@@ -11,6 +11,7 @@ import { json, readBody } from './http_util';
 import { rateLimited } from './ratelimit';
 import { handleAdminApi } from './admin';
 import { GameServer } from './game';
+import { cacheControlFor, etagFor, isNotModified } from './static_cache';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const STATIC_DIR = path.join(__dirname, '..', 'dist');
@@ -45,8 +46,12 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void 
   const shell = isAdminRequest(req) ? 'admin.html' : 'index.html';
   let urlPath = (req.url ?? '/').split('?')[0];
   if (urlPath === '/' || urlPath === '/admin' || urlPath === '/admin/') urlPath = `/${shell}`;
-  const file = path.join(STATIC_DIR, path.normalize(urlPath).replace(/^([.][.][/\\])+/, ''));
-  if (!file.startsWith(STATIC_DIR) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+  // normalize once and reuse for BOTH file resolution and cache policy —
+  // otherwise /assets/../x would serve a mutable file with immutable caching
+  urlPath = path.posix.normalize(urlPath).replace(/^([.][.][/\\])+/, '');
+  const file = path.join(STATIC_DIR, urlPath);
+  const stats = file.startsWith(STATIC_DIR) && fs.existsSync(file) ? fs.statSync(file) : null;
+  if (!stats?.isFile()) {
     // Asset paths must 404, not SPA-fall-back: a missing .glb served as index.html
     // surfaces as a cryptic GLTFLoader parse error instead of a clear 404.
     if (path.extname(urlPath) && path.extname(urlPath) !== '.html') {
@@ -57,7 +62,7 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void 
     // SPA fallback
     const index = path.join(STATIC_DIR, shell);
     if (fs.existsSync(index)) {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-cache' });
       fs.createReadStream(index).pipe(res);
     } else {
       res.writeHead(404);
@@ -65,7 +70,28 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void 
     }
     return;
   }
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream' });
+  const isReadMethod = req.method === 'GET' || req.method === 'HEAD';
+  const etag = etagFor(stats);
+  const validators = {
+    'Cache-Control': cacheControlFor(urlPath),
+    'ETag': etag,
+    'Last-Modified': stats.mtime.toUTCString(),
+  };
+  if (isReadMethod && isNotModified(req.headers, etag, stats.mtime)) {
+    res.writeHead(304, validators);
+    res.end();
+    return;
+  }
+  res.writeHead(200, {
+    ...validators,
+    'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream',
+    'Content-Length': stats.size,
+  });
+  if (req.method === 'HEAD') {
+    // don't read a multi-MB asset from disk just to discard the bytes
+    res.end();
+    return;
+  }
   fs.createReadStream(file).pipe(res);
 }
 
