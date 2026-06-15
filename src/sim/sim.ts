@@ -4283,6 +4283,12 @@ export class Sim {
     // "/combo" — self-only readout of combo points built on the current target
     if (/^\/(?:combo|cp|combopoints)(?:\s|$)/i.test(raw)) {
       this.error(r.meta.entityId, this.comboReadout(r.e));
+    // "/combat" (aliases /cb, /incombat) — self-only readout of whether you are
+    // in combat and, when only the linger timer is keeping you there, how long
+    // until you drop out. Self-only error reply, returns null so it is neither
+    // logged nor spoken; works online for free (no server interceptor).
+    if (/^\/(?:combat|cb|incombat)(?:\s|$)/i.test(raw)) {
+      this.error(r.meta.entityId, this.combatReadout(r.e));
       return null;
     }
 
@@ -5774,6 +5780,20 @@ export class Sim {
     const target = e.comboTargetId !== null ? this.entities.get(e.comboTargetId) : undefined;
     const on = target ? ` on ${target.name}` : '';
     return `Combo points: ${e.comboPoints}/5${on}.`;
+  // Readout for "/combat": reads only the live Entity.inCombat / combatTimer
+  // (no new fields). combatTimer is "time since last combat event"; a player
+  // lingers in combat until it reaches COMBAT_LINGER (the literal 5s drop-out
+  // window applied in updatePlayers, sim.ts where inCombat is recomputed). If
+  // inCombat is still set past that window, an enemy is actively engaged, so no
+  // countdown can be promised.
+  private combatReadout(e: Entity): string {
+    if (!e.inCombat) return 'You are not in combat.';
+    const COMBAT_LINGER = 5;
+    const remaining = COMBAT_LINGER - e.combatTimer;
+    if (remaining > 0) {
+      return `You are in combat — leaving in ${Math.ceil(remaining)}s if no further action.`;
+    }
+    return 'You are in combat (enemies still engaged).';
   }
 
   private error(pid: number, text: string): void {
