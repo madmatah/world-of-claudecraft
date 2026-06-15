@@ -2123,6 +2123,15 @@ export class Hud {
     if (match) return t('questUi.logs.ready', { name: questTitleFromSource(match[1]), status: t('questUi.log.readyStatus') });
     match = /^Your market listing of (.+) expired and waits at the Merchant\.$/.exec(text);
     if (match) return t('itemUi.logs.expiredListing', { item: itemDisplayNameFromSource(match[1]) });
+    // The dungeon party-size warning is emitted as a 'log' event (sim.ts), so it must be
+    // matched on this path, not in localizeLootText.
+    match = /^(.+) is meant for a full party of (\d+)\. Tread carefully\.$/.exec(text);
+    if (match) {
+      return t('worldContent.dungeonPartyWarning', {
+        name: dungeonDisplayNameFromSource(match[1]),
+        count: formatNumber(Number(match[2]), { maximumFractionDigits: 0 }),
+      });
+    }
     // Server-sent friends/guild/who/world messages arrive as 'log' events; fall
     // back to the shared server-message localizer (same as localizeErrorText /
     // localizeLootText) so they are not displayed in raw English.
@@ -2183,13 +2192,6 @@ export class Hud {
     if (match) return t('itemUi.logs.reclaimedItem', { item: itemStackDisplayName(match[1], match[2]) });
     match = /^You collect (.+) from the Merchant\.$/.exec(text);
     if (match) return t('itemUi.logs.collectedMoney', { money: this.localizeSimMoney(match[1]) });
-    match = /^(.+) is meant for a full party of (\d+)\. Tread carefully\.$/.exec(text);
-    if (match) {
-      return t('worldContent.dungeonPartyWarning', {
-        name: dungeonDisplayNameFromSource(match[1]),
-        count: formatNumber(Number(match[2]), { maximumFractionDigits: 0 }),
-      });
-    }
     const server = localizeServerText(text);
     if (server !== null) return server;
     // Sim-emitted log/error/loot text (src/sim) is English at the source; localize it
