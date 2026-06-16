@@ -163,6 +163,9 @@ export interface MobTemplate {
   summonAdds?: { mobId: string; count: number; atHpPct: number[] };
   // Boss mechanic: damage multiplier once hp drops below the threshold.
   enrage?: { belowHpPct: number; dmgMult: number };
+  // Innate "spiked hide" trait: melee attackers take flat damage back on every
+  // connecting swing — the mob-side equivalent of the druid Thorns aura.
+  thorns?: { value: number; school?: Aura['school']; name?: string };
 }
 
 export type AbilityEffect =

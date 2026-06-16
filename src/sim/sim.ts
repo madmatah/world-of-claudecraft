@@ -2422,6 +2422,11 @@ export class Sim {
           this.dealDamage(target, attacker, a.value, false, a.school, a.name, 'hit', true);
         }
       }
+      // innate "spiked hide" mobs (e.g. bristleback boars) reflect on every hit
+      const spikes = MOBS[target.templateId]?.thorns;
+      if (spikes && !attacker.dead) {
+        this.dealDamage(target, attacker, spikes.value, false, spikes.school ?? 'physical', spikes.name ?? 'Spiked Hide', 'hit', true);
+      }
     }
     return true;
   }

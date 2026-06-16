@@ -64,6 +64,8 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
     id: 'wild_boar', name: 'Wild Boar', minLevel: 2, maxLevel: 3, family: 'beast',
     hpBase: 34, hpPerLevel: 16, dmgBase: 4, dmgPerLevel: 1.8, attackSpeed: 2.2,
     armorPerLevel: 14, moveSpeed: 7.5, aggroRadius: 9,
+    // Stiff bristles prick anyone who melees the boar.
+    thorns: { value: 2, name: 'Bristled Hide' },
     loot: [
       { copper: 12, chance: 1 },
       { itemId: 'boar_hide', chance: 0.6, questId: 'q_boars' },
@@ -78,6 +80,8 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
     armorPerLevel: 30, moveSpeed: 7.2, aggroRadius: 12,
     aoePulse: { min: 12, max: 18, radius: 8, every: 9, name: 'Bristleback Stomp', school: 'physical' },
     enrage: { belowHpPct: 0.35, dmgMult: 1.4 },
+    // A full coat of iron-hard bristles — punishing to melee head-on.
+    thorns: { value: 8, name: 'Bristled Hide' },
     loot: [
       { copper: 120, chance: 1 },
       { itemId: 'tough_jerky', chance: 1 },
