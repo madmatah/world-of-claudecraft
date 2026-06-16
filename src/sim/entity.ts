@@ -49,7 +49,10 @@ function hpFromStamina(sta: number): number {
   return Math.min(sta, 20) + Math.max(0, sta - 20) * 10;
 }
 function manaFromIntellect(int: number): number {
-  return Math.min(int, 20) + Math.max(0, int - 20) * 15;
+  // Floor at 0 so an Intellect-draining debuff (negative buff_int) can never push
+  // the mana pool below its level-based base into negative territory.
+  const i = Math.max(0, int);
+  return Math.min(i, 20) + Math.max(0, i - 20) * 15;
 }
 
 // Recompute all derived stats for the player from class, level, gear, buffs, and

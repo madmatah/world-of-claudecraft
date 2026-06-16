@@ -156,6 +156,9 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
       { itemId: 'wyrmcult_orders', chance: 0.5, questId: 'q_cult_orders' },
       { itemId: 'frayed_prayer_beads', chance: 0.35 },
     ],
+    // The zealot's fevered chanting claws at a caster's mind, draining Intellect
+    // and shrinking their mana pool for a while.
+    enfeeble: { chance: 0.3, int: 12, duration: 12, name: 'Maddening Whisper', school: 'shadow' },
     scale: 1.0, color: 0x76448a,
   },
   wyrmcult_necromancer: {

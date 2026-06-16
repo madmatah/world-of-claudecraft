@@ -4101,6 +4101,24 @@ export class Sim {
         school: (ms.school as Aura['school']) ?? 'physical',
       });
     }
+    // Maddening curse: a landed hit can fog a caster's mind, draining Intellect
+    // and thus shrinking their mana pool. Mana users only (it does nothing to
+    // rage/energy users); hostile mobs only, so a friendly pet (mobSwing's other
+    // caller) never debuffs the party. Rides buff_int with a negative value, so
+    // recalcPlayerStats folds it through to maxResource with no new math.
+    const enfeeble = MOBS[mob.templateId]?.enfeeble;
+    if (enfeeble && mob.hostile && !target.dead && target.resourceType === 'mana' && this.rng.chance(enfeeble.chance)) {
+      this.applyAura(target, {
+        id: `enfeeble_${mob.templateId}`,
+        name: enfeeble.name,
+        kind: 'buff_int',
+        remaining: enfeeble.duration,
+        duration: enfeeble.duration,
+        value: -Math.abs(enfeeble.int),
+        sourceId: mob.id,
+        school: enfeeble.school ?? 'shadow',
+      });
+    }
   }
 
   // Apply (or refresh + stack) a corrosive armor-shred debuff on the victim.
