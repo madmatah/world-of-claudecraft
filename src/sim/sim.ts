@@ -4177,28 +4177,6 @@ export class Sim {
         school: enfeeble.school ?? 'shadow',
       });
     }
-  }
-
-  // Apply (or refresh + stack) a corrosive armor-shred debuff on the victim.
-  // Mirrors the warrior Sunder Armor stacking: one shared `sunder` slot found by
-  // kind, bumped up to `maxStacks`, with its timer fully refreshed each application.
-  // effectiveArmor() already subtracts value*stacks, so the victim takes more
-  // physical damage from every attacker until it expires.
-  private applyCorrosion(mob: Entity, target: Entity, corrode: NonNullable<MobTemplate['corrode']>): void {
-    const existing = target.auras.find((a) => a.kind === 'sunder');
-    if (existing) {
-      existing.stacks = Math.min(corrode.maxStacks, (existing.stacks ?? 1) + 1);
-      existing.value = corrode.armor;
-      existing.remaining = existing.duration;
-      this.emit({ type: 'aura', targetId: target.id, name: corrode.name, gained: true });
-    } else {
-      this.applyAura(target, {
-        id: `corrode_${mob.templateId}`, name: corrode.name, kind: 'sunder',
-        remaining: corrode.duration, duration: corrode.duration,
-        value: corrode.armor, stacks: 1,
-        sourceId: mob.id, school: corrode.school ?? 'nature',
-      });
-    }
     // On-hit chill: frost-touched mobs numb the victim, slowing their movement.
     const chill = MOBS[mob.templateId]?.chillOnHit;
     if (chill && !mob.dead && !target.dead && this.rng.chance(chill.chance)) {
@@ -4221,6 +4199,28 @@ export class Sim {
         value: -Math.abs(demo.ap),
         sourceId: mob.id,
         school: 'physical',
+      });
+    }
+  }
+
+  // Apply (or refresh + stack) a corrosive armor-shred debuff on the victim.
+  // Mirrors the warrior Sunder Armor stacking: one shared `sunder` slot found by
+  // kind, bumped up to `maxStacks`, with its timer fully refreshed each application.
+  // effectiveArmor() already subtracts value*stacks, so the victim takes more
+  // physical damage from every attacker until it expires.
+  private applyCorrosion(mob: Entity, target: Entity, corrode: NonNullable<MobTemplate['corrode']>): void {
+    const existing = target.auras.find((a) => a.kind === 'sunder');
+    if (existing) {
+      existing.stacks = Math.min(corrode.maxStacks, (existing.stacks ?? 1) + 1);
+      existing.value = corrode.armor;
+      existing.remaining = existing.duration;
+      this.emit({ type: 'aura', targetId: target.id, name: corrode.name, gained: true });
+    } else {
+      this.applyAura(target, {
+        id: `corrode_${mob.templateId}`, name: corrode.name, kind: 'sunder',
+        remaining: corrode.duration, duration: corrode.duration,
+        value: corrode.armor, stacks: 1,
+        sourceId: mob.id, school: corrode.school ?? 'nature',
       });
     }
   }
