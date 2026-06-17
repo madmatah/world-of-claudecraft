@@ -228,6 +228,10 @@ export interface MobTemplate {
   // existing root aura + crowd-control DR; no new aura kind. Players only; rooting a
   // fellow mob is meaningless and would let a friendly pet trivially lock enemies.
   ensnare?: { chance: number; duration: number; name: string; school?: Aura['school'] };
+  // On-hit debuff: a chance per landed crushing blow to briefly stun the victim.
+  // Reuses the `stun` aura kind (same one the AoE stomp applies); players only, and
+  // hostile-only so a friendly pet sharing the swing path never stuns the party.
+  stunOnHit?: { chance: number; duration: number; name: string; school?: Aura['school'] };
   // On-hit debuff: a chance per landed melee swing to mire the victim, slowing
   // their ATTACK SPEED (an `attackspeed` aura, `mult` > 1 lengthens the swing
   // interval) for `duration`s. Rides the existing swingIntervalMult hook — no new

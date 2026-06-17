@@ -168,6 +168,7 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
     id: 'mogger_lackey', name: 'Mogger Lackey', minLevel: 5, maxLevel: 6, family: 'humanoid',
     hpBase: 44, hpPerLevel: 18, dmgBase: 6, dmgPerLevel: 2.0, attackSpeed: 2.0,
     armorPerLevel: 18, moveSpeed: 7.5, aggroRadius: 12,
+    stunOnHit: { chance: 0.12, duration: 1, name: 'Skullthump', school: 'physical' },
     loot: [],
     scale: 0.95, color: 0x7b4b2b,
   },

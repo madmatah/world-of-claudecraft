@@ -4199,6 +4199,18 @@ export class Sim {
     if (ensnare && mob.hostile && target.kind === 'player' && !target.dead && this.rng.chance(ensnare.chance)) {
       this.applyRootAura(mob, target, ensnare.name, `ensnare_${mob.templateId}`, ensnare.duration, ensnare.school ?? 'nature');
     }
+    // stunOnHit: a landed crushing blow may briefly stun the victim. Hostile mobs
+    // only (a friendly pet shares this swing path) and only stuns players. Reuses
+    // the `stun` aura the AoE stomp already applies, so isStunned()/the HUD handle
+    // it with no new wiring. Kept low-chance/short so it threatens without locking.
+    const stunOnHit = MOBS[mob.templateId]?.stunOnHit;
+    if (stunOnHit && mob.hostile && target.kind === 'player' && !target.dead && this.rng.chance(stunOnHit.chance)) {
+      this.applyAura(target, {
+        id: `stun_${mob.templateId}`, name: stunOnHit.name, kind: 'stun',
+        remaining: stunOnHit.duration, duration: stunOnHit.duration, value: 0,
+        sourceId: mob.id, school: stunOnHit.school ?? 'physical',
+      });
+    }
     // slowStrike: a landed hit may mire the victim, slowing their attack speed.
     // Rides the existing `attackspeed` aura (swingIntervalMult: value > 1 = slower);
     // refreshes by id and never stacks. Guarded on `hostile` so a friendly pet
