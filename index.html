@@ -771,6 +771,7 @@
   .spell-icon { width: 34px; height: 34px; border-radius: 5px; flex: none;
     background-color: #15151f; background-size: cover; background-position: center; background-repeat: no-repeat;
     border: 2px solid #4a3d1d; }
+  .spell-hotbar-toggle { display: none; }
 
   /* quest log */
   #quest-log-window { width: 520px; }
@@ -4117,6 +4118,7 @@
     padding: 4px;
     width: 100%;
     max-width: 100%;
+    min-height: 50px;
     box-sizing: border-box;
     overflow-x: auto;
     overflow-y: hidden;
@@ -4127,6 +4129,11 @@
   }
   body.mobile-touch #actionbar.many-spells { grid-template-columns: none; }
   body.mobile-touch .action-btn { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 7px; }
+  body.mobile-touch.mobile-hotbar-dragging #actionbar { touch-action: none; }
+  body.mobile-touch .action-btn.mobile-drag-source {
+    border-color: var(--gold);
+    box-shadow: 0 0 12px #ffd100aa, inset 0 0 0 1px #ffd10077;
+  }
   body.mobile-touch .action-btn:not(.used):not(.queued):not(.drop-target):hover { border-color: #4a3d1d; }
   body.mobile-touch .action-btn .icon-label { border-radius: 6px; }
   body.mobile-touch .action-btn .cd-text { font-size: 13px; }
@@ -4338,13 +4345,19 @@
   }
   body.mobile-touch #bags {
     position: fixed;
-    left: 10px;
-    right: 10px;
-    bottom: 10px;
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    top: max(10px, env(safe-area-inset-top));
+    bottom: calc(72px + env(safe-area-inset-bottom));
     width: auto;
-    max-height: calc(38vh - 20px);
+    transform: none;
+    max-height: none;
     box-sizing: border-box;
-    overflow-y: auto;
+    overflow: hidden;
+    z-index: 95;
+  }
+  body.mobile-touch #bags .bag-grid {
+    min-height: 150px;
   }
   body.mobile-touch .vendor-item,
   body.mobile-touch .bag-item,
@@ -4456,6 +4469,31 @@
     padding: 0;
     box-sizing: border-box;
     font-size: 16px;
+  }
+  body.mobile-touch #spellbook .spell-row {
+    min-height: 52px;
+    padding-right: 4px;
+  }
+  body.mobile-touch #spellbook .spell-hotbar-toggle {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 40px;
+    border: 2px solid #4a3d1d;
+    border-radius: 7px;
+    background: radial-gradient(circle at 35% 30%, #2d3048e0, #11121ee0 72%);
+    color: var(--gold);
+    font: 700 22px/1 var(--ui-font);
+    box-shadow: inset 0 1px 0 #ffffff14, 0 2px 6px #0008;
+  }
+  body.mobile-touch #spellbook .spell-hotbar-toggle.remove {
+    color: #ffcf9c;
+    border-color: #8b4e2c;
+  }
+  body.mobile-touch #spellbook .spell-hotbar-toggle:disabled {
+    opacity: 0.45;
   }
   body.mobile-touch #quest-dialog .qd-list-item,
   body.mobile-touch #quest-log-window .ql-item,

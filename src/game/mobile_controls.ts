@@ -276,10 +276,10 @@ export class MobileControls {
       if (!this.active) return;
       e.preventDefault();
       triggerHaptic(HAPTIC_TAP, this.hapticsOn);
-      cb();
       if (button.closest('#mobile-extra-controls')) {
         this.closeMoreModal();
       }
+      cb();
     });
   }
 

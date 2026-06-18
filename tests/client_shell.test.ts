@@ -152,6 +152,12 @@ describe('client HTML shell', () => {
     expect(mobileControlsTs).toContain('delete modal.dataset.windowMoved;');
     expect(mobileControlsTs).toContain('private closeMoreModal(): void {');
     expect(mobileControlsTs).toContain("document.getElementById('mobile-controls')?.classList.remove('expanded');");
+    const bindButton = mobileControlsTs.slice(
+      mobileControlsTs.indexOf('private bindButton'),
+      mobileControlsTs.indexOf('private closeMoreModal'),
+    );
+    expect(bindButton.indexOf("button.closest('#mobile-extra-controls')")).toBeGreaterThan(-1);
+    expect(bindButton.indexOf('this.closeMoreModal();')).toBeLessThan(bindButton.indexOf('cb();'));
     expect(hudTs).toContain(".filter((win) => win.id !== 'mobile-extra-controls')");
   });
 
@@ -217,7 +223,38 @@ describe('client HTML shell', () => {
     expect(html).toContain('body.mobile-touch #actionbar {\n    display: flex;\n    flex-wrap: nowrap;');
     expect(html).toContain('overflow-x: auto;\n    overflow-y: hidden;');
     expect(html).toContain('touch-action: pan-x;');
+    expect(html).toContain('min-height: 50px;');
     expect(html).toContain('body.mobile-touch .action-btn { width: 42px; height: 42px; flex: 0 0 42px;');
+    expect(html).toContain('body.mobile-touch.mobile-hotbar-dragging #actionbar { touch-action: none; }');
+    expect(html).toContain('body.mobile-touch .action-btn.mobile-drag-source');
+  });
+
+  it('falls back to the normal hotbar when a form hotbar has no saved spells', () => {
+    expect(hudTs).toContain('const emptyFormMap = this.activeHotbarForm !== \'normal\' && parsed.every((action) => action === null);');
+    expect(hudTs).toContain("localStorage.getItem(this.slotMapKey('normal'))");
+    expect(hudTs).not.toContain('this.loadedSlotMapFromStorage = stored || this.activeHotbarForm !== \'normal\';');
+  });
+
+  it('keeps the active druid form toggle on its form action bar', () => {
+    expect(hudTs).toContain("if (this.activeHotbarForm === 'bear') return 'bear_form';");
+    expect(hudTs).toContain("if (this.activeHotbarForm === 'cat') return 'cat_form';");
+    expect(hudTs).toContain('if (formToggle && knownAbilityIds.includes(formToggle)) autoPlaceAbilityIds.add(formToggle);');
+  });
+
+  it('shows mobile spellbook add and remove controls for the spell bar', () => {
+    expect(html).toContain('.spell-hotbar-toggle { display: none; }');
+    expect(html).toContain('body.mobile-touch #spellbook .spell-hotbar-toggle {\n    min-width: 40px;\n    min-height: 40px;');
+    expect(html).toContain('body.mobile-touch #spellbook .spell-hotbar-toggle.remove');
+    expect(hudTs).toContain("toggle.className = 'spell-hotbar-toggle' + (onBar ? ' remove' : '');");
+    expect(hudTs).toContain('this.removeAbilityFromHotbar(known.def.id)');
+    expect(hudTs).toContain('this.addAbilityToHotbar(known.def.id)');
+  });
+
+  it('sizes the mobile Bags window as a usable modal', () => {
+    expect(html).toContain('body.mobile-touch #bags {\n    position: fixed;\n    left: max(10px, env(safe-area-inset-left));\n    right: max(10px, env(safe-area-inset-right));\n    top: max(10px, env(safe-area-inset-top));\n    bottom: calc(72px + env(safe-area-inset-bottom));\n    width: auto;\n    transform: none;');
+    expect(html).toContain('body.mobile-touch #bags .bag-grid {\n    min-height: 150px;');
+    expect(html).not.toContain('body.mobile-touch #bags {\n    position: fixed;\n    left: 10px;\n    right: 10px;\n    bottom: 10px;');
+    expect(html).not.toContain('max-height: calc(38vh - 20px);');
   });
 
   it('keeps the expanded mobile More tray inside the viewport', () => {

@@ -209,6 +209,15 @@ const CHAT_TEMPLATE_KEYS = {
   say: 'hud.chat.templates.say',
 } satisfies Record<string, TranslationKey>;
 type HotbarForm = 'normal' | 'bear' | 'cat' | 'stealth';
+type MobileHotbarDrag = {
+  pointerId: number;
+  sourceIndex: number;
+  startX: number;
+  startY: number;
+  active: boolean;
+  timer: number;
+  targetIndex: number | null;
+};
 
 // world map: terrain is pre-rendered for the whole zone at this resolution
 // (cached per zone) and a sub-rect is blitted for the current zoom.
@@ -224,6 +233,8 @@ export class Hud {
   private knownAbilityIdsAtLastSlotSync: Set<string> | null = null;
   private activeHotbarForm: HotbarForm = 'normal';
   private dragAction: { action: Exclude<HotbarAction, null>; sourceIndex: number | null } | null = null;
+  private mobileHotbarDrag: MobileHotbarDrag | null = null;
+  private suppressNextActionClick = false;
   private optionsHooks: OptionsHooks | null = null;
   private reportHooks: ReportHooks | null = null;
   // Soft swear terms from the server (online only), masked in chat when the
@@ -964,6 +975,7 @@ export class Hud {
       touchTimer = undefined;
     };
     const showAt = (x: number, y: number, trigger: 'touch' | 'mouse' | 'focus') => {
+      if (this.mobileHotbarDrag?.active) return;
       // Touch-only path: showing the tooltip means the held control is being
       // inspected, so the release click should peek, not fire its action.
       this.peekGuard.tooltipShown(trigger);
@@ -1153,9 +1165,9 @@ export class Hud {
   // shortcuts. Abilities are keyed by id (known is class-ordered and shifts on
   // level-up, so indices would not survive). Persisted per class+character,
   // with separate form/stealth layouts because each state has a different kit.
-  private slotMapKey(): string {
+  private slotMapKey(form: HotbarForm = this.activeHotbarForm): string {
     const base = `woc_hotbar_${this.sim.cfg.playerClass}_${this.sim.player.name}`;
-    return this.activeHotbarForm === 'normal' ? base : `${base}_${this.activeHotbarForm}`;
+    return form === 'normal' ? base : `${base}_${form}`;
   }
 
   private playerHotbarForm(): HotbarForm {
@@ -1180,18 +1192,79 @@ export class Hud {
       stored = raw !== null;
       arr = JSON.parse(raw ?? 'null');
     } catch { /* corrupt */ }
-    this.loadedSlotMapFromStorage = stored || this.activeHotbarForm !== 'normal';
-    this.hotbarActions = parseHotbarActions(
+    const parsed = parseHotbarActions(
       arr,
       Hud.BAR_ABILITY_SLOTS,
       (id) => !!ABILITIES[id],
       (id) => this.isHotbarItemId(id),
     );
+    const emptyFormMap = this.activeHotbarForm !== 'normal' && parsed.every((action) => action === null);
+    if (emptyFormMap) {
+      let fallback: unknown = null;
+      try { fallback = JSON.parse(localStorage.getItem(this.slotMapKey('normal')) ?? 'null'); } catch { /* corrupt */ }
+      const normalActions = parseHotbarActions(
+        fallback,
+        Hud.BAR_ABILITY_SLOTS,
+        (id) => !!ABILITIES[id],
+        (id) => this.isHotbarItemId(id),
+      );
+      if (normalActions.some((action) => action !== null)) {
+        this.loadedSlotMapFromStorage = true;
+        this.hotbarActions = normalActions;
+        this.knownAbilityIdsAtLastSlotSync = null;
+        return;
+      }
+    }
+    this.loadedSlotMapFromStorage = stored;
+    this.hotbarActions = parsed;
     this.knownAbilityIdsAtLastSlotSync = null;
   }
 
   private saveSlotMap(): void {
     try { localStorage.setItem(this.slotMapKey(), JSON.stringify(this.hotbarActions)); } catch { /* storage unavailable */ }
+  }
+
+  private firstEmptyHotbarIndex(): number {
+    return this.hotbarActions.findIndex((action) => action === null);
+  }
+
+  private hotbarIndexForAbility(abilityId: string): number {
+    return this.hotbarActions.findIndex((action) => action?.type === 'ability' && action.id === abilityId);
+  }
+
+  private addAbilityToHotbar(abilityId: string): boolean {
+    if (this.hotbarIndexForAbility(abilityId) !== -1) return false;
+    const target = this.firstEmptyHotbarIndex();
+    if (target === -1) return false;
+    this.hotbarActions = placeAbilityOnSlot(this.hotbarActions, abilityId, target);
+    this.saveSlotMap();
+    return true;
+  }
+
+  private removeAbilityFromHotbar(abilityId: string): boolean {
+    const target = this.hotbarIndexForAbility(abilityId);
+    if (target === -1) return false;
+    this.hotbarActions = clearHotbarSlot(this.hotbarActions, target);
+    this.saveSlotMap();
+    return true;
+  }
+
+  private refreshSpellbookHotbarControls(): void {
+    document.querySelectorAll<HTMLButtonElement>('#spellbook .spell-hotbar-toggle').forEach((btn) => {
+      const id = btn.dataset.abilityId;
+      if (!id) return;
+      const onBar = this.hotbarIndexForAbility(id) !== -1;
+      btn.textContent = onBar ? '-' : '+';
+      btn.classList.toggle('remove', onBar);
+      btn.setAttribute('aria-pressed', onBar ? 'true' : 'false');
+      btn.disabled = !onBar && this.firstEmptyHotbarIndex() === -1;
+    });
+  }
+
+  private formToggleAbilityId(): string | null {
+    if (this.activeHotbarForm === 'bear') return 'bear_form';
+    if (this.activeHotbarForm === 'cat') return 'cat_form';
+    return null;
   }
 
   private syncActiveHotbarForm(): void {
@@ -1218,6 +1291,8 @@ export class Hud {
         if (!this.knownAbilityIdsAtLastSlotSync.has(id)) autoPlaceAbilityIds.add(id);
       }
     }
+    const formToggle = this.formToggleAbilityId();
+    if (formToggle && knownAbilityIds.includes(formToggle)) autoPlaceAbilityIds.add(formToggle);
     const synced = syncHotbarActions(this.hotbarActions, knownAbilityIds, autoPlaceAbilityIds);
     this.hotbarActions = synced.actions;
     if (synced.changed) this.saveSlotMap();
@@ -1314,9 +1389,11 @@ export class Hud {
       cdText.className = 'cdtext';
       btn.append(label, countEl, kb, cdOverlay, cdText);
       const slot = i;
+      btn.dataset.hotbarSlot = String(slot);
       // slot 0 is Attack for every class (auto-attack toggle — players
       // without right-click need a way in); the kit fills slots 1+
       btn.addEventListener('click', () => {
+        if (this.suppressNextActionClick) { this.suppressNextActionClick = false; btn.blur(); return; }
         // On touch, the click that ends a long-press peek inspects the slot
         // (tooltip already shown) instead of casting — release dismisses it.
         if (this.peekGuard.consume()) { this.hideTooltip(); btn.blur(); return; }
@@ -1405,6 +1482,7 @@ export class Hud {
           this.dragAction = null;
           this.clearActionDropTargets();
         });
+        this.bindMobileActionDrag(btn, slot);
         // right-click clears the slot so a full bar can make room for new spells
         btn.addEventListener('contextmenu', (e) => {
           e.preventDefault();
@@ -1421,6 +1499,90 @@ export class Hud {
 
   private clearActionDropTargets(): void {
     document.querySelectorAll('#actionbar .drop-target').forEach((el) => el.classList.remove('drop-target'));
+  }
+
+  private actionButtonSlotFromPoint(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y)?.closest?.('.action-btn') as HTMLButtonElement | null;
+    const raw = el?.dataset.hotbarSlot;
+    if (!raw) return null;
+    const slot = Number(raw);
+    return Number.isInteger(slot) && slot >= 1 ? slot : null;
+  }
+
+  private clearMobileHotbarDrag(): void {
+    const drag = this.mobileHotbarDrag;
+    if (drag) window.clearTimeout(drag.timer);
+    this.mobileHotbarDrag = null;
+    document.body.classList.remove('mobile-hotbar-dragging');
+    document.querySelectorAll('#actionbar .mobile-drag-source').forEach((el) => el.classList.remove('mobile-drag-source'));
+    this.clearActionDropTargets();
+  }
+
+  private bindMobileActionDrag(btn: HTMLButtonElement, slot: number): void {
+    btn.addEventListener('pointerdown', (e) => {
+      if (!document.body.classList.contains('mobile-touch') || e.pointerType !== 'touch') return;
+      if (this.actionForSlot(slot)?.type !== 'ability') return;
+      this.clearMobileHotbarDrag();
+      const sourceIndex = slot - 1;
+      const drag: MobileHotbarDrag = {
+        pointerId: e.pointerId,
+        sourceIndex,
+        startX: e.clientX,
+        startY: e.clientY,
+        active: false,
+        targetIndex: null,
+        timer: window.setTimeout(() => {
+          const current = this.mobileHotbarDrag;
+          if (!current || current.pointerId !== e.pointerId) return;
+          current.active = true;
+          current.targetIndex = sourceIndex;
+          this.suppressNextActionClick = true;
+          document.body.classList.add('mobile-hotbar-dragging');
+          btn.classList.add('mobile-drag-source');
+          btn.classList.add('drop-target');
+          this.hideTooltip();
+          try { btn.setPointerCapture?.(e.pointerId); } catch { /* pointer already released */ }
+        }, 320),
+      };
+      this.mobileHotbarDrag = drag;
+    });
+
+    btn.addEventListener('pointermove', (e) => {
+      const drag = this.mobileHotbarDrag;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY);
+      if (!drag.active && moved > 9) {
+        this.clearMobileHotbarDrag();
+        return;
+      }
+      if (!drag.active) return;
+      e.preventDefault();
+      const targetSlot = this.actionButtonSlotFromPoint(e.clientX, e.clientY);
+      const targetIndex = targetSlot !== null ? targetSlot - 1 : null;
+      drag.targetIndex = targetIndex;
+      this.clearActionDropTargets();
+      const targetBtn = targetSlot !== null ? this.abilityButtons[targetSlot]?.btn : null;
+      if (targetBtn) targetBtn.classList.add('drop-target');
+      this.abilityButtons[drag.sourceIndex + 1]?.btn.classList.add('mobile-drag-source');
+    });
+
+    const finish = (e: PointerEvent) => {
+      const drag = this.mobileHotbarDrag;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      const wasActive = drag.active;
+      const targetIndex = drag.targetIndex;
+      if (wasActive) {
+        e.preventDefault();
+        this.suppressNextActionClick = true;
+        if (targetIndex !== null && targetIndex !== drag.sourceIndex) {
+          this.hotbarActions = swapHotbarSlots(this.hotbarActions, drag.sourceIndex, targetIndex);
+          this.saveSlotMap();
+        }
+      }
+      this.clearMobileHotbarDrag();
+    };
+    btn.addEventListener('pointerup', finish);
+    btn.addEventListener('pointercancel', finish);
   }
 
   // Repaint the keycap on every action button from the current bindings.
@@ -1663,6 +1825,7 @@ export class Hud {
     this.renderPetBar();
     const tgtDist = target && !target.dead ? dist2d(p.pos, target.pos) : null;
     this.actionbarEl.classList.toggle('many-spells', this.hotbarActions.filter((action) => action !== null).length > 10);
+    if ($('#spellbook').style.display === 'block') this.refreshSpellbookHotbarControls();
     for (let i = 0; i < this.abilityButtons.length; i++) {
       const ab = this.abilityButtons[i];
       const slotLabel = formatAbilityNumber(i + 1);
@@ -4248,6 +4411,27 @@ export class Hud {
         <div class="spell-text"><div class="spell-name">${esc(name)}${known && known.rank > 1 ? ` <span class="spell-rank">${esc(t('abilityUi.tooltip.rank', { rank: formatAbilityNumber(known.rank) }))}</span>` : ''}</div>
         <div class="spell-sub">${locked ? esc(t('abilityUi.spellbook.trainableAtLevel', { level: learnLevel })) : esc(summary)}</div></div>`;
       if (known) {
+        const onBar = this.hotbarIndexForAbility(known.def.id) !== -1;
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'spell-hotbar-toggle' + (onBar ? ' remove' : '');
+        toggle.dataset.abilityId = known.def.id;
+        toggle.textContent = onBar ? '-' : '+';
+        toggle.setAttribute('aria-label', `${name} ${onBar ? '-' : '+'}`);
+        toggle.setAttribute('aria-pressed', onBar ? 'true' : 'false');
+        toggle.disabled = !onBar && this.firstEmptyHotbarIndex() === -1;
+        toggle.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+        toggle.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const changed = this.hotbarIndexForAbility(known.def.id) !== -1
+            ? this.removeAbilityFromHotbar(known.def.id)
+            : this.addAbilityToHotbar(known.def.id);
+          if (!changed) return;
+          audio.click();
+          this.refreshSpellbookHotbarControls();
+        });
+        row.appendChild(toggle);
         row.draggable = true;
         row.addEventListener('dragstart', (e) => {
           const action = { type: 'ability' as const, id: known.def.id };
