@@ -252,32 +252,35 @@ function drawHeader(ctx: CanvasRenderingContext2D, data: PlayerCardData): void {
 }
 
 function drawBadge(ctx: CanvasRenderingContext2D, tier: HolderTier, badge: HTMLImageElement, balance: number | null): void {
-  const cx = 1108;
-  const cy = 96;
-  const r = 52;
+  // Bottom-left of the right column (the footer band) — swapped with the brand
+  // mark, which now sits top-right. Badge on the left, tier + balance to its right.
+  // Compact badge with a tight glow so it sits inside the footer band without
+  // bleeding up into the gear panel above (which ends at y≈530).
+  const r = 30;
+  const cx = 478 + r;
+  const cy = 575;
   ctx.save();
   ctx.shadowColor = hexWithAlpha(tier.glow, 0.9);
-  ctx.shadowBlur = 22;
+  ctx.shadowBlur = 8;
   ctx.drawImage(badge, cx - r, cy - r, r * 2, r * 2);
   ctx.restore();
 
-  const right = cx - r - 14;
-  ctx.textAlign = 'right';
+  const left = cx + r + 16;
+  ctx.textAlign = 'left';
   // Tier name.
   ctx.fillStyle = tier.ring;
-  ctx.font = `700 22px ${TITLE_FONT}`;
-  ctx.fillText(tier.name.toUpperCase(), right, cy - 22);
+  ctx.font = `700 18px ${TITLE_FONT}`;
+  ctx.fillText(tier.name.toUpperCase(), left, cy - 13);
   // The actual on-chain bag — the flex.
   if (balance !== null) {
     ctx.fillStyle = COL.gold;
-    ctx.font = `700 24px ${BODY_FONT}`;
-    fillTextClamped(ctx, `${formatWoc(balance)} $WOC`, right, cy + 4, 380);
+    ctx.font = `700 20px ${BODY_FONT}`;
+    fillTextClamped(ctx, `${formatWoc(balance)} $WOC`, left, cy + 10, 210);
   }
   // Flavour line.
   ctx.fillStyle = COL.muted;
-  ctx.font = `400 14px ${BODY_FONT}`;
-  fillTextClamped(ctx, tier.flavor, right, cy + 26, 400);
-  ctx.textAlign = 'left';
+  ctx.font = `400 12px ${BODY_FONT}`;
+  fillTextClamped(ctx, tier.flavor, left, cy + 28, 220);
 }
 
 function drawStats(ctx: CanvasRenderingContext2D, data: PlayerCardData): void {
@@ -346,20 +349,23 @@ function drawGear(ctx: CanvasRenderingContext2D, data: PlayerCardData): void {
 
 function drawFooter(ctx: CanvasRenderingContext2D, data: PlayerCardData, logo: HTMLImageElement | null): void {
   const y = CARD_H - 26;
-  const bx = 478;
-  // Brand mark: the full logo lockup, else a plain text wordmark. Its backing is
-  // near-black and the footer sits on the card's dark gradient, so it composites
-  // with no visible seam.
+  // Brand mark: the full logo lockup, else a plain text wordmark — top-right now
+  // (swapped with the holder badge, which moved to the bottom-left). Right-aligned
+  // against the card's right margin, above the stats panel.
   if (logo && logo.width > 0) {
-    const h = 70;
+    const h = 104;
     const w = (logo.width / logo.height) * h;
-    ctx.drawImage(logo, bx, CARD_H - 26 - h, w, h);
+    ctx.drawImage(logo, 1156 - w, 38, w, h);
   } else {
+    ctx.textAlign = 'right';
     ctx.fillStyle = COL.gold;
-    ctx.font = `700 24px ${TITLE_FONT}`;
-    ctx.fillText('WORLD OF CLAUDECRAFT', bx, y);
+    ctx.font = `700 34px ${TITLE_FONT}`;
+    ctx.fillText('WORLD OF CLAUDECRAFT', 1156, 100);
+    ctx.textAlign = 'left';
   }
 
+  // Referral line stays bottom-right; URL clamp trimmed so it clears the badge
+  // block now occupying the bottom-left.
   ctx.textAlign = 'right';
   ctx.fillStyle = COL.cream;
   ctx.font = `600 19px ${BODY_FONT}`;
@@ -367,7 +373,7 @@ function drawFooter(ctx: CanvasRenderingContext2D, data: PlayerCardData, logo: H
   ctx.fillText(`@${data.referralHandle}${recruited}`, 1168, y - 22);
   ctx.fillStyle = COL.goldDim;
   ctx.font = `400 16px ${BODY_FONT}`;
-  fillTextClamped(ctx, `Forge your legend → ${data.siteUrl}`, 1168, y, 480);
+  fillTextClamped(ctx, `Forge your legend → ${data.siteUrl}`, 1168, y, 360);
   ctx.textAlign = 'left';
 }
 
