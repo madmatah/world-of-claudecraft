@@ -112,6 +112,12 @@ export type EquipSlot =
   | 'gloves'
   | 'feet';
 
+// The eight equip slots, in the canonical paperdoll order. Single source for
+// the entity loop and the server's unequip-command validation.
+export const EQUIP_SLOTS: readonly EquipSlot[] = [
+  'mainhand', 'helmet', 'shoulder', 'chest', 'waist', 'legs', 'gloves', 'feet',
+];
+
 export type SkinCatalog = 'class' | 'mech';
 
 export type ItemUse =

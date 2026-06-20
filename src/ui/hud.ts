@@ -5515,7 +5515,25 @@ export class Hud {
       const qColor = !item ? '#666' : QUALITY_COLOR[item.quality ?? 'common'] ?? '#fff';
       row.innerHTML = `${item ? this.itemIcon(item) : `<img class="item-icon" style="border-color:#444" src="${iconDataUrl('item', 'slot_empty')}" alt="" draggable="false">`}
         <div><div class="slot-name">${esc(slot.name)}</div><div class="slot-item" style="color:${qColor}">${item ? esc(itemDisplayName(item)) : esc(t('itemUi.equipment.empty'))}</div></div>`;
-      if (item) this.attachTooltip(row, () => this.itemTooltip(item));
+      if (item) {
+        this.attachTooltip(row, () => this.itemTooltip(item));
+        // Remove the piece back to bags, leaving the slot empty (equipping only
+        // ever swaps in a replacement — this is the way to fully unequip).
+        const unequip = document.createElement('button');
+        unequip.type = 'button';
+        unequip.className = 'equip-unequip-btn';
+        unequip.textContent = t('hudChrome.paperdoll.unequip');
+        unequip.setAttribute('aria-label', t('hudChrome.paperdoll.unequipAria', { item: itemDisplayName(item) }));
+        unequip.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          this.sim.unequipItem(slot.key);
+          audio.click();
+          this.hideTooltip();
+          this.renderBags();
+          this.renderCharIfOpen();
+        });
+        row.appendChild(unequip);
+      }
       return row;
     };
     for (const slot of leftSlots) leftCol.appendChild(buildSlotRow(slot));

@@ -228,4 +228,9 @@ export const hudChromeStrings = {
       other: "Who: {count} players online on {realm}.",
     },
   },
+  // Character window (paperdoll) controls.
+  paperdoll: {
+    unequip: "Unequip",
+    unequipAria: "Unequip {item}",
+  },
 };

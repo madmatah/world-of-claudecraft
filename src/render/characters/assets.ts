@@ -204,6 +204,17 @@ export function skinTexture(key: string, skinIndex: number): THREE.Texture | nul
   return url ? skinTexByUrl.get(url) ?? null : null;
 }
 
+/** Ensure the alternate atlas for (key, skinIndex) is loaded. Returns a promise
+ *  that resolves once it is cached (so the caller can re-read `skinTexture` and
+ *  re-apply), or null when there is nothing to wait for — the skin has no atlas
+ *  (embedded default) or it is already loaded. Hardens live skin swaps against a
+ *  not-yet-loaded atlas (otherwise the body shows the default until a relog). */
+export function ensureSkinTexture(key: string, skinIndex: number): Promise<void> | null {
+  const url = SKINS[key]?.[skinIndex] ?? null;
+  if (!url || skinTexByUrl.has(url)) return null;
+  return loadSkinTexInto(url, skinTexByUrl);
+}
+
 /** Resolved emissive (glow) map for a visual key + skin index, or null when the
  *  skin has no glow (most do) / it isn't loaded / low tier. */
 export function skinEmissiveTexture(key: string, skinIndex: number): THREE.Texture | null {

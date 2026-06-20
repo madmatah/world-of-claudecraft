@@ -1,5 +1,6 @@
 import { CLASSES, ITEMS, MOBS, NpcDef } from './data';
 import type { Entity, EquipSlot, MobTemplate, PlayerClass, Stats, Vec3 } from './types';
+import { EQUIP_SLOTS } from './types';
 import type { TalentModifiers } from './content/talents';
 
 function baseEntity(id: number, pos: Vec3): Entity {
@@ -72,7 +73,7 @@ export function recalcPlayerStats(e: Entity, cls: PlayerClass, equipment: Player
     spi: def.baseStats.spi + def.statsPerLevel.spi * (lvl - 1),
     armor: def.baseStats.armor + def.statsPerLevel.armor * (lvl - 1),
   };
-  for (const slot of ['mainhand', 'helmet', 'shoulder', 'chest', 'waist', 'legs', 'gloves', 'feet'] as EquipSlot[]) {
+  for (const slot of EQUIP_SLOTS) {
     const itemId = equipment[slot];
     if (!itemId) continue;
     const item = ITEMS[itemId];

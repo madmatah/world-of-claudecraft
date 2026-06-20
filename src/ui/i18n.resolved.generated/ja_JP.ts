@@ -334,6 +334,10 @@ export const ja_JP: EnTranslations = {
         "many": "Who：{realm}に{count}人のプレイヤーがオンラインです。",
         "other": "Who：{realm}に{count}人のプレイヤーがオンラインです。"
       }
+    },
+    "paperdoll": {
+      "unequip": "外す",
+      "unequipAria": "{item}を外す"
     }
   },
   "skinEvent": {

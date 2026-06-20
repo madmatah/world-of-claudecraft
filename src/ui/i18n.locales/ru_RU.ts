@@ -2671,6 +2671,8 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   "skinEvent.title": "Косметический тайник",
   "skinEvent.unavailable": "Скоро",
   "skinEvent.unequip": "Снять",
+  "hudChrome.paperdoll.unequip": "Снять",
+  "hudChrome.paperdoll.unequipAria": "Снять {item}",
   "skinEvent.unlocked": "Косметика разблокирована!",
   "errors.api.webLoginOnly": "Вход разрешён только из игрового клиента.",
   "hudChrome.chatTimestamps.clock12h": "12-часовой",

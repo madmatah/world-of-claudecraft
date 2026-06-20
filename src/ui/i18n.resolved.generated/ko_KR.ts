@@ -334,6 +334,10 @@ export const ko_KR: EnTranslations = {
         "many": "검색: {realm} 서버에 {count}명의 플레이어가 접속 중입니다.",
         "other": "검색: {realm} 서버에 {count}명의 플레이어가 접속 중입니다."
       }
+    },
+    "paperdoll": {
+      "unequip": "장착 해제",
+      "unequipAria": "{item} 장착 해제"
     }
   },
   "skinEvent": {

@@ -334,6 +334,10 @@ export const zh_TW: EnTranslations = {
         "many": "查詢：{realm} 上有 {count} 名玩家在線上。",
         "other": "查詢：{realm} 上有 {count} 名玩家在線上。"
       }
+    },
+    "paperdoll": {
+      "unequip": "卸下",
+      "unequipAria": "卸下 {item}"
     }
   },
   "skinEvent": {

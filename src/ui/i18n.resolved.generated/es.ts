@@ -334,6 +334,10 @@ export const es: EnTranslations = {
         "many": "Quién: {count} jugadores conectados en {realm}.",
         "other": "Quién: {count} jugadores conectados en {realm}."
       }
+    },
+    "paperdoll": {
+      "unequip": "Unequip",
+      "unequipAria": "Unequip {item}"
     }
   },
   "skinEvent": {

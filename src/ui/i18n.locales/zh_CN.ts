@@ -2671,6 +2671,8 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   "skinEvent.title": "外观宝箱",
   "skinEvent.unavailable": "即将推出",
   "skinEvent.unequip": "卸下",
+  "hudChrome.paperdoll.unequip": "卸下",
+  "hudChrome.paperdoll.unequipAria": "卸下 {item}",
   "skinEvent.unlocked": "外观已解锁！",
   "errors.api.webLoginOnly": "只能从游戏客户端登录。",
   "hudChrome.chatTimestamps.clock12h": "12小时制",

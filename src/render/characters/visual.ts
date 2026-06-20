@@ -8,7 +8,7 @@ import type { OverheadEmoteId } from '../../world_api';
 import { GFX } from '../gfx';
 import type { EmoteClipSpec, VisualDef } from './manifest';
 import {
-  applyMaterials, assembleModel, prepareVisual, skinTexture, skinEmissiveTexture, tintedFarMaterials,
+  applyMaterials, assembleModel, ensureSkinTexture, prepareVisual, skinTexture, skinEmissiveTexture, tintedFarMaterials,
 } from './assets';
 import { desiredBaseState, locomotionTimeScale, type AnimState, type BaseState } from './anim_state';
 
@@ -348,6 +348,21 @@ export class CharacterVisual {
   setSkin(skinIndex: number): void {
     if (skinIndex === this.skinIndex) return;
     this.skinIndex = skinIndex;
+    this.applySkinMaterials(skinIndex);
+    // If the alternate atlas for this skin has not finished loading yet,
+    // skinTexture() returned null and the body is showing the embedded default.
+    // Load it on demand and re-apply once it arrives — but only if this is still
+    // the requested skin (a newer setSkin must win). Without this, a freshly
+    // selected skin stayed on the default until a relog warmed the atlas cache.
+    const pending = ensureSkinTexture(this.key, skinIndex);
+    if (pending) {
+      void pending.then(() => {
+        if (this.skinIndex === skinIndex) this.applySkinMaterials(skinIndex);
+      }).catch((err) => console.error('failed to load skin atlas:', err));
+    }
+  }
+
+  private applySkinMaterials(skinIndex: number): void {
     applyMaterials(this.model, this.def, this.entityColor, skinTexture(this.key, skinIndex), skinEmissiveTexture(this.key, skinIndex));
     // re-snapshot the material map ghost/restore relies on, then re-ghost if stealthed
     this.originalMaterials.clear();

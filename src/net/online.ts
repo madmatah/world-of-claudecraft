@@ -924,6 +924,9 @@ export class ClientWorld implements IWorld {
   equipItem(itemId: string): void {
     this.cmd({ cmd: 'equip', item: itemId });
   }
+  unequipItem(slot: EquipSlot): void {
+    this.cmd({ cmd: 'unequip_item', slot });
+  }
   useItem(itemId: string): void {
     this.cmd({ cmd: 'use', item: itemId });
   }

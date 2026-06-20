@@ -334,6 +334,10 @@ export const en_XA: EnTranslations = {
         "many": "[Ŵĥó: {count} þļáýéŕš óñļíñé óñ {realm}.]",
         "other": "[Ŵĥó: {count} þļáýéŕš óñļíñé óñ {realm}.]"
       }
+    },
+    "paperdoll": {
+      "unequip": "[Úñéɋúíþ]",
+      "unequipAria": "[Úñéɋúíþ {item}]"
     }
   },
   "skinEvent": {

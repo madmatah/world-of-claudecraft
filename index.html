@@ -3710,6 +3710,28 @@
     color: #fff;
     box-shadow: 0 0 8px rgba(202, 164, 114, 0.45);
   }
+  /* Per-slot Unequip affordance in the character window (paperdoll). */
+  .equip-slot .equip-unequip-btn {
+    margin-inline-start: auto;
+    min-height: 34px;
+    min-width: 40px;
+    padding: 0 8px;
+    border-radius: 7px;
+    border: 1px solid rgba(202, 164, 114, 0.42);
+    background: rgba(60, 38, 28, 0.38);
+    color: var(--color-text-secondary, #d6c1a0);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: var(--cursor-point);
+    transition: border-color 0.12s, box-shadow 0.12s, color 0.12s;
+  }
+  .equip-slot .equip-unequip-btn:hover,
+  .equip-slot .equip-unequip-btn:focus-visible {
+    border-color: rgba(255, 218, 160, 0.8);
+    color: #fff;
+    box-shadow: 0 0 7px rgba(202, 164, 114, 0.4);
+  }
+  body.mobile-touch .equip-slot .equip-unequip-btn { min-height: 40px; }
 
   /* ---------- Premium Accessible Login Form styling ---------- */
   .auth-panel-premium {
