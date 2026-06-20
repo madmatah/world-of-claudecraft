@@ -99,7 +99,7 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
   },
   elder_bristleback: {
     id: 'elder_bristleback', name: 'Elder Bristleback', minLevel: 5, maxLevel: 5, family: 'beast', rare: true,
-    elite: true, canSwim: true, ccImmune: true, respawnMult: 432,
+    elite: true, canSwim: true, ccImmune: true, respawnMult: 7.2,
     hpBase: 260, hpPerLevel: 52, dmgBase: 11, dmgPerLevel: 3.3, attackSpeed: 2.4,
     armorPerLevel: 30, moveSpeed: 7.2, aggroRadius: 12,
     aoePulse: { min: 12, max: 18, radius: 8, every: 9, name: 'Bristleback Stomp', school: 'physical' },
@@ -266,7 +266,7 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
     // Mogger (humanoid). A heavy, slow striker that erupts in a shadow nova
     // and goes berserk when low; loot mirrors the other rare elites.
     id: 'captain_verlan', name: 'Captain Verlan', minLevel: 7, maxLevel: 7, family: 'undead', rare: true,
-    elite: true, ccImmune: true, respawnMult: 432,
+    elite: true, ccImmune: true, respawnMult: 7.2,
     hpBase: 280, hpPerLevel: 56, dmgBase: 12, dmgPerLevel: 3.4, attackSpeed: 2.6,
     armorPerLevel: 32, moveSpeed: 7.4, aggroRadius: 13,
     aoePulse: { min: 13, max: 19, radius: 9, every: 9, name: 'Hollow Nova', school: 'shadow', fx: 'nova' },
@@ -423,7 +423,7 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
   },
   brightwood_monarch: {
     id: 'brightwood_monarch', name: 'The Brightwood Monarch', minLevel: 6, maxLevel: 6, family: 'beast', rare: true,
-    elite: true, ccImmune: true, respawnMult: 432,
+    elite: true, ccImmune: true, respawnMult: 7.2,
     hpBase: 240, hpPerLevel: 48, dmgBase: 11, dmgPerLevel: 3.2, attackSpeed: 2.4,
     armorPerLevel: 26, moveSpeed: 8, aggroRadius: 12,
     // The great stag of the glade. It sweeps a wide arc with its crown of antlers

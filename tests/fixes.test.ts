@@ -240,7 +240,7 @@ describe('swimming', () => {
 });
 
 describe('rare spawn rules', () => {
-  it('rare spawns are elite, control immune, swimmers with long respawns', () => {
+  it('rare spawns are elite, control immune, swimmers with configured respawns', () => {
     for (const id of [
       'elder_bristleback',
       'sableweb_matriarch',
@@ -255,7 +255,8 @@ describe('rare spawn rules', () => {
         canSwim: true,
         ccImmune: true,
       });
-      if (id === 'elder_bristleback' || id === 'sableweb_matriarch') expect(MOBS[id].respawnMult).toBe(432);
+      if (id === 'elder_bristleback') expect(MOBS[id].respawnMult).toBe(7.2);
+      else if (id === 'sableweb_matriarch') expect(MOBS[id].respawnMult).toBe(432);
       else if (id === 'mirejaw_the_ravenous' || id === 'sister_nhalia') expect(MOBS[id].respawnMult).toBe(648);
       else expect(MOBS[id].respawnMult).toBe(864);
     }
@@ -297,9 +298,19 @@ describe('rare spawn rules', () => {
 
   it('rare respawn timers use their configured multiplier', () => {
     const sim = new Sim({ seed: SEED, playerClass: 'warrior', respawnSeconds: 2 });
-    const rare = createMob(990003, MOBS.elder_bristleback, 5, { x: 0, y: 0, z: 0 });
+    const rare = createMob(990003, MOBS.sableweb_matriarch, 6, { x: 0, y: 0, z: 0 });
     (sim as any).handleDeath(rare, null);
     expect(rare.respawnTimer).toBe(864);
+  });
+
+  it('quest-related named rares respawn after 3 minutes', () => {
+    const ids = ['old_cragmaw', 'captain_verlan', 'brightwood_monarch', 'elder_bristleback'] as const;
+    for (const id of ids) {
+      const sim = new Sim({ seed: SEED, playerClass: 'warrior' });
+      const mob = createMob(990004, MOBS[id], MOBS[id].maxLevel, { x: 0, y: 0, z: 0 });
+      (sim as any).handleDeath(mob, null);
+      expect(mob.respawnTimer, id).toBe(180);
+    }
   });
 
   it('Mogger respawns on a quest-boss timer instead of a long rare-spawn timer', () => {

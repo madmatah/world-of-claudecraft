@@ -1025,7 +1025,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   "itemUi.market.collectWithCount": "Забрать ({count})",
   "itemUi.market.noMerchant": "Подойдите к Торговцу, чтобы заключать сделки.",
   "itemUi.market.emptyBrowse": "На рынке тихо. Выставьте что-нибудь первым на вкладке Продать.",
-  "itemUi.market.browseNote": "Товары, выставленные искателями приключений со всего мира. Выберите Купить, чтобы сразу приобрести стопку.",
+  "itemUi.market.browseNote": "Товары, выставленные искателями приключений со всего мира. Выберите Купить, чтобы сразу приобрести стопку.",   "itemUi.market.searchPlaceholder": "Поиск по рынку...",   "itemUi.market.searchAria": "Поиск на мировом рынке по названию предмета",   "itemUi.market.emptySearch": "Ничего не найдено по запросу. Попробуйте другое название.",   "itemUi.market.truncated": "Показано {shown} из {total} совпадений. Уточните поиск, чтобы увидеть остальное.",
   "itemUi.market.merchantStock": "Запасы Торговца",
   "itemUi.market.stackCount": "x{count}",
   "itemUi.market.each": "{money} за штуку",

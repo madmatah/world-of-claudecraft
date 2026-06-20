@@ -1011,6 +1011,9 @@ export class ClientWorld implements IWorld {
   arenaAugmentPick(augmentId: string): void {
     this.cmd({ cmd: 'arena_augment', augment: augmentId });
   }
+  marketSearch(query: string): void {
+    this.cmd({ cmd: 'market_search', q: query });
+  }
   marketList(itemId: string, count: number, price: number): void {
     this.cmd({ cmd: 'market_list', item: itemId, count, price });
   }

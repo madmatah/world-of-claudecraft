@@ -1025,7 +1025,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   "itemUi.market.collectWithCount": "领取（{count}）",
   "itemUi.market.noMerchant": "靠近商人才能交易。",
   "itemUi.market.emptyBrowse": "市场很安静。到出售标签页率先上架物品。",
-  "itemUi.market.browseNote": "来自全境冒险者的货物。选择购买即可直接买下一组。",
+  "itemUi.market.browseNote": "来自全境冒险者的货物。选择购买即可直接买下一组。",   "itemUi.market.searchPlaceholder": "搜索市场...",   "itemUi.market.searchAria": "按物品名称搜索世界市场",   "itemUi.market.emptySearch": "没有商品符合你的搜索。请尝试其他名称。",   "itemUi.market.truncated": "显示 {total} 个匹配中的 {shown} 个。请细化搜索以查看其余内容。",
   "itemUi.market.merchantStock": "商人库存",
   "itemUi.market.stackCount": "x{count}",
   "itemUi.market.each": "每个 {money}",

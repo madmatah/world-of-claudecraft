@@ -1290,6 +1290,7 @@ export class GameServer {
       case 'switchLoadout': if (typeof msg.index === 'number') sim.switchLoadout(msg.index | 0, pid); break;
       case 'deleteLoadout': if (typeof msg.index === 'number') sim.deleteLoadout(msg.index | 0, pid); break;
       // World Market (the Merchant's auction house)
+      case 'market_search': if (typeof msg.q === 'string') sim.marketSearch(msg.q, pid); break;
       case 'market_list':
         if (typeof msg.item === 'string' && Number.isFinite(msg.count) && Number.isFinite(msg.price)) {
           sim.marketList(msg.item, msg.count, msg.price, pid);

@@ -447,6 +447,7 @@ export class Hud {
   private marketOpen = false;
   private marketTab: 'browse' | 'sell' | 'collect' = 'browse';
   private marketSellItem: string | null = null; // bag item staged for listing
+  private marketSearchQuery = ''; // active browse search term (sent to the server)
   private lastMarketSig = '';
   // all-time ladder, fetched best-effort from the server (online only)
   private arenaAllTime: Partial<Record<ArenaFormat, { name: string; class: string; level: number; rating: number; wins: number; losses: number }[]>> = {};
@@ -4714,6 +4715,8 @@ export class Hud {
     this.marketOpen = true;
     this.marketTab = 'browse';
     this.marketSellItem = null;
+    this.marketSearchQuery = '';
+    this.sim.marketSearch('');
     this.lastMarketSig = '';
     this.renderMarket();
     $('#market-window').style.display = 'flex';
@@ -4790,7 +4793,7 @@ export class Hud {
     if (!this.marketOpen || this.marketTab === 'sell') return;
     const info = this.sim.marketInfo;
     const collectN = info ? (info.collectionCopper > 0 ? 1 : 0) + info.collectionItems.length : 0;
-    const sig = JSON.stringify([this.marketTab, info?.listings, info?.collectionCopper, info?.collectionItems]);
+    const sig = JSON.stringify([this.marketTab, info?.listings, info?.totalCount, info?.filter, info?.collectionCopper, info?.collectionItems]);
     if (sig === this.lastMarketSig) return;
     this.lastMarketSig = sig;
     const collectTab = $('#market-window').querySelector('[data-tab="collect"]');
@@ -4812,11 +4815,50 @@ export class Hud {
   }
 
   private renderMarketBrowse(body: HTMLElement, info: MarketInfo): void {
+    // Reuse the search field and list container across refreshes so typing in
+    // the box never loses focus when the server streams back filtered results.
+    let search = body.querySelector('.mkt-search') as HTMLInputElement | null;
+    let list = body.querySelector('.mkt-list') as HTMLElement | null;
+    if (!search || !list) {
+      body.innerHTML = '';
+      search = document.createElement('input');
+      search.type = 'search';
+      search.className = 'mkt-search';
+      search.placeholder = t('itemUi.market.searchPlaceholder');
+      search.setAttribute('aria-label', t('itemUi.market.searchAria'));
+      search.value = this.marketSearchQuery;
+      search.addEventListener('input', () => {
+        this.marketSearchQuery = search!.value;
+        this.sim.marketSearch(search!.value);
+      });
+      body.appendChild(search);
+      list = document.createElement('div');
+      list.className = 'mkt-list';
+      body.appendChild(list);
+    }
+    // Keep the field in sync on external resets, but never clobber active typing.
+    if (document.activeElement !== search && search.value !== this.marketSearchQuery) {
+      search.value = this.marketSearchQuery;
+    }
+    list.innerHTML = '';
     if (info.listings.length === 0) {
-      body.innerHTML = `<div class="mkt-empty">${esc(t('itemUi.market.emptyBrowse'))}</div>`;
+      const empty = document.createElement('div');
+      empty.className = 'mkt-empty';
+      empty.textContent = info.filter.trim()
+        ? t('itemUi.market.emptySearch')
+        : t('itemUi.market.emptyBrowse');
+      list.appendChild(empty);
       return;
     }
-    body.innerHTML = `<div class="mkt-note">${esc(t('itemUi.market.browseNote'))}</div>`;
+    const note = document.createElement('div');
+    note.className = 'mkt-note';
+    note.textContent = info.totalCount > info.listings.length
+      ? t('itemUi.market.truncated', {
+          shown: formatNumber(info.listings.length, { maximumFractionDigits: 0 }),
+          total: formatNumber(info.totalCount, { maximumFractionDigits: 0 }),
+        })
+      : t('itemUi.market.browseNote');
+    list.appendChild(note);
     for (const l of info.listings) {
       const item = ITEMS[l.itemId];
       if (!item) continue;
@@ -4845,7 +4887,7 @@ export class Hud {
       });
       row.appendChild(btn);
       this.attachTooltip(row, () => this.itemTooltip(item));
-      body.appendChild(row);
+      list.appendChild(row);
     }
   }
 

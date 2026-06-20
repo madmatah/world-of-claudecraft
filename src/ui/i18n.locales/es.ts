@@ -1028,7 +1028,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "itemUi.market.collectWithCount": "Recoger ({count})",
   "itemUi.market.noMerchant": "Acércate al Mercader para comerciar.",
   "itemUi.market.emptyBrowse": "El mercado está tranquilo. Sé el primero en publicar algo en la pestaña Vender.",
-  "itemUi.market.browseNote": "Mercancías publicadas por aventureros del reino entero. Elige Comprar para adquirir un montón al instante.",
+  "itemUi.market.browseNote": "Mercancías publicadas por aventureros del reino entero. Elige Comprar para adquirir un montón al instante.",   "itemUi.market.searchPlaceholder": "Buscar en el mercado...",   "itemUi.market.searchAria": "Buscar en el Mercado Mundial por nombre de objeto",   "itemUi.market.emptySearch": "Ningún artículo coincide con tu búsqueda. Prueba con otro nombre.",   "itemUi.market.truncated": "Mostrando {shown} de {total} coincidencias. Refina tu búsqueda para ver el resto.",
   "itemUi.market.merchantStock": "Existencias del Mercader",
   "itemUi.market.stackCount": "x{count}",
   "itemUi.market.each": "{money} cada uno",

@@ -65,7 +65,7 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
   // mechanics only — a rending pounce (aoePulse) and a wounded-beast enrage.
   old_cragmaw: {
     id: 'old_cragmaw', name: 'Old Cragmaw', minLevel: 14, maxLevel: 14, family: 'beast', rare: true,
-    elite: true, canSwim: true, ccImmune: true, respawnMult: 432,
+    elite: true, canSwim: true, ccImmune: true, respawnMult: 7.2,
     hpBase: 320, hpPerLevel: 56, dmgBase: 16, dmgPerLevel: 4.0, attackSpeed: 1.7,
     armorPerLevel: 24, moveSpeed: 8.6, aggroRadius: 13,
     aoePulse: { min: 22, max: 30, radius: 8, every: 9, name: 'Savage Pounce', school: 'physical' },

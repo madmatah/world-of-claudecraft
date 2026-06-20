@@ -351,6 +351,7 @@ describe("i18n Localization Key Coverage", () => {
     realm: "Eastbrook",
     resource: "Mana",
     seconds: 7,
+    shown: 120,
     slot: 5,
     source: "Wolf",
     speed: 2.4,

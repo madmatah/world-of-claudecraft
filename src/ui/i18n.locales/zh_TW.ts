@@ -1025,7 +1025,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   "itemUi.market.collectWithCount": "領取（{count}）",
   "itemUi.market.noMerchant": "靠近商人才能交易。",
   "itemUi.market.emptyBrowse": "市場很安靜。到出售分頁率先上架物品。",
-  "itemUi.market.browseNote": "來自全境冒險者的貨物。選擇購買即可直接買下一組。",
+  "itemUi.market.browseNote": "來自全境冒險者的貨物。選擇購買即可直接買下一組。",   "itemUi.market.searchPlaceholder": "搜尋市場...",   "itemUi.market.searchAria": "依物品名稱搜尋世界市場",   "itemUi.market.emptySearch": "沒有商品符合你的搜尋。請嘗試其他名稱。",   "itemUi.market.truncated": "顯示 {total} 個相符中的 {shown} 個。請細化搜尋以查看其餘內容。",
   "itemUi.market.merchantStock": "商人庫存",
   "itemUi.market.stackCount": "x{count}",
   "itemUi.market.each": "每個 {money}",

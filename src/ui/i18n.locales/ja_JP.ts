@@ -1025,7 +1025,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   "itemUi.market.collectWithCount": "受取（{count}）",
   "itemUi.market.noMerchant": "取引するには商人に近づいてください。",
   "itemUi.market.emptyBrowse": "市場は静かです。売却タブで最初に何かを出品しましょう。",
-  "itemUi.market.browseNote": "王国中の冒険者が出品した品です。購入を選ぶとスタックを即時購入します。",
+  "itemUi.market.browseNote": "王国中の冒険者が出品した品です。購入を選ぶとスタックを即時購入します。",   "itemUi.market.searchPlaceholder": "市場を検索...",   "itemUi.market.searchAria": "アイテム名でワールドマーケットを検索",   "itemUi.market.emptySearch": "検索に一致する商品がありません。別の名前をお試しください。",   "itemUi.market.truncated": "{total}件中{shown}件を表示。検索を絞り込んで残りを表示してください。",
   "itemUi.market.merchantStock": "商人の在庫",
   "itemUi.market.stackCount": "x{count}",
   "itemUi.market.each": "各 {money}",

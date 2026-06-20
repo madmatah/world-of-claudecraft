@@ -481,6 +481,11 @@ export interface PlayerMeta {
   // Session-only: name of the last player who whispered us, for "/r" replies.
   // Never persisted — a fresh login starts with no reply target.
   lastWhisperFrom?: string;
+  // Session-only World Market browse filter. The market is capped at
+  // MARKET_WIRE_LIMIT listings per snapshot to bound wire cost, so this
+  // server-side substring filter (matched against item names) is how a player
+  // reaches goods past the cap. Never persisted — resets on login.
+  marketFilter: string;
 }
 
 // Away-from-keyboard / do-not-disturb presence. `afk` still delivers whispers
@@ -888,6 +893,7 @@ export class Sim {
       loadouts: [],
       activeLoadout: -1,
       away: null,
+      marketFilter: '',
     };
     this.players.set(player.id, meta);
     player.skinCatalog = meta.skinCatalog;
@@ -9352,6 +9358,15 @@ export class Sim {
 
   // List a stack from your bags for sale. The goods are escrowed (pulled from
   // your bags immediately) and held by the Merchant until bought or reclaimed.
+  // Set the player's session-only World Market browse filter. Purely a
+  // display/query narrowing — no gameplay effect — so it needs no proximity or
+  // liveness gate; the next marketInfoFor snapshot reflects it.
+  marketSearch(query: string, pid?: number): void {
+    const r = this.resolve(pid);
+    if (!r) return;
+    r.meta.marketFilter = (query ?? '').slice(0, 40);
+  }
+
   marketList(itemId: string, count: number, price: number, pid?: number): void {
     const r = this.resolve(pid);
     if (!r) return;
@@ -9466,7 +9481,16 @@ export class Sim {
     // the World Market is a place you visit — only stream it while standing by
     // the Merchant, which also bounds the per-snapshot wire cost
     if (!this.nearMerchant(e)) return null;
-    const sorted = [...this.marketListings].sort((a, b) => {
+    // Server-side browse filter: a substring match on item name (and id) lets a
+    // player reach goods past MARKET_WIRE_LIMIT without lifting the wire cap.
+    const filter = meta.marketFilter.trim().toLowerCase();
+    const matched = filter
+      ? this.marketListings.filter((l) => {
+          const name = (ITEMS[l.itemId]?.name ?? l.itemId).toLowerCase();
+          return name.includes(filter) || l.itemId.toLowerCase().includes(filter);
+        })
+      : this.marketListings;
+    const sorted = [...matched].sort((a, b) => {
       const na = ITEMS[a.itemId]?.name ?? a.itemId;
       const nb = ITEMS[b.itemId]?.name ?? b.itemId;
       return na.localeCompare(nb) || a.price - b.price;
@@ -9479,6 +9503,8 @@ export class Sim {
     const myListingCount = this.marketListings.reduce((n, l) => n + (!l.house && l.sellerKey === meta.name ? 1 : 0), 0);
     return {
       listings,
+      totalCount: matched.length,
+      filter: meta.marketFilter,
       collectionCopper: col?.copper ?? 0,
       collectionItems: col ? col.items.map((s) => ({ ...s })) : [],
       cutPct: Math.round(MARKET_CUT * 100),

@@ -1025,7 +1025,7 @@ export const de_DE: Partial<Record<TranslationKey, string>> = {
   "itemUi.market.collectWithCount": "Abholen ({count})",
   "itemUi.market.noMerchant": "Tretet an den Händler heran, um zu handeln.",
   "itemUi.market.emptyBrowse": "Der Markt ist ruhig. Stellt als Erste etwas im Reiter Verkaufen ein.",
-  "itemUi.market.browseNote": "Waren von Abenteurern im ganzen Reich. Wählt Kaufen, um einen Stapel sofort zu erwerben.",
+  "itemUi.market.browseNote": "Waren von Abenteurern im ganzen Reich. Wählt Kaufen, um einen Stapel sofort zu erwerben.",   "itemUi.market.searchPlaceholder": "Markt durchsuchen...",   "itemUi.market.searchAria": "Den Weltmarkt nach Gegenstandsnamen durchsuchen",   "itemUi.market.emptySearch": "Keine Waren entsprechen deiner Suche. Versuche einen anderen Namen.",   "itemUi.market.truncated": "{shown} von {total} Treffern werden angezeigt. Verfeinere deine Suche, um den Rest zu sehen.",
   "itemUi.market.merchantStock": "Händlerbestand",
   "itemUi.market.stackCount": "x{count}",
   "itemUi.market.each": "{money} pro Stück",

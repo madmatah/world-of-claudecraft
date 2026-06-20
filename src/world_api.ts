@@ -226,6 +226,8 @@ export interface MarketListingView {
 
 export interface MarketInfo {
   listings: MarketListingView[];
+  totalCount: number; // listings matching the active filter, before the wire cap
+  filter: string; // the active browse filter (echoed back from the server)
   collectionCopper: number; // proceeds waiting to be collected
   collectionItems: InvSlot[]; // returned/expired items waiting to be collected
   cutPct: number; // the Merchant's cut on a sale, as a percentage
@@ -349,6 +351,7 @@ export interface IWorld {
   // 2v2 Fiesta: lock in one of the augments currently on offer
   arenaAugmentPick(augmentId: string): void;
   // World Market
+  marketSearch(query: string): void;
   marketList(itemId: string, count: number, price: number): void;
   marketBuy(listingId: number): void;
   marketCancel(listingId: number): void;

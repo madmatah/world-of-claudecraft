@@ -1025,7 +1025,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   "itemUi.market.collectWithCount": "수령 ({count})",
   "itemUi.market.noMerchant": "상인에게 가까이 가야 거래할 수 있습니다.",
   "itemUi.market.emptyBrowse": "시장이 조용합니다. 판매 탭에서 먼저 물건을 올려 보세요.",
-  "itemUi.market.browseNote": "왕국 전역의 모험가가 올린 상품입니다. 구매를 선택하면 묶음을 바로 삽니다.",
+  "itemUi.market.browseNote": "왕국 전역의 모험가가 올린 상품입니다. 구매를 선택하면 묶음을 바로 삽니다.",   "itemUi.market.searchPlaceholder": "시장 검색...",   "itemUi.market.searchAria": "아이템 이름으로 세계 시장 검색",   "itemUi.market.emptySearch": "검색과 일치하는 물품이 없습니다. 다른 이름을 시도하세요.",   "itemUi.market.truncated": "{total}개 중 {shown}개 표시 중. 나머지를 보려면 검색을 좁히세요.",
   "itemUi.market.merchantStock": "상인 재고",
   "itemUi.market.stackCount": "x{count}",
   "itemUi.market.each": "개당 {money}",
