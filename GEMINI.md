@@ -21,7 +21,7 @@ This guide provides project-specific context and instructions optimized for **Ge
 ### Agentic Loop Coordination
 - **Subagent Spawning**: For long-horizon research or E2E test runs, spawn the specialized `research` subagent to keep the main context window free of verbose logs.
 - **Timer / Cron Scheduler**: Use the native `schedule` tool for delayed checks or recurring tasks (polling servers or waiting for long builds) instead of running terminal `sleep` commands.
-- **Direct Output Style**: Gemini 3.5 Flash (High) can generate overly flowery explanations or AI-like narratives when reasoning is set to High. Write concise, direct, and functional comments. Do **not** use em dashes in user-facing copy or developer documentation; prefer colons, hyphens, or parentheses.
+- **Direct Output Style**: Gemini 3.5 Flash (High) can generate overly flowery explanations or AI-like narratives when reasoning is set to High. Write concise, direct, and functional comments. Do **not** use em dashes, en dashes, or emojis anywhere (code, comments, docs, commits, PR text, or player copy); prefer commas, colons, parentheses, or "to" for ranges.
 
 ### Claude Interoperability
 - **`CLAUDE.md` is canonical.** This project is driven primarily through Claude Code (Claude Opus 4.8); the root and per-directory `CLAUDE.md` files are the source of truth for architecture, invariants, commands, and conventions. Read and ingest them during your initialization/planning phase, and when this guide and `CLAUDE.md` disagree, **`CLAUDE.md` wins** — treat this file as the Gemini-session companion, not a competing spec.
@@ -54,7 +54,7 @@ This guide provides project-specific context and instructions optimized for **Ge
 
 When working inside the simulation package:
 1. **Deterministic Mutation**: Never directly modify the `Sim` state or entity properties from rendering or client code. All state mutations must go through `Sim`'s own command methods (e.g. `castAbility`, `targetEntity`, `addItem`) and resolve inside the `tick()` loop (`src/sim/sim.ts`). The numeric RL action surface `applyAction` lives in `src/sim/obs.ts`, not `sim.ts`.
-2. **Deterministic RNG**: Always use the seed-based pseudo-random number generator (`src/sim/rng.ts`). Never call `Math.random()`.
+2. **Deterministic RNG**: Always use the seed-based pseudo-random number generator (`src/sim/rng.ts`). Never call `Math.random()`, `Date.now()`, or `performance.now()` in `src/sim/`. `tests/architecture.test.ts` enforces sim purity (no DOM or render/ui/game/net/three imports, no nondeterminism).
 3. **Stat Formulas**: Maintain fidelity to classic-era-MMO-style formulas (e.g., Attack Power, Armor Damage Mitigation, Critical Strike rating, and Spell Resistances) defined in `src/sim/content/classes.ts`.
 4. **Collision & Spatial Queries**: Use the axis-aligned bounding box (AABB) system in `src/sim/colliders.ts` and spatial indexing in `src/sim/spatial.ts` for physics checks and spell ranges.
 
@@ -154,7 +154,7 @@ Types: `feat`, `fix`, `refactor`, `style`, `docs`, `test`, `chore`.
 7. **Senior Engineering Standards**:
    - Deliver clean, scalable, and well-architected code.
    - **Always read before editing**: Read and fully understand existing patterns, dependencies, and imports in a file before modifying it.
-   - **Prefer editing over creating**: Modify existing files rather than introducing new ones, unless a new file is explicitly required.
+   - **Module-first for new behavior**: prefer a new, focused, testable module behind an existing seam (`IWorld`, a `src/sim/content/` record, a `src/render/<thing>.ts`) over appending a block of logic to a large file. Do not split a monolith just to hit a line count. See the Modularity section in `CLAUDE.md`.
    - **Reason through blast radius**: For simulation changes, DB persistence alterations, API routes, or WebSocket handler updates, reason through failure modes (concurrency, partial success, side-effects) before writing code.
    - **Red team your own diffs**: Critically review your changes before declaring completion. Ask: "What breaks under edge cases? What's the worst input?"
    - **Verification goes beyond compile checks**: Ensure unit/integration tests pass (`npm run test`), and visually verify/interact with UI changes in the browser using the Playwright MCP server (testing both success and error paths).

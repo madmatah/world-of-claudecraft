@@ -23,19 +23,19 @@ Any non-Claude coding agent (Codex and similar) can treat this file as root proj
 ## Core Engineering Rules
 
 - Keep TypeScript strict and avoid `any` casts.
-- Prefer editing existing files over adding new files unless a new file is clearly required.
+- Module-first for new behavior: prefer a new, focused, testable module behind an existing seam (`IWorld`, a `src/sim/content/` record, a `src/render/<thing>.ts`) over appending a block of logic to a large file. Do not split a monolith just to hit a line count. See the Modularity section in `CLAUDE.md`.
 - Use standard ES modules and relative imports.
 - Do not add placeholder code or TODO-driven implementations.
 - Do not import Tailwind or new UI frameworks.
 - For external library/API usage, fetch current docs with Context7 or official docs when available.
-- Do not use the em dash character in UI copy or developer docs.
+- Do not use em dashes, en dashes, or emojis anywhere: code, comments, docs, commits, PR text, or player copy. Use commas, colons, parentheses, or "to" for ranges.
 - Do not use raw emojis for in-game UI icons.
 
 ## Simulation Rules
 
 - Never mutate simulation state directly from rendering, UI, or client glue code.
 - All state mutations must happen through simulation actions/ticks.
-- Use seeded RNG from `src/sim/rng.ts`; never use `Math.random()` in simulation logic.
+- Use seeded RNG from `src/sim/rng.ts`; never `Math.random()`, `Date.now()`, or `performance.now()` in `src/sim/`. `tests/architecture.test.ts` enforces sim purity (no DOM or render/ui/game/net/three imports, no nondeterminism).
 - Maintain classic-era-MMO-style stat formulas and deterministic combat behavior.
 - Use existing collision, spatial, and pathfinding helpers.
 
