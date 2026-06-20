@@ -14,6 +14,8 @@ import { holderInfoForPubkey } from './woc_balance';
 import type { AccountChatMuteStatus, AccountCosmetics, RequestMetadata } from './db';
 import { ChatFilter } from './chat_filter';
 import { loadChatFilterState, applyChatStrike, recordChatViolation } from './chat_filter_db';
+import { IpBlockList } from './ip_block';
+import { loadActiveBlockedIps } from './ip_block_db';
 import { offensiveName } from './auth';
 import { ChatLogger } from './chat_log';
 import { SocialService } from './social';
@@ -133,6 +135,7 @@ export interface ClientSession {
   socialTrackedIds?: number[];
   // IP address at join time (from requestMetadata); used for per-IP session counting.
   ip: string;
+  isAdmin: boolean;
   // Behavioral bot-detection state. Ephemeral — reset on every join.
   bot: BotTracker;
 }
@@ -347,6 +350,7 @@ export class GameServer {
   // Admin-managed soft/hard word lists + escalation config. Loaded from the DB
   // at boot (loadChatFilter) and refreshed whenever an admin edits the lists.
   readonly chatFilter = new ChatFilter();
+  private readonly ipBlockList = new IpBlockList();
   private readonly socialDb = new PgSocialDb(pool);
   readonly social: SocialService;
   private wireCache = new Map<number, EntityWireCache>();
@@ -697,7 +701,7 @@ export class GameServer {
     cls: import('../src/sim/types').PlayerClass,
     state: import('../src/sim/sim').CharacterState | null,
     isGm = false,
-    meta: RequestMetadata & Partial<AccountChatMuteStatus> & { accountCosmetics?: AccountCosmetics; chatStrikes?: number } = {},
+    meta: RequestMetadata & Partial<AccountChatMuteStatus> & { accountCosmetics?: AccountCosmetics; chatStrikes?: number; isAdmin?: boolean } = {},
   ): ClientSession | { error: string } {
     if (this.sessionsByCharacterId.has(characterId)) return { error: 'character already in world' };
     // Anti-bot: cap simultaneous online characters per account. Accounts can
@@ -743,6 +747,7 @@ export class GameServer {
       lastSent: {},
       sentEnts: new Map(),
       ip: sessionIp,
+      isAdmin: meta.isAdmin ?? false,
       bot: antibot.createTracker(),
     };
     this.ipSessionCounts.set(sessionIp, (this.ipSessionCounts.get(sessionIp) ?? 0) + 1);
@@ -1058,6 +1063,45 @@ export class GameServer {
     const words = this.chatFilter.softWords();
     for (const session of this.clients.values()) {
       this.send(session, { t: 'censor', words });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // IP blocklist
+  // -------------------------------------------------------------------------
+
+  async loadBlockedIps(): Promise<void> {
+    try {
+      this.ipBlockList.setEntries(await loadActiveBlockedIps());
+    } catch (err) {
+      console.error('failed to load blocked IPs:', err);
+    }
+  }
+
+  async reloadBlockedIps(): Promise<void> {
+    await this.loadBlockedIps();
+  }
+
+  isIpBlocked(ip: string): boolean {
+    return this.ipBlockList.isBlocked(ip, Date.now());
+  }
+
+  disconnectByIp(ip: string, reason: string): void {
+    for (const session of [...this.clients.values()]) {
+      if (session.ip !== ip || session.isAdmin) continue;
+      this.send(session, { t: 'error', error: reason });
+      try { session.ws.close(); } catch { /* connection already closing */ }
+      void this.leave(session, 'moderation action');
+    }
+  }
+
+  disconnectBlockedSessions(reason: string): void {
+    const now = Date.now();
+    for (const session of [...this.clients.values()]) {
+      if (session.isAdmin || !this.ipBlockList.isBlocked(session.ip, now)) continue;
+      this.send(session, { t: 'error', error: reason });
+      try { session.ws.close(); } catch { /* connection already closing */ }
+      void this.leave(session, 'moderation action');
     }
   }
 
