@@ -50,22 +50,29 @@ const appBuildId = env([
   'CF_PAGES_COMMIT_SHA',
 ]) ?? gitSha() ?? appBuildDate.replace(/[-:TZ.]/g, '').slice(0, 12);
 
-// Pretty-URL aliases for the standalone official-channels page (public/links.html).
-// Mirrors the production server's rewrite in server/main.ts (LINKS_ALIASES) so the
-// same /links, /social, /social-media-links paths resolve in dev and preview too.
-const LINKS_ALIASES = new Set([
-  '/links', '/links/', '/social', '/social/', '/social-media-links', '/social-media-links/',
+// Pretty-URL aliases for standalone static HTML pages. Mirrors the production
+// server rewrite in server/main.ts so these paths resolve in dev and preview too.
+const STATIC_PAGE_ALIASES = new Map([
+  ['/links', '/links.html'],
+  ['/links/', '/links.html'],
+  ['/social', '/links.html'],
+  ['/social/', '/links.html'],
+  ['/social-media-links', '/links.html'],
+  ['/social-media-links/', '/links.html'],
+  ['/play', '/play.html'],
+  ['/play/', '/play.html'],
 ]);
-function linksAliasPlugin() {
+function staticPageAliasPlugin() {
   const rewrite = (req: { url?: string }) => {
     const url = req.url ?? '';
     const pathOnly = url.split('?')[0];
-    if (LINKS_ALIASES.has(pathOnly)) req.url = '/links.html' + url.slice(pathOnly.length);
+    const target = STATIC_PAGE_ALIASES.get(pathOnly);
+    if (target) req.url = target + url.slice(pathOnly.length);
   };
   const attach = (server: { middlewares: { use: (fn: (req: { url?: string }, res: unknown, next: () => void) => void) => void } }) => {
     server.middlewares.use((req, _res, next) => { rewrite(req); next(); });
   };
-  return { name: 'woc-links-alias', configureServer: attach, configurePreviewServer: attach };
+  return { name: 'woc-static-page-alias', configureServer: attach, configurePreviewServer: attach };
 }
 
 // Phase 4 (i18n Lazy Locales): after the production build, resolve each lazy locale
@@ -96,7 +103,7 @@ function i18nModulepreloadPlugin() {
 
 export default defineConfig({
   base: '/',
-  plugins: [linksAliasPlugin(), i18nModulepreloadPlugin()],
+  plugins: [staticPageAliasPlugin(), i18nModulepreloadPlugin()],
   resolve: { alias: { '#bot-detector': botDetectorImpl } },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
@@ -133,6 +140,7 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL('index.html', import.meta.url)),
         admin: fileURLToPath(new URL('admin.html', import.meta.url)),
+        play: fileURLToPath(new URL('play.html', import.meta.url)),
       },
     },
   },
