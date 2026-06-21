@@ -9,45 +9,17 @@
 // Reproducibility is checked by tests/i18n_resolved_equivalence.test.ts.
 
 export const pending: Record<string, readonly string[]> = {
-  "es": [
-    "entities.dungeons.nythraxis_boss_arena.enterText",
-    "entities.dungeons.nythraxis_boss_arena.leaveText",
-    "entities.dungeons.nythraxis_boss_arena.name"
-  ],
-  "es_ES": [
-    "entities.dungeons.nythraxis_boss_arena.enterText",
-    "entities.dungeons.nythraxis_boss_arena.leaveText",
-    "entities.dungeons.nythraxis_boss_arena.name"
-  ],
-  "fr_FR": [
-    "entities.dungeons.nythraxis_boss_arena.enterText",
-    "entities.dungeons.nythraxis_boss_arena.leaveText",
-    "entities.dungeons.nythraxis_boss_arena.name"
-  ],
-  "fr_CA": [
-    "entities.dungeons.nythraxis_boss_arena.enterText",
-    "entities.dungeons.nythraxis_boss_arena.leaveText",
-    "entities.dungeons.nythraxis_boss_arena.name"
-  ],
+  "es": [],
+  "es_ES": [],
+  "fr_FR": [],
+  "fr_CA": [],
   "en_CA": [],
-  "it_IT": [
-    "entities.dungeons.nythraxis_boss_arena.enterText",
-    "entities.dungeons.nythraxis_boss_arena.leaveText",
-    "entities.dungeons.nythraxis_boss_arena.name"
-  ],
-  "de_DE": [
-    "entities.dungeons.nythraxis_boss_arena.enterText",
-    "entities.dungeons.nythraxis_boss_arena.leaveText",
-    "entities.dungeons.nythraxis_boss_arena.name"
-  ],
+  "it_IT": [],
+  "de_DE": [],
   "zh_CN": [],
   "zh_TW": [],
   "ko_KR": [],
   "ja_JP": [],
-  "pt_BR": [
-    "entities.dungeons.nythraxis_boss_arena.enterText",
-    "entities.dungeons.nythraxis_boss_arena.leaveText",
-    "entities.dungeons.nythraxis_boss_arena.name"
-  ],
+  "pt_BR": [],
   "ru_RU": []
 };

@@ -5114,9 +5114,9 @@ export const de_DE: EnTranslations = {
         "leaveText": "Du trittst wieder in die kalte Luft von Thornpeak."
       },
       "nythraxis_boss_arena": {
-        "name": "Nythraxis Raid Arena",
-        "enterText": "You pass through the sealed royal door.",
-        "leaveText": "You return to the cold air of Thornpeak."
+        "name": "Nythraxis-Schlachtzugsarena",
+        "enterText": "Ihr durchschreitet die versiegelte königliche Tür.",
+        "leaveText": "Ihr kehrt in die kalte Luft von Thornpeak zurück."
       },
       "drowned_temple": {
         "name": "Der Ertränkte Tempel",

@@ -26,30 +26,30 @@
   "counts": {
     "keys": 3431,
     "rows": 44603,
-    "translated": 44532,
-    "pending": 21,
+    "translated": 44553,
+    "pending": 0,
     "blocked": 50,
     "blockedSource": 92
   },
   "perLocale": {
     "es": {
-      "translated": 3427,
-      "pending": 3,
+      "translated": 3430,
+      "pending": 0,
       "blocked": 1
     },
     "es_ES": {
-      "translated": 3427,
-      "pending": 3,
+      "translated": 3430,
+      "pending": 0,
       "blocked": 1
     },
     "fr_FR": {
-      "translated": 3418,
-      "pending": 3,
+      "translated": 3421,
+      "pending": 0,
       "blocked": 10
     },
     "fr_CA": {
-      "translated": 3419,
-      "pending": 3,
+      "translated": 3422,
+      "pending": 0,
       "blocked": 9
     },
     "en_CA": {
@@ -58,13 +58,13 @@
       "blocked": 0
     },
     "it_IT": {
-      "translated": 3416,
-      "pending": 3,
+      "translated": 3419,
+      "pending": 0,
       "blocked": 12
     },
     "de_DE": {
-      "translated": 3418,
-      "pending": 3,
+      "translated": 3421,
+      "pending": 0,
       "blocked": 10
     },
     "zh_CN": {
@@ -88,8 +88,8 @@
       "blocked": 0
     },
     "pt_BR": {
-      "translated": 3421,
-      "pending": 3,
+      "translated": 3424,
+      "pending": 0,
       "blocked": 7
     },
     "ru_RU": {
