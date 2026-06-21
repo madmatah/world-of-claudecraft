@@ -1056,6 +1056,19 @@
   .char-stats { font-size: 12px; line-height: 1.65; color: #cfc6a8; margin-top: 10px; border-top: 1px solid #463a1c; padding-top: 8px;
     display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   .char-stats b { color: #fff; font-weight: normal; }
+  /* Each stat is a hoverable/focusable cell that opens a class-aware breakdown
+     tooltip. The padding + matching negative margin turn the hover/focus tint into
+     a padded pill WITHOUT moving the text (layout-neutral: the margin box equals the
+     content box, so rows never reflow between states). Color/background only (no
+     transform) per the motion-sickness rule; keyboard focus gets the same pill as
+     hover so the affordance is identical for mouse and keyboard. */
+  .char-stats .stat-cell { cursor: help; border-radius: 4px; padding: 1px 5px; margin: -1px -5px;
+    transition: color .12s, background-color .12s; }
+  .char-stats .stat-cell:hover { color: #fff; background: rgba(255, 215, 120, 0.1); }
+  .char-stats .stat-cell:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 1px;
+    color: #fff; background: rgba(255, 215, 120, 0.1); }
+  /* Honor the OS-level reduced-motion preference too, not just the in-app toggle. */
+  @media (prefers-reduced-motion: reduce) { .char-stats .stat-cell { transition: none; } }
 
   /* spellbook */
   #spellbook { width: 430px; }
@@ -1300,7 +1313,8 @@
     flex-direction: column;
   }
   #bags .panel-title { flex: none; }
-  #bags .bag-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  #bags .bag-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   #bags .money { flex: none; display: flex; align-items: center; gap: 10px; }
   /* coins stay right-aligned whether or not the $WOC chip is present */
   #bags .money .money-inline { margin-left: auto; }
@@ -1477,12 +1491,14 @@
   .mkt-select-chevron { width: 8px; height: 8px; flex: none; border-right: 2px solid #cabb8c; border-bottom: 2px solid #cabb8c; transform: translateY(-2px) rotate(45deg); }
   .mkt-select.open .mkt-select-chevron { transform: translateY(2px) rotate(225deg); }
   .mkt-select-menu { position: absolute; left: 0; top: calc(100% + 4px); width: 100%; max-height: 236px; overflow-y: auto;
+    touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
     padding: 5px; border: 1px solid #6f5a2a; border-radius: 6px; background: #140f09f7; box-shadow: 0 10px 24px #000c, inset 0 1px 0 #ffffff12; z-index: 20; }
   .mkt-select-option { width: 100%; display: block; border: 0; border-radius: 4px; background: transparent; color: #f0e4c8;
     font-family: var(--font-ui); font-size: 13px; line-height: 1.2; text-align: left; padding: 7px 8px; cursor: var(--cursor-point); }
   .mkt-select-option:hover, .mkt-select-option:focus-visible { outline: 0; background: #ffffff14; color: #ffe6a8; }
   .mkt-select-option.sel { background: #cc9a3c2e; color: var(--gold); }
-  #market-body { overflow-y: auto; flex: 1; min-height: 0; padding-right: 2px; }
+  #market-body { overflow-y: auto; flex: 1; min-height: 0; padding-right: 2px;
+    touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .mkt-note { font-size: 11.5px; color: #b6ad8c; line-height: 1.45; margin: 2px 0 8px; font-family: Georgia, serif; }
   .mkt-row { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 9px; align-items: center;
     padding: 5px 6px; border-radius: 4px; font-size: 12px; }
@@ -1691,6 +1707,10 @@
   #tooltip .tt-stat { color: #fff; font-size: 11.5px; }
   #tooltip .tt-green { color: #1eff00; font-size: 11.5px; }
   #tooltip .tt-red { color: #ff5040; font-size: 11.5px; }
+  /* stat-tooltip prose (what a stat does) + the "From your N {stat}:" breakdown head */
+  #tooltip .tt-body { color: #cfc6a8; font-size: 11.5px; margin-top: 3px; }
+  #tooltip .tt-bd-head { color: #c2a86a; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+    margin-top: 6px; padding-top: 5px; border-top: 1px solid #3a3526; }
   /* item comparison block (hover an equippable item to see the worn one + deltas) */
   #tooltip .tt-cmp { margin-top: 6px; padding-top: 5px; border-top: 1px solid #3a3526; }
   #tooltip .tt-cmp-head { color: #8a7f5e; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
@@ -1716,7 +1736,8 @@
   #tooltip { font-size: calc(12px * var(--tooltip-scale, 1)); }
   #tooltip .tt-title { font-size: calc(13.5px * var(--tooltip-scale, 1)); }
   #tooltip .tt-sub { font-size: calc(11px * var(--tooltip-scale, 1)); }
-  #tooltip .tt-desc, #tooltip .tt-stat, #tooltip .tt-green { font-size: calc(11.5px * var(--tooltip-scale, 1)); }
+  #tooltip .tt-desc, #tooltip .tt-stat, #tooltip .tt-green, #tooltip .tt-body { font-size: calc(11.5px * var(--tooltip-scale, 1)); }
+  #tooltip .tt-bd-head { font-size: calc(10px * var(--tooltip-scale, 1)); }
   /* Chat Text Size (--chat-font-scale) + Chat Background Opacity (--chat-opacity). */
   .chat-pane { font-size: calc(11px * var(--chat-font-scale, 1)); }
   #chatlog-frame { background: linear-gradient(170deg,
@@ -2538,6 +2559,126 @@
     opacity: 0;
     transform: translateY(8px);
   }
+
+  /* Account portal (logged-in "Account" nav tab) */
+  .account-portal {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    background: linear-gradient(180deg, rgba(21, 21, 31, 0.96) 0%, rgba(8, 8, 12, 0.98) 100%);
+    border: 2px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8),
+                inset 0 0 20px rgba(0, 0, 0, 0.55),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+  }
+  .account-portal-head {
+    text-align: left;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    border-bottom: 1px solid rgba(200, 168, 56, 0.22);
+    padding-bottom: var(--spacing-md);
+  }
+  .account-id {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-end;
+    text-align: right;
+  }
+  #account-username { font-size: 1.4rem; font-weight: 700; }
+  .account-meta { font-size: 0.85rem; color: var(--color-text-muted); }
+  .account-logged-out { text-align: center; opacity: 0.8; }
+  .account-sections {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+  @media (min-width: 760px) {
+    .account-sections { grid-template-columns: 1fr 1fr; }
+    /* Settings + Danger zone span the full width; short cards pair up. */
+    .account-card:first-child, .account-card-danger { grid-column: 1 / -1; }
+  }
+  .account-card {
+    background: linear-gradient(180deg, rgba(14, 14, 22, 0.95) 0%, rgba(8, 8, 13, 0.98) 100%);
+    border: 1px solid rgba(200, 168, 56, 0.34);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04),
+                0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+  .account-card-danger {
+    border-color: rgba(180, 60, 60, 0.62);
+    background: linear-gradient(180deg, rgba(28, 12, 14, 0.9) 0%, rgba(10, 7, 10, 0.98) 100%);
+  }
+  .account-card-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    color: var(--color-primary);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(255, 209, 0, 0.24);
+  }
+  .account-card-danger .account-card-title { color: #e08a8a; }
+  .account-form-title {
+    margin: var(--spacing-sm) 0 0;
+    font-family: var(--font-heading);
+    font-size: 0.9rem;
+    color: var(--color-text-light);
+  }
+  .account-form { display: flex; flex-direction: column; gap: var(--spacing-xs); }
+  .account-summary, .account-hint {
+    color: var(--color-text-muted);
+    font-size: 0.88rem;
+    line-height: 1.45;
+    margin: 0;
+  }
+  .account-portal .auth-field { margin-bottom: var(--spacing-sm); }
+  .account-portal input {
+    display: block;
+    width: 100%;
+    background: var(--color-bg-input);
+    color: var(--color-text-light);
+    border: 2px solid var(--color-border-default);
+    outline: none;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: var(--font-sans);
+    user-select: text;
+    transition: border-color var(--transition-speed) var(--transition-ease),
+                box-shadow var(--transition-speed) var(--transition-ease),
+                background-color var(--transition-speed) var(--transition-ease);
+  }
+  .account-portal input:focus-visible {
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 8px var(--color-primary-glow);
+    background-color: #12121a;
+    outline: none;
+  }
+  .account-portal .btn { width: 100%; min-height: 40px; }
+  .account-form .btn { align-self: stretch; }
+  .auth-field-msg { font-size: 0.85rem; min-height: 1.1em; }
+  .auth-field-msg.is-error { color: #e88; }
+  .auth-field-msg.is-ok { color: #8d8; }
+  @media (max-width: 640px) {
+    .account-portal { padding: var(--spacing-md); }
+    .account-portal-head { flex-direction: column; align-items: flex-start; }
+    .account-id { align-items: flex-start; text-align: left; }
+  }
+  body.mobile-touch .account-portal input { font-size: 16px; }
 
   /* Hero view specific layout */
   #hero-view {
@@ -4950,7 +5091,12 @@
   #mobile-preflight { display: none; }
   #rotate-device { display: none; }
   body.mobile-touch #game-canvas { touch-action: none; }
-  body.mobile-touch #ui { touch-action: none; }
+  /* The HUD overlay must let one-finger panning reach scrollable windows (Bag,
+     Market, etc.) on iOS — Safari intersects touch-action down the ancestor
+     chain, so `none` here would block child scroll containers and a child's
+     own `pan-y` could not re-enable it. `pan-x pan-y` still blocks pinch/
+     double-tap zoom (also guarded globally in preventMobileZoom). */
+  body.mobile-touch #ui { touch-action: pan-x pan-y; }
   body.mobile-touch.game-active,
   body.mobile-touch.game-active #ui,
   body.mobile-touch.game-active #nameplates,
@@ -5631,6 +5777,16 @@
   body.mobile-touch .equip-col { width: 108px; }
   body.mobile-touch .equip-slot .slot-name { font-size: 9px; }
   body.mobile-touch .equip-slot .slot-item { font-size: 10px; }
+  /* Phones (the long-press peek audience, same body.mobile-touch gate attachTooltip
+     uses) get a comfortable >=40px long-press target per .stat-cell. Symmetric
+     vertical padding both reaches the touch floor and optically centers the single
+     line, so no flex is needed; the -5px side margins are unchanged, preserving the
+     hover/focus pill's bleed into the 12px column gap. Because the sizing applies in
+     every state (rest/hover/focus alike), rows still never reflow between states, and
+     the compact desktop sheet (no mobile-touch) is untouched. */
+  body.mobile-touch .char-stats .stat-cell {
+    min-height: 40px; box-sizing: border-box; padding: 10px 5px; margin: 0 -5px;
+  }
   body.mobile-touch .mkt-price-row {
     flex-wrap: wrap;
   }
@@ -7650,6 +7806,12 @@
             <li class="nav-item">
               <button type="button" class="nav-link" id="nav-btn-login" aria-selected="false" aria-pressed="false" data-i18n="nav.loginRegister">Login/Register</button>
             </li>
+            <li class="nav-item" id="nav-item-account" hidden>
+              <button type="button" class="nav-link" id="nav-btn-account" aria-selected="false" aria-pressed="false" data-i18n="nav.account">Account</button>
+            </li>
+            <li class="nav-item" id="nav-item-logout" hidden>
+              <button type="button" class="nav-link" id="nav-btn-logout" aria-selected="false" aria-pressed="false" data-i18n="nav.logout">Logout</button>
+            </li>
           </ul>
         </nav>
 
@@ -8044,6 +8206,94 @@
           <h2 class="skeleton-title" data-i18n="download.title">Download Desktop Launcher</h2>
           <p class="skeleton-desc" data-i18n="download.desc">Get the standalone launcher for optimized performance and full-screen play.</p>
           <div class="coming-soon-badge" data-i18n="comingSoon.placeholder">Coming Soon...</div>
+        </div>
+      </section>
+
+      <section id="account-view" class="view-section" hidden aria-hidden="true">
+        <div class="account-portal">
+          <header class="account-portal-head">
+            <h2 class="auth-title" data-i18n="hudChrome.account.title">Account</h2>
+            <div class="account-id">
+              <span id="account-username" class="gold"></span>
+              <span id="account-member-since" class="account-meta"></span>
+            </div>
+          </header>
+
+          <p id="account-logged-out" class="account-logged-out" hidden data-i18n="hudChrome.account.loggedOutPrompt">Log in to manage your account.</p>
+
+          <div id="account-sections" class="account-sections">
+            <!-- Account Settings: password + email -->
+            <section class="account-card">
+              <h3 class="account-card-title" data-i18n="hudChrome.account.sectionSettings">Account Settings</h3>
+              <form id="account-password-form" class="account-form" novalidate>
+                <h4 class="account-form-title" data-i18n="hudChrome.account.changePassword">Change Password</h4>
+                <div class="auth-field">
+                  <label for="account-current-pass" class="auth-label" data-i18n="hudChrome.account.currentPassword">Current password</label>
+                  <input id="account-current-pass" type="password" maxlength="128" autocomplete="current-password" />
+                </div>
+                <div class="auth-field">
+                  <label for="account-new-pass" class="auth-label" data-i18n="hudChrome.account.newPassword">New password</label>
+                  <input id="account-new-pass" type="password" maxlength="128" autocomplete="new-password" />
+                </div>
+                <div class="auth-field">
+                  <label for="account-confirm-pass" class="auth-label" data-i18n="hudChrome.account.confirmNewPassword">Confirm new password</label>
+                  <input id="account-confirm-pass" type="password" maxlength="128" autocomplete="new-password" />
+                </div>
+                <div id="account-password-msg" class="auth-field-msg" aria-live="polite"></div>
+                <button type="submit" class="btn btn-primary" data-i18n="hudChrome.account.savePassword">Update Password</button>
+              </form>
+
+              <form id="account-email-form" class="account-form" novalidate>
+                <div class="auth-field">
+                  <label for="account-email" class="auth-label" data-i18n="hudChrome.account.emailLabel">Email (optional)</label>
+                  <input id="account-email" type="email" maxlength="254" autocomplete="email" />
+                  <p class="account-hint" data-i18n="hudChrome.account.emailHint">Used only for account recovery. We never send marketing email.</p>
+                </div>
+                <div id="account-email-msg" class="auth-field-msg" aria-live="polite"></div>
+                <button type="submit" class="btn btn-secondary" data-i18n="hudChrome.account.saveEmail">Save Email</button>
+              </form>
+            </section>
+
+            <!-- Wallet / $WOC -->
+            <section class="account-card">
+              <h3 class="account-card-title" data-i18n="hudChrome.account.sectionWallet">$WOC Wallet</h3>
+              <p class="account-summary" data-i18n="hudChrome.account.walletSummary">Verify a Solana wallet to show holder flair on your player card.</p>
+              <button type="button" class="btn btn-secondary" id="account-manage-wallet" data-i18n="hudChrome.account.manageWallet">Manage Wallet</button>
+            </section>
+
+            <!-- Characters -->
+            <section class="account-card">
+              <h3 class="account-card-title" data-i18n="hudChrome.account.sectionCharacters">Characters</h3>
+              <p class="account-summary" data-i18n="hudChrome.account.charactersSummary">Manage your characters and enter the world.</p>
+              <p id="account-char-count" class="account-meta" aria-live="polite"></p>
+              <button type="button" class="btn btn-primary" id="account-go-characters" data-i18n="hudChrome.account.goToCharacters">View Characters</button>
+            </section>
+
+            <!-- Log out -->
+            <section class="account-card">
+              <h3 class="account-card-title" data-i18n="hudChrome.account.logOut">Log Out</h3>
+              <p class="account-summary" data-i18n="hudChrome.account.logOutSummary">Sign out of this device.</p>
+              <button type="button" class="btn btn-secondary" id="account-logout" data-i18n="hudChrome.account.logOut">Log Out</button>
+            </section>
+
+            <!-- Danger zone: deactivate -->
+            <section class="account-card account-card-danger">
+              <h3 class="account-card-title" data-i18n="hudChrome.account.sectionDanger">Danger Zone</h3>
+              <p class="account-summary" data-i18n="hudChrome.account.deactivateWarning">Deactivation locks your account and signs you out everywhere. Contact an admin to restore it. Confirm by re-entering your username and password.</p>
+              <form id="account-deactivate-form" class="account-form" novalidate>
+                <div class="auth-field">
+                  <label for="account-deactivate-user" class="auth-label" data-i18n="hudChrome.account.confirmUsername">Type your username to confirm</label>
+                  <input id="account-deactivate-user" type="text" maxlength="24" autocomplete="off" />
+                </div>
+                <div class="auth-field">
+                  <label for="account-deactivate-pass" class="auth-label" data-i18n="hudChrome.account.confirmPassword">Password</label>
+                  <input id="account-deactivate-pass" type="password" maxlength="128" autocomplete="off" />
+                </div>
+                <div id="account-deactivate-msg" class="auth-field-msg" aria-live="polite"></div>
+                <button type="submit" class="btn btn-danger" id="account-deactivate-btn" disabled data-i18n="hudChrome.account.deactivateConfirm">Deactivate My Account</button>
+              </form>
+            </section>
+          </div>
         </div>
       </section>
     </div>

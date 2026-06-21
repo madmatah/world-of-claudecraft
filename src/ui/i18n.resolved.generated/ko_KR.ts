@@ -303,6 +303,40 @@ export const ko_KR: EnTranslations = {
     "playerCard": {
       "showWalletBadge": "지갑 배지 표시"
     },
+    "statInfo": {
+      "fromYour": "당신의 {value} {stat}에서:",
+      "desc": {
+        "str": "전투력을 증가시켜 무기 공격이 더 강하게 적중하도록 합니다.",
+        "agi": "반사 신경과 조준 능력을 예리하게 하여 여러 전투 능력치를 향상시킵니다.",
+        "sta": "신체를 강인하게 하여 최대 생명력과 휴식 중 생명력 회복 속도를 높입니다.",
+        "int": "시전자의 마나 총량을 늘리고 주문 치명타율을 향상시킵니다.",
+        "spi": "비전투 중 휴식할 때 시전자의 마나가 회복되는 속도를 빠르게 합니다.",
+        "armor": "들어오는 물리 공격을 완화합니다. 낮은 레벨의 공격자에게 더 큰 효과를 발휘하며, 최대 75%까지 적용됩니다.",
+        "attackPower": "무기 공격을 강화합니다. 전투력 14당 초당 피해 1이 추가됩니다.",
+        "dps": "무기의 피해와 속도, 전투력을 종합한 예상 무기 초당 피해입니다.",
+        "critChance": "공격이 치명적으로 적중하여 두 배의 피해를 입힐 확률입니다.",
+        "dodge": "들어오는 근접 공격을 완전히 피해 피해를 전혀 입지 않을 확률입니다."
+      },
+      "effects": {
+        "attackPower": "+{value} 전투력",
+        "rangedAttackPower": "+{value} 원거리 전투력",
+        "critPct": "+{value}% 치명타",
+        "dodgePct": "+{value}% 회피",
+        "armor": "+{value} 방어도",
+        "maxHealth": "+{value} 최대 생명력",
+        "maxMana": "+{value} 최대 마나",
+        "spellCritPct": "+{value}% 주문 치명타",
+        "healthRegen": "휴식 중 5초마다 약 {value} 생명력 회복",
+        "manaRegen": "휴식 중 5초마다 약 {value} 마나 회복",
+        "damageReduction": "{level} 레벨 공격자에 대한 피해 감소: {value}%",
+        "dpsFromAp": "공격에 초당 피해 {value} 추가"
+      },
+      "notes": {
+        "minorForClass": "당신의 직업에는 거의 도움이 되지 않습니다.",
+        "baseChance": "모든 모험가가 공유하는 5%의 기본 확률이 포함되어 있습니다.",
+        "dpsApprox": "추정치이며, 치명타와 기술 피해는 제외됩니다."
+      }
+    },
     "talents": {
       "defaultBuildName": "빌드 {n}"
     },
@@ -351,6 +385,49 @@ export const ko_KR: EnTranslations = {
       "tooLarge": "신고가 너무 커서 보낼 수 없습니다. 스크린샷 없이 다시 시도하세요.",
       "rateLimited": "최근에 여러 건의 신고를 보냈습니다. 잠시 후 다시 보내 주세요.",
       "failed": "버그 신고를 보낼 수 없습니다. 다시 시도해 주세요."
+    },
+    "account": {
+      "title": "계정",
+      "loggedOutPrompt": "계정을 관리하려면 로그인하세요.",
+      "memberSince": "가입일: {date}",
+      "sectionSettings": "계정 설정",
+      "sectionWallet": "$WOC 지갑",
+      "sectionCharacters": "캐릭터",
+      "sectionDanger": "위험 구역",
+      "changePassword": "비밀번호 변경",
+      "currentPassword": "현재 비밀번호",
+      "newPassword": "새 비밀번호",
+      "confirmNewPassword": "새 비밀번호 확인",
+      "savePassword": "비밀번호 업데이트",
+      "passwordChanged": "비밀번호가 업데이트되었습니다. 다른 기기에서 로그아웃되었습니다.",
+      "errCurrentRequired": "현재 비밀번호를 입력하세요.",
+      "errPasswordShort": "새 비밀번호는 6자 이상이어야 합니다.",
+      "errPasswordLong": "새 비밀번호는 128자 이하여야 합니다.",
+      "errPasswordUnchanged": "새 비밀번호는 현재 비밀번호와 달라야 합니다.",
+      "errPasswordConfirm": "새 비밀번호가 서로 일치하지 않습니다.",
+      "emailLabel": "이메일(선택 사항)",
+      "emailHint": "계정 복구에만 사용됩니다. 마케팅 이메일은 보내지 않습니다.",
+      "saveEmail": "이메일 저장",
+      "emailSaved": "이메일이 저장되었습니다.",
+      "errEmailInvalid": "유효한 이메일 주소를 입력하세요.",
+      "errCurrentPassword": "현재 비밀번호가 올바르지 않습니다.",
+      "errUsernameMatch": "해당 사용자 이름이 계정과 일치하지 않습니다.",
+      "errPasswordIncorrect": "비밀번호가 올바르지 않습니다.",
+      "errCharactersOnline": "비활성화하기 전에 모든 캐릭터에서 로그아웃하세요.",
+      "deactivatedLocked": "이 계정은 비활성화되었습니다. 복원하려면 관리자에게 문의하세요.",
+      "charactersSummary": "캐릭터를 관리하고 월드에 입장하세요.",
+      "charactersCount": "캐릭터: {count}",
+      "goToCharacters": "캐릭터 보기",
+      "walletSummary": "Solana 지갑을 인증하여 플레이어 카드에 보유자 표식을 표시하세요.",
+      "manageWallet": "지갑 관리",
+      "deactivate": "계정 비활성화",
+      "deactivateWarning": "비활성화하면 계정이 잠기고 모든 기기에서 로그아웃됩니다. 복원하려면 관리자에게 문의하세요. 사용자 이름과 비밀번호를 다시 입력하여 확인하세요.",
+      "confirmUsername": "확인을 위해 사용자 이름을 입력하세요",
+      "confirmPassword": "비밀번호",
+      "deactivateConfirm": "내 계정 비활성화",
+      "deactivated": "계정이 비활성화되었습니다.",
+      "logOut": "로그아웃",
+      "logOutSummary": "이 기기에서 로그아웃합니다."
     }
   },
   "skinEvent": {
@@ -395,6 +472,8 @@ export const ko_KR: EnTranslations = {
     "news": "새소식",
     "download": "다운로드",
     "loginRegister": "로그인/회원가입",
+    "account": "계정",
+    "logout": "로그아웃",
     "donate": "후원"
   },
   "stats": {

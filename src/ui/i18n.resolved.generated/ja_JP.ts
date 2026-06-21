@@ -303,6 +303,40 @@ export const ja_JP: EnTranslations = {
     "playerCard": {
       "showWalletBadge": "ウォレットバッジを表示"
     },
+    "statInfo": {
+      "fromYour": "あなたの{stat}{value}による効果:",
+      "desc": {
+        "str": "攻撃力を上昇させ、武器による攻撃の威力を高めます。",
+        "agi": "反射神経と狙いを鋭くし、複数の戦闘ステータスを向上させます。",
+        "sta": "肉体を強化し、最大体力と休憩中の体力回復速度を高めます。",
+        "int": "術者の最大マナを増やし、呪文のクリティカル発生率を向上させます。",
+        "spi": "戦闘外で休憩している間の、術者のマナ回復速度を速めます。",
+        "armor": "物理攻撃のダメージを軽減します。軽減量は格下の攻撃者に対してより大きくなり、上限は75%です。",
+        "attackPower": "武器による攻撃を強化します。攻撃力14ごとに秒間ダメージが1上昇します。",
+        "dps": "武器のダメージと速度に攻撃力を組み合わせて算出した、推定の秒間ダメージです。",
+        "critChance": "攻撃がクリティカルとなり、ダメージが2倍になる確率です。",
+        "dodge": "迫り来る近接攻撃を完全に回避し、ダメージを受けない確率です。"
+      },
+      "effects": {
+        "attackPower": "攻撃力 +{value}",
+        "rangedAttackPower": "遠隔攻撃力 +{value}",
+        "critPct": "クリティカル +{value}%",
+        "dodgePct": "回避 +{value}%",
+        "armor": "防御力 +{value}",
+        "maxHealth": "最大体力 +{value}",
+        "maxMana": "最大マナ +{value}",
+        "spellCritPct": "呪文クリティカル +{value}%",
+        "healthRegen": "休憩中、5秒ごとに体力が約{value}回復",
+        "manaRegen": "休憩中、5秒ごとにマナが約{value}回復",
+        "damageReduction": "レベル{level}の攻撃者に対するダメージ軽減: {value}%",
+        "dpsFromAp": "攻撃の秒間ダメージを{value}上昇させます"
+      },
+      "notes": {
+        "minorForClass": "あなたのクラスにはほとんど効果がありません。",
+        "baseChance": "全ての冒険者が共有する5%の基本確率を含みます。",
+        "dpsApprox": "推定値であり、クリティカルやアビリティによるダメージは含みません。"
+      }
+    },
     "talents": {
       "defaultBuildName": "ビルド {n}"
     },
@@ -351,6 +385,49 @@ export const ja_JP: EnTranslations = {
       "tooLarge": "報告のサイズが大きすぎて送信できません。スクリーンショットを外して再試行してください。",
       "rateLimited": "最近、報告を複数回送信しています。しばらく待ってから送信してください。",
       "failed": "バグ報告を送信できませんでした。もう一度お試しください。"
+    },
+    "account": {
+      "title": "アカウント",
+      "loggedOutPrompt": "アカウントを管理するにはログインしてください。",
+      "memberSince": "登録日：{date}",
+      "sectionSettings": "アカウント設定",
+      "sectionWallet": "$WOC ウォレット",
+      "sectionCharacters": "キャラクター",
+      "sectionDanger": "危険な操作",
+      "changePassword": "パスワードの変更",
+      "currentPassword": "現在のパスワード",
+      "newPassword": "新しいパスワード",
+      "confirmNewPassword": "新しいパスワードを確認",
+      "savePassword": "パスワードを更新",
+      "passwordChanged": "パスワードを更新しました。他のデバイスからログアウトされました。",
+      "errCurrentRequired": "現在のパスワードを入力してください。",
+      "errPasswordShort": "新しいパスワードは6文字以上にしてください。",
+      "errPasswordLong": "新しいパスワードは128文字以内にしてください。",
+      "errPasswordUnchanged": "新しいパスワードは現在のものと異なる必要があります。",
+      "errPasswordConfirm": "新しいパスワードが一致しません。",
+      "emailLabel": "メールアドレス（任意）",
+      "emailHint": "アカウント復旧にのみ使用します。宣伝メールは一切送信しません。",
+      "saveEmail": "メールを保存",
+      "emailSaved": "メールを保存しました。",
+      "errEmailInvalid": "有効なメールアドレスを入力してください。",
+      "errCurrentPassword": "現在のパスワードが正しくありません。",
+      "errUsernameMatch": "そのユーザー名はアカウントと一致しません。",
+      "errPasswordIncorrect": "パスワードが正しくありません。",
+      "errCharactersOnline": "無効化する前にすべてのキャラクターからログアウトしてください。",
+      "deactivatedLocked": "このアカウントは無効化されています。復元するには管理者に連絡してください。",
+      "charactersSummary": "キャラクターを管理してワールドに入りましょう。",
+      "charactersCount": "キャラクター：{count}",
+      "goToCharacters": "キャラクターを表示",
+      "walletSummary": "Solana ウォレットを認証してプレイヤーカードに保有者バッジを表示します。",
+      "manageWallet": "ウォレットを管理",
+      "deactivate": "アカウントを無効化",
+      "deactivateWarning": "無効化するとアカウントがロックされ、すべてのデバイスからログアウトされます。復元するには管理者に連絡してください。ユーザー名とパスワードを再入力して確認してください。",
+      "confirmUsername": "確認のためユーザー名を入力",
+      "confirmPassword": "パスワード",
+      "deactivateConfirm": "アカウントを無効化する",
+      "deactivated": "アカウントが無効化されました。",
+      "logOut": "ログアウト",
+      "logOutSummary": "このデバイスからログアウトします。"
     }
   },
   "skinEvent": {
@@ -395,6 +472,8 @@ export const ja_JP: EnTranslations = {
     "news": "ニュース",
     "download": "ダウンロード",
     "loginRegister": "ログイン/登録",
+    "account": "アカウント",
+    "logout": "ログアウト",
     "donate": "寄付"
   },
   "stats": {

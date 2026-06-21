@@ -303,6 +303,40 @@ export const zh_CN: EnTranslations = {
     "playerCard": {
       "showWalletBadge": "显示钱包徽章"
     },
+    "statInfo": {
+      "fromYour": "来自你的 {value} 点{stat}：",
+      "desc": {
+        "str": "提高你的攻击强度，使你的武器攻击造成更高的伤害。",
+        "agi": "提高你的反应和准度，强化你的多项战斗属性。",
+        "sta": "强健你的体魄，提高你的最大生命值以及休息时恢复生命值的速度。",
+        "int": "扩大施法者的法力值上限，并提高其造成法术暴击的几率。",
+        "spi": "加快施法者在脱离战斗、休息时恢复法力值的速度。",
+        "armor": "减轻受到的物理打击。对等级较低的攻击者减伤效果更强，最高减伤上限为75%。",
+        "attackPower": "强化你的武器攻击。每14点攻击强度可提高1点每秒伤害。",
+        "dps": "你的预估武器每秒伤害，由武器的伤害与速度以及你的攻击强度共同计算得出。",
+        "critChance": "你的攻击造成暴击的几率，暴击将造成双倍伤害。",
+        "dodge": "你完全躲开来袭近战攻击、不受任何伤害的几率。"
+      },
+      "effects": {
+        "attackPower": "+{value} 攻击强度",
+        "rangedAttackPower": "+{value} 远程攻击强度",
+        "critPct": "+{value}% 暴击",
+        "dodgePct": "+{value}% 躲闪",
+        "armor": "+{value} 护甲",
+        "maxHealth": "+{value} 最大生命值",
+        "maxMana": "+{value} 最大法力值",
+        "spellCritPct": "+{value}% 法术暴击",
+        "healthRegen": "休息时每5秒约恢复 {value} 点生命值",
+        "manaRegen": "休息时每5秒约恢复 {value} 点法力",
+        "damageReduction": "对{level}级攻击者的伤害减免：{value}%",
+        "dpsFromAp": "为你的攻击增加 {value} 点每秒伤害"
+      },
+      "notes": {
+        "minorForClass": "对你的职业益处不大。",
+        "baseChance": "包含所有冒险者共享的5%基础几率。",
+        "dpsApprox": "此为预估值，不计入暴击和技能伤害。"
+      }
+    },
     "talents": {
       "defaultBuildName": "配置 {n}"
     },
@@ -351,6 +385,49 @@ export const zh_CN: EnTranslations = {
       "tooLarge": "该报告过大，无法发送。请去掉截图后重试。",
       "rateLimited": "你最近已发送多份报告。请稍后再发送。",
       "failed": "无法发送错误报告。请重试。"
+    },
+    "account": {
+      "title": "账户",
+      "loggedOutPrompt": "登录以管理您的账户。",
+      "memberSince": "注册于 {date}",
+      "sectionSettings": "账户设置",
+      "sectionWallet": "$WOC 钱包",
+      "sectionCharacters": "角色",
+      "sectionDanger": "危险区域",
+      "changePassword": "修改密码",
+      "currentPassword": "当前密码",
+      "newPassword": "新密码",
+      "confirmNewPassword": "确认新密码",
+      "savePassword": "更新密码",
+      "passwordChanged": "密码已更新。其他设备已登出。",
+      "errCurrentRequired": "请输入当前密码。",
+      "errPasswordShort": "新密码至少需要 6 个字符。",
+      "errPasswordLong": "新密码最多只能包含 128 个字符。",
+      "errPasswordUnchanged": "新密码必须与当前密码不同。",
+      "errPasswordConfirm": "两次输入的新密码不一致。",
+      "emailLabel": "邮箱（可选）",
+      "emailHint": "仅用于账户找回。我们绝不发送营销邮件。",
+      "saveEmail": "保存邮箱",
+      "emailSaved": "邮箱已保存。",
+      "errEmailInvalid": "请输入有效的邮箱地址。",
+      "errCurrentPassword": "当前密码不正确。",
+      "errUsernameMatch": "该用户名与您的账户不匹配。",
+      "errPasswordIncorrect": "密码不正确。",
+      "errCharactersOnline": "请先登出所有角色再进行注销。",
+      "deactivatedLocked": "此账户已注销。请联系管理员以恢复。",
+      "charactersSummary": "管理您的角色并进入游戏世界。",
+      "charactersCount": "角色：{count}",
+      "goToCharacters": "查看角色",
+      "walletSummary": "验证 Solana 钱包以在玩家卡片上显示持有者标识。",
+      "manageWallet": "管理钱包",
+      "deactivate": "注销账户",
+      "deactivateWarning": "注销将锁定您的账户并在所有设备上登出。请联系管理员以恢复。请重新输入用户名和密码以确认。",
+      "confirmUsername": "输入您的用户名以确认",
+      "confirmPassword": "密码",
+      "deactivateConfirm": "注销我的账户",
+      "deactivated": "您的账户已注销。",
+      "logOut": "退出登录",
+      "logOutSummary": "退出当前设备的登录。"
     }
   },
   "skinEvent": {
@@ -395,6 +472,8 @@ export const zh_CN: EnTranslations = {
     "news": "新闻资讯",
     "download": "下载客户端",
     "loginRegister": "登录/注册",
+    "account": "账户",
+    "logout": "退出登录",
     "donate": "捐赠"
   },
   "stats": {
