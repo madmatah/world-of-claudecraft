@@ -236,7 +236,9 @@ export const es: EnTranslations = {
       "browserEffectsNote": "Auto tones down heavy CSS effects (blur, glow, background motion) based on your browser and device. Lower it manually if the interface feels sluggish.",
       "footstepSounds": "Sonidos de pasos",
       "showWalletOnCharacterScreen": "Mostrar cartera en la pantalla de personajes",
-      "showWalletOnPlayerCard": "Mostrar cartera en la tarjeta de jugador"
+      "showWalletOnPlayerCard": "Mostrar cartera en la tarjeta de jugador",
+      "uiScale": "Escala de la interfaz",
+      "highContrastBackground": "Fondo de alto contraste"
     },
     "perf": {
       "title": "Superposición de rendimiento",
@@ -309,6 +311,10 @@ export const es: EnTranslations = {
     "playerCard": {
       "showWalletBadge": "Mostrar insignia de cartera"
     },
+    "landing": {
+      "highContrast": "Alto contraste",
+      "highContrastAria": "Alternar el fondo de alto contraste: desactiva el tráiler en movimiento para que el texto de la pantalla de inicio siga siendo legible"
+    },
     "statInfo": {
       "fromYour": "De tu {value} de {stat}:",
       "desc": {
@@ -374,6 +380,10 @@ export const es: EnTranslations = {
         "many": "Quién: {count} jugadores conectados en {realm}.",
         "other": "Quién: {count} jugadores conectados en {realm}."
       }
+    },
+    "paperdoll": {
+      "unequipAria": "Desequipar {item}",
+      "unequipHint": "Haz clic en ×, clic derecho o arrastra a las bolsas para desequipar"
     },
     "account": {
       "title": "Cuenta",
@@ -1357,6 +1367,7 @@ export const es: EnTranslations = {
         "unignoreChat": "Dejar de ignorar chat",
         "report": "Reportar jugador",
         "removeParty": "Expulsar del grupo",
+        "convertToRaid": "Convertir en banda",
         "cancel": "Cancelar"
       }
     },
@@ -1522,6 +1533,25 @@ export const es: EnTranslations = {
       "friendOnline": "{name} se ha conectado.",
       "friendOffline": "{name} se ha desconectado."
     },
+    "tutorial": {
+      "title": "Nuevo Aventurero",
+      "stepLabel": "Paso {current} de {total}",
+      "skip": "Saltar tutorial",
+      "dismiss": "Descartar",
+      "doneTitle": "Listo para la aventura",
+      "doneBody": "Ya dominas lo básico, {name}. El Valle es tuyo para explorar: pulsa {questKey} en cualquier momento para revisar tus misiones. ¡Buena caza!",
+      "moveTitle": "Da tus primeros pasos",
+      "moveBody": "Usa {moveKeys} para moverte y el ratón para mirar alrededor. Da unos pasos para empezar.",
+      "seekTitle": "Busca al Mariscal",
+      "seekBody": "El mariscal Redbrook espera en el pueblo y tiene trabajo para una nueva espada. Sigue la marca para llegar a él.",
+      "talkTitle": "Acepta la tarea",
+      "talkBody": "Acércate al mariscal Redbrook y pulsa {interactKey} para hablar; luego acepta su tarea.",
+      "slayTitle": "Lobos a las puertas",
+      "slayBody": "Caza a los lobos del bosque en el camino del norte. Selecciona uno y atácalo para diezmar la manada.",
+      "slayProgress": "Lobos del bosque abatidos: {current} / {needed}",
+      "returnTitle": "Reclama tu recompensa",
+      "returnBody": "Tu tarea está hecha. Vuelve con el mariscal Redbrook y pulsa {interactKey} para entregarla."
+    },
     "markers": {
       "names": {
         "star": "Estrella",
@@ -1575,6 +1605,12 @@ export const es: EnTranslations = {
       "guildTab": "Hermandad",
       "ignoreTab": "Ignorar",
       "leaveParty": "Salir del grupo",
+      "raidTab": "Banda",
+      "raidEmpty": "Convierte un grupo en banda para gestionar los grupos de banda aquí.",
+      "raidGroupEmpty": "No hay jugadores en este grupo.",
+      "raidGroupTitle": "Grupo {position} ({count}/5)",
+      "raidMoveToGroup": "Mover al grupo {position}",
+      "raidLeader": "Líder de banda",
       "offlineEmpty": "Amigos, hermandades y listas de ignorados están disponibles en juego en línea.",
       "friendsEmpty": "Aún no tienes amigos. Busca a alguien por nombre abajo.",
       "ignoreEmpty": "Tu lista de ignorados está vacía.",
@@ -1812,7 +1848,8 @@ export const es: EnTranslations = {
       "common": "Común",
       "uncommon": "Poco común",
       "rare": "Raro",
-      "epic": "Épico"
+      "epic": "Épico",
+      "legendary": "Legendario"
     },
     "kind": {
       "weapon": "Arma",
@@ -3519,6 +3556,36 @@ export const es: EnTranslations = {
       "event_skin_token": {
         "name": "Alijo cosmético misterioso"
       },
+      "deathless_heartwood": {
+        "name": "Duramen de la Corona Inmortal"
+      },
+      "kingsbane_last_oath": {
+        "name": "Matarrayes, último juramento de Thornpeak"
+      },
+      "crownforged_dreadhelm": {
+        "name": "Yelmo aterrador Forjacorona"
+      },
+      "crownforged_warspaulders": {
+        "name": "Hombreras de guerra Forjacorona"
+      },
+      "nighttalon_crown": {
+        "name": "Corona Garra Nocturna"
+      },
+      "nighttalon_shoulderguards": {
+        "name": "Guardahombros Garra Nocturna"
+      },
+      "soulflame_cowl": {
+        "name": "Caperuza Llama de Alma"
+      },
+      "soulflame_mantle": {
+        "name": "Manto Llama de Alma"
+      },
+      "stormcallers_crown": {
+        "name": "Corona del Invocatormentas"
+      },
+      "stormcallers_spaulders": {
+        "name": "Bufas del Invocatormentas"
+      },
       "unknown_alien_weaponry": {
         "name": "Armamento alienígena desconocido"
       },
@@ -3733,6 +3800,12 @@ export const es: EnTranslations = {
       },
       "bound_guardian": {
         "name": "Guardián Vinculado"
+      },
+      "nythraxis_skeleton_warrior": {
+        "name": "Guardia real alzado"
+      },
+      "nythraxis_scourge_of_thornpeak": {
+        "name": "Nythraxis, Azote de Thornpeak"
       },
       "brightwood_hare": {
         "name": "Liebre de Brightwood"
@@ -3985,6 +4058,11 @@ export const es: EnTranslations = {
         "name": "Montaraz Elwyn",
         "title": "Guardiana del claro",
         "greeting": "Silencio, {className}. El claro está tranquilo hoy, y pretendo que siga así."
+      },
+      "brother_aldric_raid": {
+        "name": "Hermano Aldric",
+        "title": "Sacerdote del Valle",
+        "greeting": "De un patio de capilla al techo del mundo... el rastro termina aquí. Siento que la montaña escucha."
       },
       "tidewatcher_ondrel": {
         "name": "Ondrel Vane",
@@ -4711,8 +4789,8 @@ export const es: EnTranslations = {
       },
       "q_nythraxis_bound_guardian": {
         "title": "El Guardián Vinculado",
-        "text": "Voss escribió que los supervivientes sellaron el Anillo del rey tras un guardián antiguo, para que nadie pudiera alcanzar la tumba de Nythraxis por accidente o ambición. Lleva la Piedra clave de la cripta al círculo ritual en el terreno llano al este de la cripta abandonada y al sureste de la tumba occidental. Úsala allí, rompe al guardián y trae el anillo.",
-        "completion": "Las tres reliquias cuentan la misma historia: Aldren luchó para defender a su rey, Malric rompió el límite de la muerte y Voss intentó detener lo que vino después. El sello se debilita, y este anillo es la llave de la tumba de Nythraxis. Ahora estás armonizado para entrar en La Cripta de Nythraxis.",
+        "text": "Voss escribio que los supervivientes sellaron el Anillo del rey tras un guardian antiguo, para que nadie pudiera alcanzar la tumba de Nythraxis por accidente o ambicion. Lleva la Piedra clave de la cripta al circulo ritual en el terreno llano al este de la cripta abandonada y al sureste de la tumba occidental. Usala alli, rompe al guardian y trae el anillo.",
+        "completion": "Las tres reliquias cuentan la misma historia: Aldren lucho para defender a su rey, Malric rompio el limite de la muerte y Voss intento detener lo que vino despues. El sello se debilita, y este anillo es la llave de la tumba de Nythraxis. Ahora estas armonizado para entrar en La Cripta de Nythraxis. Vuelve a la cripta abandonada, abre la puerta real y enfrenta a Nythraxis antes de que la ira del viejo rey desborde Thornpeak.",
         "objectives": {
           "0": {
             "label": "Piedra clave usada en el círculo ritual"
@@ -4722,6 +4800,16 @@ export const es: EnTranslations = {
           },
           "2": {
             "label": "Anillo del rey"
+          }
+        }
+      },
+      "q_nythraxis_scourges_end": {
+        "title": "El fin del Azote",
+        "text": "El sello ha abierto el camino, {playerName}, pero una tumba abierta no es una victoria. Nythraxis fue rey una vez, y la ruina bajo Thornpeak sigue ligada a su voluntad. Entra en la cripta con aliados de confianza. Rompe la corona inmortal antes de que su mandato alcance el campo de batalla de arriba.",
+        "completion": "Entonces la corona calla al fin. Thornpeak seguira cargando con sus muertos, pero ningun rey bajo la montana volvera a llamarlos a la guerra. Has terminado lo que Aldren, Malric y Voss solo pudieron contener.",
+        "objectives": {
+          "0": {
+            "label": "Nythraxis derrotado"
           }
         }
       },
@@ -5059,6 +5147,11 @@ export const es: EnTranslations = {
         "name": "Cripta abandonada",
         "enterText": "Cruzas el umbral de la cripta abandonada.",
         "leaveText": "Vuelves a salir al aire frío de Thornpeak."
+      },
+      "nythraxis_boss_arena": {
+        "name": "Arena de banda de Nythraxis",
+        "enterText": "Cruzas la puerta real sellada.",
+        "leaveText": "Regresas al aire frío de Thornpeak."
       },
       "drowned_temple": {
         "name": "El Templo Ahogado",

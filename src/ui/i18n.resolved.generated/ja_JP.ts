@@ -236,7 +236,9 @@ export const ja_JP: EnTranslations = {
       "browserEffectsNote": "自動はブラウザとデバイスに応じて、負荷の高い CSS エフェクト（ぼかし・グロー・背景アニメーション）を抑えます。動作が重い場合は手動で下げてください。",
       "footstepSounds": "足音",
       "showWalletOnCharacterScreen": "キャラクター画面にウォレットを表示",
-      "showWalletOnPlayerCard": "プレイヤーカードにウォレットを表示"
+      "showWalletOnPlayerCard": "プレイヤーカードにウォレットを表示",
+      "uiScale": "UIスケール",
+      "highContrastBackground": "高コントラスト背景"
     },
     "perf": {
       "title": "パフォーマンスオーバーレイ",
@@ -309,6 +311,10 @@ export const ja_JP: EnTranslations = {
     "playerCard": {
       "showWalletBadge": "ウォレットバッジを表示"
     },
+    "landing": {
+      "highContrast": "高コントラスト",
+      "highContrastAria": "高コントラスト背景を切り替えます。動画トレーラーを無効にして、スタート画面のテキストを読みやすくします"
+    },
     "statInfo": {
       "fromYour": "あなたの{stat}{value}による効果:",
       "desc": {
@@ -374,6 +380,10 @@ export const ja_JP: EnTranslations = {
         "many": "Who：{realm}に{count}人のプレイヤーがオンラインです。",
         "other": "Who：{realm}に{count}人のプレイヤーがオンラインです。"
       }
+    },
+    "paperdoll": {
+      "unequipAria": "{item}を外す",
+      "unequipHint": "× をクリック、右クリック、またはバッグへドラッグで外す"
     },
     "account": {
       "title": "アカウント",
@@ -1357,6 +1367,7 @@ export const ja_JP: EnTranslations = {
         "unignoreChat": "チャット無視解除",
         "report": "プレイヤーを通報",
         "removeParty": "パーティから外す",
+        "convertToRaid": "レイドに変換",
         "cancel": "キャンセル"
       }
     },
@@ -1522,6 +1533,25 @@ export const ja_JP: EnTranslations = {
       "friendOnline": "{name}がオンラインになりました。",
       "friendOffline": "{name}がオフラインになりました。"
     },
+    "tutorial": {
+      "title": "新米冒険者",
+      "stepLabel": "ステップ {current}/{total}",
+      "skip": "チュートリアルをスキップ",
+      "dismiss": "閉じる",
+      "doneTitle": "冒険の準備完了",
+      "doneBody": "基本は覚えましたね、{name}。イーストブルック渓谷はあなたのもの、自由に探索しましょう。いつでも {questKey} キーでクエストを確認できます。よい狩りを！",
+      "moveTitle": "まず一歩を",
+      "moveBody": "{moveKeys} で移動し、マウスで周囲を見回します。数歩進んで始めましょう。",
+      "seekTitle": "元帥を探す",
+      "seekBody": "レッドブルック元帥が町で待っており、新人に頼みごとがあります。目印をたどって彼のもとへ向かいましょう。",
+      "talkTitle": "依頼を受ける",
+      "talkBody": "レッドブルック元帥に近づき、{interactKey} を押して話しかけ、依頼を受けましょう。",
+      "slayTitle": "戸口の狼",
+      "slayBody": "北の道で森の狼を狩りましょう。一体をターゲットして攻撃し、群れを減らします。",
+      "slayProgress": "倒した森の狼：{current} / {needed}",
+      "returnTitle": "報酬を受け取る",
+      "returnBody": "依頼は完了しました。レッドブルック元帥のもとへ戻り、{interactKey} を押して納品しましょう。"
+    },
     "markers": {
       "names": {
         "star": "星",
@@ -1575,6 +1605,12 @@ export const ja_JP: EnTranslations = {
       "guildTab": "ギルド",
       "ignoreTab": "無視",
       "leaveParty": "パーティを抜ける",
+      "raidTab": "レイド",
+      "raidEmpty": "パーティをレイドに変換すると、ここでレイドグループを管理できます。",
+      "raidGroupEmpty": "このグループにプレイヤーはいません。",
+      "raidGroupTitle": "グループ {position} ({count}/5)",
+      "raidMoveToGroup": "グループ {position} に移動",
+      "raidLeader": "レイドリーダー",
       "offlineEmpty": "フレンド、ギルド、無視リストはオンラインプレイで利用できます。",
       "friendsEmpty": "フレンドはまだいません。下で名前を検索してください。",
       "ignoreEmpty": "無視リストは空です。",
@@ -1812,7 +1848,8 @@ export const ja_JP: EnTranslations = {
       "common": "一般",
       "uncommon": "良質",
       "rare": "レア",
-      "epic": "エピック"
+      "epic": "エピック",
+      "legendary": "伝説"
     },
     "kind": {
       "weapon": "武器",
@@ -3519,6 +3556,36 @@ export const ja_JP: EnTranslations = {
       "event_skin_token": {
         "name": "謎めいた装いの宝箱"
       },
+      "deathless_heartwood": {
+        "name": "不死王冠の心材"
+      },
+      "kingsbane_last_oath": {
+        "name": "キングスベイン、ソーンピーク最後の誓い"
+      },
+      "crownforged_dreadhelm": {
+        "name": "冠鍛えの恐怖兜"
+      },
+      "crownforged_warspaulders": {
+        "name": "冠鍛えの戦肩当て"
+      },
+      "nighttalon_crown": {
+        "name": "夜爪の冠"
+      },
+      "nighttalon_shoulderguards": {
+        "name": "夜爪の肩守り"
+      },
+      "soulflame_cowl": {
+        "name": "魂炎の頭巾"
+      },
+      "soulflame_mantle": {
+        "name": "魂炎のマント"
+      },
+      "stormcallers_crown": {
+        "name": "嵐呼びの冠"
+      },
+      "stormcallers_spaulders": {
+        "name": "嵐呼びの肩当て"
+      },
       "unknown_alien_weaponry": {
         "name": "未知の異星武装"
       },
@@ -3733,6 +3800,12 @@ export const ja_JP: EnTranslations = {
       },
       "bound_guardian": {
         "name": "縛られし守護者"
+      },
+      "nythraxis_skeleton_warrior": {
+        "name": "蘇った王家の衛兵"
+      },
+      "nythraxis_scourge_of_thornpeak": {
+        "name": "ナイスラクシス、ソーンピークの災厄"
       },
       "brightwood_hare": {
         "name": "ブライトウッドの野ウサギ"
@@ -3985,6 +4058,11 @@ export const ja_JP: EnTranslations = {
         "name": "レンジャー・エルウィン",
         "title": "林間の守り手",
         "greeting": "静かに、{className}。今日の林間は穏やかだ。私はこのまま保つつもりでね。"
+      },
+      "brother_aldric_raid": {
+        "name": "アルドリック修道士",
+        "title": "谷の司祭",
+        "greeting": "礼拝堂の墓地から世界の屋根まで... 足跡はここで終わります。山が耳を澄ませているのを感じます。"
       },
       "tidewatcher_ondrel": {
         "name": "オンドレル・ヴェイン",
@@ -4712,7 +4790,7 @@ export const ja_JP: EnTranslations = {
       "q_nythraxis_bound_guardian": {
         "title": "縛られし守護者",
         "text": "ヴォスは、生存者たちが偶然や野心でニスラクシスの墓に辿り着く者を防ぐため、王の印章指輪を古代の守護者の奥に封じたと記しています。墓所の要石を、廃棄された墓所の東、西の墓の南東にある平地の儀式陣へ持っていってください。そこで使い、守護者を破り、指輪を持ち帰ってください。",
-        "completion": "三つの遺物は同じ物語を語っています。オルドレンは王を守るために戦い、マルリックは死の境界を破り、ヴォスはその後に起きたことを止めようとしました。封印は弱まり、この指輪こそニスラクシスの墓への鍵です。あなたは今、ニスラクシスの墓所へ入るための調律を終えました。",
+        "completion": "三つの遺物は同じ物語を語っています。アルドレンは王を守るために戦い、マルリックは死の境界を破り、ヴォスはその後に起きたことを止めようとしました。封印は弱まり、この指輪こそニスラクシスの墓への鍵です。あなたは今、ニスラクシスの墓所へ入るための調律を終えました。廃れた墓所へ戻り、王家の扉を開き、古き王の怒りがソーンピークの外へ溢れる前にニスラクシスと対峙してください。",
         "objectives": {
           "0": {
             "label": "儀式の円で地下墓所の要石を使用"
@@ -4722,6 +4800,16 @@ export const ja_JP: EnTranslations = {
           },
           "2": {
             "label": "王の印章指輪"
+          }
+        }
+      },
+      "q_nythraxis_scourges_end": {
+        "title": "災厄の終わり",
+        "text": "印章指輪が道を開きました、{playerName}。しかし開かれた墓は勝利ではありません。ニスラクシスはかつて王であり、ソーンピークの地下の廃墟はいまも彼の意志に縛られています。信頼できる仲間とともに墓所へ入り、不死の王冠の命令が上の戦場へ届く前に打ち砕いてください。",
+        "completion": "これで王冠はついに沈黙しました。ソーンピークはなお死者を抱えるでしょうが、山の下の王が彼らを再び戦へ呼ぶことはありません。あなたは、アルドレン、マルリック、そしてヴォスが封じることしかできなかったものを終わらせました。",
+        "objectives": {
+          "0": {
+            "label": "ニスラクシスを撃破"
           }
         }
       },
@@ -5058,6 +5146,11 @@ export const ja_JP: EnTranslations = {
       "nythraxis_crypt": {
         "name": "放棄された地下墓所",
         "enterText": "放棄された地下墓所の敷居を越えます。",
+        "leaveText": "ソーンピークの冷たい空気へ戻ります。"
+      },
+      "nythraxis_boss_arena": {
+        "name": "ナイスラクシスのレイドアリーナ",
+        "enterText": "封印された王家の扉を通り抜けます。",
         "leaveText": "ソーンピークの冷たい空気へ戻ります。"
       },
       "drowned_temple": {

@@ -251,6 +251,20 @@ describe('client HTML shell', () => {
     expect(mainTs).not.toContain("visualViewport?.addEventListener('scroll', syncAppViewport)");
   });
 
+  it('lets HUD windows scroll by touch on iOS (Bag / Market)', () => {
+    // The HUD overlay must permit one-finger panning so scroll containers
+    // inside it can scroll on iOS — `touch-action: none` here would block them
+    // (Safari intersects touch-action down the ancestor chain, so a child's
+    // own pan-y cannot re-enable it). pan-x pan-y still blocks pinch-zoom.
+    expect(html).toContain('body.mobile-touch #ui { touch-action: pan-x pan-y; }');
+    expect(html).not.toContain('body.mobile-touch #ui { touch-action: none; }');
+    // Scrollable lists get iOS momentum + scroll isolation.
+    expect(html).toContain('#bags .bag-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto;\n    touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }');
+    expect(html).toContain('#market-body { overflow-y: auto; flex: 1; min-height: 0; padding-right: 2px;\n    touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }');
+    // The world canvas still suppresses panning so camera drag is unaffected.
+    expect(html).toContain('body.mobile-touch #game-canvas { touch-action: none; }');
+  });
+
   it('places news release metadata below the heading on mobile', () => {
     expect(mainTs).toContain('<h3 class="news-item-title">${title}</h3><div class="news-item-meta">${tag}${badge}${when}</div></div>');
     expect(html).toContain('body.mobile-touch .news-item-head {\n    flex-direction: column;\n    align-items: flex-start;');
@@ -327,11 +341,16 @@ describe('client HTML shell', () => {
     expect(html).toContain('@media (orientation: landscape) {\n    body.mobile-touch .play-console {\n      width: 100%;\n      max-width: 460px;');
   });
 
-  it('ships a looping cinematic backdrop with a poster fallback', () => {
+  it('ships a looping cinematic backdrop with a poster fallback, lazy-loaded for perf', () => {
     expect(html).toContain('id="bg-home"');
     expect(html).toContain('poster="/home-bg.png"');
-    expect(html).toContain('<source src="/home-bg.mp4" type="video/mp4"');
-    expect(html).toContain('autoplay loop muted playsinline');
+    // The 5.7MB mp4 is NOT eagerly fetched: no <source>/autoplay/preload in the
+    // static markup. main.ts attaches data-trailer-src only on capable devices;
+    // phones / Save-Data / reduced-motion / high-contrast keep the poster only.
+    expect(html).toContain('data-trailer-src="/home-bg.mp4"');
+    expect(html).toContain('preload="none"');
+    expect(html).not.toContain('<source src="/home-bg.mp4"');
+    expect(mainTs).toContain('applyLandingBackdrop');
     // View transitions still honour reduced-motion.
     expect(mainTs).toContain("prefers-reduced-motion: reduce");
   });

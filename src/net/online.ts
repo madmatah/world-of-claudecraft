@@ -391,6 +391,24 @@ function copyPos(dst: { x: number; y: number; z: number }, src: { x: number; y: 
 // graveyard release). Those are snapped, not interpolated — see applyWire.
 const TELEPORT_SNAP_DIST_SQ = 40 * 40;
 
+// Despawn grace (anti-flicker, entity-map churn). The server keeps known
+// entities in interest out to a drop radius (100yd players / 130yd npcs) that is
+// wider than the add radius, but a wandering entity riding that boundary — or a
+// single late/dropped frame — can still fall out of one snapshot without truly
+// leaving. (Distance-tier-throttled entities are NOT a source here: the server
+// lists them in `keep`, so they count as seen and are never missing.) Deleting a
+// briefly-absent entity that frame, then re-creating it the next, churns the
+// entity map; hold it at its last pose for this window instead. Kept short so a
+// genuine leaver (logout, corpse cleanup) lingers only momentarily.
+const DESPAWN_GRACE_MS = 600;
+// ...but only for entities last seen near/beyond the interest boundary, where
+// that churn happens. A close-range disappearance is intentional (an enemy going
+// stealth) and must hide at once, so anything nearer than this drops immediately.
+// Note the converse: an out-leveled stealther seen at >=70yd now lingers up to
+// DESPAWN_GRACE_MS before vanishing — acceptable, since you can only see a
+// stealthed unit at that range when far out-leveling it.
+const DESPAWN_GRACE_MIN_DIST_SQ = 70 * 70;
+
 function blankEntity(id: number): Entity {
   return {
     id, kind: 'mob', templateId: '', name: '', level: 1, mendTimer: 0, wardTimer: 0, rallyTimer: 0, warcryTimer: 0,
@@ -457,6 +475,9 @@ export class ClientWorld implements IWorld {
   // snapshot interpolation
   lastSnapAt = 0;
   snapInterval = 50; // ms, adapts to measured cadence
+  // entity id -> performance.now() when it first went missing from a snapshot;
+  // used for the despawn grace window (anti-flicker), cleared once it returns
+  private missingSince = new Map<number, number>();
   // camera follow for keyboard turns applied by the main loop
   pendingFacingDelta = 0;
   connected = false;
@@ -898,9 +919,35 @@ export class ClientWorld implements IWorld {
       }
     }
 
-    // prune entities that left our interest area
+    // prune entities that left our interest area. An entity briefly absent from
+    // a single snapshot (interest-boundary churn, a late/dropped frame) is held
+    // at its last pose for a short grace window rather than deleted outright, so
+    // the entity map doesn't churn delete/re-create across the boundary. The
+    // grace applies only near/beyond the interest boundary; a close-range
+    // disappearance (an enemy going stealth) still hides immediately.
+    // (A `keep`-listed entity counts as seen above, so its timer is cleared.)
+    const self = this.entities.get(this.playerId);
+    const missingSince = this.missingSince;
     for (const [id, e] of this.entities) {
-      if (!seen.has(id)) this.entities.delete(id);
+      if (id === this.playerId) continue;
+      if (seen.has(id)) {
+        missingSince.delete(id);
+        continue;
+      }
+      const dx = self ? e.pos.x - self.pos.x : 0;
+      const dz = self ? e.pos.z - self.pos.z : 0;
+      if (dx * dx + dz * dz < DESPAWN_GRACE_MIN_DIST_SQ) {
+        this.entities.delete(id);
+        missingSince.delete(id);
+        continue;
+      }
+      const since = missingSince.get(id);
+      if (since === undefined) {
+        missingSince.set(id, now);
+      } else if (now - since >= DESPAWN_GRACE_MS) {
+        this.entities.delete(id);
+        missingSince.delete(id);
+      }
     }
   }
 
@@ -1014,6 +1061,9 @@ export class ClientWorld implements IWorld {
   equipItem(itemId: string): void {
     this.cmd({ cmd: 'equip', item: itemId });
   }
+  unequipItem(slot: EquipSlot): void {
+    this.cmd({ cmd: 'unequip_item', slot });
+  }
   useItem(itemId: string): void {
     this.cmd({ cmd: 'use', item: itemId });
   }
@@ -1121,6 +1171,12 @@ export class ClientWorld implements IWorld {
   }
   partyKick(targetPid: number): void {
     this.cmd({ cmd: 'pkick', id: targetPid });
+  }
+  convertPartyToRaid(): void {
+    this.cmd({ cmd: 'praid' });
+  }
+  moveRaidMember(targetPid: number, group: 1 | 2): void {
+    this.cmd({ cmd: 'pmoveRaid', id: targetPid, group });
   }
   // raid/target markers
   markerFor(entityId: number): number | null {

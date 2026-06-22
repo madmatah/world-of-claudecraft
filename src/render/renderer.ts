@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ALL_CLASSES, type Entity, type SimEvent } from '../sim/types';
+import { ALL_CLASSES, isQuestTurnInNpc, type Entity, type SimEvent } from '../sim/types';
 import { OVERHEAD_EMOTES, type IWorld } from '../world_api';
 import { groundHeight, WATER_LEVEL, zoneBiomeAt } from '../sim/world';
 import {
@@ -46,6 +46,7 @@ import { comboPipsFor, COMBO_PIP_MAX } from './nameplate_combo';
 import { stepCameraOcclusion, type CameraOcclusionState } from './camera_collision';
 import { castBarState } from './cast_bar';
 import { isMobThreateningViewer } from './nameplate_threat';
+import { characterSoulRendActive } from './character_effects';
 import { FRIENDLY, isFriendlyPet, isOwnedPetHostile, mobNameColor } from './reaction';
 
 const NAMEPLATE_RANGE = 55;
@@ -2115,6 +2116,7 @@ export class Renderer {
     switch (ev.type) {
       case 'spellfx':
         if (ev.fx === 'projectile') this.vfx.projectile(ev.sourceId, ev.targetId, ev.school);
+        else if (ev.fx === 'beam') this.vfx.beam(ev.sourceId, ev.targetId, ev.school);
         else if (ev.fx === 'tick') this.vfx.tick(ev.targetId, ev.school);
         else this.vfx.nova(ev.targetId, ev.school);
         break;
@@ -2596,7 +2598,7 @@ export class Renderer {
   // ---------------------------------------------------------------------
 
   private builtInteriors = new Set<string>();
-  private fogState: 'outdoor' | 'dungeon' | 'temple' | 'underwater' = 'outdoor';
+  private fogState: 'outdoor' | 'dungeon' | 'temple' | 'nythraxis' | 'underwater' = 'outdoor';
 
   private buildInterior(interior: string, ox: number, oz: number): void {
     this.dungeons ??= new DungeonInteriors(this.scene, this.lowGfx, this.flames, this.fireLights);
@@ -2651,9 +2653,12 @@ export class Renderer {
     }
     // the Drowned Temple reads as submerged: a teal murk instead of the
     // crypt's near-black, so its flooded halls feel underwater, not just dark
-    const inTemple = inside && !isArenaPos(px) && dungeonAt(px)?.interior === 'temple';
+    const interior = inside && !isArenaPos(px) ? dungeonAt(px)?.interior : null;
+    const inTemple = interior === 'temple';
+    const inNythraxis = interior === 'nythraxis';
     const desired = inTemple ? 'temple'
-      : inside ? 'dungeon'
+      : inNythraxis ? 'nythraxis'
+        : inside ? 'dungeon'
         : camY < WATER_LEVEL - 0.05 ? 'underwater' : 'outdoor';
     const fog = this.scene.fog as THREE.Fog;
     if (desired !== this.fogState) {
@@ -2666,6 +2671,12 @@ export class Renderer {
         fog.color.setHex(0x0a3a44);
         fog.near = 12;
         fog.far = 78;
+      } else if (desired === 'nythraxis') {
+        // the raid arena is huge (±230) — push the murk back so ~50yd reads
+        // clear (linear-fog midpoint (near+far)/2 = 50), not the old ~30
+        fog.color.setHex(0x020106);
+        fog.near = 20;
+        fog.far = 80;
       } else if (desired === 'underwater') {
         fog.color.setHex(0x17506e);
         fog.near = 2;
@@ -2680,7 +2691,7 @@ export class Renderer {
       // underground so the torch point lights own the scene; restore outside.
       // The rim glow cranks up instead — silhouettes must split from the murk.
       if (!this.lowGfx) {
-        const underground = desired === 'dungeon' || desired === 'temple';
+        const underground = desired === 'dungeon' || desired === 'temple' || desired === 'nythraxis';
         this.sun.intensity = underground ? DUNGEON_SUN_INTENSITY : SUN_INTENSITY;
         this.hemi.intensity = underground ? DUNGEON_HEMI_INTENSITY : HEMI_INTENSITY;
         this.scene.environmentIntensity = underground ? DUNGEON_ENV_INTENSITY : this.envOutdoorIntensity;
@@ -2822,7 +2833,14 @@ export class Renderer {
       const cdx = e.pos.x - p.pos.x, cdz = e.pos.z - p.pos.z;
       const d2 = cdx * cdx + cdz * cdz;
       if (id !== p.id) {
-        if (d2 > ENTITY_DRAW_RANGE * ENTITY_DRAW_RANGE) {
+        // Per-frame visibility uses the SAME 80/96 hysteresis as view
+        // create/destroy (above) so a rig hovering right at the 80yd draw edge
+        // doesn't toggle visible/invisible every frame — that hard cutoff is the
+        // actual on-screen boundary flicker. group.visible carries last frame's
+        // state: once shown, keep it until past the 96yd destroy radius (where
+        // the view is torn down anyway); while hidden, show only within 80yd.
+        const showCutoff = v.group.visible ? ENTITY_VIEW_DESTROY_RANGE_SQ : ENTITY_VIEW_CREATE_RANGE_SQ;
+        if (d2 > showCutoff) {
           v.group.visible = false;
           continue;
         }
@@ -2876,6 +2894,11 @@ export class Renderer {
           v.sparkle.scale.set(pulse, pulse, 1);
           v.sparkle.material.rotation = this.time * 0.8;
         }
+        if (vis
+          && (e.objectItemId === 'bastion_ward_stone' || e.objectItemId === 'soulshard_pillar')
+          && e.auras.some((a) => a.id === 'nythraxis_wardstone_lit')) {
+          this.vfx.castSparkle(e.id, 'arcane', dt * 2.6);
+        }
         if (v.portal && vis) {
           v.portal.rotation.z = this.time * 1.4;
           (v.portal.material as THREE.MeshBasicMaterial).opacity = 0.45 + Math.sin(this.time * 2.2 + e.id) * 0.15;
@@ -2894,10 +2917,13 @@ export class Renderer {
       // rig, click proxy, and any form visual grow/shrink together.
       if (e.scale !== v.liveScale) { v.liveScale = e.scale; v.group.scale.setScalar(e.scale); }
 
-      // swimming pose: prone at the surface (derived here — the sim is unaware)
+      // swimming pose: prone at the surface (derived here — the sim is unaware).
+      // The cheap feet-depth test gates the expensive terrain-noise sample: an
+      // entity whose feet are above the swim line can't be swimming, so the vast
+      // majority (everyone on land) skip groundHeight() entirely each frame.
       const swimming = !e.dead
-        && groundHeight(e.pos.x, e.pos.z, this.sim.cfg.seed) < WATER_LEVEL - 0.8
-        && e.pos.y <= WATER_LEVEL - 0.5;
+        && e.pos.y <= WATER_LEVEL - 0.5
+        && groundHeight(e.pos.x, e.pos.z, this.sim.cfg.seed) < WATER_LEVEL - 0.8;
 
       // lazy form visuals, swapped by visibility like the old sheep/bear rigs
       if (polyed && !v.sheepVisual) {
@@ -2926,6 +2952,7 @@ export class Renderer {
             : travel && v.travelVisual ? v.travelVisual : v.visual;
       const ghost = ghostWolf || shouldRenderStealthGhost(this.sim.playerId, e) || e.templateId.startsWith('vision_');
       active.setGhost(ghost);
+      active.setSoulRend(characterSoulRendActive(e));
       v.visual.root.visible = active === v.visual;
       // distant rigs swap to the single-draw baked idle-pose mesh
       v.visual.setFar(v.isFar && active === v.visual);
@@ -3019,6 +3046,9 @@ export class Renderer {
 
       if (st.casting) {
         this.vfx.castSparkle(e.id, e.castingAbility === 'demon_heal' ? 'shadow' : ABILITIES[e.castingAbility!]?.school ?? 'arcane', dt);
+      }
+      if (e.auras.some((a) => a.id === 'nythraxis_soul_rend')) {
+        this.vfx.castSparkle(e.id, 'shadow', dt * 3.2);
       }
       if (swimming) this.vfx.swimRipple(v.group.position, moving ? dt * 3 : dt);
     }
@@ -3382,6 +3412,9 @@ export class Renderer {
       const hidden = (isSelf && !hasOverheadEmote) || d2 > NAMEPLATE_RANGE_SQ
         || (e.dead && !e.lootable && e.kind === 'mob')
         || (e.kind === 'object' && !isDoor)
+        // the sealed royal door inside the crypt carries no floating label —
+        // it reads as part of the back wall, not a portal billboard
+        || (isDoor && e.dungeonId === 'nythraxis_boss_arena')
         || (!this.showNameplates && e.kind === 'mob' && !e.dead);
       if (hidden) {
         if (v.nameplateDisplay !== 'none') {
@@ -3462,8 +3495,10 @@ export class Renderer {
         // $WOC holder-tier flair, shown on OTHER players (own nameplate is hidden).
         this.setNameplateTier(v, isSelf ? 0 : (e.holderTier ?? 0));
         this.setNameplateHp(v, e);
-      } else if (e.kind === 'npc') {
-        const npcName = npcDisplayName(e.templateId);
+      } else if (e.kind === 'npc' || (!e.hostile && e.questIds.length > 0)) {
+        const npcName = e.kind === 'npc'
+          ? npcDisplayName(e.templateId)
+          : tEntity({ kind: 'mob', id: e.templateId, field: 'name' });
         let marker = '';
         let cls = '';
         // role-aware: '!' only at the quest's giver, '?' only at its turn-in
@@ -3472,9 +3507,9 @@ export class Renderer {
           const quest = QUESTS[qid];
           if (!quest) continue;
           const st = sim.questState(qid);
-          if (st === 'ready' && quest.turnInNpcId === e.templateId) { marker = '?'; cls = 'ready'; break; }
+          if (st === 'ready' && isQuestTurnInNpc(quest, e.templateId)) { marker = '?'; cls = 'ready'; break; }
           if (st === 'available' && quest.giverNpcId === e.templateId) { marker = '!'; cls = 'avail'; }
-          else if (st === 'active' && quest.turnInNpcId === e.templateId && !marker) { marker = '?'; cls = 'active'; }
+          else if (st === 'active' && isQuestTurnInNpc(quest, e.templateId) && !marker) { marker = '?'; cls = 'active'; }
         }
         const markerClass = cls ? `np-marker ${cls}` : 'np-marker';
         this.setNameplateStatic(v, `npc|${npcName}|${marker}|${markerClass}`, npcName, FRIENDLY, 'none', marker, markerClass, '1');

@@ -236,7 +236,9 @@ export const de_DE: EnTranslations = {
       "browserEffectsNote": "Auto tones down heavy CSS effects (blur, glow, background motion) based on your browser and device. Lower it manually if the interface feels sluggish.",
       "footstepSounds": "Schrittgeräusche",
       "showWalletOnCharacterScreen": "Wallet auf dem Charakterbildschirm anzeigen",
-      "showWalletOnPlayerCard": "Wallet auf der Spielerkarte anzeigen"
+      "showWalletOnPlayerCard": "Wallet auf der Spielerkarte anzeigen",
+      "uiScale": "UI-Skalierung",
+      "highContrastBackground": "Hintergrund mit hohem Kontrast"
     },
     "perf": {
       "title": "Leistungsanzeige",
@@ -309,6 +311,10 @@ export const de_DE: EnTranslations = {
     "playerCard": {
       "showWalletBadge": "Wallet-Abzeichen anzeigen"
     },
+    "landing": {
+      "highContrast": "Hoher Kontrast",
+      "highContrastAria": "Hintergrund mit hohem Kontrast umschalten: deaktiviert den bewegten Trailer, damit der Text des Startbildschirms lesbar bleibt"
+    },
     "statInfo": {
       "fromYour": "Von deinen {value} Punkten {stat}:",
       "desc": {
@@ -374,6 +380,10 @@ export const de_DE: EnTranslations = {
         "many": "Wer: {count} Spieler online auf {realm}.",
         "other": "Wer: {count} Spieler online auf {realm}."
       }
+    },
+    "paperdoll": {
+      "unequipAria": "{item} ablegen",
+      "unequipHint": "Klicke auf ×, Rechtsklick oder in die Taschen ziehen zum Ablegen"
     },
     "account": {
       "title": "Konto",
@@ -1357,6 +1367,7 @@ export const de_DE: EnTranslations = {
         "unignoreChat": "Chat nicht mehr ignorieren",
         "report": "Spieler melden",
         "removeParty": "Aus Gruppe entfernen",
+        "convertToRaid": "In Schlachtzug umwandeln",
         "cancel": "Abbrechen"
       }
     },
@@ -1522,6 +1533,25 @@ export const de_DE: EnTranslations = {
       "friendOnline": "{name} ist online gekommen.",
       "friendOffline": "{name} ist offline gegangen."
     },
+    "tutorial": {
+      "title": "Neuer Abenteurer",
+      "stepLabel": "Schritt {current} von {total}",
+      "skip": "Tutorial überspringen",
+      "dismiss": "Schließen",
+      "doneTitle": "Bereit für das Abenteuer",
+      "doneBody": "Du beherrschst die Grundlagen, {name}. Das Eastbrook-Tal liegt bereit, von dir erkundet zu werden. Drücke jederzeit {questKey}, um deine Quests einzusehen. Gute Jagd.",
+      "moveTitle": "Erste Schritte",
+      "moveBody": "Nutze {moveKeys} zum Bewegen und die Maus zum Umsehen. Mach ein paar Schritte, um zu beginnen.",
+      "seekTitle": "Suche den Marschall",
+      "seekBody": "Marschall Redbrook wartet in der Stadt und hat Arbeit für einen frischen Recken. Folge der Markierung zu ihm.",
+      "talkTitle": "Nimm die Aufgabe an",
+      "talkBody": "Stell dich nah an Marschall Redbrook und drücke {interactKey}, um mit ihm zu sprechen, und nimm dann seine Aufgabe an.",
+      "slayTitle": "Wölfe vor der Tür",
+      "slayBody": "Jage die Waldwölfe an der Nordstraße. Visiere einen an und greife ihn an, um das Rudel zu lichten.",
+      "slayProgress": "Erlegte Waldwölfe: {current} / {needed}",
+      "returnTitle": "Hol dir deine Belohnung",
+      "returnBody": "Deine Aufgabe ist erledigt. Kehre zu Marschall Redbrook zurück und drücke {interactKey}, um sie abzugeben."
+    },
     "markers": {
       "names": {
         "star": "Stern",
@@ -1575,6 +1605,12 @@ export const de_DE: EnTranslations = {
       "guildTab": "Gilde",
       "ignoreTab": "Ignorieren",
       "leaveParty": "Gruppe verlassen",
+      "raidTab": "Schlachtzug",
+      "raidEmpty": "Wandelt eine Gruppe in einen Schlachtzug um, um hier Schlachtzugsgruppen zu verwalten.",
+      "raidGroupEmpty": "Keine Spieler in dieser Gruppe.",
+      "raidGroupTitle": "Gruppe {position} ({count}/5)",
+      "raidMoveToGroup": "In Gruppe {position} verschieben",
+      "raidLeader": "Schlachtzugsleiter",
       "offlineEmpty": "Freunde, Gilden und Ignorierlisten sind im Onlinespiel verfügbar.",
       "friendsEmpty": "Noch keine Freunde. Sucht unten jemanden nach Namen.",
       "ignoreEmpty": "Eure Ignorierliste ist leer.",
@@ -1812,7 +1848,8 @@ export const de_DE: EnTranslations = {
       "common": "Gewöhnlich",
       "uncommon": "Ungewöhnlich",
       "rare": "Selten",
-      "epic": "Episch"
+      "epic": "Episch",
+      "legendary": "Legendär"
     },
     "kind": {
       "weapon": "Waffe",
@@ -3519,6 +3556,36 @@ export const de_DE: EnTranslations = {
       "event_skin_token": {
         "name": "Geheimnisvolle Kosmetiktruhe"
       },
+      "deathless_heartwood": {
+        "name": "Herzholz der todlosen Krone"
+      },
+      "kingsbane_last_oath": {
+        "name": "Königsbann, letzter Eid von Thornpeak"
+      },
+      "crownforged_dreadhelm": {
+        "name": "Kronengeschmiedeter Schreckenshelm"
+      },
+      "crownforged_warspaulders": {
+        "name": "Kronengeschmiedete Kriegsschultern"
+      },
+      "nighttalon_crown": {
+        "name": "Nachtklauenkrone"
+      },
+      "nighttalon_shoulderguards": {
+        "name": "Nachtklauen-Schulterschützer"
+      },
+      "soulflame_cowl": {
+        "name": "Seelenflammenkapuze"
+      },
+      "soulflame_mantle": {
+        "name": "Seelenflammenmantel"
+      },
+      "stormcallers_crown": {
+        "name": "Krone des Sturmrufers"
+      },
+      "stormcallers_spaulders": {
+        "name": "Schulterplatten des Sturmrufers"
+      },
       "unknown_alien_weaponry": {
         "name": "Unbekannte Alien-Waffen"
       },
@@ -3733,6 +3800,12 @@ export const de_DE: EnTranslations = {
       },
       "bound_guardian": {
         "name": "Gebundener Wächter"
+      },
+      "nythraxis_skeleton_warrior": {
+        "name": "Auferstandene Koenigswache"
+      },
+      "nythraxis_scourge_of_thornpeak": {
+        "name": "Nythraxis, Geissel von Thornpeak"
       },
       "brightwood_hare": {
         "name": "Hellholz-Hase"
@@ -3985,6 +4058,11 @@ export const de_DE: EnTranslations = {
         "name": "Waldläufer Elwyn",
         "title": "Hüter der Lichtung",
         "greeting": "Ruhig, {className} - die Lichtung ist heute friedlich, und das gedenke ich so zu erhalten."
+      },
+      "brother_aldric_raid": {
+        "name": "Bruder Aldric",
+        "title": "Priester des Tals",
+        "greeting": "Vom Kapellenhof im Tal bis zum Dach der Welt... die Spur endet hier. Ich spüre, wie der Berg lauscht."
       },
       "tidewatcher_ondrel": {
         "name": "Ondrel Vane",
@@ -4711,8 +4789,8 @@ export const de_DE: EnTranslations = {
       },
       "q_nythraxis_bound_guardian": {
         "title": "Der Gebundene Wächter",
-        "text": "Voss schrieb, dass die Überlebenden den Siegelring des Königs hinter einem uralten Wächter versiegelten, damit niemand Nythraxis Grab durch Zufall oder Ehrgeiz erreicht. Bring den Kryptenschlüssel zum Ritualkreis auf dem flachen Boden östlich der verlassenen Krypta und südöstlich des westlichen Grabes. Benutze ihn dort, brich den Wächter und bring den Ring zurück.",
-        "completion": "Die drei Relikte erzählen dieselbe Geschichte: Aldren kämpfte, um seinen König zu verteidigen, Malric durchbrach die Grenze des Todes, und Voss versuchte aufzuhalten, was folgte. Das Siegel wird schwächer, und dieser Ring ist der Schlüssel zu Nythraxis Grab. Du bist nun eingestimmt, die Krypta von Nythraxis zu betreten.",
+        "text": "Voss schrieb, dass die Uberlebenden den Siegelring des Konigs hinter einem uralten Wachter versiegelten, damit niemand Nythraxis Grab durch Zufall oder Ehrgeiz erreicht. Bring den Kryptenschlussel zum Ritualkreis auf dem flachen Boden ostlich der verlassenen Krypta und sudostlich des westlichen Grabes. Benutze ihn dort, brich den Wachter und bring den Ring zuruck.",
+        "completion": "Die drei Relikte erzahlen dieselbe Geschichte: Aldren kampfte, um seinen Konig zu verteidigen, Malric durchbrach die Grenze des Todes, und Voss versuchte aufzuhalten, was folgte. Das Siegel wird schwacher, und dieser Ring ist der Schlussel zu Nythraxis Grab. Du bist nun eingestimmt, die Krypta von Nythraxis zu betreten. Kehrt zur verlassenen Krypta zuruck, offnet die konigliche Tur und stellt Euch Nythraxis, bevor der Zorn des alten Konigs uber Thornpeak hinausbricht.",
         "objectives": {
           "0": {
             "label": "Schlüsselstein am Ritualkreis benutzt"
@@ -4722,6 +4800,16 @@ export const de_DE: EnTranslations = {
           },
           "2": {
             "label": "Siegelring des Königs"
+          }
+        }
+      },
+      "q_nythraxis_scourges_end": {
+        "title": "Das Ende der Geissel",
+        "text": "Der Siegelring hat den Weg geoeffnet, {playerName}, doch ein offenes Grab ist kein Sieg. Nythraxis war einst ein Koenig, und die Ruine unter Thornpeak bleibt an seinen Willen gebunden. Betretet die Krypta mit Verbuendeten, denen Ihr vertraut. Brecht die todlose Krone, bevor ihr Befehl das Schlachtfeld darueber erreicht.",
+        "completion": "Dann schweigt die Krone endlich. Thornpeak wird seine Toten weiter tragen, doch kein Koenig unter dem Berg wird sie je wieder in den Krieg rufen. Ihr habt beendet, was Aldren, Malric und Voss nur eindämmen konnten.",
+        "objectives": {
+          "0": {
+            "label": "Nythraxis besiegt"
           }
         }
       },
@@ -5059,6 +5147,11 @@ export const de_DE: EnTranslations = {
         "name": "Verlassene Krypta",
         "enterText": "Du überschreitest die Schwelle der verlassenen Krypta.",
         "leaveText": "Du trittst wieder in die kalte Luft von Thornpeak."
+      },
+      "nythraxis_boss_arena": {
+        "name": "Nythraxis-Schlachtzugsarena",
+        "enterText": "Ihr durchschreitet die versiegelte königliche Tür.",
+        "leaveText": "Ihr kehrt in die kalte Luft von Thornpeak zurück."
       },
       "drowned_temple": {
         "name": "Der Ertränkte Tempel",

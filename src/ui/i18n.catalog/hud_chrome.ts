@@ -112,6 +112,10 @@ export const hudChromeStrings = {
     footstepSounds: "Footstep Sounds",
     showWalletOnCharacterScreen: "Show Wallet on Character Screen",
     showWalletOnPlayerCard: "Show Wallet on Player Card",
+    // Interface panel: global HUD zoom slider, and the mirror of the landing
+    // page's high-contrast backdrop toggle.
+    uiScale: "UI Scale",
+    highContrastBackground: "High-Contrast Background",
   },
   // Performance overlay (the customizable in-game stats panel + its Options
   // sub-view). Player-facing, so every label is a key here; the live numbers in
@@ -193,6 +197,12 @@ export const hudChromeStrings = {
   },
   playerCard: {
     showWalletBadge: "Show wallet badge",
+  },
+  // Landing-page (start screen) accessibility controls.
+  landing: {
+    // Footer toggle: swap the moving trailer for a static high-contrast backdrop.
+    highContrast: "High Contrast",
+    highContrastAria: "Toggle high-contrast background: disables the moving trailer so start-screen text stays legible",
   },
   // Character-screen stat tooltips (hover a stat on the C panel). The stat NAMES
   // reuse itemUi.stats.*; only these descriptions / effect lines / notes are new.
@@ -276,6 +286,11 @@ export const hudChromeStrings = {
       many: "Who: {count} players online on {realm}.",
       other: "Who: {count} players online on {realm}.",
     },
+  },
+  // Character window (paperdoll) controls.
+  paperdoll: {
+    unequipAria: "Unequip {item}",
+    unequipHint: "Click ×, right-click, or drag to bags to unequip",
   },
   // Home-page account portal (the logged-in "Account" nav tab). Lives here in the
   // English-only hud_chrome domain so an English-only PR compiles; translations
