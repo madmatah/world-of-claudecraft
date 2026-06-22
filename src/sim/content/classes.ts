@@ -1447,8 +1447,8 @@ export const ABILITIES: Record<string, AbilityDef> = {
     id: 'travel_form', name: 'Travel Form', class: 'druid', learnLevel: 16,
     cost: 30, castTime: 0, cooldown: 0, range: 0, school: 'nature',
     requiresTarget: false,
-    effects: [{ type: 'selfBuff', kind: 'form_travel', value: 1.4, duration: 3600 }],
-    description: 'Instantly shift into a swift travel form, increasing movement speed by 40%. You cannot use other abilities while shifted, but can shift in or out of combat — ideal for escaping.',
+    effects: [{ type: 'selfBuff', kind: 'form_travel', value: 2.0, duration: 3600 }],
+    description: 'Instantly shift into a swift travel form, increasing movement speed by 100%. You cannot use other abilities while shifted, but can shift in or out of combat, ideal for escaping.',
   },
   enrage: {
     id: 'enrage', name: 'Enrage', class: 'druid', learnLevel: 16,

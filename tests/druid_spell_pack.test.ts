@@ -86,7 +86,7 @@ describe('druid spell pack — casting applies effects', () => {
     expect(e.resource).toBeGreaterThan(0);
   });
 
-  it('Travel Form shapeshifts and grants +40% movement speed out of combat', () => {
+  it('Travel Form shapeshifts and grants +100% movement speed out of combat', () => {
     const sim = makeWorld();
     const a = sim.addPlayer('druid', 'Walker');
     const e = sim.entities.get(a)!;
@@ -96,8 +96,35 @@ describe('druid spell pack — casting applies effects', () => {
     sim.tick();
     const form = e.auras.find((au) => au.kind === 'form_travel');
     expect(form, 'travel_form should apply a form_travel aura').toBeTruthy();
-    expect(form!.value).toBeCloseTo(1.4);
-    expect((sim as any).moveSpeedMult(e)).toBeCloseTo(1.4);
+    expect(form!.value).toBeCloseTo(2.0);
+    expect((sim as any).moveSpeedMult(e)).toBeCloseTo(2.0);
+  });
+
+  // Regression guard for the player-facing path: moveSpeedMult alone passing is not
+  // enough (the historical Dash/Travel bug had a correct-looking aura that the
+  // movement step floored to a no-op). Drive real input and measure ground covered.
+  it('Travel Form actually moves the druid faster (integration)', () => {
+    const distanceOver = (withForm: boolean): number => {
+      const sim = makeWorld();
+      const a = sim.addPlayer('druid', 'Strider');
+      const e = sim.entities.get(a)!;
+      sim.setPlayerLevel(20, a);
+      e.resource = 100;
+      if (withForm) { sim.castAbility('travel_form', a); sim.tick(); }
+      const meta = (sim as any).players.get(a);
+      meta.moveInput = {
+        forward: true, back: false, turnLeft: false, turnRight: false,
+        strafeLeft: false, strafeRight: false, jump: false,
+      };
+      const start = { x: e.pos.x, z: e.pos.z };
+      for (let i = 0; i < 60; i++) sim.tick();
+      return Math.hypot(e.pos.x - start.x, e.pos.z - start.z);
+    };
+    const base = distanceOver(false);
+    const travel = distanceOver(true);
+    expect(base).toBeGreaterThan(0);
+    // +100% speed: should cover close to twice the ground (allow slack for terrain).
+    expect(travel / base).toBeGreaterThan(1.8);
   });
 
   it('Travel Form toggles off cleanly, removing the form and the speed', () => {
