@@ -23,6 +23,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.bugReport.screenshotAlt",
     "hudChrome.bugReport.submit",
     "hudChrome.bugReport.submitted",
+    "hudChrome.bugReport.submittedNoShot",
     "hudChrome.bugReport.tooLarge",
     "hudChrome.bugReport.unknown"
   ],
@@ -40,6 +41,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.bugReport.screenshotAlt",
     "hudChrome.bugReport.submit",
     "hudChrome.bugReport.submitted",
+    "hudChrome.bugReport.submittedNoShot",
     "hudChrome.bugReport.tooLarge",
     "hudChrome.bugReport.unknown"
   ],
@@ -57,6 +59,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.bugReport.screenshotAlt",
     "hudChrome.bugReport.submit",
     "hudChrome.bugReport.submitted",
+    "hudChrome.bugReport.submittedNoShot",
     "hudChrome.bugReport.tooLarge",
     "hudChrome.bugReport.unknown"
   ],
@@ -74,6 +77,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.bugReport.screenshotAlt",
     "hudChrome.bugReport.submit",
     "hudChrome.bugReport.submitted",
+    "hudChrome.bugReport.submittedNoShot",
     "hudChrome.bugReport.tooLarge",
     "hudChrome.bugReport.unknown"
   ],
@@ -92,6 +96,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.bugReport.screenshotAlt",
     "hudChrome.bugReport.submit",
     "hudChrome.bugReport.submitted",
+    "hudChrome.bugReport.submittedNoShot",
     "hudChrome.bugReport.tooLarge",
     "hudChrome.bugReport.unknown"
   ],
@@ -109,6 +114,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.bugReport.screenshotAlt",
     "hudChrome.bugReport.submit",
     "hudChrome.bugReport.submitted",
+    "hudChrome.bugReport.submittedNoShot",
     "hudChrome.bugReport.tooLarge",
     "hudChrome.bugReport.unknown"
   ],
@@ -130,6 +136,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.bugReport.screenshotAlt",
     "hudChrome.bugReport.submit",
     "hudChrome.bugReport.submitted",
+    "hudChrome.bugReport.submittedNoShot",
     "hudChrome.bugReport.tooLarge",
     "hudChrome.bugReport.unknown"
   ],

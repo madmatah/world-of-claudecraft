@@ -285,8 +285,11 @@ export class Api {
     description: string;
     screenshot: string | null;
     meta: unknown;
-  }): Promise<void> {
-    await this.post('/api/bug-reports', payload);
+  }): Promise<{ screenshotStored: boolean }> {
+    const res = await this.post('/api/bug-reports', payload);
+    // The server drops a screenshot that fails its allowlist/size gate; surface
+    // that so the player is not told the screenshot was attached when it was not.
+    return { screenshotStored: res?.screenshotStored !== false };
   }
 
   async projectStats(): Promise<{ accounts_created: number; players_online: number; realm: string }> {

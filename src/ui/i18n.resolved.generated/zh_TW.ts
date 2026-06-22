@@ -399,6 +399,7 @@ export const zh_TW: EnTranslations = {
       "screenshotAlt": "附加到此錯誤回報的當前畫面截圖",
       "submit": "傳送回報",
       "submitted": "錯誤回報已傳送。謝謝！",
+      "submittedNoShot": "錯誤回報已傳送，但截圖過大，無法一併附上。",
       "describeFirst": "請先描述錯誤再傳送。",
       "tooLarge": "此回報過大，無法傳送。請移除截圖後重試。",
       "rateLimited": "你最近已傳送多份回報。請稍候再傳送。",

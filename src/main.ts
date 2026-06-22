@@ -969,7 +969,8 @@ async function startGame(world: IWorld, offlineSim: Sim | null, online: ClientWo
         viewport: { w: window.innerWidth, h: window.innerHeight, dpr: window.devicePixelRatio },
         zone: zoneBiomeAt(world.player.pos.z),
         level: world.player.level,
-        className: String((world.player as { cls?: unknown }).cls ?? ''),
+        // Entity has no `cls`; the player's class is its templateId (see Entity).
+        className: world.player.templateId,
         cameraYaw: renderer?.camYaw ?? 0,
       }),
       submit: (payload) => api.submitBugReport({

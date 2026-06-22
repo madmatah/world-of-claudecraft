@@ -30,6 +30,7 @@ interface TableState {
 
 const accountsState: TableState = { page: 1, search: '', sort: 'id', dir: 'desc' };
 const charactersState: TableState = { page: 1, search: '', sort: 'level', dir: 'desc' };
+const bugReportsState = { page: 1 };
 let liveTimer: number | null = null;
 let activityTimer: number | null = null;
 type AdminPage = 'overview' | 'usage' | 'moderation' | 'chat-filter' | 'blocked-ips' | 'bug-reports';
@@ -98,10 +99,31 @@ function showPage(page: AdminPage): void {
 
 async function refreshBugReports(): Promise<void> {
   try {
-    const data = await apiGet<{ rows: BugReportRow[] }>('/admin/api/bug-reports');
+    const params = new URLSearchParams({ page: String(bugReportsState.page) });
+    const data = await apiGet<Paginated<BugReportRow>>(`/admin/api/bug-reports?${params}`);
     $('bug-reports').innerHTML = renderBugReportsTable(data.rows);
+    $('bug-reports-pager').innerHTML = renderPager(data.total, data.page, data.limit);
   } catch (err) {
     if (!handleAuthFailure(err)) $('bug-reports').innerHTML = `<div class="empty">${t('bugReports.loadFailed')}</div>`;
+  }
+}
+
+// Fetch one report's screenshot on demand (kept out of the list payload) and show
+// it in a click-to-dismiss overlay.
+async function showBugScreenshot(id: number): Promise<void> {
+  try {
+    const data = await apiGet<{ screenshot: string | null }>(`/admin/api/bug-reports/${id}/screenshot`);
+    if (!data.screenshot) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'bug-shot-overlay';
+    const img = document.createElement('img');
+    img.src = data.screenshot;
+    img.alt = t('bugReports.screenshotAlt');
+    overlay.appendChild(img);
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+  } catch (err) {
+    handleAuthFailure(err);
   }
 }
 
@@ -569,6 +591,16 @@ function wireEvents(): void {
   $('characters-pager').addEventListener('click', (e) => {
     const page = pagerTarget(e);
     if (page !== null) { charactersState.page = page; void refreshCharacters(); }
+  });
+
+  $('bug-reports-pager').addEventListener('click', (e) => {
+    const page = pagerTarget(e);
+    if (page !== null) { bugReportsState.page = page; void refreshBugReports(); }
+  });
+
+  $('bug-reports').addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('button[data-bug-shot]') as HTMLButtonElement | null;
+    if (btn) void showBugScreenshot(Number(btn.dataset.bugShot));
   });
 
   $('accounts').addEventListener('click', (e) => {

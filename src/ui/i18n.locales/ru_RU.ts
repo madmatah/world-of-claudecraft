@@ -108,6 +108,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   "hudChrome.bugReport.screenshotAlt": "Скриншот текущего вида, приложенный к этому отчёту об ошибке",
   "hudChrome.bugReport.submit": "Отправить отчёт",
   "hudChrome.bugReport.submitted": "Отчёт об ошибке отправлен. Спасибо!",
+  "hudChrome.bugReport.submittedNoShot": "Отчёт об ошибке отправлен, но скриншот слишком большой и не был приложен.",
   "hudChrome.bugReport.describeFirst": "Пожалуйста, опишите ошибку перед отправкой.",
   "hudChrome.bugReport.tooLarge": "Этот отчёт слишком большой для отправки. Попробуйте без скриншота.",
   "hudChrome.bugReport.rateLimited": "Вы недавно отправили несколько отчётов. Подождите немного перед следующим.",

@@ -524,23 +524,26 @@ export function renderBugReportsTable(rows: BugReportRow[]): string {
   if (rows.length === 0) return `<div class="empty">${t('bugReports.empty')}</div>`;
   const body = rows.map((r) => {
     const coords = `${fmtNumber(r.pos_x)}, ${fmtNumber(r.pos_y)}, ${fmtNumber(r.pos_z)}`;
-    // r.screenshot is a server-stored data URL; escape it for the attribute so a
-    // crafted value can't break out of the src context.
-    const shot = r.screenshot
-      ? `<a href="${escapeHtml(r.screenshot)}" target="_blank" rel="noopener"><img class="bug-thumb" src="${escapeHtml(r.screenshot)}" alt="${t('bugReports.screenshotAlt')}" /></a>`
+    // The list omits the screenshot bytes; offer a button that fetches the one
+    // report's screenshot on demand (see showBugScreenshot in main.ts).
+    const shot = r.has_screenshot
+      ? `<button class="btn-link" data-bug-shot="${r.id}">${t('bugReports.viewScreenshot')}</button>`
       : `<span class="text-dim">${t('bugReports.noScreenshot')}</span>`;
+    const meta = `<details><summary>${t('bugReports.colMeta')}</summary><pre class="bug-meta">${escapeHtml(JSON.stringify(r.meta ?? {}, null, 2))}</pre></details>`;
     return `<tr>
       <td>${fmtRelative(r.created_at)}</td>
       <td>${escapeHtml(r.realm) || '-'}</td>
       <td>${escapeHtml(r.character_name) || '-'}</td>
       <td>${escapeHtml(coords)}</td>
       <td class="bug-desc-cell">${escapeHtml(r.description)}</td>
+      <td><span class="badge">${escapeHtml(r.status)}</span></td>
+      <td>${meta}</td>
       <td>${shot}</td>
     </tr>`;
   });
   return `<div class="table-scroll"><table>
     <thead><tr>
-      <th>${t('bugReports.colWhen')}</th><th>${t('bugReports.colRealm')}</th><th>${t('bugReports.colCharacter')}</th><th>${t('bugReports.colPosition')}</th><th>${t('bugReports.colDescription')}</th><th>${t('bugReports.colScreenshot')}</th>
+      <th>${t('bugReports.colWhen')}</th><th>${t('bugReports.colRealm')}</th><th>${t('bugReports.colCharacter')}</th><th>${t('bugReports.colPosition')}</th><th>${t('bugReports.colDescription')}</th><th>${t('bugReports.colStatus')}</th><th>${t('bugReports.colMeta')}</th><th>${t('bugReports.colScreenshot')}</th>
     </tr></thead>
     <tbody>${body.join('')}</tbody>
   </table></div>`;

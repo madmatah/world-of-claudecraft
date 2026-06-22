@@ -148,9 +148,10 @@ export interface BugReportPayload {
 }
 
 export interface BugReportHooks {
-  // Submit a captured bug report to the server. Resolves on success, rejects with
-  // a server error message the hud maps via localizeBugReportError.
-  submit(payload: BugReportPayload): Promise<void>;
+  // Submit a captured bug report to the server. Resolves on success (screenshotStored
+  // is false when the server dropped the screenshot), rejects with a server error
+  // message the hud maps via localizeBugReportError.
+  submit(payload: BugReportPayload): Promise<{ screenshotStored: boolean }>;
   // Grab a JPEG data URL of the current frame, or null if capture failed/unavailable.
   capture(): string | null;
   // Auto-collected context (build, userAgent, viewport, zone, level/class, camera).
@@ -8776,7 +8777,7 @@ export class Hud {
   }
 
   // Only wired online (main.ts), so its presence is what gates the "Report a Bug"
-  // option — the offline browser world has no server to receive reports.
+  // option (the offline browser world has no server to receive reports).
   attachBugReporting(hooks: BugReportHooks): void {
     this.bugReportHooks = hooks;
   }
@@ -9093,8 +9094,9 @@ export class Hud {
     const error = document.createElement('div');
     error.className = 'report-error';
     error.id = 'bug-error';
+    // role="alert" already implies an assertive live region; a second aria-live
+    // would conflict, so it is the only announcement hook on this node.
     error.setAttribute('role', 'alert');
-    error.setAttribute('aria-live', 'polite');
     body.appendChild(error);
 
     const actions = document.createElement('div');
@@ -9116,9 +9118,12 @@ export class Hud {
       if (!description) { error.textContent = t('hudChrome.bugReport.describeFirst'); return; }
       submit.disabled = true;
       error.textContent = '';
+      const sentShot = includeShot && shot !== null;
       hooks.submit({ description, screenshot: includeShot ? shot : null, meta: hooks.collectMeta() })
-        .then(() => {
-          this.log(t('hudChrome.bugReport.submitted'), '#ffd100');
+        .then(({ screenshotStored }) => {
+          // Be honest when the server dropped a screenshot the player asked to send.
+          const droppedShot = sentShot && !screenshotStored;
+          this.log(t(droppedShot ? 'hudChrome.bugReport.submittedNoShot' : 'hudChrome.bugReport.submitted'), '#ffd100');
           this.optionsView = 'main';
           this.renderOptions();
         })
@@ -9129,6 +9134,8 @@ export class Hud {
     });
 
     $('#options-menu').querySelector('[data-close]')?.addEventListener('click', () => this.closeOptions());
+    // Focus the description so a keyboard/screen-reader user lands in the field.
+    window.setTimeout(() => desc.focus(), 0);
   }
 
   private localizeBugReportError(err: unknown): string {

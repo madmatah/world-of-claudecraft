@@ -399,6 +399,7 @@ export const zh_CN: EnTranslations = {
       "screenshotAlt": "附加到此错误报告的当前画面截图",
       "submit": "发送报告",
       "submitted": "错误报告已发送。谢谢！",
+      "submittedNoShot": "错误报告已发送，但截图过大，未能一并附上。",
       "describeFirst": "请先描述错误再发送。",
       "tooLarge": "该报告过大，无法发送。请去掉截图后重试。",
       "rateLimited": "你最近已发送多份报告。请稍后再发送。",

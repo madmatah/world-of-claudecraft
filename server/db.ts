@@ -142,7 +142,10 @@ CREATE TABLE IF NOT EXISTS bug_reports (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS bug_reports_account_created ON bug_reports(account_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS bug_reports_status_created ON bug_reports(status, created_at DESC);
+-- Serves the admin list (ORDER BY created_at DESC, no status filter), mirroring
+-- accounts_created_at. A (status, created_at) composite would not satisfy this
+-- ordering without a leading-column filter.
+CREATE INDEX IF NOT EXISTS bug_reports_created ON bug_reports(created_at DESC);
 CREATE TABLE IF NOT EXISTS account_moderation_actions (
   id BIGSERIAL PRIMARY KEY,
   account_id INT REFERENCES accounts(id) ON DELETE CASCADE,

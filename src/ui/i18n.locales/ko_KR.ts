@@ -108,6 +108,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   "hudChrome.bugReport.screenshotAlt": "이 버그 신고에 첨부된 현재 화면의 스크린샷",
   "hudChrome.bugReport.submit": "신고 보내기",
   "hudChrome.bugReport.submitted": "버그 신고가 전송되었습니다. 감사합니다!",
+  "hudChrome.bugReport.submittedNoShot": "버그 신고가 전송되었습니다. 다만 스크린샷이 너무 커서 첨부하지 못했습니다.",
   "hudChrome.bugReport.describeFirst": "보내기 전에 버그를 설명해 주세요.",
   "hudChrome.bugReport.tooLarge": "신고가 너무 커서 보낼 수 없습니다. 스크린샷 없이 다시 시도하세요.",
   "hudChrome.bugReport.rateLimited": "최근에 여러 건의 신고를 보냈습니다. 잠시 후 다시 보내 주세요.",

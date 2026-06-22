@@ -399,6 +399,7 @@ export const pt_BR: EnTranslations = {
       "screenshotAlt": "Screenshot of the current view attached to this bug report",
       "submit": "Send Report",
       "submitted": "Bug report sent. Thank you!",
+      "submittedNoShot": "Bug report sent, but the screenshot was too large to include.",
       "describeFirst": "Please describe the bug before sending.",
       "tooLarge": "That report is too large to send. Try again without the screenshot.",
       "rateLimited": "You've sent several reports recently. Please wait a bit before sending another.",

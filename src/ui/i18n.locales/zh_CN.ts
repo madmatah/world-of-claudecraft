@@ -108,6 +108,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   "hudChrome.bugReport.screenshotAlt": "附加到此错误报告的当前画面截图",
   "hudChrome.bugReport.submit": "发送报告",
   "hudChrome.bugReport.submitted": "错误报告已发送。谢谢！",
+  "hudChrome.bugReport.submittedNoShot": "错误报告已发送，但截图过大，未能一并附上。",
   "hudChrome.bugReport.describeFirst": "请先描述错误再发送。",
   "hudChrome.bugReport.tooLarge": "该报告过大，无法发送。请去掉截图后重试。",
   "hudChrome.bugReport.rateLimited": "你最近已发送多份报告。请稍后再发送。",

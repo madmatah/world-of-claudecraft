@@ -15,7 +15,7 @@ import { Sim } from '../src/sim/sim';
 import type { PlayerClass } from '../src/sim/types';
 import type { LeaderboardEntry } from '../src/world_api';
 import { cleanReportReason, createPlayerReport, createSuspiciousRegistrationReport } from './moderation_db';
-import { createBugReport, BugReportRateLimitError, BUG_DESCRIPTION_MAX, BUG_SCREENSHOT_MAX } from './bug_report_db';
+import { createBugReport, BugReportRateLimitError, BUG_DESCRIPTION_MAX } from './bug_report_db';
 import { resolveReportTarget } from './report_target';
 import { bufferHandshakeMessages } from './ws_buffer';
 import {
@@ -573,16 +573,18 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
       const description = typeof body.description === 'string' ? body.description.trim() : '';
       if (!description) return json(res, 400, { error: 'describe the bug' });
       const characterId = Number.isFinite(Number(body.characterId)) ? Number(body.characterId) : null;
-      let characterName = typeof body.characterName === 'string' ? body.characterName : '';
+      // Only trust a character name the server can verify the account owns. A
+      // missing or unowned characterId resolves to no name (never the client value).
+      let characterName = '';
       let resolvedCharacterId: number | null = null;
       if (characterId !== null) {
         const character = await getCharacter(accountId, characterId);
         if (character) { resolvedCharacterId = character.id; characterName = character.name; }
       }
       const pos = body.pos && typeof body.pos === 'object' ? body.pos : {};
-      let screenshot = typeof body.screenshot === 'string' ? body.screenshot : null;
-      if (screenshot && screenshot.length > BUG_SCREENSHOT_MAX) screenshot = null;
       try {
+        // The screenshot allowlist and meta clamp live in createBugReport so they
+        // apply to every insert path, not just this route.
         const report = await createBugReport({
           accountId,
           characterId: resolvedCharacterId,
@@ -590,10 +592,10 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse): P
           realm: REALM,
           pos: { x: Number(pos.x), y: Number(pos.y), z: Number(pos.z) },
           description: description.slice(0, BUG_DESCRIPTION_MAX),
-          screenshot,
-          meta: body.meta && typeof body.meta === 'object' ? body.meta : {},
+          screenshot: typeof body.screenshot === 'string' ? body.screenshot : null,
+          meta: body.meta,
         });
-        return json(res, 200, { ok: true, reportId: report.id });
+        return json(res, 200, { ok: true, reportId: report.id, screenshotStored: report.screenshotStored });
       } catch (err) {
         if (err instanceof BugReportRateLimitError) return json(res, 429, { error: err.message });
         throw err;

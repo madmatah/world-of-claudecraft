@@ -15,7 +15,7 @@ import {
   listFilterWords, removeFilterWord, resetChatStrikes, updateFilterConfig, type WordTier,
 } from './chat_filter_db';
 import { addBlockedIp, cleanIp, listBlockedIps, removeBlockedIp } from './ip_block_db';
-import { listBugReports } from './bug_report_db';
+import { listBugReports, getBugReportScreenshot } from './bug_report_db';
 import type { GameServer } from './game';
 import { providerUsageSnapshot } from './provider_usage';
 
@@ -311,7 +311,13 @@ export async function handleAdminApi(
     }
     if (path === '/admin/api/bug-reports') {
       const { page, limit } = parsePageParams(url.searchParams);
-      return ok(res, { rows: await listBugReports(limit, (page - 1) * limit) });
+      const { rows, total } = await listBugReports(limit, (page - 1) * limit);
+      return ok(res, { rows, total, page, limit });
+    }
+    const bugScreenshotMatch = /^\/admin\/api\/bug-reports\/(\d+)\/screenshot$/.exec(path);
+    if (bugScreenshotMatch) {
+      // The list query omits the (potentially large) screenshot; fetch it per report.
+      return ok(res, { screenshot: await getBugReportScreenshot(Number(bugScreenshotMatch[1])) });
     }
     const moderationAccountMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)$/.exec(path);
     if (moderationAccountMatch) {

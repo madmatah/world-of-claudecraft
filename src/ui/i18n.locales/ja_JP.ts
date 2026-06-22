@@ -108,6 +108,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   "hudChrome.bugReport.screenshotAlt": "このバグ報告に添付された現在の画面のスクリーンショット",
   "hudChrome.bugReport.submit": "報告を送信",
   "hudChrome.bugReport.submitted": "バグ報告を送信しました。ありがとうございます！",
+  "hudChrome.bugReport.submittedNoShot": "バグ報告を送信しました。ただしスクリーンショットが大きすぎて添付できませんでした。",
   "hudChrome.bugReport.describeFirst": "送信する前にバグの内容を記入してください。",
   "hudChrome.bugReport.tooLarge": "報告のサイズが大きすぎて送信できません。スクリーンショットを外して再試行してください。",
   "hudChrome.bugReport.rateLimited": "最近、報告を複数回送信しています。しばらく待ってから送信してください。",
