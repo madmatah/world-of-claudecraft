@@ -203,6 +203,7 @@ export const en_CA: AdminTranslations = {
   "dialog.actionUnban": "Restore account login access",
   "dialog.confirm": "Confirm",
   "dialog.cancel": "Cancel",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Enter a moderator note / reason first.",
   "alert.customExpiryRequired": "Choose a custom suspension expiry.",
   "alert.actionFailed": "moderation action failed",

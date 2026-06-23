@@ -203,6 +203,7 @@ export const zh_TW: AdminTranslations = {
   "dialog.actionUnban": "恢復帳號登入權限",
   "dialog.confirm": "確認",
   "dialog.cancel": "取消",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "請先輸入管理員備註／原因。",
   "alert.customExpiryRequired": "請選擇自訂停權到期時間。",
   "alert.actionFailed": "管理稽核操作失敗",

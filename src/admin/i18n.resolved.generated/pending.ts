@@ -10,24 +10,62 @@
 // and `pretest`). Reproducibility is checked by tests/i18n_admin_catalog.test.ts.
 
 export const pending: Record<string, readonly string[]> = {
-  "es": [],
-  "es_ES": [],
-  "fr_FR": [],
-  "fr_CA": [],
+  "es": [
+    "dialog.warning"
+  ],
+  "es_ES": [
+    "dialog.warning"
+  ],
+  "fr_FR": [
+    "dialog.warning"
+  ],
+  "fr_CA": [
+    "dialog.warning"
+  ],
   "en_CA": [],
-  "it_IT": [],
-  "de_DE": [],
-  "zh_CN": [],
-  "zh_TW": [],
-  "ko_KR": [],
-  "ja_JP": [],
-  "pt_BR": [],
-  "ru_RU": [],
-  "nl_NL": [],
-  "pl_PL": [],
-  "id_ID": [],
-  "tr_TR": [],
-  "sv_SE": [],
-  "vi_VN": [],
-  "da_DK": []
+  "it_IT": [
+    "dialog.warning"
+  ],
+  "de_DE": [
+    "dialog.warning"
+  ],
+  "zh_CN": [
+    "dialog.warning"
+  ],
+  "zh_TW": [
+    "dialog.warning"
+  ],
+  "ko_KR": [
+    "dialog.warning"
+  ],
+  "ja_JP": [
+    "dialog.warning"
+  ],
+  "pt_BR": [
+    "dialog.warning"
+  ],
+  "ru_RU": [
+    "dialog.warning"
+  ],
+  "nl_NL": [
+    "dialog.warning"
+  ],
+  "pl_PL": [
+    "dialog.warning"
+  ],
+  "id_ID": [
+    "dialog.warning"
+  ],
+  "tr_TR": [
+    "dialog.warning"
+  ],
+  "sv_SE": [
+    "dialog.warning"
+  ],
+  "vi_VN": [
+    "dialog.warning"
+  ],
+  "da_DK": [
+    "dialog.warning"
+  ]
 };

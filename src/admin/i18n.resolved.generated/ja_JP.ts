@@ -203,6 +203,7 @@ export const ja_JP: AdminTranslations = {
   "dialog.actionUnban": "アカウントのログインアクセスを復旧",
   "dialog.confirm": "確認",
   "dialog.cancel": "キャンセル",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "先にモデレーターメモ / 理由を入力してください。",
   "alert.customExpiryRequired": "カスタム停止の期限を選択してください。",
   "alert.actionFailed": "モデレーション操作に失敗しました",

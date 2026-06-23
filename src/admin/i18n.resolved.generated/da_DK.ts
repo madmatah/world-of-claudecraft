@@ -203,6 +203,7 @@ export const da_DK: AdminTranslations = {
   "dialog.actionUnban": "Genopret kontoens loginadgang",
   "dialog.confirm": "Bekræft",
   "dialog.cancel": "Annullér",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Indtast først en moderatornote / begrundelse.",
   "alert.customExpiryRequired": "Vælg en brugerdefineret udløbstid for suspendering.",
   "alert.actionFailed": "moderationshandling mislykkedes",

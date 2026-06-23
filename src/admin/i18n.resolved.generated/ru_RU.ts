@@ -203,6 +203,7 @@ export const ru_RU: AdminTranslations = {
   "dialog.actionUnban": "Восстановить доступ к аккаунту",
   "dialog.confirm": "Подтвердить",
   "dialog.cancel": "Отмена",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Сначала введите заметку модератора / причину.",
   "alert.customExpiryRequired": "Выберите срок окончания блокировки.",
   "alert.actionFailed": "не удалось выполнить действие модерации",

@@ -203,6 +203,7 @@ export const zh_CN: AdminTranslations = {
   "dialog.actionUnban": "恢复账号登录权限",
   "dialog.confirm": "确认",
   "dialog.cancel": "取消",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "请先填写审核备注 / 原因。",
   "alert.customExpiryRequired": "请选择自定义暂停的到期时间。",
   "alert.actionFailed": "审核操作失败",

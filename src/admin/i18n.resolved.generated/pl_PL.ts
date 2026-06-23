@@ -203,6 +203,7 @@ export const pl_PL: AdminTranslations = {
   "dialog.actionUnban": "Przywróć dostęp do logowania na konto",
   "dialog.confirm": "Potwierdź",
   "dialog.cancel": "Anuluj",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Najpierw wpisz notatkę moderatora / powód.",
   "alert.customExpiryRequired": "Wybierz własny czas wygaśnięcia zawieszenia.",
   "alert.actionFailed": "akcja moderacyjna nie powiodła się",

@@ -203,6 +203,7 @@ export const sv_SE: AdminTranslations = {
   "dialog.actionUnban": "Återställ kontots inloggningsåtkomst",
   "dialog.confirm": "Bekräfta",
   "dialog.cancel": "Avbryt",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Ange en moderatoranteckning / orsak först.",
   "alert.customExpiryRequired": "Välj en anpassad utgångstid för avstängning.",
   "alert.actionFailed": "modereringsåtgärden misslyckades",

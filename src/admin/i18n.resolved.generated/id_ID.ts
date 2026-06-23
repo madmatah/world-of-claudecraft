@@ -203,6 +203,7 @@ export const id_ID: AdminTranslations = {
   "dialog.actionUnban": "Pulihkan akses masuk akun",
   "dialog.confirm": "Konfirmasi",
   "dialog.cancel": "Batal",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Masukkan catatan / alasan moderator terlebih dahulu.",
   "alert.customExpiryRequired": "Pilih masa kedaluwarsa penangguhan kustom.",
   "alert.actionFailed": "tindakan moderasi gagal",

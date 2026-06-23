@@ -203,6 +203,7 @@ export const it_IT: AdminTranslations = {
   "dialog.actionUnban": "Ripristina l'accesso all'account",
   "dialog.confirm": "Conferma",
   "dialog.cancel": "Annulla",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Inserisci prima una nota moderatore / motivo.",
   "alert.customExpiryRequired": "Scegli una scadenza personalizzata per la sospensione.",
   "alert.actionFailed": "azione di moderazione non riuscita",

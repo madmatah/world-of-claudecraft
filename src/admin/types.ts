@@ -302,3 +302,18 @@ export interface ChatFilterData {
   config: EscalationConfig;
   accounts: ChatModeratedAccount[];
 }
+
+// One bar in the overview activity charts (BarChart.svelte). `title` overrides the
+// default "<label>: <value><suffix>" hover tooltip.
+export interface BarPoint {
+  label: string;
+  value: number;
+  title?: string;
+}
+
+export interface LinePoint {
+  label: string;
+  value: number;
+  secondaryValue?: number;
+  title?: string;
+}

@@ -203,6 +203,7 @@ export const nl_NL: AdminTranslations = {
   "dialog.actionUnban": "Inlogtoegang tot account herstellen",
   "dialog.confirm": "Bevestigen",
   "dialog.cancel": "Annuleren",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Voer eerst een moderatornotitie / reden in.",
   "alert.customExpiryRequired": "Kies een aangepaste vervaltijd voor de schorsing.",
   "alert.actionFailed": "moderatie-actie mislukt",

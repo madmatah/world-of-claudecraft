@@ -203,6 +203,7 @@ export const en_XA: AdminTranslations = {
   "dialog.actionUnban": "[Ŕéšţóŕé áççóúñţ ļóĝíñ áççéšš]",
   "dialog.confirm": "[Çóñƒíŕɱ]",
   "dialog.cancel": "[Çáñçéļ]",
+  "dialog.warning": "[Ŵáŕñíñĝ]",
   "alert.noteRequired": "[Éñţéŕ á ɱóðéŕáţóŕ ñóţé / ŕéášóñ ƒíŕšţ.]",
   "alert.customExpiryRequired": "[Çĥóóšé á çúšţóɱ šúšþéñšíóñ éẋþíŕý.]",
   "alert.actionFailed": "[ɱóðéŕáţíóñ áçţíóñ ƒáíļéð]",

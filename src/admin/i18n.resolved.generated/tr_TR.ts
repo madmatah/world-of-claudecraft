@@ -203,6 +203,7 @@ export const tr_TR: AdminTranslations = {
   "dialog.actionUnban": "Hesabın oturum açma erişimini geri yükle",
   "dialog.confirm": "Onayla",
   "dialog.cancel": "İptal",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Önce bir moderatör notu / gerekçe girin.",
   "alert.customExpiryRequired": "Özel bir askıya alma sona erme tarihi seçin.",
   "alert.actionFailed": "moderasyon işlemi başarısız oldu",

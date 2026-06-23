@@ -203,6 +203,7 @@ export const ko_KR: AdminTranslations = {
   "dialog.actionUnban": "계정 로그인 권한 복구",
   "dialog.confirm": "확인",
   "dialog.cancel": "취소",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "먼저 관리자 메모 / 사유를 입력하세요.",
   "alert.customExpiryRequired": "기간 지정 정지 종료 시점을 선택하세요.",
   "alert.actionFailed": "관리 작업 실패",

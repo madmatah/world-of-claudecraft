@@ -203,6 +203,7 @@ export const de_DE: AdminTranslations = {
   "dialog.actionUnban": "Konto-Login wieder freischalten",
   "dialog.confirm": "Bestätigen",
   "dialog.cancel": "Abbrechen",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Zuerst eine Moderatornotiz / einen Grund eingeben.",
   "alert.customExpiryRequired": "Ein individuelles Ablaufdatum der Aussetzung wählen.",
   "alert.actionFailed": "Moderationsaktion fehlgeschlagen",

@@ -203,6 +203,7 @@ export const vi_VN: AdminTranslations = {
   "dialog.actionUnban": "Khôi phục quyền đăng nhập tài khoản",
   "dialog.confirm": "Xác Nhận",
   "dialog.cancel": "Hủy",
+  "dialog.warning": "Warning",
   "alert.noteRequired": "Hãy nhập ghi chú / lý do của người kiểm duyệt trước.",
   "alert.customExpiryRequired": "Hãy chọn thời hạn đình chỉ tùy chỉnh.",
   "alert.actionFailed": "thao tác kiểm duyệt thất bại",
