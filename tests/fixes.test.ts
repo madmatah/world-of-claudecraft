@@ -538,7 +538,7 @@ describe('boss loot and encounter resets', () => {
     }
   });
 
-  it('fair-splits corpse copper among nearby living party members', () => {
+  it('fair-splits corpse copper among nearby party members, including the in-range fallen', () => {
     const sim = makeSim();
     const a = sim.playerId;
     const b = sim.addPlayer('mage', 'Bert');
@@ -554,21 +554,25 @@ describe('boss loot and encounter resets', () => {
     teleportTo(sim, 21, 20, b);
     teleportTo(sim, 20, 21, c);
     teleportTo(sim, 160, 160, d);
+    // Cyra was downed during the fight; her corpse is still on the mob. Classic
+    // group rules keep a fallen-but-in-range member in the split (the old bug
+    // erased her share for dying). Only Dara, who is far away, is excluded.
     sim.entities.get(c)!.dead = true;
     const mob = createMob(990099, MOBS.forest_wolf, 2, { x: 20, y: 0, z: 22 });
     mob.dead = true;
     mob.lootable = true;
     mob.tappedById = a;
-    mob.loot = { copper: 11, items: [] };
+    mob.loot = { copper: 12, items: [] };
     sim.entities.set(mob.id, mob);
 
     sim.lootCorpse(mob.id, b);
 
     const gains = [a, b, c, d].map((pid) => sim.meta(pid)!.copper);
-    expect(gains[0] + gains[1]).toBe(11);
-    expect(Math.abs(gains[0] - gains[1])).toBeLessThanOrEqual(1);
-    expect(gains[2]).toBe(0);
-    expect(gains[3]).toBe(0);
+    expect(gains[0] + gains[1] + gains[2]).toBe(12); // a, b, and the fallen c share it
+    expect(gains[0]).toBeGreaterThan(0);
+    expect(gains[1]).toBeGreaterThan(0);
+    expect(gains[2]).toBeGreaterThan(0);
+    expect(gains[3]).toBe(0); // Dara is out of range
     expect(mob.loot).toBeNull();
   });
 
@@ -1189,6 +1193,48 @@ describe('quest npc roles', () => {
 
     for (let i = 0; i < 2 * 20; i++) sim.tick();
     expect(sim.entities.has(guardian.id)).toBe(false);
+  });
+
+  it('re-summons the Bound Guardian at the ritual circle after the first one despawns unkilled', () => {
+    const sim = makeSim();
+    const ritual = [...sim.entities.values()].find((e) => e.kind === 'object' && e.objectItemId === 'crypt_ritual_circle')!;
+    teleportTo(sim, ritual.pos.x, ritual.pos.z);
+    sim.questLog.set('q_nythraxis_bound_guardian', { questId: 'q_nythraxis_bound_guardian', counts: [0, 0, 0], state: 'active' });
+    sim.addItem('crypt_keystone', 1);
+
+    sim.pickUpObject(ritual.id);
+    const first = [...sim.entities.values()].find((e) => e.templateId === 'bound_guardian')!;
+    expect(first).toBeTruthy();
+    // interact objective is one-shot; it should not block re-summoning the guardian
+    expect(sim.questLog.get('q_nythraxis_bound_guardian')?.counts[0]).toBe(1);
+
+    // the guardian leashes and idle-despawns without ever being killed
+    first.inCombat = false;
+    first.aiState = 'idle';
+    first.aggroTargetId = null;
+    first.damageIdleDespawnTimer = 0.05;
+    sim.tick();
+    expect([...sim.entities.values()].some((e) => e.templateId === 'bound_guardian' && !e.dead)).toBe(false);
+
+    // re-using the ritual circle must summon a fresh guardian so the kill is reachable
+    teleportTo(sim, ritual.pos.x, ritual.pos.z);
+    sim.pickUpObject(ritual.id);
+    const second = [...sim.entities.values()].find((e) => e.templateId === 'bound_guardian' && !e.dead);
+    expect(second).toBeTruthy();
+    // interact count stays satisfied; the keystone is retained for the retry
+    expect(sim.questLog.get('q_nythraxis_bound_guardian')?.counts[0]).toBe(1);
+    expect(sim.countItem('crypt_keystone', sim.playerId)).toBe(1);
+  });
+
+  it('does not re-summon the Bound Guardian once the kill objective is complete', () => {
+    const sim = makeSim();
+    const ritual = [...sim.entities.values()].find((e) => e.kind === 'object' && e.objectItemId === 'crypt_ritual_circle')!;
+    teleportTo(sim, ritual.pos.x, ritual.pos.z);
+    sim.questLog.set('q_nythraxis_bound_guardian', { questId: 'q_nythraxis_bound_guardian', counts: [1, 1, 0], state: 'active' });
+    sim.addItem('crypt_keystone', 1);
+
+    sim.pickUpObject(ritual.id);
+    expect([...sim.entities.values()].some((e) => e.templateId === 'bound_guardian' && !e.dead)).toBe(false);
   });
 
   it('shares Nythraxis ritual circle progress with nearby party members', () => {

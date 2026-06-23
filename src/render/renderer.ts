@@ -16,6 +16,7 @@ import { mechAssetsReady, preloadMechAssets } from './characters/assets';
 import { isVisuallyDead } from './anim_state';
 import { clickMarkerAnim, clickMarkerColor, CLICK_MARKER_LIFETIME } from './click_marker';
 import { LocoTrack, newLocoTrack, updateLocomotion } from './locomotion';
+import { stepSelfFacing, releaseSelfFacing } from './facing_smooth';
 import type { SpatialAudioSink, Surface } from './audio_sink';
 import { buildPropMaterialPrewarmGroup, buildProps } from './props';
 import { plankTexture, sparkleTexture } from './textures';
@@ -626,8 +627,24 @@ export class Renderer {
   private tmpV = new THREE.Vector3();
   private viewCandidates: ViewCandidate[] = [];
   private tmpV2 = new THREE.Vector3();
+  // Manual frustum cull for characters. Their skinned meshes keep
+  // frustumCulled=false (a skinned mesh's bind-pose bounds don't follow the
+  // animated pose, so Three's own cull pops visible rigs out), which means an
+  // off-screen rig otherwise issues its draws every frame. We instead cull at
+  // the group level from the rig's real world position + a generous radius.
+  // Gated to shadowless tiers so a culled off-screen caster can never drop a
+  // shadow that was actually visible in-frame.
+  private cullFrustum = new THREE.Frustum();
+  private cullViewProj = new THREE.Matrix4();
+  private cullSphere = new THREE.Sphere();
+  private cullCharacters = false;
   private selfRenderPosition = new THREE.Vector3();
   private selfRenderPositionReady = false;
+  // Last yaw applied to the local player while the camera was driving its facing
+  // (mouselook / mouse-camera). Null when the override is disengaged, so the next
+  // engage re-seeds from the live interpolated facing instead of snapping. See
+  // facing_smooth.ts for why the camera-driven yaw must be rate-limited.
+  private selfFacingOverride: number | null = null;
   private cameraLookAt = new THREE.Vector3();
   // floating /say-/yell bubbles, keyed by speaker entity id
   private chatBubbles = new Map<number, { el: HTMLDivElement; until: number }>();
@@ -815,6 +832,8 @@ export class Renderer {
     this.scene.add(sun);
     this.scene.add(sun.target);
     this.sun = sun;
+    // characters can self-cull only where they cast no sun shadow (low/lean tier)
+    this.cullCharacters = !sun.castShadow;
     this.sunDir.copy(SUN_DIR);
 
     // visible sun disc + bloom halo
@@ -2890,6 +2909,14 @@ export class Renderer {
     // frame parity for distance-tiered mixer throttling
     this.frameIdx = (this.frameIdx + 1) & 0xffff;
 
+    // world-space view frustum for the per-character cull below. Built from last
+    // frame's camera (it's repositioned after this loop); the one-frame lag is
+    // absorbed by the generous per-rig cull radius.
+    if (this.cullCharacters) {
+      this.cullViewProj.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+      this.cullFrustum.setFromProjectionMatrix(this.cullViewProj);
+    }
+
     for (const [id, v] of this.views) {
       const e = sim.entities.get(id);
       if (!e) continue;
@@ -2951,7 +2978,22 @@ export class Renderer {
       const z = isSelf ? selfPos.z : e.prevPos.z + (e.pos.z - e.prevPos.z) * ea;
       v.group.position.set(x, y, z);
       let facing = e.prevFacing + shortestAngle(e.prevFacing, e.facing) * ea;
-      if (id === p.id && renderFacingOverride !== null) facing = renderFacingOverride;
+      if (id === p.id && renderFacingOverride !== null) {
+        // Rate-limit the camera-driven heading so engaging mouselook (or starting
+        // to move in Mouse Camera mode) rotates the model smoothly toward the
+        // camera instead of teleporting it up to 180deg in a single frame. Seed
+        // from the current interpolated facing on first engage.
+        facing = stepSelfFacing(this.selfFacingOverride ?? facing, renderFacingOverride, dt);
+        this.selfFacingOverride = facing;
+      } else if (id === p.id && this.selfFacingOverride !== null) {
+        // Disengage frame: route the return to the interpolated sim facing
+        // through the SAME rate limiter so releasing mouselook mid-flick (before
+        // the model caught up to the camera) rotates back smoothly instead of
+        // snapping. Hold the override until it has converged onto the sim facing.
+        const r = releaseSelfFacing(this.selfFacingOverride, facing, dt);
+        facing = r.facing;
+        this.selfFacingOverride = r.done ? null : r.facing;
+      }
       v.group.rotation.y = facing;
 
       if (e.kind === 'object') {
@@ -2981,6 +3023,16 @@ export class Renderer {
 
       this.updateBaseVisual(e, v);
       if (!v.visual) continue;
+
+      // off-screen rigs still need their pose/audio updated, but not their draws.
+      // Decide visibility now from the real world position; applied at the end so
+      // the rest of the per-entity work (animation, footstep audio) is unaffected.
+      let charOnScreen = true;
+      if (this.cullCharacters && id !== p.id) {
+        this.cullSphere.center.set(x, y + v.height * 0.5 * e.scale, z);
+        this.cullSphere.radius = (v.height * 0.7 + 1.5) * e.scale;
+        charOnScreen = this.cullFrustum.intersectsSphere(this.cullSphere);
+      }
 
       // live skin swap — appearance changed (in-game changer or a multiplayer peer)
       if (e.skin !== v.skin) { v.skin = e.skin; v.visual.setSkin(e.skin); }
@@ -3123,6 +3175,9 @@ export class Renderer {
         this.vfx.castSparkle(e.id, 'shadow', dt * 3.2);
       }
       if (swimming) this.vfx.swimRipple(v.group.position, moving ? dt * 3 : dt);
+
+      // skip the draw for off-screen rigs (pose/audio above already ran)
+      if (!charOnScreen) v.group.visible = false;
     }
 
     // selection ring

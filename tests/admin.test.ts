@@ -9,6 +9,7 @@ vi.mock('../server/db', () => ({
   saveToken: vi.fn(),
   accountForToken: vi.fn(),
   isAdminAccount: vi.fn(),
+  accountMailTarget: vi.fn(async () => null),
 }));
 vi.mock('../server/admin_db', async () => {
   const actual = await vi.importActual<typeof import('../server/admin_db')>('../server/admin_db');

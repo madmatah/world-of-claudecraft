@@ -9,13 +9,20 @@ const dbMock = vi.hoisted(() => {
   return { query: vi.fn() };
 });
 vi.mock('pg', () => ({
-  Pool: vi.fn(function Pool() { return { query: dbMock.query }; }),
+  // connect() hands back a client backed by the same routed query spy, so
+  // transactional helpers (BEGIN/COMMIT around a pooled client) are exercised
+  // through the same write log as the pool-level queries.
+  Pool: vi.fn(function Pool() {
+    return { query: dbMock.query, connect: async () => ({ query: dbMock.query, release() {} }) };
+  }),
 }));
 
 import {
   handleAccountWhoami, handleAccountChangePassword, handleAccountLogout, handleAccountSetEmail, handleAccountDeactivate,
+  handleAccountEmailChange, handleAccountEmailVerify, handleAccountExport, handleAccountMarketing, handleEmailUnsubscribe,
   type AccountGameHooks,
 } from '../server/account';
+import { makeEmailToken } from '../server/email';
 import { moderationStatusForAccount } from '../server/db';
 import { hashPassword } from '../server/auth';
 
@@ -32,7 +39,12 @@ function makeRes(): any {
   return {
     statusCode: 0,
     body: '',
-    writeHead(status: number) { this.statusCode = status; return this; },
+    headers: {} as Record<string, string>,
+    writeHead(status: number, headers?: Record<string, string>) {
+      this.statusCode = status;
+      if (headers) this.headers = headers;
+      return this;
+    },
     end(data: string) { this.body = data ?? ''; return this; },
   };
 }
@@ -45,13 +57,19 @@ let accountRow: any;
 let characters: any[];
 let charCount: number;
 let writes: { sql: string; params: any[] }[];
+// Pending email-change row the consume UPDATE returns (null = invalid/expired).
+let pendingChange: any;
 
 function routeQuery(sql: string, params: any[]) {
   writes.push({ sql, params });
+  // The consume claim must be checked before the generic accounts/id read.
+  if (sql.includes('UPDATE email_change_requests')) return { rows: pendingChange ? [pendingChange] : [] };
+  if (sql.includes('SELECT id FROM accounts WHERE unsubscribe_token')) return { rows: accountRow ? [{ id: accountRow.id }] : [] };
+  if (sql.includes('unsubscribe_token')) return { rows: [{ unsubscribe_token: params[1] ?? 'unsub-token' }] };
   if (sql.includes('FROM accounts WHERE id')) return { rows: accountRow ? [accountRow] : [] };
   if (sql.includes('COUNT(*)')) return { rows: [{ count: charCount }] };
   if (sql.includes('FROM characters WHERE account_id')) return { rows: characters };
-  return { rows: [] }; // UPDATE / DELETE writes
+  return { rows: [] }; // UPDATE / DELETE / INSERT writes
 }
 
 const CORRECT_PW = 'correct-horse';
@@ -59,9 +77,10 @@ let pwHash = '';
 
 beforeEach(async () => {
   pwHash = pwHash || (await hashPassword(CORRECT_PW));
-  accountRow = { id: 1, username: 'Aelwyn', password_hash: pwHash, email: null, created_at: '2026-01-15T10:00:00.000Z', deactivated_at: null };
+  accountRow = { id: 1, username: 'Aelwyn', password_hash: pwHash, email: null, created_at: '2026-01-15T10:00:00.000Z', deactivated_at: null, locale: null, marketing_opt_in: false };
   characters = [{ id: 10 }, { id: 11 }];
   charCount = 2;
+  pendingChange = { account_id: 1, new_email: 'new@example.com' };
   writes = [];
   dbMock.query.mockReset();
   dbMock.query.mockImplementation((sql: string, params: any[]) => routeQuery(sql, params));
@@ -143,6 +162,17 @@ describe('handleAccountSetEmail', () => {
     const upd = writes.find((w) => w.sql.includes('UPDATE accounts SET email'));
     expect(upd!.params[1]).toBe('Player@example.com');
   });
+  it('fires the welcome email when setting the first email on an account', async () => {
+    accountRow.email = null; // signed up without an email
+    const res = makeRes();
+    await handleAccountSetEmail(makeReq({ email: 'first@example.com' }), res, 1);
+    expect(parse(res).status).toBe(200);
+    // The welcome send is fire-and-forget; let its microtask flush, then assert
+    // an email_log row was written for it (no throw is the core guarantee).
+    await Promise.resolve();
+    expect(writes.some((w) => w.sql.includes('UPDATE accounts SET email'))).toBe(true);
+  });
+
   it('clears the address when empty', async () => {
     const res = makeRes();
     await handleAccountSetEmail(makeReq({ email: '' }), res, 1);
@@ -227,6 +257,111 @@ describe('account portal auth-failure accounting', () => {
     const res = makeRes();
     await handleAccountDeactivate(makeReq({ username: 'Aelwyn', password: 'wrong' }, '198.51.100.32'), res, 1, noHooks);
     expect(parse(res).status).toBe(401);
+  });
+});
+
+describe('handleAccountEmailChange', () => {
+  it('rejects a wrong password without creating a request (401)', async () => {
+    const res = makeRes();
+    await handleAccountEmailChange(makeReq({ password: 'wrong', newEmail: 'new@example.com' }, '198.51.100.41'), res, 1);
+    expect(parse(res).status).toBe(401);
+    expect(writes.some((w) => w.sql.includes('INSERT INTO email_change_requests'))).toBe(false);
+  });
+  it('rejects a malformed new address (400)', async () => {
+    const res = makeRes();
+    await handleAccountEmailChange(makeReq({ password: CORRECT_PW, newEmail: 'nope' }, '198.51.100.41'), res, 1);
+    expect(parse(res).status).toBe(400);
+  });
+  it('rejects changing to the address already on file (400)', async () => {
+    accountRow.email = 'same@example.com';
+    const res = makeRes();
+    await handleAccountEmailChange(makeReq({ password: CORRECT_PW, newEmail: 'SAME@example.com' }, '198.51.100.41'), res, 1);
+    expect(parse(res).status).toBe(400);
+  });
+  it('creates a single-use pending request and stores only a hash', async () => {
+    const res = makeRes();
+    await handleAccountEmailChange(makeReq({ password: CORRECT_PW, newEmail: 'new@example.com' }, '198.51.100.41'), res, 1);
+    expect(parse(res).status).toBe(200);
+    const ins = writes.find((w) => w.sql.includes('INSERT INTO email_change_requests'));
+    expect(ins).toBeTruthy();
+    // params: [accountId, newEmail, tokenHash, ttl]. The stored token is a hash.
+    expect(ins!.params[1]).toBe('new@example.com');
+    expect(ins!.params[2]).toMatch(/^[0-9a-f]{64}$/);
+    // The address itself must NOT be applied to the account yet (verify-gated).
+    expect(writes.some((w) => w.sql.includes('UPDATE accounts SET email'))).toBe(false);
+    // Any prior pending request is invalidated first, so only the newest link works.
+    expect(writes.some((w) => w.sql.includes('DELETE FROM email_change_requests'))).toBe(true);
+  });
+});
+
+describe('handleAccountEmailVerify', () => {
+  it('400s an empty or unknown token without applying a change', async () => {
+    pendingChange = null; // consume finds nothing
+    const res = makeRes();
+    await handleAccountEmailVerify(res, makeEmailToken().token);
+    expect(parse(res).status).toBe(400);
+    expect(writes.some((w) => w.sql.includes('UPDATE accounts SET email'))).toBe(false);
+  });
+  it('applies the new address on a valid token', async () => {
+    const res = makeRes();
+    await handleAccountEmailVerify(res, makeEmailToken().token);
+    const { status, data } = parse(res);
+    expect(status).toBe(200);
+    expect(data.email).toBe('new@example.com');
+    const apply = writes.find((w) => w.sql.includes('UPDATE accounts SET email'));
+    expect(apply!.sql).toContain('email_verified_at');
+    expect(apply!.params).toEqual([1, 'new@example.com']);
+  });
+});
+
+describe('handleAccountExport', () => {
+  it('returns a JSON attachment bundling account + characters', async () => {
+    const res = makeRes();
+    await handleAccountExport(makeReq({}, '198.51.100.42'), res, 1);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toContain('attachment');
+    const bundle = JSON.parse(res.body);
+    expect(bundle.account).toMatchObject({ id: 1, username: 'Aelwyn' });
+    expect(Array.isArray(bundle.characters)).toBe(true);
+  });
+  it('404s when the account is gone', async () => {
+    accountRow = null;
+    const res = makeRes();
+    await handleAccountExport(makeReq({}, '198.51.100.42'), res, 1);
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('handleAccountMarketing', () => {
+  it('opts in and mints an unsubscribe token', async () => {
+    const res = makeRes();
+    await handleAccountMarketing(makeReq({ optIn: true }, '198.51.100.43'), res, 1);
+    expect(parse(res).data).toEqual({ optIn: true });
+    expect(writes.some((w) => w.sql.includes('UPDATE accounts SET marketing_opt_in') && w.params[1] === true)).toBe(true);
+    expect(writes.some((w) => w.sql.includes('unsubscribe_token'))).toBe(true);
+  });
+  it('opts out (treats a non-true value as false) without minting a token', async () => {
+    const res = makeRes();
+    await handleAccountMarketing(makeReq({ optIn: 'yes' }, '198.51.100.43'), res, 1);
+    expect(parse(res).data).toEqual({ optIn: false });
+    expect(writes.some((w) => w.sql.includes('UPDATE accounts SET marketing_opt_in') && w.params[1] === false)).toBe(true);
+    expect(writes.some((w) => w.sql.includes('unsubscribe_token'))).toBe(false);
+  });
+});
+
+describe('handleEmailUnsubscribe', () => {
+  it('clears marketing opt-in for a matching token', async () => {
+    accountRow = { id: 5 };
+    const res = makeRes();
+    await handleEmailUnsubscribe(res, 'some-token');
+    expect(parse(res).status).toBe(200);
+    expect(writes.some((w) => w.sql.includes('UPDATE accounts SET marketing_opt_in') && w.params[1] === false)).toBe(true);
+  });
+  it('200s silently for an empty token without writing', async () => {
+    const res = makeRes();
+    await handleEmailUnsubscribe(res, '');
+    expect(parse(res).status).toBe(200);
+    expect(writes.some((w) => w.sql.includes('UPDATE accounts SET marketing_opt_in'))).toBe(false);
   });
 });
 

@@ -1,7 +1,8 @@
 import * as http from 'node:http';
 import { json, readBody } from './http_util';
 import { rateLimited } from './ratelimit';
-import { findAccount, touchLogin, saveToken, accountForToken, isAdminAccount, setAccountDeactivated } from './db';
+import { findAccount, touchLogin, saveToken, accountForToken, isAdminAccount, setAccountDeactivated, accountMailTarget } from './db';
+import { emailSecurityIncident } from './email';
 import { verifyPassword, newToken } from './auth';
 import {
   overviewCounts, registrationsByDay, sessionsByDay, classDistribution, levelDistribution,
@@ -126,6 +127,19 @@ export async function handleAdminApi(
         if (action !== 'unban') {
           const statusText = action === 'ban' ? 'This account has been banned.' : 'This account is suspended.';
           game.disconnectAccount(targetAccountId, statusText);
+          // Notify the affected account of the moderation action. Best-effort and
+          // fully isolated: a mail-target lookup or send failure must never turn a
+          // successful moderation action into an error response.
+          void accountMailTarget(targetAccountId)
+            .then((target) => {
+              if (!target) return;
+              const reasonText = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim() : 'not specified';
+              const until = action === 'ban'
+                ? 'permanent'
+                : (typeof body.expiresAt === 'string' && body.expiresAt ? body.expiresAt : 'until reviewed');
+              emailSecurityIncident(target, action, reasonText, until);
+            })
+            .catch((err) => console.error('security-incident email failed:', err));
         }
         return ok(res, { ok: true });
       } catch (err) {

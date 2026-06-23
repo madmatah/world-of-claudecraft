@@ -33,6 +33,28 @@ export const hudChromeStrings = {
     title: "Emotes",
     done: "Done",
   },
+  theme: {
+    preset: "UI Theme",
+    customColors: "Custom Colors",
+    reset: "Reset",
+    presets: {
+      classic: "Classic Gold",
+      midnight: "Midnight",
+      parchment: "Parchment",
+      highContrast: "High Contrast",
+    },
+    knob: {
+      accent: "Accent",
+      border: "Border",
+      panel: "Frame",
+      text: "Text",
+      textMuted: "Muted Text",
+      hp: "Health",
+      mana: "Mana",
+      rage: "Rage",
+      energy: "Energy",
+    },
+  },
   // On-screen quest tracker. The "(N)" count shown beside the header while the
   // tracker is collapsed (the number is spliced in via formatNumber), plus the
   // header button's state-aware hover/title hint (Collapse while expanded,
@@ -124,11 +146,23 @@ export const hudChromeStrings = {
     browserEffectsReduced: "Reduced",
     browserEffectsMinimal: "Minimal",
     browserEffectsNote: "Auto tones down heavy CSS effects (blur, glow, background motion) based on your browser and device. Lower it manually if the interface feels sluggish.",
+    // Interface Mode control (Graphics panel): desktop keyboard/mouse vs the
+    // on-screen touch controls. Auto detects the device; the rest force one.
+    interfaceMode: "Interface Mode",
+    interfaceModeAuto: "Auto",
+    interfaceModeDesktop: "Desktop",
+    interfaceModeTouch: "Touch",
+    interfaceModeNote: "Auto picks desktop or touch controls from your device. Choose Desktop to force keyboard and mouse (useful on a tablet with a keyboard), or Touch for the on-screen controls.",
     // Audio panel toggle for the per-footfall step clips (off by default).
     footstepSounds: "Footstep Sounds",
     // Toggle for the OSRS-style click-feedback marker: entity targets and
     // click-to-move destinations (on by default).
     clickFeedback: "Click Marker",
+    // Keybind panel toggle: pointer-lock the canvas during a camera drag so the
+    // cursor cannot leave the window (hit the screen edge or slip to a second
+    // monitor) while rotating. On by default.
+    lockCursorOnRotate: "Lock Cursor While Rotating",
+    keybindHelpLockCursorOnRotate: "Keeps the mouse cursor inside the window while you drag to rotate the camera, so it cannot reach the screen edge or move to another monitor. Turn off if you prefer a free cursor.",
     showWalletOnCharacterScreen: "Show Wallet on Character Screen",
     showWalletOnPlayerCard: "Show Wallet on Player Card",
     // Interface panel: global HUD zoom slider, and the mirror of the landing
@@ -186,6 +220,7 @@ export const hudChromeStrings = {
       network: "Network",
       renderer: "Renderer",
       system: "System",
+      input: "Input",
     },
     // Short metric labels shown in the overlay's left column and the Stats toggles.
     labels: {
@@ -207,6 +242,7 @@ export const hudChromeStrings = {
       memory: "Memory",
       hitches: "Hitches",
       entities: "Entities",
+      apm: "APM",
     },
     // Color-theme preset names (also the swatches' accessible names).
     themes: {
@@ -399,5 +435,60 @@ export const hudChromeStrings = {
     // Log out
     logOut: "Log Out",
     logOutSummary: "Sign out of this device.",
+    // Security section (two-factor, verified email change, data export).
+    sectionSecurity: "Security",
+    // Change email (verified, two-step)
+    changeEmailTitle: "Change Email",
+    changeEmailHint: "We email a confirmation link to the new address and a notice to the old one. Your email only changes once you open the link.",
+    changeEmailNew: "New email",
+    changeEmailSubmit: "Send Confirmation Link",
+    changeEmailSent: "Check your inbox: open the link we sent to confirm your new email.",
+    errEmailUnchanged: "That is already your email address.",
+    // Two-factor (TOTP)
+    twoFactorTitle: "Two-Factor Authentication",
+    twoFactorStatusOn: "Two-factor authentication is ON for your account.",
+    twoFactorStatusOff: "Add an authenticator app for stronger account security.",
+    twoFactorSetupBtn: "Set Up Two-Factor",
+    twoFactorBeginHint: "Enter your password to begin setup.",
+    twoFactorBegin: "Begin Setup",
+    twoFactorScanHint: "Add this key to your authenticator app (Google Authenticator, Authy, 1Password, and similar), then enter the 6-digit code it shows.",
+    twoFactorSecretLabel: "Setup key",
+    twoFactorOpenApp: "Open in authenticator app",
+    twoFactorCodeLabel: "6-digit code",
+    twoFactorVerifyBtn: "Verify and Enable",
+    twoFactorEnabledMsg: "Two-factor authentication is now on.",
+    twoFactorRecoveryTitle: "Save your recovery codes",
+    twoFactorRecoveryHint: "Each code works once. Store them somewhere safe: they are the only way back in if you lose your authenticator app.",
+    twoFactorDownloadCodes: "Download Codes",
+    twoFactorDone: "Done",
+    twoFactorDisableHint: "Enter your password to turn two-factor off. Your recovery codes will be discarded.",
+    twoFactorDisableBtn: "Turn Off Two-Factor",
+    twoFactorDisabledMsg: "Two-factor authentication is off.",
+    errTwoFactorCode: "That code is not valid, try again.",
+    errTwoFactorState: "Two-factor setup is not in the expected state. Reload and try again.",
+    // Data export (GDPR)
+    exportTitle: "Export My Data",
+    exportHint: "Download a copy of your account and characters as a JSON file. We also email you a confirmation.",
+    exportBtn: "Download My Data",
+    exportDone: "Your data was downloaded. We emailed you a confirmation.",
+    exportFailed: "Could not export your data. Try again in a moment.",
+  },
+  // Modular bag filtering controls: the category chips, sort dropdown, and live
+  // search above the bag grid, plus the "no items match" empty state.
+  bags: {
+    filterGroupAria: "Filter bags by category",
+    filterAll: "All",
+    filterWeapon: "Weapons",
+    filterArmor: "Armor",
+    filterConsumable: "Consumables",
+    filterMaterial: "Materials",
+    filterQuest: "Quest",
+    sortAria: "Sort bag items",
+    sortRecent: "Recent",
+    sortQuality: "Quality",
+    sortName: "Name",
+    searchPlaceholder: "Search items",
+    searchAria: "Search bag items by name",
+    noMatch: "No items match your filters.",
   },
 };

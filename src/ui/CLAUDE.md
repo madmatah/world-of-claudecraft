@@ -85,6 +85,34 @@ direction the HUD modularization is heading; see the root Modularity section). T
 painters (`unit_portrait*`, `xp_bar.ts`) are the template: a host-agnostic core a Vitest
 drives directly, plus a thin DOM/canvas consumer.
 
+### Extracting a HUD window (the recipe)
+`hud.ts` is one `Hud` class touched by nearly every PR; that is the merge-conflict tax
+this recipe pays down. Migrate one window at a time, on the rule of three, never as a
+big-bang split. **Reference: the Vendor window (`vendor_view.ts` + `vendor_window.ts`,
+the first window migrated this way), copy its shape for the next one.**
+
+The split has three parts:
+1. **Pure view model** (`<window>_view.ts`): a DOM-free, i18n-free `build<Window>View(...)`
+   that takes the raw world inputs and returns the structure the window draws (which rows,
+   which prices, which flags). This is the only part with branching logic worth testing in
+   isolation. Unit-test it directly in `tests/<window>_view.test.ts` (no DOM): see
+   `tests/vendor_view.test.ts`. For sim-derived data add `expect(build()).toEqual(build())`.
+2. **Thin consumer** (`<window>_window.ts`): a `render<Window>(el, ...view, deps)` that paints
+   the panel and wires clicks. It imports `t`/`esc`/`svgIcon`/formatters directly but takes
+   `Hud`'s shared painters (`itemIcon`, `moneyHtml`, `itemTooltip`, `attachTooltip`,
+   `hideTooltip`) and the action callbacks (`onBuy`, `onClose`, …) as an injected `deps`
+   object. It owns no state and never imports `Hud`.
+3. **Hud stays the orchestrator.** Keep the `open<Window>`/`close<Window>` methods in `Hud`:
+   cross-window coordination (`closeOtherWindows`, bag re-centring, mobile teardown, body
+   classes) needs `Hud`'s private state and does not belong in the module. The per-render
+   method (e.g. `renderVendor`) shrinks to: resolve the entity, build the view, call the
+   module with `deps`.
+
+Keep the diff a move-plus-import, not a rewrite (root `extract-and-test` skill). Reuse
+existing `t()` keys where the markup is unchanged (a pure extraction adds no i18n keys;
+Vendor added none). All interpolated names still pass through `esc()`. For item-name
+display, import the shared `itemDisplayName` from `entity_i18n.ts` rather than re-copying it.
+
 ## i18n - IMPORTANT (sparse-overlay model; contributors add ENGLISH ONLY)
 The locale data is split across files. Touch the right one:
 - `i18n.catalog/` (nested) is the **authoritative source catalog** and drives
@@ -222,6 +250,16 @@ unit-testing.
 - **meters.ts** — DPS/HPS/threat meters, encounter-segmented; threat reads
   the mob's real `entity.threat` hate table. Uses `performance.now()` (UI timing
   only — fine here; that ban is sim-only).
+- **vendor_view.ts** / **vendor_window.ts**: the merchant vendor window, and the
+  first full window migrated out of `hud.ts` by the "Extracting a HUD window"
+  recipe above. The pure **view** (`vendor_view.ts`, DOM/i18n-free,
+  unit-tested in `tests/vendor_view.test.ts`) is `buildVendorView`, which decides
+  the sellable goods rows (item exists + has a buyValue) and the redeemable buyback
+  rows (item exists + count > 0) with prices. The thin **consumer**
+  (`vendor_window.ts`, `renderVendorWindow`) paints `#vendor-window` from that view
+  and takes `Hud`'s shared painters plus the buy/buyback/close callbacks as injected
+  `deps`. `Hud` keeps `openVendor`/`closeVendor` (cross-window orchestration);
+  `renderVendor` is now a thin bridge.
 - **player_context_menu.ts** — pure `chatPlayerContextActions()` returning
   whisper/invite/friend/ignore/report actions for the right-click-player menu.
 - **auth_utils.ts** — login/char-select form helpers: password toggle, ARIA

@@ -1,8 +1,9 @@
 import type { WebSocket } from 'ws';
-import { Sim } from '../src/sim/sim';
+import { Sim, MAX_CHAT_MESSAGE_LEN } from '../src/sim/sim';
 import type { PlayerMeta } from '../src/sim/sim';
 import { DT, Entity, EQUIP_SLOTS, EquipSlot, RUN_SPEED, SimEvent, dist2d, emptyMoveInput } from '../src/sim/types';
 import { parseMoveInputFrame } from '../src/sim/move_input';
+import { verifyChallenge } from '../src/sim/client_challenge';
 import { stealthDetectionRadius, threatEntries } from '../src/sim/threat';
 import { zoneAt, DUNGEONS } from '../src/sim/data';
 import { MECH_CHROMAS, mechChromaItemId, mechChromaSkinIndex } from '../src/sim/content/skins';
@@ -133,6 +134,8 @@ export interface ClientSession {
   // IP address at join time (from requestMetadata); used for per-IP session counting.
   ip: string;
   isAdmin: boolean;
+  // Seed the client sends at auth; signs its challenge answers.
+  clientSeed: string;
   // Behavioral bot-detection state. Ephemeral — reset on every join.
   botTrackingContext: BotTrackingContext;
 }
@@ -577,7 +580,7 @@ export class GameServer {
     for (const session of this.clients.values()) {
       const action = this.botDetector.handleTick(session.botTrackingContext, now, ANTIBOT_ENFORCE);
       if (action === 'kick') {
-        void this.leave(session, 'disconnected');
+        void this.kickSession(session, 'rejected by server', 'disconnected');
       }
     }
   }
@@ -696,7 +699,7 @@ export class GameServer {
     cls: import('../src/sim/types').PlayerClass,
     state: import('../src/sim/sim').CharacterState | null,
     isGm = false,
-    meta: RequestMetadata & Partial<AccountChatMuteStatus> & { accountCosmetics?: AccountCosmetics; chatStrikes?: number; isAdmin?: boolean } = {},
+    meta: RequestMetadata & Partial<AccountChatMuteStatus> & { accountCosmetics?: AccountCosmetics; chatStrikes?: number; isAdmin?: boolean; clientSeed?: string } = {},
   ): ClientSession | { error: string } {
     if (this.sessionsByCharacterId.has(characterId)) return { error: 'character already in world' };
     // Anti-bot: cap simultaneous online characters per account. Accounts can
@@ -725,7 +728,7 @@ export class GameServer {
     );
     this.applyAccountQuestLockouts(pid, accountCosmetics);
     const sessionIp = meta.ip ?? '';
-    const botTrackingContext = this.botDetector.createTrackingContext({ accountId, characterId, name, ip: sessionIp });
+    const botTrackingContext = this.botDetector.createTrackingContext({ accountId, characterId, name, ip: sessionIp }, meta);
     const session: ClientSession = {
       ws, accountId, accountCosmetics, characterId, pid, name,
       lastSave: Date.now(), alive: true, joinedAt: Date.now(), dbSessionId: null, left: false,
@@ -744,6 +747,7 @@ export class GameServer {
       sentEnts: new Map(),
       ip: sessionIp,
       isAdmin: meta.isAdmin ?? false,
+      clientSeed: meta.clientSeed ?? '',
       botTrackingContext,
     };
     this.ipSessionCounts.set(sessionIp, (this.ipSessionCounts.get(sessionIp) ?? 0) + 1);
@@ -797,6 +801,20 @@ export class GameServer {
     await this.sendSocialSnapshot(session.characterId);
     await this.social.announcePresence({ characterId: session.characterId, name: session.name }, true)
       .catch((err) => console.error('presence announce failed:', err));
+  }
+
+  // Tear down a live session as a kick: tell the client why, close the socket,
+  // then run the normal leave() cleanup. Sending the error frame and closing the
+  // socket (not just calling leave) is what lets net/online.ts surface the
+  // disconnect and return the app to character select, so a kicked player can
+  // rejoin. Every forced-disconnect path (moderation, IP block, character
+  // takeover, and the anti-bot tick) funnels through here so none can
+  // half-tear-down a session, leaving the world without the client and wedging
+  // the player "connected" with no way back in.
+  private kickSession(session: ClientSession, clientError: string, leaveReason: string): Promise<void> {
+    this.send(session, { t: 'error', error: clientError });
+    try { session.ws.close(); } catch { /* connection already closing */ }
+    return this.leave(session, leaveReason);
   }
 
   async leave(session: ClientSession, reason: string): Promise<void> {
@@ -993,9 +1011,7 @@ export class GameServer {
   disconnectAccount(accountId: number, reason: string): void {
     for (const session of [...this.clients.values()]) {
       if (session.accountId !== accountId) continue;
-      this.send(session, { t: 'error', error: reason });
-      try { session.ws.close(); } catch { /* connection already closing */ }
-      void this.leave(session, 'moderation action');
+      void this.kickSession(session, reason, 'moderation action');
     }
   }
 
@@ -1010,9 +1026,7 @@ export class GameServer {
     // Ownership is also enforced at the REST layer; re-check here so this method
     // can never disconnect a session that belongs to another account.
     if (!session || session.accountId !== accountId) return 'not-online';
-    this.send(session, { t: 'error', error: 'character taken over' });
-    try { session.ws.close(); } catch { /* connection already closing */ }
-    await this.leave(session, 'character taken over');
+    await this.kickSession(session, 'character taken over', 'character taken over');
     return 'taken-over';
   }
 
@@ -1113,9 +1127,7 @@ export class GameServer {
   disconnectByIp(ip: string, reason: string): void {
     for (const session of [...this.clients.values()]) {
       if (session.ip !== ip || session.isAdmin) continue;
-      this.send(session, { t: 'error', error: reason });
-      try { session.ws.close(); } catch { /* connection already closing */ }
-      void this.leave(session, 'moderation action');
+      void this.kickSession(session, reason, 'moderation action');
     }
   }
 
@@ -1123,9 +1135,7 @@ export class GameServer {
     const now = Date.now();
     for (const session of [...this.clients.values()]) {
       if (session.isAdmin || !this.ipBlockList.isBlocked(session.ip, now)) continue;
-      this.send(session, { t: 'error', error: reason });
-      try { session.ws.close(); } catch { /* connection already closing */ }
-      void this.leave(session, 'moderation action');
+      void this.kickSession(session, reason, 'moderation action');
     }
   }
 
@@ -1197,7 +1207,7 @@ export class GameServer {
       this.botDetector.observeProtocolAnomaly(session.botTrackingContext, 'unknown_type', raw, receivedAtMs);
       return;
     }
-    this.botDetector.observeCommand(session.botTrackingContext, String(msg.cmd ?? ''), receivedAtMs);
+    this.botDetector.observeCommand(session.botTrackingContext, String(msg.cmd ?? ''), receivedAtMs, msg);
     switch (msg.cmd) {
       case 'castSlot': sim.castAbilityBySlot(msg.slot | 0, pid); break;
       case 'cast': if (typeof msg.ability === 'string') sim.castAbility(msg.ability, pid); break;
@@ -1280,6 +1290,11 @@ export class GameServer {
         }
         break;
       case 'release': sim.releaseSpirit(pid); break;
+      case 'challengeResponse':
+        if (typeof msg.n === 'string' && typeof msg.r === 'string' && typeof msg.sig === 'string') {
+          if (!verifyChallenge(msg.n, msg.r, msg.sig, session.clientSeed)) break;
+        }
+        break;
       case 'chat': {
         if (typeof msg.text !== 'string') break;
         if (this.isChatMuted(session)) break;
@@ -1308,7 +1323,7 @@ export class GameServer {
             if (sent) {
               this.chatLog.log({
                 accountId: session.accountId, characterId: session.characterId,
-                characterName: session.name, channel, message: body.trim().slice(0, 200),
+                characterName: session.name, channel, message: body.trim().slice(0, MAX_CHAT_MESSAGE_LEN),
               });
             }
           }).catch((err) => console.error(`${channel} chat failed:`, err));
@@ -1487,6 +1502,9 @@ export class GameServer {
         if (exit) sim.leaveDungeon(pid);
         break;
       }
+      // client telemetry should not be considered as unknown command. Used for offline stats computing.
+      case 'telemetry':
+        break;
       default:
         this.botDetector.observeProtocolAnomaly(session.botTrackingContext, 'unknown_command', raw, receivedAtMs);
     }
@@ -1802,7 +1820,7 @@ export class GameServer {
             if (sent) {
               this.chatLog.log({
                 accountId: session.accountId, characterId: session.characterId,
-                characterName: session.name, channel, message: body.trim().slice(0, 200),
+                characterName: session.name, channel, message: body.trim().slice(0, MAX_CHAT_MESSAGE_LEN),
               });
             }
           }).catch((err) => console.error(`${channel} chat failed:`, err));

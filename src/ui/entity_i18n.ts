@@ -1,5 +1,5 @@
 import { ABILITIES, CLASSES, DUNGEONS, ITEMS, MOBS, NPCS, QUESTS, ZONES } from '../sim/data';
-import type { PlayerClass } from '../sim/types';
+import type { ItemDef, PlayerClass } from '../sim/types';
 import {
   en,
   getLanguage,
@@ -207,6 +207,10 @@ export function tEntity(request: EntityTranslationRequest): string {
   const fallback = interpolateSource(canonicalEntityText(request), request.values);
   recordFallback(request, fallback);
   return fallback;
+}
+
+export function itemDisplayName(item: ItemDef): string {
+  return tEntity({ kind: 'item', id: item.id, field: 'name' });
 }
 
 export function resetEntityTranslationFallbackLog(): void {

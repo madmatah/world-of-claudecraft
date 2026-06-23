@@ -48,9 +48,12 @@ import { sfx } from '../game/sfx';
 import { voice } from '../game/voice';
 import { music, musicZoneForLocation, shouldResetMusicForDungeonEntry } from '../game/music';
 import { iconDataUrl, QUALITY_COLOR, raidMarkerDataUrl, RAID_MARKER_NAMES } from './icons';
+import { overworldDungeonPortals } from './map_dungeon_portals';
 import { UnitPortraitPainter } from './unit_portrait_painter';
 import { crestIdForEntity } from './unit_portrait';
 import { svgIcon } from './ui_icons';
+import { buildVendorView } from './vendor_view';
+import { renderVendorWindow } from './vendor_window';
 import { shouldPlayCombatImpactForTarget, shouldPlayCritSfxForTarget, shouldPlayMobVoiceSfxForEntity } from './combat_sfx';
 import { nextVoicedYell, voicedYellGain, type VoicedYellState } from './voice_events';
 import { walletDisplayAvailable, walletUiEnabled, wocBalance, wocBalanceVerified, verifiedWocBalance, onWalletUiChange } from './wallet_balance';
@@ -64,7 +67,8 @@ import { Keybinds, BIND_ACTIONS, BIND_CATEGORIES, isReservedCode, keyLabel } fro
 import { GAMEPAD_BUTTON_LABELS, GAMEPAD_NONE } from '../game/gamepad_map';
 import { Settings, GameSettings, BoolSettingKey, NumericSettingKey, SETTING_RANGES, normalizeClickMoveButton } from '../game/settings';
 import { PerfOverlaySettingsPanel, type PerfOverlayHooks, type PerfSettingsHost } from './perf_overlay_settings';
-import { isPhoneTouchDevice } from '../game/mobile_controls';
+import { PRESET_ORDER, THEME_KNOB_ORDER, THEME_KNOB_LABEL_KEY, resolveTheme, type PresetId, type ThemeKnob, type ThemeState } from './theme';
+import { useTouchInterface, isNativeAppShell } from '../game/mobile_controls';
 import { chatPlayerContextActions } from './player_context_menu';
 import {
   MARKET_ARMOR_TYPE_FILTERS,
@@ -79,6 +83,17 @@ import {
   type MarketSubtypeFilter,
 } from './market_filters';
 import {
+  BAG_CATEGORIES,
+  BAG_SORTS,
+  DEFAULT_BAG_FILTER,
+  applyBagFilter,
+  parseBagFilter,
+  serializeBagFilter,
+  type BagCategory,
+  type BagFilterState,
+  type BagSort,
+} from './bag_filter';
+import {
   CHAT_TAB_CHANNELS, CHANNEL_LABEL_KEYS, channelNeedsJoin, composeChatLine,
   parseChatTabs, serializeChatTabs, isChatTabChannel,
   type ChatTabChannel, type ChatTabId,
@@ -86,7 +101,7 @@ import {
 import { TouchPeekGuard, TOOLTIP_PEEK_MS } from './touch_peek';
 import { maskProfanity } from './profanity';
 import { formatMoney as formatLocalizedMoney, formatNumber, getLanguage, isSupportedLanguage, moneyParts, supportedLanguages, t, tOptional, tPlural, type SupportedLanguage, type TranslationKey } from './i18n';
-import { tEntity } from './entity_i18n';
+import { itemDisplayName, tEntity } from './entity_i18n';
 import { localizeServerText, localizeZone } from './server_i18n';
 import { localizeSimText, localizeSimAuraName } from './sim_i18n';
 import { tTalent, localizeTalentTitle } from './talent_i18n';
@@ -125,10 +140,19 @@ export interface OptionsHooks {
   // feature is off or no wallet is connected/linked.
   refreshWocBalance(): void;
   perfOverlay: PerfOverlayHooks;
+  // UI theming seam — main.ts owns the ThemeStore + live CSS-variable apply.
+  theme: ThemeHooks;
   // Gamepad button-layout seam (the concrete GamepadBindings satisfies it
   // structurally), so the Controller options panel can read & rebind buttons
   // without the HUD importing the manager.
   gamepad: GamepadBindingsHooks;
+}
+
+export interface ThemeHooks {
+  get(): ThemeState;
+  setPreset(id: PresetId): void;
+  setCustom(knob: ThemeKnob, value: string | null): void;
+  resetCustom(): void;
 }
 
 // Read/rebind the gamepad's button→action layout from the options panel.
@@ -211,6 +235,19 @@ const RESOURCE_LABEL_KEYS: Record<ResourceType, TranslationKey> = {
   mana: 'abilityUi.resources.mana',
   rage: 'abilityUi.resources.rage',
   energy: 'abilityUi.resources.energy',
+};
+const BAG_CATEGORY_LABEL_KEYS: Record<BagCategory, TranslationKey> = {
+  all: 'hudChrome.bags.filterAll',
+  weapon: 'hudChrome.bags.filterWeapon',
+  armor: 'hudChrome.bags.filterArmor',
+  consumable: 'hudChrome.bags.filterConsumable',
+  material: 'hudChrome.bags.filterMaterial',
+  quest: 'hudChrome.bags.filterQuest',
+};
+const BAG_SORT_LABEL_KEYS: Record<BagSort, TranslationKey> = {
+  recent: 'hudChrome.bags.sortRecent',
+  quality: 'hudChrome.bags.sortQuality',
+  name: 'hudChrome.bags.sortName',
 };
 const RAID_MARKER_LABEL_KEYS = [
   'hud.markers.names.star',
@@ -547,6 +584,7 @@ export class Hud {
   private openQuestDetailId: string | null = null;
   private selectedQuestLogId: string | null = null;
   private questDialogReturnFocus: HTMLElement | null = null;
+  private questDialogOpenedAtMs = 0;
   private questLogReturnFocus: HTMLElement | null = null;
   private lastPortraitTarget = -999;
   // swing timer: the period is captured from the reset edge (swingTimer jumping
@@ -581,6 +619,13 @@ export class Hud {
   private marketSellItem: string | null = null; // bag item staged for listing
   private marketSearchQuery = ''; // active browse search term (sent to the server)
   private lastMarketSig = '';
+  // Modular bag filtering: category chips + sort + live search, persisted across
+  // sessions. Pure logic lives in bag_filter.ts; renderBags() is the thin consumer.
+  private static readonly BAG_FILTER_KEY = 'woc_bag_filter';
+  private bagFilter: BagFilterState = (() => {
+    try { return parseBagFilter(localStorage.getItem(Hud.BAG_FILTER_KEY)); }
+    catch { return { ...DEFAULT_BAG_FILTER }; }
+  })();
   // all-time ladder, fetched best-effort from the server (online only)
   private arenaAllTime: Partial<Record<ArenaFormat, { name: string; class: string; level: number; rating: number; wins: number; losses: number }[]>> = {};
   private arenaLbFetchedAt: Partial<Record<ArenaFormat, number>> = {};
@@ -1428,7 +1473,7 @@ export class Hud {
   }
 
   private syncChatPlaceholder(): void {
-    const input = document.getElementById('chat-input') as HTMLInputElement | null;
+    const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
     if (input) input.placeholder = this.activeChatPlaceholder();
   }
 
@@ -3799,10 +3844,11 @@ export class Hud {
       ctx.fillText(text, mx, my);
     };
     zone.pois.forEach((poi, poiIndex) => label(poi.x, poi.z, zonePoiLabel(zone.id, poiIndex)));
-    // dungeon entrance portals in this zone
-    for (const dungeon of DUNGEON_LIST) {
-      if (dungeon.doorPos.z < zone.zMin || dungeon.doorPos.z >= zone.zMax) continue;
-      const { mx, my } = toMap(dungeon.doorPos.x, dungeon.doorPos.z);
+    // dungeon entrance portals in this zone (raids reached only through an
+    // internal door share their parent's doorPos and carry no overworld portal,
+    // so their label does not overlap the parent's, see overworldDungeonPortals)
+    for (const portal of overworldDungeonPortals(DUNGEON_LIST, zone.zMin, zone.zMax)) {
+      const { mx, my } = toMap(portal.x, portal.z);
       ctx.fillStyle = '#c084ff';
       ctx.beginPath();
       ctx.arc(mx, my, 5, 0, Math.PI * 2);
@@ -3810,7 +3856,7 @@ export class Hud {
       ctx.stroke();
       ctx.fillStyle = '#e0c0ff';
       ctx.font = 'bold 12px Georgia';
-      const dungeonName = dungeonDisplayName(dungeon.id);
+      const dungeonName = dungeonDisplayName(portal.id);
       ctx.strokeText(dungeonName, mx, my - 9);
       ctx.fillText(dungeonName, mx, my - 9);
       ctx.font = 'bold 13px Georgia';
@@ -4584,6 +4630,8 @@ export class Hud {
       'You cannot afford that.': 'itemUi.errors.cannotAfford',
       'That is not your listing.': 'itemUi.errors.notYourListing',
       'You have nothing to collect.': 'itemUi.errors.nothingToCollect',
+      "You can't assist yourself.": 'hud.errors.assistSelf',
+      'Assist whom? Target a player or use /assist <name>.': 'hud.errors.assistWhom',
     };
     const key = exact[text];
     if (key) return t(key);
@@ -4600,6 +4648,13 @@ export class Hud {
     if (match) return t('hud.errors.whisperAmbiguous', { name: match[1] });
     match = /^There is no player named '(.+)' online\.$/.exec(text);
     if (match) return t('hud.errors.whisperMissing', { name: match[1] });
+    match = /^Assisting (.+)\.$/.exec(text);
+    if (match) return t('hud.errors.assisting', { name: match[1] });
+    // Assist reply only: anchor the name to a single un-punctuated token run so a
+    // future unmapped "... has no target." sim line is not mis-localized with a wrong
+    // {name}. Player names never contain a period, so excluding "." keeps this specific.
+    match = /^([^.]+) has no target\.$/.exec(text);
+    if (match) return t('hud.errors.assistNoTarget', { name: match[1] });
     // Lenient suffix match: the sim's command-help list (". Try /s /y /w /p /g, /me, …")
     // evolves over time; capture the command non-greedily and tolerate any "Try /…" tail
     // so this never silently falls through to raw English again.
@@ -5068,6 +5123,7 @@ export class Hud {
   openQuestDialog(npcId: number): void {
     const npc = this.sim.entities.get(npcId);
     if (!npc || npc.kind !== 'npc') return;
+    this.questDialogOpenedAtMs = performance.now();
     if ($('#quest-dialog').style.display !== 'block') this.questDialogReturnFocus = this.currentFocusableElement();
     this.closeOtherWindows('#quest-dialog');
     // Voice the greeting only on the initial open — renderGossip also runs when
@@ -5190,14 +5246,22 @@ export class Hud {
       btn.className = 'btn';
       btn.type = 'button';
       btn.textContent = t('questUi.dialog.accept');
-      btn.addEventListener('click', () => { this.sim.acceptQuest(questId); this.renderGossip(npc); });
+      btn.addEventListener('click', () => {
+        this.sim.acceptQuest(questId);
+        this.sim.reportTelemetry('quest_accept', { timeMs: performance.now() - this.questDialogOpenedAtMs });
+        this.renderGossip(npc);
+      });
       el.appendChild(btn);
     } else if (state === 'ready') {
       const btn = document.createElement('button');
       btn.className = 'btn';
       btn.type = 'button';
       btn.textContent = t('questUi.dialog.completeQuest');
-      btn.addEventListener('click', () => { this.sim.turnInQuest(questId); this.renderGossip(npc); });
+      btn.addEventListener('click', () => {
+        this.sim.turnInQuest(questId);
+        this.sim.reportTelemetry('quest_turnin', { timeMs: performance.now() - this.questDialogOpenedAtMs });
+        this.renderGossip(npc);
+      });
       el.appendChild(btn);
     }
     const back = document.createElement('button');
@@ -5424,66 +5488,26 @@ export class Hud {
     if (this.openVendorNpcId === null) return;
     const npc = this.sim.entities.get(this.openVendorNpcId);
     if (!npc) return;
-    const el = $('#vendor-window');
-    // the rebuild replaces the hovered row (its mouseleave never fires) and
-    // collapses the scrolled list — drop the tooltip and restore the scroll
-    this.hideTooltip();
-    const scrollTop = el.scrollTop;
-    let html = `<div class="panel-title"><span>${esc(t('itemUi.vendor.goodsTitle', { name: entityDisplayName(npc) }))}</span><button type="button" class="x-btn" data-close aria-label="${esc(t('itemUi.vendor.close'))}">${svgIcon('close')}</button></div>`;
-    el.innerHTML = html;
-    for (const itemId of npc.vendorItems) {
-      const item = ITEMS[itemId];
-      if (!item?.buyValue) continue;
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'vendor-item';
-      const price = formatLocalizedMoney(item.buyValue);
-      const itemName = itemDisplayName(item);
-      row.setAttribute('aria-label', t('itemUi.vendor.buyAria', { item: itemName, price }));
-      row.innerHTML = `${this.itemIcon(item)}<span class="vi-name">${esc(itemName)}</span><span class="vi-price">${this.moneyHtml(item.buyValue)}</span>`;
-      row.addEventListener('click', () => {
-        this.sim.buyItem(npc.id, itemId);
-        if ($('#bags').style.display !== 'none') this.renderBags();
-        this.renderVendor();
-      });
-      this.attachTooltip(row, () => this.itemTooltip(item) + `<div class="tt-sub">${esc(t('itemUi.tooltip.clickBuy'))}</div>`);
-      el.appendChild(row);
-    }
-    const buybackTitle = document.createElement('div');
-    buybackTitle.className = 'vendor-section-title';
-    buybackTitle.textContent = t('itemUi.vendor.buybackTitle');
-    el.appendChild(buybackTitle);
-    const buyback = this.sim.vendorBuyback.filter((s) => ITEMS[s.itemId] && s.count > 0);
-    if (buyback.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'vendor-empty';
-      empty.textContent = t('itemUi.vendor.buybackEmpty');
-      el.appendChild(empty);
-    }
-    for (const s of buyback) {
-      const item = ITEMS[s.itemId]!;
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'vendor-item';
-      const price = formatLocalizedMoney(item.sellValue);
-      const itemName = itemDisplayName(item);
-      row.setAttribute('aria-label', t('itemUi.vendor.buybackAria', { item: itemName, price }));
-      row.innerHTML = `${this.itemIcon(item)}<span class="vi-name">${esc(itemName)}${s.count > 1 ? ` x${s.count}` : ''}</span><span class="vi-price">${this.moneyHtml(item.sellValue)}</span>`;
-      row.addEventListener('click', () => {
-        this.sim.buyBackItem(s.itemId);
-        if ($('#bags').style.display !== 'none') this.renderBags();
-        this.renderVendor();
-      });
-      this.attachTooltip(row, () => this.itemTooltip(item) + `<div class="tt-sub">${esc(t('itemUi.tooltip.clickBuyback'))}</div>`);
-      el.appendChild(row);
-    }
-    const hint = document.createElement('div');
-    hint.className = 'vendor-hint';
-    hint.textContent = t('itemUi.vendor.hint');
-    el.appendChild(hint);
-    el.querySelector('[data-close]')?.addEventListener('click', () => this.closeVendor());
-    el.style.display = 'block';
-    el.scrollTop = scrollTop;
+    const buyAndRefresh = (buy: () => void) => {
+      buy();
+      if ($('#bags').style.display !== 'none') this.renderBags();
+      this.renderVendor();
+    };
+    renderVendorWindow(
+      $('#vendor-window'),
+      entityDisplayName(npc),
+      buildVendorView(npc.vendorItems, this.sim.vendorBuyback, ITEMS),
+      {
+        itemIcon: (item) => this.itemIcon(item),
+        moneyHtml: (copper) => this.moneyHtml(copper),
+        itemTooltip: (item) => this.itemTooltip(item),
+        attachTooltip: (el, html) => this.attachTooltip(el, html),
+        hideTooltip: () => this.hideTooltip(),
+        onBuy: (itemId) => buyAndRefresh(() => this.sim.buyItem(npc.id, itemId)),
+        onBuyBack: (itemId) => buyAndRefresh(() => this.sim.buyBackItem(itemId)),
+        onClose: () => this.closeVendor(),
+      },
+    );
   }
 
   closeVendor(): void {
@@ -5998,6 +6022,77 @@ export class Hud {
     if ($('#char-window').style.display === 'block') this.renderChar();
   }
 
+  private persistBagFilter(): void {
+    try { localStorage.setItem(Hud.BAG_FILTER_KEY, serializeBagFilter(this.bagFilter)); }
+    catch { /* storage unavailable (private mode); filter still works in-session */ }
+  }
+
+  // The category-chip + sort + search controls above the bag grid. Each control
+  // mutates this.bagFilter, persists, and re-renders; the actual filtering is the
+  // pure applyBagFilter() in bag_filter.ts.
+  private buildBagFilterBar(): HTMLElement {
+    const bar = document.createElement('div');
+    bar.className = 'bag-filter-bar';
+
+    const chips = document.createElement('div');
+    chips.className = 'bag-chips';
+    chips.setAttribute('role', 'group');
+    chips.setAttribute('aria-label', t('hudChrome.bags.filterGroupAria'));
+    for (const category of BAG_CATEGORIES) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'bag-chip' + (this.bagFilter.category === category ? ' active' : '');
+      chip.textContent = t(BAG_CATEGORY_LABEL_KEYS[category]);
+      chip.setAttribute('aria-pressed', this.bagFilter.category === category ? 'true' : 'false');
+      chip.addEventListener('click', () => {
+        if (this.bagFilter.category === category) return;
+        this.bagFilter.category = category;
+        this.persistBagFilter();
+        audio.click();
+        this.renderBags();
+      });
+      chips.appendChild(chip);
+    }
+    bar.appendChild(chips);
+
+    const tools = document.createElement('div');
+    tools.className = 'bag-tools';
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'bag-search';
+    search.placeholder = t('hudChrome.bags.searchPlaceholder');
+    search.setAttribute('aria-label', t('hudChrome.bags.searchAria'));
+    search.value = this.bagFilter.search;
+    search.addEventListener('input', () => {
+      this.bagFilter.search = search.value;
+      this.persistBagFilter();
+      this.refreshBagGrid();
+    });
+    tools.appendChild(search);
+
+    const sort = document.createElement('select');
+    sort.className = 'bag-sort';
+    sort.setAttribute('aria-label', t('hudChrome.bags.sortAria'));
+    for (const option of BAG_SORTS) {
+      const opt = document.createElement('option');
+      opt.value = option;
+      opt.textContent = t(BAG_SORT_LABEL_KEYS[option]);
+      if (this.bagFilter.sort === option) opt.selected = true;
+      sort.appendChild(opt);
+    }
+    sort.addEventListener('change', () => {
+      this.bagFilter.sort = sort.value as BagSort;
+      this.persistBagFilter();
+      audio.click();
+      this.renderBags();
+    });
+    tools.appendChild(sort);
+
+    bar.appendChild(tools);
+    return bar;
+  }
+
   renderBags(): void {
     const el = $('#bags');
     const sim = this.sim;
@@ -6006,12 +6101,43 @@ export class Hud {
     // otherwise using an item (e.g. a potion) snaps the list back to the top.
     const prevScrollTop = el.querySelector('.bag-grid')?.scrollTop ?? 0;
     el.innerHTML = `<div class="panel-title"><span>${esc(t('itemUi.bags.title'))}</span><button type="button" class="x-btn" data-close aria-label="${esc(t('itemUi.bags.close'))}">${svgIcon('close')}</button></div>`;
+    // Skip the chip/search row entirely when the bag is empty: a full filter bar
+    // above a single "(empty)" line is just noise.
+    if (sim.inventory.length > 0) el.appendChild(this.buildBagFilterBar());
     const grid = document.createElement('div');
     grid.className = 'bag-grid';
+    this.fillBagGrid(grid);
+    el.appendChild(grid);
+    grid.scrollTop = prevScrollTop;
+    const moneyRow = document.createElement('div');
+    moneyRow.className = 'money';
+    moneyRow.innerHTML = `${this.wocBalanceHtml()}${this.moneyHtml(sim.copper)}`;
+    el.appendChild(moneyRow);
+    el.querySelector('[data-close]')?.addEventListener('click', () => {
+      if (this.vendorOpen && document.body.classList.contains('mobile-touch')) {
+        this.closeVendor();
+        return;
+      }
+      el.style.display = 'none';
+      this.hideTooltip();
+      this.cancelPetFeed();
+    });
+  }
+
+  // Populate (or repopulate) the .bag-grid scroll container from the current
+  // filter state. Split out so a search keystroke can refresh just the grid
+  // (refreshBagGrid) without rebuilding the filter bar and stealing input focus.
+  private fillBagGrid(grid: HTMLElement): void {
+    const sim = this.sim;
+    const visible = applyBagFilter(sim.inventory, (id) => ITEMS[id], this.bagFilter);
     if (sim.inventory.length === 0) {
       grid.innerHTML = `<div class="bag-empty">${esc(t('itemUi.bags.empty'))}</div>`;
+      return;
+    } else if (visible.length === 0) {
+      grid.innerHTML = `<div class="bag-empty">${esc(t('hudChrome.bags.noMatch'))}</div>`;
+      return;
     }
-    for (const s of [...sim.inventory]) {
+    for (const s of visible) {
       const item = ITEMS[s.itemId];
       if (!item) continue;
       const row = document.createElement('button');
@@ -6081,21 +6207,17 @@ export class Hud {
       });
       grid.appendChild(row);
     }
-    el.appendChild(grid);
+  }
+
+  // Refresh only the grid contents (used by live search) so the search input
+  // keeps focus and caret position across keystrokes.
+  private refreshBagGrid(): void {
+    const grid = $('#bags').querySelector('.bag-grid') as HTMLElement | null;
+    if (!grid) return;
+    const prevScrollTop = grid.scrollTop;
+    grid.innerHTML = '';
+    this.fillBagGrid(grid);
     grid.scrollTop = prevScrollTop;
-    const money = document.createElement('div');
-    money.className = 'money';
-    money.innerHTML = `${this.wocBalanceHtml()}${this.moneyHtml(sim.copper)}`;
-    el.appendChild(money);
-    el.querySelector('[data-close]')?.addEventListener('click', () => {
-      if (this.vendorOpen && document.body.classList.contains('mobile-touch')) {
-        this.closeVendor();
-        return;
-      }
-      el.style.display = 'none';
-      this.hideTooltip();
-      this.cancelPetFeed();
-    });
   }
 
   private sellBagItem(slot: InvSlot, ev: MouseEvent): void {
@@ -8890,11 +9012,14 @@ export class Hud {
   // Open the chat bar pre-filled with a whisper to this player (classic-MMO-style DM).
   private startWhisper(name: string): void {
     if (!name || name === this.sim.player.name) return;
-    const input = $('#chat-input') as unknown as HTMLInputElement;
+    const input = $('#chat-input') as unknown as HTMLTextAreaElement;
     input.value = `/w ${name} `;
     input.style.display = 'block';
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
+    // Re-anchor + autosize the bar for the pre-filled value even if it was
+    // already open (focus alone won't re-fire); main.ts listens for 'input'.
+    input.dispatchEvent(new Event('input'));
   }
 
   // -------------------------------------------------------------------------
@@ -9455,27 +9580,42 @@ export class Hud {
     fxNote.className = 'set-note';
     fxNote.textContent = t('hudChrome.options.browserEffectsNote');
     body.appendChild(fxNote);
+    // Desktop keyboard/mouse vs the on-screen touch controls. Auto detects the
+    // device; Desktop/Touch force one (e.g. a tablet with a keyboard picks
+    // Desktop). Re-render so the touch-only sliders below show/hide to match.
+    // Hidden in the native app shell, which forces the touch UI regardless.
+    if (!isNativeAppShell()) {
+      this.settingChoice(body, t('hudChrome.options.interfaceMode'), 'interfaceMode', [
+        { value: 0, label: t('hudChrome.options.interfaceModeAuto') },
+        { value: 1, label: t('hudChrome.options.interfaceModeDesktop') },
+        { value: 2, label: t('hudChrome.options.interfaceModeTouch') },
+      ], () => this.renderGraphics());
+      const interfaceNote = document.createElement('div');
+      interfaceNote.className = 'set-note';
+      interfaceNote.textContent = t('hudChrome.options.interfaceModeNote');
+      body.appendChild(interfaceNote);
+    }
     this.settingSlider(body, t('hud.options.cameraSpeed'), 'cameraSpeed');
     // Camera Speed only scales mouselook; on touch the camera joystick has its
     // own rate, so phones get a dedicated sensitivity slider here.
-    if (isPhoneTouchDevice()) this.settingSlider(body, t('hud.options.touchLookSpeed'), 'touchLookSpeed');
+    if (useTouchInterface()) this.settingSlider(body, t('hud.options.touchLookSpeed'), 'touchLookSpeed');
     this.settingSlider(body, t('hud.options.brightness'), 'brightness');
     this.settingSlider(body, t('hud.options.fieldOfView'), 'cameraFov', { fmt: (v) => `${formatNumber(Math.round(v), { maximumFractionDigits: 0 })}°`, step: 1 });
     this.settingSlider(body, t('hud.options.renderQuality'), 'renderScale');
     this.settingToggle(body, t('hud.options.fullscreen'), 'fullscreen');
     this.settingToggle(body, t('game.settings.showOverflowXp'), 'showOverflowXp');
     // Touch-only: lets phone players dim the on-screen joysticks + buttons.
-    if (isPhoneTouchDevice()) this.settingSlider(body, t('hud.options.touchOpacity'), 'touchOpacity');
+    if (useTouchInterface()) this.settingSlider(body, t('hud.options.touchOpacity'), 'touchOpacity');
     this.settingToggle(body, t('game.settings.weather'), 'weather');
     // Touch-only: lets phone players size the on-screen joysticks to their hands.
-    if (isPhoneTouchDevice()) this.settingSlider(body, t('hud.options.joystickSize'), 'joystickScale');
+    if (useTouchInterface()) this.settingSlider(body, t('hud.options.joystickSize'), 'joystickScale');
     // Touch-only: lets phone players size the on-screen action buttons to taste.
-    if (isPhoneTouchDevice()) this.settingSlider(body, t('hud.options.buttonSize'), 'actionButtonScale');
+    if (useTouchInterface()) this.settingSlider(body, t('hud.options.buttonSize'), 'actionButtonScale');
     // Touch-only: a larger deadzone resists accidental drift from a resting
     // thumb on the move stick; only meaningful with on-screen controls.
-    if (isPhoneTouchDevice()) this.settingSlider(body, t('hud.options.joystickDeadzone'), 'joystickDeadzone');
+    if (useTouchInterface()) this.settingSlider(body, t('hud.options.joystickDeadzone'), 'joystickDeadzone');
     // Touch-only: flips the vertical axis of the on-screen camera joystick + swipe-look.
-    if (isPhoneTouchDevice()) this.settingBoolToggle(body, t('hud.options.invertLook'), 'touchInvertLook');
+    if (useTouchInterface()) this.settingBoolToggle(body, t('hud.options.invertLook'), 'touchInvertLook');
     const note = document.createElement('div');
     note.className = 'set-note';
     note.textContent = t('hud.options.graphicsNote');
@@ -9582,9 +9722,81 @@ export class Hud {
     parent.append(row, status);
   }
 
+  // UI theme picker: a preset selector plus a full-palette custom-colour block.
+  // Preset/custom changes route through OptionsHooks.theme; main.ts persists and
+  // live-applies the resulting CSS variables, so no reload is needed.
+  private renderThemeControls(body: HTMLElement): void {
+    const hooks = this.optionsHooks;
+    if (!hooks) return;
+    const theme = hooks.theme;
+
+    const presetRow = document.createElement('div');
+    presetRow.className = 'set-row';
+    const presetName = document.createElement('span');
+    presetName.className = 'set-name';
+    presetName.textContent = t('hudChrome.theme.preset');
+    const seg = document.createElement('div');
+    seg.className = 'set-seg theme-presets';
+    const presetLabel = (id: PresetId): string => t(`hudChrome.theme.presets.${id}` as TranslationKey);
+    for (const id of PRESET_ORDER) {
+      const btn = document.createElement('button');
+      btn.className = 'btn set-seg-btn';
+      btn.textContent = presetLabel(id);
+      btn.classList.toggle('active', theme.get().preset === id);
+      btn.addEventListener('click', () => {
+        audio.click();
+        theme.setPreset(id);
+        this.renderInterface(); // refresh active state + custom pickers
+      });
+      seg.appendChild(btn);
+    }
+    presetRow.append(presetName, seg);
+    body.appendChild(presetRow);
+
+    // Custom palette: one colour input per knob, seeded with the effective value.
+    const effective = resolveTheme(theme.get());
+    const customCount = Object.keys(theme.get().custom).length;
+    const customRow = document.createElement('div');
+    customRow.className = 'set-row theme-custom-head';
+    const customName = document.createElement('span');
+    customName.className = 'set-name';
+    customName.textContent = t('hudChrome.theme.customColors');
+    const reset = document.createElement('button');
+    reset.className = 'btn set-toggle';
+    reset.textContent = t('hudChrome.theme.reset');
+    reset.disabled = customCount === 0;
+    reset.addEventListener('click', () => {
+      audio.click();
+      theme.resetCustom();
+      this.renderInterface();
+    });
+    customRow.append(customName, reset);
+    body.appendChild(customRow);
+
+    const grid = document.createElement('div');
+    grid.className = 'theme-color-grid';
+    for (const knob of THEME_KNOB_ORDER) {
+      const row = document.createElement('label');
+      row.className = 'theme-color-row';
+      const swatchLabel = document.createElement('span');
+      swatchLabel.textContent = t(`hudChrome.theme.knob.${THEME_KNOB_LABEL_KEY[knob]}` as TranslationKey);
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.value = effective[knob];
+      input.setAttribute('aria-label', swatchLabel.textContent);
+      // 'input' fires continuously while dragging the picker → live preview.
+      input.addEventListener('input', () => theme.setCustom(knob, input.value));
+      input.addEventListener('change', () => { theme.setCustom(knob, input.value); reset.disabled = false; });
+      row.append(input, swatchLabel);
+      grid.appendChild(row);
+    }
+    body.appendChild(grid);
+  }
+
   private renderInterface(): void {
     const body = this.settingsViewShell(t('hud.options.interface'));
     this.languageSelect(body);
+    this.renderThemeControls(body);
     this.settingSlider(body, t('hudChrome.options.uiScale'), 'uiScale');
     this.settingSlider(body, t('hud.options.hudOpacity'), 'hudOpacity');
     this.settingSlider(body, t('hud.options.tooltipScale'), 'tooltipScale');
@@ -9736,7 +9948,7 @@ export class Hud {
   // Toggle row styled for the Key Bindings panel. Handles the bool Mouse Camera
   // setting and the numeric (0/1) Click to Move setting, which both live here
   // alongside the rebindable keys.
-  private settingToggleKeybind(parent: HTMLElement, label: string, key: BoolSettingKey | 'clickToMove'): void {
+  private settingToggleKeybind(parent: HTMLElement, label: string, key: BoolSettingKey | 'clickToMove', help?: string): void {
     const hooks = this.optionsHooks;
     if (!hooks) return;
     const isOn = () => (key === 'clickToMove' ? hooks.settings.get(key) >= 0.5 : hooks.settings.get(key));
@@ -9767,6 +9979,12 @@ export class Hud {
     });
     row.append(name, toggle);
     parent.appendChild(row);
+    if (help) {
+      const hint = document.createElement('div');
+      hint.className = 'kb-note kb-toggle-help';
+      hint.textContent = help;
+      parent.appendChild(hint);
+    }
   }
 
   private clickMoveMouseButtonRow(parent: HTMLElement): void {
@@ -9863,6 +10081,7 @@ export class Hud {
     el.classList.add('kb-wide');
     el.innerHTML = `<div class="panel-title"><span>${esc(t('hud.options.keyBindings'))}</span><button type="button" class="x-btn" data-close aria-label="${esc(t('hud.options.returnToGame'))}">${svgIcon('close')}</button></div>`;
     this.settingToggleKeybind(el, t('hud.options.mouseCamera'), 'mouseCamera');
+    this.settingToggleKeybind(el, t('hudChrome.options.lockCursorOnRotate'), 'lockCursorOnRotate', t('hudChrome.options.keybindHelpLockCursorOnRotate'));
     this.settingToggleKeybind(el, t('hud.options.clickToMove'), 'clickToMove');
     this.clickMoveMouseButtonRow(el);
     this.settingToggleKeybind(el, t('hud.keybinds.actions.attackMove'), 'attackMove');
@@ -10007,10 +10226,6 @@ function abilityDisplayDescription(def: AbilityDef, damageText: string): string 
 
 function classDisplayName(cls: PlayerClass): string {
   return tEntity({ kind: 'class', id: cls, field: 'name' });
-}
-
-function itemDisplayName(item: ItemDef): string {
-  return tEntity({ kind: 'item', id: item.id, field: 'name' });
 }
 
 function itemDisplayNameFromSource(name: string): string {
