@@ -48,6 +48,7 @@ import { sfx } from '../game/sfx';
 import { voice } from '../game/voice';
 import { music, musicZoneForLocation, shouldResetMusicForDungeonEntry } from '../game/music';
 import { iconDataUrl, QUALITY_COLOR, raidMarkerDataUrl, RAID_MARKER_NAMES } from './icons';
+import { overworldDungeonPortals } from './map_dungeon_portals';
 import { UnitPortraitPainter } from './unit_portrait_painter';
 import { crestIdForEntity } from './unit_portrait';
 import { svgIcon } from './ui_icons';
@@ -3802,10 +3803,11 @@ export class Hud {
       ctx.fillText(text, mx, my);
     };
     zone.pois.forEach((poi, poiIndex) => label(poi.x, poi.z, zonePoiLabel(zone.id, poiIndex)));
-    // dungeon entrance portals in this zone
-    for (const dungeon of DUNGEON_LIST) {
-      if (dungeon.doorPos.z < zone.zMin || dungeon.doorPos.z >= zone.zMax) continue;
-      const { mx, my } = toMap(dungeon.doorPos.x, dungeon.doorPos.z);
+    // dungeon entrance portals in this zone (raids reached only through an
+    // internal door share their parent's doorPos and carry no overworld portal,
+    // so their label does not overlap the parent's, see overworldDungeonPortals)
+    for (const portal of overworldDungeonPortals(DUNGEON_LIST, zone.zMin, zone.zMax)) {
+      const { mx, my } = toMap(portal.x, portal.z);
       ctx.fillStyle = '#c084ff';
       ctx.beginPath();
       ctx.arc(mx, my, 5, 0, Math.PI * 2);
@@ -3813,7 +3815,7 @@ export class Hud {
       ctx.stroke();
       ctx.fillStyle = '#e0c0ff';
       ctx.font = 'bold 12px Georgia';
-      const dungeonName = dungeonDisplayName(dungeon.id);
+      const dungeonName = dungeonDisplayName(portal.id);
       ctx.strokeText(dungeonName, mx, my - 9);
       ctx.fillText(dungeonName, mx, my - 9);
       ctx.font = 'bold 13px Georgia';
