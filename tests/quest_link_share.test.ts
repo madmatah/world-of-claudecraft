@@ -82,6 +82,26 @@ describe('acceptLinkedQuest', () => {
     expect(sim.questState(q, b)).toBe('active');
   });
 
+  it('re-grants a missing required item on linked accept (parity with acceptQuest)', () => {
+    // q_nythraxis_bound_guardian needs the Crypt Keystone, earned in the prior quest.
+    // A party member who no longer holds it must have it re-granted on accept, exactly
+    // as the NPC path does, or the quest is permanently uncompletable.
+    const { sim, a, b } = partyOfTwo();
+    const q = 'q_nythraxis_bound_guardian';
+    const def = QUESTS[q];
+    expect(def.requiredItems).toContain('crypt_keystone');
+    // Make the recipient eligible (level + prerequisite) but NOT holding the keystone.
+    sim.setPlayerLevel(def.minLevel ?? 20, b);
+    (sim as any).resolve(b).meta.questsDone.add(def.requiresQuest as string);
+    expect(sim.questState(q, b)).toBe('available');
+    expect((sim as any).countItem('crypt_keystone', b)).toBe(0);
+
+    sim.acceptLinkedQuest(q, a, b);
+
+    expect(sim.questState(q, b)).toBe('active');
+    expect((sim as any).countItem('crypt_keystone', b)).toBeGreaterThan(0);
+  });
+
   it('is deterministic — same inputs, same result twice', () => {
     const run = () => {
       const { sim, a, b } = partyOfTwo();
