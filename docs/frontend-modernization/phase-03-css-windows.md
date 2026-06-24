@@ -47,10 +47,26 @@ Spawn one Explore agent to read and summarize, returning a tight digest (not raw
   CSS items and "Top risks" item 6 (cascade/rule-drop) and item 2-bullet on backdrop -webkit-first.
 - the SPECIFIC index.html <style> ranges this phase moves (real V16 line numbers from the recon):
   window centering 1301-1432; char/spellbook/questlog/leaderboard/talents 1432-1597; modals +
-  dropdown 1598-1696; vendor/bags/social/map/arena/auction/options/emote bodies; delve board
-  1051-1084; lockpick 1085-1168. Ask the agent to map each /* ---- name ---- */ section comment in
-  these ranges to its destination file (layout.css vs components.css) and report the section list.
+  dropdown 1598-1696; vendor/bags/social/map bodies inside the windows block; and the four sections
+  the deep review found live OUTSIDE the windows block (they are NOT in 1301-1696, the draft was
+  wrong): arena 1846-1899; market (auction) 1900-1972; options 1973-2039; theme picker 2040-2107;
+  emote 2108-2161. (Theme picker moves WITH options: it is the options-window accent picker.) Plus
+  delve board 1051-1084; lockpick 1085-1168. Ask the agent to map each /* ---- name ---- */ section
+  comment in these ranges to its destination file (layout.css vs components.css) and report the
+  section list.
 The orchestrator keeps the section map, not the raw CSS.
+
+BAND PARTITION (verify before any cut; the deep review found the draft skipped an orphan band). The
+inline-style band 1846-2455 must be FULLY assigned across P2/P3/P4a/P4b with no gap and no overlap.
+P3 owns the windows block 1301-2161 EXCEPT any sub-section already moved by P2 (the in-world HUD
+chrome): concretely P3 owns 1301-1696 (centering + classic stat windows + modals/dropdown) PLUS the
+five out-of-block sections arena 1846-1899, market 1900-1972, options 1973-2039, theme 2040-2107,
+emote 2108-2161, PLUS delve board 1051-1084 and lockpick 1085-1168. The remainder of 1846-2455 (the
+Fiesta HUD section at ~2162-2302/2303 and any in-world chrome below it) is P2's, and the shell /
+chat / party-frame / mobile rules are P4a/P4b's. Before cutting, the integration step asserts that
+every line in 1846-2161 lands in exactly one P3 destination file and that nothing in P3's claimed
+ranges is already present in hud.css (P2): if a line is double-claimed, STOP and re-classify (Top
+risks item 6, the orphan band).
 
 STEP 2 - CHOOSE ORCHESTRATION + EXECUTE:
 ULTRACODE Workflow, fan out one slice per window-section group, then a single sequential integration
@@ -62,14 +78,28 @@ ULTRACODE Workflow, fan out one slice per window-section group, then a single se
   bodies, index 1432-1597.
 - Slice C (components.css, modals + dropdown): index 1598-1696 (confirm/prompt modals, dropdown
   menus, context-style popovers that belong to windows not the in-world HUD).
-- Slice D (components.css, interaction windows): vendor/bags/social/map/arena/auction/options/emote
-  window bodies (the per-window selectors in the windows block).
+- Slice D (components.css, interaction windows): vendor/bags/social/map window bodies inside the
+  windows block, PLUS the five out-of-block sections at their real V16 ranges (the draft wrongly
+  listed these as in-the-windows-block with no line range; live they are OUTSIDE 1301-1696):
+  arena 1846-1899, market (auction) 1900-1972, options 1973-2039, theme picker 2040-2107, emote
+  2108-2161. The theme picker (2040-2107) moves WITH options as one unit (it is the options accent
+  picker), not as a standalone slice.
 - Slice E (components.css, delve board + lockpick): delve board 1051-1084, lockpick 1085-1168.
 Because all slices edit the same two new files + the same index.html <style>, run them with
 isolation: "worktree" (overlapping edits) OR serialize the integration: have each slice EMIT its
 exact cut-range + the destination-file text block, and let the orchestrator apply them in one
 deterministic pass to avoid a merge race on index.html. After integration, run css_corpus and
 diff each /* ---- name ---- */ section's normalized rule set old-vs-new.
+
+REGISTER THE NEW CSS FILES IN THE IMPORT SEAM (both entries):
+- P1 defined the single CSS-import seam (a barrel imported once from the game entries' TS; V16 had
+  no such seam, see state.md Key file paths). layout.css and components.css are NEW files; they do
+  not load themselves. Add BOTH to that shared barrel (under the same @layer order P1 declared) so
+  they are imported by BOTH index.html and play.html (the two game entries that share the chrome).
+  Do NOT add a raw <link> in either HTML head and do NOT register them per-entry twice: one barrel,
+  imported by both entries, is the seam. If you cut a window rule into a file no entry imports, the
+  window goes unstyled at runtime even though css_corpus passes (css_corpus reads the file union, not
+  the loaded graph), so verify in the built entry, not just the corpus.
 
 INVARIANTS THIS PHASE MUST KEEP (from state.md locked decisions + non-negotiable constraints):
 - Presentation-only. No hud.ts/sim/server/net/IWorld changes; this is CSS relocation only. If you
@@ -83,12 +113,22 @@ INVARIANTS THIS PHASE MUST KEEP (from state.md locked decisions + non-negotiable
 - backdrop-filter must be emitted -webkit-first (Lightning minify gotcha) wherever a window body uses
   it (vendor/options glass etc.).
 - i18n: no player-visible string changes here (CSS only); do not add any t() key.
-- No em dashes, en dashes, or emojis in CSS comments or section banners.
+- No em dashes, en dashes, or emojis in NEW text. This is a byte-for-byte CSS move: the no-dash rule
+  applies to new text only (state.md non-negotiables). A relocated existing comment that already
+  contains a dash may ride along unchanged OR be normalized to a comma/colon/parenthesis (comments
+  ONLY, never a selector or value). Do not introduce a new dash; if you touch a moved comment's dash
+  at all, normalize it rather than preserve a gratuitous one. The 10-dash section markers
+  (/* ---------- name ---------- */) are STRUCTURAL keys for css_corpus, not prose dashes: copy them
+  verbatim, do not normalize them.
 - Shared worktree: commit with EXPLICIT paths, never git add -A.
 
 Out of scope (do NOT do in this phase):
-- The pre-game shell, login, chat, party-frame CSS, context menu, trade, controls drawer, mobile
-  touch, char-select, and the per-entry index.extra/play.extra split: that is P4 (CSS C).
+- The pre-game shell, login, char-select -> shell.css: that is P4a (CSS C-1). Chat, party-frame CSS,
+  context menu, trade, controls drawer, mobile touch, and the per-entry index.extra/play.extra split:
+  that is P4b (CSS C-2). Do not pull any of those into B2.
+- The Fiesta HUD section (~2162-2302/2303) and any in-world chrome below it in the 1846-2455 band:
+  that is P2 (CSS B1), already landed; if you find a Fiesta-HUD rule still inline, it is P2's, leave
+  it (Top risks item 6, the orphan band).
 - The in-world HUD chrome (nameplates/frames/bars/FCT/vignette): that was P2 (CSS B1).
 - tokens.css/base.css and the Lightning flip / @layer declaration: that was P1.
 - Any window JS extraction into *_view cores or painters: that is P6-P9.
@@ -100,13 +140,15 @@ Run the CSS/HTML-entry row of the validation matrix (state.md):
 - npx vitest run tests/css_corpus.test.ts (the section-by-section completeness guard MUST account
   for every moved window section; this is the primary rule-drop catch).
 - npx vitest run tests/client_shell.test.ts (window DOM ids unchanged).
-- npm run build (all 4 entries resolve under @layer).
+- npm run build (all 4 entries resolve under @layer; confirm layout.css and components.css are in
+  the built chunk for BOTH index.html and play.html via the shared barrel, not orphaned files).
 - the backdrop-filter survival check (grep the built CSS: -webkit-backdrop-filter precedes the
   unprefixed property for every window body that uses it).
 - biome check on the new/changed .css (layout.css, components.css).
 - Open-each-window smoke: confirm via the section map that every window section (char, spellbook,
-  questlog, leaderboard, talents, vendor, bags, social, map, arena, auction, options, emote, delve
-  board, lockpick, modals, dropdown) has its rules present in a built entry and centered correctly.
+  questlog, leaderboard, talents, vendor, bags, social, map, arena, market/auction, options, theme
+  picker, emote, delve board, lockpick, modals, dropdown) has its rules present in a built entry
+  (loaded via the shared barrel, in BOTH index.html and play.html) and centered correctly.
 This is NOT a per-frame phase: no perf_tour gate.
 Review dispatch: qa-checklist only (CSS-only, presentation surface; no server/net/IWorld/sim touch,
 so privacy-security-review, migration-safety, and cross-platform-sync do not fire). Prompt the
@@ -114,8 +156,9 @@ reviewer for COVERAGE: every dropped/reordered rule, every section the css_corpu
 cover, any backdrop-filter ordering miss. Do not commit until it reports no BLOCKING.
 
 STEP 4 - COMMIT CADENCE (2-5 Conventional Commits, scope + EXPLICIT paths):
-- style(css): extract window centering and shells into src/styles/layout.css
-  (paths: src/styles/layout.css, index.html)
+- style(css): extract window centering and shells into src/styles/layout.css and register both new
+  CSS modules in the shared import barrel for index.html + play.html
+  (paths: src/styles/layout.css, src/styles/components.css, the P1 CSS-import barrel, index.html, play.html)
 - style(css): extract feature-window bodies into src/styles/components.css
   (paths: src/styles/components.css, index.html)
 - style(css): relocate delve board + lockpick window CSS into components.css
@@ -129,10 +172,15 @@ STEP 5 - ACCEPTANCE CRITERIA (all verifiable + green):
 [copied below into the final report]
 
 STEP 6 - DOC UPDATES + MEMORY:
-- progress.md: mark P3 done, list the two new CSS modules and the index.html line ranges emptied,
-  note the section map (which window went to layout vs components).
+- progress.md: mark P3 done, list the two new CSS modules and the index.html line ranges emptied
+  (1301-1696 windows block, the five out-of-block sections arena 1846-1899 / market 1900-1972 /
+  options 1973-2039 / theme 2040-2107 / emote 2108-2161, plus delve 1051-1084 / lockpick 1085-1168),
+  note the section map (which window went to layout vs components), and record that both new modules
+  are now loaded via the P1 barrel from index.html + play.html.
 - state.md: flip the P3 ledger row to done; under "Key file paths" note layout.css/components.css now
-  carry the windows block; if you discovered a window section the recon range did not name, record it.
+  carry the windows block and are registered in the CSS-import barrel; confirm the 1846-2161 band is
+  now fully assigned (P3 took arena/market/options/theme/emote, P2 kept Fiesta HUD); if you discovered
+  a window section the recon range did not name, record it.
 - Memory: record any surprising rule (e.g. a window that shares a selector with an in-world HUD rule
   already in hud.css, a modal that depends on cascade order with a P2 rule, or a backdrop-filter
   ordering case Lightning re-emitted).
@@ -140,7 +188,7 @@ STEP 6 - DOC UPDATES + MEMORY:
 STEP 7 - FINAL RESPONSE:
 Status, files changed (absolute paths), validation results (tsc, css_corpus, client_shell, build x4,
 biome, backdrop survival), reviewer verdict, any deferrals, and end with:
-Next: phase-04-css-shell-mobile-extra.md
+Next: phase-04a-css-shell.md
 
 STOPPING RULES:
 - STOP if a window rule cannot be moved without changing the cascade (a window selector whose
@@ -164,6 +212,13 @@ module shape, so the port is a relocate not a re-derive. The key risk is silent 
 (item 6 in Top risks): a window rule that depended on source order with a hud.css rule (P2) or with
 another window, plus the Lightning backdrop -webkit-first gotcha on glassy window bodies; the
 section-by-section corpus diff plus the backdrop survival grep are the specific guards against it.
-De-risking value: clearing the windows block out of inline `<style>` is the last big chunk before
-P4 can finish emptying both HTML entries, and it leaves the window bodies in a real module that P5
-(--fx-* glass) and P6-P9 (painter extraction) can target without re-touching HTML.
+The deep review corrected the draft's biggest factual error: arena/market/options/theme/emote are
+NOT inside the 1301-1696 windows block, they live OUTSIDE it at 1846-2161, so the phase now carries
+their explicit ranges plus a band-partition assertion that 1846-2161 lands fully across P3 (these
+five) and P2 (Fiesta HUD), with nothing double-claimed. The other landed fix is the import seam:
+layout.css and components.css are new files that no entry loads until they are registered in the P1
+barrel, and they must be imported by BOTH index.html and play.html (css_corpus reads the file union
+and would pass on an orphaned file), so the phase verifies them in the built entry, not just the
+corpus. De-risking value: clearing the windows block out of inline `<style>` is the last big chunk
+before P4a/P4b can finish emptying both HTML entries, and it leaves the window bodies in a real
+module that P5 (--fx-* glass) and P6-P9 (painter extraction) can target without re-touching HTML.
