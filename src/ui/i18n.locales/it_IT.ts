@@ -4644,6 +4644,9 @@ export const it_IT: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.tries': '{count} tentativi',
   'lockpickUi.triesOne': '1 tentativo',
   'lockpickUi.seconds': '{seconds}s',
+  'lockpickUi.perMove': '{seconds} s per mossa',
+  'lockpickUi.depthKeys':
+    'Le scorciatoie impostano la profondità del grimaldello (Q/W/E/A/Z), non il numero della guardia.',
   'lockpickUi.boardTitle': 'Via del Cilindro: scrigno {tier}',
   'lockpickUi.closeAria': 'Chiudi',
   'lockpickUi.withdrawAria': 'Ritirati',
@@ -4672,6 +4675,9 @@ export const it_IT: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.summary.fail':
     "La serratura è rovinata. Completa di nuovo l'incursione per un altro tentativo.",
   'lockpickUi.summary.abandoned': 'Sfili di nuovo i grimaldelli. La serratura attende.',
+  'worldContent.delveLockedChestInteract': 'Premi F per scassinare la serratura',
+  'worldContent.delveRewardChestInteract': 'Premi F per reclamare il bottino',
+  'worldContent.delveSurfaceExitInteract': 'Premi F per risalire',
   'sim.delve.objectiveClearRoom': 'Ripulisci la stanza.',
   'sim.delve.objectiveDefeatBoss': 'Sconfiggi il boss.',
   // Account-security portal (2FA, verified email change, GDPR export) from PR #833.,

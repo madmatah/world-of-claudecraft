@@ -4658,6 +4658,9 @@ export const es: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.tries': '{count} intentos',
   'lockpickUi.triesOne': '1 intento',
   'lockpickUi.seconds': '{seconds}s',
+  'lockpickUi.perMove': '{seconds} s por movimiento',
+  'lockpickUi.depthKeys':
+    'Las teclas rápidas fijan la profundidad de ganzúa (Q/W/E/A/Z), no el número de guarda.',
   'lockpickUi.boardTitle': 'Senda del Tambor: botín {tier}',
   'lockpickUi.closeAria': 'Cerrar',
   'lockpickUi.withdrawAria': 'Retirarse',
@@ -4686,6 +4689,9 @@ export const es: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.summary.fail':
     'La cerradura está arruinada. Vuelve a superar la expedición para otro intento.',
   'lockpickUi.summary.abandoned': 'Sacas las ganzúas con cuidado. La cerradura aguarda.',
+  'worldContent.delveLockedChestInteract': 'Pulsa F para forzar la cerradura',
+  'worldContent.delveRewardChestInteract': 'Pulsa F para reclamar el botín',
+  'worldContent.delveSurfaceExitInteract': 'Pulsa F para trepar',
   'sim.delve.objectiveClearRoom': 'Despeja la sala.',
   'sim.delve.objectiveDefeatBoss': 'Derrota al jefe.',
   // Account-security portal (2FA, verified email change, GDPR export) from PR #833.,

@@ -1795,7 +1795,7 @@ export const fr_CA: EnTranslations = {
     "pagesAria": "{count} serrures",
     "tries": "{count} essais",
     "triesOne": "1 essai",
-    "perMove": "{seconds}s / move",
+    "perMove": "{seconds} s par mouvement",
     "seconds": "{seconds}s",
     "boardTitle": "Voie du crocheteur : cachette {tier}",
     "closeAria": "Fermer",
@@ -1806,7 +1806,7 @@ export const fr_CA: EnTranslations = {
     "triesOf": "Essais {tries}/{total}",
     "triesOfAria": "{tries} essais restants sur {total}",
     "ward": "Garde {col} / {total}",
-    "depthKeys": "Hotkeys set pick depth (Q/W/E/A/Z), not the ward number.",
+    "depthKeys": "Les raccourcis définissent la profondeur du crochet (Q/W/E/A/Z), pas le numéro de garde.",
     "withdraw": "Se retirer (Esc)",
     "action": {
       "hardSet": "Forcer fort",
@@ -6256,8 +6256,8 @@ export const fr_CA: EnTranslations = {
     "dungeonExitName": "Sortie de {name}",
     "dungeonPartyWarning": "{name} est prévu pour un groupe complet de {count}. Avancez prudemment.",
     "dungeonInstanceBusy": "Toutes les instances de {name} sont occupées. Réessayez bientôt.",
-    "delveLockedChestInteract": "Press F to pick the lock",
-    "delveRewardChestInteract": "Press F to claim spoils",
-    "delveSurfaceExitInteract": "Press F to climb"
+    "delveLockedChestInteract": "Appuyez sur F pour crocheter la serrure",
+    "delveRewardChestInteract": "Appuyez sur F pour récupérer le butin",
+    "delveSurfaceExitInteract": "Appuyez sur F pour remonter"
   }
 };

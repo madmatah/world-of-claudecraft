@@ -1795,7 +1795,7 @@ export const pt_BR: EnTranslations = {
     "pagesAria": "{count} fechaduras",
     "tries": "{count} tentativas",
     "triesOne": "1 tentativa",
-    "perMove": "{seconds}s / move",
+    "perMove": "{seconds} s por movimento",
     "seconds": "{seconds}s",
     "boardTitle": "Caminho dos Pinos: reserva {tier}",
     "closeAria": "Fechar",
@@ -1806,7 +1806,7 @@ export const pt_BR: EnTranslations = {
     "triesOf": "Tentativas {tries}/{total}",
     "triesOfAria": "{tries} de {total} tentativas restantes",
     "ward": "Guarda {col} / {total}",
-    "depthKeys": "Hotkeys set pick depth (Q/W/E/A/Z), not the ward number.",
+    "depthKeys": "As teclas de atalho definem a profundidade da gazua (Q/W/E/A/Z), não o número da guarda.",
     "withdraw": "Recuar (Esc)",
     "action": {
       "hardSet": "Fixar Forte",
@@ -6256,8 +6256,8 @@ export const pt_BR: EnTranslations = {
     "dungeonExitName": "Saída de {name}",
     "dungeonPartyWarning": "{name} foi feito para um grupo completo de {count}. Avance com cuidado.",
     "dungeonInstanceBusy": "Todas as instâncias de {name} estão ocupadas. Tente novamente em breve.",
-    "delveLockedChestInteract": "Press F to pick the lock",
-    "delveRewardChestInteract": "Press F to claim spoils",
-    "delveSurfaceExitInteract": "Press F to climb"
+    "delveLockedChestInteract": "Pressione F para arrombar a fechadura",
+    "delveRewardChestInteract": "Pressione F para reivindicar o saque",
+    "delveSurfaceExitInteract": "Pressione F para subir"
   }
 };

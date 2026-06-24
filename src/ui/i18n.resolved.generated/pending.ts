@@ -9,59 +9,17 @@
 // Reproducibility is checked by tests/i18n_resolved_equivalence.test.ts.
 
 export const pending: Record<string, readonly string[]> = {
-  "es": [
-    "lockpickUi.depthKeys",
-    "lockpickUi.perMove",
-    "worldContent.delveLockedChestInteract",
-    "worldContent.delveRewardChestInteract",
-    "worldContent.delveSurfaceExitInteract"
-  ],
-  "es_ES": [
-    "lockpickUi.depthKeys",
-    "lockpickUi.perMove",
-    "worldContent.delveLockedChestInteract",
-    "worldContent.delveRewardChestInteract",
-    "worldContent.delveSurfaceExitInteract"
-  ],
-  "fr_FR": [
-    "lockpickUi.depthKeys",
-    "lockpickUi.perMove",
-    "worldContent.delveLockedChestInteract",
-    "worldContent.delveRewardChestInteract",
-    "worldContent.delveSurfaceExitInteract"
-  ],
-  "fr_CA": [
-    "lockpickUi.depthKeys",
-    "lockpickUi.perMove",
-    "worldContent.delveLockedChestInteract",
-    "worldContent.delveRewardChestInteract",
-    "worldContent.delveSurfaceExitInteract"
-  ],
+  "es": [],
+  "es_ES": [],
+  "fr_FR": [],
+  "fr_CA": [],
   "en_CA": [],
-  "it_IT": [
-    "lockpickUi.depthKeys",
-    "lockpickUi.perMove",
-    "worldContent.delveLockedChestInteract",
-    "worldContent.delveRewardChestInteract",
-    "worldContent.delveSurfaceExitInteract"
-  ],
-  "de_DE": [
-    "lockpickUi.depthKeys",
-    "lockpickUi.perMove",
-    "worldContent.delveLockedChestInteract",
-    "worldContent.delveRewardChestInteract",
-    "worldContent.delveSurfaceExitInteract"
-  ],
+  "it_IT": [],
+  "de_DE": [],
   "zh_CN": [],
   "zh_TW": [],
   "ko_KR": [],
   "ja_JP": [],
-  "pt_BR": [
-    "lockpickUi.depthKeys",
-    "lockpickUi.perMove",
-    "worldContent.delveLockedChestInteract",
-    "worldContent.delveRewardChestInteract",
-    "worldContent.delveSurfaceExitInteract"
-  ],
+  "pt_BR": [],
   "ru_RU": []
 };

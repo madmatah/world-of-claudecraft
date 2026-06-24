@@ -4670,6 +4670,9 @@ export const de_DE: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.tries': '{count} Versuche',
   'lockpickUi.triesOne': '1 Versuch',
   'lockpickUi.seconds': '{seconds}s',
+  'lockpickUi.perMove': '{seconds} s pro Zug',
+  'lockpickUi.depthKeys':
+    'Schnelltasten setzen die Dietrichtiefe (Q/W/E/A/Z), nicht die Sperrennummer.',
   'lockpickUi.boardTitle': 'Pfad der Stifte: {tier} Hort',
   'lockpickUi.closeAria': 'Schließen',
   'lockpickUi.withdrawAria': 'Zurückziehen',
@@ -4698,6 +4701,9 @@ export const de_DE: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.summary.fail':
     'Das Schloss ist ruiniert. Schließe den Tiefgang erneut ab für einen weiteren Versuch.',
   'lockpickUi.summary.abandoned': 'Du ziehst die Dietriche wieder heraus. Das Schloss wartet.',
+  'worldContent.delveLockedChestInteract': 'Drücke F, um das Schloss zu knacken',
+  'worldContent.delveRewardChestInteract': 'Drücke F, um Beute zu beanspruchen',
+  'worldContent.delveSurfaceExitInteract': 'Drücke F, um hinaufzuklettern',
   'sim.delve.objectiveClearRoom': 'Den Raum räumen.',
   'sim.delve.objectiveDefeatBoss': 'Den Boss erschlagen.',
   // Account-security portal (2FA, verified email change, GDPR export) from PR #833.,

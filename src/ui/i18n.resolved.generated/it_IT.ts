@@ -1795,7 +1795,7 @@ export const it_IT: EnTranslations = {
     "pagesAria": "{count} serrature",
     "tries": "{count} tentativi",
     "triesOne": "1 tentativo",
-    "perMove": "{seconds}s / move",
+    "perMove": "{seconds} s per mossa",
     "seconds": "{seconds}s",
     "boardTitle": "Via del Cilindro: scrigno {tier}",
     "closeAria": "Chiudi",
@@ -1806,7 +1806,7 @@ export const it_IT: EnTranslations = {
     "triesOf": "Tentativi {tries}/{total}",
     "triesOfAria": "{tries} di {total} tentativi rimasti",
     "ward": "Guardia {col} / {total}",
-    "depthKeys": "Hotkeys set pick depth (Q/W/E/A/Z), not the ward number.",
+    "depthKeys": "Le scorciatoie impostano la profondità del grimaldello (Q/W/E/A/Z), non il numero della guardia.",
     "withdraw": "Ritirati (Esc)",
     "action": {
       "hardSet": "Spinta Decisa",
@@ -6256,8 +6256,8 @@ export const it_IT: EnTranslations = {
     "dungeonExitName": "Uscita da {name}",
     "dungeonPartyWarning": "{name} è pensato per un gruppo completo di {count}. Procedi con cautela.",
     "dungeonInstanceBusy": "Tutte le istanze di {name} sono occupate. Riprova tra poco.",
-    "delveLockedChestInteract": "Press F to pick the lock",
-    "delveRewardChestInteract": "Press F to claim spoils",
-    "delveSurfaceExitInteract": "Press F to climb"
+    "delveLockedChestInteract": "Premi F per scassinare la serratura",
+    "delveRewardChestInteract": "Premi F per reclamare il bottino",
+    "delveSurfaceExitInteract": "Premi F per risalire"
   }
 };

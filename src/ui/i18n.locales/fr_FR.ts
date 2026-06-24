@@ -4686,6 +4686,9 @@ export const fr_FR: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.tries': '{count} essais',
   'lockpickUi.triesOne': '1 essai',
   'lockpickUi.seconds': '{seconds}s',
+  'lockpickUi.perMove': '{seconds} s par mouvement',
+  'lockpickUi.depthKeys':
+    'Les raccourcis définissent la profondeur du crochet (Q/W/E/A/Z), pas le numéro de garde.',
   'lockpickUi.boardTitle': 'Voie du crocheteur : cachette {tier}',
   'lockpickUi.closeAria': 'Fermer',
   'lockpickUi.withdrawAria': 'Se retirer',
@@ -4715,6 +4718,9 @@ export const fr_FR: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.summary.fail':
     'La serrure est détruite. Terminez à nouveau la plongée pour un autre essai.',
   'lockpickUi.summary.abandoned': 'Vous retirez doucement les crochets. La serrure attend.',
+  'worldContent.delveLockedChestInteract': 'Appuyez sur F pour crocheter la serrure',
+  'worldContent.delveRewardChestInteract': 'Appuyez sur F pour récupérer le butin',
+  'worldContent.delveSurfaceExitInteract': 'Appuyez sur F pour remonter',
   'sim.delve.objectiveClearRoom': 'Nettoyez la salle.',
   'sim.delve.objectiveDefeatBoss': 'Vainquez le boss.',
   // Account-security portal (2FA, verified email change, GDPR export) from PR #833.,

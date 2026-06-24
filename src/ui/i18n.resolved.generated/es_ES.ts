@@ -1795,7 +1795,7 @@ export const es_ES: EnTranslations = {
     "pagesAria": "{count} cerraduras",
     "tries": "{count} intentos",
     "triesOne": "1 intento",
-    "perMove": "{seconds}s / move",
+    "perMove": "{seconds} s por movimiento",
     "seconds": "{seconds}s",
     "boardTitle": "Senda del Tambor: botín {tier}",
     "closeAria": "Cerrar",
@@ -1806,7 +1806,7 @@ export const es_ES: EnTranslations = {
     "triesOf": "Intentos {tries}/{total}",
     "triesOfAria": "{tries} de {total} intentos restantes",
     "ward": "Guarda {col} / {total}",
-    "depthKeys": "Hotkeys set pick depth (Q/W/E/A/Z), not the ward number.",
+    "depthKeys": "Las teclas rápidas fijan la profundidad de ganzúa (Q/W/E/A/Z), no el número de guarda.",
     "withdraw": "Retirarse (Esc)",
     "action": {
       "hardSet": "Fijar a fondo",
@@ -6256,8 +6256,8 @@ export const es_ES: EnTranslations = {
     "dungeonExitName": "Salida de {name}",
     "dungeonPartyWarning": "{name} está pensado para un grupo completo de {count}. Avanza con cuidado.",
     "dungeonInstanceBusy": "Todas las instancias de {name} están ocupadas. Inténtalo de nuevo pronto.",
-    "delveLockedChestInteract": "Press F to pick the lock",
-    "delveRewardChestInteract": "Press F to claim spoils",
-    "delveSurfaceExitInteract": "Press F to climb"
+    "delveLockedChestInteract": "Pulsa F para forzar la cerradura",
+    "delveRewardChestInteract": "Pulsa F para reclamar el botín",
+    "delveSurfaceExitInteract": "Pulsa F para trepar"
   }
 };

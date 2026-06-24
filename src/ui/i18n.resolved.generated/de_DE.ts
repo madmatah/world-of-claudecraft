@@ -1795,7 +1795,7 @@ export const de_DE: EnTranslations = {
     "pagesAria": "{count} Schlösser",
     "tries": "{count} Versuche",
     "triesOne": "1 Versuch",
-    "perMove": "{seconds}s / move",
+    "perMove": "{seconds} s pro Zug",
     "seconds": "{seconds}s",
     "boardTitle": "Pfad der Stifte: {tier} Hort",
     "closeAria": "Schließen",
@@ -1806,7 +1806,7 @@ export const de_DE: EnTranslations = {
     "triesOf": "Versuche {tries}/{total}",
     "triesOfAria": "{tries} von {total} Versuchen übrig",
     "ward": "Sperre {col} / {total}",
-    "depthKeys": "Hotkeys set pick depth (Q/W/E/A/Z), not the ward number.",
+    "depthKeys": "Schnelltasten setzen die Dietrichtiefe (Q/W/E/A/Z), nicht die Sperrennummer.",
     "withdraw": "Zurückziehen (Esc)",
     "action": {
       "hardSet": "Fest setzen",
@@ -6256,8 +6256,8 @@ export const de_DE: EnTranslations = {
     "dungeonExitName": "Ausgang von {name}",
     "dungeonPartyWarning": "{name} ist für eine vollständige Gruppe von {count} gedacht. Geh vorsichtig vor.",
     "dungeonInstanceBusy": "Alle Instanzen von {name} sind belegt. Versuch es bald erneut.",
-    "delveLockedChestInteract": "Press F to pick the lock",
-    "delveRewardChestInteract": "Press F to claim spoils",
-    "delveSurfaceExitInteract": "Press F to climb"
+    "delveLockedChestInteract": "Drücke F, um das Schloss zu knacken",
+    "delveRewardChestInteract": "Drücke F, um Beute zu beanspruchen",
+    "delveSurfaceExitInteract": "Drücke F, um hinaufzuklettern"
   }
 };

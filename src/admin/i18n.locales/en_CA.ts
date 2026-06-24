@@ -17,6 +17,7 @@ export const en_CA: Record<string, string> = {
   "nav.overview": "Overview",
   "nav.moderation": "Moderation",
   "stats.onlineNow": "online now",
+  "stats.onlineAccounts": "online accounts",
   "stats.peakOnline": "peak online",
   "stats.accounts": "accounts",
   "stats.characters": "characters",

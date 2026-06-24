@@ -4634,6 +4634,9 @@ export const pt_BR: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.tries': '{count} tentativas',
   'lockpickUi.triesOne': '1 tentativa',
   'lockpickUi.seconds': '{seconds}s',
+  'lockpickUi.perMove': '{seconds} s por movimento',
+  'lockpickUi.depthKeys':
+    'As teclas de atalho definem a profundidade da gazua (Q/W/E/A/Z), não o número da guarda.',
   'lockpickUi.boardTitle': 'Caminho dos Pinos: reserva {tier}',
   'lockpickUi.closeAria': 'Fechar',
   'lockpickUi.withdrawAria': 'Recuar',
@@ -4662,6 +4665,9 @@ export const pt_BR: Partial<Record<TranslationKey, string>> = {
   'lockpickUi.summary.fail':
     'A fechadura está arruinada. Conclua a incursão novamente para outra tentativa.',
   'lockpickUi.summary.abandoned': 'Você retira as gazuas com cuidado. A fechadura aguarda.',
+  'worldContent.delveLockedChestInteract': 'Pressione F para arrombar a fechadura',
+  'worldContent.delveRewardChestInteract': 'Pressione F para reivindicar o saque',
+  'worldContent.delveSurfaceExitInteract': 'Pressione F para subir',
   'sim.delve.objectiveClearRoom': 'Limpe a sala.',
   'sim.delve.objectiveDefeatBoss': 'Derrote o chefe.',
   // Account-security portal (2FA, verified email change, GDPR export) from PR #833.,
