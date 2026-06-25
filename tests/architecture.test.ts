@@ -76,12 +76,17 @@ function forbiddenUiCoreImport(spec: string): string | null {
 
 // Same idea for a render-resident pure logic core (cast_bar): it lives in render,
 // so a render sibling import is allowed, but it must stay Three-free (the painter
-// owns the Three drawing) and must not import game/net or a DOM-owning painter.
+// owns the Three drawing) and must not import game/net or a DOM-owning painter. It
+// must ALSO stay i18n-free (decision 6/8 / the file header): the core emits stable
+// discriminators (the raw cast id, the eat/drink mode) that the painter localizes,
+// so importing the i18n runtime (t/tEntity/formatNumber from any *i18n module) is
+// forbidden. That makes a t() call in the core fail this guard, not just the header.
 function forbiddenRenderCoreImport(spec: string): string | null {
   if (spec === 'three' || spec.startsWith('three/')) return 'three';
   const layer = spec.match(/(?:^|\/)(game|net)\//);
   if (layer) return layer[1];
   if (/(?:^|\/)(?:[a-z0-9_]+_painter|painter_host)$/.test(spec)) return 'painter';
+  if (/(?:^|\/)[a-z_]*i18n$/.test(spec)) return 'i18n';
   return null;
 }
 
@@ -278,5 +283,29 @@ describe('src/render pure-core invariants', () => {
       violations,
       `src/render pure cores must be deterministic (no Math.random/Date.now/performance.now):\n${violations.join('\n')}`,
     ).toEqual([]);
+  });
+
+  // Teeth check for the render-core matcher (mirrors the ui-core one above): pins
+  // every forbidden layer AND the i18n ban so a future regex weakening cannot let a
+  // render core import three / game / net / a DOM painter / the i18n runtime and stay
+  // green. The i18n ban is what makes a t()/tEntity call in the i18n-free core fail
+  // the guard, not just the file header.
+  it('forbiddenRenderCoreImport flags every forbidden layer (incl i18n) and allows the permitted ones', () => {
+    expect(forbiddenRenderCoreImport('three')).toBe('three');
+    expect(forbiddenRenderCoreImport('three/examples/jsm/controls/OrbitControls')).toBe('three');
+    expect(forbiddenRenderCoreImport('../game/audio')).toBe('game');
+    expect(forbiddenRenderCoreImport('../net/client_world')).toBe('net');
+    expect(forbiddenRenderCoreImport('./delve_map_painter')).toBe('painter');
+    expect(forbiddenRenderCoreImport('./painter_host')).toBe('painter');
+    // The i18n-free contract: the i18n runtime (t/formatNumber) AND the tEntity /
+    // sim-i18n helpers are off-limits to a render core (unlike a ui core, where
+    // entity_i18n is permitted) - the core emits discriminators the painter localizes.
+    expect(forbiddenRenderCoreImport('../ui/i18n')).toBe('i18n');
+    expect(forbiddenRenderCoreImport('./entity_i18n')).toBe('i18n');
+    expect(forbiddenRenderCoreImport('../ui/sim_i18n')).toBe('i18n');
+    // Permitted: host-agnostic sim types/data and a non-painter render sibling.
+    expect(forbiddenRenderCoreImport('../sim/types')).toBeNull();
+    expect(forbiddenRenderCoreImport('../sim/data')).toBeNull();
+    expect(forbiddenRenderCoreImport('./delve_map')).toBeNull();
   });
 });
