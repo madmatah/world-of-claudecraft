@@ -245,3 +245,154 @@ export type DispatchOnlyCommand = (typeof DISPATCH_ONLY_COMMANDS)[number];
 // dispatch-only extras. The typed `cmd()` send path is keyed to this, so a send
 // of any dispatch-only token is a compile error.
 export type ClientCommand = Exclude<CommandName, DispatchOnlyCommand>;
+
+// ---------------------------------------------------------------------------
+// Command facet tags (W6+). APPEND-ONLY metadata that names, for each wire
+// command, the IWorld facet whose method sends it, so the command universe is
+// discoverable by domain. Like COMMAND_NAMES this is types-as-data, not
+// player-facing copy (no t(), no DOM); it never gates the wire (COMMAND_NAMES is
+// the protocol). PARTIAL by design: each cluster slice (W6-W10) appends its
+// facet's commands, and members with no wire command (roster reads like `cfg`,
+// the HUD-read `activeLootRolls`) are deliberately absent. Keyed by ClientCommand
+// so a dispatch-only token (e.g. `targetNearest`, the RL-only Sim action) can
+// never be tagged.
+export type WorldFacet =
+  | 'IWorldEntityRoster'
+  | 'IWorldCombat'
+  | 'IWorldTargeting'
+  | 'IWorldInteraction'
+  | 'IWorldLoot'
+  | 'IWorldInventory'
+  | 'IWorldCosmetics'
+  | 'IWorldQuests'
+  | 'IWorldProgressionXp'
+  | 'IWorldTalents'
+  | 'IWorldPet'
+  | 'IWorldParty'
+  | 'IWorldTrade'
+  | 'IWorldChat'
+  | 'IWorldDuelArena'
+  | 'IWorldSocialGraph'
+  | 'IWorldMarket'
+  | 'IWorldDungeons'
+  | 'IWorldDelves'
+  | 'IWorldTelemetry';
+
+export const COMMAND_FACETS = {
+  // IWorldCombat: ability casts, auto-attack, spirit release.
+  cast: 'IWorldCombat',
+  castSlot: 'IWorldCombat',
+  attack: 'IWorldCombat',
+  stopattack: 'IWorldCombat',
+  release: 'IWorldCombat',
+  // IWorldTargeting: target selection + tab cycling.
+  target: 'IWorldTargeting',
+  tab: 'IWorldTargeting',
+  targetNearestFriendly: 'IWorldTargeting',
+  tabFriendly: 'IWorldTargeting',
+  // IWorldLoot: need-greed roll submit.
+  lootRoll: 'IWorldLoot',
+  // IWorldTelemetry: fire-and-forget metrics sink.
+  telemetry: 'IWorldTelemetry',
+  // IWorldProgressionXp: opt-in cosmetic prestige (leaderboard is a REST GET, no
+  // wire command; the XP/milestone reads ride the self-snapshot, not a send).
+  prestige: 'IWorldProgressionXp',
+  // IWorldTalents: allocation commits + loadout edits (talentPoints is a local
+  // compute with no send; the server re-validates every allocation).
+  applyTalents: 'IWorldTalents',
+  respec: 'IWorldTalents',
+  setSpec: 'IWorldTalents',
+  saveLoadout: 'IWorldTalents',
+  switchLoadout: 'IWorldTalents',
+  deleteLoadout: 'IWorldTalents',
+  // IWorldCosmetics: skin + mech-chroma equips (snake_case wire strings, by design).
+  change_skin: 'IWorldCosmetics',
+  claim_event_skin: 'IWorldCosmetics',
+  unequip_mech_chroma: 'IWorldCosmetics',
+  // IWorldPet: hunter-pet commands (snake_case wire strings, by design; pet state
+  // mirrors on the owned-mob entity wire, not a self-snapshot field).
+  pet_abandon: 'IWorldPet',
+  pet_rename: 'IWorldPet',
+  pet_revive: 'IWorldPet',
+  pet_attack: 'IWorldPet',
+  pet_taunt: 'IWorldPet',
+  pet_auto_taunt: 'IWorldPet',
+  pet_feed: 'IWorldPet',
+  pet_heal: 'IWorldPet',
+  pet_mode: 'IWorldPet',
+  // IWorldParty: party/raid commands + raid-target markers (terse wire strings; the
+  // markers belong to IWorldParty, not IWorldTargeting; partyInfo/markerFor are
+  // snapshot reads with no send).
+  pinvite: 'IWorldParty',
+  paccept: 'IWorldParty',
+  pdecline: 'IWorldParty',
+  pleave: 'IWorldParty',
+  pkick: 'IWorldParty',
+  praid: 'IWorldParty',
+  punraid: 'IWorldParty',
+  pmoveRaid: 'IWorldParty',
+  setMarker: 'IWorldParty',
+  clearMarker: 'IWorldParty',
+  // IWorldTrade: peer-to-peer trade-window commands (tradeInfo is a snapshot read,
+  // no send).
+  trade_req: 'IWorldTrade',
+  trade_accept: 'IWorldTrade',
+  trade_offer: 'IWorldTrade',
+  trade_confirm: 'IWorldTrade',
+  trade_cancel: 'IWorldTrade',
+  // IWorldDuelArena: duels + rated-arena queue + the 2v2 Fiesta augment pick. Fiesta
+  // has no top-level member (it lives in arenaInfo.match.fiesta and flows over the
+  // events queue); arena_augment is its only command. duelInfo/arenaInfo are snapshot
+  // reads (no send).
+  duel_req: 'IWorldDuelArena',
+  duel_accept: 'IWorldDuelArena',
+  duel_decline: 'IWorldDuelArena',
+  arena_queue: 'IWorldDuelArena',
+  arena_leave: 'IWorldDuelArena',
+  arena_augment: 'IWorldDuelArena',
+  // IWorldSocialGraph: friends/blocks/guild commands (online only; resolved
+  // server-side by character name, handled by the #4 SocialService). socialInfo
+  // arrives via the social/socialpos frames (no command); searchCharacters is a REST
+  // GET (no wire command); social_refresh is a dispatch-only server push (untagged).
+  friend_add: 'IWorldSocialGraph',
+  friend_remove: 'IWorldSocialGraph',
+  block_add: 'IWorldSocialGraph',
+  block_remove: 'IWorldSocialGraph',
+  guild_create: 'IWorldSocialGraph',
+  guild_invite: 'IWorldSocialGraph',
+  guild_accept: 'IWorldSocialGraph',
+  guild_decline: 'IWorldSocialGraph',
+  guild_leave: 'IWorldSocialGraph',
+  guild_kick: 'IWorldSocialGraph',
+  guild_promote: 'IWorldSocialGraph',
+  guild_demote: 'IWorldSocialGraph',
+  guild_transfer: 'IWorldSocialGraph',
+  guild_disband: 'IWorldSocialGraph',
+  // IWorldMarket: World Market browse/list/buy/cancel/collect (snake_case wire
+  // strings, by design). marketInfo is a snapshot read (no send, untagged).
+  market_search: 'IWorldMarket',
+  market_list: 'IWorldMarket',
+  market_buy: 'IWorldMarket',
+  market_cancel: 'IWorldMarket',
+  market_collect: 'IWorldMarket',
+  // IWorldDungeons: dungeon enter/leave. raidLockouts is a snapshot-derived read
+  // (no send, untagged). enter_crypt/leave_crypt are legacy dispatch-only aliases
+  // (untagged; on the DISPATCH_ONLY_COMMANDS allowlist), NOT IWorldDungeons.
+  enter_dungeon: 'IWorldDungeons',
+  leave_dungeon: 'IWorldDungeons',
+  // IWorldDelves: delve enter/leave + interact + companion upgrade + Marks-vendor buy
+  // + lockpick lifecycle + chest collect. Note the wire-name skew: delveBuyShopItem
+  // sends `delve_buy`, so the tag is keyed on the WIRE string `delve_buy`. The reads
+  // delveShopOffers (pure client compute from the dclears mirror), lockpickState
+  // (event-rebuilt), delveRun/companionState/delveMarks/companionUpgrades/delveDaily
+  // (snapshot reads) carry no command and stay untagged.
+  enter_delve: 'IWorldDelves',
+  leave_delve: 'IWorldDelves',
+  delve_interact: 'IWorldDelves',
+  companion_upgrade: 'IWorldDelves',
+  delve_buy: 'IWorldDelves',
+  lockpick_engage: 'IWorldDelves',
+  lockpick_action: 'IWorldDelves',
+  lockpick_abort: 'IWorldDelves',
+  collect_delve_chest_loot: 'IWorldDelves',
+} as const satisfies Partial<Record<ClientCommand, WorldFacet>>;
