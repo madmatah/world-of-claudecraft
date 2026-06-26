@@ -40,15 +40,82 @@ held to these — verify in mobile portrait *and* landscape before calling UI wo
     wins. Don't set a per-control mobile font below 16px, and don't lean on the viewport
     scale-lock. Regression check: `node scripts/mobile_input_zoom_check.mjs` (needs `npm run dev`).
   - Every tappable target (buttons, links, selects, tabs, icon-only controls, anything
-    with `role="button"|"tab"|"option"`) is **≥40×40px**.
+    with `role="button"|"tab"|"option"`) stays **>=40x40px** on mobile touch controls
+    (the preferred floor); 24x24px (WCAG 2.2 SC 2.5.8) is the absolute minimum, used only
+    where 40x40 is genuinely infeasible. Do NOT weaken the 40x40 floor to 24px.
   - Narrow headers collapse to a hamburger drawer rather than wrapping/overflowing.
-- **Accessibility (WCAG 2.1 AA):** full keyboard operation (Tab/Shift+Tab/Enter/Space);
+- **Accessibility (WCAG 2.2 AA):** full keyboard operation (Tab/Shift+Tab/Enter/Space);
   high-contrast `:focus-visible` on every custom interactive element; correct
   semantics / ARIA (`role`, `aria-selected`, `aria-pressed`, `aria-invalid`,
   `aria-describedby`, `tabindex`); honor `prefers-reduced-motion` (drop cross-fades,
   content translations, camera auto-rotate); **no `transform: scale()` on hover/focus**
   of list/rail/chip items (motion-sickness trigger); text contrast ≥4.5:1 (≥3:1 large).
   Accessible names are still `t()` keys (see i18n below).
+- **HUD-chrome WCAG 2.2 AA contract (what P15a/P15b built and guard).** The chrome
+  (windows, buttons, forms, menus, chat, tooltips) is in scope; the 3D world / game
+  canvas is OUT of scope (not screen-readable, never faked with aria). On top of the
+  per-control basics above:
+  - **Focus management:** opening a window TRAPS Tab/Shift+Tab inside it and RETURNS focus
+    to the opener on close, via the one shared `src/ui/focus_manager.ts`
+    (`windowFocus(rootSel)`); the trap intercepts Tab only when focus is already inside (Tab
+    is the game's target-nearest key, so an unconditional trap would hijack it). Esc stays
+    with the single `closeAll` dispatcher, not the manager.
+  - **Visible focus that never animates away:** every `:focus-visible` ring is steady and
+    drawn from a token / system color, never a raw hex, never `transition`ed / animated /
+    blurred off.
+  - **Skip links** ("Skip to Main HUD" / "Skip to Chat") are the first focusable elements;
+    **live regions** announce chat (`#chatlog` role=log) and combat (off-screen
+    `#combat-live` role=status, throttled per type by `src/ui/live_region_politeness.ts`).
+  - **`forced-colors: active`** is the ONLY contrast adaptation (no light theme, no
+    `prefers-color-scheme`): borders + the focus ring survive via system-color keywords;
+    meaning is never carried by a background-image alone.
+  - **No viewport scale-lock:** `user-scalable=no` / `maximum-scale` are dropped (WCAG SC
+    1.4.4 / 1.4.10); the 16px input-font floor is the anti-zoom guard.
+  - Enforced always-on (every `npm test`) by `tests/focus_manager.test.ts`,
+    `tests/focus_order.test.ts`, `tests/focus_visible_guard.test.ts` (rings steady +
+    token-drawn), `tests/live_region_politeness.test.ts`, `tests/combat_announcer.test.ts`,
+    and `tests/client_shell.test.ts` (skip links first-focusable, the live regions, the
+    dropped scale-lock, the forced-colors/print CSS, role=group/progressbar in both
+    entries). The axe-core + keyboard-reachability + rendered target-size checks are the
+    OPT-IN browser suite `tests/browser/*.browser.test.ts` (`npm run test:browser`, via
+    `vitest.browser.config.ts`); wiring that suite (and axe) into CI on WebKit/Firefox is
+    pending P17b.
+
+## Per-frame performance contract (write-elision + tiering)
+Per-frame HUD code (anything reached from `Hud.update()`) holds these, proven by the
+P10-P14 phases:
+- **Write-elision.** Every per-frame DOM write goes through the host's elided writers
+  (`setText`/`setDisplay`/`setTransform`/`setWidth` + the multi-slot
+  `setStyleProp`/`toggleClass`/`setAttr`), bound over the private `hotWriteCache` in
+  `src/ui/hud.ts` (about lines 744 and 1239-1305) and exposed to painters via
+  `src/ui/painter_host.ts` (`PainterHostWriters` / `makeWriterFacet`). A painter never
+  calls `el.textContent =` / `style.*` / `setAttribute` / `innerHTML` directly; the cache
+  key is byte-identical so an unchanged value skips the DOM, and `perfStats()` exposes the
+  skip-rate. Enforced always-on by `tests/painter_host.test.ts` (a writer writes a value
+  once then elides byte-identical repeats, keys per element, namespaces per slot, so a
+  non-byte-identical key or a single-slot collapse fails the test).
+- **Allocation-light cores.** A per-frame view-core returns a REUSED, preallocated
+  container + slots (no per-frame array/object garbage); jitter/clock stay in the painter,
+  never the core. Enforced always-on by the reference-stability probe
+  `tests/util/alloc_probe.ts` (driven by `tests/alloc_probe.test.ts` plus the per-frame
+  view tests, e.g. `tests/auras_view.test.ts`, `tests/action_bar_view.test.ts`).
+- **The perf gate.** `scripts/perf_tour.mjs` (an env-driven `npm run` script, run per
+  per-frame phase against the recorded P0 baseline) asserts `frameP95 <= baseline` and that
+  the AoE-burst FCT node count stays bounded; it also REPORTS `hudHotDomSkipRate`, which
+  each per-frame phase checked against the P0 baseline at its green gate (perf_tour does NOT
+  auto-fail on skip-rate, so the always-on write-elision guarantee is the
+  `tests/painter_host.test.ts` guard above). Each green-gate commit is TAGGED so a later
+  cumulative regression bisects to a phase. The STANDING vitest perf budget
+  (`tests/hud_perf_budget.test.ts`) and the first all-together perf run are pending P17a.
+- **Two controllers stay separate.** HUD tier knobs read the STATIC graphics preset via
+  `src/game/ui_effects_profile.ts` (the `data-fx-level` stamp), NEVER `governor.state()`;
+  `Hud.fxTier()` resolves the static stamp through `coerceFxTier`. This is the perf half of
+  the gameplay-neutral-graphics invariant (root `CLAUDE.md`). Guarded by
+  `tests/ui_tier_knobs.test.ts` (the import-absence + behavioral two-controller scan) and
+  the `ui_tier_knobs` purity row in `tests/architecture.test.ts`.
+
+The CSS token system, `@layer` order, browser matrix, and bundle discipline these painters
+depend on are in `src/styles/CLAUDE.md`.
 
 ## hud.ts navigation map (one class `Hud`)
 Every region is fenced by a `// ----` banner, so jump by grepping the banner (or the
@@ -85,33 +152,48 @@ direction the HUD modularization is heading; see the root Modularity section). T
 painters (`unit_portrait*`, `xp_bar.ts`) are the template: a host-agnostic core a Vitest
 drives directly, plus a thin DOM/canvas consumer.
 
-### Extracting a HUD window (the recipe)
-`hud.ts` is one `Hud` class touched by nearly every PR; that is the merge-conflict tax
-this recipe pays down. Migrate one window at a time, on the rule of three, never as a
-big-bang split. **Reference: the Vendor window (`vendor_view.ts` + `vendor_window.ts`,
-the first window migrated this way), copy its shape for the next one.**
+### Authoring a new HUD component (the recipe)
+One recipe for a new window/panel OR a per-frame frame/bar, and for migrating one out of
+`hud.ts` (the one `Hud` class nearly every PR touches; that is the merge-conflict tax this
+pays down). Migrate one at a time, on the rule of three, never a big-bang split.
+**Reference: the Vendor window (`vendor_view.ts` + `vendor_window.ts`, the first window
+migrated this way) and the `unit_frame` family for a per-frame component.** Ordered steps:
 
-The split has three parts:
-1. **Pure view model** (`<window>_view.ts`): a DOM-free, i18n-free `build<Window>View(...)`
-   that takes the raw world inputs and returns the structure the window draws (which rows,
-   which prices, which flags). This is the only part with branching logic worth testing in
-   isolation. Unit-test it directly in `tests/<window>_view.test.ts` (no DOM): see
-   `tests/vendor_view.test.ts`. For sim-derived data add `expect(build()).toEqual(build())`.
-2. **Thin consumer** (`<window>_window.ts`): a `render<Window>(el, ...view, deps)` that paints
-   the panel and wires clicks. It imports `t`/`esc`/`svgIcon`/formatters directly but takes
-   `Hud`'s shared painters (`itemIcon`, `moneyHtml`, `itemTooltip`, `attachTooltip`,
-   `hideTooltip`) and the action callbacks (`onBuy`, `onClose`, …) as an injected `deps`
-   object. It owns no state and never imports `Hud`.
-3. **Hud stays the orchestrator.** Keep the `open<Window>`/`close<Window>` methods in `Hud`:
+(a) **Pure view-core** `src/ui/<name>_view.ts`: map `IWorld` (+ raw inputs) to a render
+   model (which rows, prices, flags, geometry); DOM/Three/i18n-free; INSTANCE-PARAMETERIZED
+   (take a descriptor/id, no hardcoded element id, no single-instance assumption);
+   allocation-light if per-frame (reuse one container). Register it in the `UI_PURE_CORES`
+   allowlist in `tests/architecture.test.ts`.
+(b) **Core test** `tests/<name>_view.test.ts`: same-input-same-output (`expect(build()).toEqual(build())`
+   for sim-derived data, see `tests/vendor_view.test.ts`); no `Math.random`/`Date.now`/
+   `performance.now`; no DOM import. Feed BOTH a Sim-shaped and a `ClientWorld`-mirror stub
+   for parity.
+(c) **Thin painter** `src/ui/<name>_window.ts` (or `_painter.ts`): paints the panel /
+   updates the nodes and wires callbacks via an injected `deps` object (`Hud`'s shared
+   `itemIcon`/`moneyHtml`/`itemTooltip`/`attachTooltip` + the action callbacks); owns no
+   state and never imports `Hud`. ALL DOM writes go through the `PainterHost` elided
+   writers; it drives tokens / CSS vars, never a literal hex/px/color in TS (the per-painter
+   no-magic-values source guard, e.g. `tests/action_bar_painter.test.ts`,
+   `tests/minimap_painter.test.ts`). Interpolated names pass through `esc()`; a pure
+   extraction reuses existing `t()` keys and adds none (Vendor added none). For item names
+   import the shared `itemDisplayName` from `entity_i18n.ts`.
+(d) **For chrome (a window/control):** satisfy the HUD-chrome WCAG 2.2 AA contract above
+   (roles/aria, focus trap + return, steady `:focus-visible`, target-size, forced-colors).
+(e) **For a hot (per-frame) component:** keep the core allocation-light and pass the perf
+   gate (frameP95 + skip-rate); tier knobs read the static preset, not the governor (see
+   the per-frame performance contract above).
+(f) **Reuse a FAMILY before building bespoke:** a unit-style frame is a new
+   `UnitFramePainter` instance (`unit_frame.ts` + `unit_frame_painter.ts`); an extra action
+   bar is another `ActionBarPainter` instance built from a new bar descriptor
+   (`action_bar_view.ts` + `action_bar_painter.ts`).
+   Adding the extra bars / raid frames is a follow-on feature that inherits the seam, not a
+   refactor step.
+(g) **`Hud` stays the orchestrator.** Keep `open<Window>`/`close<Window>` in `Hud`:
    cross-window coordination (`closeOtherWindows`, bag re-centring, mobile teardown, body
-   classes) needs `Hud`'s private state and does not belong in the module. The per-render
-   method (e.g. `renderVendor`) shrinks to: resolve the entity, build the view, call the
-   module with `deps`.
-
-Keep the diff a move-plus-import, not a rewrite (root `extract-and-test` skill). Reuse
-existing `t()` keys where the markup is unchanged (a pure extraction adds no i18n keys;
-Vendor added none). All interpolated names still pass through `esc()`. For item-name
-display, import the shared `itemDisplayName` from `entity_i18n.ts` rather than re-copying it.
+   classes) needs `Hud`'s private state. The per-render method (e.g. `renderVendor`) shrinks
+   to: resolve the entity, build the view, call the module with `deps`. Keep the diff a
+   move-plus-import, not a rewrite (root `extract-and-test` skill). Run the matching
+   validation-matrix rows (`docs/frontend-modernization/state.md`) before committing.
 
 ## i18n - IMPORTANT (sparse-overlay model; contributors add ENGLISH ONLY)
 The locale data is split across files. Touch the right one:

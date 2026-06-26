@@ -19,6 +19,7 @@ Postgres (`pg`) · Vite + esbuild · Vitest. No UI framework; tiny dependency se
 | `src/render/` | Three.js renderer (procedural geometry/textures/VFX). Reads the world; never mutates it. |
 | `src/game/` | Local input, camera, keybinds, mobile controls, procedural WebAudio. |
 | `src/ui/` | Classic HUD (frames, windows, tooltips, map, FCT), procedural icons, i18n. |
+| `src/styles/` | Extracted HUD CSS (`tokens`/`base`/`layout`/`components`/`hud`/`hud.mobile` plus per-entry `.extra`) under one `@layer` order, imported once from the game entries via `src/main.ts`. See `src/styles/CLAUDE.md`. |
 | `src/net/` | Online client: REST auth + WebSocket world mirror (`ClientWorld`). |
 | `src/admin/` | Admin dashboard SPA (separate `admin.html` entry). |
 | `src/guide/` | Public guide/wiki SPA (separate `guide.html` entry, served at `/wiki`); spoiler-safe content generated from `src/sim/`. |
@@ -67,6 +68,22 @@ See `README.md` for the full host/develop/play guide and the classic-fidelity ch
   `tests/architecture.test.ts`.)
 - **Gameplay math follows real classic-era MMO formulas** (rage, hit tables, armor DR,
   XP curves; see `README.md` and `docs/design/`). Don't invent balance numbers.
+- **Graphics and performance settings are gameplay-neutral.** No graphics or performance
+  preset (the static `data-fx-level` tier, reduce-motion, any per-element tier knob) may
+  give a player a gameplay ADVANTAGE or DISADVANTAGE. A tier may shed COSMETIC richness
+  (floating-combat-text volume/lifetime, minimap redraw smoothness, buff-icon overflow,
+  portrait/HP-bar redraw smoothness within about 200ms) but NEVER actionable information a
+  player reads and reacts to: own debuffs, party/raid member HP, the target/boss cast bar,
+  target HP granularity, enemy/aggro positions. Test for a new tier knob: if it hides or
+  delays something a player acts on, it is not allowed. This generalizes the HUD
+  two-controller rule (tier knobs read the STATIC preset via `src/game/ui_effects_profile.ts`,
+  never the FPS governor). See `docs/design/graphics-settings-fairness.md` (the per-knob
+  analysis + the 2026-06-26 fairness re-audit). Enforced by `tests/auras_painter.test.ts`
+  (a debuff past the buff cap still renders), `tests/ui_tier_knobs.test.ts` (party frames
+  left un-tiered + the `Hud.fxTier()` static-stamp / no-governor source scan),
+  `tests/snapshots.test.ts` + `tests/auras_view.test.ts` (a negative-value `buff_*`
+  stat-sap carries its value over the wire so it classifies as a debuff identically online
+  and offline), and the `ui_tier_knobs` purity row in `tests/architecture.test.ts`.
 - **Don't hand-edit generated files**, e.g. `src/render/assets/manifest.generated.ts`
   (regenerate via the build).
 - **i18n: every player-visible string is a `t()` key**, classified by render sink,
@@ -114,6 +131,18 @@ this repo already has, do not invent new ones:
   `Sim` and `ClientWorld`, then consume via `IWorld`. render/ui never import a concrete world.
 - New self-contained HUD window or panel: its own module the HUD composes, not a new
   banner section in `hud.ts` (the direction the HUD modularization is heading).
+- New HUD component (a window OR a per-frame frame/bar): a pure view-core
+  (`src/ui/<name>_view.ts`, DOM/Three-free, Node-tested, allocation-light if per-frame,
+  registered in the `UI_PURE_CORES` allowlist) plus a thin write-elided painter on the
+  `PainterHost` seam (`src/ui/painter_host.ts`). INSTANCE-PARAMETERIZED: take a
+  descriptor/id, no hardcoded element id, no single-instance assumption. Reuse a FAMILY
+  before building bespoke: a unit-style frame is a `UnitFramePainter` instance
+  (`src/ui/unit_frame.ts` + `unit_frame_painter.ts`, shared by player/target/party); an
+  extra action bar is another `ActionBarPainter` instance built from a new bar descriptor
+  (`src/ui/action_bar_view.ts` + `action_bar_painter.ts`). Guarded by the UI-purity scan in `tests/architecture.test.ts`
+  (`forbiddenUiCoreImport` + `UI_PURE_CORES`): a registered core may not import `three`, a
+  `*_painter`, `painter_host`, `render`/`game`/`net`, or DOM globals. Full recipe + the
+  a11y/perf/token contracts: `src/ui/CLAUDE.md` and `src/styles/CLAUDE.md`.
 - New visual system: a new `src/render/<thing>.ts` the renderer calls, not a method bank on `renderer.ts`.
 - New game content (mob/quest/item/ability/zone): a declarative record in
   `src/sim/content/`, merged by `data.ts`, never a content table inline in `sim.ts`.
