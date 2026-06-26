@@ -294,4 +294,19 @@ export const COMMAND_FACETS = {
   lootRoll: 'IWorldLoot',
   // IWorldTelemetry: fire-and-forget metrics sink.
   telemetry: 'IWorldTelemetry',
+  // IWorldProgressionXp: opt-in cosmetic prestige (leaderboard is a REST GET, no
+  // wire command; the XP/milestone reads ride the self-snapshot, not a send).
+  prestige: 'IWorldProgressionXp',
+  // IWorldTalents: allocation commits + loadout edits (talentPoints is a local
+  // compute with no send; the server re-validates every allocation).
+  applyTalents: 'IWorldTalents',
+  respec: 'IWorldTalents',
+  setSpec: 'IWorldTalents',
+  saveLoadout: 'IWorldTalents',
+  switchLoadout: 'IWorldTalents',
+  deleteLoadout: 'IWorldTalents',
+  // IWorldCosmetics: skin + mech-chroma equips (snake_case wire strings, by design).
+  change_skin: 'IWorldCosmetics',
+  claim_event_skin: 'IWorldCosmetics',
+  unequip_mech_chroma: 'IWorldCosmetics',
 } as const satisfies Partial<Record<ClientCommand, WorldFacet>>;

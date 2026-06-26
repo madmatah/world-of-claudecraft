@@ -59,3 +59,42 @@ describe('command facet tags (W6)', () => {
     expect('activeLootRolls' in tags).toBe(false);
   });
 });
+
+// W7: append the progression cluster's tags (prestige + talents + cosmetics). The
+// table-consistency invariants in the W6 block above (no orphan tag, no dispatch-only
+// leak) already cover these new entries; this block pins the exact facet per W7
+// command and that the no-wire members stay untagged. Append-only: never edit a tag.
+const W7_TAGS: Readonly<Record<string, string>> = {
+  prestige: 'IWorldProgressionXp',
+  applyTalents: 'IWorldTalents',
+  respec: 'IWorldTalents',
+  setSpec: 'IWorldTalents',
+  saveLoadout: 'IWorldTalents',
+  switchLoadout: 'IWorldTalents',
+  deleteLoadout: 'IWorldTalents',
+  change_skin: 'IWorldCosmetics',
+  claim_event_skin: 'IWorldCosmetics',
+  unequip_mech_chroma: 'IWorldCosmetics',
+};
+
+describe('command facet tags (W7)', () => {
+  const tags = COMMAND_FACETS as Readonly<Record<string, string>>;
+
+  it('tags every W7 progression/talents/cosmetics command with its facet', () => {
+    for (const [cmd, facet] of Object.entries(W7_TAGS)) {
+      expect(tags[cmd], `facet tag for '${cmd}'`).toBe(facet);
+    }
+  });
+
+  it('preserves the snake_case cosmetics wire strings (never normalized to camelCase)', () => {
+    expect('change_skin' in tags).toBe(true);
+    expect('claim_event_skin' in tags).toBe(true);
+    expect('unequip_mech_chroma' in tags).toBe(true);
+    expect('changeSkin' in tags).toBe(false);
+  });
+
+  it('does not tag talentPoints or leaderboard (local compute / REST GET, no wire send)', () => {
+    expect('talentPoints' in tags).toBe(false);
+    expect('leaderboard' in tags).toBe(false);
+  });
+});

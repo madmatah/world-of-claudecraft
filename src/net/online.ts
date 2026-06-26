@@ -727,8 +727,12 @@ export class ClientWorld implements IWorld {
   inventory: InvSlot[] = [];
   vendorBuyback: InvSlot[] = [];
   equipment: Partial<Record<EquipSlot, string>> = {};
-  accountCosmetics: AccountCosmetics = { completedQuestIds: [], mechChromaIds: [] };
   copper = 0;
+  // --- IWorldCosmetics: account cosmetics (completed-quest + mech-chroma ids),
+  // mirrored from snapshot self. ---
+  accountCosmetics: AccountCosmetics = { completedQuestIds: [], mechChromaIds: [] };
+  // --- IWorldProgressionXp: XP + post-cap progression scalars + unlocked
+  // milestones, mirrored from snapshot self. ---
   xp = 0;
   // Post-cap progression (Max-Level XP Overflow), mirrored from snapshot self.
   lifetimeXp = 0;
@@ -736,7 +740,8 @@ export class ClientWorld implements IWorld {
   // Rested XP pool, mirrored from snapshot self.
   restedXp = 0;
   unlockedMilestones: string[] = [];
-  // Talents & Specializations, mirrored from snapshot self (display + staging).
+  // --- IWorldTalents: talents + spec/role + saved loadouts, mirrored from
+  // snapshot self (display + staging). ---
   talents: TalentAllocation = emptyAllocation();
   talentSpec: string | null = null;
   talentRole: Role | null = null;
@@ -1233,6 +1238,10 @@ export class ClientWorld implements IWorld {
       e.drinking = s.drk
         ? { itemId: '', kind: 'drink', hpPer2s: 0, manaPer2s: 0, remaining: s.drk.remaining }
         : null;
+      // IWorldProgressionXp facet (W7) self-decode: xp/lxp/rxp/prk ride every
+      // self-frame (?? 0); milestones is delta-guarded (omitted keeps the prior
+      // mirror). Terse keys (lxp->lifetimeXp, rxp->restedXp, prk->prestigeRank,
+      // milestones->unlockedMilestones) are unchanged by the re-group.
       this.xp = s.xp ?? 0;
       this.lifetimeXp = s.lxp ?? 0;
       this.restedXp = s.rxp ?? 0;
@@ -1252,6 +1261,8 @@ export class ClientWorld implements IWorld {
         this.invChanged = true;
       }
       if (s.equip !== undefined) this.equipment = s.equip;
+      // IWorldCosmetics facet (W7) self-decode: cosmetics is delta-guarded (a
+      // missing field keeps the prior mirror); normalizeAccountCosmetics rebuilds it.
       if (s.cosmetics !== undefined) {
         this.accountCosmetics = normalizeAccountCosmetics(s.cosmetics);
         this.cosmeticsChanged = true;
@@ -1261,6 +1272,9 @@ export class ClientWorld implements IWorld {
       if (s.qdone !== undefined) this.questsDone = new Set(s.qdone);
       if (s.lockouts !== undefined) this.selfLockouts = s.lockouts as Record<string, number>;
       if (s.qlog !== undefined || s.qdone !== undefined) this.pendingQuestCommands?.clear();
+      // IWorldTalents facet (W7) self-decode: tal is delta-guarded (omitted keeps
+      // the prior mirror); the known rebuild below is display-only (re-renders what
+      // the server already decided), not client authority.
       // talent state (heavy field, sent on change): mirror it, then resolve known
       // with the precomputed modifiers so granted abilities + tweaks show locally.
       if (s.tal !== undefined && s.tal) {
@@ -1488,6 +1502,9 @@ export class ClientWorld implements IWorld {
   buyBackItem(itemId: string): void {
     this.cmd({ cmd: 'buyback', item: itemId });
   }
+  // --- IWorldCosmetics: skin + mech-chroma equips. Optimistic local nudge, then
+  // the snake_case cmd (change_skin/claim_event_skin/unequip_mech_chroma); the
+  // server re-validates and the self-snapshot reconciles. ---
   changeSkin(skin: number, catalog: 'class' | 'mech' = 'class'): void {
     const idx =
       catalog === 'mech'
@@ -1795,6 +1812,9 @@ export class ClientWorld implements IWorld {
     }
     return out;
   }
+  // --- IWorldProgressionXp: lifetime-XP leaderboard (REST GET, no wire command) +
+  // the opt-in prestige action (cmd 'prestige'). The XP/milestone reads ride the
+  // self-snapshot mirror fields above. ---
   async leaderboard(page = 0, pageSize = LEADERBOARD_PAGE_SIZE): Promise<LeaderboardPage> {
     const empty: LeaderboardPage = { leaders: [], page: 0, pageCount: 1, total: 0, pageSize };
     try {
@@ -1817,7 +1837,10 @@ export class ClientWorld implements IWorld {
   prestige(): void {
     this.cmd({ cmd: 'prestige' });
   }
-  // Talents & Specializations — the server re-validates every allocation.
+  // --- IWorldTalents: talentPoints is a local compute (no send); applyTalents/
+  // respec/setSpec/saveLoadout/switchLoadout/deleteLoadout send camelCase commands,
+  // saveLoadout/deleteLoadout carry sanctioned display-only local recompute.
+  // Talents & Specializations: the server re-validates every allocation. ---
   talentPoints(): { total: number; spent: number } {
     const level = this.entities.get(this.playerId)?.level ?? 1;
     return { total: talentPointsAtLevel(level), spent: pointsSpent(this.talents) };
