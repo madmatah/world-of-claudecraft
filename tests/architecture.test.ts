@@ -140,6 +140,7 @@ const UI_PURE_CORES = [
   'src/ui/minimap_markers.ts',
   'src/ui/fct_core.ts',
   'src/game/ui_effects_profile.ts',
+  'src/game/ui_tier_knobs.ts',
 ].map((rel) => join(repoRoot, rel));
 
 // Pure logic cores that live in src/render (the painter half is Three-side). Just
