@@ -138,6 +138,7 @@ const UI_PURE_CORES = [
   'src/ui/action_bar_view.ts',
   'src/ui/auras_view.ts',
   'src/ui/minimap_markers.ts',
+  'src/ui/fct_core.ts',
   'src/game/ui_effects_profile.ts',
 ].map((rel) => join(repoRoot, rel));
 
