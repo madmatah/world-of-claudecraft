@@ -116,6 +116,22 @@ const mobileControlsTs = readFileSync(
   new URL('../src/game/mobile_controls.ts', import.meta.url),
   'utf8',
 ).replace(/\r\n/g, '\n');
+// Per-frame keyed-pool painters (P11c / P12b / P13b). The per-member party rows,
+// the aura slots, and the FCT nodes used to be inline createElement / innerHTML in
+// hud.ts; they dissolved into these pooled painters, so the shape guards below grep
+// the painter that owns the pool now, not a static id in hud.ts (P17a moved-id sweep).
+const partyFrameRowTs = readFileSync(
+  new URL('../src/ui/party_frame_row.ts', import.meta.url),
+  'utf8',
+).replace(/\r\n/g, '\n');
+const aurasPainterTs = readFileSync(
+  new URL('../src/ui/auras_painter.ts', import.meta.url),
+  'utf8',
+).replace(/\r\n/g, '\n');
+const fctPainterTs = readFileSync(
+  new URL('../src/ui/fct_painter.ts', import.meta.url),
+  'utf8',
+).replace(/\r\n/g, '\n');
 const robotsTxt = readFileSync(new URL('../public/robots.txt', import.meta.url), 'utf8').replace(
   /\r\n/g,
   '\n',
@@ -704,6 +720,33 @@ describe('client HTML shell', () => {
     expect(xpBarPainterTs).toContain(
       'this.writers.setStyleProp(this.playerFrame, XP_FILL_PROP, fillFrac4);',
     );
+  });
+
+  it('keeps the dissolved per-frame node families in their keyed-pool painters', () => {
+    // P17a moved-id sweep: three families of nodes that used to be built inline in
+    // hud.ts (per-rebuild innerHTML / per-event createElement) no longer have a static
+    // id to grep, so these assert the NEW pooled shape against the painter that owns it.
+    // If a future change moves the pool back inline or drops the keyed builder, this
+    // fails instead of silently losing the guard.
+
+    // Party rows (P11c): the per-member row + the #party-leave button are built once by
+    // the pooled row builder, not re-created on every party rebuild in hud.ts.
+    expect(partyFrameRowTs).toContain("row.className = 'party-frame panel';");
+    expect(partyFrameRowTs).toContain("btn.id = 'party-leave';");
+
+    // Aura slots (P12b): one node per aura id, held in a keyed pool and built once in
+    // createNode() as .buff > .dur + .stacks.
+    expect(aurasPainterTs).toContain('private readonly pool = new Map<string, PooledAura>();');
+    expect(aurasPainterTs).toContain("const DUR_CLASS = 'dur';");
+    expect(aurasPainterTs).toContain("const STACKS_CLASS = 'stacks';");
+    expect(aurasPainterTs).toContain('this.createNode()');
+
+    // FCT nodes (P13b): a fixed-size pre-allocated div ring capped at FCT_POOL_CAP, each
+    // node aria-hidden, never createElement'd per combat event.
+    expect(fctPainterTs).toContain('export const FCT_POOL_CAP = 64;');
+    expect(fctPainterTs).toContain("const FCT_BASE_CLASS = 'fct';");
+    expect(fctPainterTs).toContain('node.className = FCT_BASE_CLASS;');
+    expect(fctPainterTs).toContain("node.setAttribute('aria-hidden', 'true');");
   });
 
   it('keeps the mobile homepage scrollable with a sticky header', () => {
