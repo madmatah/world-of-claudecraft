@@ -293,6 +293,46 @@ describe('src/ui pure-core invariants', () => {
   });
 });
 
+describe('purity scan matchers keep their teeth (the shared DOM / determinism regexes)', () => {
+  // The DOM-global + nondeterminism scans gate sim purity AND the pure-core sweeps; a regex
+  // that silently stopped matching would pass every scan vacuously. The commit that added the
+  // completeness sweep proved these by a ONE-TIME manual injection (then reverted); these
+  // STANDING self-tests keep that proof durable, so a future weakening of the regex fails here.
+  it('DOM_GLOBAL_RE matches real DOM-global access and rejects benign lookalikes', () => {
+    for (const positive of [
+      'document.body.append(x)',
+      'window.location.href',
+      'navigator.userAgent',
+      "localStorage['k']",
+      'sessionStorage.setItem(a, b)',
+    ]) {
+      expect(DOM_GLOBAL_RE.test(positive), positive).toBe(true);
+    }
+    for (const negative of [
+      'const windowless = computeViewport();',
+      'shadowDocument(node)',
+      'this.documentTitle = t;',
+      'const navigatorState = 1;',
+    ]) {
+      expect(DOM_GLOBAL_RE.test(negative), negative).toBe(false);
+    }
+  });
+
+  it('NONDETERMINISM_RE matches forbidden sources and rejects deterministic lookalikes', () => {
+    for (const positive of ['Math.random()', 'Date.now()', 'performance.now()']) {
+      expect(NONDETERMINISM_RE.test(positive), positive).toBe(true);
+    }
+    for (const negative of [
+      'Math.round(x)',
+      'Date.parse(s)',
+      'performance.measure(a)',
+      'rng.next()',
+    ]) {
+      expect(NONDETERMINISM_RE.test(negative), negative).toBe(false);
+    }
+  });
+});
+
 describe('src/render pure-core invariants', () => {
   it('lists only files that exist (the curated pure cores)', () => {
     const missing = RENDER_PURE_CORES.filter((f) => !statSync(f).isFile());
