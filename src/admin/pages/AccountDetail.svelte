@@ -19,9 +19,9 @@
   import Badge from '../components/Badge.svelte';
 
   // Expandable account detail: characters, recent sessions, account status, and (when
-  // includeAdminControls) the full moderation controls. Shared by the Overview accounts
-  // table and the Moderation tab. After any successful action it calls onChanged so the
-  // parent refetches; the server re-authorizes every action regardless.
+  // includeAdminControls) the full moderation controls. Shared by the Accounts page and
+  // Moderation. After any successful action it calls onChanged so the parent refetches;
+  // the server re-authorizes every action regardless.
   let {
     detail,
     includeAdminControls = false,

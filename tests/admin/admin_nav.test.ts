@@ -24,6 +24,9 @@ describe('AdminNav', () => {
       'page',
     );
     expect(screen.getByRole('link', { name: t('nav.chatFilter') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: t('nav.players') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: t('nav.accounts') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: t('nav.characters') })).toBeInTheDocument();
   });
 
   it('keeps the moderation section active for an IP detail route', () => {

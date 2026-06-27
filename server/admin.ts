@@ -442,9 +442,10 @@ export async function handleAdminApi(
     }
     if (path === '/admin/api/characters') {
       const { page, limit } = parsePageParams(url.searchParams);
+      const search = url.searchParams.get('search') ?? '';
       const sort = url.searchParams.get('sort') ?? 'level';
       const dir = url.searchParams.get('dir') === 'asc' ? 'asc' : 'desc';
-      return ok(res, await listCharacters(sort, dir, page, limit));
+      return ok(res, await listCharacters(search, sort, dir, page, limit));
     }
 
     fail(res, 404, 'unknown admin endpoint');

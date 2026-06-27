@@ -1,9 +1,10 @@
-// One navigation tree drives the sidebar, default section destinations, breadcrumbs,
-// and route validation. Detail-only routes such as IP associations stay outside this
-// tree and attach themselves to the relevant parent trail.
+// One navigation tree drives the sidebar, default section destinations, page titles,
+// and route validation. Detail-only routes such as IP associations stay outside it.
 export type AdminPage =
   | 'overview'
   | 'usage'
+  | 'accounts'
+  | 'characters'
   | 'moderation'
   | 'chat-filter'
   | 'blocked-ips'
@@ -32,6 +33,15 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     labelKey: 'nav.operations',
     defaultPage: 'usage',
     items: [{ id: 'usage', labelKey: 'nav.usage' }],
+  },
+  {
+    id: 'players',
+    labelKey: 'nav.players',
+    defaultPage: 'accounts',
+    items: [
+      { id: 'accounts', labelKey: 'nav.accounts' },
+      { id: 'characters', labelKey: 'nav.characters' },
+    ],
   },
   {
     id: 'moderation',

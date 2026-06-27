@@ -715,11 +715,13 @@ const CHARACTER_SORT_COLUMNS: Record<string, string> = {
 };
 
 export async function listCharacters(
+  search: string,
   sort: string,
   dir: 'asc' | 'desc',
   page: number,
   limit: number,
 ): Promise<Paginated<AdminCharacterRow>> {
+  const pattern = search ? `%${escapeLike(search)}%` : '%';
   const column = CHARACTER_SORT_COLUMNS[sort] ?? 'c.level';
   const direction = dir === 'asc' ? 'ASC' : 'DESC';
   const offset = (page - 1) * limit;
@@ -731,11 +733,17 @@ export async function listCharacters(
               c.created_at, c.updated_at
        FROM characters c
        JOIN accounts a ON a.id = c.account_id
+       WHERE c.name ILIKE $1
        ORDER BY ${column} ${direction}, c.id
-       LIMIT $1 OFFSET $2`,
-      [limit, offset],
+       LIMIT $2 OFFSET $3`,
+      [pattern, limit, offset],
     ),
-    pool.query(`SELECT count(*)::int AS total FROM characters`),
+    pool.query(
+      `SELECT count(*)::int AS total
+       FROM characters c
+       WHERE c.name ILIKE $1`,
+      [pattern],
+    ),
   ]);
   return {
     rows: rows.rows.map((r) => ({

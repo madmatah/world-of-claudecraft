@@ -16,6 +16,9 @@ describe('admin navigation', () => {
     expect(parseAdminRoute(new URL('https://admin.test/admin?page=moderation'))).toEqual({
       page: 'moderation',
     });
+    expect(parseAdminRoute(new URL('https://admin.test/admin?page=accounts'))).toEqual({
+      page: 'accounts',
+    });
     expect(
       parseAdminRoute(new URL('https://admin.test/admin?page=ip&ip=2001%3Adb8%3A%3A1')),
     ).toEqual({ page: 'ip', ip: '2001:db8::1' });

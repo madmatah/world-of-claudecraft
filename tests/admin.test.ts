@@ -67,6 +67,7 @@ import {
   clientPerfSummary,
   escapeLike,
   listAccounts,
+  listCharacters,
   onlineHistory,
   overviewCounts,
 } from '../server/admin_db';
@@ -304,6 +305,25 @@ describe('admin api auth', () => {
     );
 
     expect(listAccounts).toHaveBeenCalledWith('bob', 2, 50);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('passes pagination, search, and sorting through to the characters query', async () => {
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    vi.mocked(listCharacters).mockResolvedValue({ rows: [], total: 0, page: 3, limit: 50 });
+    const res = fakeRes();
+
+    await handleAdminApi(
+      fakeReq({
+        token: VALID_TOKEN,
+        url: '/admin/api/characters?page=3&limit=50&search=Merlin&sort=name&dir=asc',
+      }),
+      res,
+      fakeGame,
+    );
+
+    expect(listCharacters).toHaveBeenCalledWith('Merlin', 'name', 'asc', 3, 50);
     expect(res.statusCode).toBe(200);
   });
 

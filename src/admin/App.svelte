@@ -13,6 +13,8 @@
   import Login from './components/Login.svelte';
   import AdminShell from './components/AdminShell.svelte';
   import Overview from './pages/Overview.svelte';
+  import Accounts from './pages/Accounts.svelte';
+  import Characters from './pages/Characters.svelte';
   import Usage from './pages/Usage.svelte';
   import Moderation from './pages/Moderation.svelte';
   import ChatFilter from './pages/ChatFilter.svelte';
@@ -28,6 +30,8 @@
   let route = $state<AdminRoute>(currentAdminRoute());
   const PAGE_COMPONENTS = {
     overview: Overview,
+    accounts: Accounts,
+    characters: Characters,
     usage: Usage,
     moderation: Moderation,
     'chat-filter': ChatFilter,
