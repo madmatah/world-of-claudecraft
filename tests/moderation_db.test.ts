@@ -108,15 +108,15 @@ describe('moderation report helpers', () => {
   it('sorts moderation queue by open report count, recency, then online status', async () => {
     query.mockResolvedValueOnce({ rows: [
       {
-        account_id: 2, username: 'offline-two', banned_at: null, suspended_until: null,
+        account_id: 2, username: 'offline-two', is_admin: false, banned_at: null, suspended_until: null,
         open_reports: 2, latest_report_at: '2026-06-01T00:00:00Z', latest_reason: 'spam', character_names: ['B'],
       },
       {
-        account_id: 3, username: 'online-two', banned_at: null, suspended_until: null,
+        account_id: 3, username: 'online-two', is_admin: true, banned_at: null, suspended_until: null,
         open_reports: 2, latest_report_at: '2026-05-01T00:00:00Z', latest_reason: 'spam', character_names: ['C'],
       },
       {
-        account_id: 4, username: 'one', banned_at: null, suspended_until: null,
+        account_id: 4, username: 'one', is_admin: false, banned_at: null, suspended_until: null,
         open_reports: 1, latest_report_at: '2026-06-10T00:00:00Z', latest_reason: 'other', character_names: ['D'],
       },
     ] } as any);
@@ -125,6 +125,8 @@ describe('moderation report helpers', () => {
 
     expect(rows.map((r) => r.accountId)).toEqual([2, 3, 4]);
     expect(rows[1].online).toBe(true);
+    expect(rows[1].isAdmin).toBe(true);
+    expect(query.mock.calls[0][0]).toMatch(/a\.is_admin/);
   });
 
   it('loads per-report chat context before each report timestamp', async () => {

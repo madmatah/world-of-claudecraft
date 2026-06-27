@@ -1,6 +1,13 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { auth } from './state/auth.svelte';
   import { session } from './state/session.svelte';
+  import {
+    ipHref,
+    locationIp,
+    setAdminNavigation,
+    shouldHandleNavigation,
+  } from './navigation';
   import { PAGES, type AdminPage } from './pages/pages';
   import { t } from './i18n';
   import Login from './components/Login.svelte';
@@ -11,6 +18,7 @@
   import ChatFilter from './pages/ChatFilter.svelte';
   import BlockedIps from './pages/BlockedIps.svelte';
   import BugReports from './pages/BugReports.svelte';
+  import IpAssociations from './pages/IpAssociations.svelte';
 
   // Root of the admin SPA. Shows the login overlay until authed, then the dashboard
   // chrome (header + tabs) and the active page. The {#key session.locale} wrapper
@@ -18,6 +26,24 @@
   // module-level current locale that Svelte does not track. Each page owns its own
   // data fetching and live timers (mounted/unmounted with the tab).
   let active = $state<AdminPage>('overview');
+  let selectedIp = $state<string | null>(locationIp());
+
+  setAdminNavigation({
+    openIp(event, ip) {
+      if (!shouldHandleNavigation(event)) return;
+      event.preventDefault();
+      history.pushState({ ...history.state, adminIpView: true }, '', ipHref(ip));
+      selectedIp = ip;
+    },
+  });
+
+  onMount(() => {
+    const syncLocation = () => {
+      selectedIp = locationIp();
+    };
+    window.addEventListener('popstate', syncLocation);
+    return () => window.removeEventListener('popstate', syncLocation);
+  });
 </script>
 
 {#key session.locale}
@@ -31,20 +57,26 @@
       </div>
     </header>
 
-    <Tabs pages={PAGES} {active} onSelect={(p) => (active = p)} />
+    {#if selectedIp !== null}
+      {#key selectedIp}
+        <IpAssociations ip={selectedIp} />
+      {/key}
+    {:else}
+      <Tabs pages={PAGES} {active} onSelect={(p) => (active = p)} />
 
-    {#if active === 'overview'}
-      <Overview />
-    {:else if active === 'usage'}
-      <Usage />
-    {:else if active === 'moderation'}
-      <Moderation />
-    {:else if active === 'chat-filter'}
-      <ChatFilter />
-    {:else if active === 'blocked-ips'}
-      <BlockedIps />
-    {:else if active === 'bug-reports'}
-      <BugReports />
+      {#if active === 'overview'}
+        <Overview />
+      {:else if active === 'usage'}
+        <Usage />
+      {:else if active === 'moderation'}
+        <Moderation />
+      {:else if active === 'chat-filter'}
+        <ChatFilter />
+      {:else if active === 'blocked-ips'}
+        <BlockedIps />
+      {:else if active === 'bug-reports'}
+        <BugReports />
+      {/if}
     {/if}
   {/if}
 {/key}

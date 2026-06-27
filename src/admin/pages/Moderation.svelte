@@ -4,10 +4,10 @@
   import { apiGet } from '../api';
   import { auth } from '../state/auth.svelte';
   import { t } from '../i18n';
-  import { fmtDate, fmtRelative } from '../format';
+  import { fmtRelative } from '../format';
   import { reasonLabel } from '../labels';
   import Panel from '../components/Panel.svelte';
-  import Badge from '../components/Badge.svelte';
+  import AccountIndicators from '../components/AccountIndicators.svelte';
   import ModerationDetail from './ModerationDetail.svelte';
 
   // Moderation tab: the report queue (highest open-report counts first) and the detail
@@ -49,15 +49,13 @@
       <tbody>
         {#each rows as r (r.accountId)}
           <tr class="clickable" onclick={() => (selectedId = r.accountId)}>
-            <td>{r.username}{#if r.online} <Badge>{t('moderation.badgeOnline')}</Badge>{/if}</td>
+            <td>{r.username} <AccountIndicators isAdmin={r.isAdmin} online={r.online} /></td>
             <td>{r.characterNames.join(', ') || '—'}</td>
             <td class="num">{r.openReports}</td>
             <td>{reasonLabel(r.latestReason)}</td>
             <td>{fmtRelative(r.latestReportAt)}</td>
             <td>
-              {#if r.status === 'banned'}<Badge variant="bad">{t('accounts.badgeBanned')}</Badge>
-              {:else if r.status === 'suspended'}<Badge variant="warn">{t('detail.suspendedUntil', { value: fmtDate(r.suspendedUntil) })}</Badge>
-              {:else}<Badge>{t('detail.statusActive')}</Badge>{/if}
+              <AccountIndicators status={r.status} suspendedUntil={r.suspendedUntil} />
             </td>
           </tr>
         {/each}

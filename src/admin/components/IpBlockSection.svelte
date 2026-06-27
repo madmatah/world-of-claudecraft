@@ -5,6 +5,7 @@
   import { banIp, type PendingAction } from '../moderation_actions';
   import Panel from './Panel.svelte';
   import Badge from './Badge.svelte';
+  import IpLink from './IpLink.svelte';
 
   // An account's recent IPs and their block status, so a moderator sees at a glance why
   // a player cannot connect. Ban is confirmed (onBan opens the shared confirm dialog);
@@ -37,7 +38,7 @@
     <div class="ip-block">
       {#each ips as entry (entry.ip)}
         <div class="ip-row">
-          <code>{entry.ip}</code>
+          <IpLink ip={entry.ip} />
           {#if entry.isLast}<span class="hint">{t('blockedIps.lastIp')}</span>{/if}
           {#if entry.blocked}<Badge variant="bad">{t('blockedIps.blockedBadge')}</Badge>{/if}
           {#if entry.blocked}

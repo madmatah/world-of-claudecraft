@@ -524,6 +524,130 @@ export interface Paginated<T> {
   limit: number;
 }
 
+export interface IpAssociationCharacter {
+  characterId: number | null;
+  characterName: string;
+  realm: string | null;
+  lastSeenAt: string;
+  sessionCount: number;
+}
+
+export interface IpAssociationAccount {
+  accountId: number;
+  username: string;
+  isAdmin: boolean;
+  status: 'active' | 'suspended' | 'banned';
+  suspendedUntil: string | null;
+  createdAt: string;
+  createdWithIp: boolean;
+  lastLoginWithIp: boolean;
+  hasSession: boolean;
+  lastSeenAt: string;
+  characters: IpAssociationCharacter[];
+}
+
+export interface IpAssociations {
+  ip: string;
+  accounts: IpAssociationAccount[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export async function associationsForIp(
+  ip: string,
+  page: number,
+  limit: number,
+): Promise<IpAssociations> {
+  const offset = (page - 1) * limit;
+  const accounts = await pool.query(
+    `WITH session_matches AS (
+       SELECT account_id, max(started_at) AS latest_session_at
+       FROM play_sessions
+       WHERE ip_address = $1
+       GROUP BY account_id
+     ),
+     matched AS (
+       SELECT a.id, a.username, a.is_admin, a.created_at, a.suspended_until,
+              CASE
+                WHEN a.banned_at IS NOT NULL THEN 'banned'
+                WHEN a.suspended_until > now() THEN 'suspended'
+                ELSE 'active'
+              END AS status,
+              COALESCE(a.created_ip = $1, false) AS created_with_ip,
+              COALESCE(a.last_login_ip = $1, false) AS last_login_with_ip,
+              sm.latest_session_at,
+              GREATEST(
+                CASE WHEN a.created_ip = $1 THEN a.created_at ELSE '-infinity'::timestamptz END,
+                CASE WHEN a.last_login_ip = $1
+                  THEN COALESCE(a.last_login, a.created_at)
+                  ELSE '-infinity'::timestamptz
+                END,
+                COALESCE(sm.latest_session_at, '-infinity'::timestamptz)
+              ) AS last_seen_at
+       FROM accounts a
+       LEFT JOIN session_matches sm ON sm.account_id = a.id
+       WHERE a.created_ip = $1 OR a.last_login_ip = $1 OR sm.account_id IS NOT NULL
+     )
+     SELECT *, count(*) OVER ()::int AS total
+     FROM matched
+     ORDER BY last_seen_at DESC, id DESC
+     LIMIT $2 OFFSET $3`,
+    [ip, limit, offset],
+  );
+
+  const accountIds = accounts.rows.map((row) => Number(row.id));
+  const characters =
+    accountIds.length === 0
+      ? { rows: [] }
+      : await pool.query(
+          `SELECT ps.account_id, ps.character_id,
+                  COALESCE(c.name, ps.character_name) AS character_name, c.realm,
+                  max(ps.started_at) AS last_seen_at,
+                  count(*)::int AS session_count
+           FROM play_sessions ps
+           LEFT JOIN characters c ON c.id = ps.character_id
+           WHERE ps.ip_address = $1 AND ps.account_id = ANY($2::int[])
+           GROUP BY ps.account_id, ps.character_id, COALESCE(c.name, ps.character_name), c.realm
+           ORDER BY ps.account_id, last_seen_at DESC, character_name`,
+          [ip, accountIds],
+        );
+
+  const charactersByAccount = new Map<number, IpAssociationCharacter[]>();
+  for (const row of characters.rows) {
+    const accountId = Number(row.account_id);
+    const list = charactersByAccount.get(accountId) ?? [];
+    list.push({
+      characterId: row.character_id === null ? null : Number(row.character_id),
+      characterName: row.character_name,
+      realm: row.realm ?? null,
+      lastSeenAt: row.last_seen_at,
+      sessionCount: Number(row.session_count),
+    });
+    charactersByAccount.set(accountId, list);
+  }
+
+  return {
+    ip,
+    accounts: accounts.rows.map((row) => ({
+      accountId: Number(row.id),
+      username: row.username,
+      isAdmin: row.is_admin,
+      status: row.status,
+      suspendedUntil: row.suspended_until ?? null,
+      createdAt: row.created_at,
+      createdWithIp: row.created_with_ip,
+      lastLoginWithIp: row.last_login_with_ip,
+      hasSession: row.latest_session_at !== null,
+      lastSeenAt: row.last_seen_at,
+      characters: charactersByAccount.get(Number(row.id)) ?? [],
+    })),
+    total: Number(accounts.rows[0]?.total ?? 0),
+    page,
+    limit,
+  };
+}
+
 export async function listAccounts(
   search: string,
   page: number,

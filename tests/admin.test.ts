@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { isIP } from 'node:net';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the db layers so no Postgres is needed; the router logic is under test.
@@ -24,6 +25,7 @@ vi.mock('../server/admin_db', async () => {
     listAccounts: vi.fn(),
     listCharacters: vi.fn(),
     accountDetail: vi.fn(),
+    associationsForIp: vi.fn(),
     clientPerfSummary: vi.fn(),
     clientPerfRaw: vi.fn(),
   };
@@ -51,12 +53,16 @@ vi.mock('../server/ip_block_db', () => ({
   addBlockedIp: vi.fn(async () => '1.2.3.4'),
   removeBlockedIp: vi.fn(async () => true),
   listBlockedIps: vi.fn(async () => []),
-  cleanIp: (v: unknown) => (typeof v === 'string' ? v.trim() : ''),
+  cleanIp: (v: unknown) => {
+    const value = typeof v === 'string' ? v.trim() : '';
+    return isIP(value) ? value : '';
+  },
 }));
 
 import { handleAdminApi, parsePageParams } from '../server/admin';
 import {
   accountDetail,
+  associationsForIp,
   clientPerfRaw,
   clientPerfSummary,
   escapeLike,
@@ -301,6 +307,63 @@ describe('admin api auth', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('serves grouped IP associations with normalized pagination', async () => {
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    vi.mocked(associationsForIp).mockResolvedValue({
+      ip: '203.0.113.7',
+      accounts: [
+        {
+          accountId: 9,
+          username: 'linked',
+          isAdmin: false,
+          status: 'active',
+          suspendedUntil: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          createdWithIp: false,
+          lastLoginWithIp: true,
+          hasSession: false,
+          lastSeenAt: '2026-06-01T00:00:00Z',
+          characters: [],
+        },
+      ],
+      total: 1,
+      page: 2,
+      limit: 50,
+    });
+    fakeGame.isIpBlocked.mockReturnValueOnce(true);
+    const res = fakeRes();
+
+    await handleAdminApi(
+      fakeReq({
+        token: VALID_TOKEN,
+        url: '/admin/api/ip-associations?ip=203.0.113.7&page=2&limit=50',
+      }),
+      res,
+      fakeGame,
+    );
+
+    expect(associationsForIp).toHaveBeenCalledWith('203.0.113.7', 2, 50);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.blocked).toBe(true);
+    expect(res.body.data.accounts[0].online).toBe(true);
+  });
+
+  it('rejects an invalid IP association lookup', async () => {
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    const res = fakeRes();
+
+    await handleAdminApi(
+      fakeReq({ token: VALID_TOKEN, url: '/admin/api/ip-associations?ip=not-an-ip' }),
+      res,
+      fakeGame,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(associationsForIp).not.toHaveBeenCalled();
+  });
+
   it('serves the moderation queue to admins with online account context', async () => {
     vi.mocked(accountForToken).mockResolvedValue(7);
     vi.mocked(isAdminAccount).mockResolvedValue(true);
@@ -308,6 +371,7 @@ describe('admin api auth', () => {
       {
         accountId: 9,
         username: 'badactor',
+        isAdmin: false,
         status: 'active',
         suspendedUntil: null,
         openReports: 4,

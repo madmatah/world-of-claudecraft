@@ -1,6 +1,7 @@
 import type * as http from 'node:http';
 import {
   accountDetail,
+  associationsForIp,
   classDistribution,
   clientPerfRaw,
   clientPerfSummary,
@@ -388,6 +389,21 @@ export async function handleAdminApi(
       const { page, limit } = parsePageParams(url.searchParams);
       const search = (url.searchParams.get('search') ?? '').slice(0, 64);
       return ok(res, await listAccounts(search, page, limit));
+    }
+    if (path === '/admin/api/ip-associations') {
+      const ip = cleanIp(url.searchParams.get('ip'));
+      if (!ip) return fail(res, 400, 'a valid IP address is required');
+      const { page, limit } = parsePageParams(url.searchParams);
+      const associations = await associationsForIp(ip, page, limit);
+      const onlineAccountIds = game.liveAccountIds();
+      return ok(res, {
+        ...associations,
+        accounts: associations.accounts.map((account) => ({
+          ...account,
+          online: onlineAccountIds.has(account.accountId),
+        })),
+        blocked: game.isIpBlocked(ip),
+      });
     }
     if (path === '/admin/api/moderation/queue') {
       return ok(res, { rows: await moderationQueue(game.liveAccountIds()) });

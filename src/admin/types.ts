@@ -150,6 +150,34 @@ export interface Paginated<T> {
   limit: number;
 }
 
+export interface IpAssociationsData {
+  ip: string;
+  blocked: boolean;
+  accounts: {
+    accountId: number;
+    username: string;
+    isAdmin: boolean;
+    online: boolean;
+    status: 'active' | 'suspended' | 'banned';
+    suspendedUntil: string | null;
+    createdAt: string;
+    createdWithIp: boolean;
+    lastLoginWithIp: boolean;
+    hasSession: boolean;
+    lastSeenAt: string;
+    characters: {
+      characterId: number | null;
+      characterName: string;
+      realm: string | null;
+      lastSeenAt: string;
+      sessionCount: number;
+    }[];
+  }[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export interface AccountDetail {
   id: number;
   username: string;
@@ -188,6 +216,7 @@ export interface AccountDetail {
 export interface ModerationQueueRow {
   accountId: number;
   username: string;
+  isAdmin: boolean;
   status: 'active' | 'suspended' | 'banned';
   suspendedUntil: string | null;
   openReports: number;

@@ -18,7 +18,7 @@ type-checked by `npm run check:admin` (svelte-check over `tsconfig.admin.json`).
 - `App.svelte`: root, auth gate (login vs dashboard), tab routing, `{#key session.locale}` re-render.
 - `admin.css`: global tokens (`:root`) + shared classes (`.panel`, `.badge`, `.stat`, `table`, `.pager`, the mobile-zoom floor). Component-specific layout is scoped `<style>`.
 - `state/`: runes singletons: `auth.svelte.ts` (token/name, login, logout, `handleAuthFailure`), `session.svelte.ts` (locale signal), `poll.ts` (interval helper + refresh constants).
-- `components/`: shared UI: `Login`, `Tabs`, `Panel`, `Badge`, `StatCard`, `Pager`, `BarChart` (native SVG, no `{@html}`), `ConfirmDialog`, `ScreenshotOverlay`, `OnlineTable`, `CharactersTable`, `ProviderUsage`, `WordList`, `ChatModeration`, `IpBlockSection`.
+- `components/`: shared UI: `Login`, `Tabs`, `Panel`, `Badge`, `AccountIndicators`, `IpLink`, `StatCard`, `Pager`, `BarChart` (native SVG, no `{@html}`), `ConfirmDialog`, `ScreenshotOverlay`, `OnlineTable`, `CharactersTable`, `ProviderUsage`, `WordList`, `ChatModeration`, `IpBlockSection`.
 - `pages/`: one per tab: `Overview`, `Usage`, `Moderation` (+ `ModerationDetail`), `ChatFilter`, `BlockedIps`, `BugReports`, plus the shared `AccountDetail`. `pages.ts` is the tab list.
 - Host-agnostic helpers (plain `.ts`, unit-tested directly): `moderation_actions.ts` (builds the suspend/ban/chat-mute/force-rename/ban-ip request + validation), `ip_block.ts` (`knownAccountIps`), `block_expiry.ts`, `labels.ts` (`reasonLabel`).
 - Reused as-is: `api.ts` (fetch wrapper, `apiLogin/apiGet/apiPost`, `ApiError`, token in `localStorage`), `types.ts` (endpoint response shapes), `format.ts` (`fmtDuration/Date/Relative/Copper/Bytes/Number/Percent`), `i18n.ts` (+ `i18n.en.ts`, `i18n.locales/`, `i18n.resolved.generated/`).
@@ -37,7 +37,7 @@ literal `t('...')` in this dir and fails on an untracked key.
 ## Talks to server/admin.ts over `/admin/api`
 All responses use the `{ success, data, error }` envelope (unwrapped in `api.ts`).
 GET: `/overview`, `/online`, `/activity`, `/accounts?search&page`, `/accounts/:id`,
-`/characters?sort&dir&page`, `/moderation/queue`, `/moderation/accounts/:id`,
+`/ip-associations?ip&page`, `/characters?sort&dir&page`, `/moderation/queue`, `/moderation/accounts/:id`,
 `/chat-filter`, `/blocked-ips`, `/bug-reports?page`, `/bug-reports/:id/screenshot`.
 POST: `/login`, `/moderation/accounts/:id/{suspend,ban,unban,chat-mute,lift-mute,reset-strikes}`,
 `/moderation/characters/:id/force-rename`, `/moderation/reports/:id/ignore`,

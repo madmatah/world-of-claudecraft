@@ -171,6 +171,7 @@ export async function createSuspiciousRegistrationReport(input: {
 export interface ModerationQueueRow {
   accountId: number;
   username: string;
+  isAdmin: boolean;
   status: 'active' | 'suspended' | 'banned';
   suspendedUntil: string | null;
   openReports: number;
@@ -185,6 +186,7 @@ export async function moderationQueue(onlineAccountIds: Set<number>): Promise<Mo
     `SELECT
        a.id AS account_id,
        a.username,
+       a.is_admin,
        a.banned_at,
        a.suspended_until,
        count(r.id)::int AS open_reports,
@@ -204,6 +206,7 @@ export async function moderationQueue(onlineAccountIds: Set<number>): Promise<Mo
     return {
       accountId: r.account_id,
       username: r.username,
+      isAdmin: r.is_admin,
       status,
       suspendedUntil,
       openReports: r.open_reports,

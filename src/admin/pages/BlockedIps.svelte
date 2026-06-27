@@ -8,6 +8,7 @@
   import { blockExpiryIso } from '../block_expiry';
   import Panel from '../components/Panel.svelte';
   import Badge from '../components/Badge.svelte';
+  import IpLink from '../components/IpLink.svelte';
 
   // Blocked IPs tab: add an IP block (with a shared-IP confirm) and list/unblock the
   // current blocks. Ported from renderBlockedIps + wireBlockedIpsEvents.
@@ -88,7 +89,7 @@
         <tbody>
           {#each data.rows as r (r.id)}
             <tr>
-              <td><code>{r.ip}</code></td>
+              <td><IpLink ip={r.ip} /></td>
               <td>{r.reason || '—'}</td>
               <td>
                 {#if r.expiresAt === null}

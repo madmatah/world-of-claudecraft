@@ -8,6 +8,7 @@ const queue = {
     {
       accountId: 1,
       username: 'troll',
+      isAdmin: true,
       status: 'active',
       suspendedUntil: null,
       openReports: 2,
@@ -72,6 +73,7 @@ beforeEach(() => {
 describe('Moderation', () => {
   it('opens an account from the queue and bans it through the confirm dialog', async () => {
     render(Moderation);
+    expect(await screen.findByText(t('accounts.badgeAdmin'))).toBeInTheDocument();
     await fireEvent.click(await screen.findByText('troll'));
     // detail loaded
     expect(await screen.findByText(t('report.openReports'))).toBeInTheDocument();

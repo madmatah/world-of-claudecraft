@@ -44,7 +44,8 @@ beforeEach(() => {
 describe('BlockedIps', () => {
   it('lists current blocks with a permanent badge', async () => {
     render(BlockedIps);
-    expect(await screen.findByText('203.0.113.7')).toBeInTheDocument();
+    const ipLink = await screen.findByRole('link', { name: '203.0.113.7' });
+    expect(ipLink).toHaveAttribute('href', expect.stringContaining('ip=203.0.113.7'));
     expect(screen.getByText(t('blockedIps.permanent'))).toBeInTheDocument();
   });
 
