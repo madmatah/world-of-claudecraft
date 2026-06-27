@@ -39,9 +39,15 @@ import { nextFocusIndex } from './focus_order';
  * Focus-FIRST-on-open is a derivation of this set, not a second selector: focusFirst()
  * skips the [data-close] X so opening a window lands on a meaningful control rather than
  * the dismiss affordance, falling back to the X only when it is the sole focusable.
+ *
+ * tabindex="-1" is excluded from EVERY clause, not just the bare [tabindex] one: an element
+ * with tabindex="-1" is programmatically focusable but deliberately OUT of the Tab sequence
+ * (the roving-tabindex idiom, e.g. the inactive social / talents / market tabs), so the Tab
+ * cycle must skip it exactly as native Tab does, or a roving widget inside a trapped window
+ * would stop on every inactive item instead of behaving as one Tab stop.
  */
 export const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'button:not([disabled]):not([tabindex="-1"]), [href]:not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
 
 export interface FocusTrapOptions {
   /**
