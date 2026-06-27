@@ -294,10 +294,10 @@ export function resolveLootRoll(ctx: SimContext, roll: PendingLootRoll): void {
       ctx.emit({ type: 'loot', text: `Everyone passed on ${roll.itemName}.`, pid });
     return;
   }
-  let winner = contenders[0];
-  for (const contender of contenders.slice(1)) {
-    if ((contender.result.roll ?? 0) > (winner.result.roll ?? 0)) winner = contender;
-  }
+  const highestRoll = Math.max(...contenders.map((contender) => contender.result.roll ?? 0));
+  const tiedWinners = contenders.filter((contender) => contender.result.roll === highestRoll);
+  const winner =
+    tiedWinners.length === 1 ? tiedWinners[0] : tiedWinners[ctx.rng.int(0, tiedWinners.length - 1)];
   const winnerMeta = ctx.players.get(winner.pid);
   const winnerName = winnerMeta?.name ?? 'Unknown';
   for (const pid of roll.candidates) {

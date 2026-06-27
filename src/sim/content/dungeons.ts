@@ -148,7 +148,7 @@ export const DUNGEON_MOBS: Record<string, MobTemplate> = {
       { itemId: 'boneplate_vest', chance: 0.34, rollGroup: 'korgath_guaranteed_uncommon' },
       { itemId: 'revenant_silk_robe', chance: 0.33, rollGroup: 'korgath_guaranteed_uncommon' },
       { itemId: 'nightwalk_jerkin', chance: 0.33, rollGroup: 'korgath_guaranteed_uncommon' },
-      { itemId: 'zealotsbane_blade', chance: 0.20, rollGroup: 'korgath_bonus' },
+      { itemId: 'zealotsbane_blade', chance: 0.19, rollGroup: 'korgath_bonus' },
       { itemId: 'korgaths_chainwraps', chance: 0.10, rollGroup: 'korgath_bonus' },
       { itemId: 'staff_of_velkhar', chance: 0.10, rollGroup: 'korgath_bonus' },
       { itemId: 'shadowmeld_tunic', chance: 0.10, rollGroup: 'korgath_bonus' },
