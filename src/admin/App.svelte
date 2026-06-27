@@ -1,17 +1,17 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, type Component } from 'svelte';
   import { auth } from './state/auth.svelte';
   import { session } from './state/session.svelte';
   import {
-    ipHref,
-    locationIp,
+    currentAdminRoute,
+    routeHref,
     setAdminNavigation,
     shouldHandleNavigation,
+    type AdminRoute,
   } from './navigation';
-  import { PAGES, type AdminPage } from './pages/pages';
-  import { t } from './i18n';
+  import type { AdminPage } from './pages/pages';
   import Login from './components/Login.svelte';
-  import Tabs from './components/Tabs.svelte';
+  import AdminShell from './components/AdminShell.svelte';
   import Overview from './pages/Overview.svelte';
   import Usage from './pages/Usage.svelte';
   import Moderation from './pages/Moderation.svelte';
@@ -20,26 +20,42 @@
   import BugReports from './pages/BugReports.svelte';
   import IpAssociations from './pages/IpAssociations.svelte';
 
-  // Root of the admin SPA. Shows the login overlay until authed, then the dashboard
-  // chrome (header + tabs) and the active page. The {#key session.locale} wrapper
+  // Root of the admin SPA. Shows the login overlay until authed, then the shared
+  // navigation shell and the routed page. The {#key session.locale} wrapper
   // re-renders everything when the locale changes, since the admin t() reads a
   // module-level current locale that Svelte does not track. Each page owns its own
-  // data fetching and live timers (mounted/unmounted with the tab).
-  let active = $state<AdminPage>('overview');
-  let selectedIp = $state<string | null>(locationIp());
+  // data fetching and live timers (mounted/unmounted with the route).
+  let route = $state<AdminRoute>(currentAdminRoute());
+  const PAGE_COMPONENTS = {
+    overview: Overview,
+    usage: Usage,
+    moderation: Moderation,
+    'chat-filter': ChatFilter,
+    'blocked-ips': BlockedIps,
+    'bug-reports': BugReports,
+  } satisfies Record<AdminPage, Component>;
+  let Page = $derived(route.page === 'ip' ? null : PAGE_COMPONENTS[route.page]);
 
   setAdminNavigation({
-    openIp(event, ip) {
+    navigate(event, nextRoute) {
       if (!shouldHandleNavigation(event)) return;
       event.preventDefault();
-      history.pushState({ ...history.state, adminIpView: true }, '', ipHref(ip));
-      selectedIp = ip;
+      const href = routeHref(nextRoute);
+      const currentHref = `${location.pathname}${location.search}${location.hash}`;
+      if (href === currentHref) return;
+      history.pushState({ ...history.state, adminRoute: true }, '', href);
+      route = nextRoute;
+    },
+    back(event) {
+      if (!shouldHandleNavigation(event) || !history.state?.adminRoute) return;
+      event.preventDefault();
+      history.back();
     },
   });
 
   onMount(() => {
     const syncLocation = () => {
-      selectedIp = locationIp();
+      route = currentAdminRoute();
     };
     window.addEventListener('popstate', syncLocation);
     return () => window.removeEventListener('popstate', syncLocation);
@@ -50,33 +66,14 @@
   {#if !auth.authed}
     <Login />
   {:else}
-    <header>
-      <h1>{t('app.title')}</h1>
-      <div class="who">
-        <span>{t('auth.signedInAs')}</span> <span id="who-name">{auth.name}</span><button type="button" onclick={() => auth.logout()}>{t('auth.signOut')}</button>
-      </div>
-    </header>
-
-    {#if selectedIp !== null}
-      {#key selectedIp}
-        <IpAssociations ip={selectedIp} />
-      {/key}
-    {:else}
-      <Tabs pages={PAGES} {active} onSelect={(p) => (active = p)} />
-
-      {#if active === 'overview'}
-        <Overview />
-      {:else if active === 'usage'}
-        <Usage />
-      {:else if active === 'moderation'}
-        <Moderation />
-      {:else if active === 'chat-filter'}
-        <ChatFilter />
-      {:else if active === 'blocked-ips'}
-        <BlockedIps />
-      {:else if active === 'bug-reports'}
-        <BugReports />
+    <AdminShell {route}>
+      {#if route.page === 'ip'}
+        {#key route.ip}
+          <IpAssociations ip={route.ip} />
+        {/key}
+      {:else if Page}
+        <Page />
       {/if}
-    {/if}
+    </AdminShell>
   {/if}
 {/key}

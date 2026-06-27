@@ -29,7 +29,7 @@
   onMount(() => { void refreshQueue(); });
 </script>
 
-<Panel title={t('moderation.title')} hint={t('moderation.queueHint')}>
+<Panel title={t('moderation.queueTitle')} hint={t('moderation.queueHint')}>
   {#if failed}
     <div class="empty">{t('moderation.loadFailed')}</div>
   {:else if rows.length === 0}

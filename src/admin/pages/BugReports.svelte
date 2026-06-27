@@ -43,7 +43,7 @@
   onMount(() => { void refresh(); });
 </script>
 
-<Panel title={t('bugReports.title')} hint={t('bugReports.hint')}>
+<Panel title={t('bugReports.listTitle')} hint={t('bugReports.hint')}>
   {#if failed}
     <div class="empty">{t('bugReports.loadFailed')}</div>
   {:else if data && data.rows.length === 0}

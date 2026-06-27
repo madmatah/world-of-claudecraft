@@ -1,8 +1,12 @@
 import { getContext, setContext } from 'svelte';
+import { PAGES, type AdminPage } from './pages/pages';
 
 export interface AdminNavigation {
-  openIp: (event: MouseEvent, ip: string) => void;
+  navigate: (event: MouseEvent, route: AdminRoute) => void;
+  back: (event: MouseEvent) => void;
 }
+
+export type AdminRoute = { page: AdminPage } | { page: 'ip'; ip: string };
 
 const NAVIGATION_CONTEXT = Symbol('admin-navigation');
 
@@ -10,33 +14,34 @@ export function setAdminNavigation(navigation: AdminNavigation): void {
   setContext(NAVIGATION_CONTEXT, navigation);
 }
 
-export function getAdminNavigation(): AdminNavigation {
-  return (
-    getContext<AdminNavigation | undefined>(NAVIGATION_CONTEXT) ?? {
-      openIp: () => {},
-    }
-  );
+// Links remain valid native anchors without a provider, which keeps isolated
+// component tests and no-JS navigation functional instead of hiding a no-op.
+export function getAdminNavigation(): AdminNavigation | null {
+  return getContext<AdminNavigation | undefined>(NAVIGATION_CONTEXT) ?? null;
 }
 
-function urlWithIp(ip: string | null): URL {
+export function parseAdminRoute(url: URL): AdminRoute {
+  const page = url.searchParams.get('page');
+  const ip = url.searchParams.get('ip')?.trim();
+  if (page === 'ip' && ip) return { page: 'ip', ip };
+  if (PAGES.some((candidate) => candidate.id === page)) {
+    return { page: page as AdminPage };
+  }
+  // Backward compatibility for IP links created before page became explicit.
+  if (page === null && ip) return { page: 'ip', ip };
+  return { page: 'overview' };
+}
+
+export function currentAdminRoute(): AdminRoute {
+  return parseAdminRoute(new URL(window.location.href));
+}
+
+export function routeHref(route: AdminRoute): string {
   const url = new URL(window.location.href);
-  if (ip === null) url.searchParams.delete('ip');
-  else url.searchParams.set('ip', ip);
-  return url;
-}
-
-export function ipHref(ip: string): string {
-  const url = urlWithIp(ip);
+  url.searchParams.set('page', route.page);
+  if (route.page === 'ip') url.searchParams.set('ip', route.ip);
+  else url.searchParams.delete('ip');
   return `${url.pathname}${url.search}${url.hash}`;
-}
-
-export function dashboardHref(): string {
-  const url = urlWithIp(null);
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
-export function locationIp(): string | null {
-  return new URL(window.location.href).searchParams.get('ip');
 }
 
 export function shouldHandleNavigation(event: MouseEvent): boolean {

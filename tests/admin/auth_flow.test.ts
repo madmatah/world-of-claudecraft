@@ -25,6 +25,7 @@ vi.mock('../../src/admin/api', () => ({
     }
   },
   apiLogin: h.apiLogin,
+  apiGet: vi.fn(async () => ({ rows: [] })),
   clearSession: () => h.setToken(null),
   getAdminName: () => 'alice',
   getToken: () => h.getToken(),
@@ -36,6 +37,7 @@ import { t } from '../../src/admin/i18n';
 import { auth } from '../../src/admin/state/auth.svelte';
 
 beforeEach(() => {
+  history.replaceState(null, '', '/admin?page=moderation');
   h.apiLogin.mockReset();
   h.setToken(null);
   auth.token = null;
@@ -65,6 +67,7 @@ describe('admin auth flow', () => {
 
     expect(await screen.findByText(t('auth.signOut'))).toBeInTheDocument();
     expect(screen.getByText('alice')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: t('nav.reports') })).toBeInTheDocument();
     expect(h.apiLogin).toHaveBeenCalledWith('alice', 'pw');
   });
 
@@ -86,5 +89,39 @@ describe('admin auth flow', () => {
     expect(screen.getByText(t('auth.signOut'))).toBeInTheDocument();
     await fireEvent.click(screen.getByText(t('auth.signOut')));
     expect(await screen.findByText(t('auth.signIn'))).toBeInTheDocument();
+  });
+
+  it('keeps the URL and active page in sync across navigation and popstate', async () => {
+    auth.token = 'tok';
+    auth.name = 'alice';
+    render(App);
+
+    const blockedIps = screen.getByRole('link', { name: t('nav.blockedIps') });
+    await fireEvent.click(blockedIps);
+    expect(location.search).toContain('page=blocked-ips');
+    expect(blockedIps).toHaveAttribute('aria-current', 'page');
+
+    history.replaceState(null, '', '/admin?page=moderation');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await vi.waitFor(() =>
+      expect(screen.getByRole('link', { name: t('nav.reports') })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
+
+  it('opens the mobile navigation and returns focus after Escape', async () => {
+    auth.token = 'tok';
+    auth.name = 'alice';
+    render(App);
+
+    const open = screen.getByRole('button', { name: t('nav.openMenu') });
+    await fireEvent.click(open);
+    expect(open).toHaveAccessibleName(t('nav.closeMenu'));
+    expect(open).toHaveAttribute('aria-expanded', 'true');
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: t('nav.openMenu') })).toHaveFocus();
   });
 });

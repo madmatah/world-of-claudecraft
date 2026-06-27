@@ -3,7 +3,7 @@
   import type { IpAssociationsData } from '../types';
   import { apiGet } from '../api';
   import { auth } from '../state/auth.svelte';
-  import { dashboardHref, shouldHandleNavigation } from '../navigation';
+  import { getAdminNavigation, routeHref } from '../navigation';
   import { fmtDate, fmtNumber } from '../format';
   import { t } from '../i18n';
   import Badge from '../components/Badge.svelte';
@@ -17,6 +17,7 @@
   let failed = $state(false);
   let page = $state(1);
   let requestId = 0;
+  const navigation = getAdminNavigation();
 
   async function refresh(): Promise<void> {
     const currentRequest = ++requestId;
@@ -38,9 +39,7 @@
   }
 
   function back(event: MouseEvent): void {
-    if (!shouldHandleNavigation(event) || !history.state?.adminIpView) return;
-    event.preventDefault();
-    history.back();
+    navigation?.back(event);
   }
 
   onMount(() => {
@@ -49,9 +48,9 @@
 </script>
 
 <div class="ip-page">
-  <a class="back-link" href={dashboardHref()} onclick={back}>{t('ipAssociations.back')}</a>
+  <a class="back-link" href={routeHref({ page: 'overview' })} onclick={back}>{t('ipAssociations.back')}</a>
 
-  <Panel title={t('ipAssociations.title', { ip })}>
+  <Panel>
     {#if failed}
       <div class="empty">{t('ipAssociations.loadFailed')}</div>
     {:else if data === null}

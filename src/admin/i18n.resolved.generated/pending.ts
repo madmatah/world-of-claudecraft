@@ -11,6 +11,8 @@
 
 export const pending: Record<string, readonly string[]> = {
   "es": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -30,9 +32,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "es_ES": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -52,9 +64,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "fr_FR": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -74,9 +96,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "fr_CA": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -96,10 +128,20 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "en_CA": [],
   "it_IT": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -119,9 +161,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "de_DE": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -141,9 +193,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "zh_CN": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -163,9 +225,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "zh_TW": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -185,9 +257,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "ko_KR": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -207,9 +289,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "ja_JP": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -229,9 +321,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "pt_BR": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -251,9 +353,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "ru_RU": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -273,9 +385,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "nl_NL": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -295,9 +417,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "pl_PL": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -317,9 +449,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "id_ID": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -339,9 +481,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "tr_TR": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -361,9 +513,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "sv_SE": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -383,9 +545,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "vi_VN": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -405,9 +577,19 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ],
   "da_DK": [
+    "app.shortTitle",
+    "bugReports.listTitle",
     "dialog.warning",
     "ipAssociations.accountCount",
     "ipAssociations.accountId",
@@ -427,6 +609,14 @@ export const pending: Record<string, readonly string[]> = {
     "ipAssociations.matchedLastLogin",
     "ipAssociations.noAccounts",
     "ipAssociations.noCharacters",
-    "ipAssociations.title"
+    "ipAssociations.title",
+    "moderation.queueTitle",
+    "moderation.reportsTitle",
+    "nav.closeMenu",
+    "nav.openMenu",
+    "nav.operations",
+    "nav.primaryLabel",
+    "nav.reports",
+    "nav.support"
   ]
 };
