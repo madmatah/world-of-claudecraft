@@ -37,9 +37,7 @@ describe('AdminNav', () => {
       onClose: () => {},
     });
 
-    expect(screen.getByRole('link', { name: t('nav.moderation') })).toHaveClass(
-      'active-section',
-    );
+    expect(screen.getByRole('link', { name: t('nav.moderation') })).toHaveClass('active-section');
     expect(screen.getByRole('link', { name: t('nav.sharedIps') })).toHaveAttribute(
       'aria-current',
       'page',

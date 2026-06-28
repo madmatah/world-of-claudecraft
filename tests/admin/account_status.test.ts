@@ -17,20 +17,12 @@ describe('accountStatusFor', () => {
   });
 
   it('distinguishes active and expired suspensions', () => {
-    expect(
-      accountStatusFor(
-        { bannedAt: null, suspendedUntil: '2026-06-29T00:00:00Z' },
-        now,
-      ),
-    ).toBe('suspended');
-    expect(
-      accountStatusFor(
-        { bannedAt: null, suspendedUntil: '2026-06-27T00:00:00Z' },
-        now,
-      ),
-    ).toBe('active');
-    expect(
-      accountStatusFor({ bannedAt: null, suspendedUntil: null }, now),
-    ).toBe('active');
+    expect(accountStatusFor({ bannedAt: null, suspendedUntil: '2026-06-29T00:00:00Z' }, now)).toBe(
+      'suspended',
+    );
+    expect(accountStatusFor({ bannedAt: null, suspendedUntil: '2026-06-27T00:00:00Z' }, now)).toBe(
+      'active',
+    );
+    expect(accountStatusFor({ bannedAt: null, suspendedUntil: null }, now)).toBe('active');
   });
 });

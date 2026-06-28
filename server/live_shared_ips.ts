@@ -12,9 +12,7 @@ export interface LiveSharedIp {
 
 // Builds the online-only Shared IPs view from authoritative in-memory sessions.
 // Multiple characters from the same account count once for a given address.
-export function sharedIpsFromLiveSessions(
-  sessions: Iterable<LiveIpSession>,
-): LiveSharedIp[] {
+export function sharedIpsFromLiveSessions(sessions: Iterable<LiveIpSession>): LiveSharedIp[] {
   const byIp = new Map<string, { accountIds: Set<number>; latestJoin: number }>();
   for (const session of sessions) {
     if (!session.ip) continue;

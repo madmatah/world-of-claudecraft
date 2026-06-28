@@ -2,9 +2,9 @@
 import './_setup';
 import { render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
+import ModerationHistory from '../../src/admin/components/ModerationHistory.svelte';
 import { fmtDate } from '../../src/admin/format';
 import { t } from '../../src/admin/i18n';
-import ModerationHistory from '../../src/admin/components/ModerationHistory.svelte';
 
 describe('ModerationHistory', () => {
   it('renders who performed each action, when, why, and its expiry', () => {
@@ -32,9 +32,7 @@ describe('ModerationHistory', () => {
     });
 
     expect(screen.getByText(t('moderationHistory.actionSuspend'))).toBeInTheDocument();
-    expect(
-      screen.getAllByText(t('moderationHistory.by', { name: 'moderator' })),
-    ).toHaveLength(2);
+    expect(screen.getAllByText(t('moderationHistory.by', { name: 'moderator' }))).toHaveLength(2);
     expect(screen.getByText('harassment')).toBeInTheDocument();
     expect(screen.getByText(t('moderationHistory.actionChatUnmute'))).toBeInTheDocument();
     expect(screen.getByText('appeal accepted')).toBeInTheDocument();

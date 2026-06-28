@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 import './_setup';
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  parseAdminRoute,
-  routeHref,
-  shouldHandleNavigation,
-} from '../../src/admin/navigation';
+import { parseAdminRoute, routeHref, shouldHandleNavigation } from '../../src/admin/navigation';
 
 describe('admin navigation', () => {
   beforeEach(() => {

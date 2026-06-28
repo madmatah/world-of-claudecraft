@@ -114,9 +114,9 @@ vi.mock('../../src/admin/api', () => ({
   clearSession: () => {},
 }));
 
-import Characters from '../../src/admin/pages/Characters.svelte';
 import App from '../../src/admin/App.svelte';
 import { t } from '../../src/admin/i18n';
+import Characters from '../../src/admin/pages/Characters.svelte';
 import { auth } from '../../src/admin/state/auth.svelte';
 
 describe('Players pages', () => {
@@ -146,9 +146,7 @@ describe('Players pages', () => {
   it('renders the sortable characters directory', async () => {
     render(Characters);
     expect(await screen.findByText('Merlin')).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText(t('characters.searchPlaceholder')),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(t('characters.searchPlaceholder'))).toBeInTheDocument();
     expect(
       screen.getByRole('columnheader', { name: new RegExp(t('characters.colLevel')) }),
     ).toBeInTheDocument();
@@ -187,9 +185,7 @@ describe('Players pages', () => {
     expect(screen.getByText('198.51.100.4')).toBeInTheDocument();
     expect(screen.getByText(t('moderationHistory.title'))).toBeInTheDocument();
     expect(screen.getByText('harassment')).toBeInTheDocument();
-    expect(
-      screen.getByText(t('moderationHistory.by', { name: 'moderator' })),
-    ).toBeInTheDocument();
+    expect(screen.getByText(t('moderationHistory.by', { name: 'moderator' }))).toBeInTheDocument();
 
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

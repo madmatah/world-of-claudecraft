@@ -20,9 +20,7 @@ describe('admin character queries', () => {
   });
 
   it('filters character names while escaping LIKE wildcards', async () => {
-    mocks.query
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ total: 0 }] });
+    mocks.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ total: 0 }] });
 
     await expect(listCharacters('Mer%lin', 'name', 'asc', 1, 25)).resolves.toEqual({
       rows: [],
@@ -36,10 +34,8 @@ describe('admin character queries', () => {
       expect.stringContaining('WHERE c.name ILIKE $1'),
       ['%Mer\\%lin%', 25, 0],
     );
-    expect(mocks.query).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('FROM characters c'),
-      ['%Mer\\%lin%'],
-    );
+    expect(mocks.query).toHaveBeenNthCalledWith(2, expect.stringContaining('FROM characters c'), [
+      '%Mer\\%lin%',
+    ]);
   });
 });

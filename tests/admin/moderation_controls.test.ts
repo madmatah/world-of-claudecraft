@@ -119,9 +119,7 @@ describe('ChatModerationControls', () => {
 
     expect(screen.getByText(t('chatMod.muteReason', { value: 'chat abuse' }))).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(t('detail.notePlaceholder'))).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: t('detail.chatMute1h') }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: t('detail.chatMute1h') })).not.toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: t('chatMod.liftChatMute') }));
     const reason = screen.getByPlaceholderText(t('detail.notePlaceholder'));

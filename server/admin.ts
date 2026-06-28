@@ -141,16 +141,12 @@ export async function handleAdminApi(
     const accountId = await adminAccountId(req);
     if (accountId === null) return fail(res, 401, 'admin authentication required');
 
-    const actionMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)\/(suspend|unsuspend|ban|unban)$/.exec(
-      path,
-    );
+    const actionMatch =
+      /^\/admin\/api\/moderation\/accounts\/(\d+)\/(suspend|unsuspend|ban|unban)$/.exec(path);
     if (req.method === 'POST' && actionMatch) {
       const targetAccountId = Number(actionMatch[1]);
       const action = actionMatch[2] as 'suspend' | 'unsuspend' | 'ban' | 'unban';
-      if (
-        (action === 'suspend' || action === 'ban') &&
-        (await isAdminAccount(targetAccountId))
-      ) {
+      if ((action === 'suspend' || action === 'ban') && (await isAdminAccount(targetAccountId))) {
         return fail(res, 400, 'admin accounts cannot be suspended or banned');
       }
       const body = await readBody(req);

@@ -42,8 +42,8 @@ vi.mock('../../src/admin/api', () => ({
   clearSession: () => {},
 }));
 
-import SharedIps from '../../src/admin/pages/SharedIps.svelte';
 import { t } from '../../src/admin/i18n';
+import SharedIps from '../../src/admin/pages/SharedIps.svelte';
 
 beforeEach(() => {
   mocks.apiGet.mockReset();

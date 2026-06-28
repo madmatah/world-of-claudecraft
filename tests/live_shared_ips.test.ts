@@ -31,10 +31,6 @@ describe('sharedIpsFromLiveSessions', () => {
       { accountId: 7, ip: '203.0.113.9', joinedAt: 500 },
     ]);
 
-    expect(rows.map((row) => row.ip)).toEqual([
-      '203.0.113.9',
-      '203.0.113.7',
-      '203.0.113.8',
-    ]);
+    expect(rows.map((row) => row.ip)).toEqual(['203.0.113.9', '203.0.113.7', '203.0.113.8']);
   });
 });

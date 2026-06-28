@@ -1,5 +1,5 @@
 import { getContext, setContext } from 'svelte';
-import { PAGES, type AdminPage } from './pages/pages';
+import { type AdminPage, PAGES } from './pages/pages';
 
 export interface AdminNavigation {
   navigate: (event: MouseEvent, route: AdminRoute) => void;
@@ -45,11 +45,5 @@ export function routeHref(route: AdminRoute): string {
 }
 
 export function shouldHandleNavigation(event: MouseEvent): boolean {
-  return (
-    event.button === 0 &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey &&
-    !event.shiftKey
-  );
+  return event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
 }

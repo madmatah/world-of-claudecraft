@@ -67,8 +67,8 @@ vi.mock('../../src/admin/api', () => ({
   clearSession: () => {},
 }));
 
-import { t } from '../../src/admin/i18n';
 import { fmtDate } from '../../src/admin/format';
+import { t } from '../../src/admin/i18n';
 import IpAssociations from '../../src/admin/pages/IpAssociations.svelte';
 
 beforeEach(() => {
@@ -95,9 +95,7 @@ describe('IP associations', () => {
     expect(screen.getByText(t('accounts.badgeAdmin'))).toBeInTheDocument();
     expect(screen.getByText(t('moderation.badgeOnline'))).toBeInTheDocument();
     expect(
-      screen.getByText(
-        t('detail.suspendedUntil', { value: fmtDate('2026-06-03T00:00:00Z') }),
-      ),
+      screen.getByText(t('detail.suspendedUntil', { value: fmtDate('2026-06-03T00:00:00Z') })),
     ).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole('button', { name: t('blockedIps.unblock') }));
@@ -123,9 +121,7 @@ describe('IP associations', () => {
     render(IpAssociations, { ip: '203.0.113.7' });
 
     await screen.findByText('alice');
-    await fireEvent.click(
-      screen.getByRole('button', { name: t('ipAssociations.blockAction') }),
-    );
+    await fireEvent.click(screen.getByRole('button', { name: t('ipAssociations.blockAction') }));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     await fireEvent.input(screen.getByLabelText(t('dialog.reason')), {

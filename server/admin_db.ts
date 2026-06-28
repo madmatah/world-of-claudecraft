@@ -560,10 +560,7 @@ export interface SharedIpRow {
   lastSeenAt: string;
 }
 
-export async function listSharedIps(
-  page: number,
-  limit: number,
-): Promise<Paginated<SharedIpRow>> {
+export async function listSharedIps(page: number, limit: number): Promise<Paginated<SharedIpRow>> {
   const offset = (page - 1) * limit;
   const result = await pool.query(
     `WITH account_ip_events AS (
@@ -945,8 +942,7 @@ export async function accountDetail(accountId: number): Promise<AccountDetail | 
       reason: entry.reason,
       createdAt: entry.created_at,
       expiresAt: entry.expires_at ?? null,
-      adminAccountId:
-        entry.admin_account_id === null ? null : Number(entry.admin_account_id),
+      adminAccountId: entry.admin_account_id === null ? null : Number(entry.admin_account_id),
       adminUsername: entry.admin_username ?? null,
     })),
   };

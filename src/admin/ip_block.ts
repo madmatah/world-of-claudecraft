@@ -1,5 +1,5 @@
-import type { ModerationAccountDetail } from './types';
 import { recentAccountIps } from './account_ips';
+import type { ModerationAccountDetail } from './types';
 
 // Add moderation-specific block state to the shared recent-IP history. Blocked
 // addresses beyond the normal cap stay visible so the Unblock action remains reachable.

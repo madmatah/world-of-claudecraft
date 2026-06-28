@@ -40,7 +40,7 @@ import {
 } from './db';
 import { IpBlockList } from './ip_block';
 import { loadActiveBlockedIps } from './ip_block_db';
-import { sharedIpsFromLiveSessions, type LiveSharedIp } from './live_shared_ips';
+import { type LiveSharedIp, sharedIpsFromLiveSessions } from './live_shared_ips';
 import { REALM } from './realm';
 import type { Presence, PresenceStatus, SocialActor, SocialTransport } from './social';
 import { SocialService } from './social';

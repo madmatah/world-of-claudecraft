@@ -2,9 +2,9 @@
 import './_setup';
 import { render, screen } from '@testing-library/svelte';
 import { describe, expect, it } from 'vitest';
+import AccountIndicators from '../../src/admin/components/AccountIndicators.svelte';
 import { fmtDate } from '../../src/admin/format';
 import { t } from '../../src/admin/i18n';
-import AccountIndicators from '../../src/admin/components/AccountIndicators.svelte';
 
 describe('AccountIndicators', () => {
   it('renders prominent admin and online indicators with a neutral active state', () => {

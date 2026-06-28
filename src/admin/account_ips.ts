@@ -6,10 +6,7 @@ export interface RecentAccountIp {
   isLastLogin: boolean;
 }
 
-type AccountIpHistory = Pick<
-  AccountDetail,
-  'lastLogin' | 'lastLoginIp' | 'recentSessions'
->;
+type AccountIpHistory = Pick<AccountDetail, 'lastLogin' | 'lastLoginIp' | 'recentSessions'>;
 
 const DEFAULT_RECENT_IP_LIMIT = 5;
 
@@ -34,10 +31,7 @@ export function recentAccountIps(
       return;
     }
     existing.isLastLogin ||= isLastLogin;
-    if (
-      validTimestamp(normalizedLastSeenAt) >
-      validTimestamp(existing.lastSeenAt)
-    ) {
+    if (validTimestamp(normalizedLastSeenAt) > validTimestamp(existing.lastSeenAt)) {
       existing.lastSeenAt = normalizedLastSeenAt;
     }
   };
@@ -48,9 +42,6 @@ export function recentAccountIps(
   }
 
   return [...byIp.values()]
-    .sort(
-      (a, b) =>
-        validTimestamp(b.lastSeenAt) - validTimestamp(a.lastSeenAt),
-    )
+    .sort((a, b) => validTimestamp(b.lastSeenAt) - validTimestamp(a.lastSeenAt))
     .slice(0, Math.max(0, Math.floor(limit)));
 }
