@@ -181,7 +181,7 @@ export function t(key: string, params?: Record<string, string | number>): string
 // strings. Unknown / transport / code-diagnostic errors fall through to English on
 // purpose (the localization design principle: only operator-facing UI is translated).
 const ADMIN_ERROR_KEYS: Record<string, string> = {
-  'too many attempts — wait a minute and try again': 'error.tooManyAttempts',
+  'too many attempts, wait a minute and try again': 'error.tooManyAttempts',
   'invalid username or password': 'error.invalidCredentials',
   'this account does not have admin access': 'error.noAdminAccess',
   'admin accounts cannot be suspended or banned': 'error.cannotModerateAdmin',
