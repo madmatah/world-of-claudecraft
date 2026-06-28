@@ -254,6 +254,7 @@ export const es: AdminTranslations = {
   "alert.actionFailed": "falló la acción de moderación",
   "auth.loginFailed": "error al iniciar sesión — ¿está activo el servidor?",
   "common.unknown": "desconocido",
+  "common.emptyValue": "-",
   "detail.since": "desde {value}",
   "detail.suspendedUntil": "suspendida hasta {value}",
   "detail.accountNum": "cuenta #{id}",

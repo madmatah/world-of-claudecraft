@@ -254,6 +254,7 @@ export const tr_TR: AdminTranslations = {
   "alert.actionFailed": "moderasyon işlemi başarısız oldu",
   "auth.loginFailed": "giriş başarısız — sunucu çalışıyor mu?",
   "common.unknown": "bilinmiyor",
+  "common.emptyValue": "-",
   "detail.since": "{value} tarihinden beri",
   "detail.suspendedUntil": "{value} tarihine kadar askıya alındı",
   "detail.accountNum": "hesap #{id}",

@@ -254,6 +254,7 @@ export const ja_JP: AdminTranslations = {
   "alert.actionFailed": "モデレーション操作に失敗しました",
   "auth.loginFailed": "ログインに失敗しました — サーバーは起動していますか？",
   "common.unknown": "不明",
+  "common.emptyValue": "-",
   "detail.since": "{value}から",
   "detail.suspendedUntil": "{value}まで停止",
   "detail.accountNum": "アカウント #{id}",

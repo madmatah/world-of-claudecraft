@@ -50,7 +50,7 @@
         {#each rows as r (r.accountId)}
           <tr class="clickable" onclick={() => (selectedId = r.accountId)}>
             <td>{r.username} <AccountIndicators isAdmin={r.isAdmin} online={r.online} /></td>
-            <td>{r.characterNames.join(', ') || '—'}</td>
+            <td>{r.characterNames.join(', ') || t('common.emptyValue')}</td>
             <td class="num">{r.openReports}</td>
             <td>{reasonLabel(r.latestReason)}</td>
             <td>{fmtRelative(r.latestReportAt)}</td>

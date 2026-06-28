@@ -254,6 +254,7 @@ export const ru_RU: AdminTranslations = {
   "alert.actionFailed": "не удалось выполнить действие модерации",
   "auth.loginFailed": "ошибка входа — сервер запущен?",
   "common.unknown": "неизвестно",
+  "common.emptyValue": "-",
   "detail.since": "с {value}",
   "detail.suspendedUntil": "приостановлено до {value}",
   "detail.accountNum": "аккаунт #{id}",

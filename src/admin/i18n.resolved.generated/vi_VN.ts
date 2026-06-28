@@ -254,6 +254,7 @@ export const vi_VN: AdminTranslations = {
   "alert.actionFailed": "thao tác kiểm duyệt thất bại",
   "auth.loginFailed": "đăng nhập thất bại — máy chủ có đang chạy không?",
   "common.unknown": "không rõ",
+  "common.emptyValue": "-",
   "detail.since": "từ {value}",
   "detail.suspendedUntil": "bị đình chỉ đến {value}",
   "detail.accountNum": "tài khoản #{id}",

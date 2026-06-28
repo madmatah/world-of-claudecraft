@@ -254,6 +254,7 @@ export const ko_KR: AdminTranslations = {
   "alert.actionFailed": "관리 작업 실패",
   "auth.loginFailed": "로그인 실패 — 서버가 실행 중인가요?",
   "common.unknown": "알 수 없음",
+  "common.emptyValue": "-",
   "detail.since": "{value}부터",
   "detail.suspendedUntil": "{value}까지 정지됨",
   "detail.accountNum": "계정 #{id}",

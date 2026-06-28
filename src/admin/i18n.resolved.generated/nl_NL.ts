@@ -254,6 +254,7 @@ export const nl_NL: AdminTranslations = {
   "alert.actionFailed": "moderatie-actie mislukt",
   "auth.loginFailed": "aanmelden mislukt — is de server actief?",
   "common.unknown": "onbekend",
+  "common.emptyValue": "-",
   "detail.since": "sinds {value}",
   "detail.suspendedUntil": "geschorst tot {value}",
   "detail.accountNum": "account #{id}",

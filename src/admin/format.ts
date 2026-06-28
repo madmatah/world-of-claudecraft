@@ -19,9 +19,9 @@ export function fmtDuration(totalSeconds: number): string {
 }
 
 export function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
+  if (!iso) return t('common.emptyValue');
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return t('common.emptyValue');
   return new Intl.DateTimeFormat(adminLanguageTag(), {
     year: 'numeric',
     month: 'short',

@@ -90,7 +90,7 @@
           {#each data.rows as r (r.id)}
             <tr>
               <td><IpLink ip={r.ip} /></td>
-              <td>{r.reason || '—'}</td>
+              <td>{r.reason || t('common.emptyValue')}</td>
               <td>
                 {#if r.expiresAt === null}
                   <Badge>{t('blockedIps.permanent')}</Badge>

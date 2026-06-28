@@ -254,6 +254,7 @@ export const da_DK: AdminTranslations = {
   "alert.actionFailed": "moderationshandling mislykkedes",
   "auth.loginFailed": "login mislykkedes — er serveren oppe?",
   "common.unknown": "ukendt",
+  "common.emptyValue": "-",
   "detail.since": "siden {value}",
   "detail.suspendedUntil": "suspenderet indtil {value}",
   "detail.accountNum": "konto #{id}",

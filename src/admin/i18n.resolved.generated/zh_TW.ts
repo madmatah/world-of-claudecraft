@@ -254,6 +254,7 @@ export const zh_TW: AdminTranslations = {
   "alert.actionFailed": "管理稽核操作失敗",
   "auth.loginFailed": "登入失敗 — 伺服器是否在執行？",
   "common.unknown": "未知",
+  "common.emptyValue": "-",
   "detail.since": "自 {value}",
   "detail.suspendedUntil": "停權至 {value}",
   "detail.accountNum": "帳戶 #{id}",

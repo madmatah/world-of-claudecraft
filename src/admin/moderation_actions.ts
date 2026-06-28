@@ -202,7 +202,7 @@ export function banIp(
     rows: [
       { label: t('blockedIps.colIp'), value: ip },
       { label: t('dialog.action'), value: actionLabel },
-      { label: t('dialog.reason'), value: note || '—' },
+      { label: t('dialog.reason'), value: note || t('common.emptyValue') },
       { label: t('dialog.warning'), value: t('blockedIps.sharedIpWarning') },
     ],
     endpoint: '/admin/api/blocked-ips',

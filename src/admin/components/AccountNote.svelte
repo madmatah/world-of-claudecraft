@@ -14,6 +14,10 @@
     onSubmit: (pending: PendingAction) => boolean | Promise<boolean>;
   } = $props();
 
+  // Mirrors the server cap (server/moderation_db.ts NOTE_MAX): the server truncates
+  // past this, so cap the input too rather than silently dropping characters.
+  const NOTE_MAX = 2000;
+
   let note = $state('');
 
   $effect(() => {
@@ -37,6 +41,7 @@
       <textarea
         class="note-input"
         rows="2"
+        maxlength={NOTE_MAX}
         bind:value={note}
         aria-label={t('detail.addNoteLabel')}
         placeholder={t('detail.addNotePlaceholder')}

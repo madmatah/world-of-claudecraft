@@ -254,6 +254,7 @@ export const zh_CN: AdminTranslations = {
   "alert.actionFailed": "审核操作失败",
   "auth.loginFailed": "登录失败 — 服务器是否在运行？",
   "common.unknown": "未知",
+  "common.emptyValue": "-",
   "detail.since": "自 {value}",
   "detail.suspendedUntil": "暂停至 {value}",
   "detail.accountNum": "账户 #{id}",

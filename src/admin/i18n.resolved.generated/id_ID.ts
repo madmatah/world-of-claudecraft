@@ -254,6 +254,7 @@ export const id_ID: AdminTranslations = {
   "alert.actionFailed": "tindakan moderasi gagal",
   "auth.loginFailed": "login gagal — apakah server menyala?",
   "common.unknown": "tidak diketahui",
+  "common.emptyValue": "-",
   "detail.since": "sejak {value}",
   "detail.suspendedUntil": "ditangguhkan hingga {value}",
   "detail.accountNum": "akun #{id}",

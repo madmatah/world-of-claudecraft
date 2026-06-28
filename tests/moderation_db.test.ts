@@ -7,8 +7,16 @@ vi.mock('../server/db', () => ({
 import { pool } from '../server/db';
 import {
   addAccountNote,
-  cleanReportReason, cleanText, createPlayerReport, createSuspiciousRegistrationReport, forceCharacterRename, moderateAccount,
-  liftAccountChatMute, muteAccountChat, moderationQueue, moderationReportsForAccount,
+  cleanReportReason,
+  cleanText,
+  createPlayerReport,
+  createSuspiciousRegistrationReport,
+  forceCharacterRename,
+  liftAccountChatMute,
+  moderateAccount,
+  moderationQueue,
+  moderationReportsForAccount,
+  muteAccountChat,
 } from '../server/moderation_db';
 
 const query = vi.mocked(pool.query);
@@ -37,28 +45,32 @@ describe('moderation report helpers', () => {
   });
 
   it('rejects self reports before writing', async () => {
-    await expect(createPlayerReport({
-      reporterAccountId: 1,
-      reporterCharacterId: 10,
-      reporterCharacterName: 'Alice',
-      target: { accountId: 1, characterId: 11, characterName: 'Alt' },
-      reason: 'spam',
-      details: 'same account',
-    })).rejects.toThrow(/yourself/);
+    await expect(
+      createPlayerReport({
+        reporterAccountId: 1,
+        reporterCharacterId: 10,
+        reporterCharacterName: 'Alice',
+        target: { accountId: 1, characterId: 11, characterName: 'Alt' },
+        reason: 'spam',
+        details: 'same account',
+      }),
+    ).rejects.toThrow(/yourself/);
     expect(query).not.toHaveBeenCalled();
   });
 
   it('rejects duplicate open reports in the recent window', async () => {
     query.mockResolvedValueOnce({ rows: [{ id: 99 }] } as any);
 
-    await expect(createPlayerReport({
-      reporterAccountId: 1,
-      reporterCharacterId: 10,
-      reporterCharacterName: 'Alice',
-      target: { accountId: 2, characterId: 20, characterName: 'Bob' },
-      reason: 'harassment',
-      details: 'duplicate',
-    })).rejects.toThrow(/already reported/);
+    await expect(
+      createPlayerReport({
+        reporterAccountId: 1,
+        reporterCharacterId: 10,
+        reporterCharacterName: 'Alice',
+        target: { accountId: 2, characterId: 20, characterName: 'Bob' },
+        reason: 'harassment',
+        details: 'duplicate',
+      }),
+    ).rejects.toThrow(/already reported/);
   });
 
   it('creates a system moderation report for suspicious sequential registration bursts', async () => {
@@ -107,20 +119,43 @@ describe('moderation report helpers', () => {
   });
 
   it('sorts moderation queue by open report count, recency, then online status', async () => {
-    query.mockResolvedValueOnce({ rows: [
-      {
-        account_id: 2, username: 'offline-two', is_admin: false, banned_at: null, suspended_until: null,
-        open_reports: 2, latest_report_at: '2026-06-01T00:00:00Z', latest_reason: 'spam', character_names: ['B'],
-      },
-      {
-        account_id: 3, username: 'online-two', is_admin: true, banned_at: null, suspended_until: null,
-        open_reports: 2, latest_report_at: '2026-05-01T00:00:00Z', latest_reason: 'spam', character_names: ['C'],
-      },
-      {
-        account_id: 4, username: 'one', is_admin: false, banned_at: null, suspended_until: null,
-        open_reports: 1, latest_report_at: '2026-06-10T00:00:00Z', latest_reason: 'other', character_names: ['D'],
-      },
-    ] } as any);
+    query.mockResolvedValueOnce({
+      rows: [
+        {
+          account_id: 2,
+          username: 'offline-two',
+          is_admin: false,
+          banned_at: null,
+          suspended_until: null,
+          open_reports: 2,
+          latest_report_at: '2026-06-01T00:00:00Z',
+          latest_reason: 'spam',
+          character_names: ['B'],
+        },
+        {
+          account_id: 3,
+          username: 'online-two',
+          is_admin: true,
+          banned_at: null,
+          suspended_until: null,
+          open_reports: 2,
+          latest_report_at: '2026-05-01T00:00:00Z',
+          latest_reason: 'spam',
+          character_names: ['C'],
+        },
+        {
+          account_id: 4,
+          username: 'one',
+          is_admin: false,
+          banned_at: null,
+          suspended_until: null,
+          open_reports: 1,
+          latest_report_at: '2026-06-10T00:00:00Z',
+          latest_reason: 'other',
+          character_names: ['D'],
+        },
+      ],
+    } as any);
 
     const rows = await moderationQueue(new Set([3]));
 
@@ -132,25 +167,43 @@ describe('moderation report helpers', () => {
 
   it('loads per-report chat context before each report timestamp', async () => {
     query
-      .mockResolvedValueOnce({ rows: [{
-        id: 7,
-        reason: 'harassment',
-        details: 'bad chat',
-        status: 'open',
-        created_at: '2026-06-13T00:00:00Z',
-        reporter_account_id: 1,
-        reporter_username: 'alice',
-        reporter_character_id: 10,
-        reporter_character_name: 'Alice',
-        reported_account_id: 2,
-        reported_username: 'bob',
-        reported_character_id: 20,
-        reported_character_name: 'Bob',
-      }] } as any)
-      .mockResolvedValueOnce({ rows: [
-        { id: 2, character_name: 'Bob', channel: 'say', message: 'second', created_at: '2026-06-12T23:59:00Z' },
-        { id: 1, character_name: 'Bob', channel: 'say', message: 'first', created_at: '2026-06-12T23:58:00Z' },
-      ] } as any);
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 7,
+            reason: 'harassment',
+            details: 'bad chat',
+            status: 'open',
+            created_at: '2026-06-13T00:00:00Z',
+            reporter_account_id: 1,
+            reporter_username: 'alice',
+            reporter_character_id: 10,
+            reporter_character_name: 'Alice',
+            reported_account_id: 2,
+            reported_username: 'bob',
+            reported_character_id: 20,
+            reported_character_name: 'Bob',
+          },
+        ],
+      } as any)
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            character_name: 'Bob',
+            channel: 'say',
+            message: 'second',
+            created_at: '2026-06-12T23:59:00Z',
+          },
+          {
+            id: 1,
+            character_name: 'Bob',
+            channel: 'say',
+            message: 'first',
+            created_at: '2026-06-12T23:58:00Z',
+          },
+        ],
+      } as any);
 
     const reports = await moderationReportsForAccount(2);
 
@@ -160,23 +213,27 @@ describe('moderation report helpers', () => {
   });
 
   it('rejects suspension expiry values that are not in the future', async () => {
-    await expect(moderateAccount({
-      accountId: 2,
-      adminAccountId: 1,
-      action: 'suspend',
-      reason: 'test',
-      expiresAt: '2020-01-01T00:00:00Z',
-    })).rejects.toThrow(/future/);
+    await expect(
+      moderateAccount({
+        accountId: 2,
+        adminAccountId: 1,
+        action: 'suspend',
+        reason: 'test',
+        expiresAt: '2020-01-01T00:00:00Z',
+      }),
+    ).rejects.toThrow(/future/);
     expect(query).not.toHaveBeenCalled();
   });
 
   it('requires a future chat mute expiry', async () => {
-    await expect(muteAccountChat({
-      accountId: 2,
-      adminAccountId: 1,
-      reason: 'cool down',
-      expiresAt: '2020-01-01T00:00:00Z',
-    })).rejects.toThrow(/future/);
+    await expect(
+      muteAccountChat({
+        accountId: 2,
+        adminAccountId: 1,
+        reason: 'cool down',
+        expiresAt: '2020-01-01T00:00:00Z',
+      }),
+    ).rejects.toThrow(/future/);
     expect(query).not.toHaveBeenCalled();
   });
 
@@ -197,7 +254,13 @@ describe('moderation report helpers', () => {
     expect(client.query.mock.calls[1][0]).toMatch(/chat_muted_until/);
     expect(client.query.mock.calls[1][1]).toEqual([2, new Date(expiresAt), 'tone it down']);
     expect(client.query.mock.calls[2][0]).toMatch(/account_moderation_actions/);
-    expect(client.query.mock.calls[2][1]).toEqual([2, 1, 'chat_mute', 'tone it down', new Date(expiresAt)]);
+    expect(client.query.mock.calls[2][1]).toEqual([
+      2,
+      1,
+      'chat_mute',
+      'tone it down',
+      new Date(expiresAt),
+    ]);
     expect(client.query.mock.calls[3][0]).toBe('COMMIT');
     expect(client.release).toHaveBeenCalledTimes(1);
   });
@@ -220,8 +283,7 @@ describe('moderation report helpers', () => {
     expect(client.query.mock.calls[1][0]).toMatch(/chat_mute_reason = NULL/);
     expect(client.query.mock.calls[1][0]).toMatch(/chat_muted_until > now\(\)/);
     expect(client.query.mock.calls[2][0]).toMatch(/account_moderation_actions/);
-    expect(client.query.mock.calls[2][0]).toMatch(/'chat_unmute'/);
-    expect(client.query.mock.calls[2][1]).toEqual([2, 1, 'appeal accepted']);
+    expect(client.query.mock.calls[2][1]).toEqual([2, 1, 'chat_unmute', 'appeal accepted', null]);
     expect(client.query.mock.calls[3][0]).toBe('COMMIT');
   });
 
@@ -245,12 +307,14 @@ describe('moderation report helpers', () => {
   });
 
   it('requires a moderation reason for suspend and ban actions', async () => {
-    await expect(moderateAccount({
-      accountId: 2,
-      adminAccountId: 1,
-      action: 'ban',
-      reason: '   ',
-    })).rejects.toThrow(/reason/);
+    await expect(
+      moderateAccount({
+        accountId: 2,
+        adminAccountId: 1,
+        action: 'ban',
+        reason: '   ',
+      }),
+    ).rejects.toThrow(/reason/);
     expect(query).not.toHaveBeenCalled();
   });
 
@@ -294,13 +358,7 @@ describe('moderation report helpers', () => {
     expect(client.query.mock.calls[1][0]).toMatch(/suspended_until > now\(\)/);
     expect(client.query.mock.calls[1][1]).toEqual([2, 'appeal accepted']);
     expect(client.query.mock.calls[2][0]).toMatch(/account_moderation_actions/);
-    expect(client.query.mock.calls[2][1]).toEqual([
-      2,
-      1,
-      'unsuspend',
-      'appeal accepted',
-      null,
-    ]);
+    expect(client.query.mock.calls[2][1]).toEqual([2, 1, 'unsuspend', 'appeal accepted', null]);
     expect(client.query.mock.calls[3][0]).toBe('COMMIT');
   });
 
@@ -340,18 +398,23 @@ describe('moderation report helpers', () => {
     const suspendClient = clientStub();
     connect.mockResolvedValueOnce(suspendClient as any);
     await moderateAccount({
-      accountId: 2, adminAccountId: 1, action: 'suspend', reason: 'cooling off',
+      accountId: 2,
+      adminAccountId: 1,
+      action: 'suspend',
+      reason: 'cooling off',
       expiresAt: new Date(Date.now() + 3600_000).toISOString(),
     });
-    const suspendUpdate = suspendClient.query.mock.calls.find((c) => /UPDATE accounts/.test(c[0]))![0];
+    const suspendUpdate = suspendClient.query.mock.calls.find((c) =>
+      /UPDATE accounts/.test(c[0]),
+    )![0];
     expect(suspendUpdate).toMatch(/banned_at = NULL/);
     expect(suspendUpdate).toMatch(/suspended_until = \$2/);
   });
 
   it('requires note text and writes nothing for an empty note', async () => {
-    await expect(
-      addAccountNote({ accountId: 2, adminAccountId: 1, note: '   ' }),
-    ).rejects.toThrow(/note/);
+    await expect(addAccountNote({ accountId: 2, adminAccountId: 1, note: '   ' })).rejects.toThrow(
+      /note/,
+    );
     expect(query).not.toHaveBeenCalled();
   });
 
@@ -364,10 +427,9 @@ describe('moderation report helpers', () => {
     expect(query).toHaveBeenCalledTimes(1);
     const [sql, params] = query.mock.calls[0];
     expect(sql).toMatch(/INSERT INTO account_moderation_actions/);
-    expect(sql).toMatch(/'note'/);
     expect(sql).not.toMatch(/UPDATE accounts/);
     expect(sql).not.toMatch(/player_reports/);
-    expect(params).toEqual([2, 1, 'watching for repeat behavior']);
+    expect(params).toEqual([2, 1, 'note', 'watching for repeat behavior', null]);
   });
 
   it('marks a character for forced rename and action-resolves its reports', async () => {
@@ -375,7 +437,11 @@ describe('moderation report helpers', () => {
     const client = clientStub();
     connect.mockResolvedValue(client as any);
 
-    const result = await forceCharacterRename({ characterId: 20, adminAccountId: 1, reason: 'offensive name' });
+    const result = await forceCharacterRename({
+      characterId: 20,
+      adminAccountId: 1,
+      reason: 'offensive name',
+    });
 
     expect(result).toEqual({ accountId: 2 });
     // The whole transaction must run on one pinned client, not arbitrary pooled

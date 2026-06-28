@@ -254,6 +254,7 @@ export const sv_SE: AdminTranslations = {
   "alert.actionFailed": "modereringsåtgärden misslyckades",
   "auth.loginFailed": "inloggning misslyckades — är servern uppe?",
   "common.unknown": "okänd",
+  "common.emptyValue": "-",
   "detail.since": "sedan {value}",
   "detail.suspendedUntil": "avstängd till {value}",
   "detail.accountNum": "konto #{id}",

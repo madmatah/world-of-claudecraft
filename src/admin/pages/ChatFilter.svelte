@@ -88,7 +88,7 @@
       <label>{t('chatFilter.ladderLabel')}
         <input id="cf-ladder" type="text" bind:value={ladder} />
       </label>
-      <div class="hint">{t('chatFilter.currentLadder')} {ladderHuman || '—'}</div>
+      <div class="hint">{t('chatFilter.currentLadder')} {ladderHuman || t('common.emptyValue')}</div>
       <button onclick={saveConfig}>{t('chatFilter.saveConfig')}</button>
     </div>
   </Panel>

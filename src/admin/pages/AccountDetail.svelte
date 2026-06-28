@@ -113,7 +113,7 @@
                 <td class="num">{c.level}</td>
                 <td class="num">{c.xp}</td>
                 <td class="num">{fmtCopper(c.copper)}</td>
-                <td class="num">{c.pos ? `${Math.round(c.pos.x)}, ${Math.round(c.pos.z)}` : '—'}</td>
+                <td class="num">{c.pos ? `${Math.round(c.pos.x)}, ${Math.round(c.pos.z)}` : t('common.emptyValue')}</td>
                 <td>{fmtRelative(c.updatedAt)}</td>
                 {#if canModerate}<td><button class="btn-sm" onclick={() => (selectedCharacter = c)}>{t('detail.forceNameChange')}</button></td>{/if}
               </tr>
