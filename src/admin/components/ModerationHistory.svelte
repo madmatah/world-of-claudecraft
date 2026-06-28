@@ -85,9 +85,9 @@
 
   li {
     padding: 10px;
-    border: 1px solid #2a2414;
+    border: 1px solid var(--border-subtle);
     border-radius: 4px;
-    background: #090910;
+    background: var(--surface-sunken);
   }
 
   .history-meta {

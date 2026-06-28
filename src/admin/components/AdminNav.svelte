@@ -82,7 +82,7 @@
     height: 100vh;
     overflow-y: auto;
     background: #0b0b11;
-    border-right: 1px solid #2a2414;
+    border-right: 1px solid var(--border-subtle);
   }
 
   .sidebar-header {
@@ -92,7 +92,7 @@
     justify-content: space-between;
     gap: 10px;
     padding: 0 16px;
-    border-bottom: 1px solid #2a2414;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .sidebar-brand {
@@ -157,13 +157,13 @@
 
   .nav-page {
     padding: 7px 10px;
-    color: #c9b27a;
+    color: var(--text-soft);
     border-left: 2px solid transparent;
   }
 
   .nav-page:hover,
   .nav-section-title:hover {
-    color: #fff;
+    color: var(--text-bright);
     background: #1a160f;
   }
 
@@ -210,15 +210,15 @@
       width: 40px;
       height: 40px;
       flex: none;
-      background: #1a1410;
-      color: #c9b27a;
-      border: 1px solid #463a1c;
+      background: var(--btn-flat-bg);
+      color: var(--text-soft);
+      border: 1px solid var(--border-soft);
       border-radius: 3px;
       cursor: pointer;
     }
 
     .nav-close:hover {
-      color: #fff;
+      color: var(--text-bright);
       border-color: var(--gold-dim);
     }
 

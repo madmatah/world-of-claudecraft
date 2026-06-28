@@ -134,12 +134,12 @@
   }
 
   .danger {
-    border-color: #b34a3a;
-    color: #ff7a5e;
+    border-color: var(--color-danger-border);
+    color: var(--color-danger);
   }
 
   .danger:hover {
-    border-color: #ff7a5e;
+    border-color: var(--color-danger);
     color: var(--text);
   }
 

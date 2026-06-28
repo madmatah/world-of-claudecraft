@@ -246,12 +246,12 @@
   }
 
   .block-action {
-    border-color: #b34a3a;
-    color: #ff7a5e;
+    border-color: var(--color-danger-border);
+    color: var(--color-danger);
   }
 
   .block-action:hover {
-    border-color: #ff7a5e;
+    border-color: var(--color-danger);
     color: var(--text);
   }
 
@@ -263,8 +263,8 @@
   .ip-account {
     margin: 0;
     padding: 10px;
-    background: #090910;
-    border: 1px solid #2a2414;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-subtle);
     border-radius: 4px;
   }
 

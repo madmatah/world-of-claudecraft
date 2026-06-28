@@ -150,7 +150,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 16px 18px;
-    border-bottom: 1px solid #2a2414;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   h2 {
@@ -187,7 +187,7 @@
   }
 
   .account-summary dd {
-    color: #c9b27a;
+    color: var(--text-soft);
   }
 
   .account-modal-close {
@@ -196,7 +196,7 @@
     min-width: 40px;
     height: 40px;
     padding: 0;
-    background: #1a1410;
+    background: var(--btn-flat-bg);
   }
 
   .account-modal-close span::before,
@@ -228,7 +228,7 @@
   .recent-ips {
     margin: 18px 0 0;
     padding-top: 14px;
-    border-top: 1px solid #2a2414;
+    border-top: 1px solid var(--border-subtle);
   }
 
   .recent-ips h3 {
@@ -249,8 +249,8 @@
     justify-content: space-between;
     gap: 12px;
     padding: 7px 9px;
-    background: #0d0d14;
-    border: 1px solid #2a2414;
+    background: var(--surface-inset);
+    border: 1px solid var(--border-subtle);
     border-radius: 4px;
   }
 

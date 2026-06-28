@@ -116,7 +116,7 @@
 
   .workspace {
     min-width: 0;
-    background: #060609;
+    background: var(--bg-app);
   }
 
   .workspace-topbar {
@@ -125,7 +125,7 @@
     align-items: center;
     justify-content: flex-end;
     padding: 0 24px;
-    border-bottom: 1px solid #2a2414;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .mobile-brand {
@@ -157,9 +157,9 @@
 
   .who button,
   .nav-toggle {
-    background: #1a1410;
-    color: #c9b27a;
-    border: 1px solid #463a1c;
+    background: var(--btn-flat-bg);
+    color: var(--text-soft);
+    border: 1px solid var(--border-soft);
     border-radius: 3px;
     cursor: pointer;
   }
@@ -171,7 +171,7 @@
 
   .who button:hover,
   .nav-toggle:hover {
-    color: #fff;
+    color: var(--text-bright);
     border-color: var(--gold-dim);
   }
 
