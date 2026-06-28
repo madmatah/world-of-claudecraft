@@ -19,7 +19,7 @@ type-checked by `npm run check:admin` (svelte-check over `tsconfig.admin.json`).
 - `admin.css`: global tokens (`:root`) + shared classes (`.panel`, `.badge`, `.stat`, `table`, `.pager`, the mobile-zoom floor). Component-specific layout is scoped `<style>`.
 - `state/`: runes singletons: `auth.svelte.ts` (token/name, login, logout, `handleAuthFailure`), `session.svelte.ts` (locale signal), `poll.ts` (interval helper + refresh constants).
 - `navigation.ts`: typed page/IP route parsing, URL serialization, History API interception, and optional navigation context for native links.
-- `components/`: shared UI: `Login`, `AdminShell`, `AdminNav`, `AccountModal`, `AccountLink`, `Panel`, `Badge`, `AccountIndicators`, `IpLink`, `StatCard`, `Pager`, `BarChart` (native SVG, no `{@html}`), `ConfirmDialog`, `ScreenshotOverlay`, `OnlineTable`, `CharactersTable`, `ProviderUsage`, `WordList`, `ChatModeration`, `IpBlockSection`.
+- `components/`: shared UI: `Login`, `AdminShell`, `AdminNav`, `AccountModal`, `AccountLink`, `Panel`, `Badge`, `AccountIndicators`, `IpLink`, `StatCard`, `Pager`, `BarChart` (native SVG, no `{@html}`), `ConfirmDialog`, `ModerationActionPrompt`, `AccountModerationActions`, `ChatModerationControls`, `ModerationHistory`, `ScreenshotOverlay`, `OnlineTable`, `CharactersTable`, `ProviderUsage`, `WordList`, `ChatModeration`, `IpBlockSection`.
 - `pages/`: one per route: `Overview`, `Usage`, `Accounts`, `Characters`, `Moderation` (+ `ModerationDetail`), `SharedIps`, `ChatFilter`, `BlockedIps`, `BugReports`, plus the shared `AccountDetail`. `pages.ts` is the navigation tree.
 - Host-agnostic helpers (plain `.ts`, unit-tested directly): `moderation_actions.ts` (builds the suspend/ban/chat-mute/force-rename/ban-ip request + validation), `ip_block.ts` (`knownAccountIps`), `block_expiry.ts`, `labels.ts` (`reasonLabel`).
 - Reused as-is: `api.ts` (fetch wrapper, `apiLogin/apiGet/apiPost`, `ApiError`, token in `localStorage`), `types.ts` (endpoint response shapes), `format.ts` (`fmtDuration/Date/Relative/Copper/Bytes/Number/Percent`), `i18n.ts` (+ `i18n.en.ts`, `i18n.locales/`, `i18n.resolved.generated/`).
@@ -40,7 +40,7 @@ All responses use the `{ success, data, error }` envelope (unwrapped in `api.ts`
 GET: `/overview`, `/online`, `/activity`, `/accounts?search&page`, `/accounts/:id`,
 `/ip-associations?ip&page`, `/characters?sort&dir&page`, `/moderation/queue`, `/moderation/accounts/:id`,
 `/chat-filter`, `/blocked-ips`, `/bug-reports?page`, `/bug-reports/:id/screenshot`.
-POST: `/login`, `/moderation/accounts/:id/{suspend,ban,unban,chat-mute,lift-mute,reset-strikes}`,
+POST: `/login`, `/moderation/accounts/:id/{suspend,unsuspend,ban,unban,chat-mute,lift-mute,reset-strikes}`,
 `/moderation/characters/:id/force-rename`, `/moderation/reports/:id/ignore`,
 `/chat-filter/words`, `/chat-filter/words/:id/delete`, `/chat-filter/config`,
 `/blocked-ips`, `/blocked-ips/delete`. In dev, Vite proxies `/admin/api` to `:8787`.

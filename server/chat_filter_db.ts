@@ -293,15 +293,6 @@ export async function chatModeratedAccounts(limit = 200): Promise<ChatModeratedA
   }));
 }
 
-/** Clear an active mute. Returns the account id touched (for live disconnect/notice). */
-export async function liftChatMute(accountId: number): Promise<boolean> {
-  const res = await pool.query(
-    `UPDATE accounts SET chat_muted_until = NULL WHERE id = $1`,
-    [accountId],
-  );
-  return (res.rowCount ?? 0) > 0;
-}
-
 export async function resetChatStrikes(accountId: number): Promise<boolean> {
   const res = await pool.query(
     `UPDATE accounts SET chat_strikes = 0 WHERE id = $1`,

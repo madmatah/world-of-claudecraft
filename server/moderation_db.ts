@@ -298,7 +298,7 @@ export async function ignoreReport(reportId: number, adminAccountId: number, not
 export async function moderateAccount(input: {
   accountId: number;
   adminAccountId: number;
-  action: 'suspend' | 'ban' | 'unban';
+  action: 'suspend' | 'unsuspend' | 'ban' | 'unban';
   reason: unknown;
   expiresAt?: unknown;
 }): Promise<void> {
@@ -332,6 +332,16 @@ export async function moderateAccount(input: {
          WHERE id = $1`,
         [input.accountId, reason],
       );
+    } else if (input.action === 'unsuspend') {
+      const updated = await client.query(
+        `UPDATE accounts
+         SET suspended_until = NULL, moderation_reason = $2
+         WHERE id = $1 AND suspended_until > now()`,
+        [input.accountId, reason],
+      );
+      if ((updated.rowCount ?? 0) === 0) {
+        throw new Error('account is not suspended');
+      }
     } else {
       // Suspending supersedes any standing ban (an admin downgrading a ban to a
       // timed suspension). banned_at must be cleared here for the same reason
@@ -350,12 +360,14 @@ export async function moderateAccount(input: {
        VALUES ($1, $2, $3, $4, $5)`,
       [input.accountId, input.adminAccountId, input.action, reason, expiresAt ? expiresAt.toISOString() : null],
     );
-    await client.query(
-      `UPDATE player_reports
-       SET status = 'actioned', reviewed_at = now(), reviewed_by_account_id = $2, review_note = $3
-       WHERE reported_account_id = $1 AND status = 'open'`,
-      [input.accountId, input.adminAccountId, reason],
-    );
+    if (input.action !== 'unsuspend') {
+      await client.query(
+        `UPDATE player_reports
+         SET status = 'actioned', reviewed_at = now(), reviewed_by_account_id = $2, review_note = $3
+         WHERE reported_account_id = $1 AND status = 'open'`,
+        [input.accountId, input.adminAccountId, reason],
+      );
+    }
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -390,6 +402,39 @@ export async function muteAccountChat(input: {
       `INSERT INTO account_moderation_actions (account_id, admin_account_id, action, reason, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
       [input.accountId, input.adminAccountId, 'chat_mute', reason, expiresAt],
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function liftAccountChatMute(input: {
+  accountId: number;
+  adminAccountId: number;
+  reason: unknown;
+}): Promise<void> {
+  const reason = cleanText(input.reason, ACTION_REASON_MAX);
+  if (!reason) throw new Error('moderation reason is required');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const updated = await client.query(
+      `UPDATE accounts
+       SET chat_muted_until = NULL, chat_mute_reason = NULL
+       WHERE id = $1 AND chat_muted_until > now()`,
+      [input.accountId],
+    );
+    if ((updated.rowCount ?? 0) === 0) {
+      throw new Error('account is not chat muted');
+    }
+    await client.query(
+      `INSERT INTO account_moderation_actions (account_id, admin_account_id, action, reason)
+       VALUES ($1, $2, 'chat_unmute', $3)`,
+      [input.accountId, input.adminAccountId, reason],
     );
     await client.query('COMMIT');
   } catch (err) {

@@ -36,6 +36,7 @@ const modDetail = {
     playtimeSeconds: 3600,
     characters: [],
     recentSessions: [],
+    moderationHistory: [],
   },
   reports: [],
   chat: { chatMutedUntil: null, chatStrikes: 0, violations: [] },
@@ -78,10 +79,10 @@ describe('Moderation', () => {
     // detail loaded
     expect(await screen.findByText(t('report.openReports'))).toBeInTheDocument();
 
-    // ban requires a note: fill it, then ban -> confirm dialog -> confirm
-    const noteInput = document.querySelector('.account-mod-reason') as HTMLInputElement;
-    await fireEvent.input(noteInput, { target: { value: 'persistent spam' } });
+    // The reason field appears only after selecting an action.
     await fireEvent.click(screen.getByText(t('detail.ban')));
+    const noteInput = screen.getByPlaceholderText(t('detail.notePlaceholder'));
+    await fireEvent.input(noteInput, { target: { value: 'persistent spam' } });
     expect(await screen.findByText(t('dialog.confirmBan'))).toBeInTheDocument();
     await fireEvent.click(screen.getByText(t('dialog.confirm')));
 

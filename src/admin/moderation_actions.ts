@@ -69,6 +69,22 @@ export function suspendCustom(accountId: number, rawExpiry: string, note: string
   };
 }
 
+export function unsuspendAccount(accountId: number, note: string): Built {
+  if (!note) return { errorKey: 'alert.noteRequired' };
+  return {
+    pending: {
+      title: t('dialog.confirmUnsuspension'),
+      rows: [
+        accountRow(accountId),
+        { label: t('dialog.action'), value: t('dialog.actionUnsuspend') },
+        reasonRow(note),
+      ],
+      endpoint: `/admin/api/moderation/accounts/${accountId}/unsuspend`,
+      body: { reason: note },
+    },
+  };
+}
+
 export function chatMuteHours(accountId: number, hours: number, note: string): Built {
   if (!note) return { errorKey: 'alert.noteRequired' };
   const expiresAt = new Date(Date.now() + hours * HOUR_MS).toISOString();
@@ -103,6 +119,22 @@ export function chatMuteCustom(accountId: number, rawExpiry: string, note: strin
       ],
       endpoint: `/admin/api/moderation/accounts/${accountId}/chat-mute`,
       body: { reason: note, expiresAt: r.iso },
+    },
+  };
+}
+
+export function liftChatMute(accountId: number, note: string): Built {
+  if (!note) return { errorKey: 'alert.noteRequired' };
+  return {
+    pending: {
+      title: t('dialog.confirmChatUnmute'),
+      rows: [
+        accountRow(accountId),
+        { label: t('dialog.action'), value: t('dialog.actionChatUnmute') },
+        reasonRow(note),
+      ],
+      endpoint: `/admin/api/moderation/accounts/${accountId}/lift-mute`,
+      body: { reason: note },
     },
   };
 }

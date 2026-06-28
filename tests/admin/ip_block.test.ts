@@ -24,6 +24,7 @@ function detail(
       playtimeSeconds: 0,
       characters: [],
       recentSessions: [],
+      moderationHistory: [],
       ...over,
     },
     reports: [],

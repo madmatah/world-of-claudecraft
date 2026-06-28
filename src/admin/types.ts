@@ -223,6 +223,17 @@ export interface AccountDetail {
     seconds: number;
     ip: string | null;
   }[];
+  moderationHistory: ModerationHistoryEntry[];
+}
+
+export interface ModerationHistoryEntry {
+  id: number;
+  action: string;
+  reason: string;
+  createdAt: string;
+  expiresAt: string | null;
+  adminAccountId: number | null;
+  adminUsername: string | null;
 }
 
 export interface ModerationQueueRow {

@@ -7,7 +7,15 @@ const filterData = {
   soft: [{ id: 1, word: 'darn' }],
   hard: [{ id: 2, word: 'slur' }],
   config: { warningsBeforeMute: 2, muteLadderSeconds: [3600, 7200] },
-  accounts: [{ id: 9, username: 'troll', isAdmin: false, chatStrikes: 3, chatMutedUntil: null }],
+  accounts: [
+    {
+      id: 9,
+      username: 'troll',
+      isAdmin: false,
+      chatStrikes: 3,
+      chatMutedUntil: '2999-01-01T00:00:00Z',
+    },
+  ],
 };
 
 const apiPost = vi.fn();
@@ -65,5 +73,18 @@ describe('ChatFilter', () => {
     await screen.findByText('troll');
     await fireEvent.click(screen.getByText(t('chatMod.resetStrikes')));
     expect(apiPost).toHaveBeenCalledWith('/admin/api/moderation/accounts/9/reset-strikes', {});
+  });
+
+  it('asks for a reason before lifting a chat mute', async () => {
+    render(ChatFilter);
+    await screen.findByText('troll');
+    await fireEvent.click(screen.getByText(t('chatMod.liftMute')));
+    const reason = screen.getByPlaceholderText(t('detail.notePlaceholder'));
+    await fireEvent.input(reason, { target: { value: 'appeal accepted' } });
+    await fireEvent.click(screen.getByText(t('dialog.confirm')));
+
+    expect(apiPost).toHaveBeenCalledWith('/admin/api/moderation/accounts/9/lift-mute', {
+      reason: 'appeal accepted',
+    });
   });
 });

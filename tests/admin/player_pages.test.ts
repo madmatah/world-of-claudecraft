@@ -61,6 +61,17 @@ const accountDetail = {
       ip: '198.51.100.4',
     },
   ],
+  moderationHistory: [
+    {
+      id: 3,
+      action: 'suspend',
+      reason: 'harassment',
+      createdAt: '2026-06-01T02:00:00Z',
+      expiresAt: '2026-06-02T02:00:00Z',
+      adminAccountId: 2,
+      adminUsername: 'moderator',
+    },
+  ],
 };
 
 const charactersPage = {
@@ -125,9 +136,8 @@ describe('Players pages', () => {
         name: t('accountModal.title', { username: 'alice' }),
       }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText(t('detail.notePlaceholder')),
-    ).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(t('detail.notePlaceholder'))).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: t('detail.ban') })).toBeInTheDocument();
 
     await fireEvent.keyDown(window, { key: 'Escape' });
     await vi.waitFor(() => expect(accountLink).toHaveFocus());
@@ -175,6 +185,11 @@ describe('Players pages', () => {
     expect(screen.getByText(t('accountModal.recentIps'))).toBeInTheDocument();
     expect(screen.getByText('203.0.113.7')).toBeInTheDocument();
     expect(screen.getByText('198.51.100.4')).toBeInTheDocument();
+    expect(screen.getByText(t('moderationHistory.title'))).toBeInTheDocument();
+    expect(screen.getByText('harassment')).toBeInTheDocument();
+    expect(
+      screen.getByText(t('moderationHistory.by', { name: 'moderator' })),
+    ).toBeInTheDocument();
 
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

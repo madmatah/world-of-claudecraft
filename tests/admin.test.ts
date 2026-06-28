@@ -36,6 +36,7 @@ vi.mock('../server/moderation_db', () => ({
   moderationQueue: vi.fn(),
   moderationReportsForAccount: vi.fn(),
   ignoreReport: vi.fn(),
+  liftAccountChatMute: vi.fn(),
   moderateAccount: vi.fn(),
   muteAccountChat: vi.fn(),
 }));
@@ -44,7 +45,6 @@ vi.mock('../server/chat_filter_db', () => ({
   chatModeratedAccounts: vi.fn(async () => []),
   chatModerationForAccount: vi.fn(),
   getFilterConfig: vi.fn(),
-  liftChatMute: vi.fn(),
   listFilterWords: vi.fn(),
   removeFilterWord: vi.fn(),
   resetChatStrikes: vi.fn(),
@@ -77,17 +77,17 @@ import {
   addFilterWord,
   chatModerationForAccount,
   getFilterConfig,
-  liftChatMute,
   listFilterWords,
   removeFilterWord,
   resetChatStrikes,
   updateFilterConfig,
 } from '../server/chat_filter_db';
-import { accountForToken, findAccount, isAdminAccount } from '../server/db';
+import { accountForToken, accountMailTarget, findAccount, isAdminAccount } from '../server/db';
 import { addBlockedIp, removeBlockedIp } from '../server/ip_block_db';
 import {
   forceCharacterRename,
   ignoreReport,
+  liftAccountChatMute,
   moderateAccount,
   moderationQueue,
   moderationReportsForAccount,
@@ -562,6 +562,7 @@ describe('admin api auth', () => {
       playtimeSeconds: 0,
       characters: [],
       recentSessions: [],
+      moderationHistory: [],
     });
     vi.mocked(moderationReportsForAccount).mockResolvedValue([]);
     const res = fakeRes();
@@ -596,6 +597,7 @@ describe('admin api auth', () => {
       playtimeSeconds: 0,
       characters: [],
       recentSessions: [],
+      moderationHistory: [],
     });
     const res = fakeRes();
 
@@ -743,6 +745,35 @@ describe('admin api auth', () => {
       expiresAt: undefined,
     });
     expect(fakeGame.disconnectAccount).not.toHaveBeenCalled();
+  });
+
+  it('unsuspends without disconnecting the account', async () => {
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    vi.mocked(moderateAccount).mockResolvedValue();
+    const res = fakeRes();
+
+    await handleAdminApi(
+      fakeReq({
+        method: 'POST',
+        token: VALID_TOKEN,
+        url: '/admin/api/moderation/accounts/9/unsuspend',
+        body: { reason: 'appeal accepted' },
+      }),
+      res,
+      fakeGame,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(moderateAccount).toHaveBeenCalledWith({
+      accountId: 9,
+      adminAccountId: 7,
+      action: 'unsuspend',
+      reason: 'appeal accepted',
+      expiresAt: undefined,
+    });
+    expect(fakeGame.disconnectAccount).not.toHaveBeenCalled();
+    expect(accountMailTarget).not.toHaveBeenCalled();
   });
 
   it('rejects suspending or banning admin accounts', async () => {
@@ -926,7 +957,8 @@ describe('admin api chat filter', () => {
   });
 
   it('lifts a mute and syncs the live session', async () => {
-    vi.mocked(liftChatMute).mockResolvedValue(true);
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(liftAccountChatMute).mockResolvedValue();
     const res = fakeRes();
 
     await handleAdminApi(
@@ -934,13 +966,18 @@ describe('admin api chat filter', () => {
         method: 'POST',
         token: VALID_TOKEN,
         url: '/admin/api/moderation/accounts/9/lift-mute',
+        body: { reason: 'appeal accepted' },
       }),
       res,
       fakeGame,
     );
 
     expect(res.statusCode).toBe(200);
-    expect(liftChatMute).toHaveBeenCalledWith(9);
+    expect(liftAccountChatMute).toHaveBeenCalledWith({
+      accountId: 9,
+      adminAccountId: 7,
+      reason: 'appeal accepted',
+    });
     expect(fakeGame.liftChatMuteLive).toHaveBeenCalledWith(9);
   });
 
@@ -980,6 +1017,7 @@ describe('admin api chat filter', () => {
       playtimeSeconds: 0,
       characters: [],
       recentSessions: [],
+      moderationHistory: [],
     });
     vi.mocked(moderationReportsForAccount).mockResolvedValue([]);
     vi.mocked(chatModerationForAccount).mockResolvedValue({

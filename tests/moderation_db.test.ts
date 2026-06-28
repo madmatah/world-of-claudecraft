@@ -7,7 +7,7 @@ vi.mock('../server/db', () => ({
 import { pool } from '../server/db';
 import {
   cleanReportReason, cleanText, createPlayerReport, createSuspiciousRegistrationReport, forceCharacterRename, moderateAccount,
-  muteAccountChat, moderationQueue, moderationReportsForAccount,
+  liftAccountChatMute, muteAccountChat, moderationQueue, moderationReportsForAccount,
 } from '../server/moderation_db';
 
 const query = vi.mocked(pool.query);
@@ -201,6 +201,48 @@ describe('moderation report helpers', () => {
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 
+  it('lifts an active chat mute and writes a dedicated audit action', async () => {
+    const client = clientStub();
+    client.query
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any)
+      .mockResolvedValue({ rows: [] } as any);
+    connect.mockResolvedValue(client as any);
+
+    await liftAccountChatMute({
+      accountId: 2,
+      adminAccountId: 1,
+      reason: 'appeal accepted',
+    });
+
+    expect(client.query.mock.calls[1][0]).toMatch(/chat_muted_until = NULL/);
+    expect(client.query.mock.calls[1][0]).toMatch(/chat_mute_reason = NULL/);
+    expect(client.query.mock.calls[1][0]).toMatch(/chat_muted_until > now\(\)/);
+    expect(client.query.mock.calls[2][0]).toMatch(/account_moderation_actions/);
+    expect(client.query.mock.calls[2][0]).toMatch(/'chat_unmute'/);
+    expect(client.query.mock.calls[2][1]).toEqual([2, 1, 'appeal accepted']);
+    expect(client.query.mock.calls[3][0]).toBe('COMMIT');
+  });
+
+  it('rejects lifting chat mute when no active mute exists', async () => {
+    const client = clientStub();
+    client.query
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValue({ rows: [] } as any);
+    connect.mockResolvedValue(client as any);
+
+    await expect(
+      liftAccountChatMute({
+        accountId: 2,
+        adminAccountId: 1,
+        reason: 'appeal accepted',
+      }),
+    ).rejects.toThrow(/not chat muted/);
+
+    expect(client.query.mock.calls[2][0]).toBe('ROLLBACK');
+  });
+
   it('requires a moderation reason for suspend and ban actions', async () => {
     await expect(moderateAccount({
       accountId: 2,
@@ -229,6 +271,56 @@ describe('moderation report helpers', () => {
     expect(client.query.mock.calls[2][0]).toMatch(/account_moderation_actions/);
     expect(client.query.mock.calls[2][1]).toEqual([2, 1, 'unban', 'appeal accepted', null]);
     expect(client.query.mock.calls[4][0]).toBe('COMMIT');
+    expect(client.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('unsuspends an active suspension and writes a dedicated audit action', async () => {
+    const client = clientStub();
+    client.query
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any)
+      .mockResolvedValue({ rows: [] } as any);
+    connect.mockResolvedValue(client as any);
+
+    await moderateAccount({
+      accountId: 2,
+      adminAccountId: 1,
+      action: 'unsuspend',
+      reason: 'appeal accepted',
+    });
+
+    expect(client.query.mock.calls[1][0]).toMatch(/SET suspended_until = NULL/);
+    expect(client.query.mock.calls[1][0]).toMatch(/suspended_until > now\(\)/);
+    expect(client.query.mock.calls[1][1]).toEqual([2, 'appeal accepted']);
+    expect(client.query.mock.calls[2][0]).toMatch(/account_moderation_actions/);
+    expect(client.query.mock.calls[2][1]).toEqual([
+      2,
+      1,
+      'unsuspend',
+      'appeal accepted',
+      null,
+    ]);
+    expect(client.query.mock.calls[3][0]).toBe('COMMIT');
+  });
+
+  it('rejects unsuspending an account without an active suspension', async () => {
+    const client = clientStub();
+    client.query
+      .mockResolvedValueOnce({ rows: [] } as any)
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
+      .mockResolvedValue({ rows: [] } as any);
+    connect.mockResolvedValue(client as any);
+
+    await expect(
+      moderateAccount({
+        accountId: 2,
+        adminAccountId: 1,
+        action: 'unsuspend',
+        reason: 'appeal accepted',
+      }),
+    ).rejects.toThrow(/not suspended/);
+
+    expect(client.query.mock.calls[2][0]).toBe('ROLLBACK');
     expect(client.release).toHaveBeenCalledTimes(1);
   });
 

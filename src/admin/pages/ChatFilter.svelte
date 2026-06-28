@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { ChatFilterData } from '../types';
+  import type { ChatFilterData, ChatModeratedAccount } from '../types';
   import { apiGet, apiPost } from '../api';
   import { auth } from '../state/auth.svelte';
   import { localizeAdminError, t } from '../i18n';
@@ -8,6 +8,8 @@
   import Panel from '../components/Panel.svelte';
   import Badge from '../components/Badge.svelte';
   import WordList from '../components/WordList.svelte';
+  import ModerationActionPrompt from '../components/ModerationActionPrompt.svelte';
+  import { liftChatMute } from '../moderation_actions';
 
   // Chat filter tab: escalation config, the soft/hard word tiers, and the list of
   // chat-moderated accounts. Ported from renderChatFilter + wireChatFilterEvents.
@@ -15,6 +17,7 @@
   let failed = $state(false);
   let warnings = $state(0);
   let ladder = $state('');
+  let selectedLift = $state<ChatModeratedAccount | null>(null);
 
   let ladderHuman = $derived((data?.config.muteLadderSeconds ?? []).map((s) => fmtDuration(s)).join(' → '));
 
@@ -47,8 +50,25 @@
     apiPost('/admin/api/chat-filter/config', { warningsBeforeMute, muteLadderSeconds }).then(() => refresh()).catch((err: unknown) => fail(err, 'alert.saveConfigFailed'));
   }
 
-  function accountAction(accountId: number, endpoint: 'lift-mute' | 'reset-strikes'): void {
-    apiPost(`/admin/api/moderation/accounts/${accountId}/${endpoint}`, {}).then(() => refresh()).catch((err: unknown) => fail(err, 'alert.actionFailed'));
+  function resetStrikes(accountId: number): void {
+    apiPost(`/admin/api/moderation/accounts/${accountId}/reset-strikes`, {}).then(() => refresh()).catch((err: unknown) => fail(err, 'alert.actionFailed'));
+  }
+
+  async function confirmLift(values: { reason: string; expiry: string }): Promise<void> {
+    const account = selectedLift;
+    if (!account) return;
+    const built = liftChatMute(account.id, values.reason);
+    if ('errorKey' in built) {
+      window.alert(t(built.errorKey));
+      return;
+    }
+    try {
+      await apiPost(built.pending.endpoint, built.pending.body);
+      selectedLift = null;
+      await refresh();
+    } catch (err) {
+      fail(err, 'alert.actionFailed');
+    }
   }
 
   const muted = (until: string | null) => until !== null && new Date(until).getTime() > Date.now();
@@ -107,10 +127,27 @@
                 {#if muted(a.chatMutedUntil)}<Badge variant="warn">{t('chatMod.mutedUntil', { value: fmtDate(a.chatMutedUntil) })}</Badge>{:else}<Badge>{t('chatMod.notMuted')}</Badge>{/if}
               </td>
               <td>
-                {#if muted(a.chatMutedUntil)}<button onclick={() => accountAction(a.id, 'lift-mute')}>{t('chatMod.liftMute')}</button>{/if}
-                {#if a.chatStrikes > 0}<button onclick={() => accountAction(a.id, 'reset-strikes')}>{t('chatMod.resetStrikes')}</button>{/if}
+                {#if muted(a.chatMutedUntil)}<button onclick={() => (selectedLift = a)}>{t('chatMod.liftMute')}</button>{/if}
+                {#if a.chatStrikes > 0}<button onclick={() => resetStrikes(a.id)}>{t('chatMod.resetStrikes')}</button>{/if}
               </td>
             </tr>
+            {#if selectedLift?.id === a.id}
+              <tr>
+                <td colspan="4">
+                  {#key a.id}
+                    <ModerationActionPrompt
+                      title={t('dialog.confirmChatUnmute')}
+                      rows={[
+                        { label: t('dialog.account'), value: a.username },
+                        { label: t('dialog.action'), value: t('chatMod.liftChatMute') },
+                      ]}
+                      onConfirm={confirmLift}
+                      onCancel={() => (selectedLift = null)}
+                    />
+                  {/key}
+                </td>
+              </tr>
+            {/if}
           {/each}
         </tbody>
       </table>

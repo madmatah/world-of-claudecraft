@@ -6,29 +6,42 @@
   import Panel from './Panel.svelte';
   import Badge from './Badge.svelte';
   import IpLink from './IpLink.svelte';
+  import ModerationActionPrompt from './ModerationActionPrompt.svelte';
 
   // An account's recent IPs and their block status, so a moderator sees at a glance why
-  // a player cannot connect. Ban is confirmed (onBan opens the shared confirm dialog);
-  // unblock is reversible and applies directly. Admins can't be locked out, so their
-  // unblocked IPs offer no ban button. Ported from renderIpBlockSection.
+  // a player cannot connect. Blocking asks for its own optional reason; unblocking is
+  // reversible and applies directly. Admins cannot be locked out, so their unblocked
+  // IPs offer no block button.
   let {
     detail,
-    note,
     onBan,
     onUnblock,
   }: {
     detail: ModerationAccountDetail;
-    note: string;
-    onBan: (pending: PendingAction) => void;
+    onBan: (pending: PendingAction) => boolean | Promise<boolean>;
     onUnblock: (ip: string) => void;
   } = $props();
 
+  let selected = $state<{ ip: string; duration: string; label: string } | null>(null);
   let ips = $derived(knownAccountIps(detail));
+
+  $effect(() => {
+    detail.account.id;
+    selected = null;
+  });
   const banButtons = [
     { duration: '1d', label: () => t('blockedIps.ban24h') },
     { duration: '30d', label: () => t('blockedIps.ban30d') },
     { duration: '', label: () => t('blockedIps.banForever') },
   ];
+
+  async function confirm(values: { reason: string; expiry: string }): Promise<void> {
+    const action = selected;
+    if (!action) return;
+    if (await onBan(banIp(action.ip, action.label, action.duration, values.reason))) {
+      selected = null;
+    }
+  }
 </script>
 
 <Panel title={t('blockedIps.accountSectionTitle')}>
@@ -47,11 +60,39 @@
             <span class="hint">{t('blockedIps.adminProtected')}</span>
           {:else}
             {#each banButtons as b}
-              <button class="danger" onclick={() => onBan(banIp(entry.ip, b.label(), b.duration, note))}>{b.label()}</button>
+              <button
+                class="danger"
+                onclick={() =>
+                  (selected = {
+                    ip: entry.ip,
+                    duration: b.duration,
+                    label: b.label(),
+                  })}
+              >
+                {b.label()}
+              </button>
             {/each}
           {/if}
         </div>
       {/each}
     </div>
+    {#if selected}
+      {@const action = selected}
+      {#key `${action.ip}:${action.duration}`}
+        <ModerationActionPrompt
+          title={t('blockedIps.confirmBanTitle')}
+          rows={[
+            { label: t('blockedIps.colIp'), value: action.ip },
+            { label: t('dialog.action'), value: action.label },
+            { label: t('dialog.warning'), value: t('blockedIps.sharedIpWarning') },
+          ]}
+          reasonRequired={false}
+          reasonPlaceholder={t('blockedIps.reasonPlaceholder')}
+          danger
+          onConfirm={confirm}
+          onCancel={() => (selected = null)}
+        />
+      {/key}
+    {/if}
   {/if}
 </Panel>

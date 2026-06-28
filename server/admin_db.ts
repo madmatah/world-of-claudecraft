@@ -850,10 +850,19 @@ export interface AccountDetail {
     seconds: number;
     ip: string | null;
   }[];
+  moderationHistory: {
+    id: number;
+    action: string;
+    reason: string;
+    createdAt: string;
+    expiresAt: string | null;
+    adminAccountId: number | null;
+    adminUsername: string | null;
+  }[];
 }
 
 export async function accountDetail(accountId: number): Promise<AccountDetail | null> {
-  const [account, characters, sessions] = await Promise.all([
+  const [account, characters, sessions, moderationHistory] = await Promise.all([
     pool.query(
       `SELECT id, username, created_at, last_login, is_admin, banned_at, suspended_until,
               COALESCE(moderation_reason, '') AS moderation_reason,
@@ -878,6 +887,17 @@ export async function accountDetail(accountId: number): Promise<AccountDetail | 
       `SELECT id, character_name, started_at, ended_at, ip_address,
               EXTRACT(EPOCH FROM (COALESCE(ended_at, now()) - started_at))::bigint AS seconds
        FROM play_sessions WHERE account_id = $1 ORDER BY started_at DESC LIMIT 20`,
+      [accountId],
+    ),
+    pool.query(
+      `SELECT action_log.id, action_log.action, action_log.reason,
+              action_log.created_at, action_log.expires_at,
+              action_log.admin_account_id, admin.username AS admin_username
+       FROM account_moderation_actions action_log
+       LEFT JOIN accounts admin ON admin.id = action_log.admin_account_id
+       WHERE action_log.account_id = $1
+       ORDER BY action_log.created_at DESC, action_log.id DESC
+       LIMIT 50`,
       [accountId],
     ),
   ]);
@@ -918,6 +938,16 @@ export async function accountDetail(accountId: number): Promise<AccountDetail | 
       endedAt: s.ended_at,
       seconds: Number(s.seconds),
       ip: s.ip_address ?? null,
+    })),
+    moderationHistory: moderationHistory.rows.map((entry) => ({
+      id: Number(entry.id),
+      action: entry.action,
+      reason: entry.reason,
+      createdAt: entry.created_at,
+      expiresAt: entry.expires_at ?? null,
+      adminAccountId:
+        entry.admin_account_id === null ? null : Number(entry.admin_account_id),
+      adminUsername: entry.admin_username ?? null,
     })),
   };
 }

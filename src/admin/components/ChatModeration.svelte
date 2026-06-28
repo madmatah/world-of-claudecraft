@@ -1,34 +1,36 @@
 <script lang="ts">
-  import type { ChatModerationDetail } from '../types';
+  import type { AccountDetail, ChatModerationDetail } from '../types';
+  import type { PendingAction } from '../moderation_actions';
   import { t } from '../i18n';
   import { fmtDate, fmtDuration } from '../format';
   import Panel from './Panel.svelte';
-  import Badge from './Badge.svelte';
+  import ChatModerationControls from './ChatModerationControls.svelte';
 
-  // Chat-filter state for an account in the moderation detail: live mute status, strike
-  // count, the warn/mute incident log, and manual lift/reset (non-destructive, no
-  // confirm). Ported from renderChatModeration. The parent owns the apiPost + refetch.
+  // Chat-filter state for an account in the moderation detail: shared mute controls,
+  // strike state, and the warn/mute incident log. The parent owns apiPost and refresh.
   let {
+    account,
     chat,
-    onLift,
+    onSubmit,
     onReset,
   }: {
+    account: AccountDetail;
     chat: ChatModerationDetail;
-    onLift: () => void;
+    onSubmit: (pending: PendingAction) => boolean | Promise<boolean>;
     onReset: () => void;
   } = $props();
 </script>
 
 <Panel title={t('chatMod.title')}>
-  <div class="chat-mod-status">
-    {t('chatMod.status')}
-    {#if chat.chatMutedUntil}<Badge variant="bad">{t('chatMod.mutedUntil', { value: fmtDate(chat.chatMutedUntil) })}</Badge>{:else}<Badge>{t('chatMod.notMuted')}</Badge>{/if}
-    · {t('chatMod.strikes')} <b>{chat.chatStrikes}</b>
-  </div>
-  <div class="mod-actions">
-    {#if chat.chatMutedUntil}<button onclick={onLift}>{t('chatMod.liftMute')}</button>{/if}
-    {#if chat.chatStrikes > 0}<button onclick={onReset}>{t('chatMod.resetStrikes')}</button>{/if}
-  </div>
+  <ChatModerationControls
+    target={{
+      ...account,
+      chatMutedUntil: chat.chatMutedUntil,
+      chatStrikes: chat.chatStrikes,
+    }}
+    {onSubmit}
+    {onReset}
+  />
   <h4>{t('chatMod.recentIncidents')}</h4>
   {#if chat.violations.length === 0}
     <div class="empty">{t('chatMod.noIncidents')}</div>

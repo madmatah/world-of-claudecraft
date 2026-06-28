@@ -21,7 +21,6 @@ import {
   chatModeratedAccounts,
   chatModerationForAccount,
   getFilterConfig,
-  liftChatMute,
   listFilterWords,
   removeFilterWord,
   resetChatStrikes,
@@ -44,6 +43,7 @@ import { addBlockedIp, cleanIp, listBlockedIps, removeBlockedIp } from './ip_blo
 import {
   forceCharacterRename,
   ignoreReport,
+  liftAccountChatMute,
   moderateAccount,
   moderationQueue,
   moderationReportsForAccount,
@@ -140,13 +140,16 @@ export async function handleAdminApi(
     const accountId = await adminAccountId(req);
     if (accountId === null) return fail(res, 401, 'admin authentication required');
 
-    const actionMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)\/(suspend|ban|unban)$/.exec(
+    const actionMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)\/(suspend|unsuspend|ban|unban)$/.exec(
       path,
     );
     if (req.method === 'POST' && actionMatch) {
       const targetAccountId = Number(actionMatch[1]);
-      const action = actionMatch[2] as 'suspend' | 'ban' | 'unban';
-      if (action !== 'unban' && (await isAdminAccount(targetAccountId))) {
+      const action = actionMatch[2] as 'suspend' | 'unsuspend' | 'ban' | 'unban';
+      if (
+        (action === 'suspend' || action === 'ban') &&
+        (await isAdminAccount(targetAccountId))
+      ) {
         return fail(res, 400, 'admin accounts cannot be suspended or banned');
       }
       const body = await readBody(req);
@@ -158,7 +161,7 @@ export async function handleAdminApi(
           reason: body.reason,
           expiresAt: body.expiresAt,
         });
-        if (action !== 'unban') {
+        if (action === 'suspend' || action === 'ban') {
           const statusText =
             action === 'ban' ? 'This account has been banned.' : 'This account is suspended.';
           game.disconnectAccount(targetAccountId, statusText);
@@ -253,9 +256,18 @@ export async function handleAdminApi(
     const liftMuteMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)\/lift-mute$/.exec(path);
     if (req.method === 'POST' && liftMuteMatch) {
       const id = Number(liftMuteMatch[1]);
-      const lifted = await liftChatMute(id);
-      if (lifted) game.liftChatMuteLive(id);
-      return lifted ? ok(res, { ok: true }) : fail(res, 404, 'account not found');
+      const body = await readBody(req);
+      try {
+        await liftAccountChatMute({
+          accountId: id,
+          adminAccountId: accountId,
+          reason: body.reason,
+        });
+        game.liftChatMuteLive(id);
+        return ok(res, { ok: true });
+      } catch (err) {
+        return fail(res, 400, err instanceof Error ? err.message : 'chat unmute failed');
+      }
     }
     const resetStrikesMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)\/reset-strikes$/.exec(
       path,

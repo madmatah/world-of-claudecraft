@@ -4,9 +4,11 @@ import {
   chatMuteCustom,
   chatMuteHours,
   forceRename,
+  liftChatMute,
   suspendCustom,
   suspendHours,
   unbanAccount,
+  unsuspendAccount,
 } from '../../src/admin/moderation_actions';
 
 // Pure validation + endpoint/body shaping for the moderation actions. Runs in the
@@ -18,7 +20,9 @@ describe('moderation_actions', () => {
     expect(suspendHours(5, 24, '')).toEqual({ errorKey: 'alert.noteRequired' });
     expect(banAccount(5, '')).toEqual({ errorKey: 'alert.noteRequired' });
     expect(unbanAccount(5, '')).toEqual({ errorKey: 'alert.noteRequired' });
+    expect(unsuspendAccount(5, '')).toEqual({ errorKey: 'alert.noteRequired' });
     expect(chatMuteHours(5, 1, '')).toEqual({ errorKey: 'alert.noteRequired' });
+    expect(liftChatMute(5, '')).toEqual({ errorKey: 'alert.noteRequired' });
     expect(forceRename(9, 'Foo', '')).toEqual({ errorKey: 'alert.noteRequired' });
   });
 
@@ -39,6 +43,13 @@ describe('moderation_actions', () => {
     expect(built.pending.danger).toBe(true);
   });
 
+  it('builds an unsuspend request without changing ban state', () => {
+    const built = unsuspendAccount(42, 'appeal accepted');
+    if (!('pending' in built)) throw new Error('expected pending');
+    expect(built.pending.endpoint).toBe('/admin/api/moderation/accounts/42/unsuspend');
+    expect(built.pending.body).toEqual({ reason: 'appeal accepted' });
+  });
+
   it('validates custom suspend expiry: required then must be in the future', () => {
     expect(suspendCustom(7, '', 'note')).toEqual({ errorKey: 'alert.customExpiryRequired' });
     expect(suspendCustom(7, 'not-a-date', 'note')).toEqual({
@@ -54,6 +65,13 @@ describe('moderation_actions', () => {
 
   it('uses the chat-mute custom-required key for custom chat mute', () => {
     expect(chatMuteCustom(7, '', 'note')).toEqual({ errorKey: 'alert.customChatMuteRequired' });
+  });
+
+  it('builds an audited chat unmute request', () => {
+    const built = liftChatMute(42, 'appeal accepted');
+    if (!('pending' in built)) throw new Error('expected pending');
+    expect(built.pending.endpoint).toBe('/admin/api/moderation/accounts/42/lift-mute');
+    expect(built.pending.body).toEqual({ reason: 'appeal accepted' });
   });
 
   it('force-rename posts to the character endpoint', () => {

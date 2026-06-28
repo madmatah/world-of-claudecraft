@@ -6,17 +6,13 @@
   import { auth } from '../state/auth.svelte';
   import {
     type Built,
-    banAccount,
-    chatMuteCustom,
-    chatMuteHours,
     forceRename,
-    suspendCustom,
-    suspendHours,
-    unbanAccount,
     type PendingAction,
   } from '../moderation_actions';
-  import ConfirmDialog from '../components/ConfirmDialog.svelte';
-  import Badge from '../components/Badge.svelte';
+  import AccountModerationActions from '../components/AccountModerationActions.svelte';
+  import ChatModerationControls from '../components/ChatModerationControls.svelte';
+  import ModerationActionPrompt from '../components/ModerationActionPrompt.svelte';
+  import ModerationHistory from '../components/ModerationHistory.svelte';
 
   // Reusable account body: moderation actions, chat state, characters, and recent
   // sessions. Identity and account status belong to the parent context (table row,
@@ -32,38 +28,33 @@
     onChanged: () => void;
   } = $props();
 
-  let note = $state('');
-  let customExpiry = $state('');
-  let pending = $state<PendingAction | null>(null);
+  let selectedCharacter = $state<AccountDetail['characters'][number] | null>(null);
 
   let canModerate = $derived(includeAdminControls && !detail.isAdmin);
-  let activeChatMute = $derived(detail.chatMutedUntil !== null && new Date(detail.chatMutedUntil).getTime() > Date.now());
 
-  function run(built: Built): void {
+  async function submit(built: Built): Promise<boolean> {
     if ('errorKey' in built) {
       window.alert(t(built.errorKey));
-      return;
+      return false;
     }
-    pending = built.pending;
+    return submitPending(built.pending);
   }
 
-  async function confirm(): Promise<void> {
-    const p = pending;
-    if (!p) return;
+  async function submitPending(pending: PendingAction): Promise<boolean> {
     try {
-      await apiPost(p.endpoint, p.body);
-      pending = null;
+      await apiPost(pending.endpoint, pending.body);
       onChanged();
+      return true;
     } catch (err) {
       if (!auth.handleAuthFailure(err)) {
         window.alert(err instanceof Error ? localizeAdminError(err.message) : t('alert.actionFailed'));
       }
+      return false;
     }
   }
 
-  // Lift mute / reset strikes are non-destructive and skip the confirm dialog, matching
-  // the old flow. Available for any account (incl. admins) so an auto-muted operator can
-  // clear it.
+  // Resetting strikes is reversible and skips confirmation. Lifting a mute goes through
+  // the audited chat action prompt because it changes an active moderation state.
   async function direct(endpoint: string): Promise<void> {
     try {
       await apiPost(endpoint, {});
@@ -74,53 +65,24 @@
       }
     }
   }
+
+  async function confirmForceRename(values: { reason: string; expiry: string }): Promise<void> {
+    const character = selectedCharacter;
+    if (!character) return;
+    if (await submit(forceRename(character.id, character.name, values.reason))) {
+      selectedCharacter = null;
+    }
+  }
 </script>
 
 <div class="account-detail">
-  {#if canModerate}
-    <div class="account-admin-controls mod-account-actions">
-      {#if detail.moderationReason}
-        <div class="moderation-reason">
-          {t('detail.reason', { value: detail.moderationReason })}
-        </div>
-      {/if}
-      {#if activeChatMute && detail.chatMuteReason}
-        <div class="moderation-reason">
-          <b>{t('detail.chatMuteLabel')}</b>
-          {t('detail.reason', { value: detail.chatMuteReason })}
-        </div>
-      {/if}
-      <input class="account-mod-reason" placeholder={t('detail.notePlaceholder')} maxlength="500" bind:value={note} />
-      {#if detail.bannedAt}
-        <button onclick={() => run(unbanAccount(detail.id, note.trim()))}>{t('detail.unban')}</button>
-      {:else}
-        <button onclick={() => run(suspendHours(detail.id, 1, note.trim()))}>{t('detail.suspend1h')}</button>
-        <button onclick={() => run(suspendHours(detail.id, 24, note.trim()))}>{t('detail.suspend24h')}</button>
-        <button onclick={() => run(suspendHours(detail.id, 72, note.trim()))}>{t('detail.suspend3d')}</button>
-        <button onclick={() => run(suspendHours(detail.id, 168, note.trim()))}>{t('detail.suspend7d')}</button>
-        <button onclick={() => run(suspendHours(detail.id, 720, note.trim()))}>{t('detail.suspend30d')}</button>
-        <input class="account-custom-expiry" type="datetime-local" bind:value={customExpiry} />
-        <button onclick={() => run(suspendCustom(detail.id, customExpiry, note.trim()))}>{t('detail.suspendCustom')}</button>
-        <button onclick={() => run(chatMuteHours(detail.id, 1, note.trim()))}>{t('detail.chatMute1h')}</button>
-        <button onclick={() => run(chatMuteCustom(detail.id, customExpiry, note.trim()))}>{t('detail.chatMuteCustom')}</button>
-        <button class="danger" onclick={() => run(banAccount(detail.id, note.trim()))}>{t('detail.ban')}</button>
-      {/if}
-    </div>
-    {#if pending}
-      <ConfirmDialog title={pending.title} rows={pending.rows} danger={pending.danger} onConfirm={confirm} onCancel={() => (pending = null)} />
-    {/if}
-  {/if}
-
   {#if includeAdminControls}
-    <div class="account-admin-controls chat-mod-controls">
-      <div class="account-status">
-        <b>{t('chatMod.chatLabel')}</b>
-        {#if activeChatMute}<Badge variant="warn" size="medium">{t('chatMod.mutedUntil', { value: fmtDate(detail.chatMutedUntil) })}</Badge>{:else}<Badge size="medium">{t('chatMod.notMuted')}</Badge>{/if}
-        · {t('chatMod.strikesInline')} <b>{detail.chatStrikes}</b>
-      </div>
-      {#if activeChatMute}<button onclick={() => direct(`/admin/api/moderation/accounts/${detail.id}/lift-mute`)}>{t('chatMod.liftChatMute')}</button>{/if}
-      {#if detail.chatStrikes > 0}<button onclick={() => direct(`/admin/api/moderation/accounts/${detail.id}/reset-strikes`)}>{t('chatMod.resetChatStrikes')}</button>{/if}
-    </div>
+    <AccountModerationActions target={detail} onSubmit={submitPending} />
+    <ChatModerationControls
+      target={detail}
+      onSubmit={submitPending}
+      onReset={() => direct(`/admin/api/moderation/accounts/${detail.id}/reset-strikes`)}
+    />
   {/if}
 
   <div class="detail-grid">
@@ -152,11 +114,25 @@
                 <td class="num">{fmtCopper(c.copper)}</td>
                 <td class="num">{c.pos ? `${Math.round(c.pos.x)}, ${Math.round(c.pos.z)}` : '—'}</td>
                 <td>{fmtRelative(c.updatedAt)}</td>
-                {#if canModerate}<td><button class="btn-sm" onclick={() => run(forceRename(c.id, c.name, note.trim()))}>{t('detail.forceNameChange')}</button></td>{/if}
+                {#if canModerate}<td><button class="btn-sm" onclick={() => (selectedCharacter = c)}>{t('detail.forceNameChange')}</button></td>{/if}
               </tr>
             {/each}
           </tbody>
         </table>
+      {/if}
+      {#if selectedCharacter}
+        {@const character = selectedCharacter}
+        {#key character.id}
+          <ModerationActionPrompt
+            title={t('dialog.confirmForceName')}
+            rows={[
+              { label: t('dialog.character'), value: character.name },
+              { label: t('dialog.action'), value: t('detail.forceNameChange') },
+            ]}
+            onConfirm={confirmForceRename}
+            onCancel={() => (selectedCharacter = null)}
+          />
+        {/key}
       {/if}
     </div>
     <div>
@@ -181,4 +157,6 @@
       {/if}
     </div>
   </div>
+
+  <ModerationHistory entries={detail.moderationHistory} />
 </div>
