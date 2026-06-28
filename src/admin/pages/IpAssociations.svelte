@@ -282,13 +282,13 @@
 
   .hint {
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-size-small);
   }
 
   .account-meta,
   .match-reason {
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-size-small);
   }
 
   .account-meta {

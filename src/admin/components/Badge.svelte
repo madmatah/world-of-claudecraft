@@ -5,9 +5,11 @@
   // indicators visually consistent across otherwise unrelated admin pages.
   let {
     variant = 'default',
+    size = 'compact',
     children,
   }: {
     variant?: 'default' | 'neutral' | 'warn' | 'bad' | 'success' | 'admin';
+    size?: 'compact' | 'medium';
     children: Snippet;
   } = $props();
 </script>
@@ -19,4 +21,5 @@
   class:bad={variant === 'bad'}
   class:success={variant === 'success'}
   class:admin={variant === 'admin'}
+  class:medium={size === 'medium'}
 >{@render children()}</span>

@@ -1,7 +1,7 @@
 import { getContext, setContext } from 'svelte';
 
 export interface AccountModalController {
-  open: (accountId: number) => void;
+  open: (accountId: number, onChanged?: () => void) => void;
   close: () => void;
 }
 

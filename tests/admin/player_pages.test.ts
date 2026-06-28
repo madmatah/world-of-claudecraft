@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import './_setup';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
 const accountsPage = {
@@ -38,7 +38,19 @@ const accountDetail = {
   chatStrikes: 0,
   lastLoginIp: '203.0.113.7',
   playtimeSeconds: 3600,
-  characters: [],
+  characters: [
+    {
+      id: 7,
+      name: 'Merlin',
+      class: 'mage',
+      level: 42,
+      copper: 456,
+      xp: 123,
+      pos: { x: 1, z: 2 },
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-06-01T00:00:00Z',
+    },
+  ],
   recentSessions: [
     {
       id: 10,
@@ -91,21 +103,34 @@ vi.mock('../../src/admin/api', () => ({
   clearSession: () => {},
 }));
 
-import Accounts from '../../src/admin/pages/Accounts.svelte';
 import Characters from '../../src/admin/pages/Characters.svelte';
 import App from '../../src/admin/App.svelte';
 import { t } from '../../src/admin/i18n';
 import { auth } from '../../src/admin/state/auth.svelte';
 
 describe('Players pages', () => {
-  it('renders the searchable accounts directory and expandable detail', async () => {
-    render(Accounts);
-    expect(await screen.findByText('alice')).toBeInTheDocument();
+  it('opens account details from the searchable accounts directory', async () => {
+    history.replaceState(null, '', '/admin?page=accounts');
+    auth.token = 'tok';
+    auth.name = 'alice';
+    render(App);
+
+    await screen.findByText('alice');
+    const accountLink = screen.getByRole('button', { name: '1' });
     expect(screen.getByPlaceholderText(t('accounts.searchPlaceholder'))).toBeInTheDocument();
-    await fireEvent.click(screen.getByText('alice').closest('tr')!);
+    await fireEvent.click(accountLink.closest('tr')!);
+
     expect(
-      await screen.findByPlaceholderText(t('detail.notePlaceholder')),
+      await screen.findByRole('dialog', {
+        name: t('accountModal.title', { username: 'alice' }),
+      }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText(t('detail.notePlaceholder')),
+    ).toBeInTheDocument();
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await vi.waitFor(() => expect(accountLink).toHaveFocus());
   });
 
   it('renders the sortable characters directory', async () => {
@@ -130,11 +155,20 @@ describe('Players pages', () => {
     accountLink.focus();
     await fireEvent.click(accountLink);
 
-    expect(
-      await screen.findByRole('dialog', {
-        name: t('accountModal.title', { username: 'alice' }),
-      }),
-    ).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', {
+      name: t('accountModal.title', { username: 'alice' }),
+    });
+    const title = within(dialog).getByRole('heading', {
+      name: t('accountModal.title', { username: 'alice' }),
+    });
+    const summary = within(dialog).getByText(t('accounts.colRegistered')).closest('dl');
+
+    expect(title.parentElement).toContainElement(screen.getByText(t('detail.statusActive')));
+    expect(summary).not.toBeNull();
+    expect(within(summary!).getByText(t('accounts.colId'))).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: t('detail.forceNameChange') })).toHaveClass(
+      'btn-sm',
+    );
     expect(screen.getByText(t('moderation.badgeOnline'))).toBeInTheDocument();
     expect(screen.getByText(t('detail.statusActive'))).toBeInTheDocument();
     expect(screen.queryByText(t('detail.status'))).not.toBeInTheDocument();

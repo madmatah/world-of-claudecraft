@@ -47,7 +47,7 @@
           <td class="num">{c.level}</td>
           <td class="num">{c.xp}</td>
           <td class="num">{fmtCopper(c.copper)}</td>
-          <td><AccountLink accountId={c.accountId} username={c.username} /></td>
+          <td><AccountLink accountId={c.accountId} label={c.username} /></td>
           <td>{fmtDate(c.createdAt)}</td>
           <td>{fmtRelative(c.updatedAt)}</td>
         </tr>

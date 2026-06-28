@@ -115,7 +115,7 @@
     <div class="account-admin-controls chat-mod-controls">
       <div class="account-status">
         <b>{t('chatMod.chatLabel')}</b>
-        {#if activeChatMute}<Badge variant="warn">{t('chatMod.mutedUntil', { value: fmtDate(detail.chatMutedUntil) })}</Badge>{:else}<Badge>{t('chatMod.notMuted')}</Badge>{/if}
+        {#if activeChatMute}<Badge variant="warn" size="medium">{t('chatMod.mutedUntil', { value: fmtDate(detail.chatMutedUntil) })}</Badge>{:else}<Badge size="medium">{t('chatMod.notMuted')}</Badge>{/if}
         · {t('chatMod.strikesInline')} <b>{detail.chatStrikes}</b>
       </div>
       {#if activeChatMute}<button onclick={() => direct(`/admin/api/moderation/accounts/${detail.id}/lift-mute`)}>{t('chatMod.liftChatMute')}</button>{/if}
@@ -152,7 +152,7 @@
                 <td class="num">{fmtCopper(c.copper)}</td>
                 <td class="num">{c.pos ? `${Math.round(c.pos.x)}, ${Math.round(c.pos.z)}` : '—'}</td>
                 <td>{fmtRelative(c.updatedAt)}</td>
-                {#if canModerate}<td><button onclick={() => run(forceRename(c.id, c.name, note.trim()))}>{t('detail.forceNameChange')}</button></td>{/if}
+                {#if canModerate}<td><button class="btn-sm" onclick={() => run(forceRename(c.id, c.name, note.trim()))}>{t('detail.forceNameChange')}</button></td>{/if}
               </tr>
             {/each}
           </tbody>

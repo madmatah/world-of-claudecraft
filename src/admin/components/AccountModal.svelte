@@ -12,7 +12,15 @@
   import IpLink from './IpLink.svelte';
   import ModalDialog from './ModalDialog.svelte';
 
-  let { accountId, onClose }: { accountId: number; onClose: () => void } = $props();
+  let {
+    accountId,
+    onClose,
+    onChanged,
+  }: {
+    accountId: number;
+    onClose: () => void;
+    onChanged?: () => void;
+  } = $props();
 
   let detail = $state<AccountDetailData | null>(null);
   let failed = $state(false);
@@ -45,6 +53,7 @@
 <ModalDialog
   labelledBy="account-modal-title"
   closeLabel={t('accountModal.close')}
+  width="1240px"
   {onClose}
 >
   <div class="account-modal-content">
@@ -59,21 +68,21 @@
             {/if}
           </h2>
           {#if detail}
-            <AccountIndicators isAdmin={detail.isAdmin} />
-          {/if}
-        </div>
-        {#if detail}
-          <div class="account-id">
-            <span>{t('accounts.colId')}:</span> {fmtNumber(detail.id)}
-          </div>
-          <div class="account-state">
             <AccountIndicators
+              isAdmin={detail.isAdmin}
               online={detail.online}
               status={accountStatusFor(detail)}
               suspendedUntil={detail.suspendedUntil}
+              size="medium"
             />
-          </div>
+          {/if}
+        </div>
+        {#if detail}
           <dl class="account-summary">
+            <div>
+              <dt>{t('accounts.colId')}</dt>
+              <dd>{fmtNumber(detail.id)}</dd>
+            </div>
             <div>
               <dt>{t('accounts.colRegistered')}</dt>
               <dd>{fmtDate(detail.createdAt)}</dd>
@@ -107,6 +116,7 @@
           includeAdminControls
           onChanged={() => {
             void refresh(false);
+            onChanged?.();
           }}
         />
         <section class="recent-ips">
@@ -158,27 +168,13 @@
     flex-wrap: wrap;
   }
 
-  .account-id {
-    margin-top: 4px;
-    color: #c9b27a;
-    font-size: 12px;
-  }
-
-  .account-id span {
-    color: var(--text-dim);
-  }
-
-  .account-state {
-    margin-top: 8px;
-  }
-
   .account-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 8px 18px;
     margin-top: 8px;
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-size-small);
   }
 
   .account-summary div {
@@ -226,6 +222,7 @@
     max-height: calc(100vh - 145px);
     overflow: auto;
     padding: 18px;
+    container-type: inline-size;
   }
 
   .recent-ips {
@@ -259,7 +256,7 @@
 
   .recent-ip span {
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: var(--font-size-small);
   }
 
   @media (max-width: 800px) {

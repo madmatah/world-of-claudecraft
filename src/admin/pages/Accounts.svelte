@@ -1,27 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type {
-    AccountDetail as AccountDetailData,
-    AccountRow,
-    Paginated,
-  } from '../types';
+  import type { AccountRow, Paginated } from '../types';
   import { apiGet } from '../api';
+  import { getAccountModalController } from '../account_modal';
   import { accountStatusFor } from '../account_status';
   import { auth } from '../state/auth.svelte';
   import { SEARCH_DEBOUNCE_MS } from '../state/poll';
   import { t } from '../i18n';
-  import { fmtDate, fmtDuration, fmtRelative } from '../format';
+  import { fmtDate, fmtDuration, fmtNumber, fmtRelative } from '../format';
   import Panel from '../components/Panel.svelte';
   import Badge from '../components/Badge.svelte';
+  import AccountLink from '../components/AccountLink.svelte';
   import Pager from '../components/Pager.svelte';
-  import AccountDetail from './AccountDetail.svelte';
 
+  const accountModal = getAccountModalController();
   let accounts = $state<Paginated<AccountRow> | null>(null);
   let failed = $state(false);
   let search = $state('');
   let page = $state(1);
-  let expandedId = $state<number | null>(null);
-  let expandedDetail = $state<AccountDetailData | null>(null);
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function refresh(): Promise<void> {
@@ -41,29 +37,10 @@
     searchTimer = setTimeout(() => void refresh(), SEARCH_DEBOUNCE_MS);
   }
 
-  async function refreshExpandedDetail(): Promise<void> {
-    if (expandedId === null) return;
-    try {
-      expandedDetail = await apiGet<AccountDetailData>(`/admin/api/accounts/${expandedId}`);
-    } catch (err) {
-      if (!auth.handleAuthFailure(err)) console.error('account detail failed:', err);
-    }
-  }
-
-  async function toggleAccount(id: number): Promise<void> {
-    if (expandedId === id) {
-      expandedId = null;
-      expandedDetail = null;
-      return;
-    }
-    expandedId = id;
-    expandedDetail = null;
-    await refreshExpandedDetail();
-  }
-
-  function onAccountChanged(): void {
-    void refreshExpandedDetail();
-    void refresh();
+  function openAccount(event: MouseEvent, id: number): void {
+    const row = event.currentTarget as HTMLTableRowElement;
+    row.querySelector<HTMLButtonElement>('.btn-link')?.focus({ preventScroll: true });
+    accountModal?.open(id, () => void refresh());
   }
 
   onMount(() => {
@@ -116,8 +93,14 @@
       <tbody>
         {#each accounts.rows as account (account.id)}
           {@const status = accountStatusFor(account)}
-          <tr class="clickable" onclick={() => toggleAccount(account.id)}>
-            <td class="num">{account.id}</td>
+          <tr class="clickable" onclick={(event) => openAccount(event, account.id)}>
+            <td class="num">
+              <AccountLink
+                accountId={account.id}
+                label={fmtNumber(account.id)}
+                onChanged={() => void refresh()}
+              />
+            </td>
             <td>
               {account.username}
               {#if account.isAdmin}<Badge>{t('accounts.badgeAdmin')}</Badge>{/if}
@@ -133,17 +116,6 @@
             <td>{fmtDate(account.createdAt)}</td>
             <td>{fmtRelative(account.lastLogin)}</td>
           </tr>
-          {#if expandedId === account.id && expandedDetail}
-            <tr class="detail-row">
-              <td colspan="7">
-                <AccountDetail
-                  detail={expandedDetail}
-                  includeAdminControls
-                  onChanged={onAccountChanged}
-                />
-              </td>
-            </tr>
-          {/if}
         {/each}
       </tbody>
     </table>

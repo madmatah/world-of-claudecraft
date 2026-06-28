@@ -9,23 +9,25 @@
     online = false,
     status,
     suspendedUntil = null,
+    size = 'compact',
   }: {
     isAdmin?: boolean;
     online?: boolean;
     status?: AccountStatus;
     suspendedUntil?: string | null;
+    size?: 'compact' | 'medium';
   } = $props();
 </script>
 
 <span class="account-indicators">
-  {#if isAdmin}<Badge variant="admin">{t('accounts.badgeAdmin')}</Badge>{/if}
-  {#if online}<Badge variant="success">{t('moderation.badgeOnline')}</Badge>{/if}
+  {#if isAdmin}<Badge variant="admin" {size}>{t('accounts.badgeAdmin')}</Badge>{/if}
+  {#if online}<Badge variant="success" {size}>{t('moderation.badgeOnline')}</Badge>{/if}
   {#if status === 'banned'}
-    <Badge variant="bad">{t('accounts.badgeBanned')}</Badge>
+    <Badge variant="bad" {size}>{t('accounts.badgeBanned')}</Badge>
   {:else if status === 'suspended'}
-    <Badge variant="warn">{t('detail.suspendedUntil', { value: fmtDate(suspendedUntil) })}</Badge>
+    <Badge variant="warn" {size}>{t('detail.suspendedUntil', { value: fmtDate(suspendedUntil) })}</Badge>
   {:else if status === 'active'}
-    <Badge variant="neutral">{t('detail.statusActive')}</Badge>
+    <Badge variant="neutral" {size}>{t('detail.statusActive')}</Badge>
   {/if}
 </span>
 

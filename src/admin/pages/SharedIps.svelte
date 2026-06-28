@@ -213,7 +213,7 @@
   .shared-ip-heading {
     padding: 3px 12px 6px;
     color: var(--gold-dim);
-    font-size: 11px;
+    font-size: var(--font-size-small);
     text-transform: uppercase;
     letter-spacing: 0.6px;
   }
