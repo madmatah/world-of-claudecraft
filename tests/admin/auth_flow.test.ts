@@ -47,6 +47,14 @@ beforeEach(() => {
 });
 
 describe('admin auth flow', () => {
+  function loginForm(): HTMLFormElement {
+    const form = screen.getByText(t('auth.signIn')).closest('form');
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error('login form not found');
+    }
+    return form;
+  }
+
   it('shows the login screen when not authed', () => {
     render(App);
     expect(screen.getByText(t('auth.signIn'))).toBeInTheDocument();
@@ -63,7 +71,7 @@ describe('admin auth flow', () => {
       target: { value: 'alice' },
     });
     await fireEvent.input(screen.getByLabelText(t('auth.password')), { target: { value: 'pw' } });
-    await fireEvent.submit(screen.getByText(t('auth.signIn')).closest('form')!);
+    await fireEvent.submit(loginForm());
 
     expect(await screen.findByText(t('auth.signOut'))).toBeInTheDocument();
     expect(screen.getByText('alice')).toBeInTheDocument();
@@ -76,7 +84,7 @@ describe('admin auth flow', () => {
     render(App);
     await fireEvent.input(screen.getByLabelText(t('auth.username')), { target: { value: 'bob' } });
     await fireEvent.input(screen.getByLabelText(t('auth.password')), { target: { value: 'nope' } });
-    await fireEvent.submit(screen.getByText(t('auth.signIn')).closest('form')!);
+    await fireEvent.submit(loginForm());
 
     await vi.waitFor(() => expect(auth.loginError).not.toBe(''));
     expect(screen.queryByText(t('auth.signOut'))).not.toBeInTheDocument();

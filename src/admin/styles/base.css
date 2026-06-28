@@ -145,14 +145,15 @@
   /* Mobile zoom prevention: operators are users too, and the dashboard ships to
      phones/tablets. iOS Safari auto-zooms the page when a focused control renders
      below 16px (and ignores the viewport settings), so floor every focusable control
-     at 16px on coarse-pointer (touch) devices. !important beats #login input's
-     id-specificity (14px) and the unlayered scoped styles; pointer:coarse leaves
+     at 16px on coarse-pointer (touch) devices. !important beats unlayered scoped
+     styles; pointer:coarse leaves
      desktop operators (fine pointer) at the compact 14px and is the only reliable
      cross-browser fix. */
   @media (pointer: coarse) {
     input,
     textarea,
     select {
+      /* biome-ignore lint/complexity/noImportantStyles: required to prevent iOS focus zoom over unlayered component styles */
       font-size: 16px !important;
     }
 

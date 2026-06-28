@@ -14,7 +14,7 @@
   }
 </script>
 
-<div id="login">
+<div id="login" class="login">
   <form class="panel" id="login-form" onsubmit={submit}>
     <div class="panel-title">{t('app.title')}</div>
     <label for="login-username">{t('auth.username')}</label>

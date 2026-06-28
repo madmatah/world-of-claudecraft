@@ -66,5 +66,9 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
 export const PAGES: readonly AdminNavItem[] = NAV_SECTIONS.flatMap((section) => section.items);
 
 export function itemForPage(page: AdminPage): AdminNavItem {
-  return PAGES.find((item) => item.id === page)!;
+  const item = PAGES.find((candidate) => candidate.id === page);
+  if (!item) {
+    throw new Error(`unknown admin page: ${page}`);
+  }
+  return item;
 }

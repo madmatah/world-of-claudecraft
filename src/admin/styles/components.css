@@ -34,7 +34,7 @@
   }
 
   /* ---------- login ---------- */
-  #login {
+  .login {
     position: fixed;
     inset: 0;
     display: flex;
@@ -43,20 +43,20 @@
     background: var(--bg-app);
     z-index: 10;
   }
-  #login .panel {
+  .login .panel {
     width: 320px;
   }
-  #login label {
+  .login label {
     display: block;
     font-size: 12px;
     color: var(--text-dim);
     margin: 10px 0 4px;
   }
-  #login input {
+  .login input {
     width: 100%;
     font-size: 14px;
   }
-  #login button {
+  .login button {
     width: 100%;
     margin-top: 14px;
     padding: 9px;
@@ -68,7 +68,7 @@
     font-family: var(--title-font);
     cursor: pointer;
   }
-  #login button:hover {
+  .login button:hover {
     filter: brightness(1.25);
   }
   #login-error {
@@ -85,6 +85,43 @@
   }
   section {
     margin-bottom: 18px;
+  }
+
+  /* ---------- tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-table);
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid #1f1a10;
+    white-space: nowrap;
+  }
+  th {
+    color: var(--gold-dim);
+    font-weight: normal;
+    font-size: var(--font-size-small);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  th.sortable {
+    cursor: pointer;
+  }
+  th.sortable:hover {
+    color: var(--gold);
+  }
+  tbody tr:hover {
+    background: var(--row-hover);
+  }
+  tr.clickable {
+    cursor: pointer;
+  }
+  td.num,
+  th.num {
+    text-align: right;
   }
 
   /* ---------- chat filter ---------- */
@@ -229,42 +266,6 @@
     letter-spacing: 0.6px;
   }
 
-  /* ---------- tables ---------- */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--font-size-table);
-  }
-  th,
-  td {
-    text-align: left;
-    padding: 7px 10px;
-    border-bottom: 1px solid #1f1a10;
-    white-space: nowrap;
-  }
-  th {
-    color: var(--gold-dim);
-    font-weight: normal;
-    font-size: var(--font-size-small);
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-  }
-  th.sortable {
-    cursor: pointer;
-  }
-  th.sortable:hover {
-    color: var(--gold);
-  }
-  tbody tr:hover {
-    background: var(--row-hover);
-  }
-  tr.clickable {
-    cursor: pointer;
-  }
-  td.num,
-  th.num {
-    text-align: right;
-  }
   .table-scroll {
     overflow-x: auto;
   }

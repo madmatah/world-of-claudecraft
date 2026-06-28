@@ -427,6 +427,9 @@ export async function moderateAccount(input: {
         throw new Error('account is not suspended');
       }
     } else {
+      if (expiresAt === null) {
+        throw new Error('suspension expiry must be in the future');
+      }
       // Suspending supersedes any standing ban (an admin downgrading a ban to a
       // timed suspension). banned_at must be cleared here for the same reason
       // the ban branch clears suspended_until — moderationStatusForAccount reads
@@ -436,7 +439,7 @@ export async function moderateAccount(input: {
         `UPDATE accounts
          SET banned_at = NULL, suspended_until = $2, moderation_reason = $3
          WHERE id = $1`,
-        [input.accountId, expiresAt!.toISOString(), reason],
+        [input.accountId, expiresAt.toISOString(), reason],
       );
     }
     await recordModerationAction(client, input.action, {

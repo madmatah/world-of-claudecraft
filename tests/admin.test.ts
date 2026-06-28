@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isIP } from 'node:net';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -72,6 +73,7 @@ import {
   listSharedIps,
   onlineHistory,
   overviewCounts,
+  type PerfRawRow,
 } from '../server/admin_db';
 import {
   addFilterWord,
@@ -84,6 +86,7 @@ import {
 } from '../server/chat_filter_db';
 import { accountForToken, accountMailTarget, findAccount, isAdminAccount } from '../server/db';
 import { addBlockedIp, removeBlockedIp } from '../server/ip_block_db';
+import type { LiveSharedIp } from '../server/live_shared_ips';
 import {
   forceCharacterRename,
   ignoreReport,
@@ -97,7 +100,12 @@ import {
 const VALID_TOKEN = 'a'.repeat(64);
 
 function fakeReq(opts: { method?: string; url?: string; token?: string; body?: unknown } = {}) {
-  const req: any = new EventEmitter();
+  const req = new EventEmitter() as EventEmitter & {
+    method: string;
+    url: string;
+    headers: { authorization?: string };
+    socket: { remoteAddress: string };
+  };
   req.method = opts.method ?? 'GET';
   req.url = opts.url ?? '/admin/api/overview';
   req.headers = opts.token ? { authorization: `Bearer ${opts.token}` } : {};
@@ -108,13 +116,25 @@ function fakeReq(opts: { method?: string; url?: string; token?: string; body?: u
       req.emit('end');
     });
   }
-  return req;
+  return req as unknown as IncomingMessage;
 }
 
-function fakeRes() {
-  const res: any = {
+interface AdminJson {
+  [key: string]: AdminJson;
+  [key: number]: AdminJson;
+}
+
+interface FakeResponse {
+  statusCode: number;
+  body: AdminJson;
+  writeHead(status: number): void;
+  end(data?: string): void;
+}
+
+function fakeRes(): FakeResponse & ServerResponse {
+  const res: FakeResponse = {
     statusCode: 0,
-    body: null as any,
+    body: {},
     writeHead(status: number) {
       this.statusCode = status;
     },
@@ -122,10 +142,10 @@ function fakeRes() {
       this.body = data ? JSON.parse(data) : null;
     },
   };
-  return res;
+  return res as FakeResponse & ServerResponse;
 }
 
-const fakeGame: any = {
+const fakeGameState = {
   adminStats: () => ({
     online: 2,
     onlineAccounts: 2,
@@ -138,7 +158,7 @@ const fakeGame: any = {
   }),
   liveSessions: () => [],
   liveAccountIds: () => new Set([9]),
-  liveSharedIps: vi.fn(() => []),
+  liveSharedIps: vi.fn<() => LiveSharedIp[]>(() => []),
   disconnectAccount: vi.fn(),
   muteAccountChat: vi.fn(),
   reloadChatFilter: vi.fn(async () => {}),
@@ -148,6 +168,7 @@ const fakeGame: any = {
   reloadBlockedIps: vi.fn(async () => {}),
   disconnectByIp: vi.fn(),
 };
+const fakeGame = fakeGameState as typeof fakeGameState & Parameters<typeof handleAdminApi>[2];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -518,7 +539,10 @@ describe('admin api auth', () => {
       byScenario: [],
       worstGpuBuckets: [],
     });
-    vi.mocked(clientPerfRaw).mockResolvedValue([{ id: 123 } as any, { id: 100 } as any]);
+    vi.mocked(clientPerfRaw).mockResolvedValue([
+      { id: 123 } as unknown as PerfRawRow,
+      { id: 100 } as unknown as PerfRawRow,
+    ]);
 
     const summaryRes = fakeRes();
     await handleAdminApi(

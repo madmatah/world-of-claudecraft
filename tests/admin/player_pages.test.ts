@@ -128,8 +128,10 @@ describe('Players pages', () => {
 
     await screen.findByText('alice');
     const accountLink = screen.getByRole('button', { name: '1' });
+    const accountRow = accountLink.closest('tr');
+    if (!accountRow) throw new Error('account row not found');
     expect(screen.getByPlaceholderText(t('accounts.searchPlaceholder'))).toBeInTheDocument();
-    await fireEvent.click(accountLink.closest('tr')!);
+    await fireEvent.click(accountRow);
 
     expect(
       await screen.findByRole('dialog', {
@@ -172,8 +174,8 @@ describe('Players pages', () => {
     const summary = within(dialog).getByText(t('accounts.colRegistered')).closest('dl');
 
     expect(title.parentElement).toContainElement(screen.getByText(t('detail.statusActive')));
-    expect(summary).not.toBeNull();
-    expect(within(summary!).getByText(t('accounts.colId'))).toBeInTheDocument();
+    if (!summary) throw new Error('account summary not found');
+    expect(within(summary).getByText(t('accounts.colId'))).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: t('detail.forceNameChange') })).toHaveClass(
       'btn-sm',
     );

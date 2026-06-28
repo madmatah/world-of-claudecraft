@@ -1,10 +1,20 @@
+import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../server/db', () => ({
-  pool: { query: vi.fn(), connect: vi.fn() },
+type TestQuery = (
+  text: string,
+  values?: readonly unknown[],
+) => Promise<QueryResult<Record<string, unknown>>>;
+
+const db = vi.hoisted(() => ({
+  query: vi.fn<TestQuery>(),
+  connect: vi.fn<() => Promise<PoolClient>>(),
 }));
 
-import { pool } from '../server/db';
+vi.mock('../server/db', () => ({
+  pool: db,
+}));
+
 import {
   addAccountNote,
   cleanReportReason,
@@ -19,14 +29,23 @@ import {
   muteAccountChat,
 } from '../server/moderation_db';
 
-const query = vi.mocked(pool.query);
-const connect = vi.mocked(pool.connect);
+const { query, connect } = db;
+
+function queryResult<T extends QueryResultRow>(rows: T[], rowCount = rows.length): QueryResult<T> {
+  return {
+    command: '',
+    rowCount,
+    oid: 0,
+    fields: [],
+    rows,
+  };
+}
 
 // A pooled-client stub whose query()/release() calls we can inspect. Pinning a
 // single client for the whole transaction is what makes BEGIN/…/COMMIT atomic,
 // so the tests assert every transactional statement runs through this stub.
 function clientStub() {
-  const cquery = vi.fn().mockResolvedValue({ rows: [] } as any);
+  const cquery = vi.fn<TestQuery>().mockResolvedValue(queryResult([]));
   const release = vi.fn();
   return { query: cquery, release };
 }
@@ -59,7 +78,7 @@ describe('moderation report helpers', () => {
   });
 
   it('rejects duplicate open reports in the recent window', async () => {
-    query.mockResolvedValueOnce({ rows: [{ id: 99 }] } as any);
+    query.mockResolvedValueOnce(queryResult([{ id: 99 }]));
 
     await expect(
       createPlayerReport({
@@ -75,12 +94,12 @@ describe('moderation report helpers', () => {
 
   it('creates a system moderation report for suspicious sequential registration bursts', async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ n: 31 }] } as any) // same numeric prefix
-      .mockResolvedValueOnce({ rows: [{ n: 1 }] } as any) // same IP
-      .mockResolvedValueOnce({ rows: [{ n: 1 }] } as any) // same /24
-      .mockResolvedValueOnce({ rows: [{ n: 1 }] } as any) // same UA
-      .mockResolvedValueOnce({ rows: [] } as any) // duplicate report check
-      .mockResolvedValueOnce({ rows: [{ id: 123 }] } as any); // insert
+      .mockResolvedValueOnce(queryResult([{ n: 31 }])) // same numeric prefix
+      .mockResolvedValueOnce(queryResult([{ n: 1 }])) // same IP
+      .mockResolvedValueOnce(queryResult([{ n: 1 }])) // same /24
+      .mockResolvedValueOnce(queryResult([{ n: 1 }])) // same UA
+      .mockResolvedValueOnce(queryResult([])) // duplicate report check
+      .mockResolvedValueOnce(queryResult([{ id: 123 }])); // insert
 
     const result = await createSuspiciousRegistrationReport({
       accountId: 42,
@@ -102,10 +121,10 @@ describe('moderation report helpers', () => {
 
   it('does not create a system moderation report without a suspicious registration signal', async () => {
     query
-      .mockResolvedValueOnce({ rows: [{ n: 1 }] } as any)
-      .mockResolvedValueOnce({ rows: [{ n: 1 }] } as any)
-      .mockResolvedValueOnce({ rows: [{ n: 1 }] } as any)
-      .mockResolvedValueOnce({ rows: [{ n: 1 }] } as any);
+      .mockResolvedValueOnce(queryResult([{ n: 1 }]))
+      .mockResolvedValueOnce(queryResult([{ n: 1 }]))
+      .mockResolvedValueOnce(queryResult([{ n: 1 }]))
+      .mockResolvedValueOnce(queryResult([{ n: 1 }]));
 
     const result = await createSuspiciousRegistrationReport({
       accountId: 42,
@@ -119,8 +138,8 @@ describe('moderation report helpers', () => {
   });
 
   it('sorts moderation queue by open report count, recency, then online status', async () => {
-    query.mockResolvedValueOnce({
-      rows: [
+    query.mockResolvedValueOnce(
+      queryResult([
         {
           account_id: 2,
           username: 'offline-two',
@@ -154,8 +173,8 @@ describe('moderation report helpers', () => {
           latest_reason: 'other',
           character_names: ['D'],
         },
-      ],
-    } as any);
+      ]),
+    );
 
     const rows = await moderationQueue(new Set([3]));
 
@@ -167,8 +186,8 @@ describe('moderation report helpers', () => {
 
   it('loads per-report chat context before each report timestamp', async () => {
     query
-      .mockResolvedValueOnce({
-        rows: [
+      .mockResolvedValueOnce(
+        queryResult([
           {
             id: 7,
             reason: 'harassment',
@@ -184,10 +203,10 @@ describe('moderation report helpers', () => {
             reported_character_id: 20,
             reported_character_name: 'Bob',
           },
-        ],
-      } as any)
-      .mockResolvedValueOnce({
-        rows: [
+        ]),
+      )
+      .mockResolvedValueOnce(
+        queryResult([
           {
             id: 2,
             character_name: 'Bob',
@@ -202,8 +221,8 @@ describe('moderation report helpers', () => {
             message: 'first',
             created_at: '2026-06-12T23:58:00Z',
           },
-        ],
-      } as any);
+        ]),
+      );
 
     const reports = await moderationReportsForAccount(2);
 
@@ -239,7 +258,7 @@ describe('moderation report helpers', () => {
 
   it('mutes account chat and writes an audit action in one transaction', async () => {
     const client = clientStub();
-    connect.mockResolvedValue(client as any);
+    connect.mockResolvedValue(client as unknown as PoolClient);
     const expiresAt = new Date(Date.now() + 3600_000).toISOString();
 
     await muteAccountChat({
@@ -268,10 +287,10 @@ describe('moderation report helpers', () => {
   it('lifts an active chat mute and writes a dedicated audit action', async () => {
     const client = clientStub();
     client.query
-      .mockResolvedValueOnce({ rows: [] } as any)
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any)
-      .mockResolvedValue({ rows: [] } as any);
-    connect.mockResolvedValue(client as any);
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([], 1))
+      .mockResolvedValue(queryResult([]));
+    connect.mockResolvedValue(client as unknown as PoolClient);
 
     await liftAccountChatMute({
       accountId: 2,
@@ -290,10 +309,10 @@ describe('moderation report helpers', () => {
   it('rejects lifting chat mute when no active mute exists', async () => {
     const client = clientStub();
     client.query
-      .mockResolvedValueOnce({ rows: [] } as any)
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
-      .mockResolvedValue({ rows: [] } as any);
-    connect.mockResolvedValue(client as any);
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([], 0))
+      .mockResolvedValue(queryResult([]));
+    connect.mockResolvedValue(client as unknown as PoolClient);
 
     await expect(
       liftAccountChatMute({
@@ -320,7 +339,7 @@ describe('moderation report helpers', () => {
 
   it('unbans accounts and writes an audit action in one transaction', async () => {
     const client = clientStub();
-    connect.mockResolvedValue(client as any);
+    connect.mockResolvedValue(client as unknown as PoolClient);
 
     await moderateAccount({
       accountId: 2,
@@ -342,10 +361,10 @@ describe('moderation report helpers', () => {
   it('unsuspends an active suspension and writes a dedicated audit action', async () => {
     const client = clientStub();
     client.query
-      .mockResolvedValueOnce({ rows: [] } as any)
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 } as any)
-      .mockResolvedValue({ rows: [] } as any);
-    connect.mockResolvedValue(client as any);
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([], 1))
+      .mockResolvedValue(queryResult([]));
+    connect.mockResolvedValue(client as unknown as PoolClient);
 
     await moderateAccount({
       accountId: 2,
@@ -365,10 +384,10 @@ describe('moderation report helpers', () => {
   it('rejects unsuspending an account without an active suspension', async () => {
     const client = clientStub();
     client.query
-      .mockResolvedValueOnce({ rows: [] } as any)
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 } as any)
-      .mockResolvedValue({ rows: [] } as any);
-    connect.mockResolvedValue(client as any);
+      .mockResolvedValueOnce(queryResult([]))
+      .mockResolvedValueOnce(queryResult([], 0))
+      .mockResolvedValue(queryResult([]));
+    connect.mockResolvedValue(client as unknown as PoolClient);
 
     await expect(
       moderateAccount({
@@ -389,14 +408,18 @@ describe('moderation report helpers', () => {
     // banned_at before suspended_until, so a leftover ban would silently mask a
     // downgrade-to-suspension and keep the account locked out forever.
     const banClient = clientStub();
-    connect.mockResolvedValueOnce(banClient as any);
+    connect.mockResolvedValueOnce(banClient as unknown as PoolClient);
     await moderateAccount({ accountId: 2, adminAccountId: 1, action: 'ban', reason: 'cheating' });
-    const banUpdate = banClient.query.mock.calls.find((c) => /UPDATE accounts/.test(c[0]))![0];
+    const banUpdateCall = banClient.query.mock.calls.find((call) =>
+      /UPDATE accounts/.test(call[0]),
+    );
+    if (!banUpdateCall) throw new Error('ban update query not found');
+    const banUpdate = banUpdateCall[0];
     expect(banUpdate).toMatch(/banned_at = now\(\)/);
     expect(banUpdate).toMatch(/suspended_until = NULL/);
 
     const suspendClient = clientStub();
-    connect.mockResolvedValueOnce(suspendClient as any);
+    connect.mockResolvedValueOnce(suspendClient as unknown as PoolClient);
     await moderateAccount({
       accountId: 2,
       adminAccountId: 1,
@@ -404,9 +427,11 @@ describe('moderation report helpers', () => {
       reason: 'cooling off',
       expiresAt: new Date(Date.now() + 3600_000).toISOString(),
     });
-    const suspendUpdate = suspendClient.query.mock.calls.find((c) =>
-      /UPDATE accounts/.test(c[0]),
-    )![0];
+    const suspendUpdateCall = suspendClient.query.mock.calls.find((call) =>
+      /UPDATE accounts/.test(call[0]),
+    );
+    if (!suspendUpdateCall) throw new Error('suspension update query not found');
+    const suspendUpdate = suspendUpdateCall[0];
     expect(suspendUpdate).toMatch(/banned_at = NULL/);
     expect(suspendUpdate).toMatch(/suspended_until = \$2/);
   });
@@ -419,7 +444,7 @@ describe('moderation report helpers', () => {
   });
 
   it('appends a note as an audit-only action without touching account state or reports', async () => {
-    query.mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
+    query.mockResolvedValueOnce(queryResult([], 1));
 
     await addAccountNote({ accountId: 2, adminAccountId: 1, note: 'watching for repeat behavior' });
 
@@ -433,9 +458,9 @@ describe('moderation report helpers', () => {
   });
 
   it('marks a character for forced rename and action-resolves its reports', async () => {
-    query.mockResolvedValueOnce({ rows: [{ account_id: 2 }] } as any);
+    query.mockResolvedValueOnce(queryResult([{ account_id: 2 }]));
     const client = clientStub();
-    connect.mockResolvedValue(client as any);
+    connect.mockResolvedValue(client as unknown as PoolClient);
 
     const result = await forceCharacterRename({
       characterId: 20,
@@ -456,13 +481,13 @@ describe('moderation report helpers', () => {
   });
 
   it('rolls back on the pinned client and releases it when a statement fails', async () => {
-    query.mockResolvedValueOnce({ rows: [{ account_id: 2 }] } as any);
+    query.mockResolvedValueOnce(queryResult([{ account_id: 2 }]));
     const client = clientStub();
     client.query
-      .mockResolvedValueOnce({ rows: [] } as any) // BEGIN
+      .mockResolvedValueOnce(queryResult([])) // BEGIN
       .mockRejectedValueOnce(new Error('db down')) // first UPDATE fails
-      .mockResolvedValue({ rows: [] } as any); // ROLLBACK
-    connect.mockResolvedValue(client as any);
+      .mockResolvedValue(queryResult([])); // ROLLBACK
+    connect.mockResolvedValue(client as unknown as PoolClient);
 
     await expect(
       forceCharacterRename({ characterId: 20, adminAccountId: 1, reason: 'offensive name' }),
