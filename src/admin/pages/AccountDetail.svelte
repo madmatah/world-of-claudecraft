@@ -10,6 +10,7 @@
     type PendingAction,
   } from '../moderation_actions';
   import AccountModerationActions from '../components/AccountModerationActions.svelte';
+  import AccountNote from '../components/AccountNote.svelte';
   import ChatModerationControls from '../components/ChatModerationControls.svelte';
   import ModerationActionPrompt from '../components/ModerationActionPrompt.svelte';
   import ModerationHistory from '../components/ModerationHistory.svelte';
@@ -158,5 +159,8 @@
     </div>
   </div>
 
+  {#if includeAdminControls}
+    <AccountNote accountId={detail.id} onSubmit={submitPending} />
+  {/if}
   <ModerationHistory entries={detail.moderationHistory} />
 </div>

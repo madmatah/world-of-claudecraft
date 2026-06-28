@@ -646,6 +646,7 @@ th.num {
 }
 .mod-actions button,
 .mod-account-actions button,
+.mod-account-note button,
 .ip-block button,
 .ip-add button,
 #blocked-ips table button {
@@ -658,11 +659,16 @@ th.num {
 }
 .mod-actions button:hover,
 .mod-account-actions button:hover,
+.mod-account-note button:not(:disabled):hover,
 .ip-block button:hover,
 .ip-add button:hover,
 #blocked-ips table button:hover {
   color: #fff;
   border-color: var(--gold-dim);
+}
+.mod-account-note button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .ip-block .danger,
 .ip-add .danger,

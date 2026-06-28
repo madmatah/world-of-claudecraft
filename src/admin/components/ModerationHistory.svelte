@@ -17,6 +17,7 @@
     if (action === 'chat_mute') return t('moderationHistory.actionChatMute');
     if (action === 'chat_unmute') return t('moderationHistory.actionChatUnmute');
     if (action === 'force_rename') return t('moderationHistory.actionForceRename');
+    if (action === 'note') return t('moderationHistory.actionNote');
     return t('moderationHistory.actionUnknown');
   }
 

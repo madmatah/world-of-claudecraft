@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addNote,
   banAccount,
   chatMuteCustom,
   chatMuteHours,
@@ -72,6 +73,20 @@ describe('moderation_actions', () => {
     if (!('pending' in built)) throw new Error('expected pending');
     expect(built.pending.endpoint).toBe('/admin/api/moderation/accounts/42/lift-mute');
     expect(built.pending.body).toEqual({ reason: 'appeal accepted' });
+  });
+
+  it('requires text for a note', () => {
+    expect(addNote(42, '')).toEqual({ errorKey: 'alert.noteRequired' });
+  });
+
+  it('builds a non-punitive note request with the note carried in reason', () => {
+    const built = addNote(42, 'spoke to player, watching for repeat behavior');
+    if (!('pending' in built)) throw new Error('expected pending');
+    expect(built.pending.endpoint).toBe('/admin/api/moderation/accounts/42/note');
+    expect(built.pending.body).toEqual({
+      reason: 'spoke to player, watching for repeat behavior',
+    });
+    expect(built.pending.danger).toBeUndefined();
   });
 
   it('force-rename posts to the character endpoint', () => {

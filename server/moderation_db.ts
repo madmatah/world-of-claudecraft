@@ -6,6 +6,9 @@ export type ModerationAction = 'ignore' | 'suspend' | 'ban' | 'unban';
 
 const REPORT_DETAILS_MAX = 1000;
 const ACTION_REASON_MAX = 500;
+// Free-form moderator notes carry more context than an action reason, so they get a
+// roomier bound. Notes are recorded in the same audit log as sanctions.
+const NOTE_MAX = 2000;
 const DUPLICATE_REPORT_WINDOW_HOURS = 12;
 const REGISTRATION_BURST_WINDOW_MINUTES = 10;
 const REGISTRATION_PREFIX_THRESHOLD = 25;
@@ -443,6 +446,23 @@ export async function liftAccountChatMute(input: {
   } finally {
     client.release();
   }
+}
+
+// Append a free-form moderator note to an account's audit log. Purely additive: it
+// changes no account state and resolves no reports (unlike moderateAccount), so a
+// single INSERT is atomic on its own and needs no transaction.
+export async function addAccountNote(input: {
+  accountId: number;
+  adminAccountId: number;
+  note: unknown;
+}): Promise<void> {
+  const note = cleanText(input.note, NOTE_MAX);
+  if (!note) throw new Error('a note is required');
+  await pool.query(
+    `INSERT INTO account_moderation_actions (account_id, admin_account_id, action, reason)
+     VALUES ($1, $2, 'note', $3)`,
+    [input.accountId, input.adminAccountId, note],
+  );
 }
 
 export async function forceCharacterRename(input: {

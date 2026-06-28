@@ -41,6 +41,7 @@ import type { GameServer } from './game';
 import { json, readBody } from './http_util';
 import { addBlockedIp, cleanIp, listBlockedIps, removeBlockedIp } from './ip_block_db';
 import {
+  addAccountNote,
   forceCharacterRename,
   ignoreReport,
   liftAccountChatMute,
@@ -267,6 +268,19 @@ export async function handleAdminApi(
         return ok(res, { ok: true });
       } catch (err) {
         return fail(res, 400, err instanceof Error ? err.message : 'chat unmute failed');
+      }
+    }
+    // Append a free-form moderator note to the account's audit log. Non-punitive:
+    // no account-state change, no disconnection, no report resolution.
+    const noteMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)\/note$/.exec(path);
+    if (req.method === 'POST' && noteMatch) {
+      const id = Number(noteMatch[1]);
+      const body = await readBody(req);
+      try {
+        await addAccountNote({ accountId: id, adminAccountId: accountId, note: body.reason });
+        return ok(res, { ok: true });
+      } catch (err) {
+        return fail(res, 400, err instanceof Error ? err.message : 'failed to add note');
       }
     }
     const resetStrikesMatch = /^\/admin\/api\/moderation\/accounts\/(\d+)\/reset-strikes$/.exec(

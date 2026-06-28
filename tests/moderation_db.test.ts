@@ -6,6 +6,7 @@ vi.mock('../server/db', () => ({
 
 import { pool } from '../server/db';
 import {
+  addAccountNote,
   cleanReportReason, cleanText, createPlayerReport, createSuspiciousRegistrationReport, forceCharacterRename, moderateAccount,
   liftAccountChatMute, muteAccountChat, moderationQueue, moderationReportsForAccount,
 } from '../server/moderation_db';
@@ -345,6 +346,28 @@ describe('moderation report helpers', () => {
     const suspendUpdate = suspendClient.query.mock.calls.find((c) => /UPDATE accounts/.test(c[0]))![0];
     expect(suspendUpdate).toMatch(/banned_at = NULL/);
     expect(suspendUpdate).toMatch(/suspended_until = \$2/);
+  });
+
+  it('requires note text and writes nothing for an empty note', async () => {
+    await expect(
+      addAccountNote({ accountId: 2, adminAccountId: 1, note: '   ' }),
+    ).rejects.toThrow(/note/);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('appends a note as an audit-only action without touching account state or reports', async () => {
+    query.mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
+
+    await addAccountNote({ accountId: 2, adminAccountId: 1, note: 'watching for repeat behavior' });
+
+    expect(connect).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(1);
+    const [sql, params] = query.mock.calls[0];
+    expect(sql).toMatch(/INSERT INTO account_moderation_actions/);
+    expect(sql).toMatch(/'note'/);
+    expect(sql).not.toMatch(/UPDATE accounts/);
+    expect(sql).not.toMatch(/player_reports/);
+    expect(params).toEqual([2, 1, 'watching for repeat behavior']);
   });
 
   it('marks a character for forced rename and action-resolves its reports', async () => {

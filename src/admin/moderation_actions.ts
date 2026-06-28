@@ -139,6 +139,22 @@ export function liftChatMute(accountId: number, note: string): Built {
   };
 }
 
+// A free-form moderator note. Non-punitive and additive only: it posts to the note
+// endpoint, which appends to the audit log without changing account state. The note
+// text rides in `reason` for parity with the other actions; the inline form submits
+// it directly, so title/rows are present only to satisfy PendingAction.
+export function addNote(accountId: number, note: string): Built {
+  if (!note) return { errorKey: 'alert.noteRequired' };
+  return {
+    pending: {
+      title: t('detail.addNote'),
+      rows: [accountRow(accountId), reasonRow(note)],
+      endpoint: `/admin/api/moderation/accounts/${accountId}/note`,
+      body: { reason: note },
+    },
+  };
+}
+
 export function banAccount(accountId: number, note: string): Built {
   if (!note) return { errorKey: 'alert.noteRequired' };
   return {
