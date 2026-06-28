@@ -24,6 +24,7 @@ describe('AdminNav', () => {
       'page',
     );
     expect(screen.getByRole('link', { name: t('nav.chatFilter') })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: t('nav.sharedIps') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: t('nav.players') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: t('nav.accounts') })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: t('nav.characters') })).toBeInTheDocument();
@@ -39,7 +40,7 @@ describe('AdminNav', () => {
     expect(screen.getByRole('link', { name: t('nav.moderation') })).toHaveClass(
       'active-section',
     );
-    expect(screen.getByRole('link', { name: t('nav.blockedIps') })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: t('nav.sharedIps') })).toHaveAttribute(
       'aria-current',
       'page',
     );

@@ -17,6 +17,7 @@
   import Characters from './pages/Characters.svelte';
   import Usage from './pages/Usage.svelte';
   import Moderation from './pages/Moderation.svelte';
+  import SharedIps from './pages/SharedIps.svelte';
   import ChatFilter from './pages/ChatFilter.svelte';
   import BlockedIps from './pages/BlockedIps.svelte';
   import BugReports from './pages/BugReports.svelte';
@@ -34,6 +35,7 @@
     characters: Characters,
     usage: Usage,
     moderation: Moderation,
+    'shared-ips': SharedIps,
     'chat-filter': ChatFilter,
     'blocked-ips': BlockedIps,
     'bug-reports': BugReports,

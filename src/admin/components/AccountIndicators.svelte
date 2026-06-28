@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { AccountStatus } from '../account_status';
   import { fmtDate } from '../format';
   import { t } from '../i18n';
   import Badge from './Badge.svelte';
@@ -11,7 +12,7 @@
   }: {
     isAdmin?: boolean;
     online?: boolean;
-    status?: 'active' | 'suspended' | 'banned';
+    status?: AccountStatus;
     suspendedUntil?: string | null;
   } = $props();
 </script>

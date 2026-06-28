@@ -40,6 +40,7 @@ import {
 } from './db';
 import { IpBlockList } from './ip_block';
 import { loadActiveBlockedIps } from './ip_block_db';
+import { sharedIpsFromLiveSessions, type LiveSharedIp } from './live_shared_ips';
 import { REALM } from './realm';
 import type { Presence, PresenceStatus, SocialActor, SocialTransport } from './social';
 import { SocialService } from './social';
@@ -1155,6 +1156,10 @@ export class GameServer {
 
   liveAccountIds(): Set<number> {
     return new Set([...this.clients.values()].map((s) => s.accountId));
+  }
+
+  liveSharedIps(): LiveSharedIp[] {
+    return sharedIpsFromLiveSessions(this.clients.values());
   }
 
   async recordOnlineSnapshot(): Promise<void> {

@@ -554,6 +554,59 @@ export interface IpAssociations {
   limit: number;
 }
 
+export interface SharedIpRow {
+  ip: string;
+  accountCount: number;
+  lastSeenAt: string;
+}
+
+export async function listSharedIps(
+  page: number,
+  limit: number,
+): Promise<Paginated<SharedIpRow>> {
+  const offset = (page - 1) * limit;
+  const result = await pool.query(
+    `WITH account_ip_events AS (
+       SELECT id AS account_id, created_ip AS ip, created_at AS seen_at
+       FROM accounts
+       WHERE created_ip IS NOT NULL AND created_ip <> ''
+       UNION ALL
+       SELECT id AS account_id, last_login_ip AS ip,
+              COALESCE(last_login, created_at) AS seen_at
+       FROM accounts
+       WHERE last_login_ip IS NOT NULL AND last_login_ip <> ''
+       UNION ALL
+       SELECT account_id, ip_address AS ip, max(started_at) AS seen_at
+       FROM play_sessions
+       WHERE ip_address IS NOT NULL AND ip_address <> ''
+       GROUP BY account_id, ip_address
+     ),
+     shared AS (
+       SELECT ip,
+              count(DISTINCT account_id)::int AS account_count,
+              max(seen_at) AS last_seen_at
+       FROM account_ip_events
+       GROUP BY ip
+       HAVING count(DISTINCT account_id) > 1
+     )
+     SELECT *, count(*) OVER ()::int AS total
+     FROM shared
+     ORDER BY account_count DESC, last_seen_at DESC, ip
+     LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
+  return {
+    rows: result.rows.map((row) => ({
+      ip: row.ip,
+      accountCount: Number(row.account_count),
+      lastSeenAt: row.last_seen_at,
+    })),
+    total: Number(result.rows[0]?.total ?? 0),
+    page,
+    limit,
+  };
+}
+
 export async function associationsForIp(
   ip: string,
   page: number,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import './_setup';
-import { render, screen, within } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const data = {
   ip: '203.0.113.7',
@@ -49,6 +49,9 @@ const data = {
   ],
 };
 
+let currentData = data;
+const apiPost = vi.fn();
+
 vi.mock('../../src/admin/api', () => ({
   ApiError: class ApiError extends Error {
     status: number;
@@ -57,8 +60,8 @@ vi.mock('../../src/admin/api', () => ({
       this.status = status;
     }
   },
-  apiGet: vi.fn(async () => data),
-  apiPost: vi.fn(),
+  apiGet: vi.fn(async () => currentData),
+  apiPost: (...args: unknown[]) => apiPost(...args),
   getToken: () => 'tok',
   getAdminName: () => 'admin',
   clearSession: () => {},
@@ -68,11 +71,25 @@ import { t } from '../../src/admin/i18n';
 import { fmtDate } from '../../src/admin/format';
 import IpAssociations from '../../src/admin/pages/IpAssociations.svelte';
 
+beforeEach(() => {
+  currentData = data;
+  apiPost.mockReset();
+  apiPost.mockResolvedValue({});
+});
+
 describe('IP associations', () => {
   it('groups one character row per account and identifies every association source', async () => {
     render(IpAssociations, { ip: '203.0.113.7' });
 
     expect(await screen.findByText('alice')).toBeInTheDocument();
+    const title = screen.getByRole('heading', {
+      name: t('ipAssociations.title', { ip: '203.0.113.7' }),
+    });
+    expect(title.parentElement).toContainElement(screen.getByText(t('ipAssociations.blocked')));
+    expect(screen.getByRole('link', { name: t('ipAssociations.back') })).toHaveAttribute(
+      'href',
+      expect.stringContaining('page=shared-ips'),
+    );
     expect(screen.getByText('Alicia')).toBeInTheDocument();
     expect(screen.getByText(t('ipAssociations.blocked'))).toBeInTheDocument();
     expect(screen.getByText(t('accounts.badgeAdmin'))).toBeInTheDocument();
@@ -82,6 +99,11 @@ describe('IP associations', () => {
         t('detail.suspendedUntil', { value: fmtDate('2026-06-03T00:00:00Z') }),
       ),
     ).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: t('blockedIps.unblock') }));
+    expect(apiPost).toHaveBeenCalledWith('/admin/api/blocked-ips/delete', {
+      ip: '203.0.113.7',
+    });
 
     const rows = screen.getAllByRole('row');
     expect(rows.some((row) => within(row).queryByText('Alicia') !== null)).toBe(true);
@@ -94,5 +116,30 @@ describe('IP associations', () => {
     expect(screen.getByText(t('ipAssociations.noCharacters'))).toBeInTheDocument();
     expect(screen.getByText(t('ipAssociations.matchedCreation'))).toBeInTheDocument();
     expect(screen.getByText(t('accounts.badgeBanned'))).toBeInTheDocument();
+  });
+
+  it('collects a reason and expiration before blocking the IP', async () => {
+    currentData = { ...data, blocked: false };
+    render(IpAssociations, { ip: '203.0.113.7' });
+
+    await screen.findByText('alice');
+    await fireEvent.click(
+      screen.getByRole('button', { name: t('ipAssociations.blockAction') }),
+    );
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText(t('dialog.reason')), {
+      target: { value: 'investigation' },
+    });
+    await fireEvent.change(screen.getByLabelText(t('blockedIps.expiresLabel')), {
+      target: { value: '7d' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: t('blockedIps.add') }));
+
+    expect(apiPost).toHaveBeenCalledWith('/admin/api/blocked-ips', {
+      ip: '203.0.113.7',
+      reason: 'investigation',
+      expiresAt: expect.any(String),
+    });
   });
 });

@@ -24,6 +24,7 @@ vi.mock('../server/admin_db', async () => {
     onlineHistory: vi.fn(),
     listAccounts: vi.fn(),
     listCharacters: vi.fn(),
+    listSharedIps: vi.fn(),
     accountDetail: vi.fn(),
     associationsForIp: vi.fn(),
     clientPerfSummary: vi.fn(),
@@ -68,6 +69,7 @@ import {
   escapeLike,
   listAccounts,
   listCharacters,
+  listSharedIps,
   onlineHistory,
   overviewCounts,
 } from '../server/admin_db';
@@ -136,6 +138,7 @@ const fakeGame: any = {
   }),
   liveSessions: () => [],
   liveAccountIds: () => new Set([9]),
+  liveSharedIps: vi.fn(() => []),
   disconnectAccount: vi.fn(),
   muteAccountChat: vi.fn(),
   reloadChatFilter: vi.fn(async () => {}),
@@ -148,6 +151,8 @@ const fakeGame: any = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  fakeGame.isIpBlocked.mockReturnValue(false);
+  fakeGame.liveSharedIps.mockReturnValue([]);
   // Default so the moderation-detail route (which now also loads chat state)
   // resolves; individual chat-filter tests override as needed.
   vi.mocked(chatModerationForAccount).mockResolvedValue({
@@ -327,6 +332,83 @@ describe('admin api auth', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('serves shared IPs with their current block state', async () => {
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    vi.mocked(listSharedIps).mockResolvedValue({
+      rows: [
+        {
+          ip: '203.0.113.7',
+          accountCount: 3,
+          lastSeenAt: '2026-06-28T12:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 2,
+      limit: 50,
+    });
+    fakeGame.isIpBlocked.mockReturnValue(true);
+    const res = fakeRes();
+
+    await handleAdminApi(
+      fakeReq({
+        token: VALID_TOKEN,
+        url: '/admin/api/shared-ips?page=2&limit=50',
+      }),
+      res,
+      fakeGame,
+    );
+
+    expect(listSharedIps).toHaveBeenCalledWith(2, 50);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.rows[0]).toEqual(
+      expect.objectContaining({ ip: '203.0.113.7', blocked: true }),
+    );
+  });
+
+  it('serves online shared IPs from memory without querying session history', async () => {
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    fakeGame.liveSharedIps.mockReturnValue([
+      {
+        ip: '203.0.113.8',
+        accountCount: 4,
+        lastSeenAt: '2026-06-28T12:00:00Z',
+      },
+      {
+        ip: '203.0.113.9',
+        accountCount: 2,
+        lastSeenAt: '2026-06-28T11:00:00Z',
+      },
+    ]);
+    const res = fakeRes();
+
+    await handleAdminApi(
+      fakeReq({
+        token: VALID_TOKEN,
+        url: '/admin/api/shared-ips?online=1&page=2&limit=1',
+      }),
+      res,
+      fakeGame,
+    );
+
+    expect(listSharedIps).not.toHaveBeenCalled();
+    expect(fakeGame.liveSharedIps).toHaveBeenCalledOnce();
+    expect(res.body.data).toEqual({
+      rows: [
+        {
+          ip: '203.0.113.9',
+          accountCount: 2,
+          lastSeenAt: '2026-06-28T11:00:00Z',
+          blocked: false,
+        },
+      ],
+      total: 2,
+      page: 2,
+      limit: 1,
+    });
+  });
+
   it('serves grouped IP associations with normalized pagination', async () => {
     vi.mocked(accountForToken).mockResolvedValue(7);
     vi.mocked(isAdminAccount).mockResolvedValue(true);
@@ -492,6 +574,40 @@ describe('admin api auth', () => {
 
     expect(res.statusCode).toBe(200);
     expect(moderationReportsForAccount).toHaveBeenCalledWith(9);
+    expect(res.body.data.account.online).toBe(true);
+  });
+
+  it('includes the in-memory online state in account detail without another query', async () => {
+    vi.mocked(accountForToken).mockResolvedValue(7);
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    vi.mocked(accountDetail).mockResolvedValue({
+      id: 9,
+      username: 'online-player',
+      createdAt: '',
+      lastLogin: null,
+      isAdmin: false,
+      bannedAt: null,
+      suspendedUntil: null,
+      moderationReason: '',
+      chatMutedUntil: null,
+      chatMuteReason: '',
+      chatStrikes: 0,
+      lastLoginIp: null,
+      playtimeSeconds: 0,
+      characters: [],
+      recentSessions: [],
+    });
+    const res = fakeRes();
+
+    await handleAdminApi(
+      fakeReq({ token: VALID_TOKEN, url: '/admin/api/accounts/9' }),
+      res,
+      fakeGame,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.online).toBe(true);
+    expect(accountDetail).toHaveBeenCalledWith(9);
   });
 
   it('ignores an open report', async () => {

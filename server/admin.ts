@@ -8,6 +8,7 @@ import {
   levelDistribution,
   listAccounts,
   listCharacters,
+  listSharedIps,
   onlineHistory,
   overviewCounts,
   registrationsByDay,
@@ -390,6 +391,30 @@ export async function handleAdminApi(
       const search = (url.searchParams.get('search') ?? '').slice(0, 64);
       return ok(res, await listAccounts(search, page, limit));
     }
+    if (path === '/admin/api/shared-ips') {
+      const { page, limit } = parsePageParams(url.searchParams);
+      if (url.searchParams.get('online') === '1') {
+        const rows = game.liveSharedIps();
+        const offset = (page - 1) * limit;
+        return ok(res, {
+          rows: rows.slice(offset, offset + limit).map((row) => ({
+            ...row,
+            blocked: game.isIpBlocked(row.ip),
+          })),
+          total: rows.length,
+          page,
+          limit,
+        });
+      }
+      const sharedIps = await listSharedIps(page, limit);
+      return ok(res, {
+        ...sharedIps,
+        rows: sharedIps.rows.map((row) => ({
+          ...row,
+          blocked: game.isIpBlocked(row.ip),
+        })),
+      });
+    }
     if (path === '/admin/api/ip-associations') {
       const ip = cleanIp(url.searchParams.get('ip'));
       if (!ip) return fail(res, 400, 'a valid IP address is required');
@@ -428,7 +453,10 @@ export async function handleAdminApi(
       ]);
       if (!detail) return fail(res, 404, 'account not found');
       return ok(res, {
-        account: detail,
+        account: {
+          ...detail,
+          online: game.liveAccountIds().has(id),
+        },
         reports,
         chat,
         blockedIps: getBlockedIpsForAccount(game, detail),
@@ -436,9 +464,13 @@ export async function handleAdminApi(
     }
     const detailMatch = /^\/admin\/api\/accounts\/(\d+)$/.exec(path);
     if (detailMatch) {
-      const detail = await accountDetail(Number(detailMatch[1]));
+      const id = Number(detailMatch[1]);
+      const detail = await accountDetail(id);
       if (!detail) return fail(res, 404, 'account not found');
-      return ok(res, detail);
+      return ok(res, {
+        ...detail,
+        online: game.liveAccountIds().has(id),
+      });
     }
     if (path === '/admin/api/characters') {
       const { page, limit } = parsePageParams(url.searchParams);

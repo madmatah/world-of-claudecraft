@@ -6,6 +6,7 @@
     Paginated,
   } from '../types';
   import { apiGet } from '../api';
+  import { accountStatusFor } from '../account_status';
   import { auth } from '../state/auth.svelte';
   import { SEARCH_DEBOUNCE_MS } from '../state/poll';
   import { t } from '../i18n';
@@ -65,13 +66,6 @@
     void refresh();
   }
 
-  function suspendedSoon(account: AccountRow): boolean {
-    return (
-      account.suspendedUntil !== null &&
-      new Date(account.suspendedUntil).getTime() > Date.now()
-    );
-  }
-
   onMount(() => {
     void refresh();
     return () => {
@@ -121,14 +115,15 @@
       </thead>
       <tbody>
         {#each accounts.rows as account (account.id)}
+          {@const status = accountStatusFor(account)}
           <tr class="clickable" onclick={() => toggleAccount(account.id)}>
             <td class="num">{account.id}</td>
             <td>
               {account.username}
               {#if account.isAdmin}<Badge>{t('accounts.badgeAdmin')}</Badge>{/if}
-              {#if account.bannedAt}
+              {#if status === 'banned'}
                 <Badge variant="bad">{t('accounts.badgeBanned')}</Badge>
-              {:else if suspendedSoon(account)}
+              {:else if status === 'suspended'}
                 <Badge variant="warn">{t('accounts.badgeSuspended')}</Badge>
               {/if}
             </td>

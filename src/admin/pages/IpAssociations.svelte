@@ -1,13 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { IpAssociationsData } from '../types';
-  import { apiGet } from '../api';
+  import { apiGet, apiPost } from '../api';
+  import { blockExpiryIso } from '../block_expiry';
   import { auth } from '../state/auth.svelte';
   import { getAdminNavigation, routeHref } from '../navigation';
   import { fmtDate, fmtNumber } from '../format';
-  import { t } from '../i18n';
+  import { localizeAdminError, t } from '../i18n';
   import Badge from '../components/Badge.svelte';
   import AccountIndicators from '../components/AccountIndicators.svelte';
+  import IpBlockDialog from '../components/IpBlockDialog.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
   import Pager from '../components/Pager.svelte';
   import Panel from '../components/Panel.svelte';
 
@@ -16,6 +19,8 @@
   let data = $state<IpAssociationsData | null>(null);
   let failed = $state(false);
   let page = $state(1);
+  let blockDialogOpen = $state(false);
+  let actionPending = $state(false);
   let requestId = 0;
   const navigation = getAdminNavigation();
 
@@ -42,13 +47,77 @@
     navigation?.back(event);
   }
 
+  function fail(err: unknown, fallbackKey: string): void {
+    if (!auth.handleAuthFailure(err)) {
+      window.alert(err instanceof Error ? localizeAdminError(err.message) : t(fallbackKey));
+    }
+  }
+
+  async function blockIp(reason: string, duration: string): Promise<void> {
+    if (actionPending) return;
+    actionPending = true;
+    try {
+      await apiPost('/admin/api/blocked-ips', {
+        ip,
+        reason,
+        expiresAt: blockExpiryIso(duration),
+      });
+      blockDialogOpen = false;
+      await refresh();
+    } catch (err) {
+      fail(err, 'blockedIps.addFailed');
+    } finally {
+      actionPending = false;
+    }
+  }
+
+  async function unblockIp(): Promise<void> {
+    if (actionPending) return;
+    actionPending = true;
+    try {
+      await apiPost('/admin/api/blocked-ips/delete', { ip });
+      await refresh();
+    } catch (err) {
+      fail(err, 'blockedIps.removeFailed');
+    } finally {
+      actionPending = false;
+    }
+  }
+
   onMount(() => {
     void refresh();
   });
 </script>
 
 <div class="ip-page">
-  <a class="back-link" href={routeHref({ page: 'overview' })} onclick={back}>{t('ipAssociations.back')}</a>
+  {#snippet blockedBadge()}
+    <Badge variant="bad">{t('ipAssociations.blocked')}</Badge>
+  {/snippet}
+
+  {#snippet pageActions()}
+    {#if data?.blocked}
+      <button type="button" disabled={actionPending} onclick={() => void unblockIp()}>
+        {t('blockedIps.unblock')}
+      </button>
+    {:else}
+      <button
+        class="block-action"
+        type="button"
+        disabled={actionPending}
+        onclick={() => (blockDialogOpen = true)}
+      >
+        {t('ipAssociations.blockAction')}
+      </button>
+    {/if}
+  {/snippet}
+
+  <PageHeader
+    title={t('ipAssociations.title', { ip })}
+    badge={data?.blocked ? blockedBadge : undefined}
+    actions={data ? pageActions : undefined}
+  />
+
+  <a class="back-link" href={routeHref({ page: 'shared-ips' })} onclick={back}>{t('ipAssociations.back')}</a>
 
   <Panel>
     {#if failed}
@@ -60,7 +129,6 @@
     {:else}
       <div class="summary">
         <span>{t('ipAssociations.accountCount', { count: fmtNumber(data.total) })}</span>
-        {#if data.blocked}<Badge variant="bad">{t('ipAssociations.blocked')}</Badge>{/if}
       </div>
 
       <div class="account-list">
@@ -125,13 +193,28 @@
       </div>
 
       {#if data.total > data.limit}
-        <div class="pager">
-          <Pager total={data.total} page={data.page} limit={data.limit} onPage={changePage} />
-        </div>
+        <Pager
+          total={data.total}
+          page={data.page}
+          limit={data.limit}
+          layout="footer"
+          onPage={changePage}
+        />
       {/if}
     {/if}
   </Panel>
 </div>
+
+{#if blockDialogOpen}
+  <IpBlockDialog
+    {ip}
+    submitting={actionPending}
+    onConfirm={(reason, duration) => void blockIp(reason, duration)}
+    onCancel={() => {
+      if (!actionPending) blockDialogOpen = false;
+    }}
+  />
+{/if}
 
 <style>
   .ip-page {
@@ -160,6 +243,16 @@
 
   .summary {
     margin-bottom: 12px;
+  }
+
+  .block-action {
+    border-color: #b34a3a;
+    color: #ff7a5e;
+  }
+
+  .block-action:hover {
+    border-color: #ff7a5e;
+    color: var(--text);
   }
 
   .account-list {
@@ -206,11 +299,6 @@
     margin-top: 4px;
   }
 
-  .pager {
-    justify-content: flex-end;
-    margin-top: 12px;
-  }
-
   @media (max-width: 700px) {
     .account-heading {
       align-items: flex-start;
@@ -219,8 +307,7 @@
   }
 
   @media (pointer: coarse) {
-    .back-link,
-    .ip-page :global(.pager button) {
+    .back-link {
       min-width: 40px;
       min-height: 40px;
     }

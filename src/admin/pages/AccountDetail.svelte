@@ -18,10 +18,10 @@
   import ConfirmDialog from '../components/ConfirmDialog.svelte';
   import Badge from '../components/Badge.svelte';
 
-  // Expandable account detail: characters, recent sessions, account status, and (when
-  // includeAdminControls) the full moderation controls. Shared by the Accounts page and
-  // Moderation. After any successful action it calls onChanged so the parent refetches;
-  // the server re-authorizes every action regardless.
+  // Reusable account body: moderation actions, chat state, characters, and recent
+  // sessions. Identity and account status belong to the parent context (table row,
+  // moderation queue, or modal header). After a successful action, onChanged asks the
+  // parent to refresh; the server re-authorizes every action regardless.
   let {
     detail,
     includeAdminControls = false,
@@ -38,7 +38,6 @@
 
   let canModerate = $derived(includeAdminControls && !detail.isAdmin);
   let activeChatMute = $derived(detail.chatMutedUntil !== null && new Date(detail.chatMutedUntil).getTime() > Date.now());
-  let activeSuspension = $derived(detail.suspendedUntil !== null && new Date(detail.suspendedUntil).getTime() > Date.now());
 
   function run(built: Built): void {
     if ('errorKey' in built) {
@@ -80,19 +79,16 @@
 <div class="account-detail">
   {#if canModerate}
     <div class="account-admin-controls mod-account-actions">
-      <div class="account-status">
-        <b>{t('detail.status')}</b>
-        {#if detail.bannedAt}
-          <Badge variant="bad">{t('accounts.badgeBanned')}</Badge> <span class="hint">{t('detail.since', { value: fmtDate(detail.bannedAt) })}</span>
-        {:else if activeSuspension}
-          <Badge variant="warn">{t('detail.suspendedUntil', { value: fmtDate(detail.suspendedUntil) })}</Badge>
-        {:else}
-          <Badge>{t('detail.statusActive')}</Badge>{#if activeChatMute} <Badge variant="warn">{t('detail.chatMutedUntil', { value: fmtDate(detail.chatMutedUntil) })}</Badge>{/if}
-        {/if}
-        {#if detail.moderationReason}<span class="hint">{t('detail.reason', { value: detail.moderationReason })}</span>{/if}
-      </div>
+      {#if detail.moderationReason}
+        <div class="moderation-reason">
+          {t('detail.reason', { value: detail.moderationReason })}
+        </div>
+      {/if}
       {#if activeChatMute && detail.chatMuteReason}
-        <div class="account-status"><b>{t('detail.chatMuteLabel')}</b> <span class="hint">{t('detail.reason', { value: detail.chatMuteReason })}</span></div>
+        <div class="moderation-reason">
+          <b>{t('detail.chatMuteLabel')}</b>
+          {t('detail.reason', { value: detail.chatMuteReason })}
+        </div>
       {/if}
       <input class="account-mod-reason" placeholder={t('detail.notePlaceholder')} maxlength="500" bind:value={note} />
       {#if detail.bannedAt}
@@ -113,19 +109,6 @@
     {#if pending}
       <ConfirmDialog title={pending.title} rows={pending.rows} danger={pending.danger} onConfirm={confirm} onCancel={() => (pending = null)} />
     {/if}
-  {:else if includeAdminControls}
-    <div class="account-admin-controls">
-      <div class="account-status">
-        <b>{t('detail.status')}</b> <Badge>{t('accounts.badgeAdmin')}</Badge>
-        {#if detail.bannedAt}
-          <Badge variant="bad">{t('accounts.badgeBanned')}</Badge> <span class="hint">{t('detail.since', { value: fmtDate(detail.bannedAt) })}</span>
-        {:else if activeSuspension}
-          <Badge variant="warn">{t('detail.suspendedUntil', { value: fmtDate(detail.suspendedUntil) })}</Badge>
-        {:else}
-          <Badge>{t('detail.statusActive')}</Badge>{#if activeChatMute} <Badge variant="warn">{t('detail.chatMutedUntil', { value: fmtDate(detail.chatMutedUntil) })}</Badge>{/if}
-        {/if}
-      </div>
-    </div>
   {/if}
 
   {#if includeAdminControls}

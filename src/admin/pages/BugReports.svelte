@@ -85,9 +85,16 @@
         </tbody>
       </table>
     </div>
-    <div class="controls">
-      <div class="pager"><Pager total={data.total} page={data.page} limit={data.limit} onPage={(p) => { page = p; void refresh(); }} /></div>
-    </div>
+    <Pager
+      total={data.total}
+      page={data.page}
+      limit={data.limit}
+      layout="footer"
+      onPage={(p) => {
+        page = p;
+        void refresh();
+      }}
+    />
   {/if}
 </Panel>
 

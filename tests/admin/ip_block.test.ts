@@ -13,6 +13,7 @@ function detail(
       createdAt: '',
       lastLogin: null,
       isAdmin: false,
+      online: false,
       bannedAt: null,
       suspendedUntil: null,
       moderationReason: '',

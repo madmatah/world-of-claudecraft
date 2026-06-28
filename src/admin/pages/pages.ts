@@ -6,6 +6,7 @@ export type AdminPage =
   | 'accounts'
   | 'characters'
   | 'moderation'
+  | 'shared-ips'
   | 'chat-filter'
   | 'blocked-ips'
   | 'bug-reports';
@@ -49,6 +50,7 @@ export const NAV_SECTIONS: readonly AdminNavSection[] = [
     defaultPage: 'moderation',
     items: [
       { id: 'moderation', labelKey: 'nav.reports' },
+      { id: 'shared-ips', labelKey: 'nav.sharedIps' },
       { id: 'blocked-ips', labelKey: 'nav.blockedIps' },
       { id: 'chat-filter', labelKey: 'nav.chatFilter' },
     ],

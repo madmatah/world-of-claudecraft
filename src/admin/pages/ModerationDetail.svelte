@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ModerationAccountDetail, ReportDetail } from '../types';
   import { apiGet, apiPost } from '../api';
+  import { accountStatusFor } from '../account_status';
   import { auth } from '../state/auth.svelte';
   import { localizeAdminError, t } from '../i18n';
   import { fmtDate } from '../format';
@@ -33,7 +34,9 @@
   let customExpiry = $state('');
   let pending = $state<PendingAction | null>(null);
 
-  let banned = $derived(detail?.account.bannedAt != null);
+  let banned = $derived(
+    detail ? accountStatusFor(detail.account) === 'banned' : false,
+  );
 
   async function refetch(): Promise<void> {
     try {

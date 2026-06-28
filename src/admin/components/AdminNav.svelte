@@ -23,7 +23,7 @@
 
   const navigation = getAdminNavigation();
   let sidebar: HTMLElement;
-  let activePage = $derived<AdminPage>(route.page === 'ip' ? 'blocked-ips' : route.page);
+  let activePage = $derived<AdminPage>(route.page === 'ip' ? 'shared-ips' : route.page);
 
   $effect(() => {
     if (!open) return;

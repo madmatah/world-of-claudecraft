@@ -1,3 +1,5 @@
+import type { AccountStatus } from './account_status';
+
 // Shapes returned by the /admin/api endpoints (mirrors server/admin_db.ts
 // and server/game.ts admin views).
 
@@ -158,7 +160,7 @@ export interface IpAssociationsData {
     username: string;
     isAdmin: boolean;
     online: boolean;
-    status: 'active' | 'suspended' | 'banned';
+    status: AccountStatus;
     suspendedUntil: string | null;
     createdAt: string;
     createdWithIp: boolean;
@@ -178,12 +180,22 @@ export interface IpAssociationsData {
   limit: number;
 }
 
+export interface SharedIpRow {
+  ip: string;
+  accountCount: number;
+  lastSeenAt: string;
+  blocked: boolean;
+}
+
+export type SharedIpsData = Paginated<SharedIpRow>;
+
 export interface AccountDetail {
   id: number;
   username: string;
   createdAt: string;
   lastLogin: string | null;
   isAdmin: boolean;
+  online: boolean;
   bannedAt: string | null;
   suspendedUntil: string | null;
   moderationReason: string;
@@ -217,7 +229,7 @@ export interface ModerationQueueRow {
   accountId: number;
   username: string;
   isAdmin: boolean;
-  status: 'active' | 'suspended' | 'banned';
+  status: AccountStatus;
   suspendedUntil: string | null;
   openReports: number;
   latestReportAt: string;

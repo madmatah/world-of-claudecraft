@@ -2,6 +2,7 @@
   import type { CharacterRow } from '../types';
   import { classLabel, t } from '../i18n';
   import { fmtCopper, fmtDate, fmtRelative } from '../format';
+  import AccountLink from './AccountLink.svelte';
 
   // Characters table with clickable sort headers. Ported from renderCharactersTable.
   // The parent owns sort/dir/page state and refetches; onSort toggles a column.
@@ -46,7 +47,7 @@
           <td class="num">{c.level}</td>
           <td class="num">{c.xp}</td>
           <td class="num">{fmtCopper(c.copper)}</td>
-          <td>{c.username}</td>
+          <td><AccountLink accountId={c.accountId} username={c.username} /></td>
           <td>{fmtDate(c.createdAt)}</td>
           <td>{fmtRelative(c.updatedAt)}</td>
         </tr>

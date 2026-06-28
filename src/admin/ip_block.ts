@@ -1,10 +1,8 @@
 import type { ModerationAccountDetail } from './types';
+import { recentAccountIps } from './account_ips';
 
-// The known-IP list shown in an account's moderation detail: newest first (last login,
-// then recent sessions), capped, but any IP this account has blocked is always included
-// so Unblock stays reachable past the cap. Pure + testable; ported from the old
-// renderIpBlockSection. `isLast` marks the most-recent IP for the "last login" hint.
-const MAX_KNOWN_IPS = 5;
+// Add moderation-specific block state to the shared recent-IP history. Blocked
+// addresses beyond the normal cap stay visible so the Unblock action remains reachable.
 
 export interface KnownIp {
   ip: string;
@@ -14,21 +12,18 @@ export interface KnownIp {
 
 export function knownAccountIps(d: ModerationAccountDetail): KnownIp[] {
   const blocked = new Set(d.blockedIps);
-  const ips: string[] = [];
-  const seen = new Set<string>();
-  const add = (ip: string | null) => {
-    if (ip && !seen.has(ip) && ips.length < MAX_KNOWN_IPS) {
-      seen.add(ip);
-      ips.push(ip);
-    }
-  };
-  add(d.account.lastLoginIp);
-  for (const s of d.account.recentSessions) add(s.ip);
+  const recent = recentAccountIps(d.account);
+  const entries: KnownIp[] = recent.map((entry) => ({
+    ip: entry.ip,
+    blocked: blocked.has(entry.ip),
+    isLast: entry.isLastLogin,
+  }));
+  const seen = new Set(entries.map((entry) => entry.ip));
   for (const ip of d.blockedIps) {
     if (!seen.has(ip)) {
       seen.add(ip);
-      ips.push(ip);
+      entries.push({ ip, blocked: true, isLast: false });
     }
   }
-  return ips.map((ip, i) => ({ ip, blocked: blocked.has(ip), isLast: i === 0 }));
+  return entries;
 }

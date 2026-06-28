@@ -2,24 +2,37 @@
   import type { Snippet } from 'svelte';
   import { auth } from '../state/auth.svelte';
   import { t } from '../i18n';
+  import { setAccountModalController } from '../account_modal';
   import type { AdminRoute } from '../navigation';
   import { itemForPage, type AdminPage } from '../pages/pages';
   import AdminNav from './AdminNav.svelte';
+  import AccountModal from './AccountModal.svelte';
+  import PageHeader from './PageHeader.svelte';
 
   let { route, children }: { route: AdminRoute; children: Snippet } = $props();
   let navOpen = $state(false);
   let navToggle: HTMLButtonElement;
-  let page = $derived<AdminPage>(route.page === 'ip' ? 'blocked-ips' : route.page);
-  let pageTitle = $derived(
-    route.page === 'ip'
-      ? t('ipAssociations.title', { ip: route.ip })
-      : t(itemForPage(page).labelKey),
-  );
+  let accountModalId = $state<number | null>(null);
+  let page = $derived<AdminPage>(route.page === 'ip' ? 'shared-ips' : route.page);
+  let pageTitle = $derived(t(itemForPage(page).labelKey));
 
   function closeNav(returnFocus = false): void {
     navOpen = false;
     if (returnFocus) navToggle.focus();
   }
+
+  function closeAccountModal(): void {
+    accountModalId = null;
+  }
+
+  setAccountModalController({
+    open(accountId) {
+      accountModalId = accountId;
+    },
+    close() {
+      closeAccountModal();
+    },
+  });
 
   function onKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape' && navOpen) closeNav(true);
@@ -28,6 +41,7 @@
   $effect(() => {
     route;
     navOpen = false;
+    closeAccountModal();
   });
 </script>
 
@@ -72,13 +86,19 @@
       </div>
     </header>
     <main id="admin-content">
-      <header class="page-header">
-        <h1>{pageTitle}</h1>
-      </header>
+      {#if route.page !== 'ip'}
+        <PageHeader title={pageTitle} />
+      {/if}
       {@render children()}
     </main>
   </div>
 </div>
+
+{#if accountModalId !== null}
+  {#key accountModalId}
+    <AccountModal accountId={accountModalId} onClose={() => closeAccountModal()} />
+  {/key}
+{/if}
 
 <style>
   .admin-layout {
@@ -108,8 +128,7 @@
     gap: 10px;
   }
 
-  .app-title,
-  h1 {
+  .app-title {
     color: var(--gold);
     font-family: var(--title-font);
     text-shadow: 1px 1px 2px #000;
@@ -121,16 +140,6 @@
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .page-header {
-    margin-bottom: 18px;
-  }
-
-  h1 {
-    font-size: 24px;
-    font-weight: 600;
-    line-height: 1.2;
   }
 
   .who {

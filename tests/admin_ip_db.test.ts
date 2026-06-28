@@ -12,7 +12,7 @@ vi.mock('../server/realm', () => ({
   REALM: 'test-realm',
 }));
 
-import { associationsForIp } from '../server/admin_db';
+import { associationsForIp, listSharedIps } from '../server/admin_db';
 
 describe('admin IP association queries', () => {
   beforeEach(() => {
@@ -90,6 +90,40 @@ describe('admin IP association queries', () => {
       2,
       expect.stringContaining('COALESCE(c.name, ps.character_name)'),
       ['203.0.113.7', [7]],
+    );
+  });
+
+  it('lists only IPs shared by multiple accounts in investigation order', async () => {
+    mocks.query.mockResolvedValueOnce({
+      rows: [
+        {
+          ip: '203.0.113.7',
+          account_count: 4,
+          last_seen_at: '2026-06-28T12:00:00Z',
+          total: 1,
+        },
+      ],
+    });
+
+    await expect(listSharedIps(2, 25)).resolves.toEqual({
+      rows: [
+        {
+          ip: '203.0.113.7',
+          accountCount: 4,
+          lastSeenAt: '2026-06-28T12:00:00Z',
+        },
+      ],
+      total: 1,
+      page: 2,
+      limit: 25,
+    });
+
+    expect(mocks.query).toHaveBeenCalledWith(
+      expect.stringContaining('HAVING count(DISTINCT account_id) > 1'),
+      [25, 25],
+    );
+    expect(mocks.query.mock.calls[0][0]).toContain(
+      'ORDER BY account_count DESC, last_seen_at DESC, ip',
     );
   });
 
