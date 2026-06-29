@@ -145,8 +145,9 @@ export function rollLoot(
       const questRecipients = eligible.filter((m) => needsQuestDrop(ctx, entry, m));
       if (questRecipients.length === 0) continue;
       if (!ctx.rng.chance(entry.chance)) continue;
+      if (!entry.itemId) continue;
       items.push({
-        itemId: entry.itemId!,
+        itemId: entry.itemId,
         count: 1,
         personalFor: questRecipients.map((m) => m.entityId),
       });
