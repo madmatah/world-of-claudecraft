@@ -49,6 +49,7 @@ function makeCtx() {
   const cfg = { seed: 1 } as unknown as SimContextHost['cfg'];
   const clock = { time: 0, tick: 0 };
   let delayedEvents: { at: number; event: any; guard?: () => boolean }[] = [];
+  let pendingProjectiles: any[] = [];
   const emit = vi.fn();
   const clearEntityMarker = vi.fn();
   const pulseGroundAoE = vi.fn();
@@ -80,6 +81,12 @@ function makeCtx() {
     },
     set delayedEvents(v) {
       delayedEvents = v;
+    },
+    get pendingProjectiles() {
+      return pendingProjectiles;
+    },
+    set pendingProjectiles(v) {
+      pendingProjectiles = v;
     },
     get groundAoEs() {
       return groundAoEs;

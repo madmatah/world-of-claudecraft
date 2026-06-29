@@ -2198,7 +2198,8 @@ function mobLocomotion(): Scenario {
 
       // Cowardly flee: a low-HP humanoid in melee panics once (maybeFlee at/under
       // FLEE_HP_THRESHOLD -> aiState 'flee'), then the flee arm runs it away. The
-      // 'attempts to flee!' emit + callForHelp stay on Sim; the flee arm draws no rng.
+      // 'attempts to flee!' emit stays on Sim; a fleeing mob no longer rallies
+      // allies (no social aggro), and the flee arm draws no rng.
       const coward = spawnMob(
         sim,
         'mogger_lackey',

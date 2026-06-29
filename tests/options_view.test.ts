@@ -232,6 +232,7 @@ describe('options_view: interface dispatch matrix (cluster 5)', () => {
       'showWalletOnPlayerCard',
       'landingHighContrast',
       'invertLookY',
+      'showItemLevel',
     ]);
     expect(find(controls, 'reduceMotion')).toMatchObject({ control: 'boolToggle' });
   });

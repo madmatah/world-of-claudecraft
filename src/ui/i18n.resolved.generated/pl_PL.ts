@@ -222,6 +222,9 @@ export const pl_PL: EnTranslations = {
     "rest": {
       "resting": "Odpoczynek"
     },
+    "abilityScaling": {
+      "bonus": "(+{value})"
+    },
     "unitFrame": {
       "playerLabel": "Twój bohater",
       "targetLabel": "Twój cel",
@@ -317,7 +320,10 @@ export const pl_PL: EnTranslations = {
       "showWalletOnCharacterScreen": "Pokaż sakiewkę na ekranie postaci",
       "showWalletOnPlayerCard": "Pokaż sakiewkę na karcie gracza",
       "uiScale": "Skala interfejsu",
-      "highContrastBackground": "Tło o wysokim kontraście"
+      "highContrastBackground": "Tło o wysokim kontraście",
+      "showItemLevel": "Pokaż poziom przedmiotu",
+      "itemLevelLine": "Poziom przedmiotu {level}",
+      "itemScoreLine": "Ocena {score}"
     },
     "controller": {
       "title": "Kontroler",
@@ -447,6 +453,10 @@ export const pl_PL: EnTranslations = {
     },
     "tips": {
       "joinChannels": "Wskazówka: wpisz /join world lub /join lfg, aby rozmawiać z graczami z całego realmu."
+    },
+    "itemSet": {
+      "header": "{name} ({have}/{total})",
+      "bonusLine": "({pieces}) {bonus}"
     },
     "questShare": {
       "notShareable": "Tego zadania nie można udostępnić.",
@@ -584,6 +594,26 @@ export const pl_PL: EnTranslations = {
       "exportDone": "Twoje dane zostały pobrane. Wysłaliśmy ci potwierdzenie e-mailem.",
       "exportFailed": "Nie udało się wyeksportować twoich danych. Spróbuj ponownie za chwilę."
     },
+    "masterLoot": {
+      "title": "Mistrz lupow",
+      "enableLabel": "Mistrz lupow",
+      "enableAria": "Wlacz mistrza lupow",
+      "looterLabel": "Mistrz lupow",
+      "leaderOption": "Przywodca grupy",
+      "thresholdLabel": "Prog",
+      "thresholdUncommon": "Niezwykle i wyzej",
+      "thresholdRare": "Rzadkie i wyzej",
+      "thresholdEpic": "Epickie i wyzej",
+      "assignPrompt": "Przydziel {item}",
+      "assignAria": "Przydziel {item} graczowi {name}",
+      "rollButton": "Rzut",
+      "selectAll": "Zaznacz wszystko",
+      "methodMaster": "Metoda lupow ustawiona na mistrza lupow. Mistrz lupow: {name}.",
+      "methodGroup": "Metoda lupow ustawiona na lup grupowy.",
+      "assigned": "{looter} przydzielil {item} graczowi {target}.",
+      "unassigned": "{item} nie zostal przydzielony i jest wolny dla wszystkich.",
+      "leaderOnly": "Tylko przywodca grupy moze zmienic metode lupow."
+    },
     "bags": {
       "filterGroupAria": "Filtruj torby według kategorii",
       "filterAll": "Wszystko",
@@ -605,6 +635,80 @@ export const pl_PL: EnTranslations = {
       "notRaid": "Twoja grupa nie jest rajdem.",
       "leaderOnly": "Tylko przywódca rajdu może przekształcić go w drużynę.",
       "tooLarge": "Rajd liczący ponad pięciu członków nie może zostać przekształcony z powrotem w drużynę."
+    },
+    "itemArmorType": {
+      "cloth": "Tkanina",
+      "leather": "Skóra",
+      "mail": "Kolczuga"
+    },
+    "auraEffect": {
+      "dot": "Zadaje {value} obrażeń od {school} co {interval} s",
+      "hot": "Przywraca {value} zdrowia co {interval} s",
+      "absorb": "Pochłania {value} obrażeń",
+      "healAbsorb": "Pochłania {value} otrzymywanego leczenia",
+      "thorns": "Verursacht bei Angreifern {value} {school}schaden",
+      "slow": "Verringert Bewegungstempo um {pct}%",
+      "speed": "Erhöht Bewegungstempo um {pct}%",
+      "attackSpeedSlow": "Verlangsamt Angriffstempo um {pct}%",
+      "attackSpeedFast": "Erhöht Angriffstempo um {pct}%",
+      "haste": "Erhöht Angriffs- und Zaubertempo um {pct}%",
+      "tongues": "Erhöht Zauberzeit um {pct}%",
+      "increase": {
+        "ap": "Erhöht Angriffskraft um {value}",
+        "armor": "Erhöht Rüstung um {value}",
+        "int": "Erhöht Intelligenz um {value}",
+        "agi": "Erhöht Beweglichkeit um {value}",
+        "sta": "Erhöht Ausdauer um {value}",
+        "spi": "Erhöht Willenskraft um {value}",
+        "allStats": "Erhöht alle Attribute um {value}"
+      },
+      "reduce": {
+        "ap": "Verringert Angriffskraft um {value}",
+        "armor": "Verringert Rüstung um {value}",
+        "int": "Verringert Intelligenz um {value}",
+        "agi": "Verringert Beweglichkeit um {value}",
+        "sta": "Verringert Ausdauer um {value}",
+        "spi": "Verringert Willenskraft um {value}",
+        "allStats": "Verringert alle Attribute um {value}"
+      },
+      "dodge": "Erhöht Ausweichchance um {pct}%",
+      "dodgeReduce": "Verringert Ausweichchance um {pct}%",
+      "armorFlat": "Verringert Rüstung um {value}",
+      "armorFlatStacks": "Verringert Rüstung um {value} ({stacks} Stapel)",
+      "mortalWound": "Verringert erhaltene Heilung um {pct}%",
+      "vulnerability": "Erhöht erlittenen Schaden um {pct}%",
+      "physVuln": "Erhöht erlittenen physischen Schaden um {pct}%",
+      "spellVuln": "Erhöht erlittenen Magieschaden um {pct}%",
+      "critVuln": "Erhöht Chance, kritisch getroffen zu werden, um {pct}%",
+      "costTax": "Erhöht Fähigkeitskosten um {pct}%",
+      "stun": "Betäubt: handlungsunfähig",
+      "root": "Festgewurzelt: bewegungsunfähig",
+      "incapacitate": "Handlungsunfähig: kann nicht handeln",
+      "polymorph": "Verwandelt: handlungsunfähig",
+      "hex": "Verringert verursachten Schaden und Heilung um {pct}%",
+      "blind": "Geblendet: handlungsunfähig",
+      "silence": "Zum Schweigen gebracht: kann keine Zauber wirken",
+      "disarm": "Entwaffnet: kann keine Waffenangriffe nutzen",
+      "lockout": "Zauberschule gesperrt",
+      "imbue": "Waffe mit Bonuseffekten erfüllt",
+      "imbueRange": "Waffe erfüllt: {min} bis {max} Bonusschaden bei Richturteil",
+      "stealth": "Verborgen; Bewegungstempo um {pct}% verringert",
+      "formBear": "Bärengestalt: Gesundheit und Rüstung erhöht",
+      "formCat": "Katzengestalt: Nahkampfschaden und Energie",
+      "formTravel": "Reisegestalt: Bewegungstempo um {pct}% erhöht",
+      "defensiveStance": "Verteidigungshaltung: weniger erlittener Schaden, mehr Bedrohung",
+      "righteousFury": "Rechtschaffener Zorn: stark erhöhte Bedrohung durch Heiligschaden",
+      "scale": "Größe um {pct}% erhöht",
+      "jump": "Sprunghöhe um {pct}% erhöht",
+      "school": {
+        "physical": "Fizyczne",
+        "fire": "Ogień",
+        "frost": "Mróz",
+        "arcane": "Arkana",
+        "shadow": "Cień",
+        "holy": "Święte",
+        "nature": "Natura"
+      }
     },
     "loot": {
       "chestTitle": "Skrzynia"
@@ -2645,6 +2749,7 @@ export const pl_PL: EnTranslations = {
     "combat": {
       "floatingMiss": "Pudło",
       "floatingDodge": "Unik",
+      "floatingResist": "Odparto",
       "cannotMove": "Nie można się ruszyć!",
       "attack": "atak",
       "damageDone": "Twój {ability} trafia {target}, zadając {amount}.",
@@ -2653,6 +2758,7 @@ export const pl_PL: EnTranslations = {
       "damageTakenCrit": "{source} trafia cię krytycznie, zadając {amount}.",
       "miss": "Twój {ability} chybia {target}.",
       "dodged": "Twój {ability} zostaje uniknięty przez {target}.",
+      "resisted": "{target} odpiera twoje {ability}.",
       "healSelf": "Twój {ability} leczy cię o {amount}.",
       "healSelfCrit": "Twój {ability} leczy cię krytycznie o {amount}.",
       "healOther": "Twój {ability} leczy {target} o {amount}.",
@@ -3383,7 +3489,7 @@ export const pl_PL: EnTranslations = {
       },
       "arcane_missiles": {
         "name": "Arkaniczne pociski",
-        "description": "Wystrzeliwuje arkaniczne pociski we wroga, zadając 8 obrażeń arkanicznych co sekundę przez 3 sek."
+        "description": "Wystrzeliwuje arkaniczne pociski we wroga, zadając {damage} obrażeń arkanicznych co sekundę przez 3 sek."
       },
       "polymorph": {
         "name": "Polimorfia",
@@ -3447,7 +3553,7 @@ export const pl_PL: EnTranslations = {
       },
       "stealth": {
         "name": "Skradanie się",
-        "description": "Ukrywa cię w cieniu: wrogowie ledwie cię dostrzegają, ale poruszasz się o 30% wolniej. Atak lub otrzymanie obrażeń przerywa Skradanie się. Rzuć ponownie, aby się ujawnić."
+        "description": "Ukrywa cię w cieniu: wrogowie ledwie cię dostrzegają, ale poruszasz się o 50% wolniej. Atak lub otrzymanie obrażeń przerywa Skradanie się. Rzuć ponownie, aby się ujawnić."
       },
       "adrenaline_rush": {
         "name": "Przypływ adrenaliny",
@@ -3479,7 +3585,7 @@ export const pl_PL: EnTranslations = {
       },
       "vanish": {
         "name": "Zniknięcie",
-        "description": "Znikasz z pola widzenia, wchodząc w Skradanie się nawet w walce. Ukryty poruszasz się o 30% wolniej. Trwa do 10 sek."
+        "description": "Znikasz z pola widzenia, wchodząc w Skradanie się nawet w walce. Ukryty poruszasz się o 50% wolniej. Trwa do 10 sek."
       },
       "instant_poison": {
         "name": "Natychmiastowa trucizna",
@@ -3631,7 +3737,7 @@ export const pl_PL: EnTranslations = {
       },
       "mind_flay": {
         "name": "Smaganie umysłu",
-        "description": "Naciera na umysł celu energią cienia, zadając 12 obrażeń co sekundę przez 3 sek."
+        "description": "Naciera na umysł celu energią cienia, zadając {damage} obrażeń co sekundę przez 3 sek."
       },
       "flash_heal": {
         "name": "Błyskawiczne leczenie",
@@ -3707,7 +3813,7 @@ export const pl_PL: EnTranslations = {
       },
       "drain_life": {
         "name": "Wyssanie życia",
-        "description": "Wysysa życie celu, przekazując ci 7 zdrowia co sekundę przez 5 sek."
+        "description": "Wysysa życie celu, przekazując ci {damage} zdrowia co sekundę przez 5 sek."
       },
       "fear": {
         "name": "Strach",
@@ -3887,7 +3993,7 @@ export const pl_PL: EnTranslations = {
       },
       "prowl": {
         "name": "Czajenie",
-        "description": "Wchodzi w skradanie w postaci wilka. Nie można użyć w walce."
+        "description": "Wchodzi w skradanie w postaci wilka, poruszając się o 50% wolniej. Nie można użyć w walce."
       },
       "rake": {
         "name": "Rozoranie",
@@ -6283,6 +6389,43 @@ export const pl_PL: EnTranslations = {
         "name": "Zawalony Relikwiarz",
         "enterText": "Schodzisz do zawalonego relikwiarza.",
         "leaveText": "Wspinasz się z powrotem do Brata Halvena przy ruinie relikwiarza."
+      }
+    },
+    "itemSets": {
+      "crownforged": {
+        "name": "Koronokuty rynsztunek bojowy",
+        "bonus2": "Zwiększa siłę ataku o 40.",
+        "bonus3": "Zwiększa siłę o 15 i wytrzymałość o 15."
+      },
+      "deathlord": {
+        "name": "Rynsztunek bojowy Władcy Śmierci",
+        "bonus2": "Zwiększa siłę ataku o 40.",
+        "bonus3": "Zwiększa siłę o 15 i wytrzymałość o 15."
+      },
+      "necromancers": {
+        "name": "Szaty nekromanty",
+        "bonus2": "Zmniejsza opóźnianie zaklęć przez obrażenia o 50%.",
+        "bonus3": "Otrzymywane obrażenia nie opóźniają rzucania zaklęć."
+      },
+      "nighttalon": {
+        "name": "Skórzany rynsztunek Nocnego Szpona",
+        "bonus2": "Zwiększa siłę ataku o 40.",
+        "bonus3": "Zwiększa zręczność o 15 i szansę na trafienie krytyczne o 2%."
+      },
+      "soulflame": {
+        "name": "Szaty Płomienia Duszy",
+        "bonus2": "Zmniejsza opóźnianie zaklęć przez obrażenia o 50%.",
+        "bonus3": "Otrzymywane obrażenia nie opóźniają rzucania zaklęć."
+      },
+      "stormcallers": {
+        "name": "Szaty Przyzywacza Burz",
+        "bonus2": "Zmniejsza opóźnianie zaklęć przez obrażenia o 50%.",
+        "bonus3": "Otrzymywane obrażenia nie opóźniają rzucania zaklęć."
+      },
+      "wyrmshadow": {
+        "name": "Rynsztunek Cienia Żmija",
+        "bonus2": "Zwiększa siłę ataku o 40.",
+        "bonus3": "Zwiększa zręczność o 15 i szansę na trafienie krytyczne o 2%."
       }
     }
   },

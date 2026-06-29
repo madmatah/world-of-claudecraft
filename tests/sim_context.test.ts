@@ -228,6 +228,7 @@ function makeFakeHost() {
     grid: new SpatialGrid(),
     playerGrid: new SpatialGrid(),
     delayedEvents: [],
+    pendingProjectiles: [],
     groundAoEs: [],
     dungeonDoorIds: null,
     instances: [],

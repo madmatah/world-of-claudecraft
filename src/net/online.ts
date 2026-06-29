@@ -8,11 +8,13 @@ import {
   emptyAllocation,
   pointsSpent,
   type Role,
+  SAVED_LOADOUT_BAR_SLOTS,
   type SavedLoadout,
   type TalentAllocation,
   talentPointsAtLevel,
 } from '../sim/content/talents';
 import { abilitiesKnownAt, NPCS, resolveDelveShopOffers } from '../sim/data';
+import { deadTargetSelectable } from '../sim/dead_target';
 import { LEADERBOARD_PAGE_SIZE } from '../sim/leaderboard_page';
 import type { Ante, PickAction } from '../sim/lockpick';
 import { normalizeMoveFacing, sanitizeMoveInput } from '../sim/move_input';
@@ -24,6 +26,7 @@ import {
   type InvSlot,
   type LootRollChoice,
   type LootRollPrompt,
+  type MasterLootThreshold,
   type MoveInput,
   type PlayerClass,
   type QuestProgress,
@@ -611,6 +614,7 @@ function blankEntity(id: number): Entity {
     warcryTimer: 0,
     petPath: [],
     petPathCooldown: 0,
+    castPushbackReduction: 0,
     pos: { x: 0, y: 0, z: 0 },
     prevPos: { x: 0, y: 0, z: 0 },
     facing: 0,
@@ -633,6 +637,7 @@ function blankEntity(id: number): Entity {
     weapon: { min: 1, max: 2, speed: 2 },
     attackPower: 0,
     rangedPower: 0,
+    spellPower: 0,
     critChance: 0.05,
     dodgeChance: 0.05,
     moveSpeed: 7,
@@ -643,6 +648,7 @@ function blankEntity(id: number): Entity {
     inCombat: false,
     combatTimer: 99,
     auras: [],
+    stealthed: false,
     ccDr: new Map(),
     castingAbility: null,
     castRemaining: 0,
@@ -696,6 +702,7 @@ function blankEntity(id: number): Entity {
     aggroTargetId: null,
     respawnTimer: 0,
     corpseTimer: 0,
+    lootFfaTimer: Infinity,
     lootable: false,
     loot: null,
     xpValue: 0,
@@ -1173,6 +1180,7 @@ export class ClientWorld implements IWorld {
       e.facing = w.f;
       e.hp = w.hp;
       e.maxHp = w.mhp;
+      e.rangedPower = w.rp ?? 0;
       e.overheadEmoteId = isOverheadEmoteId(w.emo) ? w.emo : null;
       e.overheadEmoteUntil = e.overheadEmoteId ? Number.POSITIVE_INFINITY : 0;
       if (typeof w.emoSeq === 'number') e.overheadEmoteSeq = w.emoSeq;
@@ -1207,6 +1215,10 @@ export class ClientWorld implements IWorld {
         sourceId: 0,
         school: 'physical' as const,
         stacks: a.stacks,
+        // Mirror the charge count for a charge-limited aura (Lightning Shield); the wire sends it
+        // only when defined (server/game.ts), so an ordinary aura or an old server decodes to
+        // undefined and the badge falls back to the stacks path, exactly as before.
+        charges: a.charges,
       }));
       e.loot = w.lootList ?? null;
       return e;
@@ -1252,6 +1264,8 @@ export class ClientWorld implements IWorld {
       e.queuedOnSwing = s.queued ?? null;
       e.stats = s.stats ?? e.stats;
       e.attackPower = s.ap ?? 0;
+      e.rangedPower = s.rp ?? 0;
+      e.spellPower = s.sp ?? 0;
       e.critChance = s.crit ?? 0.05;
       e.dodgeChance = s.dodge ?? 0.05;
       e.weapon = s.weapon ?? e.weapon;
@@ -1431,6 +1445,11 @@ export class ClientWorld implements IWorld {
     }
     this.cmd({ cmd: 'castSlot', slot });
   }
+  cancelAura(auraId: string): void {
+    // Authoritative on the server; the dropped aura disappears on the next self
+    // snapshot. No optimistic local removal (stat recalc is server-owned).
+    this.cmd({ cmd: 'cancel_aura', aura: auraId });
+  }
   startAutoAttack(): void {
     this.cmd({ cmd: 'attack' });
   }
@@ -1449,7 +1468,7 @@ export class ClientWorld implements IWorld {
       if (id === null) p.targetId = null;
       else {
         const e = this.entities.get(id);
-        if (e && (!e.dead || e.lootable)) p.targetId = id;
+        if (e && (!e.dead || deadTargetSelectable(e, this.playerId))) p.targetId = id;
       }
     }
     this.cmd({ cmd: 'target', id });
@@ -1648,6 +1667,12 @@ export class ClientWorld implements IWorld {
   }
   moveRaidMember(targetPid: number, group: 1 | 2): void {
     this.cmd({ cmd: 'pmoveRaid', id: targetPid, group });
+  }
+  setPartyLootMaster(enabled: boolean, looter: number, threshold: MasterLootThreshold): void {
+    this.cmd({ cmd: 'setLootMaster', enabled, looter, threshold });
+  }
+  assignMasterLoot(rollId: number, targetPids: number[]): void {
+    this.cmd({ cmd: 'masterAssign', rollId, pids: targetPids });
   }
   // raid/target markers
   markerFor(entityId: number): number | null {
@@ -1910,7 +1935,7 @@ export class ClientWorld implements IWorld {
     if (alloc) {
       const clean = (name || 'Build').toString().slice(0, 24);
       const safeBar = Array.isArray(bar)
-        ? bar.slice(0, 16).map((b) => (typeof b === 'string' ? b : null))
+        ? bar.slice(0, SAVED_LOADOUT_BAR_SLOTS).map((b) => (typeof b === 'string' ? b : null))
         : [];
       const saved = { name: clean, alloc: cloneAllocation(alloc), bar: safeBar };
       this.talents = cloneAllocation(alloc);

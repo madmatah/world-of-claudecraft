@@ -190,6 +190,10 @@ export const BOOL_SETTINGS = {
   // to just its "Quests (N)" header. Toggled by clicking the tracker header; kept
   // here so the choice persists across sessions like the other HUD preferences.
   questTrackerCollapsed: { def: false },
+  // off by default: append an "Item Level N" (plus power score) line to every item
+  // tooltip. Purely a display preference read live by the HUD; off keeps the
+  // classic stat-only tooltip. See src/sim/item_level.ts for the derivation.
+  showItemLevel: { def: false },
   // internal, never shown in the options UI: set true once main.ts has persisted a
   // device-appropriate graphicsPreset on a player's first run (a CONCLUSIVE detection).
   // It gates firstRunGraphicsPreset so a recognized device is classified at most once and

@@ -16,6 +16,7 @@ import type { TalentModifiers } from './content/talents';
 import type { DelayedEvent, GroundAoE } from './entity_roster';
 import type { PendingLootRoll } from './loot/loot_roll';
 import type { MarketListing } from './market';
+import type { PendingProjectile } from './projectile_travel';
 import type { Rng } from './rng';
 import type {
   ArenaMatch,
@@ -83,6 +84,11 @@ export interface SimContextPrimitives {
   // reached here as live views. `delayedEvents` is read-write (the drain reassigns
   // the pending list); `groundAoEs` is mutated in place (splice), so read-only.
   delayedEvents: DelayedEvent[];
+  // In-flight projectiles (projectile_travel.ts): launched by the ranged combat
+  // paths, stepped toward their live targets in the tick prologue and resolved on the
+  // tick they arrive. Read-write (the advance reassigns the pending list), like
+  // delayedEvents.
+  pendingProjectiles: PendingProjectile[];
   readonly groundAoEs: GroundAoE[];
   // dungeon-door registry (I1) appended to on dungeon_door spawn; null until built.
   // Read-write: I1's updateDoorTriggers lazily assigns the array on first build.
@@ -183,6 +189,7 @@ export interface SimContextCallbacks {
     kind: 'hit' | 'miss' | 'dodge',
     noRage?: boolean,
     threatOpts?: { flat?: number; mult?: number },
+    direct?: boolean,
   ): void;
   handleDeath(entity: Entity, killer: Entity | null): void;
   cancelCast(entity: Entity): void;
@@ -308,7 +315,11 @@ export interface SimContextCallbacks {
   delveRunForPlayer(pid: number): DelveRun | null;
   delveModuleEntry(run: DelveRun): Vec3;
   failDelveRun(run: DelveRun): void;
-  pulseGroundAoE(effect: GroundAoE, threatOpts?: { flat?: number; mult?: number }): void;
+  pulseGroundAoE(
+    effect: GroundAoE,
+    threatOpts?: { flat?: number; mult?: number },
+    direct?: boolean,
+  ): void;
 
   // C1 damage core: the post-mitigation damage/death/xp hub the extracted module
   // (src/sim/combat/damage.ts) owns plus the helpers it consumes (all still on Sim
@@ -598,6 +609,12 @@ export function createSimContext(host: SimContextHost): SimContext {
     },
     set delayedEvents(v) {
       host.delayedEvents = v;
+    },
+    get pendingProjectiles() {
+      return host.pendingProjectiles;
+    },
+    set pendingProjectiles(v) {
+      host.pendingProjectiles = v;
     },
     get groundAoEs() {
       return host.groundAoEs;

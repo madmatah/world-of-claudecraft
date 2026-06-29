@@ -271,17 +271,30 @@ narratives; `entity_i18n.ts` (`tEntity`) localizes them at runtime; `talent_i18n
 talent titles/descriptions. A new world/talent name belongs in `world_entity_i18n.ts` (or the
 talent source), with translations in the overlays like any other key.
 
-## icons.ts: procedural, no image files
-Icons are composed on a canvas at runtime and cached as PNG data URLs: there are
-**no icon image assets**. Public API: `iconDataUrl(kind, id, size)` where `kind` is
-`'ability' | 'item' | 'aura' | 'crest'`; plus `QUALITY_COLOR`. Each icon is a recipe
+## icons.ts: procedural recipes, plus a hand-authored WebP set
+Most icons are composed on a canvas at runtime and cached as data URLs (no asset file).
+Public API: `iconDataUrl(kind, id, size)` where `kind` is
+`'ability' | 'item' | 'aura' | 'crest'`; plus `QUALITY_COLOR`. Each procedural icon is a recipe
 `{ bg, pal, prims, fx? }` (`IconRecipe`) drawn over a `BACKGROUNDS` radial + `PALETTES`
 tint with vector `PRIMITIVES` and optional `FX`. Unknown ids fall back via
 `abilityFallback`/`itemFallback` (school + name keywords), so every id always renders.
-- **Add an icon for a known id:** add an entry to `ABILITY_RECIPES` / `ITEM_RECIPES` /
+- **Add a procedural icon for a known id:** add an entry to `ABILITY_RECIPES` / `ITEM_RECIPES` /
   `AURA_RECIPES` / `CREST_RECIPES` using the `r(bg, pal, prims, fx?)` helper (e.g.
   `r('fire','blood',['sword','flame'])`; `TL/TR/BL/BR/BIG` are placement shorthands). New
   visuals need a new `PRIMITIVES` painter (centered at 0,0, ~100×100 space, r≤36, light top-left).
+- **The exception, real painted art (WebP):** the curated `ABILITY_IMAGE_IDS` set ships image
+  files instead of a recipe. `abilityImageUrl(id)` returns `/ui/skills/<class>/<id>.webp`, served
+  for `kind:'ability'` (action bar), `kind:'aura'` (buff/debuff frames), and the `/wiki` guide
+  class pages (weapons use `WEAPON_ICON_DIR` JPGs the same way). **The committed tree is WebP only
+  and WebP is the source of truth: no PNGs.** To add one, drop the art into
+  `public/ui/skills/<class>/` in any common raster format and run `npm run assets:skills`
+  (`scripts/convert_skill_icons_webp.mjs`): it encodes each non-webp image to WebP (tuned
+  `quality: 82, alphaQuality: 100, smartSubsample: true, effort: 6`) and deletes the original. Then
+  list its id in `ABILITY_IMAGE_IDS`. Nothing converts at BUILD time (the script is a pre-commit
+  step, not wired into `npm run build`); `tests/skill_icons.test.ts` fails if a wired id lacks its
+  webp or any non-webp image is committed. Only `ui/skills/` is auto-converted by `assets:skills`
+  and gated by `tests/skill_icons.test.ts`; the existing weapon JPGs and cursor/emote PNGs are
+  grandfathered. Prefer WebP for any new ability/skill art.
 
 ## Small modules (pure-core + thin-consumer pointers)
 Presentation/domain logic lifted out of `hud.ts` into a host-agnostic core a Vitest imports

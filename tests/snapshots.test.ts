@@ -17,6 +17,7 @@ vi.mock('../server/db', () => ({
 import { saveCharacterState } from '../server/db';
 import { type ClientSession, GameServer, wireEntity } from '../server/game';
 import { ClientWorld } from '../src/net/online';
+import { mechHeldWeaponOverride, visualKeyFor } from '../src/render/characters/manifest';
 import { DELVES } from '../src/sim/data';
 import { Sim } from '../src/sim/sim';
 import { type Aura, DT, type PlayerClass } from '../src/sim/types';
@@ -151,6 +152,77 @@ describe('raid lockouts over the wire', () => {
     const client = bareClient(session.pid);
     (client as any).applySnapshot(snap);
     expect(client.raidLockouts()).toEqual([]);
+  });
+});
+
+// The held-weapon-on-the-mech fix is client render, but it depends on three wire
+// fields the server must ship for a player: class (tid), cosmetic body (cat), and
+// equipped mainhand (mh). This drives the REAL server emit (wireEntity) into the
+// REAL client mirror (applySnapshot) and checks the visual layer's inputs, so the
+// mech weapon (and rogue dual-wield) is proven to work online, not just offline.
+describe('Combat Mech held weapon over the wire', () => {
+  it('mirrors class + mech skin + equipped weapon so a rogue mech dual-wields client-side', () => {
+    const sim = new Sim({ seed: 7, playerClass: 'rogue', autoEquip: true });
+    const pid = sim.playerId;
+    sim.setPlayerSkin(pid, 0, 'mech');
+    sim.addItem('keen_dirk', 1, pid);
+    sim.equipItem('keen_dirk', pid);
+    const e = sim.entities.get(pid)!;
+    expect(e.mainhandItemId).toBe('keen_dirk'); // recalcPlayerStats set the held-weapon id
+
+    // server emit
+    const w = wireEntity(e);
+    expect(w.tid).toBe('rogue'); // class drives visualKeyFor + the dual-wield override
+    expect(w.cat).toBe('mech'); // cosmetic body
+    expect(w.mh).toBe('keen_dirk'); // equipped mainhand -> held weapon model
+
+    // client mirror: a DIFFERENT local player seeing this rogue-mech in the world
+    const client = bareClient(pid + 1000);
+    (client as any).applySnapshot({ t: 'snap', ents: [w] });
+    const mirrored = client.entities.get(e.id)!;
+    expect(mirrored.templateId).toBe('rogue');
+    expect(mirrored.skinCatalog).toBe('mech');
+    expect(mirrored.mainhandItemId).toBe('keen_dirk');
+
+    // what the renderer derives from the mirrored entity
+    expect(visualKeyFor(mirrored)).toBe('player_mech');
+    const override = mechHeldWeaponOverride(mirrored.templateId as PlayerClass);
+    expect(override?.weaponSlots).toEqual([0, 1]); // equipped weapon shows in BOTH hands
+  });
+
+  it('keeps a non-dual class (warrior) mech to a single mainhand over the wire', () => {
+    const sim = new Sim({ seed: 7, playerClass: 'warrior', autoEquip: true });
+    const pid = sim.playerId;
+    sim.setPlayerSkin(pid, 0, 'mech');
+    sim.addItem('worn_sword', 1, pid);
+    sim.equipItem('worn_sword', pid);
+    const e = sim.entities.get(pid)!;
+
+    const client = bareClient(pid + 1000);
+    (client as any).applySnapshot({ t: 'snap', ents: [wireEntity(e)] });
+    const mirrored = client.entities.get(e.id)!;
+    expect(mirrored.skinCatalog).toBe('mech');
+    expect(mirrored.mainhandItemId).toBe('worn_sword');
+    expect(visualKeyFor(mirrored)).toBe('player_mech');
+    expect(mechHeldWeaponOverride(mirrored.templateId as PlayerClass)).toBeNull();
+  });
+});
+
+describe('combat ratings over the wire', () => {
+  it('mirrors Ranged Attack Power so online hunter attack-spell tooltips can scale', () => {
+    const sim = new Sim({ seed: 7, playerClass: 'hunter', autoEquip: true });
+    sim.setPlayerLevel(20);
+    sim.tick();
+    const e = sim.player;
+    expect(e.rangedPower).toBeGreaterThan(0);
+
+    const wire = wireEntity(e);
+    expect(wire.rp).toBe(e.rangedPower);
+
+    const client = bareClient(e.id + 1000);
+    (client as any).applySnapshot({ t: 'snap', ents: [wire] });
+    const mirrored = client.entities.get(e.id)!;
+    expect(mirrored.rangedPower).toBe(e.rangedPower);
   });
 });
 
@@ -423,6 +495,50 @@ describe('delta snapshots', () => {
     expect(snap.self.inv.some((s: any) => s.itemId === 'baked_bread')).toBe(true);
     expect(snap.self).not.toHaveProperty('qlog');
     expect(snap.self).not.toHaveProperty('stats');
+  });
+
+  it('resends equip + inv on the next snapshot after an online unequip', () => {
+    // A fresh warrior starts with worn_sword equipped in mainhand (its class
+    // startWeapon). unequipItem returns the piece to bags via the sim's
+    // addItemSilent, which (unlike the addItem/removeItem hub) does NOT bump
+    // PlayerMeta.wireRev and emits only a log event, so the gated equip/inv block
+    // is resent promptly only because unequip_item is a HEAVY_SELF_CMD. Without
+    // that the client would show the item still equipped (and missing from bags)
+    // until the ~2 s staggered safety refresh.
+    const client = bareClient(session.pid);
+    expect(server.sim.meta(session.pid)!.equipment.mainhand).toBe('worn_sword');
+
+    // Flush the first full snapshot to the client so it has the equipped state,
+    // then confirm the heavy block is quiet: with the gate on, a no-op
+    // re-broadcast omits equip/inv (the staggered refresh is not due this tick),
+    // so any later resend is the command dirtying the session, not the refresh.
+    broadcast(server);
+    (client as any).applySnapshot(lastSnap(fc.sent));
+    expect(client.equipment.mainhand).toBe('worn_sword');
+    fc.sent.length = 0;
+    broadcast(server);
+    const quiet = lastSnap(fc.sent);
+    expect(quiet.self).not.toHaveProperty('equip');
+    expect(quiet.self).not.toHaveProperty('inv');
+
+    // Unequip the mainhand and broadcast once: the very next snapshot must carry
+    // the updated equip + inv, not wait for the safety refresh.
+    fc.sent.length = 0;
+    server.handleMessage(
+      session,
+      JSON.stringify({ t: 'cmd', cmd: 'unequip_item', slot: 'mainhand' }),
+    );
+    broadcast(server);
+    const snap = lastSnap(fc.sent);
+    expect(snap.self).toHaveProperty('equip');
+    expect(snap.self).toHaveProperty('inv');
+    expect(snap.self.equip.mainhand).toBeUndefined();
+    expect(snap.self.inv.some((s: any) => s.itemId === 'worn_sword')).toBe(true);
+
+    // and it round-trips: the client mirror clears the slot and shows it in bags.
+    (client as any).applySnapshot(snap);
+    expect(client.equipment.mainhand).toBeUndefined();
+    expect(client.inventory.some((s) => s.itemId === 'worn_sword')).toBe(true);
   });
 
   it('mirrors vendor buyback deltas to the client', () => {
@@ -1009,6 +1125,39 @@ describe('client-side delta merge', () => {
     });
     const aura = client.entities.get(2)?.auras.find((a) => a.kind === 'sunder');
     expect(aura?.stacks, 'client should mirror the wire stack count').toBe(3);
+  });
+
+  it('reconstructs charge-limited aura charges from the wire (Lightning Shield)', () => {
+    const client = bareClient(1);
+    (client as any).applySnapshot({
+      ents: [
+        {
+          id: 3,
+          k: 'player',
+          tid: '',
+          nm: 'Shaman',
+          lv: 12,
+          x: 0,
+          y: 0,
+          z: 0,
+          f: 0,
+          hp: 200,
+          mhp: 200,
+          auras: [
+            {
+              id: 'lightning_shield',
+              name: 'Lightning Shield',
+              kind: 'thorns',
+              rem: 600,
+              dur: 600,
+              charges: 2,
+            },
+          ],
+        },
+      ],
+    });
+    const aura = client.entities.get(3)?.auras.find((a) => a.id === 'lightning_shield');
+    expect(aura?.charges, 'client should mirror the wire charge count').toBe(2);
   });
 
   it('snaps the interpolation anchor on a teleport but tweens normal moves', () => {

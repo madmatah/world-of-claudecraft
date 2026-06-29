@@ -222,6 +222,9 @@ export const zh_TW: EnTranslations = {
     "rest": {
       "resting": "休息中"
     },
+    "abilityScaling": {
+      "bonus": "(+{value})"
+    },
     "unitFrame": {
       "playerLabel": "你的角色",
       "targetLabel": "你的目標",
@@ -317,7 +320,10 @@ export const zh_TW: EnTranslations = {
       "showWalletOnCharacterScreen": "在角色畫面顯示錢包",
       "showWalletOnPlayerCard": "在玩家卡片顯示錢包",
       "uiScale": "介面縮放",
-      "highContrastBackground": "高對比度背景"
+      "highContrastBackground": "高對比度背景",
+      "showItemLevel": "顯示物品等級",
+      "itemLevelLine": "物品等級 {level}",
+      "itemScoreLine": "評分 {score}"
     },
     "controller": {
       "title": "手把",
@@ -447,6 +453,10 @@ export const zh_TW: EnTranslations = {
     },
     "tips": {
       "joinChannels": "提示：輸入 /join world 或 /join lfg 可與全伺服器的玩家聊天。"
+    },
+    "itemSet": {
+      "header": "{name} ({have}/{total})",
+      "bonusLine": "({pieces}) {bonus}"
     },
     "questShare": {
       "notShareable": "該任務無法分享。",
@@ -584,6 +594,26 @@ export const zh_TW: EnTranslations = {
       "exportDone": "你的資料已下載。我們已寄送確認信給你。",
       "exportFailed": "無法匯出你的資料。請稍候再試一次。"
     },
+    "masterLoot": {
+      "title": "隊長分配",
+      "enableLabel": "隊長分配",
+      "enableAria": "啟用隊長分配",
+      "looterLabel": "分配者",
+      "leaderOption": "隊長",
+      "thresholdLabel": "品質門檻",
+      "thresholdUncommon": "優秀及以上",
+      "thresholdRare": "稀有及以上",
+      "thresholdEpic": "史詩及以上",
+      "assignPrompt": "分配{item}",
+      "assignAria": "將{item}分配給{name}",
+      "rollButton": "擲骰",
+      "selectAll": "全選",
+      "methodMaster": "拾取方式已設為隊長分配。分配者：{name}。",
+      "methodGroup": "拾取方式已設為小隊拾取。",
+      "assigned": "{looter}將{item}分配給了{target}。",
+      "unassigned": "{item}未被分配，現可自由拾取。",
+      "leaderOnly": "只有隊長才能更改拾取方式。"
+    },
     "bags": {
       "filterGroupAria": "依類別篩選背包",
       "filterAll": "全部",
@@ -605,6 +635,80 @@ export const zh_TW: EnTranslations = {
       "notRaid": "你的隊伍並非團隊。",
       "leaderOnly": "只有團隊領袖可以轉換為隊伍。",
       "tooLarge": "超過五名成員的團隊無法轉換回隊伍。"
+    },
+    "itemArmorType": {
+      "cloth": "布甲",
+      "leather": "皮甲",
+      "mail": "鎖甲"
+    },
+    "auraEffect": {
+      "dot": "每 {interval} 秒造成 {value} 點{school}傷害",
+      "hot": "每 {interval} 秒恢復 {value} 點生命值",
+      "absorb": "吸收 {value} 點傷害",
+      "healAbsorb": "吸收 {value} 點受到的治療",
+      "thorns": "對攻擊者造成 {value} 點{school}傷害",
+      "slow": "移動速度降低 {pct}%",
+      "speed": "移動速度提高 {pct}%",
+      "attackSpeedSlow": "攻擊速度減慢 {pct}%",
+      "attackSpeedFast": "攻擊速度提高 {pct}%",
+      "haste": "攻擊與施法速度提高 {pct}%",
+      "tongues": "施法時間增加 {pct}%",
+      "increase": {
+        "ap": "攻擊強度提高 {value}",
+        "armor": "護甲提高 {value}",
+        "int": "智力提高 {value}",
+        "agi": "敏捷提高 {value}",
+        "sta": "耐力提高 {value}",
+        "spi": "精神提高 {value}",
+        "allStats": "所有屬性提高 {value}"
+      },
+      "reduce": {
+        "ap": "攻擊強度降低 {value}",
+        "armor": "護甲降低 {value}",
+        "int": "智力降低 {value}",
+        "agi": "敏捷降低 {value}",
+        "sta": "耐力降低 {value}",
+        "spi": "精神降低 {value}",
+        "allStats": "所有屬性降低 {value}"
+      },
+      "dodge": "閃躲機率提高 {pct}%",
+      "dodgeReduce": "閃避機率降低 {pct}%",
+      "armorFlat": "護甲降低 {value}",
+      "armorFlatStacks": "護甲降低 {value}（{stacks} 層）",
+      "mortalWound": "受到的治療降低 {pct}%",
+      "vulnerability": "受到的傷害提高 {pct}%",
+      "physVuln": "受到的物理傷害提高 {pct}%",
+      "spellVuln": "受到的魔法傷害提高 {pct}%",
+      "critVuln": "被致命一擊的機率提高 {pct}%",
+      "costTax": "技能消耗增加 {pct}%",
+      "stun": "昏迷：無法行動",
+      "root": "定身：無法移動",
+      "incapacitate": "喪失能力：無法行動",
+      "polymorph": "變形：無法行動",
+      "hex": "造成的傷害與治療降低 {pct}%",
+      "blind": "致盲：無法行動",
+      "silence": "沉默：無法施放法術",
+      "disarm": "繳械：無法使用武器攻擊",
+      "lockout": "法術學派被鎖定",
+      "imbue": "武器被附上額外效果",
+      "imbueRange": "武器附魔：制裁時造成 {min} 到 {max} 點額外傷害",
+      "stealth": "隱蔽；移動速度降低 {pct}%",
+      "formBear": "熊形態：生命值與護甲提高",
+      "formCat": "貓形態：近戰傷害與能量",
+      "formTravel": "旅行形態：移動速度提高 {pct}%",
+      "defensiveStance": "防禦姿態：受到的傷害降低，威脅值提高",
+      "righteousFury": "正義之怒：神聖傷害產生的威脅值大幅提高",
+      "scale": "體型增大 {pct}%",
+      "jump": "跳躍高度提高 {pct}%",
+      "school": {
+        "physical": "物理",
+        "fire": "火焰",
+        "frost": "冰霜",
+        "arcane": "秘法",
+        "shadow": "暗影",
+        "holy": "神聖",
+        "nature": "自然"
+      }
     },
     "loot": {
       "chestTitle": "寶箱"
@@ -2645,6 +2749,7 @@ export const zh_TW: EnTranslations = {
     "combat": {
       "floatingMiss": "未命中",
       "floatingDodge": "閃避",
+      "floatingResist": "抵抗",
       "cannotMove": "無法移動！",
       "attack": "攻擊",
       "damageDone": "你的{ability}擊中{target}，造成 {amount} 點傷害。",
@@ -2653,6 +2758,7 @@ export const zh_TW: EnTranslations = {
       "damageTakenCrit": "{source}對你造成致命一擊，造成 {amount} 點傷害。",
       "miss": "你的{ability}未命中{target}。",
       "dodged": "{target}閃避了你的{ability}。",
+      "resisted": "{target}抵抗了你的{ability}。",
       "healSelf": "你的{ability}為你恢復 {amount} 點生命。",
       "healSelfCrit": "你的{ability}對你造成暴擊治療，恢復 {amount} 點生命。",
       "healOther": "你的{ability}為{target}恢復 {amount} 點生命。",
@@ -3383,7 +3489,7 @@ export const zh_TW: EnTranslations = {
       },
       "arcane_missiles": {
         "name": "秘法飛彈",
-        "description": "向敵人發射秘法飛彈，持續 3 秒，每秒造成 8 點秘法傷害。"
+        "description": "向敵人發射秘法飛彈，持續 3 秒，每秒造成 {damage} 點秘法傷害。"
       },
       "polymorph": {
         "name": "變形術",
@@ -3447,7 +3553,7 @@ export const zh_TW: EnTranslations = {
       },
       "stealth": {
         "name": "潛行",
-        "description": "將你隱藏在陰影中：敵人幾乎無法察覺你，但你的移動速度降低 30%。攻擊或受到傷害會打破潛行。再次施放可現身。"
+        "description": "將你隱藏在陰影中：敵人幾乎無法察覺你，但你的移動速度降低 50%。攻擊或受到傷害會打破潛行。再次施放可現身。"
       },
       "adrenaline_rush": {
         "name": "衝動",
@@ -3479,7 +3585,7 @@ export const zh_TW: EnTranslations = {
       },
       "vanish": {
         "name": "消失",
-        "description": "從視野中消失，即使在戰鬥中也能進入潛行狀態。隱身時你的移動速度降低 30%。最多持續 10 秒。"
+        "description": "從視野中消失，即使在戰鬥中也能進入潛行狀態。隱身時你的移動速度降低 50%。最多持續 10 秒。"
       },
       "instant_poison": {
         "name": "速效毒藥",
@@ -3631,7 +3737,7 @@ export const zh_TW: EnTranslations = {
       },
       "mind_flay": {
         "name": "精神鞭笞",
-        "description": "用暗影能量攻擊目標的心靈，持續 3 秒，每秒造成 12 點傷害。"
+        "description": "用暗影能量攻擊目標的心靈，持續 3 秒，每秒造成 {damage} 點傷害。"
       },
       "flash_heal": {
         "name": "快速治療",
@@ -3707,7 +3813,7 @@ export const zh_TW: EnTranslations = {
       },
       "drain_life": {
         "name": "吸取生命",
-        "description": "吸取目標的生命，持續 5 秒，每秒向你轉移 7 點生命值。"
+        "description": "吸取目標的生命，持續 5 秒，每秒向你轉移 {damage} 點生命值。"
       },
       "fear": {
         "name": "恐懼",
@@ -3887,7 +3993,7 @@ export const zh_TW: EnTranslations = {
       },
       "prowl": {
         "name": "潛行",
-        "description": "在狼形態下進入隱匿狀態。無法於戰鬥中使用。"
+        "description": "在狼形態下進入隱匿狀態，移動速度降低 50%。無法於戰鬥中使用。"
       },
       "rake": {
         "name": "撕裂",
@@ -6283,6 +6389,43 @@ export const zh_TW: EnTranslations = {
         "name": "崩塌的聖物庫",
         "enterText": "你向下深入崩塌的聖物庫。",
         "leaveText": "你爬回聖物庫遺墟處的哈爾文修士身邊。"
+      }
+    },
+    "itemSets": {
+      "crownforged": {
+        "name": "鑄冠戰裝",
+        "bonus2": "攻擊強度提高 40 點。",
+        "bonus3": "力量提高 15 點，耐力提高 15 點。"
+      },
+      "deathlord": {
+        "name": "死王戰甲",
+        "bonus2": "攻擊強度提高 40 點。",
+        "bonus3": "力量提高 15 點，耐力提高 15 點。"
+      },
+      "necromancers": {
+        "name": "死靈法師法衣",
+        "bonus2": "受到傷害造成的施法延退降低 50%。",
+        "bonus3": "施法時不會因受到傷害而被延退。"
+      },
+      "nighttalon": {
+        "name": "夜爪皮甲",
+        "bonus2": "攻擊強度提高 40 點。",
+        "bonus3": "敏捷提高 15 點，致命一擊機率提高 2%。"
+      },
+      "soulflame": {
+        "name": "魂焰法衣",
+        "bonus2": "受到傷害造成的施法延退降低 50%。",
+        "bonus3": "施法時不會因受到傷害而被延退。"
+      },
+      "stormcallers": {
+        "name": "喚雷者法衣",
+        "bonus2": "受到傷害造成的施法延退降低 50%。",
+        "bonus3": "施法時不會因受到傷害而被延退。"
+      },
+      "wyrmshadow": {
+        "name": "龍影外衣",
+        "bonus2": "攻擊強度提高 40 點。",
+        "bonus3": "敏捷提高 15 點，致命一擊機率提高 2%。"
       }
     }
   },

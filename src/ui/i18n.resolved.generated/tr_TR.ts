@@ -222,6 +222,9 @@ export const tr_TR: EnTranslations = {
     "rest": {
       "resting": "Dinleniyor"
     },
+    "abilityScaling": {
+      "bonus": "(+{value})"
+    },
     "unitFrame": {
       "playerLabel": "Kahramanın",
       "targetLabel": "Hedefin",
@@ -317,7 +320,10 @@ export const tr_TR: EnTranslations = {
       "showWalletOnCharacterScreen": "Cüzdanı Karakter Ekranında Göster",
       "showWalletOnPlayerCard": "Cüzdanı Oyuncu Kartında Göster",
       "uiScale": "Arayüz Ölçeği",
-      "highContrastBackground": "Yüksek Kontrastlı Arka Plan"
+      "highContrastBackground": "Yüksek Kontrastlı Arka Plan",
+      "showItemLevel": "Eşya Seviyesini Göster",
+      "itemLevelLine": "Eşya Seviyesi {level}",
+      "itemScoreLine": "Puan {score}"
     },
     "controller": {
       "title": "Oyun Kolu",
@@ -447,6 +453,10 @@ export const tr_TR: EnTranslations = {
     },
     "tips": {
       "joinChannels": "İpucu: Sunucu genelindeki oyuncularla sohbet etmek için /join world ya da /join lfg yaz."
+    },
+    "itemSet": {
+      "header": "{name} ({have}/{total})",
+      "bonusLine": "({pieces}) {bonus}"
     },
     "questShare": {
       "notShareable": "Bu görev paylaşılamaz.",
@@ -584,6 +594,26 @@ export const tr_TR: EnTranslations = {
       "exportDone": "Verileriniz indirildi. Size bir onay e-postası gönderdik.",
       "exportFailed": "Verileriniz dışa aktarılamadı. Birazdan tekrar deneyin."
     },
+    "masterLoot": {
+      "title": "Ganimet ustasi",
+      "enableLabel": "Ganimet ustasi",
+      "enableAria": "Ganimet ustasini etkinlestir",
+      "looterLabel": "Ganimet ustasi",
+      "leaderOption": "Grup lideri",
+      "thresholdLabel": "Esik",
+      "thresholdUncommon": "Sira disi ve ustu",
+      "thresholdRare": "Nadir ve ustu",
+      "thresholdEpic": "Epik ve ustu",
+      "assignPrompt": "{item} ata",
+      "assignAria": "{item} esyasini {name} oyuncusuna ata",
+      "rollButton": "Zar at",
+      "selectAll": "Tümünü sec",
+      "methodMaster": "Ganimet yontemi ganimet ustasi olarak ayarlandi. Ganimet ustasi: {name}.",
+      "methodGroup": "Ganimet yontemi grup ganimeti olarak ayarlandi.",
+      "assigned": "{looter}, {item} esyasini {target} oyuncusuna atadi.",
+      "unassigned": "{item} atanmadi ve herkes icin serbest.",
+      "leaderOnly": "Ganimet yontemini yalnizca grup lideri degistirebilir."
+    },
     "bags": {
       "filterGroupAria": "Çantaları kategoriye göre filtrele",
       "filterAll": "Tümü",
@@ -605,6 +635,80 @@ export const tr_TR: EnTranslations = {
       "notRaid": "Grubun bir akın değil.",
       "leaderOnly": "Yalnızca akın lideri gruba dönüştürebilir.",
       "tooLarge": "Beşten fazla üyesi olan bir akın yeniden gruba dönüştürülemez."
+    },
+    "itemArmorType": {
+      "cloth": "Kumaş",
+      "leather": "Deri",
+      "mail": "Zincir"
+    },
+    "auraEffect": {
+      "dot": "Her {interval} sn {value} {school} hasarı verir",
+      "hot": "Her {interval} sn {value} sağlık yeniler",
+      "absorb": "{value} hasar emer",
+      "healAbsorb": "Gelen iyileştirmenin {value} kadarını emer",
+      "thorns": "Inflige {value} de daño de {school} a los atacantes",
+      "slow": "Reduce la velocidad de movimiento un {pct}%",
+      "speed": "Aumenta la velocidad de movimiento un {pct}%",
+      "attackSpeedSlow": "Reduce la velocidad de ataque un {pct}%",
+      "attackSpeedFast": "Aumenta la velocidad de ataque un {pct}%",
+      "haste": "Aumenta la velocidad de ataque y lanzamiento un {pct}%",
+      "tongues": "Aumenta el tiempo de lanzamiento un {pct}%",
+      "increase": {
+        "ap": "Aumenta el poder de ataque en {value}",
+        "armor": "Aumenta la armadura en {value}",
+        "int": "Aumenta el intelecto en {value}",
+        "agi": "Aumenta la agilidad en {value}",
+        "sta": "Aumenta el aguante en {value}",
+        "spi": "Aumenta el espíritu en {value}",
+        "allStats": "Aumenta todos los atributos en {value}"
+      },
+      "reduce": {
+        "ap": "Reduce el poder de ataque en {value}",
+        "armor": "Reduce la armadura en {value}",
+        "int": "Reduce el intelecto en {value}",
+        "agi": "Reduce la agilidad en {value}",
+        "sta": "Reduce el aguante en {value}",
+        "spi": "Reduce el espíritu en {value}",
+        "allStats": "Reduce todos los atributos en {value}"
+      },
+      "dodge": "Aumenta la probabilidad de esquivar un {pct}%",
+      "dodgeReduce": "Reduce la probabilidad de esquivar un {pct}%",
+      "armorFlat": "Reduce la armadura en {value}",
+      "armorFlatStacks": "Reduce la armadura en {value} ({stacks} acumulaciones)",
+      "mortalWound": "Reduce la sanación recibida un {pct}%",
+      "vulnerability": "Aumenta el daño recibido un {pct}%",
+      "physVuln": "Aumenta el daño físico recibido un {pct}%",
+      "spellVuln": "Aumenta el daño mágico recibido un {pct}%",
+      "critVuln": "Aumenta la probabilidad de recibir golpes críticos un {pct}%",
+      "costTax": "Aumenta los costes de habilidades un {pct}%",
+      "stun": "Aturdido: no puede actuar",
+      "root": "Enraizado: no puede moverse",
+      "incapacitate": "Incapacitado: no puede actuar",
+      "polymorph": "Polimorfado: no puede actuar",
+      "hex": "Reduce el daño y la sanación realizados un {pct}%",
+      "blind": "Cegado: no puede actuar",
+      "silence": "Silenciado: no puede lanzar hechizos",
+      "disarm": "Desarmado: no puede usar ataques con arma",
+      "lockout": "Escuela de hechizos bloqueada",
+      "imbue": "Arma imbuida con efectos adicionales",
+      "imbueRange": "Arma imbuida: {min} a {max} de daño adicional al juzgar",
+      "stealth": "Oculto; velocidad de movimiento reducida un {pct}%",
+      "formBear": "Forma de oso: salud y armadura aumentadas",
+      "formCat": "Forma felina: daño cuerpo a cuerpo y energía",
+      "formTravel": "Forma de viaje: velocidad de movimiento aumentada un {pct}%",
+      "defensiveStance": "Actitud defensiva: daño recibido reducido, más amenaza",
+      "righteousFury": "Furia recta: amenaza de daño Sagrado muy aumentada",
+      "scale": "Tamaño aumentado un {pct}%",
+      "jump": "Altura de salto aumentada un {pct}%",
+      "school": {
+        "physical": "Fiziksel",
+        "fire": "Ateş",
+        "frost": "Buz",
+        "arcane": "Arcane",
+        "shadow": "Gölge",
+        "holy": "Kutsal",
+        "nature": "Doğa"
+      }
     },
     "loot": {
       "chestTitle": "Sandık"
@@ -2645,6 +2749,7 @@ export const tr_TR: EnTranslations = {
     "combat": {
       "floatingMiss": "Iskaladı",
       "floatingDodge": "Savuşturma",
+      "floatingResist": "Direnildi",
       "cannotMove": "Hareket edemezsin!",
       "attack": "saldırı",
       "damageDone": "{ability} yeteneğin {target} hedefine {amount} hasar vurdu.",
@@ -2653,6 +2758,7 @@ export const tr_TR: EnTranslations = {
       "damageTakenCrit": "{source} sana kritik {amount} hasar vurdu.",
       "miss": "{ability} yeteneğin {target} hedefini ıskaladı.",
       "dodged": "{ability} yeteneğin {target} tarafından savuşturuldu.",
+      "resisted": "{target}, {ability} yeteneğine direndi.",
       "healSelf": "{ability} yeteneğin seni {amount} iyileştirdi.",
       "healSelfCrit": "{ability} yeteneğin seni kritik {amount} iyileştirdi.",
       "healOther": "{ability} yeteneğin {target} hedefini {amount} iyileştirdi.",
@@ -3383,7 +3489,7 @@ export const tr_TR: EnTranslations = {
       },
       "arcane_missiles": {
         "name": "Gizemli Füzeler",
-        "description": "Düşmana Gizemli Füzeler fırlatır, 3 saniye boyunca her saniye 8 Gizemli hasar verir."
+        "description": "Düşmana Gizemli Füzeler fırlatır, 3 saniye boyunca her saniye {damage} Gizemli hasar verir."
       },
       "polymorph": {
         "name": "Dönüştürme",
@@ -3631,7 +3737,7 @@ export const tr_TR: EnTranslations = {
       },
       "mind_flay": {
         "name": "Zihin Dağlama",
-        "description": "Hedefin zihnini Gölge enerjisiyle sarsar ve 3 saniye boyunca her saniye 12 hasar verir."
+        "description": "Hedefin zihnini Gölge enerjisiyle sarsar ve 3 saniye boyunca her saniye {damage} hasar verir."
       },
       "flash_heal": {
         "name": "Hızlı İyileştirme",
@@ -3707,7 +3813,7 @@ export const tr_TR: EnTranslations = {
       },
       "drain_life": {
         "name": "Can Emme",
-        "description": "Hedefin canını emer; 5 saniye boyunca her saniye sana 7 can aktarır."
+        "description": "Hedefin canını emer; 5 saniye boyunca her saniye sana {damage} can aktarır."
       },
       "fear": {
         "name": "Korku",
@@ -3887,7 +3993,7 @@ export const tr_TR: EnTranslations = {
       },
       "prowl": {
         "name": "Sinsi Yürüyüş",
-        "description": "Kurt Formundayken gizliliğe geçer. Dövüş sırasında kullanılamaz."
+        "description": "Kurt Formundayken gizliliğe geçer ve 50% daha yavaş hareket edersin. Dövüş sırasında kullanılamaz."
       },
       "rake": {
         "name": "Tırmalama",
@@ -6283,6 +6389,43 @@ export const tr_TR: EnTranslations = {
         "name": "Çökmüş Emanetlik",
         "enterText": "Çökmüş emanetliğe inersin.",
         "leaveText": "Emanetlik harabesinde Birader Halven'in yanına tırmanıp geri dönersin."
+      }
+    },
+    "itemSets": {
+      "crownforged": {
+        "name": "Taçdövme savaş takımı",
+        "bonus2": "Saldırı gücünü 40 artırır.",
+        "bonus3": "Gücü 15 ve dayanıklılığı 15 artırır."
+      },
+      "deathlord": {
+        "name": "Ölüm Lordu savaş takımı",
+        "bonus2": "Saldırı gücünü 40 artırır.",
+        "bonus3": "Gücü 15 ve dayanıklılığı 15 artırır."
+      },
+      "necromancers": {
+        "name": "Nekromansır giysileri",
+        "bonus2": "Hasarın neden olduğu büyü geri itmesini %50 azaltır.",
+        "bonus3": "Alınan hasar büyü yapmanı geciktirmez."
+      },
+      "nighttalon": {
+        "name": "Gece Pençesi deri takımı",
+        "bonus2": "Saldırı gücünü 40 artırır.",
+        "bonus3": "Çevikliği 15 ve kritik şansını %2 artırır."
+      },
+      "soulflame": {
+        "name": "Ruh Alevi giysileri",
+        "bonus2": "Hasarın neden olduğu büyü geri itmesini %50 azaltır.",
+        "bonus3": "Alınan hasar büyü yapmanı geciktirmez."
+      },
+      "stormcallers": {
+        "name": "Fırtına Çağıran giysileri",
+        "bonus2": "Hasarın neden olduğu büyü geri itmesini %50 azaltır.",
+        "bonus3": "Alınan hasar büyü yapmanı geciktirmez."
+      },
+      "wyrmshadow": {
+        "name": "Wyrm Gölgesi takımı",
+        "bonus2": "Saldırı gücünü 40 artırır.",
+        "bonus3": "Çevikliği 15 ve kritik şansını %2 artırır."
       }
     }
   },

@@ -5,6 +5,7 @@ import type {
   LockpickView,
 } from '../world_api';
 import { lineOfSightClear, resolveMovement, resolvePosition } from './colliders';
+import { auraAffectsStats, removeCancelableAura } from './combat/aura_cancel';
 import {
   cleanseFriendlyNpcAuras,
   isRejectedFriendlyNpcAura,
@@ -42,6 +43,7 @@ import {
   healingThreat as healingThreatImpl,
   hexOutputMult as hexOutputMultImpl,
 } from './combat/heal';
+import { isSpellResisted } from './combat/spell_resist';
 // A3: the augment/power-up content helpers used by the Fiesta match logic
 // (AUGMENTS_BY_ID/AugmentDef/eligibleAugments/POWERUPS/PowerupDef/tierForWave)
 // moved to social/fiesta.ts with that logic; sim.ts keeps only the type used by
@@ -71,6 +73,7 @@ import {
   type TalentAllocation,
   type TalentModifiers,
 } from './content/talents';
+import { applyCooldowns, type SavedCooldowns, serializeCooldowns } from './cooldown_persist';
 import type { DelveShopGate, DelveShopOffer } from './data';
 import {
   abilitiesKnownAt,
@@ -127,6 +130,7 @@ import {
   tickGroundAoEs,
 } from './entity_roster';
 import { canEquipItem } from './equipment_rules';
+import { fleeSpeed } from './flee_speed';
 import { formatMoney } from './format_money';
 import * as interaction from './interaction';
 import * as items from './items';
@@ -141,10 +145,12 @@ import type { Ante, PickAction } from './lockpick';
 // Sim keeps thin same-named delegates that call these.
 import {
   activeLootRolls as activeLootRollsImpl,
+  assignMasterLoot as assignMasterLootImpl,
   type PendingLootRoll,
   partyLootCandidatesForMob as partyLootCandidatesForMobImpl,
   resolveLootRoll as resolveLootRollImpl,
   rollLoot as rollLootImpl,
+  setPartyLootMaster as setPartyLootMasterImpl,
   submitLootRoll as submitLootRollImpl,
 } from './loot/loot_roll';
 import { Market, type MarketListing, type MarketSave } from './market';
@@ -152,7 +158,6 @@ import * as lifecycle from './mob/lifecycle';
 import { resetEvadingMob as resetEvadingMobFn, updateMob as updateMobFn } from './mob/locomotion';
 import { runMobSwingAffixes } from './mob/mob_swing';
 import {
-  isTrivialTo as isTrivialToFn,
   retargetMob as retargetMobFn,
   updateMobTarget as updateMobTargetFn,
 } from './mob/targeting';
@@ -176,8 +181,10 @@ import {
   talentPointBudget,
 } from './progression/talents';
 import { prestige as prestigeImpl, updateRested } from './progression/xp';
+import { advancePendingProjectiles, type PendingProjectile } from './projectile_travel';
 import { sanitizeRemovedZone1Content } from './removed_zone1_content';
 import { Rng } from './rng';
+import { persistedResource } from './serialize_resource';
 import { createSimContext, type SimContext, type SimContextHost } from './sim_context';
 import * as chatMod from './social/chat';
 import * as tradeMod from './social/trade';
@@ -189,6 +196,7 @@ export type { MarketSave } from './market';
 import {
   enterCrypt as enterCryptImpl,
   enterDungeon as enterDungeonImpl,
+  instanceInfoAt as instanceInfoAtImpl,
   instanceKeyFor as instanceKeyForImpl,
   instanceOriginOf as instanceOriginOfImpl,
   instanceSlotAt as instanceSlotAtImpl,
@@ -229,6 +237,7 @@ import {
 import * as fiestaBotsMod from './social/fiesta_bots';
 import { PartyMachine } from './social/party';
 import { SpatialGrid } from './spatial';
+import { isStunDrCategory } from './stun_dr';
 import { Targeting } from './targeting';
 import {
   addThreat,
@@ -272,6 +281,7 @@ import {
   type LootRollPrompt,
   type LootStrategies,
   MAX_LEVEL,
+  type MasterLootThreshold,
   MELEE_RANGE,
   type MobFamily,
   type MoveInput,
@@ -287,7 +297,6 @@ import {
   type SimEvent,
   type SkinCatalog,
   type SkinRank,
-  spellHitChance,
   TURN_SPEED,
   type Vec3,
   virtualLevel,
@@ -306,14 +315,12 @@ const MOVE_SLIDE_FAN = [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6];
 const BACKPEDAL_MULT = 0.65;
 // Low-HP flee ("fear"): a cowardly mob at or below this HP fraction panics, turns
 // and runs from its attacker for FLEE_DURATION seconds at FLEE_SPEED_MULT speed,
-// calling same-family allies within FLEE_HELP_RADIUS to assist. It flees only once
+// rallying same-family allies it runs past (mob/social_aggro.ts). It flees only once
 // per pull, then recovers its nerve and re-engages if it survived.
 const FLEE_HP_THRESHOLD = 0.2;
 const FLEE_DURATION = 5;
-const FLEE_SPEED_MULT = 1.4;
-const FLEE_MAX_SPEED = RUN_SPEED;
+// FLEE_SPEED_MULT / FLEE_MAX_SPEED and the cap math live in ./flee_speed.ts.
 // FLEE_RETURN_GRACE moved to mob/locomotion.ts (M2; used only by recoverFromFlee).
-const FLEE_HELP_RADIUS = 8;
 // Only sentient, cowardly families flee; beasts/undead/elementals/dragonkin fight
 // to the death. Elites, rares, and bosses never flee regardless of family.
 const FLEEING_FAMILIES: ReadonlySet<MobFamily> = new Set(['humanoid', 'kobold', 'murloc', 'troll']);
@@ -347,6 +354,7 @@ const ARENA_LADDER_SIZE = 10; // live online standings shipped to clients
 // imported back (above) for the fiestaMatchInfo presentation accessor, which stays
 // on Sim. (A2 already moved FIESTA_COUNTDOWN to social/arena.ts.)
 const PVP_ROOT_DR_RESET = 18; // seconds before a repeated PvP root is fresh again
+const PVP_STUN_DR_RESET = 18; // stuns share the root-style 100/50/25/immune scheme
 const PVP_POLYMORPH_DR_RESET = 60;
 const PVP_FEAR_DR_RESET = 60;
 const PVP_CC_DR_MULTIPLIERS = [1, 0.5, 0.25] as const;
@@ -606,6 +614,11 @@ export interface PlayerMeta {
   pendingSkinCatalog: SkinCatalog | null;
   pendingSkinItemId: string | null;
   moveInput: MoveInput;
+  // Monotonic counter bumped when a bulky, rarely-changing wire field (the
+  // inventory, and the collection-quest progress derived from it) mutates, so a
+  // host can cheaply tell whether that state needs re-sending without diffing
+  // it every frame. Runtime-only signal, never serialized/persisted.
+  wireRev: number;
   inventory: InvSlot[];
   vendorBuyback: InvSlot[];
   copper: number;
@@ -735,6 +748,10 @@ export interface CharacterState {
   loadouts?: SavedLoadout[];
   activeLoadout?: number;
   raidLockouts?: Record<string, number>;
+  // Ability/potion cooldowns as remaining-time deltas (JSONB; optional so pre-fix
+  // saves load cleanly with no cooldowns). Persisted so logging out and back in no
+  // longer wipes cooldowns and lets a player bypass them by relogging.
+  cooldowns?: SavedCooldowns;
   pet?: PetState | null;
   skin?: number; // appearance index (JSONB; optional so pre-skin saves load as 0)
   skinCatalog?: SkinCatalog;
@@ -829,6 +846,9 @@ export class Sim {
   // Owned by E1 (entity_roster drains it); stays on Sim because N1/M3 schedule into
   // it. Exposed as a live view via SimContext.
   private delayedEvents: DelayedEvent[] = [];
+  // In-flight projectiles (projectile_travel.ts): pushed by the ranged combat paths,
+  // drained in the tick prologue when each bolt's flight elapses. Live view on ctx.
+  private pendingProjectiles: PendingProjectile[] = [];
   // social systems
   // parties / partyByPid / partyInvites / nextPartyId moved to the PartyMachine
   // (src/sim/social/party.ts, session A1); reached via `this.party`.
@@ -1122,6 +1142,7 @@ export class Sim {
       pendingSkinCatalog: savedState?.pendingSkinCatalog ?? null,
       pendingSkinItemId: savedState?.pendingSkinItemId ?? null,
       moveInput: emptyMoveInput(),
+      wireRev: 0,
       inventory: [],
       vendorBuyback: [],
       copper: 0,
@@ -1257,6 +1278,9 @@ export class Sim {
             : 0;
     }
     player.swingTimer = 0;
+    // Restore ability/potion cooldowns so a relog cannot reset them (see
+    // cooldown_persist.ts). Re-anchored to this sim's clock; a fresh character has none.
+    player.potionCooldownUntil = applyCooldowns(savedState?.cooldowns, player.cooldowns, this.time);
     if (savedState?.pet) this.restorePet(player, savedState.pet);
     return player.id;
   }
@@ -1340,7 +1364,15 @@ export class Sim {
       restedXp: meta.restedXp,
       copper: meta.copper,
       hp: e.hp,
-      resource: e.resource,
+      // A druid saved while shifted runs on rage/energy with its mana parked in
+      // savedMana; persist the parked mana so reload (always caster form) restores
+      // it instead of clamping the form bar into the mana pool.
+      resource: persistedResource(
+        CLASSES[meta.cls].resourceType,
+        e.resourceType,
+        e.resource,
+        e.savedMana,
+      ),
       pos: { x: e.pos.x, z: e.pos.z },
       facing: e.facing,
       equipment: { ...meta.equipment },
@@ -1371,6 +1403,7 @@ export class Sim {
       raidLockouts: Object.fromEntries(
         [...meta.raidLockouts].filter(([, until]) => until > this.lockoutNowMs()),
       ),
+      cooldowns: serializeCooldowns(e.cooldowns, e.potionCooldownUntil, this.time),
       pet: this.serializePet(pid),
       skin: meta.skin,
       skinCatalog: meta.skinCatalog,
@@ -1734,6 +1767,12 @@ export class Sim {
       },
       set delayedEvents(v) {
         sim.delayedEvents = v;
+      },
+      get pendingProjectiles() {
+        return sim.pendingProjectiles;
+      },
+      set pendingProjectiles(v) {
+        sim.pendingProjectiles = v;
       },
       get groundAoEs() {
         return sim.groundAoEs;
@@ -2279,6 +2318,9 @@ export class Sim {
     tickGroundAoEs(this.ctx);
 
     runDespawnDecay(this.ctx);
+    // Step in-flight projectiles toward their live targets before this tick's casts and
+    // swings, so a homing bolt resolves on a fixed, deterministic phase boundary.
+    advancePendingProjectiles(this.ctx);
 
     for (const meta of this.players.values()) {
       const p = this.entities.get(meta.entityId);
@@ -2431,7 +2473,7 @@ export class Sim {
   }
 
   private fleeMoveSpeed(e: Entity): number {
-    return Math.min(e.moveSpeed * FLEE_SPEED_MULT, FLEE_MAX_SPEED) * this.moveSpeedMult(e);
+    return fleeSpeed(e.moveSpeed, this.moveSpeedMult(e));
   }
 
   // recoverFromFlee moved to mob/locomotion.ts (M2; called only by the flee arm).
@@ -2831,7 +2873,11 @@ export class Sim {
   // updateGroundAoEs (the drain) moved to entity_roster.ts (tickGroundAoEs); it pulses
   // through this.ctx.pulseGroundAoE. pulseGroundAoE STAYS here (shared entry point,
   // also called on-cast from the effect path).
-  private pulseGroundAoE(effect: GroundAoE, threatOpts?: { flat?: number; mult?: number }): void {
+  private pulseGroundAoE(
+    effect: GroundAoE,
+    threatOpts?: { flat?: number; mult?: number },
+    direct = false,
+  ): void {
     const source = this.entities.get(effect.sourceId);
     if (!source || source.dead) return;
     this.emit({
@@ -2843,7 +2889,7 @@ export class Sim {
     });
     for (const target of this.hostilesInRadius(source, effect.pos, effect.radius)) {
       if (!this.hasLineOfSight(source, target)) continue;
-      const dmg = Math.round(this.rng.range(effect.min, effect.max));
+      const dmg = Math.round(this.rng.range(effect.min, effect.max) + (effect.spBonus ?? 0));
       this.dealDamage(
         source,
         target,
@@ -2854,6 +2900,7 @@ export class Sim {
         'hit',
         false,
         threatOpts,
+        direct,
       );
     }
   }
@@ -2902,6 +2949,22 @@ export class Sim {
 
   castAbility(abilityId: string, pid?: number): void {
     castAbilityImpl(this.ctx, abilityId, pid);
+  }
+
+  // Voluntarily cancel one of a player's own helpful auras (the HUD right-click-a-buff
+  // action). Authoritative: the pure predicate refuses debuffs, so a player can never
+  // strip a silence/hex/root off themselves. Mirrors clearAurasFromSource's fade-event
+  // + conditional stat recalc so a stripped buff_*/form_* actually un-folds.
+  cancelAura(auraId: string, pid?: number): void {
+    const r = this.resolve(pid);
+    if (!r) return;
+    const { e, meta } = r;
+    const removed = removeCancelableAura(e.auras, auraId);
+    if (!removed) return;
+    this.emit({ type: 'aura', targetId: e.id, name: removed.name, gained: false });
+    if (auraAffectsStats(removed)) {
+      recalcPlayerStats(e, meta.cls, meta.equipment, this.playerMods(meta));
+    }
   }
 
   private spendResource(p: Entity, cost: number): void {
@@ -2977,6 +3040,7 @@ export class Sim {
       target.auras.splice(existing, 1);
     }
     target.auras.push(aura);
+    if (aura.kind === 'stealth') target.stealthed = true; // keep the cache live without waiting for updateAuras
     this.applyNonPlayerStatAura(target, aura, 1);
     this.emit({ type: 'aura', targetId: target.id, name: aura.name, gained: true });
     const source = this.entities.get(aura.sourceId);
@@ -3071,7 +3135,9 @@ export class Sim {
         ? PVP_POLYMORPH_DR_RESET
         : category === 'fear'
           ? PVP_FEAR_DR_RESET
-          : PVP_ROOT_DR_RESET;
+          : isStunDrCategory(category)
+            ? PVP_STUN_DR_RESET
+            : PVP_ROOT_DR_RESET;
     if (category === 'polymorph') {
       target.ccDr.set(category, { stage: stage + 1, resetAt: this.time + reset });
       return PVP_POLYMORPH_DR_DURATIONS[Math.min(stage, PVP_POLYMORPH_DR_DURATIONS.length - 1)];
@@ -3098,6 +3164,7 @@ export class Sim {
     if (idx < 0) return;
     const name = e.auras[idx].name;
     e.auras.splice(idx, 1);
+    e.stealthed = false; // keep the cache live without waiting for updateAuras
     this.emit({ type: 'aura', targetId: e.id, name, gained: false });
   }
 
@@ -3284,6 +3351,7 @@ export class Sim {
     kind: 'hit' | 'miss' | 'dodge',
     noRage = false,
     threatOpts?: { flat?: number; mult?: number },
+    direct = true,
   ): void {
     dealDamageImpl(
       this.ctx,
@@ -3296,6 +3364,7 @@ export class Sim {
       kind,
       noRage,
       threatOpts,
+      direct,
     );
   }
 
@@ -3363,6 +3432,19 @@ export class Sim {
 
   private resolveLootRoll(roll: PendingLootRoll): void {
     resolveLootRollImpl(this.ctx, roll);
+  }
+
+  assignMasterLoot(rollId: number, targetPids: number[], pid?: number): void {
+    assignMasterLootImpl(this.ctx, rollId, targetPids, pid);
+  }
+
+  setPartyLootMaster(
+    enabled: boolean,
+    looter: number,
+    threshold: MasterLootThreshold,
+    pid?: number,
+  ): void {
+    setPartyLootMasterImpl(this.ctx, enabled, looter, threshold, pid);
   }
 
   // -------------------------------------------------------------------------
@@ -3532,10 +3614,6 @@ export class Sim {
     }
   }
 
-  private isTrivialTo(mob: Entity, player: Entity): boolean {
-    return isTrivialToFn(mob, player);
-  }
-
   private updateMob(mob: Entity): void {
     updateMobFn(this.ctx, mob);
   }
@@ -3552,8 +3630,9 @@ export class Sim {
   }
 
   // Cowardly mobs panic once per pull at low HP: turn and run from the attacker
-  // for a few seconds, rallying nearby same-family allies. Returns true if the mob
-  // entered (or is already in) the flee state so the caller can stop its turn.
+  // for a few seconds, rallying nearby same-family allies, then recover their nerve.
+  // Returns true if the mob entered (or is already in) the flee state so the caller
+  // can stop its turn.
   private canFlee(mob: Entity): boolean {
     if (mob.hasFled || mob.enraged) return false;
     const tmpl = MOBS[mob.templateId];
@@ -3561,7 +3640,7 @@ export class Sim {
     return FLEEING_FAMILIES.has(tmpl.family);
   }
 
-  private maybeFlee(mob: Entity, target: Entity): boolean {
+  private maybeFlee(mob: Entity, _target: Entity): boolean {
     if (mob.maxHp <= 0 || mob.hp / mob.maxHp > FLEE_HP_THRESHOLD) return false;
     if (!this.canFlee(mob)) return false;
     mob.aiState = 'flee';
@@ -3573,33 +3652,10 @@ export class Sim {
       color: '#ffd966',
       entityId: mob.id,
     });
-    this.callForHelp(mob, target);
+    // The rally is NOT seeded here at the panic spot. The fleer runs first and rallies
+    // the first local same-family cluster it reaches, then turns back to fight with it;
+    // that per-tick scan lives in the flee arm (mob/locomotion.ts -> mob/social_aggro.ts).
     return true;
-  }
-
-  // A fleeing mob shouts for aid: nearby idle same-family mobs join the fight,
-  // mirroring the social-pull seeding in aggroMob.
-  private callForHelp(mob: Entity, target: Entity): void {
-    const family = MOBS[mob.templateId]?.family;
-    if (!family) return;
-    this.grid.forEachInRadius(mob.pos.x, mob.pos.z, FLEE_HELP_RADIUS, (m, d2) => {
-      if (
-        m.kind === 'mob' &&
-        m.id !== mob.id &&
-        !m.dead &&
-        m.hostile &&
-        m.aiState === 'idle' &&
-        m.ownerId === null &&
-        MOBS[m.templateId]?.family === family &&
-        d2 < FLEE_HELP_RADIUS * FLEE_HELP_RADIUS
-      ) {
-        m.aiState = 'chase';
-        m.aggroTargetId = target.id;
-        m.inCombat = true;
-        m.leashAnchor = { ...m.pos };
-        addThreat(m, target.id, 1);
-      }
-    });
   }
 
   mobSwing(mob: Entity, target: Entity): void {
@@ -3683,7 +3739,8 @@ export class Sim {
       school: spell.school,
       fx: 'projectile',
     });
-    if (!this.rng.chance(spellHitChance(pet.level, target.level))) {
+    // Pet spells are resisted, not missed (same semantics as player casts).
+    if (isSpellResisted(this.rng, pet.level, target.level)) {
       this.emit({
         type: 'damage',
         sourceId: pet.id,
@@ -3692,7 +3749,7 @@ export class Sim {
         crit: false,
         school: spell.school,
         ability: spell.name,
-        kind: 'miss',
+        kind: 'resist',
       });
       this.enterCombat(pet, target);
     } else {
@@ -5103,6 +5160,7 @@ export class Sim {
     return {
       leader: party.leader,
       raid: party.raid,
+      master: { ...party.lootStrategies.master },
       members: party.members.flatMap((mPid) => {
         const meta = this.players.get(mPid);
         const e = this.entities.get(mPid);
@@ -5151,6 +5209,10 @@ export class Sim {
 
   instanceSlotAt(pos: Vec3): number | null {
     return instanceSlotAtImpl(this.ctx, pos);
+  }
+
+  instanceInfoAt(pos: Vec3): { slot: number; dungeonId: string } | null {
+    return instanceInfoAtImpl(this.ctx, pos);
   }
 
   private error(pid: number, text: string, reason?: ErrorReason): void {

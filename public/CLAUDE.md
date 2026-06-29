@@ -28,7 +28,7 @@ are the imported KayKit/Quaternius/Kenney models plus PBR/HDRI/sprite/audio asse
 | `env` | 8 HDRIs (`*_1k.hdr` + `*_2k.hdr`) for IBL/sky + 6 `*_backdrop(.webp/_4k.webp)` | RGBELoader / texture |
 | `vfx` | 16 particle sprites (`.png`) | texture |
 | `audio` | `main-theme.mp3` + `sfx/` (combat/ambient/footsteps…) + `voice/<npc>/` lines | `Audio()` / `src/game/voice_manifest.generated.ts` |
-| `ui` | `cursors/` (PNG) + `emotes/` (PNG) + `weapons/` (JPG icons) | `<img>` / CSS cursor |
+| `ui` | `skills/<class>/` (WebP ability icons) + `cursors/` (PNG) + `emotes/` (PNG) + `weapons/` (JPG icons) | `<img>` / CSS cursor |
 
 Top level also holds favicons/PWA icons, `manifest.webmanifest`, `robots.txt`,
 `sitemap.xml`, `loading-screen.jpg`, `home-bg.{mp4,png}`, logos, and the two
@@ -73,5 +73,15 @@ The inline set must match `supportedLanguages` exactly.
   (`audio/`/`ui/` are intentionally outside it, referenced by raw path.)
 - **Don't add large binaries casually**: raw source packs aren't committed; keep
   only shipped, optimized assets. New art/audio: add an attribution row to `CREDITS.md`.
+- **Class ability icons are WebP, committed directly** (`ui/skills/<class>/`): WebP is a fraction
+  of PNG/JPG size at the same quality and decodes on every supported browser and native WebView.
+  Drop a new icon into `ui/skills/<class>/` in any common format and run `npm run assets:skills`
+  (`scripts/convert_skill_icons_webp.mjs`): it converts each non-webp image to WebP
+  (`smartSubsample` on) and deletes the original. WebP is the source of truth, there is NO
+  build-time conversion (the script is a pre-commit step; `tests/skill_icons.test.ts` fails if a
+  non-webp image is committed under `ui/skills/`). This is the "keep only shipped, optimized
+  assets" rule above: the lossless source is not committed. Only `ui/skills/` is auto-converted and
+  gated; the existing `cursors/`/`emotes/` PNG and `weapons/` JPG icons are grandfathered. Prefer
+  WebP for any new icon art.
 - `src/game/voice_manifest.generated.ts` and `manifest.generated.ts` are generated;
   don't hand-edit (root invariant).

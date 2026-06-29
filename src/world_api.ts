@@ -149,6 +149,7 @@ export interface IWorld
 export const COMMAND_NAMES = [
   'castSlot',
   'cast',
+  'cancel_aura',
   'target',
   'tab',
   'targetNearest',
@@ -187,6 +188,8 @@ export const COMMAND_NAMES = [
   'praid',
   'punraid',
   'pmoveRaid',
+  'setLootMaster',
+  'masterAssign',
   'setMarker',
   'clearMarker',
   'pet_abandon',
@@ -318,6 +321,7 @@ export const COMMAND_FACETS = {
   // IWorldCombat: ability casts, auto-attack, spirit release.
   cast: 'IWorldCombat',
   castSlot: 'IWorldCombat',
+  cancel_aura: 'IWorldCombat',
   attack: 'IWorldCombat',
   stopattack: 'IWorldCombat',
   release: 'IWorldCombat',
@@ -367,6 +371,8 @@ export const COMMAND_FACETS = {
   praid: 'IWorldParty',
   punraid: 'IWorldParty',
   pmoveRaid: 'IWorldParty',
+  setLootMaster: 'IWorldParty',
+  masterAssign: 'IWorldParty',
   setMarker: 'IWorldParty',
   clearMarker: 'IWorldParty',
   // IWorldTrade: peer-to-peer trade-window commands (tradeInfo is a snapshot read,
