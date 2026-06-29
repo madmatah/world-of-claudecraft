@@ -62,15 +62,8 @@
       flex-direction: column;
     }
 
-    .page-actions,
-    .page-actions :global(button) {
+    .page-actions {
       width: 100%;
-    }
-  }
-
-  @media (pointer: coarse) {
-    .page-actions :global(button) {
-      min-height: 40px;
     }
   }
 </style>

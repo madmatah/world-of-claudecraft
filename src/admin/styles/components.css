@@ -86,6 +86,16 @@
   section {
     margin-bottom: 18px;
   }
+  @media (max-width: 600px) {
+    .page-actions button {
+      width: 100%;
+    }
+  }
+  @media (pointer: coarse) {
+    .page-actions button {
+      min-height: 40px;
+    }
+  }
 
   /* ---------- tables ---------- */
   table {
