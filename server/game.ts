@@ -22,7 +22,12 @@ import {
 import { type CommandName, isOverheadEmoteId } from '../src/world_api';
 import { recordOnlineSample } from './admin_db';
 import { offensiveName } from './auth';
-import type { BotDetector, BotTrackingContext } from './bot_detector/contract';
+import type {
+  BotDetector,
+  BotTrackingContext,
+  SessionRuntimeSnapshot,
+  SuspiciousPlayer,
+} from './bot_detector/contract';
 import { ChatFilter } from './chat_filter';
 import { applyChatStrike, loadChatFilterState, recordChatViolation } from './chat_filter_db';
 import { ChatLogger } from './chat_log';
@@ -779,11 +784,48 @@ export class GameServer {
   private runAntibotTick(): void {
     const now = Date.now();
     for (const session of this.clients.values()) {
-      const action = this.botDetector.handleTick(session.botTrackingContext, now, ANTIBOT_ENFORCE);
+      const action = this.botDetector.handleTick(
+        session.botTrackingContext,
+        now,
+        ANTIBOT_ENFORCE,
+        this.captureBotDetectionSnapshot(session, now),
+      );
       if (action === 'kick') {
         void this.kickSession(session, 'rejected by server', 'disconnected');
       }
     }
+  }
+
+  private captureBotDetectionSnapshot(
+    session: ClientSession,
+    capturedAt: number,
+  ): SessionRuntimeSnapshot | null {
+    const e = this.sim.entities.get(session.pid);
+    if (!e) return null;
+    const instance = this.sim.instanceInfoAt(e.pos);
+    return {
+      capturedAt,
+      simTime: this.sim.time,
+      x: e.pos.x,
+      z: e.pos.z,
+      facing: e.facing,
+      dead: e.dead,
+      inCombat: e.inCombat,
+      targetId: e.targetId,
+      instanceSlot: instance?.slot ?? null,
+      instanceDungeonId: instance?.dungeonId ?? null,
+      level: e.level,
+      classId: e.templateId,
+      hp: e.hp,
+      maxHp: e.maxHp,
+      resource: e.resource,
+      maxResource: e.maxResource,
+      resourceType: e.resourceType,
+      autoAttack: e.autoAttack,
+      followTargetId: e.followTargetId,
+      moveSpeed: e.moveSpeed,
+      onGround: e.onGround,
+    };
   }
 
   private clearStaleInputs(): void {
@@ -1241,6 +1283,10 @@ export class GameServer {
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
     };
+  }
+
+  suspiciousPlayers(): SuspiciousPlayer[] {
+    return this.botDetector.listSuspiciousPlayers();
   }
 
   liveSessions(): AdminLivePlayer[] {

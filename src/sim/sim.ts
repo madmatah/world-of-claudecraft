@@ -189,6 +189,7 @@ export type { MarketSave } from './market';
 import {
   enterCrypt as enterCryptImpl,
   enterDungeon as enterDungeonImpl,
+  instanceInfoAt as instanceInfoAtImpl,
   instanceKeyFor as instanceKeyForImpl,
   instanceOriginOf as instanceOriginOfImpl,
   instanceSlotAt as instanceSlotAtImpl,
@@ -5185,6 +5186,10 @@ export class Sim {
 
   instanceSlotAt(pos: Vec3): number | null {
     return instanceSlotAtImpl(this.ctx, pos);
+  }
+
+  instanceInfoAt(pos: Vec3): { slot: number; dungeonId: string } | null {
+    return instanceInfoAtImpl(this.ctx, pos);
   }
 
   private error(pid: number, text: string, reason?: ErrorReason): void {
