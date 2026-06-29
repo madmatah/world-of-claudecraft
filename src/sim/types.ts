@@ -194,6 +194,9 @@ export interface Aura {
   school: 'physical' | 'fire' | 'frost' | 'arcane' | 'shadow' | 'holy' | 'nature';
   breaksOnDamage?: boolean;
   stacks?: number; // sunder armor: applications stack up to the effect's cap
+  charges?: number; // thorns: remaining reflect charges (Lightning Shield); undefined => unlimited
+  icd?: number; // thorns: internal-cooldown remaining, seconds (counts down each tick)
+  icdMax?: number; // thorns: configured internal cooldown, seconds (re-armed on each reflect)
 }
 
 export type CrowdControlDrCategory =
@@ -967,7 +970,16 @@ export type AbilityEffect =
   | { type: 'aoeAttackSpeed'; mult: number; duration: number; radius: number } // thunder clap rider
   | { type: 'aoeAttackPower'; amount: number; duration: number; radius: number } // demoralizing roar/shout
   | { type: 'aoeRoot'; duration: number; radius: number; min: number; max: number }
-  | { type: 'selfBuff'; kind: AuraKind; value: number; duration: number }
+  | {
+      type: 'selfBuff';
+      kind: AuraKind;
+      value: number;
+      duration: number;
+      // thorns auras only: a charge-limited reflect (Lightning Shield) caps how
+      // many melee hits reflect, gated by an internal cooldown between reflects.
+      charges?: number;
+      internalCooldown?: number;
+    }
   | { type: 'finisherHaste'; mult: number; basedur: number; perCombo: number } // slice and dice
   | { type: 'finisherStun'; base: number; perCombo: number } // kidney shot: stun seconds scale with combo
   | { type: 'gainResource'; amount: number } // bloodrage immediate

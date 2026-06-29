@@ -528,6 +528,10 @@ export function runEffects(
           value: eff.value,
           sourceId: p.id,
           school: ability.school,
+          // charge-limited thorns (Lightning Shield): cap reflects and gate them
+          // behind an internal cooldown. Absent on a plain always-on thorns coat.
+          charges: eff.charges,
+          icdMax: eff.internalCooldown,
         });
         recalcPlayerStats(p, meta.cls, meta.equipment, ctx.playerMods(meta));
         break;

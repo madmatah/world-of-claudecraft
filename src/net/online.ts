@@ -1208,6 +1208,10 @@ export class ClientWorld implements IWorld {
         sourceId: 0,
         school: 'physical' as const,
         stacks: a.stacks,
+        // Mirror the charge count for a charge-limited aura (Lightning Shield); the wire sends it
+        // only when defined (server/game.ts), so an ordinary aura or an old server decodes to
+        // undefined and the badge falls back to the stacks path, exactly as before.
+        charges: a.charges,
       }));
       e.loot = w.lootList ?? null;
       return e;
