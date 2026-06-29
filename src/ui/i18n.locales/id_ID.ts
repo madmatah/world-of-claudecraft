@@ -1989,6 +1989,7 @@ export const id_ID: Partial<Record<TranslationKey, string>> = {
   'footer.discordLabel': 'Gabung Discord',
   'footer.githubLabel': 'Proyek Sumber Terbuka',
   'footer.githubLink': 'https://github.com/levy-street/world-of-claudecraft',
+  'footer.whitepaper': 'Whitepaper',
   'footer.privacy': 'Kebijakan Privasi',
   'footer.terms': 'Ketentuan Layanan',
   'game.hud.lowEnergy': 'Energi Rendah',

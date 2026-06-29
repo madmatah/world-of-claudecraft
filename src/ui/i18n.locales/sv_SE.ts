@@ -1962,6 +1962,7 @@ export const sv_SE: Partial<Record<TranslationKey, string>> = {
   'footer.discordLabel': 'Gå med i Discord',
   'footer.githubLabel': 'Projekt med öppen källkod',
   'footer.githubLink': 'https://github.com/levy-street/world-of-claudecraft',
+  'footer.whitepaper': 'Whitepaper',
   'footer.privacy': 'Integritetspolicy',
   'footer.terms': 'Användarvillkor',
   'game.hud.lowEnergy': 'Låg energi',

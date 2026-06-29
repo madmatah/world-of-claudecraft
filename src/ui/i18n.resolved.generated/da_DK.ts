@@ -1543,6 +1543,7 @@ export const da_DK: EnTranslations = {
     "copyright": "2026 World of ClaudeCraft",
     "githubLink": "https://github.com/levy-street/world-of-claudecraft",
     "githubLabel": "Open Source-projekt",
+    "whitepaper": "Whitepaper",
     "terms": "Servicevilkår",
     "privacy": "Privatlivspolitik",
     "discordLabel": "Bliv medlem af Discord"

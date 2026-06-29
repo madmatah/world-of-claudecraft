@@ -1972,6 +1972,7 @@ export const pl_PL: Partial<Record<TranslationKey, string>> = {
   'footer.discordLabel': 'Dołącz do Discorda',
   'footer.githubLabel': 'Projekt open source',
   'footer.githubLink': 'https://github.com/levy-street/world-of-claudecraft',
+  'footer.whitepaper': 'Biała księga',
   'footer.privacy': 'Polityka prywatności',
   'footer.terms': 'Warunki korzystania z usługi',
   'game.hud.lowEnergy': 'Niska energia',

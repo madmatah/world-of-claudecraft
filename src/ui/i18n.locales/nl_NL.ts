@@ -1986,6 +1986,7 @@ export const nl_NL: Partial<Record<TranslationKey, string>> = {
   'footer.discordLabel': 'Word lid van de Discord',
   'footer.githubLabel': 'Opensourceproject',
   'footer.githubLink': 'https://github.com/levy-street/world-of-claudecraft',
+  'footer.whitepaper': 'Whitepaper',
   'footer.privacy': 'Privacybeleid',
   'footer.terms': 'Servicevoorwaarden',
   'game.hud.lowEnergy': 'Weinig energie',

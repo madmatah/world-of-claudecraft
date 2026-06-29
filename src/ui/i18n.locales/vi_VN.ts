@@ -1980,6 +1980,7 @@ export const vi_VN: Partial<Record<TranslationKey, string>> = {
   'footer.discordLabel': 'Tham Gia Discord',
   'footer.githubLabel': 'Dự Án Mã Nguồn Mở',
   'footer.githubLink': 'https://github.com/levy-street/world-of-claudecraft',
+  'footer.whitepaper': 'Sách trắng',
   'footer.privacy': 'Chính Sách Bảo Mật',
   'footer.terms': 'Điều Khoản Dịch Vụ',
   'game.hud.lowEnergy': 'Cạn Năng Lượng',
