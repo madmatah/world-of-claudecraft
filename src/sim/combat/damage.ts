@@ -507,6 +507,13 @@ export function handleDeath(ctx: SimContext, e: Entity, killer: Entity | null): 
         ctx.retargetMob(m);
       }
     }
+    // The owner's pet does not outlive them: without this the pet was orphaned
+    // (still owned, owner present-but-dead) so updatePet's despawn guard never
+    // fired and petPickTarget's `!owner.dead` gate left it idle and unkillable.
+    // Route it through handleDeath so the owned-mob branch below applies: warlock
+    // demons unravel, a hunter's beast leaves a revivable corpse (Revive Pet).
+    const pet = ctx.petOf(e.id);
+    if (pet) handleDeath(ctx, pet, killer);
     return;
   }
 
