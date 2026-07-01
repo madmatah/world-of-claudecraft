@@ -195,6 +195,38 @@ describe('spectate client POV', () => {
   });
 });
 
+describe('per-session isolation in the broadcast loop', () => {
+  it('keeps broadcasting to healthy sessions when one session throws', () => {
+    // Regression: the broadcast loop iterated every session unguarded, so a throw
+    // while building one player's snapshot unwound the whole call and starved every
+    // other session of its snapshot that tick (server/CLAUDE.md: one socket must
+    // not crash the loop). forEachGuarded must isolate the bad session.
+    const server = new GameServer();
+    const before = fakeWs();
+    const bad = fakeWs();
+    const after = fakeWs();
+    joinServer(server, before, 1, 'Before');
+    const badSession = joinServer(server, bad, 2, 'Broken');
+    // 'After' joins last, so it is iterated AFTER the throwing session: the real
+    // regression is that this one used to be starved when 'Broken' threw.
+    joinServer(server, after, 3, 'After');
+
+    // Force a throw only while serializing the bad session's self payload.
+    const original = (server as any).selfWireJson.bind(server);
+    vi.spyOn(server as any, 'selfWireJson').mockImplementation((session: any, ...rest: any[]) => {
+      if (session.pid === badSession.pid) throw new Error('corrupt self state');
+      return original(session, ...rest);
+    });
+
+    expect(() => broadcast(server)).not.toThrow();
+    // Both healthy sessions, on either side of the throw, still got a snapshot;
+    // only the broken one was skipped.
+    expect(lastSnap(before.sent)).not.toBeNull();
+    expect(lastSnap(after.sent)).not.toBeNull();
+    expect(lastSnap(bad.sent)).toBeNull();
+  });
+});
+
 describe('raid lockouts over the wire', () => {
   it('ships a granted lockout in self.lockouts and ClientWorld mirrors it end to end', () => {
     const server = new GameServer();

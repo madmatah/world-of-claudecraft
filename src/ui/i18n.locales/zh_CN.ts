@@ -16,6 +16,7 @@ import type { TranslationKey } from '../i18n.catalog';
 export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.spectate.banner': '正在观察 {name}',
   'hudChrome.loot.chestTitle': '宝箱',
+  'hudChrome.itemTooltip.requiresLevel': '需要等级 {level}',
   'hudChrome.spellbook.addToBarAria': '将{name}添加到动作条',
   'hudChrome.spellbook.removeFromBarAria': '从动作条移除{name}',
   'hudChrome.nameplate.mob': '[{level}] {name}',

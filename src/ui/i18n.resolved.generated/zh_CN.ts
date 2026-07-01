@@ -747,6 +747,9 @@ export const zh_CN: EnTranslations = {
       "mob": "[{level}] {name}",
       "mobElite": "[{level}+] {name}"
     },
+    "itemTooltip": {
+      "requiresLevel": "需要等级 {level}"
+    },
     "discord": {
       "title": "Discord",
       "panelTitle": "World of ClaudeCraft",

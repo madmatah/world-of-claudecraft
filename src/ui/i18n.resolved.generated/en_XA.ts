@@ -747,6 +747,9 @@ export const en_XA: EnTranslations = {
       "mob": "[[{level}] {name}]",
       "mobElite": "[[{level}+] {name}]"
     },
+    "itemTooltip": {
+      "requiresLevel": "[Ŕéɋúíŕéš Ļéʋéļ {level}]"
+    },
     "discord": {
       "title": "[Ðíšçóŕð]",
       "panelTitle": "[Ŵóŕļð óƒ ÇļáúðéÇŕáƒţ]",

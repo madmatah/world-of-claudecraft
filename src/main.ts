@@ -2,6 +2,7 @@
 // index.html and play.html both bootstrap through this module, so this one import
 // styles both game entries; admin/guide use their own entries and inline CSS.
 import './styles/index.css';
+import { syncAppViewport as syncAppViewportShared } from './game/app_viewport';
 import { audio } from './game/audio';
 import {
   BROWSER_BODY_CLASSES,
@@ -463,26 +464,7 @@ function syncBuildInfo(): void {
 }
 
 function syncAppViewport(): void {
-  const useStableGameViewport =
-    document.body.classList.contains('game-active') && useTouchInterface();
-  const width = Math.max(
-    1,
-    Math.round(
-      useStableGameViewport
-        ? window.innerWidth
-        : (window.visualViewport?.width ?? window.innerWidth),
-    ),
-  );
-  const height = Math.max(
-    1,
-    Math.round(
-      useStableGameViewport
-        ? window.innerHeight
-        : (window.visualViewport?.height ?? window.innerHeight),
-    ),
-  );
-  document.documentElement.style.setProperty('--app-vw', `${width}px`);
-  document.documentElement.style.setProperty('--app-vh', `${height}px`);
+  syncAppViewportShared();
 }
 
 function preventMobileZoom(): void {

@@ -747,6 +747,9 @@ export const ja_JP: EnTranslations = {
       "mob": "[{level}] {name}",
       "mobElite": "[{level}+] {name}"
     },
+    "itemTooltip": {
+      "requiresLevel": "必要レベル {level}"
+    },
     "discord": {
       "title": "Discord",
       "panelTitle": "World of ClaudeCraft",

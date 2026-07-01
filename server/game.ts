@@ -61,6 +61,7 @@ import { enqueueActivity } from './discord_activity';
 import { discordFlairForAccount, grantRewardPoints } from './discord_db';
 import { enqueueRelay } from './discord_relay';
 import { formatDuration } from './duration';
+import { forEachGuarded, runGuarded } from './guarded_iter';
 import { IpBlockList } from './ip_block';
 import { loadActiveBlockedIps } from './ip_block_db';
 import { type LiveSharedIp, sharedIpsFromLiveSessions } from './live_shared_ips';
@@ -79,6 +80,7 @@ import { SocialService } from './social';
 import { PgSocialDb } from './social_db';
 import { TickProfiler } from './tick_profiler';
 import { holderInfoForPubkey } from './woc_balance';
+import { isBackpressureExceeded } from './ws_backpressure';
 
 const WORLD_SEED = 20061;
 const ALDRIC_METEOR_QUEST_ID = 'q_aldrics_fallen_star';
@@ -969,58 +971,69 @@ export class GameServer {
     let last = process.hrtime.bigint();
     let acc = 0;
     this.interval = setInterval(() => {
-      const now = process.hrtime.bigint();
-      let dt = Number(now - last) / 1e9;
-      last = now;
-      if (dt > 0.5) dt = 0.5;
-      acc += dt;
-      // Feed the authoritative UTC day to the sim so the delve daily reset (FR-5.1)
-      // works without the sim reading the wall clock itself (determinism invariant).
-      this.sim.utcDay = new Date().toISOString().slice(0, 10);
-      this.bcastGridNs = 0n;
-      this.bcastSelfNs = 0n;
-      this.bcSerializeNs = 0n;
-      this.bcVisits = 0;
-      this.bcSerializes = 0;
-      let mark = now;
-      const lap = (phase: string): void => {
-        const t = process.hrtime.bigint();
-        this.tickProfiler.add(phase, Number(t - mark) / 1e6);
-        mark = t;
-      };
-      while (acc >= DT) {
-        this.clearStaleInputs();
-        lap('stale');
-        const events = this.sim.tick();
-        lap('tick');
-        this.routeEvents(events);
-        this.detectActivity(events);
-        lap('events');
-        this.runAntibotTick();
-        lap('antibot');
-        acc -= DT;
-      }
-      this.broadcastSnapshots();
-      lap('broadcast');
-      this.tickProfiler.add('bcastGrid', Number(this.bcastGridNs) / 1e6);
-      this.tickProfiler.add('bcastSelf', Number(this.bcastSelfNs) / 1e6);
-      this.socialPosTimer += dt;
-      if (this.socialPosTimer >= 1) {
-        this.socialPosTimer = 0;
-        this.broadcastSocialPositions();
-      }
-      lap('social');
-      const tickMs = Number(process.hrtime.bigint() - now) / 1e6;
-      this.tickProfiler.commit(tickMs);
-      this.maybeLogTickPerf(tickMs);
-      this.tickMsAvg =
-        this.tickMsAvg === 0 ? tickMs : this.tickMsAvg + TICK_EMA_ALPHA * (tickMs - this.tickMsAvg);
-      this.saveTimer += dt;
-      if (this.saveTimer >= AUTOSAVE_SECONDS) {
-        this.saveTimer = 0;
-        void this.saveAll('autosave');
-        void this.saveMarket();
-      }
+      // The whole tick body runs guarded: an unguarded throw here (sim tick, a
+      // broadcast, an autosave kick-off) would unwind the callback and skip the
+      // rest of this tick for everyone. Log and let the next tick self-heal so a
+      // transient fault never starves the loop (server/CLAUDE.md).
+      runGuarded(
+        () => {
+          const now = process.hrtime.bigint();
+          let dt = Number(now - last) / 1e9;
+          last = now;
+          if (dt > 0.5) dt = 0.5;
+          acc += dt;
+          // Feed the authoritative UTC day to the sim so the delve daily reset (FR-5.1)
+          // works without the sim reading the wall clock itself (determinism invariant).
+          this.sim.utcDay = new Date().toISOString().slice(0, 10);
+          this.bcastGridNs = 0n;
+          this.bcastSelfNs = 0n;
+          this.bcSerializeNs = 0n;
+          this.bcVisits = 0;
+          this.bcSerializes = 0;
+          let mark = now;
+          const lap = (phase: string): void => {
+            const t = process.hrtime.bigint();
+            this.tickProfiler.add(phase, Number(t - mark) / 1e6);
+            mark = t;
+          };
+          while (acc >= DT) {
+            this.clearStaleInputs();
+            lap('stale');
+            const events = this.sim.tick();
+            lap('tick');
+            this.routeEvents(events);
+            this.detectActivity(events);
+            lap('events');
+            this.runAntibotTick();
+            lap('antibot');
+            acc -= DT;
+          }
+          this.broadcastSnapshots();
+          lap('broadcast');
+          this.tickProfiler.add('bcastGrid', Number(this.bcastGridNs) / 1e6);
+          this.tickProfiler.add('bcastSelf', Number(this.bcastSelfNs) / 1e6);
+          this.socialPosTimer += dt;
+          if (this.socialPosTimer >= 1) {
+            this.socialPosTimer = 0;
+            this.broadcastSocialPositions();
+          }
+          lap('social');
+          const tickMs = Number(process.hrtime.bigint() - now) / 1e6;
+          this.tickProfiler.commit(tickMs);
+          this.maybeLogTickPerf(tickMs);
+          this.tickMsAvg =
+            this.tickMsAvg === 0
+              ? tickMs
+              : this.tickMsAvg + TICK_EMA_ALPHA * (tickMs - this.tickMsAvg);
+          this.saveTimer += dt;
+          if (this.saveTimer >= AUTOSAVE_SECONDS) {
+            this.saveTimer = 0;
+            void this.saveAll('autosave');
+            void this.saveMarket();
+          }
+        },
+        (err) => console.error('[tick] guarded tick body threw, skipping this tick:', err),
+      );
     }, 50);
     // Refresh every online player's $WOC holder-tier flair off the 20 Hz loop:
     // an RPC call per wallet (cached for minutes inside holderInfoForPubkey) has
@@ -2771,96 +2784,103 @@ export class GameServer {
     if (this.clients.size === 0) return;
     const tick = this.sim.tickCount;
     const head = `{"t":"snap","tick":${tick},"time":${round2(this.sim.time)}`;
-    for (const session of this.clients.values()) {
-      const p = this.sim.entities.get(session.pid);
-      const meta = this.sim.meta(session.pid);
-      if (!p || !meta) continue;
-      let anchorEntity = p;
-      let anchorMeta = meta;
-      let anchorSession = session;
-      if (session.spectating) {
-        const spectateName = session.spectating.name;
-        const target = this.sessionByCharacterId(session.spectating.characterId);
-        const targetEntity = target ? this.sim.entities.get(target.pid) : null;
-        const targetMeta = target ? this.sim.meta(target.pid) : null;
-        if (!target || target.left || !targetEntity || !targetMeta) {
-          this.exitSpectate(session, false);
-          this.sendChatNotice(session, `${spectateName} is no longer online; spectate ended.`);
-        } else {
-          anchorEntity = targetEntity;
-          anchorMeta = targetMeta;
-          anchorSession = target;
-        }
-      }
-      const ents: string[] = [];
-      const keep: number[] = [];
-      const present = new Set<number>();
-      const gridStart = this.profileBroadcastPhases ? process.hrtime.bigint() : 0n;
-      this.sim.grid.forEachInRadius(
-        anchorEntity.pos.x,
-        anchorEntity.pos.z,
-        INTEREST_QUERY_RADIUS,
-        (e, d2) => {
-          if (this.profileBroadcastPhases) this.bcVisits++;
-          if (e.id === anchorEntity.id) return;
-          if (!this.canObserveEntity(anchorEntity, e, d2)) return;
-          const known = session.sentEnts.get(e.id);
-          // the viewer's current target stays in interest to the widest drop
-          // radius so its unit frame doesn't vanish mid-chase
-          const limitSq =
-            anchorEntity.targetId === e.id
-              ? NPC_DROP_RADIUS * NPC_DROP_RADIUS
-              : interestLimitSq(e, known !== undefined);
-          if (d2 > limitSq) return;
-          present.add(e.id);
-          const cache = this.wireCacheFor(e);
-          if (known === undefined) {
-            // first sight carries the at-rest state exactly, so no settle
-            // record is owed until it moves again
-            ents.push(cache.fullJson);
-            session.sentEnts.set(e.id, {
-              idVer: cache.idVer,
-              dynVer: cache.dynVer,
-              sentAtTick: tick,
-              settled: true,
-            });
-            return;
+    // Guard each session: a throw while building one player's snapshot must not
+    // starve every other session of its snapshot this tick (server/CLAUDE.md).
+    forEachGuarded(
+      this.clients.values(),
+      (session) => {
+        const p = this.sim.entities.get(session.pid);
+        const meta = this.sim.meta(session.pid);
+        if (!p || !meta) return;
+        let anchorEntity = p;
+        let anchorMeta = meta;
+        let anchorSession = session;
+        if (session.spectating) {
+          const spectateName = session.spectating.name;
+          const target = this.sessionByCharacterId(session.spectating.characterId);
+          const targetEntity = target ? this.sim.entities.get(target.pid) : null;
+          const targetMeta = target ? this.sim.meta(target.pid) : null;
+          if (!target || target.left || !targetEntity || !targetMeta) {
+            this.exitSpectate(session, false);
+            this.sendChatNotice(session, `${spectateName} is no longer online; spectate ended.`);
+          } else {
+            anchorEntity = targetEntity;
+            anchorMeta = targetMeta;
+            anchorSession = target;
           }
-          if (known.idVer !== cache.idVer) {
-            ents.push(cache.fullJson);
-            known.idVer = cache.idVer;
+        }
+        const ents: string[] = [];
+        const keep: number[] = [];
+        const present = new Set<number>();
+        const gridStart = this.profileBroadcastPhases ? process.hrtime.bigint() : 0n;
+        this.sim.grid.forEachInRadius(
+          anchorEntity.pos.x,
+          anchorEntity.pos.z,
+          INTEREST_QUERY_RADIUS,
+          (e, d2) => {
+            if (this.profileBroadcastPhases) this.bcVisits++;
+            if (e.id === anchorEntity.id) return;
+            if (!this.canObserveEntity(anchorEntity, e, d2)) return;
+            const known = session.sentEnts.get(e.id);
+            // the viewer's current target stays in interest to the widest drop
+            // radius so its unit frame doesn't vanish mid-chase
+            const limitSq =
+              anchorEntity.targetId === e.id
+                ? NPC_DROP_RADIUS * NPC_DROP_RADIUS
+                : interestLimitSq(e, known !== undefined);
+            if (d2 > limitSq) return;
+            present.add(e.id);
+            const cache = this.wireCacheFor(e);
+            if (known === undefined) {
+              // first sight carries the at-rest state exactly, so no settle
+              // record is owed until it moves again
+              ents.push(cache.fullJson);
+              session.sentEnts.set(e.id, {
+                idVer: cache.idVer,
+                dynVer: cache.dynVer,
+                sentAtTick: tick,
+                settled: true,
+              });
+              return;
+            }
+            if (known.idVer !== cache.idVer) {
+              ents.push(cache.fullJson);
+              known.idVer = cache.idVer;
+              known.dynVer = cache.dynVer;
+              known.sentAtTick = tick;
+              known.settled = false;
+              return;
+            }
+            if (
+              !isUpdateDue(tick, e, d2, anchorEntity, known.sentAtTick) ||
+              (known.dynVer === cache.dynVer && known.settled)
+            ) {
+              // not due at this distance tier yet, or unchanged and already
+              // settled: a bare id keeps it alive on the client
+              keep.push(e.id);
+              return;
+            }
+            // due, and either changed or owing its one settle record
+            known.settled = known.dynVer === cache.dynVer;
             known.dynVer = cache.dynVer;
             known.sentAtTick = tick;
-            known.settled = false;
-            return;
-          }
-          if (
-            !isUpdateDue(tick, e, d2, anchorEntity, known.sentAtTick) ||
-            (known.dynVer === cache.dynVer && known.settled)
-          ) {
-            // not due at this distance tier yet, or unchanged and already
-            // settled: a bare id keeps it alive on the client
-            keep.push(e.id);
-            return;
-          }
-          // due, and either changed or owing its one settle record
-          known.settled = known.dynVer === cache.dynVer;
-          known.dynVer = cache.dynVer;
-          known.sentAtTick = tick;
-          ents.push(cache.liteJson);
-        },
-      );
-      // forget entities that left interest, so a re-entry sends identity again
-      for (const id of session.sentEnts.keys()) {
-        if (!present.has(id)) session.sentEnts.delete(id);
-      }
-      const selfStart = this.profileBroadcastPhases ? process.hrtime.bigint() : 0n;
-      if (this.profileBroadcastPhases) this.bcastGridNs += selfStart - gridStart;
-      const selfJson = this.selfWireJson(session, anchorEntity, anchorMeta, anchorSession);
-      if (this.profileBroadcastPhases) this.bcastSelfNs += process.hrtime.bigint() - selfStart;
-      const keepJson = keep.length > 0 ? `,"keep":[${keep.join(',')}]` : '';
-      this.sendRaw(session, `${head},"self":${selfJson},"ents":[${ents.join(',')}]${keepJson}}`);
-    }
+            ents.push(cache.liteJson);
+          },
+        );
+        // forget entities that left interest, so a re-entry sends identity again
+        for (const id of session.sentEnts.keys()) {
+          if (!present.has(id)) session.sentEnts.delete(id);
+        }
+        const selfStart = this.profileBroadcastPhases ? process.hrtime.bigint() : 0n;
+        if (this.profileBroadcastPhases) this.bcastGridNs += selfStart - gridStart;
+        const selfJson = this.selfWireJson(session, anchorEntity, anchorMeta, anchorSession);
+        if (this.profileBroadcastPhases) this.bcastSelfNs += process.hrtime.bigint() - selfStart;
+        const keepJson = keep.length > 0 ? `,"keep":[${keep.join(',')}]` : '';
+        this.sendRaw(session, `${head},"self":${selfJson},"ents":[${ents.join(',')}]${keepJson}}`);
+      },
+      (err, session) =>
+        console.error(`[snap] failed to build snapshot for pid ${session.pid}, skipping:`, err),
+    );
     // >= rather than a modulo check: catch-up broadcasts can skip ticks
     if (tick - this.lastWireSweepTick >= WIRE_CACHE_SWEEP_TICKS) {
       this.lastWireSweepTick = tick;
@@ -3212,83 +3232,90 @@ export class GameServer {
   private routeEvents(events: SimEvent[]): void {
     if (events.length === 0 || this.clients.size === 0) return;
     const eventTime = Date.now();
-    for (const session of this.clients.values()) {
-      const p = this.sim.entities.get(session.pid);
-      if (!p) continue;
-      let anchorPid = session.pid;
-      let anchorPos = p.pos;
-      if (session.spectating) {
-        const target = this.sessionByCharacterId(session.spectating.characterId);
-        const targetEntity = target ? this.sim.entities.get(target.pid) : null;
-        if (!target || target.left || !targetEntity) continue;
-        anchorPid = target.pid;
-        anchorPos = targetEntity.pos;
-      }
-      const mine: SimEvent[] = [];
-      for (const ev of events) {
-        // ignore list: drop chat originating from a character this player has
-        // blocked, before it ever reaches their client
-        if (
-          !session.spectating &&
-          ev.type === 'chat' &&
-          session.blockedIds.size > 0 &&
-          this.isBlockedSender(session, ev.fromPid)
-        )
-          continue;
-        if (ev.pid !== undefined) {
+    // Guard each session: a throw while routing events to one player must not
+    // drop this tick's events for every other session (server/CLAUDE.md).
+    forEachGuarded(
+      this.clients.values(),
+      (session) => {
+        const p = this.sim.entities.get(session.pid);
+        if (!p) return;
+        let anchorPid = session.pid;
+        let anchorPos = p.pos;
+        if (session.spectating) {
+          const target = this.sessionByCharacterId(session.spectating.characterId);
+          const targetEntity = target ? this.sim.entities.get(target.pid) : null;
+          if (!target || target.left || !targetEntity) return;
+          anchorPid = target.pid;
+          anchorPos = targetEntity.pos;
+        }
+        const mine: SimEvent[] = [];
+        for (const ev of events) {
+          // ignore list: drop chat originating from a character this player has
+          // blocked, before it ever reaches their client
           if (
-            session.spectating &&
-            ev.pid === session.pid &&
+            !session.spectating &&
             ev.type === 'chat' &&
-            ev.channel !== 'say' &&
-            ev.channel !== 'yell'
-          ) {
-            if (this.isBlockedSender(session, ev.fromPid)) continue;
-            mine.push(ev);
-            if (ev.channel === 'whisper' && ev.to === undefined && ev.fromPid !== session.pid) {
-              session.lastWhisperFrom = ev.from;
-            }
-            this.botDetector.observeEvent(session.botTrackingContext, ev, eventTime);
+            session.blockedIds.size > 0 &&
+            this.isBlockedSender(session, ev.fromPid)
+          )
             continue;
-          }
-          if (ev.pid === anchorPid) {
+          if (ev.pid !== undefined) {
             if (
               session.spectating &&
+              ev.pid === session.pid &&
               ev.type === 'chat' &&
               ev.channel !== 'say' &&
               ev.channel !== 'yell'
             ) {
+              if (this.isBlockedSender(session, ev.fromPid)) continue;
+              mine.push(ev);
+              if (ev.channel === 'whisper' && ev.to === undefined && ev.fromPid !== session.pid) {
+                session.lastWhisperFrom = ev.from;
+              }
+              this.botDetector.observeEvent(session.botTrackingContext, ev, eventTime);
               continue;
             }
-            mine.push(ev);
-            // a sim-driven change to a heavy self field (loot, level-up, quest
-            // credit, ...) refreshes those fields on the next snapshot
-            if (HEAVY_SELF_EVENTS.has(ev.type)) session.selfHeavyDirty = true;
-            // remember the last person to whisper us, for /r reply (the
-            // recipient copy of a whisper has no `to`; the sender echo does)
-            if (
-              ev.type === 'chat' &&
-              ev.channel === 'whisper' &&
-              ev.to === undefined &&
-              ev.fromPid !== session.pid &&
-              !session.spectating
-            ) {
-              session.lastWhisperFrom = ev.from;
+            if (ev.pid === anchorPid) {
+              if (
+                session.spectating &&
+                ev.type === 'chat' &&
+                ev.channel !== 'say' &&
+                ev.channel !== 'yell'
+              ) {
+                continue;
+              }
+              mine.push(ev);
+              // a sim-driven change to a heavy self field (loot, level-up, quest
+              // credit, ...) refreshes those fields on the next snapshot
+              if (HEAVY_SELF_EVENTS.has(ev.type)) session.selfHeavyDirty = true;
+              // remember the last person to whisper us, for /r reply (the
+              // recipient copy of a whisper has no `to`; the sender echo does)
+              if (
+                ev.type === 'chat' &&
+                ev.channel === 'whisper' &&
+                ev.to === undefined &&
+                ev.fromPid !== session.pid &&
+                !session.spectating
+              ) {
+                session.lastWhisperFrom = ev.from;
+              }
+              if (!session.spectating) {
+                this.botDetector.observeEvent(session.botTrackingContext, ev, eventTime);
+              }
             }
-            if (!session.spectating) {
-              this.botDetector.observeEvent(session.botTrackingContext, ev, eventTime);
-            }
+            continue;
           }
-          continue;
+          // world events: only those near this player
+          const anchor = this.eventAnchor(ev);
+          if (anchor === null || dist2d(anchorPos, anchor) <= EVENT_RADIUS) {
+            mine.push(ev);
+          }
         }
-        // world events: only those near this player
-        const anchor = this.eventAnchor(ev);
-        if (anchor === null || dist2d(anchorPos, anchor) <= EVENT_RADIUS) {
-          mine.push(ev);
-        }
-      }
-      if (mine.length > 0) this.send(session, { t: 'events', list: mine });
-    }
+        if (mine.length > 0) this.send(session, { t: 'events', list: mine });
+      },
+      (err, session) =>
+        console.error(`[events] failed to route events for pid ${session.pid}, skipping:`, err),
+    );
   }
 
   // Maps a chat event's source pid to its character id and checks the
@@ -3650,8 +3677,23 @@ export class GameServer {
   }
 
   private sendRaw(session: ClientSession, payload: string): void {
-    if (session.ws.readyState === 1) {
-      session.ws.send(payload);
+    if (session.ws.readyState !== 1) return;
+    // A client that has stopped draining its socket lets ws.bufferedAmount grow
+    // without bound (send() never blocks); left unchecked one stuck reader OOMs
+    // the process and starves everyone. Terminate the offender instead. close()
+    // would try to flush the already-huge buffer, so destroy the socket: the
+    // 'close' handler funnels into the idempotent leave() for normal cleanup.
+    if (isBackpressureExceeded(session.ws.bufferedAmount)) {
+      if (!session.left) {
+        try {
+          session.ws.terminate();
+        } catch {
+          /* socket already torn down */
+        }
+        void this.leave(session, 'backpressure');
+      }
+      return;
     }
+    session.ws.send(payload);
   }
 }

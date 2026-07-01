@@ -747,6 +747,9 @@ export const ko_KR: EnTranslations = {
       "mob": "[{level}] {name}",
       "mobElite": "[{level}+] {name}"
     },
+    "itemTooltip": {
+      "requiresLevel": "필요 레벨 {level}"
+    },
     "discord": {
       "title": "Discord",
       "panelTitle": "World of ClaudeCraft",
