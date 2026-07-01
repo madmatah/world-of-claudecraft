@@ -274,11 +274,16 @@ export const tr_TR: EnTranslations = {
       "tabsLabel": "Yüksek skor tabloları",
       "tabPlayers": "Oyuncular",
       "tabGuilds": "Loncalar",
+      "tabDevs": "Geliştiriciler",
       "guildName": "Lonca",
       "members": "Üyeler",
       "topLevel": "En İyi",
       "guildXp": "Toplam XP",
-      "guildEmpty": "Henüz sıralamada lonca yok."
+      "guildEmpty": "Henüz sıralamada lonca yok.",
+      "devName": "Katkıcı",
+      "devTierCol": "Rozet",
+      "mergedPrs": "Birleştirilen PR'ler",
+      "devEmpty": "Henüz sıralı katkıcı yok."
     },
     "raidLockout": {
       "title": "Akın Kilitleri",
@@ -308,7 +313,8 @@ export const tr_TR: EnTranslations = {
     "keybinds": {
       "emoteWheel": "İfade Çarkı",
       "targetFriendly": "En Yakın Dostu Hedefle",
-      "targetFriendlyNext": "Dost Hedefler Arasında Geç"
+      "targetFriendlyNext": "Dost Hedefler Arasında Geç",
+      "discord": "Discord"
     },
     "options": {
       "clickMoveLeft": "Sol Tık",
@@ -330,8 +336,10 @@ export const tr_TR: EnTranslations = {
       "keybindHelpLockCursorOnRotate": "Kamerayı döndürmek için sürüklerken fare imlecini pencerenin içinde tutar, böylece ekran kenarına ulaşamaz veya başka bir monitöre geçemez. Serbest imleç tercih ediyorsanız kapatın.",
       "showWalletOnCharacterScreen": "Cüzdanı Karakter Ekranında Göster",
       "showWalletOnPlayerCard": "Cüzdanı Oyuncu Kartında Göster",
+      "showDevBadges": "Geliştirici Rozetlerini Göster",
       "uiScale": "Arayüz Ölçeği",
       "highContrastBackground": "Yüksek Kontrastlı Arka Plan",
+      "startAttackOnAbility": "Yetenek Kullanımında Otomatik Saldırı",
       "showItemLevel": "Eşya Seviyesini Göster",
       "itemLevelLine": "Eşya Seviyesi {level}",
       "itemScoreLine": "Puan {score}",
@@ -428,6 +436,9 @@ export const tr_TR: EnTranslations = {
     },
     "statInfo": {
       "fromYour": "{value} {stat} değerinden:",
+      "names": {
+        "spellPower": "Büyü Gücü"
+      },
       "desc": {
         "str": "Saldırı gücünü artırır, böylece silah darbelerin daha sert iner.",
         "agi": "Reflekslerini ve nişan alma yeteneğini keskinleştirir, birçok savaş istatistiğini geliştirir.",
@@ -436,6 +447,7 @@ export const tr_TR: EnTranslations = {
         "spi": "Bir büyücünün savaş dışında dinlenirken manasının ne kadar hızlı dolduğunu artırır.",
         "armor": "Gelen fiziksel darbeleri yumuşatır. Azalma, daha düşük seviyeli saldırganlara karşı daha büyüktür ve en fazla %75 ile sınırlıdır.",
         "attackPower": "Silah saldırılarına güç katar. Her 14 saldırı gücü, saniye başına 1 hasar ekler.",
+        "spellPower": "Büyülerinin hasarını ve iyileştirmelerinin gücünü artırır. Her Zeka puanı, teçhizat veya güçlendirmelerden gelenlere ek olarak biraz Büyü Gücü sağlar.",
         "dps": "Silahının hasarını ve hızını saldırı gücünle birleştiren, saniye başına tahmini silah hasarın.",
         "critChance": "Bir saldırının kritik vurma ve çift hasar verme şansın.",
         "dodge": "Gelen bir yakın dövüş saldırısından hiç hasar almadan tamamen kaçınma şansın."
@@ -458,6 +470,15 @@ export const tr_TR: EnTranslations = {
         "minorForClass": "Sınıfın için pek faydası yok.",
         "baseChance": "Tüm maceracıların paylaştığı %5'lik temel şansı içerir.",
         "dpsApprox": "Bir tahmindir; kritik vuruşları ve yetenek hasarını hariç tutar."
+      },
+      "sources": {
+        "header": "Şunlardan oluşur:",
+        "base": "Temel: {value}",
+        "attributes": "Özelliklerinden: {value}",
+        "fromAttribute": "{stat} özelliğinden: {value}",
+        "gear": "Kuşanılan teçhizat: {value}",
+        "buff": "{name}: {value}",
+        "talents": "Yetenekler ve etkiler: {value}"
       }
     },
     "talents": {
@@ -481,6 +502,9 @@ export const tr_TR: EnTranslations = {
       "ineligible": "Bu görevin gereksinimlerini karşılamıyorsun.",
       "noQuestSelected": "Paylaşmak için günlüğünden bir görev seç.",
       "linkTitle": "Bu görevi sohbette bağlamak için Shift'e basılı tutarak tıkla."
+    },
+    "itemShare": {
+      "linkHint": "Bu eşyayı sohbete bağlamak için Shift+tıkla."
     },
     "plurals": {
       "guildMembers": {
@@ -506,6 +530,12 @@ export const tr_TR: EnTranslations = {
         "few": "Kimler: {realm} sunucusunda {count} oyuncu çevrimiçi.",
         "many": "Kimler: {realm} sunucusunda {count} oyuncu çevrimiçi.",
         "other": "Kimler: {realm} sunucusunda {count} oyuncu çevrimiçi."
+      },
+      "playersMatching": {
+        "one": "Kim: {realm} sunucusunda \"{query}\" ile eşleşen {count} oyuncu.",
+        "few": "Kim: {realm} sunucusunda \"{query}\" ile eşleşen {count} oyuncu.",
+        "many": "Kim: {realm} sunucusunda \"{query}\" ile eşleşen {count} oyuncu.",
+        "other": "Kim: {realm} sunucusunda \"{query}\" ile eşleşen {count} oyuncu."
       }
     },
     "bugReport": {
@@ -624,7 +654,26 @@ export const tr_TR: EnTranslations = {
       "methodGroup": "Ganimet yontemi grup ganimeti olarak ayarlandi.",
       "assigned": "{looter}, {item} esyasini {target} oyuncusuna atadi.",
       "unassigned": "{item} atanmadi ve herkes icin serbest.",
-      "leaderOnly": "Ganimet yontemini yalnizca grup lideri degistirebilir."
+      "leaderOnly": "Ganimet yontemini yalnizca grup lideri degistirebilir.",
+      "rollingFor": "{item} için zar atılıyor.",
+      "looterChanged": "Ganimet Yöneticisi artık {name}.",
+      "thresholdSet": "Ganimet eşiği {threshold} olarak ayarlandı.",
+      "summaryMaster": "Ganimet Ayarları: Yönetilen Ganimet, Ganimet Yöneticisi {name}, eşik {threshold}.",
+      "summaryGroup": "Ganimet Ayarları: Grup Ganimeti."
+    },
+    "party": {
+      "promoteLeader": "Lider Yap"
+    },
+    "lootSettings": {
+      "title": "Ganimet Ayarları",
+      "close": "Ganimet ayarlarını kapat",
+      "menuItem": "Ganimet Ayarları",
+      "method": "Ganimet Yöntemi",
+      "rollThreshold": "Zar Eşiği",
+      "groupLoot": "Grup Ganimeti",
+      "valueMaster": "Yönetilen Ganimet",
+      "leaderOption": "Ganimet Yöneticisi: Lider (Sen)",
+      "masterOption": "Ganimet Yöneticisi: {name}"
     },
     "bags": {
       "filterGroupAria": "Çantaları kategoriye göre filtrele",
@@ -732,6 +781,9 @@ export const tr_TR: EnTranslations = {
     "nameplate": {
       "mob": "[{level}] {name}",
       "mobElite": "[{level}+] {name}"
+    },
+    "itemTooltip": {
+      "requiresLevel": "Gereken Seviye {level}"
     },
     "discord": {
       "title": "Discord",
@@ -875,6 +927,34 @@ export const tr_TR: EnTranslations = {
           "hint": "Topluluktan yardım iste"
         }
       }
+    },
+    "devBadge": {
+      "title": "Geliştirici",
+      "tiers": {
+        "tinkerer": "Tamirci",
+        "artificer": "Zanaatkâr",
+        "runesmith": "Rün Ustası",
+        "architect": "Mimar",
+        "worldwright": "Dünya Ustası"
+      },
+      "flavors": {
+        "tinkerer": "İlk pull request'in diyara indi.",
+        "artificer": "Beş pull request geldi ve dünya senin koduna göre şekilleniyor.",
+        "runesmith": "On beş pull request çalışan oyuna işlendi.",
+        "architect": "Diyarın bir mimarı: 30 pull request birleştirildi.",
+        "worldwright": "Dünyaların bir ustası: 70 pull request oyunu şekillendiriyor."
+      },
+      "badgeTitle": "Geliştirici: {tier}",
+      "prsLanded": "{count} pull request birleştirildi",
+      "contributor": "Açık kaynak katkıcısı",
+      "link": {
+        "cta": "GitHub'ı Bağla",
+        "relink": "GitHub'ı Yeniden Bağla",
+        "benefits": "Açık kaynak deposuna birleştirilen pull request'lerin için bir geliştirici rozeti kazanmak üzere GitHub hesabını bağla.",
+        "error": "GitHub bağlanamadı. Lütfen tekrar dene."
+      },
+      "linkedAs": "{login} olarak bağlandı",
+      "unlink": "GitHub Bağlantısını Kaldır"
     }
   },
   "guide": {
@@ -5631,6 +5711,11 @@ export const tr_TR: EnTranslations = {
         "name": "İrfan Ustası Caddis",
         "title": "İrfan Ustası",
         "greeting": "Gevşek kayalara dikkat et, {className}. Dağ son zamanlarda... huzursuz. Nedenini öğrenmeye niyetliyim."
+      },
+      "auctioneer_voss": {
+        "name": "Mezatçı Voss",
+        "title": "World Market Bekçisi",
+        "greeting": "World Market burada da açık, {className}. Diyardaki her maceracıdan alışveriş yap ya da kendi mallarını sergile."
       },
       "brother_aldric_raid": {
         "name": "Birader Aldric",
