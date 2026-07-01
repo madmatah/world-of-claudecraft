@@ -785,8 +785,6 @@ export class GameServer {
 
   private moderationHost(): ModerationHost<ClientSession> {
     return {
-      selectedTargetId: (adminPid) => this.sim.entities.get(adminPid)?.targetId ?? null,
-      sessionByPid: (pid) => this.clients.get(pid) ?? null,
       sessionByName: (name) => this.sessionByName(name),
       notice: (session, text) => this.sendChatNotice(session, text),
       systemNotice: (session, text) => this.sendSystemNotice(session, text),

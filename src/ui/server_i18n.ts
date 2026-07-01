@@ -1881,8 +1881,14 @@ const RULES: Rule[] = [
     re: /^(.+) is no longer online; spectate ended\.$/,
     build: (m) => tServer('moderation.spectateEnded', { name: m[1] }),
   },
-  { re: /^Usage: \/mute <minutes> <reason>$/, build: () => tServer('moderation.muteUsage') },
-  { re: /^Usage: \/suspend <minutes> <reason>$/, build: () => tServer('moderation.suspendUsage') },
+  {
+    re: /^Usage: \/mute "<name>" <minutes> \[reason\]$/,
+    build: () => tServer('moderation.muteUsage'),
+  },
+  {
+    re: /^Usage: \/suspend "<name>" <minutes> \[reason\]$/,
+    build: () => tServer('moderation.suspendUsage'),
+  },
   {
     re: /^Usage: \/spectate <name>$/,
     build: () => tServer('moderation.spectateUsage'),
