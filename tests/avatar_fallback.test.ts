@@ -3,22 +3,11 @@ import { attachAvatarFallback } from '../src/ui/avatar_fallback';
 
 // The vitest env has no DOM (this repo models DOM wiring with a hand-rolled fake,
 // see focus_manager.test.ts), so model the minimal HTMLImageElement surface the
-// helper touches: src get/set (mirrored into the src attribute so getAttribute
-// tracks it, like a real element), getAttribute, style.display, and an
-// addEventListener('error') we fire on demand.
+// helper touches: style.display and an addEventListener('error') we fire on demand.
 class FakeImg {
   private handlers: Array<() => void> = [];
-  private attrs: Record<string, string | undefined> = {};
+  src = '';
   style = { display: '' };
-  set src(v: string) {
-    this.attrs.src = v;
-  }
-  get src(): string {
-    return this.attrs.src ?? '';
-  }
-  getAttribute(name: string): string | null {
-    return this.attrs[name] ?? null;
-  }
   addEventListener(type: string, cb: () => void): void {
     if (type === 'error') this.handlers.push(cb);
   }
@@ -35,12 +24,12 @@ describe('attachAvatarFallback', () => {
   it('leaves the image untouched until an error fires', () => {
     const img = new FakeImg();
     img.src = CDN;
-    attachAvatarFallback(asImg(img), BADGE);
+    attachAvatarFallback(asImg(img));
     expect(img.src).toBe(CDN);
     expect(img.style.display).toBe('');
   });
 
-  it('hides the image when the load fails and no fallback is given', () => {
+  it('hides the image when the load fails and no handler is given', () => {
     const img = new FakeImg();
     img.src = CDN;
     attachAvatarFallback(asImg(img));
@@ -48,21 +37,17 @@ describe('attachAvatarFallback', () => {
     expect(img.style.display).toBe('none');
   });
 
-  it('swaps to the fallback source on failure, keeping the image visible', () => {
+  it('runs the provided handler on error and does not hide the image itself', () => {
     const img = new FakeImg();
     img.src = CDN;
-    attachAvatarFallback(asImg(img), BADGE);
+    let received: HTMLImageElement | null = null;
+    attachAvatarFallback(asImg(img), (el) => {
+      received = el;
+      el.src = BADGE;
+    });
     img.fireError();
+    expect(received).toBe(asImg(img));
     expect(img.src).toBe(BADGE);
     expect(img.style.display).toBe('');
-  });
-
-  it('hides the image if the fallback source also fails', () => {
-    const img = new FakeImg();
-    img.src = CDN;
-    attachAvatarFallback(asImg(img), BADGE);
-    img.fireError(); // CDN fails -> swap to badge
-    img.fireError(); // badge also fails -> hide
-    expect(img.style.display).toBe('none');
   });
 });

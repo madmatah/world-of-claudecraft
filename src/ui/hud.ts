@@ -721,6 +721,9 @@ export class Hud {
   private targetNameEl = $('#tf-name');
   private targetLevelEl = $('#tf-level');
   private targetDiscordEl = $('#tf-discord');
+  // Diff key for the target-frame Discord line, so its per-frame update only rebuilds
+  // innerHTML (and re-attaches the avatar fallback) when the Discord content changes.
+  private targetDiscordSig = '';
   private targetHpEl = $('#tf-hp');
   private targetHpTextEl = $('#tf-hp-text');
   private targetPortraitEl = $('#tf-portrait') as unknown as HTMLCanvasElement;
@@ -9941,10 +9944,19 @@ export class Hud {
     const el = this.targetDiscordEl;
     const tier = target.discordTier ?? 0;
     if (target.kind !== 'player' || (!tier && !target.discordName && !target.discordRole)) {
-      el.classList.remove('show');
-      el.replaceChildren();
+      if (this.targetDiscordSig !== '') {
+        this.targetDiscordSig = '';
+        el.classList.remove('show');
+        el.replaceChildren();
+      }
       return;
     }
+    // This runs every frame the target frame updates; only rebuild when the Discord
+    // content actually changes (else a fresh <img> per frame would re-fetch the
+    // avatar and, on a failing CDN load, flicker between the broken glyph and hidden).
+    const sig = `${tier}|${target.discordName ?? ''}|${target.discordRole ?? ''}|${target.discordAvatar ?? ''}`;
+    if (sig === this.targetDiscordSig) return;
+    this.targetDiscordSig = sig;
     const roleTagLabel = (key: string | undefined): string => {
       switch (key) {
         case 'levyst':
@@ -10067,11 +10079,16 @@ export class Hud {
       `<div class="equip-col equip-col-right" id="inspect-equip-right"></div>` +
       `</div></div>`;
     hydratePortraits(el);
-    // If the linked-Discord avatar fails to load from the CDN, fall back to the
-    // status-tier badge (the same image shown when the player has no custom avatar)
+    // If the linked-Discord avatar fails to load from the CDN, degrade to exactly the
+    // no-avatar rendering (the plain status-tier badge, without the pfp's blue ring)
     // instead of the browser's broken-image placeholder.
     const inspectPfp = el.querySelector<HTMLImageElement>('.inspect-discord-pfp');
-    if (inspectPfp) attachAvatarFallback(inspectPfp, discordStatusBadgeDataUrl(discordTierIdx));
+    if (inspectPfp) {
+      attachAvatarFallback(inspectPfp, (img) => {
+        img.classList.remove('inspect-discord-pfp');
+        img.src = discordStatusBadgeDataUrl(discordTierIdx);
+      });
+    }
     const view = buildPaperdollView(e.equippedItems, ITEMS);
     const leftCol = el.querySelector('#inspect-equip-left');
     const rightCol = el.querySelector('#inspect-equip-right');
