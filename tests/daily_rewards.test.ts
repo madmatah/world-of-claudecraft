@@ -28,7 +28,9 @@ import {
   DailyRewardService,
   dailyRewardEligibility,
   dailyRewardPayoutSplits,
+  nextUtcResetIso,
   resetDailyRewardPriceCacheForTests,
+  rewardDayForDate,
 } from '../server/daily_rewards';
 import { buildDailyRewardsView } from '../src/ui/daily_rewards_view';
 
@@ -132,6 +134,7 @@ function rewardConfig(overrides: Partial<DailyRewardRuntimeConfig> = {}): DailyR
     wocUsdPrice: 0.5,
     solUsdPrice: 200,
     activeSeconds: 120,
+    dayStartUtcMinutes: 21 * 60,
     tasks: [
       {
         id: 'quest_completion',
@@ -372,6 +375,12 @@ describe('daily rewards', () => {
     const splits = dailyRewardPayoutSplits();
     expect(splits).toEqual([0.2, 0.15, 0.12, 0.1, 0.09, 0.08, 0.075, 0.07, 0.065, 0.05]);
     expect(splits.reduce((sum, split) => sum + split, 0)).toBeCloseTo(1);
+  });
+
+  it('maps reward days to the configured UTC cycle boundary', () => {
+    expect(rewardDayForDate(new Date('2026-07-02T20:59:00.000Z'), 21 * 60)).toBe('2026-07-01');
+    expect(rewardDayForDate(new Date('2026-07-02T21:00:00.000Z'), 21 * 60)).toBe('2026-07-02');
+    expect(nextUtcResetIso('2026-07-02', 21 * 60)).toBe('2026-07-03T21:00:00.000Z');
   });
 
   it('builds a locked view for non-eligible status', () => {

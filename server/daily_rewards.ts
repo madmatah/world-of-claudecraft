@@ -14,6 +14,7 @@ import { cachedWocBalance } from './woc_balance';
 const DEFAULT_MIN_USD = 20;
 const DEFAULT_POOL_USD = 150;
 const DEFAULT_ACTIVE_SECONDS = 120;
+const DEFAULT_DAY_START_UTC_MINUTES = 21 * 60;
 const DEFAULT_CONFIG_TTL_MS = 5 * 60_000;
 const DAILY_REWARD_CONFIG_TTL_MS = Number(
   process.env.WOC_DAILY_REWARD_CONFIG_TTL_MS ?? DEFAULT_CONFIG_TTL_MS,
@@ -74,6 +75,7 @@ export interface DailyRewardRuntimeConfig {
   wocUsdPrice: number | null;
   solUsdPrice: number | null;
   activeSeconds: number;
+  dayStartUtcMinutes: number;
   tasks: DailyRewardTaskSeed[];
 }
 
@@ -84,9 +86,26 @@ export function utcRewardDay(now = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
-export function nextUtcResetIso(day: string): string {
-  return new Date(`${day}T00:00:00.000Z`).getTime()
-    ? new Date(Date.parse(`${day}T00:00:00.000Z`) + 24 * 60 * 60 * 1000).toISOString()
+export function rewardDayForDate(
+  now = new Date(),
+  dayStartUtcMinutes = DEFAULT_DAY_START_UTC_MINUTES,
+): string {
+  return new Date(now.getTime() - dayStartUtcMinutes * 60_000).toISOString().slice(0, 10);
+}
+
+export function addRewardDays(day: string, offset: number): string {
+  const start = Date.parse(`${day}T00:00:00.000Z`);
+  if (!Number.isFinite(start)) return utcRewardDay();
+  return new Date(start + offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export function nextUtcResetIso(
+  day: string,
+  dayStartUtcMinutes = DEFAULT_DAY_START_UTC_MINUTES,
+): string {
+  const start = Date.parse(`${day}T00:00:00.000Z`);
+  return Number.isFinite(start)
+    ? new Date(start + (dayStartUtcMinutes + 24 * 60) * 60_000).toISOString()
     : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 }
 
@@ -106,6 +125,11 @@ function finitePositive(value: unknown): number | null {
 function finiteNonNegativeInteger(value: unknown): number | null {
   const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+}
+
+function finiteDayStartUtcMinutes(value: unknown): number | null {
+  const minutes = finiteNonNegativeInteger(value);
+  return minutes !== null && minutes < 24 * 60 ? minutes : null;
 }
 
 function stringField(record: Record<string, unknown>, key: string): string | null {
@@ -173,6 +197,7 @@ function fallbackRuntimeConfig(): DailyRewardRuntimeConfig {
     wocUsdPrice: null,
     solUsdPrice: null,
     activeSeconds: DEFAULT_ACTIVE_SECONDS,
+    dayStartUtcMinutes: DEFAULT_DAY_START_UTC_MINUTES,
     tasks: DEFAULT_TASKS,
   };
 }
@@ -193,6 +218,10 @@ function parseRuntimeConfigPayload(payload: unknown): DailyRewardRuntimeConfig {
       finitePositive(record.activeSeconds) ??
       finitePositive(record.active_seconds) ??
       fallback.activeSeconds,
+    dayStartUtcMinutes:
+      finiteDayStartUtcMinutes(record.dayStartUtcMinutes) ??
+      finiteDayStartUtcMinutes(record.day_start_utc_minutes) ??
+      fallback.dayStartUtcMinutes,
     tasks: parseTaskPayload(record.tasks),
   };
 }
@@ -282,6 +311,17 @@ export async function wocUsdPrice(day = utcRewardDay()): Promise<number | null> 
 
 export async function solUsdPrice(day = utcRewardDay()): Promise<number | null> {
   return (await dailyRewardRuntimeConfig(day)).solUsdPrice;
+}
+
+async function dailyRewardClock(now = new Date()): Promise<{
+  day: string;
+  config: DailyRewardRuntimeConfig;
+}> {
+  const provisionalDay = utcRewardDay(now);
+  const provisionalConfig = await dailyRewardRuntimeConfig(provisionalDay);
+  const day = rewardDayForDate(now, provisionalConfig.dayStartUtcMinutes);
+  if (day === provisionalDay) return { day, config: provisionalConfig };
+  return { day, config: await dailyRewardRuntimeConfig(day) };
 }
 
 async function prizePoolSol(config: DailyRewardRuntimeConfig): Promise<number | null> {
@@ -405,8 +445,9 @@ function onlineMultiplierPoints(
 export class DailyRewardService {
   constructor(private readonly db: DailyRewardDb = new PgDailyRewardDb()) {}
 
-  async activeSeconds(day = utcRewardDay()): Promise<number> {
-    return (await dailyRewardRuntimeConfig(day)).activeSeconds;
+  async activeSeconds(day?: string): Promise<number> {
+    if (day) return (await dailyRewardRuntimeConfig(day)).activeSeconds;
+    return (await dailyRewardClock()).config.activeSeconds;
   }
 
   async ensureActiveDay(day = utcRewardDay()): Promise<DailyRewardRuntimeConfig> {
@@ -417,8 +458,9 @@ export class DailyRewardService {
   }
 
   async status(accountId: number): Promise<DailyRewardStatus> {
-    const day = utcRewardDay();
-    const config = await this.ensureActiveDay(day);
+    const { day, config } = await dailyRewardClock();
+    await this.db.ensureDay(day, config.prizePoolUsd, config.wocUsdPrice);
+    await this.db.seedTasks(day, config.tasks);
     const eligibility = await dailyRewardEligibility(accountId, config);
     const [score, rank, spin, tasks, leaders] = await Promise.all([
       this.db.scoreForAccount(day, accountId),
@@ -429,7 +471,7 @@ export class DailyRewardService {
     ]);
     return {
       day,
-      resetAt: nextUtcResetIso(day),
+      resetAt: nextUtcResetIso(day, config.dayStartUtcMinutes),
       prizePoolUsd: config.prizePoolUsd,
       prizePoolSol: await prizePoolSol(config),
       eligibility,
@@ -451,8 +493,9 @@ export class DailyRewardService {
   async spin(
     accountId: number,
   ): Promise<DailyRewardSpinResult | { error: string; status: number }> {
-    const day = utcRewardDay();
-    const config = await this.ensureActiveDay(day);
+    const { day, config } = await dailyRewardClock();
+    await this.db.ensureDay(day, config.prizePoolUsd, config.wocUsdPrice);
+    await this.db.seedTasks(day, config.tasks);
     const eligibility = await dailyRewardEligibility(accountId, config);
     if (!eligibility.eligible)
       return { error: 'daily rewards are locked for this wallet', status: 403 };
@@ -469,8 +512,9 @@ export class DailyRewardService {
   }
 
   async recordOnlineMinute(accountId: number, activeAt: Date = new Date()): Promise<void> {
-    const day = utcRewardDay(activeAt);
-    await this.ensureActiveDay(day);
+    const { day, config } = await dailyRewardClock(activeAt);
+    await this.db.ensureDay(day, config.prizePoolUsd, config.wocUsdPrice);
+    await this.db.seedTasks(day, config.tasks);
     const minute = activeAt.toISOString().slice(0, 16);
     await this.db.addPoints(day, accountId, 'online', 0, `online:${minute}`, {
       minute,
@@ -483,8 +527,9 @@ export class DailyRewardService {
     completedAt: Date = new Date(),
   ): Promise<void> {
     if (!questId) return;
-    const day = utcRewardDay(completedAt);
-    const config = await this.ensureActiveDay(day);
+    const { day, config } = await dailyRewardClock(completedAt);
+    await this.db.ensureDay(day, config.prizePoolUsd, config.wocUsdPrice);
+    await this.db.seedTasks(day, config.tasks);
     const eligibility = await dailyRewardEligibility(accountId, config);
     if (!eligibility.eligible) return;
     const tasks = await this.db.tasksForType(day, 'quest_completion');
@@ -522,8 +567,9 @@ export class DailyRewardService {
     },
   ): Promise<void> {
     const completedAt = result.completedAt ?? new Date();
-    const day = utcRewardDay(completedAt);
-    const config = await this.ensureActiveDay(day);
+    const { day, config } = await dailyRewardClock(completedAt);
+    await this.db.ensureDay(day, config.prizePoolUsd, config.wocUsdPrice);
+    await this.db.seedTasks(day, config.tasks);
     const eligibility = await dailyRewardEligibility(accountId, config);
     if (!eligibility.eligible) return;
     const tasks = await this.db.tasksForType(day, 'arena_result');
@@ -596,7 +642,8 @@ export class DailyRewardService {
   }
 
   async finalizePreviousDay(now = new Date()): Promise<void> {
-    const previous = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const { day } = await dailyRewardClock(now);
+    const previous = addRewardDays(day, -1);
     const config = await this.ensureActiveDay(previous);
     await this.db.finalizeDay(previous, config.prizePoolUsd, DAILY_REWARD_SPLITS);
   }

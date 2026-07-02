@@ -32,6 +32,7 @@ export interface DailyRewardsWindowDeps {
 export class DailyRewardsWindow {
   private openerFocus: HTMLElement | null = null;
   private poll: number | null = null;
+  private countdownPoll: number | null = null;
   private renderSeq = 0;
   private lastHistory: DailyRewardHistory = { payouts: [] };
   private spinOverlay: HTMLElement | null = null;
@@ -59,6 +60,9 @@ export class DailyRewardsWindow {
     this.poll = window.setInterval(() => {
       if (this.isOpen) void this.render(null);
     }, 15_000);
+    this.countdownPoll = window.setInterval(() => {
+      if (this.isOpen) this.paintCountdowns();
+    }, 30_000);
   }
 
   close(): void {
@@ -70,6 +74,10 @@ export class DailyRewardsWindow {
     if (this.poll !== null) {
       window.clearInterval(this.poll);
       this.poll = null;
+    }
+    if (this.countdownPoll !== null) {
+      window.clearInterval(this.countdownPoll);
+      this.countdownPoll = null;
     }
     root.style.display = 'none';
     this.closeSpinOverlay();
@@ -97,6 +105,7 @@ export class DailyRewardsWindow {
     this.lastHistory = history;
     this.deps.onStatus?.(status);
     this.paint(buildDailyRewardsView({ kind: 'status', status, history }));
+    this.paintCountdowns();
   }
 
   private ensureShell(): void {
@@ -177,6 +186,7 @@ export class DailyRewardsWindow {
             })}`,
           })})`;
     const reset = formatDateTime(new Date(s.resetAt), { hour: 'numeric', minute: '2-digit' });
+    const remaining = this.remainingText(s.resetAt);
     const value =
       s.eligibility.usdValue === null
         ? t('hudChrome.dailyRewards.unknown')
@@ -189,11 +199,38 @@ export class DailyRewardsWindow {
       `<div class="dr-summary">` +
       `<div><span>${esc(t('hudChrome.dailyRewards.prize'))}</span><strong>${esc(prize)}</strong></div>` +
       `<div><span>${esc(t('hudChrome.dailyRewards.reset'))}</span><strong>${esc(reset)}</strong></div>` +
+      `<div class="dr-countdown"><span data-daily-rewards-countdown="${esc(s.resetAt)}">${esc(t('hudChrome.dailyRewards.endsIn', { time: remaining }))}</span></div>` +
       `<div><span>${esc(t('hudChrome.dailyRewards.score'))}</span><strong>${formatNumber(s.score, { maximumFractionDigits: 0 })}</strong></div>` +
       `<div><span>${esc(t('hudChrome.dailyRewards.walletValue'))}</span><strong>${esc(value)}</strong></div>` +
       `<p class="${view.locked ? 'dr-lock' : 'dr-ok'}">${esc(reason)}</p>` +
       `</div>`
     );
+  }
+
+  private remainingText(resetAt: string): string {
+    const ms = Date.parse(resetAt) - Date.now();
+    const totalMinutes = Math.max(0, Math.ceil(ms / 60_000));
+    if (totalMinutes < 1) return t('hudChrome.dailyRewards.remainingLessThanMinute');
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours <= 0) {
+      return t('hudChrome.dailyRewards.remainingMinutes', {
+        minutes: formatNumber(minutes, { maximumFractionDigits: 0 }),
+      });
+    }
+    return t('hudChrome.dailyRewards.remainingHoursMinutes', {
+      hours: formatNumber(hours, { maximumFractionDigits: 0 }),
+      minutes: formatNumber(minutes, { maximumFractionDigits: 0 }),
+    });
+  }
+
+  private paintCountdowns(): void {
+    const root = this.deps.root();
+    root.querySelectorAll<HTMLElement>('[data-daily-rewards-countdown]').forEach((el) => {
+      const resetAt = el.dataset.dailyRewardsCountdown;
+      if (!resetAt) return;
+      el.textContent = t('hudChrome.dailyRewards.endsIn', { time: this.remainingText(resetAt) });
+    });
   }
 
   private spinHtml(view: Extract<DailyRewardsView, { kind: 'ready' }>): string {

@@ -1378,6 +1378,13 @@
     margin: 2px 0 0;
     font-size: 12px;
   }
+  .dr-summary .dr-countdown {
+    grid-column: 1 / -1;
+  }
+  .dr-summary .dr-countdown span {
+    color: #ffe27a;
+    font-size: 12px;
+  }
   .dr-ok {
     color: #b7f2a1;
   }
