@@ -346,6 +346,7 @@ import {
   type SimEvent,
   type SkinCatalog,
   type SkinRank,
+  steadyAngleTo,
   swingMissChance,
   TURN_SPEED,
   type Vec3,
@@ -3054,7 +3055,7 @@ export class Sim {
     const done = (arrived: boolean): boolean => {
       p.chargeTargetId = null;
       p.chargePath = [];
-      if (target) p.facing = angleTo(p.pos, target.pos);
+      if (target) p.facing = steadyAngleTo(p.pos, target.pos, p.facing);
       if (arrived) this.startAutoAttack(p.id);
       return true;
     };
@@ -3133,7 +3134,7 @@ export class Sim {
       return false;
     }
     // always turn to face the leader, even while held in place
-    p.facing = angleTo(p.pos, t.pos);
+    p.facing = steadyAngleTo(p.pos, t.pos, p.facing);
     if (isStunned(p) || isRooted(p) || d <= FOLLOW_STOP_DIST) return true;
     let speed = RUN_SPEED * this.moveSpeedMult(p);
     if (this.isSwimming(p)) speed *= SWIM_SPEED_MULT;
@@ -4072,7 +4073,7 @@ export class Sim {
   private tryMobMeleeSwingInRange(mob: Entity, target: Entity): boolean {
     if (dist2d(mob.pos, target.pos) > this.mobEffectiveMeleeRange(mob)) return false;
     mob.aiState = 'attack';
-    mob.facing = angleTo(mob.pos, target.pos);
+    mob.facing = steadyAngleTo(mob.pos, target.pos, mob.facing);
     if (mob.swingTimer <= 0) {
       this.mobSwing(mob, target);
       mob.swingTimer = mob.weapon.speed * this.swingIntervalMult(mob);
@@ -4124,10 +4125,10 @@ export class Sim {
           mob.moveSpeed * profile.chaseSpeedMult * this.moveSpeedMult(mob),
         );
       } else {
-        mob.facing = angleTo(mob.pos, target.pos);
+        mob.facing = steadyAngleTo(mob.pos, target.pos, mob.facing);
       }
     } else {
-      mob.facing = angleTo(mob.pos, target.pos);
+      mob.facing = steadyAngleTo(mob.pos, target.pos, mob.facing);
     }
 
     if (
@@ -4308,7 +4309,7 @@ export class Sim {
       pet.swingTimer = Math.max(0, pet.swingTimer - DT);
       return;
     }
-    pet.facing = angleTo(pet.pos, target.pos);
+    pet.facing = steadyAngleTo(pet.pos, target.pos, pet.facing);
     pet.swingTimer -= DT;
     // Emit the projectile + resolve the hit (resisted, not missed: the same
     // semantics as player casts). Shared by the instant path and the windup

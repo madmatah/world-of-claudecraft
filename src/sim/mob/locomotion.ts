@@ -40,6 +40,7 @@ import {
   NYTHRAXIS_ADD_ID,
   NYTHRAXIS_BOSS_ID,
   SISTER_NHALIA_BOSS_ID,
+  steadyAngleTo,
   TOLLING_BELL_TEMPLATE_ID,
   type Vec3,
 } from '../types';
@@ -286,7 +287,7 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
       if (ctx.tryMobMeleeSwingInRange(mob, target)) break;
       if (!ctx.isRooted(mob))
         ctx.moveToward(mob, target.pos, mob.moveSpeed * ctx.moveSpeedMult(mob));
-      else mob.facing = angleTo(mob.pos, target.pos);
+      else mob.facing = steadyAngleTo(mob.pos, target.pos, mob.facing);
       if (ctx.tryMobMeleeSwingInRange(mob, target)) break;
       break;
     }
@@ -316,7 +317,7 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
         mob.aiState = 'chase';
         break;
       }
-      mob.facing = angleTo(mob.pos, target.pos);
+      mob.facing = steadyAngleTo(mob.pos, target.pos, mob.facing);
       mob.swingTimer -= DT;
       if (mob.swingTimer <= 0) {
         ctx.mobSwing(mob, target);
@@ -534,7 +535,7 @@ export function updateMob(ctx: SimContext, mob: Entity): void {
       }
       // Run directly away from the attacker. A root pins it in place (it just
       // cowers facing away); a stun is already handled by the early return above.
-      const away = angleTo(target.pos, mob.pos);
+      const away = steadyAngleTo(target.pos, mob.pos, mob.facing);
       mob.facing = away;
       if (!ctx.isRooted(mob)) {
         const fleePos = ctx.groundPos(
