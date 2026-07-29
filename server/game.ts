@@ -63,6 +63,7 @@ import { cancelProfessionSessionOnDisplacement } from '../src/sim/professions/se
 import { restoreToolEffectSlotAction } from '../src/sim/professions/tool_effect_actions';
 import type { ToolEffectConfirmMode } from '../src/sim/professions/tools';
 import { questProgressForWire } from '../src/sim/quests/interact_object_credit';
+import { isRallyDriverTier } from '../src/sim/realm_racers_driver';
 import { loadRiftWorldState, serializeRiftWorldState } from '../src/sim/rift/persistence';
 import type { CharacterState, PetState, PlayerMeta } from '../src/sim/sim';
 import { MAX_CHAT_MESSAGE_LEN, Sim } from '../src/sim/sim';
@@ -439,6 +440,7 @@ export const SIM_LAP_PHASES = [
   'instances',
   'delves',
   'valecup',
+  'realmRacers',
   'dfinder',
   'market',
   'postOffice',
@@ -615,6 +617,8 @@ const JAILED_BLOCKED_COMMANDS = new Set<string>([
   'vcup_queue',
   'vcup_ready',
   'vcup_practice',
+  'realm_racers_join',
+  'realm_racers_practice',
   'enter_dungeon',
   'enter_crypt',
   'enter_delve',
@@ -1267,6 +1271,29 @@ function dynamicFields(e: Entity, includeAuras = true): Record<string, unknown> 
   // root), so it is actionable and always rides when non-zero.
   if (e.mountCastRemaining) out.mcr = round2(e.mountCastRemaining);
   if (e.mountCastKey) out.mck = e.mountCastKey;
+  // Live vehicle state, for the two seated racers of a running minigame and
+  // nobody else. It is ACTIONABLE, not cosmetic: the online self-extrapolator
+  // runs the same movement kernel, and without this it would predict a running
+  // character while the server simulates a driving machine, so every race would
+  // rubber-band. The renderer reads the same fields for engine pitch and drift
+  // smoke. Omitted entirely (like mcr/mck) for everyone on foot.
+  if (e.drive) {
+    out.drv = {
+      k: e.drive.profileKey,
+      sp: round2(e.drive.speed),
+      sl: round2(e.drive.slip),
+      yr: round2(e.drive.yawRate),
+      sn: round2(e.drive.spin),
+      hb: round2(e.drive.handbrake),
+      g: round2(e.drive.gripMult),
+      dg: round2(e.drive.dragMult),
+      c: round2(e.drive.speedCap),
+      // The activity holding the controls (a racer on the grid). Sent only
+      // while true, so an ordinary driving frame costs nothing: the client
+      // greys the weapon slot off exactly the fact the server refuses on.
+      ...(e.drive.controlsLocked ? { lk: 1 } : {}),
+    };
+  }
   if (e.sitting || e.eating || e.drinking) out.sit = 1;
   if (e.riftSliding) out.sld = 1; // ice-slide: render a frozen gliding pose
   // Ledge climb: quantized progress (1..99), not the arc. The client never
@@ -1788,6 +1815,9 @@ export class GameServer {
         this.simLapMark = t;
       },
       valeCupShowcase: true, // idle Sowfield auto-runs a bot exhibition to watch/bet on
+      // A player left alone in the rally queue past the wait gets a house pilot
+      // rather than an empty circuit. Offline the Practice button covers it.
+      realmRacersBackfill: true,
     });
     this.riftUpgrader = new RiftUpgradeCoordinator(riftUpgraderConfigFromEnv());
     this.riftAssets = new RiftAssetCoordinator(riftAssetConfigFromEnv());
@@ -5821,7 +5851,12 @@ export class GameServer {
       // own turnLeft/turnRight (player_motion.ts), but mouselook facing streams in on
       // this out-of-band channel and must be rejected here, the authoritative side,
       // not trusted to a client that could simply keep sending it.
-      if (frame.facing !== null && (!e.dead || e.ghost) && !isStunned(e)) {
+      // A machine's heading is STEERED, not aimed: the movement kernel
+      // integrates it from the pilot's steering input, so the server refuses the
+      // client's streamed facing for as long as they are driving. Without this
+      // refusal a client could snap-rotate a racer mid-corner (server authority),
+      // and even an honest one would overwrite its own steering every frame.
+      if (frame.facing !== null && !e.drive && (!e.dead || e.ghost) && !isStunned(e)) {
         e.facing = frame.facing;
       }
       this.botDetector.observeInput(session.botTrackingContext, frame, receivedAtMs);
@@ -6855,6 +6890,21 @@ export class GameServer {
         ) {
           sim.vcupBet(msg.side, Math.floor(msg.amount), pid);
         }
+        break;
+      case 'realm_racers_join':
+        sim.realmRacersQueueJoin(pid);
+        break;
+      case 'realm_racers_leave':
+        sim.realmRacersQueueLeave(pid);
+        break;
+      case 'realm_racers_forfeit':
+        sim.realmRacersForfeit(pid);
+        break;
+      case 'realm_racers_practice':
+        // Race a house pilot now. The Sim re-validates the one circuit being
+        // free and the sender being able to race, and refuses silently
+        // otherwise, exactly as the queue join does.
+        if (isRallyDriverTier(msg.tier)) sim.realmRacersPracticeStart(msg.tier, pid);
         break;
 
       // Dungeon Finder (docs/prd/dungeon-finder.md). Deliberately NOT in
@@ -7975,6 +8025,7 @@ export class GameServer {
     maybe('trade', this.tradeWire(anchorSession.pid));
     maybe('duel', this.duelWire(anchorSession.pid));
     maybe('cardDuel', this.sim.cardMinigameInfoFor(anchorSession.pid));
+    maybe('rr', this.sim.realmRacersInfoFor(anchorSession.pid));
     // Small PvP-ledger scalars. Delta-guarded like delve marks: a fresh
     // session receives both, then they ride only on earn/spend changes.
     maybe('honor', meta.honor);
@@ -8229,6 +8280,19 @@ export class GameServer {
       // restore's EXPLICIT null (delta omission means "unchanged" and would
       // strand the client on the sport kit).
       maybe('sport', meta.sportRole ? { role: meta.sportRole } : null);
+      // The Realm Racers kit flag, the sibling of `sport` above and gated the
+      // same way. It names the weapon in the racer's SLOT (`w`) plus that
+      // weapon's per-race budget (`c`), read straight off the kit the sim
+      // actually granted, so a mirror never has to guess which ability a racer
+      // is holding. The live remaining count is not here: it rides `achg`, the
+      // shared charge wire.
+      const rallyWeapon = meta.realmRacersMatchId !== null ? meta.known[0] : undefined;
+      maybe(
+        'rrkit',
+        rallyWeapon
+          ? { active: true, w: rallyWeapon.def.id, c: rallyWeapon.charges ?? null }
+          : null,
+      );
     }
     return extra === '' ? json : `${json.slice(0, -1)}${extra}}`;
   }

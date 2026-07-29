@@ -89,6 +89,14 @@ import {
   TOWN_WALL_SHORT_PILLAR_TOP_FRAC,
   TOWN_WALL_TALL_PILLAR_ALONG,
 } from './prop_layout';
+import { realmRacersColliders } from './realm_racers_colliders';
+import {
+  isAtRealmRacersXZ,
+  REALM_RACERS_ORIGIN,
+  realmRacersSlotAtXZ,
+  realmRacersSlotOffset,
+} from './realm_racers_layout';
+import { resolveRealmRacersWade } from './realm_racers_spline';
 import { townPropPlacements } from './town_props';
 import type { WorldContent } from './types';
 import { valeCupColliders } from './vale_cup_layout';
@@ -1664,6 +1672,20 @@ export function resolvePosition(
   mover?: MoverHeight,
   riftToken = 0,
 ): { x: number; z: number } {
+  const rallySlot = realmRacersSlotAtXZ(x, z);
+  if (rallySlot !== null) {
+    // Every practice copy of the circuit is the SAME geometry at its own
+    // origin, so the whole story is: shift into the CANONICAL frame (which is
+    // the one the spline and the collider set are authored in), solve there,
+    // shift back. The public circuit's offset is zero, so its path is unchanged.
+    const off = realmRacersSlotOffset(rallySlot);
+    const o = REALM_RACERS_ORIGIN;
+    const local = resolveAgainst(realmRacersColliders(), x - off.x - o.x, z - off.z - o.z, r);
+    // The garden wall is the only BUILT thing here; the infield is held by the
+    // water itself, which is deep enough to stop a racer past a wading margin.
+    const waded = resolveRealmRacersWade(local.x + o.x, local.z + o.z);
+    return { x: waded.x + off.x, z: waded.z + off.z };
+  }
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);
     const local = resolveAgainst(yumiMazeColliders(), x - o.x, z - o.z, r);
@@ -1794,6 +1816,9 @@ export function supportHeightAt(
   // Region order matters: every instanced band sits past the dungeon
   // threshold, so the specific bands must be ruled out FIRST (the same
   // routing resolvePosition uses).
+  // The rally's garden wall blocks movement but is deliberately not standable:
+  // a racer cannot mantle the perimeter out of the circuit.
+  if (isAtRealmRacersXZ(x, z)) return -Infinity;
   if (isYumiMazePos(x) || isDelvePos(x) || isArenaPos(x)) return -Infinity;
   if (x > DUNGEON_X_THRESHOLD) {
     // Dungeon interiors: the furniture tops (coffin lids, cargo stacks) are
@@ -1834,6 +1859,7 @@ export function slopeGlueHeight(
   let list: Collider[] | undefined;
   let ox = 0;
   let oz = 0;
+  if (isAtRealmRacersXZ(x, z)) return -Infinity;
   if (isYumiMazePos(x) || isDelvePos(x) || isArenaPos(x)) return -Infinity;
   if (x > DUNGEON_X_THRESHOLD) {
     const inst = instanceLocal(x, z);
@@ -1894,6 +1920,7 @@ export function interiorColliderFrame(
   z: number,
 ): { list: Collider[]; ox: number; oz: number } | null {
   if (x <= DUNGEON_X_THRESHOLD) return null;
+  if (isAtRealmRacersXZ(x, z)) return null;
   if (isYumiMazePos(x) || isDelvePos(x) || isArenaPos(x)) return null;
   const { ox, oz, interior, dungeonId } = instanceLocal(x, z);
   return { list: interiorCollidersFor(dungeonId, interior), ox, oz };
@@ -2137,6 +2164,12 @@ function sightBlockedAt(
     }
     return false;
   };
+  const rallyOverlapSlot = realmRacersSlotAtXZ(x, z);
+  if (rallyOverlapSlot !== null) {
+    const off = realmRacersSlotOffset(rallyOverlapSlot);
+    const o = REALM_RACERS_ORIGIN;
+    return overlapsAny(realmRacersColliders(), x - off.x - o.x, z - off.z - o.z, false);
+  }
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);
     return overlapsAny(yumiMazeColliders(), x - o.x, z - o.z, false);

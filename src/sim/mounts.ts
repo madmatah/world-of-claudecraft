@@ -131,8 +131,11 @@ function trainingSummon(meta: PlayerMeta | undefined, key: string): boolean {
  *  lesson to take the unowned training steed back the moment the lesson ends, and by
  *  the auto-attack loop and cast path to dismount on ability use. */
 export function forceDismount(ctx: SimContext, e: Entity): void {
-  if (!e.mountKey && (e.mountCastRemaining ?? 0) <= 0 && e.mountCastKey === '') return;
+  if (!e.mountKey && (e.mountCastRemaining ?? 0) <= 0 && e.mountCastKey === '' && !e.drive) return;
   e.mountKey = '';
+  // Stepping off the machine ends the drive with it: nothing may keep a vehicle
+  // state (and therefore the vehicle movement model) without a mount under it.
+  e.drive = null;
   e.mountCastRemaining = 0;
   e.mountCastKey = '';
   const meta = ctx.players.get(e.id);
@@ -190,6 +193,7 @@ export function summonMountItem(ctx: SimContext, pid: number, key: string): bool
   const meta = ctx.players.get(pid);
   const e = ctx.entities.get(pid);
   if (!meta || !e) return false;
+  if (meta.realmRacersMatchId !== null) return false;
   const def = mountDef(key);
   if (!def) return false;
   // Clicking the reins you are currently riding puts the mount away.
@@ -241,6 +245,7 @@ export function toggleMount(ctx: SimContext, pid: number): boolean {
   const meta = ctx.players.get(pid);
   const e = ctx.entities.get(pid);
   if (!meta || !e) return false;
+  if (meta.realmRacersMatchId !== null) return false;
   // A toggle while a summon/dismount is already channeling is ignored.
   if ((e.mountCastRemaining ?? 0) > 0) return false;
   if (e.mountKey) {

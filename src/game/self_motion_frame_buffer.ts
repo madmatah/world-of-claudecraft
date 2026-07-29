@@ -8,6 +8,7 @@ export interface BufferedSelfMotionFrame {
   jitterMs: number;
   alpha: number;
   frameDt: number;
+  driveImpulse: boolean;
 }
 
 export class SelfMotionFrameBuffer {
@@ -21,6 +22,7 @@ export class SelfMotionFrameBuffer {
     jitterMs: number,
     alpha: number,
     frameDt: number,
+    driveImpulse: boolean,
   ): BufferedSelfMotionFrame {
     if (this.frame === null) {
       this.frame = {
@@ -31,6 +33,7 @@ export class SelfMotionFrameBuffer {
         jitterMs,
         alpha,
         frameDt,
+        driveImpulse,
       };
     } else {
       this.frame.enabled = enabled;
@@ -40,6 +43,7 @@ export class SelfMotionFrameBuffer {
       this.frame.jitterMs = jitterMs;
       this.frame.alpha = alpha;
       this.frame.frameDt = frameDt;
+      this.frame.driveImpulse = driveImpulse;
     }
     return this.frame;
   }

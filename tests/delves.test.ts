@@ -1419,7 +1419,7 @@ describe('Tessa percent-of-health heal + rank cap', () => {
     for (let i = 0; i < 5 && amount < 0; i++) {
       const evs = sim.tick();
       const h = evs.find(
-        (e: { type: string; targetId?: number }) =>
+        (e: { type: string; targetId?: number | null }) =>
           e.type === 'heal' && e.targetId === sim.playerId,
       );
       if (h) amount = (h as { amount: number }).amount;

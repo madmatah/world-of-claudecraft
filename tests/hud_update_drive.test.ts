@@ -935,6 +935,22 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     why: 'the Vale Cup queue window',
   },
   {
+    call: 'this.realmRacersUi.update',
+    band: 'medium',
+    gate: '',
+    surface: 'window',
+    guard: {
+      kind: 'module',
+      module: 'realm_racers.ts',
+      // One signature covers BOTH of the window's screens: the front screen's
+      // world-derived view and the practice setup screen's painter-derived one
+      // resolve to `sig` before the check, so stepping between them repaints
+      // exactly once and an unchanged frame still does nothing.
+      proof: 'if (sig === this.lastWindowSig) return;',
+    },
+    why: 'the Realm Racers window (queue + practice setup) and in-race strip',
+  },
+  {
     call: 'this.cardDuelWindow.toggle',
     band: 'medium',
     gate: 'cardDuelInMatch && !this.cardDuelWasInMatch && !this.cardDuelWindow.isOpen',
@@ -1422,7 +1438,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
     expect(
       bySurface,
       "the surface split moved. A new call needs its surface decided; a CHANGED one means a repaint was reclassified, which is the one edit that can quietly drop a window row's invalidation guard.",
-    ).toEqual({ window: 41, chrome: 72, none: 15 });
+    ).toEqual({ window: 42, chrome: 72, none: 15 });
     const windows = HUD_UPDATE_DRIVES.filter((r) => r.surface === 'window');
     expect(windows.map((r) => r.call)).toContain('this.spellbookWindow.tickOpen');
     expect(windows.map((r) => r.call)).toContain('this.refreshOpenTownFocusIfChanged');
@@ -1434,7 +1450,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
     for (const row of HUD_UPDATE_DRIVES)
       if (row.guard) byKind[row.guard.kind] = (byKind[row.guard.kind] ?? 0) + 1;
     expect(byKind, 'a guard kind changed: say why in the PR, not only in the table').toEqual({
-      module: 22,
+      module: 23,
       hud: 5,
       callsite: 10,
       none: 4,
@@ -1475,6 +1491,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
         'deeds_window.ts: if (sig === this.lastSig) return;',
         'dungeon_finder_proposal_popup.ts: if (view.sig !== this.lastSig) {',
         'dungeon_finder_window.ts: if (sig === this.lastSig) {',
+        'realm_racers.ts: if (sig === this.lastWindowSig) return;',
         'hud.ts: if (craftingReagentSig(this.sim.inventory, this.sim.player.name) === this.lastCraftingReagentSig) return;',
         'hud.ts: if (sig !== this.lastLootSettingsSig) {',
         'hud.ts: if (sig === this.lastProfessionSurfaceSig) return;',
@@ -1527,6 +1544,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
       'meters.ts',
       'mount_race_controls.ts',
       'mount_race_strip.ts',
+      'realm_racers.ts',
       'vale_cup_betting.ts',
       'vale_cup_briefing.ts',
     ]);

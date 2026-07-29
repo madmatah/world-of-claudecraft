@@ -5657,3 +5657,56 @@
     box-sizing: border-box;
   }
 }
+
+@layer hud-mobile {
+  @media (pointer: coarse) {
+    body.mobile-touch #realm-racers-window {
+      inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+        max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+      width: auto;
+      max-width: none;
+      max-height: none;
+    }
+    body.mobile-touch #realm-racers-window .btn,
+    body.mobile-touch #realm-racers-window > .panel-title > .x-btn {
+      min-width: 40px;
+      min-height: 40px;
+    }
+    /* Three rival cards across a phone width squeeze their hint copy to one
+       word per line, so they stack instead; the control rows keep their keycaps
+       beside the copy, which fits because touch drops the key column. */
+    body.mobile-touch #realm-racers-window .rally-tiers {
+      grid-template-columns: 1fr;
+    }
+    body.mobile-touch #realm-racers-window .rally-setup-actions {
+      flex-direction: column-reverse;
+    }
+    body.mobile-touch #realm-racers-window .rally-hero {
+      grid-template-columns: 1fr;
+      justify-items: start;
+      gap: 12px;
+      padding: 14px 12px;
+    }
+    body.mobile-touch #realm-racers-window .rally-pitch {
+      font-size: 15px;
+    }
+    /* Wider than desktop: the stats row now carries the forfeit button too, and
+       the strip must not clip it on a phone. */
+    body.mobile-touch #realm-racers-hud {
+      top: max(48px, calc(env(safe-area-inset-top) + 34px));
+      width: min(470px, calc(100vw - 108px));
+    }
+    body.mobile-touch .rallyhud-stats > span {
+      min-width: 76px;
+      padding-inline: 6px;
+    }
+    body.mobile-touch .rallyhud-phase {
+      font-size: 17px;
+    }
+    /* The strip sits top-center and the mobile action bar owns the bottom edge,
+       so the forfeit control only has to clear the tap-target floor here. */
+    body.mobile-touch .rallyhud-forfeit {
+      min-height: 40px;
+    }
+  }
+}

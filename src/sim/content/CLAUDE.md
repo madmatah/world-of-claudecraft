@@ -57,7 +57,10 @@ there first if you need one.
   buy path and the vendor view call). Mechanics live in `src/sim/professions/`,
   never here.
 - **Events + world systems:** `augments.ts` (2v2 Fiesta) and `skins.ts` (cosmetic
-  skin events), `vale_cup.ts`, `yumi.ts`, `item_sets.ts` (set bonuses),
+  skin events), `vale_cup.ts`, `yumi.ts`, `vehicles.ts` (`VEHICLE_PROFILES`: every
+  handling number the driving model reads, one record per drivable machine; the
+  model itself is `src/sim/vehicle_motion.ts` and must never hold a number of its
+  own), `item_sets.ts` (set bonuses),
   `graveyards.ts` (death loop), `letters.ts` + `mailboxes.ts` (mail), `tunnels.ts`
   (voxel volumes), `warlock_pets.ts`, `ground_pickup_lines.ts` (pickup flavor).
 - **`deeds.ts`: the Book of Deeds catalog:** `DEEDS` (`DeedDef` records; append new

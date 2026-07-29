@@ -94,7 +94,7 @@ describe('insane terrain fragment shader', () => {
     expect(fragmentShader).toContain('if ( wocHasSnow )');
     expect(fragmentShader).toContain(
       `if ( wocHasGrass || wocHasRock )
-          macro2 = texture2D(uMacro, vWPos.xz * 0.0045 + 0.37).r;`,
+          macro2 = texture2D(uMacro, vSurf * 0.0045 + 0.37).r;`,
     );
     expect(fragmentShader).toContain(
       `if ( wocHasDirt || wocHasRock )

@@ -11,19 +11,19 @@ import {
 } from '../sim/wildheart_field';
 import { createGrassTuftMaterial, JUNGLE_GRASS_TINT } from './foliage';
 import { GFX } from './gfx';
+import { ROUGH_GRASS, terrainSplatTexture } from './ground_material';
 import { markSharedGeometry, markSharedMaterial } from './shared_resource';
-import { ROUGH_GRASS, terrainSplatTexture } from './terrain';
-import {
-  createWaterSurfaceMaterial,
-  hasWaterShaderAssets,
-  SHALLOW_COLOR,
-  zeroWaveUniforms,
-} from './water';
 // The water shader recovers shoreline distance as depth / slope, so the basin
 // bake samples with the same contract the overworld planes do (against
 // wildheartFieldHeight instead of terrainHeight): import those constants rather
 // than mirroring them, so a water_core retune cannot silently desync the bake.
 import { MIN_SHORE_SLOPE, SHORE_SLOPE_SAMPLE_HALF_WIDTH } from './water_core';
+import {
+  buildWaterSurfaceMaterial,
+  hasWaterShaderAssets,
+  SHALLOW_COLOR,
+  zeroWaveUniforms,
+} from './water_surface_material';
 
 const GROUND_WIDTH = 184;
 const GROUND_DEPTH = 280;
@@ -279,7 +279,7 @@ function basinWaterMaterial(): THREE.Material {
     // heightfield with no carved apron, so the waterline must come from the
     // terrain contour, never the mesh rectangle.
     waterMaterial = markSharedMaterial(
-      createWaterSurfaceMaterial(zeroWaveUniforms(), { shoreEdgeFade: true }),
+      buildWaterSurfaceMaterial({ wave: zeroWaveUniforms(), shoreEdgeFade: true }),
     );
     return waterMaterial;
   }

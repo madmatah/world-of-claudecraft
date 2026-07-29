@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { ABILITIES } from '../src/sim/data';
+import {
+  resolveShellAim,
+  SHELL_AIM_CONE_RAD,
+  SHELL_MAX_RANGE,
+} from '../src/sim/realm_racers_shell';
 import type { AbilityEffect, Entity } from '../src/sim/types';
 import {
   abilityAoeRadius,
@@ -12,8 +18,8 @@ import {
   shouldUseGroundAim,
 } from '../src/ui/hud/action_bar/ground_aim';
 
-function casterAt(x: number, z: number): Pick<Entity, 'pos'> {
-  return { pos: { x, y: 0, z } };
+function casterAt(x: number, z: number, facing = 0): Pick<Entity, 'pos' | 'facing'> {
+  return { pos: { x, y: 0, z }, facing };
 }
 
 describe('ground_aim', () => {
@@ -26,6 +32,34 @@ describe('ground_aim', () => {
     expect(shouldUseGroundAim('meteor', false, true)).toBe(true);
     expect(shouldUseGroundAim('meteor', false, false)).toBe(false);
     expect(shouldUseGroundAim('flamestrike', false, true)).toBe(true);
+  });
+
+  it('always aims a Realm Racers weapon, whatever the host or the preference', () => {
+    // Placing the shell IS the weapon: the reticle-off fallback (your target's
+    // feet, else your own) has no meaning for it, and on the circuit there is no
+    // selected target to fall back to.
+    for (const mobileTouch of [false, true]) {
+      for (const preference of [false, true]) {
+        expect(shouldUseGroundAim(REALM_RACERS_ABILITY_ID, mobileTouch, preference)).toBe(true);
+      }
+    }
+  });
+
+  it('holds a Realm Racers aim inside its forward cone, mirroring the sim', () => {
+    // Facing +z, aiming 90 degrees out to the side: the barrel is bolted to the
+    // chassis, so the circle slides back onto the cone edge instead of going
+    // where the cursor asked. The clamp is the sim's own function, so what the
+    // player commits to is exactly what the server will resolve.
+    const point = { x: 30, z: 0 };
+    const aim = clampAimToRange(casterAt(0, 0), point, SHELL_MAX_RANGE, REALM_RACERS_ABILITY_ID);
+    const mirror = resolveShellAim({ x: 0, z: 0, facing: 0 }, point);
+    expect(aim.clamped).toBe(true);
+    expect(aim.point).toEqual({ x: mirror.x, z: mirror.z });
+    expect(Math.atan2(aim.point.x, aim.point.z)).toBeCloseTo(SHELL_AIM_CONE_RAD, 9);
+    // The same request under any OTHER ability id keeps the plain range clamp,
+    // so the cone is the rally weapon's rule and nobody else's.
+    const plain = clampAimToRange(casterAt(0, 0), point, SHELL_MAX_RANGE, 'flamestrike');
+    expect(plain.point).toEqual(point);
   });
 
   it('passes through points inside range', () => {

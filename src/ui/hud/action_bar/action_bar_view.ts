@@ -24,6 +24,7 @@
 // the offline Sim and the online ClientWorld mirror expose (player.cooldowns is a
 // Map, inventory is InvSlot[]); the core never reaches for a Sim-only field.
 
+import { areAbilityControlsLocked } from '../../../sim/ability_budget';
 import { freeCostAuraActive } from '../../../sim/combat/empower_next';
 import { frostProcGlowActive } from '../../../sim/combat/frost_mage';
 import {
@@ -167,8 +168,19 @@ export interface ActionBarPlayerInput {
    *  yet; recharge/rechargeLength are 0 when the pool is full (and on an online
    *  mirror that has not yet received the `achr` timer wire). */
   abilityCharges?: {
-    [id: string]: { charges: number; recharge?: number; rechargeLength?: number } | undefined;
+    [id: string]:
+      | {
+          charges: number;
+          recharge?: number;
+          rechargeLength?: number;
+          /** A FIXED activity budget rather than the refilling recharge model. */
+          fixed?: boolean;
+        }
+      | undefined;
   };
+  /** The machine under a seated pilot, when there is one. Only `controlsLocked`
+   *  is read: an activity holding the controls greys every slot. */
+  drive?: { controlsLocked: boolean } | null;
   /** The player's worn auras: the free-cost proc read (Battle Trance /
    *  next_cast_free) that drives the slot glow and usable state, the
    *  kill-window gate, and the next-cast empowerment read. Both worlds expose
@@ -500,6 +512,10 @@ export function createActionBarView(
           (!(player.resource < ability.cost) || freeByProc) &&
           windowOpen &&
           !(maxCharges > 1 && chargesLeft <= 0) &&
+          // An activity holding the controls (a racer on the grid before the
+          // flag) greys every slot rather than sweeping it: nothing is on
+          // cooldown, the pilot simply does not have the machine yet.
+          !areAbilityControlsLocked(player) &&
           (!def.requiresStealth || world.stealthed);
         slot.outOfRange =
           def.requiresTarget &&

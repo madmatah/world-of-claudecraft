@@ -8,9 +8,12 @@ import {
   SelfMotionPredictor,
   updateSelfRenderFallback,
 } from '../src/render/self_motion';
+import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
 import { type Entity, type MoveInput, RUN_SPEED } from '../src/sim/types';
-import { terrainHeight } from '../src/sim/world';
+import { resolveVehicleContact } from '../src/sim/vehicle_contact';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
+import { groundHeight, terrainHeight } from '../src/sim/world';
 
 // Policy tests for the online display-only self extrapolator, driven against a
 // REAL lagging authority: a live Sim plays the server (inputs arrive lagMs
@@ -67,6 +70,9 @@ class Lab {
   private localInput = mi();
   private inputLog: { atMs: number; input: MoveInput }[] = [];
   enabled = true;
+  // The authority announced a momentum change (a bump) for the next frame.
+  // Consumed once, like the real event drain in main.ts.
+  driveImpulse = false;
   // Scripted broadcast stall: while positive, tick boundaries still advance
   // the server (it never stops simulating) but the mirror and lastSnapMs are
   // suppressed, so the client renders against a frozen snapshot exactly like
@@ -77,16 +83,34 @@ class Lab {
   constructor(
     readonly lagMs: number,
     readonly frameMs = FRAME_MS,
-    opts: { start?: { x: number; z: number }; facing?: number } = {},
+    opts: { start?: { x: number; z: number }; facing?: number; drive?: boolean } = {},
   ) {
     this.srv = new Sim({ seed: SEED, playerClass: 'warrior', autoEquip: true });
     this.srv.setPlayerLevel(60);
     const start = opts.start ?? { x: 0, z: -80 };
     teleport(this.srv, start.x, start.z);
+    if (opts.drive) {
+      // Seat a pilot: the flat instance floor, the mount mirror, and the drive
+      // state the wire carries (server/game.ts `drv`).
+      this.srv.player.pos.y = groundHeight(start.x, start.z, this.srv.cfg.seed);
+      this.srv.player.prevPos = { ...this.srv.player.pos };
+      this.srv.player.fallStartY = this.srv.player.pos.y;
+      this.srv.player.mountKey = 'tank';
+      this.srv.player.drive = createVehicleDrive('tank');
+    }
     this.facing = opts.facing ?? 0;
     this.srv.player.facing = this.facing; // run straight north (+z) by default
     const p = this.srv.player;
-    this.self = { ...p, pos: { ...p.pos }, prevPos: { ...p.prevPos } };
+    this.self = {
+      ...p,
+      pos: { ...p.pos },
+      prevPos: { ...p.prevPos },
+      // Mirror the drive state exactly as a snapshot does, from the very first
+      // frame: the spread would otherwise hand the predictor the SERVER's own
+      // object, which is both unlike the real client and unfrozen, so the
+      // write-back guard below would never be exercised.
+      drive: p.drive ? Object.freeze({ ...p.drive }) : null,
+    };
     this.inputLog.push({ atMs: 0, input: mi() });
   }
 
@@ -125,6 +149,11 @@ class Lab {
       this.self.pos = { ...this.srv.player.pos };
       this.self.dead = this.srv.player.dead;
       this.self.ghost = this.srv.player.ghost;
+      // applyWire rebuilds the drive state into a fresh object every snapshot.
+      // FROZEN on purpose: the predictor may never write into mirrored
+      // ClientWorld state (its third safety property), so a write-back that a
+      // value comparison could only catch between snapshots throws here instead.
+      this.self.drive = this.srv.player.drive ? Object.freeze({ ...this.srv.player.drive }) : null;
       this.lastSnapMs = this.nowMs;
       delivered = true;
     }
@@ -137,7 +166,9 @@ class Lab {
       jitterMs: 0,
       alpha,
       frameDt: this.frameMs / 1000,
+      driveImpulse: this.driveImpulse,
     };
+    this.driveImpulse = false;
     const out = this.predictor.step(this.self, frame);
     const a = {
       x: this.self.prevPos.x + (this.self.pos.x - this.self.prevPos.x) * alpha,
@@ -670,5 +701,142 @@ describe('SelfMotionPredictor', () => {
       if (r.pose) maxRise = Math.max(maxRise, r.pose.y - groundY);
     }
     expect(maxRise).toBeGreaterThan(0.3);
+  });
+  it('predicts a driving machine: its own drive state, its own steered heading', () => {
+    const start = realmRacersStarts()[0];
+    const lab = new Lab(150, FRAME_MS, {
+      start: { x: start.x, z: start.z },
+      facing: start.facing,
+      drive: true,
+    });
+    lab.setInput(mi({ forward: true, turnLeft: true }));
+    for (let i = 0; i < 120; i++) lab.frame(); // 2 s of throttle into a left-hander
+
+    // The predictor is driving, and it integrated its OWN copy of the state.
+    expect(lab.predictor.driving).toBe(true);
+    const predicted = (lab.predictor as unknown as { actor: Entity }).actor.drive;
+    expect(predicted).not.toBe(lab.self.drive);
+    expect(predicted?.speed).toBeGreaterThan(5);
+
+    // Writing back into the mirrored ClientWorld state is forbidden (the
+    // predictor's third safety property). The mirror hands out FROZEN drive
+    // states, so the 120 frames above would already have thrown on a shared
+    // object; the actor's own object also survives them all, rather than being
+    // re-seeded from a wire value an echo old.
+    expect(Object.isFrozen(lab.self.drive)).toBe(true);
+    for (let i = 0; i < 30; i++) lab.frame();
+    expect((lab.predictor as unknown as { actor: Entity }).actor.drive).toBe(predicted);
+
+    // The heading is STEERED, not assigned from the display facing: it moved
+    // off the grid heading, in the direction the pilot steered (left, which
+    // increases facing), and it leads the echo-delayed authoritative one.
+    expect(lab.predictor.facing).not.toBe(start.facing);
+    expect(lab.predictor.facing).toBeGreaterThan(start.facing);
+    expect(lab.predictor.facing).toBeGreaterThan(lab.self.facing);
+
+    // ...and the display is not being permanently clamped: a leash budget
+    // sized off RUN_SPEED (not the machine's top speed) would ride the
+    // boundary every frame of a race and read as rubber-banding.
+    const result = lab.frame();
+    const lead = Math.hypot(
+      (result.pose?.x ?? 0) - result.ac.x,
+      (result.pose?.z ?? 0) - result.ac.z,
+    );
+    expect(lead).toBeGreaterThan(lab.budget()); // a machine outruns a runner's budget
+    expect(lead).toBeLessThan((26 * SELF_MOTION_CAP_MAX_MS) / 1000); // but stays leashed
+  });
+
+  it('adopts a bump it could not predict instead of driving against it', () => {
+    // A rival shoves the local machine sideways. The predictor has no idea the
+    // other racer exists, so the shove arrives as an authoritative divergence:
+    // the position correction glides it in, but the momentum has to be adopted
+    // or the scratch machine keeps driving the pre-bump line under it.
+    const race = (announce: boolean) => {
+      const start = realmRacersStarts()[0];
+      const lab = new Lab(150, FRAME_MS, {
+        start: { x: start.x, z: start.z },
+        facing: start.facing,
+        drive: true,
+      });
+      lab.setInput(mi({ forward: true }));
+      for (let i = 0; i < 60; i++) lab.frame(); // 1 s down the start straight
+      const server = lab.srv.player;
+      const drive = server.drive;
+      if (!drive) throw new Error('missing drive');
+      const rival = createVehicleDrive('tank');
+      // Slower AND leaning in: the pace difference is what scrapes, so the
+      // contact both shoves the machine sideways and spins it.
+      rival.speed = drive.speed - 14;
+      rival.slip = -9;
+      const right = { x: -Math.cos(server.facing), z: Math.sin(server.facing) };
+      resolveVehicleContact(
+        {
+          x: server.pos.x,
+          z: server.pos.z,
+          facing: server.facing,
+          drive,
+          radius: 1.7,
+          mass: 1,
+        },
+        {
+          x: server.pos.x + right.x * 2.6,
+          z: server.pos.z + right.z * 2.6,
+          facing: server.facing,
+          drive: rival,
+          radius: 1.7,
+          mass: 1,
+        },
+      );
+      expect(Math.abs(drive.slip)).toBeGreaterThan(4); // the shove really landed
+      expect(Math.abs(drive.spin)).toBeGreaterThan(0.5); // and it spun the machine
+      // The event frame reaches the client BEFORE the snapshot carrying its
+      // result, exactly as the server sends them.
+      lab.driveImpulse = announce;
+      // Settle for a second, then measure over a window rather than on one
+      // frame: the display samples at 60 Hz against a 20 Hz authority, so a
+      // single frame's reading carries that phase with it.
+      const frames = 60;
+      const window = 20;
+      // The SPIN is measured over the half second right after the contact,
+      // where it lives: it decays by design, so a tail reading would compare
+      // two numbers that are both nearly zero and prove nothing.
+      const spinFrames = 30;
+      let gap = 0;
+      let spinGap = 0;
+      let lead = 0;
+      for (let i = 0; i < frames; i++) {
+        const result = lab.frame();
+        const predicted = (lab.predictor as unknown as { actor: Entity }).actor.drive;
+        const truth = lab.srv.player.drive;
+        if (i < spinFrames) {
+          spinGap += Math.abs((predicted?.spin ?? 0) - (truth?.spin ?? 0)) / spinFrames;
+        }
+        if (i < frames - window) continue;
+        gap += Math.abs((predicted?.slip ?? 0) - (truth?.slip ?? 0)) / window;
+        lead +=
+          Math.hypot((result.pose?.x ?? 0) - result.ac.x, (result.pose?.z ?? 0) - result.ac.z) /
+          window;
+      }
+      return { gap, spinGap, lead };
+    };
+
+    const adopted = race(true);
+    const ignored = race(false);
+    // Adopted: a second later the predicted machine carries the authority's
+    // lateral velocity, so the display and the server are driving the same line.
+    expect(adopted.gap).toBeLessThan(0.45);
+    // Ignored: it is still sliding a different way, which is what the position
+    // correction would have to fight for the rest of the corner.
+    expect(ignored.gap).toBeGreaterThan(4 * adopted.gap);
+    expect(ignored.gap).toBeGreaterThan(0.8);
+    // The rotation comes with it. A predicted machine left at zero spin keeps
+    // deriving a velocity off a body that never turned, which is the same
+    // divergence one axis over.
+    expect(adopted.spinGap).toBeLessThan(0.55);
+    expect(ignored.spinGap).toBeGreaterThan(3 * adopted.spinGap);
+    expect(ignored.spinGap).toBeGreaterThan(0.5);
+    // Either way the pose stays bounded: the resync settles the prediction, it
+    // never lets it run away from (or oscillate around) the authority.
+    expect(adopted.lead).toBeLessThan((26 * SELF_MOTION_CAP_MAX_MS) / 1000);
   });
 });

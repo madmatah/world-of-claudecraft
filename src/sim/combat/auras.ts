@@ -162,7 +162,11 @@ export function updateTimers(p: Entity): void {
   }
   if (p.abilityCharges) {
     for (const [abilityId, state] of Object.entries(p.abilityCharges)) {
-      if (state.charges >= state.maxCharges) continue;
+      // A fixed budget never comes back: it is N uses granted by an activity,
+      // not a pool on a timer. Without this arm its zero recharge length reads
+      // as "already due" and the loop below hands every spent use straight back
+      // on the next tick.
+      if (state.fixed || state.charges >= state.maxCharges) continue;
       // Legacy sequential state (an old JSONB save without per-charge timers):
       // convert once, staggering the missing charges the way the old model
       // would have returned them, so a mid-recharge relog keeps its schedule.

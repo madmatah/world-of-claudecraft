@@ -33,6 +33,8 @@ import {
   zoneAt,
 } from '../sim/data';
 import type { DelveModuleId } from '../sim/delve_layout';
+import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
+import { SHELL_BLAST_RADIUS } from '../sim/realm_racers_shell';
 import { generateRiftFloor, riftLiftAt } from '../sim/rift/rift_gen';
 import type { BiomeId, ZoneDef } from '../sim/types';
 import { ALL_CLASSES, type Entity, type SimEvent } from '../sim/types';
@@ -297,6 +299,8 @@ import { buildGroundQuestObject } from './quest_objects';
 import { RaceLine } from './race_line';
 import { isOwnedPetHostile } from './reaction';
 import { buildRealmFlora, type RealmFloraView } from './realm_flora';
+import { RealmRacersShellVisuals } from './realm_racers_shell';
+import { buildRealmRacersTrack, type RealmRacersTrackView } from './realm_racers_track';
 import {
   RenderBudgetGovernor,
   type RenderBudgetSample,
@@ -1661,6 +1665,8 @@ export class Renderer {
   // per bout, camera-centred, only shown while the local player is practicing).
   private valeCupSky = new ValeCupPracticeSky();
   private valeCupTeamRings: ValeCupTeamRingsView;
+  private realmRacersTrack: RealmRacersTrackView;
+  private realmRacersShells = new RealmRacersShellVisuals();
   private vcupFireworks: {
     at: number;
     x: number;
@@ -2254,6 +2260,11 @@ export class Renderer {
     this.valeCupTeamRings = buildValeCupTeamRings();
     setRenderCategory(this.valeCupTeamRings.group, 'ui3d');
     this.scene.add(this.valeCupTeamRings.group);
+    this.realmRacersTrack = buildRealmRacersTrack();
+    setRenderCategory(this.realmRacersTrack.group, 'props');
+    this.scene.add(this.realmRacersTrack.group);
+    setRenderCategory(this.realmRacersShells.group, 'vfx');
+    this.scene.add(this.realmRacersShells.group);
     this.propsView = props;
 
     // Eastbrook's replacement town is a distinct, stable scene subtree. Its
@@ -4439,7 +4450,10 @@ export class Renderer {
     }
     this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
     // The dome rides the camera, so it also serves Wildheart's open-air field.
-    this.sky.visible = this.fogState === 'outdoor' || this.fogState === 'wildheartField';
+    this.sky.visible =
+      this.fogState === 'outdoor' ||
+      this.fogState === 'wildheartField' ||
+      this.fogState === 'rally';
     if (this.sky.visible) {
       this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
       if (!this.lowGfx) {
@@ -6384,6 +6398,62 @@ export class Renderer {
         });
         if (ev.entityId === this.sim.playerId) this.addShake(0.5);
         break;
+      case 'realmRacersShellFired':
+        // Muzzle flash and smoke at the barrel, then the arc and the ground
+        // marker the shot is dodged off. The marker's own richness never scales:
+        // only this burst does, and it is the pooled cloud's business.
+        this.realmRacersShells.fire(
+          ev.x,
+          ev.z,
+          ev.targetX,
+          ev.targetZ,
+          ev.flightSeconds,
+          this.groundSample(ev.targetX, ev.targetZ),
+        );
+        this.vfx.burst(new THREE.Vector3(ev.x, 1.1, ev.z), 'arcane', 14, 0.65);
+        break;
+      case 'realmRacersShellHit': {
+        // The crater fires whether or not anyone was caught: a miss that lands
+        // silently is most of what made the first version read as nothing
+        // happening. Flash and shockwave are the shell module's own pooled
+        // meshes; the ring and the dust are the shared pools.
+        this.realmRacersShells.impact(ev.x, ev.z, this.groundSample(ev.x, ev.z));
+        this.spawnAoeRing(ev.x, ev.z, SHELL_BLAST_RADIUS, 'physical');
+        this.vfx.burst(
+          new THREE.Vector3(ev.x, 1.1, ev.z),
+          'arcane',
+          20 + Math.round(24 * ev.impact),
+          0.9 + 0.6 * ev.impact,
+        );
+        this.vfx.groundPuff(
+          new THREE.Vector3(ev.x, this.groundSample(ev.x, ev.z), ev.z),
+          1.1 + ev.impact,
+          0xbfae92,
+        );
+        if (ev.targetId !== null) this.triggerHit(ev.targetId);
+        if (ev.targetId === this.sim.playerId) {
+          this.addShake(0.2 + 0.35 * ev.impact);
+          this.punchFov(-(1.5 + 3 * ev.impact));
+        }
+        break;
+      }
+      case 'realmRacersBump': {
+        // Sparks and a flash off the contact point, scaled by how hard it was.
+        // Deliberately minimal: the full treatment (sound, tyre marks, the
+        // camera's own reaction) rides the same event in a later pass.
+        const force = Math.min(1, ev.impact / 24);
+        this.vfx.burst(
+          new THREE.Vector3(ev.x, 0.9, ev.z),
+          'physical',
+          10 + 18 * force,
+          0.5 + force,
+        );
+        this.spawnAoeRing(ev.x, ev.z, 1.6 + 1.4 * force, 'physical');
+        if (ev.aId === this.sim.playerId || ev.bId === this.sim.playerId) {
+          this.addShake(0.12 + 0.28 * force);
+        }
+        break;
+      }
       case 'vcupGoal': {
         // Team-colored firework volley above the goal the ball went into (the
         // event's world anchor). Away palette when both sides fly one banner.
@@ -7344,6 +7414,7 @@ export class Renderer {
     | 'underwater'
     | 'rift'
     | 'practice'
+    | 'rally'
     | 'wildheartField'
     | 'lastkeep' = 'outdoor';
 
@@ -7616,6 +7687,7 @@ export class Renderer {
   private updateAmbience(px: number, camY: number, dt: number): void {
     const inside = px > DUNGEON_X_THRESHOLD;
     const pz = this.sim.player.pos.z;
+    const inRally = isAtRealmRacersXZ(px, pz);
     // Private Vale Cup practice instance: the pitch sits far out in an instance
     // band (which would otherwise read as a delve), so give it its own futuristic
     // skybox + matching fog instead of the delve murk. Detected by the match's
@@ -7745,7 +7817,7 @@ export class Renderer {
           }
         }
       }
-    } else if (inside) {
+    } else if (inside && !inRally) {
       void ensureDungeonAssets().catch(() => undefined);
       // build the interior copy the player is standing in
       for (const dungeon of DUNGEON_LIST) {
@@ -7774,23 +7846,25 @@ export class Renderer {
     const inLastKeep = interior === 'lastkeep';
     const desired = inPractice
       ? 'practice'
-      : inDelve
-        ? 'delve'
-        : inYumiMaze
-          ? 'yumiMaze'
-          : inTemple
-            ? 'temple'
-            : inNythraxis
-              ? 'nythraxis'
-              : inWildheartField
-                ? 'wildheartField'
-                : inLastKeep
-                  ? 'lastkeep'
-                  : inside
-                    ? 'dungeon'
-                    : camY < waterLevelAt(px, pz) - 0.05
-                      ? 'underwater'
-                      : 'outdoor';
+      : inRally
+        ? 'rally'
+        : inDelve
+          ? 'delve'
+          : inYumiMaze
+            ? 'yumiMaze'
+            : inTemple
+              ? 'temple'
+              : inNythraxis
+                ? 'nythraxis'
+                : inWildheartField
+                  ? 'wildheartField'
+                  : inLastKeep
+                    ? 'lastkeep'
+                    : inside
+                      ? 'dungeon'
+                      : camY < waterLevelAt(px, pz) - 0.05
+                        ? 'underwater'
+                        : 'outdoor';
     const fog = this.scene.fog as THREE.Fog;
     // Procedural rift: dynamic fog from the generated floor style, re-applied when
     // the floor changes (descent keeps fogState='rift' but swaps the palette).
@@ -7872,6 +7946,10 @@ export class Renderer {
         fog.color.setHex(this.valeCupSky.fogFor(this.practiceSkyVariant()));
         fog.near = 60;
         fog.far = 420;
+      } else if (desired === 'rally') {
+        fog.color.setHex(0xa7c995);
+        fog.near = 85;
+        fog.far = 430;
       } else if (desired === 'underwater') {
         fog.color.setHex(0x17506e);
         fog.near = 2;
@@ -8109,7 +8187,7 @@ export class Renderer {
     // The basin keeps directional daylight and the sky dome, but the camera-
     // riding sun and moon sprites can clip against its high rim as oversized
     // wedges. Reserve screen-space celestial overlays for the overworld.
-    const outdoor = this.fogState === 'outdoor';
+    const outdoor = this.fogState === 'outdoor' || this.fogState === 'rally';
     for (const sp of this.sunSprites) {
       sp.position.copy(this.camera.position).addScaledVector(this.sunDir, 760);
       sp.visible = outdoor && this.sunUp > 0.02;
@@ -8550,7 +8628,16 @@ export class Renderer {
       const z = isSelf ? selfPos.z : e.prevPos.z + (e.pos.z - e.prevPos.z) * ea;
       v.group.position.set(x, y, z);
       let facing = e.prevFacing + shortestAngle(e.prevFacing, e.facing) * facingAlpha(ea);
-      if (id === p.id && renderFacingOverride !== null) {
+      if (id === p.id && this.selfMotionActive && this.selfMotionPredictor?.driving) {
+        // Driving, the heading is not camera-driven input: it is steered, and
+        // the predictor integrates it with the same kernel the server runs. Its
+        // value is the zero-latency truth, so the model reads it directly
+        // instead of the interpolated mirror (a full echo behind on every
+        // corner) or the camera override (which is null while driving).
+        facing = this.selfMotionPredictor.facing;
+        this.selfFacingOverride = null;
+        this.selfFacingLastTarget = null;
+      } else if (id === p.id && renderFacingOverride !== null) {
         // Follow the camera-driven heading, easing in the one-time engage gap
         // (up to 180deg when engaging after an orbit) under the rate limiter
         // while applying the camera's ongoing rotation 1:1. Seed the model and
@@ -9806,6 +9893,8 @@ export class Renderer {
     this.impactSite.update(p.pos.x, p.pos.z, dt);
     // null-safe cupInfo read: the offline Sim may predate the Vale Cup module
     this.valeCupStadium.update(p.pos.x, p.pos.z, dt, this.sim.cupInfo ?? null);
+    this.realmRacersTrack.update(p.pos.x, p.pos.z, this.time);
+    this.realmRacersShells.update(dt);
     // Team rings ride the live entity views (positions are fresh: the entity loop
     // ran above). Reads cupInfo.match for a participant, else cupInfo.spectate (a
     // nearby walk-up at the Sowfield): the sim only fills spectate near the field,
@@ -9831,7 +9920,10 @@ export class Renderer {
     // sky dome + sun disc ride along with the camera
     this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
     // The dome rides the camera, so it also serves Wildheart's open-air field.
-    this.sky.visible = this.fogState === 'outdoor' || this.fogState === 'wildheartField';
+    this.sky.visible =
+      this.fogState === 'outdoor' ||
+      this.fogState === 'wildheartField' ||
+      this.fogState === 'rally';
     if (this.sky.visible) {
       this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
       if (!this.lowGfx) {
@@ -10088,7 +10180,7 @@ export class Renderer {
     // Wildheart is open-air, but the long screen-space shafts read as giant
     // triangles against its enclosed caldera rim. The basin keeps the sun,
     // sky, and outdoor grade while reserving these shafts for the overworld.
-    const outdoor = this.fogState === 'outdoor';
+    const outdoor = this.fogState === 'outdoor' || this.fogState === 'rally';
     // azimuth-only alignment, the chase cam always pitches down while the
     // sun sits high, so a full 3D dot product would never light the shafts
     this.camera.getWorldDirection(this.tmpV);

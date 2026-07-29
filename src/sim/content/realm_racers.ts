@@ -1,0 +1,131 @@
+// The Realm Racers class-agnostic one-button kit. It is swapped in only for
+// seated racers and resolved identically by Sim and ClientWorld.
+//
+// Also the rally's data-as-code roster of house pilots: the names and cosmetic
+// classes the practice/backfill bots are drawn from. Data only; the driving
+// brain is `src/sim/realm_racers_driver.ts` and the lifecycle around it is
+// `src/sim/social/realm_racers_bots.ts`.
+
+import { SHELL_BLAST_RADIUS, SHELL_MAX_RANGE } from '../realm_racers_shell';
+import type { AbilityDef, PlayerClass } from '../types';
+import type { KnownAbility } from './classes';
+
+export const REALM_RACERS_ABILITY_ID = 'rally_arc_shell';
+
+export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
+  [REALM_RACERS_ABILITY_ID]: {
+    id: REALM_RACERS_ABILITY_ID,
+    name: 'Arc Shell',
+    class: 'warrior',
+    learnLevel: 1,
+    cost: 0,
+    castTime: 0,
+    cooldown: 4.5,
+    // The player picks the spot on the ground, so the ability is a
+    // `targetMode: 'position'` cast like every other ground-targeted spell and
+    // gets the shared reticle for free. Its range is the outer edge of the
+    // aiming band; the forward CONE (and the minimum range) are the shell's own
+    // rules, re-clamped authoritatively in `src/sim/realm_racers_shell.ts`.
+    range: SHELL_MAX_RANGE,
+    targetMode: 'position',
+    school: 'physical',
+    requiresTarget: false,
+    offGcd: true,
+    usableWhileMounted: true,
+    // The radius is on the effect so the aiming circle, the marker during the
+    // flight and the blast are all one number a player can trust.
+    effects: [{ type: 'realmRacersShell', radius: SHELL_BLAST_RADIUS }],
+    description:
+      'Lob a shell onto the track ahead. Aim it yourself within a wide arc of your nose: lead a rival and they drive into it, follow them and they are gone. Where it will land is circled on the ground for the whole flight, and a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race.',
+  },
+};
+
+/**
+ * Per-weapon rally metadata, keyed by the same ability id as the table above.
+ * It is deliberately separate from the `AbilityDef`, which is the shared combat
+ * shape every class ability wears: how many uses a race grants is a fact about
+ * the RALLY, not about the spell.
+ */
+export interface RealmRacersWeapon {
+  /** Uses per race, never refilled. Null would be unlimited fire. */
+  charges: number | null;
+}
+
+/**
+ * Unlimited fire on a 4.5 s cooldown is about sixteen shots over a race, which
+ * is spam and asks the player for no decision at all. A budget makes every shot
+ * a choice: spend it on the rival beside you now, or save it for the hairpin on
+ * the last lap.
+ */
+export const ARC_SHELL_CHARGES = 3;
+
+export const REALM_RACERS_WEAPONS: Record<string, RealmRacersWeapon> = {
+  [REALM_RACERS_ABILITY_ID]: { charges: ARC_SHELL_CHARGES },
+};
+
+/** The budget a weapon starts a race with. An id with no rally record fires
+ *  without one rather than not at all. */
+export function realmRacersWeaponCharges(abilityId: string): number | null {
+  return REALM_RACERS_WEAPONS[abilityId]?.charges ?? null;
+}
+
+/**
+ * The Evergarden Racing Society's house pilot, the name a practice or backfill
+ * bot races under. A proper noun: it splices verbatim on the client exactly
+ * like a player name, and is never localized.
+ *
+ * ONE name on purpose, so every player meets the same rival. Concurrent
+ * practice races each take a private copy of the circuit and never see each
+ * other, but player names still resolve by name for whispers, so a second live
+ * pilot takes a deterministic suffix (`nextBotName`) rather than a twin.
+ */
+export const REALM_RACERS_BOT_NAMES: readonly string[] = ['Mat Driftwright'] as const;
+
+/**
+ * Cosmetic class variety for house pilots. The rally kit overrides `known` and
+ * the machine replaces locomotion outright, so class is purely what the pilot
+ * looks like in the seat. The two pet classes are excluded so no beast or demon
+ * ever trots onto the circuit behind its rider.
+ */
+export const REALM_RACERS_BOT_CLASSES: readonly PlayerClass[] = [
+  'warrior',
+  'rogue',
+  'mage',
+  'priest',
+  'paladin',
+  'shaman',
+  'druid',
+] as const;
+
+/**
+ * The kit a seated racer carries, resolved from the weapon SLOT rather than from
+ * a hardcoded id. Both of the directions the rally is heading (weapons picked up
+ * off the circuit, one signature weapon per machine) are then a different value
+ * written into the slot, not a rewrite of this path.
+ *
+ * `charges` is the slot's BUDGET, mirrored onto `KnownAbility.charges` so the
+ * action bar draws the stored-use badge with the machinery every other
+ * charge-limited ability already uses. It is deliberately not `bonusCharges`:
+ * that field drives the RECHARGE model, which refills, and a race's three shots
+ * never do.
+ */
+export function resolveRealmRacersKit(
+  weaponAbilityId: string,
+  charges: number | null,
+): KnownAbility[] {
+  const def = REALM_RACERS_ABILITIES[weaponAbilityId];
+  if (!def) return [];
+  return [
+    {
+      def,
+      rank: 1,
+      cost: 0,
+      castTime: 0,
+      cooldown: def.cooldown,
+      effects: def.effects,
+      threatFlat: 0,
+      threatMult: 1,
+      ...(charges === null ? {} : { charges }),
+    },
+  ];
+}

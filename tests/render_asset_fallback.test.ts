@@ -78,9 +78,10 @@ describe('render asset preload fallbacks', () => {
     vi.resetModules();
     mockEmptyAssetLoads();
 
-    const { buildTerrain, hasTerrainSplatAssets } = await import('../src/render/terrain');
+    const { buildTerrain } = await import('../src/render/terrain');
+    const { hasGroundSplatAssets } = await import('../src/render/ground_material');
     const { zoneAt } = await import('../src/sim/data');
-    expect(hasTerrainSplatAssets()).toBe(false);
+    expect(hasGroundSplatAssets()).toBe(false);
 
     const terrain = buildTerrain(20061);
     expect(terrain.group.children).toHaveLength(0);

@@ -2682,6 +2682,10 @@ export function runEffects(
         ctx.vcupSportShove(p, target, eff.distance);
         break;
       }
+      case 'realmRacersShell': {
+        ctx.realmRacersFireShell(p);
+        break;
+      }
       case 'sunder': {
         if (!target || target.dead) break;
         // a sunder can miss like any melee attack (and Hit rating reduces it, via

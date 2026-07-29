@@ -292,6 +292,7 @@ describe('tick perf capture lifecycle', () => {
       'sim.instances',
       'sim.delves',
       'sim.valecup',
+      'sim.realmRacers',
       'sim.dfinder',
       'sim.market',
       'sim.postOffice',

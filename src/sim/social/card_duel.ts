@@ -78,16 +78,18 @@ export function cardDuelMatchFor(ctx: SimContext, pid: number): CardDuelMatch | 
 }
 
 // At least one other QUEUEABLE HUMAN must be present to ever pair off the
-// queue. Fiesta and Vale Cup bots share the offline Sim's players map
-// (fiesta_bots.ts / vale_cup_bots.ts both reach Sim.addPlayer), but they
-// never call joinCardDuelQueue, so counting them here would let the gate
-// read "available" while a bot match is live offline, and the human queues
-// into a FIFO that can never pair (finding: bots defeat the offline gate).
+// queue. Fiesta, Vale Cup and Realm Racers bots share the offline Sim's
+// players map (fiesta_bots.ts / vale_cup_bots.ts / realm_racers_bots.ts all
+// reach Sim.addPlayer), but they never call joinCardDuelQueue, so counting them
+// here would let the gate read "available" while a bot match is live offline,
+// and the human queues into a FIFO that can never pair (finding: bots defeat
+// the offline gate).
 export function cardMinigameAvailable(ctx: SimContext, pid?: number): boolean {
   for (const [otherPid, meta] of ctx.players) {
     if (otherPid === pid) continue;
     if (meta.isFiestaBot) continue;
     if (ctx.vcup.botPids.includes(otherPid)) continue;
+    if (ctx.realmRacers.bots.has(otherPid)) continue;
     return true;
   }
   return false;

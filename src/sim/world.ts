@@ -42,6 +42,7 @@ import {
 } from './ember_lava_layout';
 import { GALE_DECK_FREEBOARD, galeDeckSurface } from './gale_harbor';
 import { reachDeckClear, reachDeckSurface } from './reach_decks';
+import { isAtRealmRacersXZ } from './realm_racers_layout';
 import { fbm2, hash2, noise2 } from './rng';
 import {
   buildTerrainRegionIndex,
@@ -3384,6 +3385,7 @@ function applyReachPoolWalkwayBed(x: number, z: number, h: number): number {
 // the raised boss dais where the room stacks one), the walkable Vale Cup
 // grandstand lift, raised docks, and custom-map sculpt edits.
 export function groundHeight(x: number, z: number, seed: number): number {
+  if (isAtRealmRacersXZ(x, z)) return DUNGEON_FLOOR_Y;
   if (x > DUNGEON_X_THRESHOLD) {
     const dungeon = dungeonAt(x);
     if (dungeon?.interior === 'wildheart') {

@@ -235,6 +235,7 @@ import {
 } from './render/gfx';
 import { Renderer } from './render/renderer';
 import {
+  hasAuthoritativeDriveImpulse,
   hasAuthoritativeSelfPositionDiscontinuity,
   type SelfMotionFrame,
 } from './render/self_motion';
@@ -1733,6 +1734,9 @@ async function startGame(
           case 'valecup':
             hud.toggleValeCup();
             break;
+          case 'rally':
+            hud.toggleRealmRacers();
+            break;
           case 'mount':
             // Ride the pick immediately (every player always has one; the
             // character sheet's picker is where the pick changes).
@@ -1838,6 +1842,7 @@ async function startGame(
     onArena: () => hud.toggleArena(),
     onDungeonFinder: () => hud.toggleDungeonFinder(),
     onValeCup: () => hud.toggleValeCup(),
+    onRally: () => hud.toggleRealmRacers(),
     onQuestLog: () => hud.toggleQuestLog(),
     onCharacter: () => {
       hud.toggleChar();
@@ -2008,6 +2013,9 @@ async function startGame(
         break;
       case 'valecup':
         hud.toggleValeCup();
+        break;
+      case 'rally':
+        hud.toggleRealmRacers();
         break;
       case 'mount':
         world.toggleMounted();
@@ -3937,6 +3945,10 @@ async function startGame(
         intro !== null ||
         raceMovementLocked,
     );
+    // The touch jump button reads as the handbrake for as long as the player is
+    // driving; the binding and the hit area never move, only the label (the
+    // setter itself is edge-gated, so this costs nothing on an ordinary frame).
+    mobileControls.setHandbrakeMode(world.player.drive != null);
     const playerDead = world.player.dead;
     if (shouldClearAutorunOnDeath(playerWasDead, playerDead)) {
       input.setAutorun(false);
@@ -4013,7 +4025,9 @@ async function startGame(
         // turnLeft/turnRight while stunned, but mouselook/controller facing is
         // applied out of band, here, before tick(), and must honor the same gate
         // or a stunned player can still turn to face away from a positional attack.
-        if (stepFacing !== null && !isStunned(offlineSim.player)) {
+        // A pilot's heading is STEERED: the movement kernel integrates it from
+        // the steering input, so the camera never claims it while driving.
+        if (stepFacing !== null && !offlineSim.player.drive && !isStunned(offlineSim.player)) {
           offlineSim.player.facing = stepFacing;
         }
         offlineSim.updateFiestaBots(); // dev: steer Fiesta practice bots (no-op unless active)
@@ -4129,6 +4143,12 @@ async function startGame(
       onlineInputEchoMs,
     );
     const pe = world.player;
+    // Behind the wheel the heading belongs to the vehicle kernel on BOTH sides:
+    // the server refuses a streamed facing from a driver (it would overwrite the
+    // steering it just integrated), so the client stops claiming the channel,
+    // keeps its turn keys on the wire as steering input, and lets the self
+    // extrapolator's predicted heading pose the model.
+    const driving = pe.drive != null;
     const alpha =
       net.lastSnapAt > 0
         ? Math.min(1.25, (performance.now() - net.lastSnapAt) / Math.max(20, net.snapInterval))
@@ -4136,7 +4156,7 @@ async function startGame(
     // facing interp capped at 1 - extrapolating angles past the snapshot oscillates
     const interpServerFacing =
       pe.prevFacing + wrapAngle(pe.facing - pe.prevFacing) * Math.min(1, alpha);
-    const foreignFacing = movementFacing ?? resolved.facing;
+    const foreignFacing = driving ? null : (movementFacing ?? resolved.facing);
     // Keyboard turns integrate the same TURN_SPEED locally and STREAM the
     // resulting heading on the facing channel, exactly like mouselook: the
     // server applies it outright instead of integrating the turn flags one
@@ -4147,7 +4167,8 @@ async function startGame(
     // the turn a second time on top of the streamed facing.
     kbTurnArgs.turnLeft = resolved.mi.turnLeft;
     kbTurnArgs.turnRight = resolved.mi.turnRight;
-    kbTurnArgs.turnAllowed = net.spectating === null && !movementFrozen() && !isStunned(pe);
+    kbTurnArgs.turnAllowed =
+      net.spectating === null && !movementFrozen() && !isStunned(pe) && !driving;
     kbTurnArgs.sentFacing = foreignFacing;
     kbTurnArgs.serverFacing = interpServerFacing;
     kbTurnArgs.echoMs = onlineInputEchoMs;
@@ -4158,10 +4179,11 @@ async function startGame(
     // close a feedback loop through the server that at high RTT never
     // converges (the observed self-spinning resonance under netem).
     const netFacing = foreignFacing ?? kbTurn.wireFacing;
-    const onlineRenderFacing =
-      visualFacingFor(resolved.mi, netFacing ?? kbFacing ?? interpServerFacing) ?? netFacing;
+    const onlineRenderFacing = driving
+      ? null
+      : (visualFacingFor(resolved.mi, netFacing ?? kbFacing ?? interpServerFacing) ?? netFacing);
     Object.assign(net.moveInput, resolved.mi);
-    if (kbTurn.suppressTurnFlags) {
+    if (kbTurn.suppressTurnFlags && !driving) {
       net.moveInput.turnLeft = false;
       net.moveInput.turnRight = false;
     }
@@ -4188,6 +4210,9 @@ async function startGame(
       drainedEvents,
       net.playerId,
     );
+    // A rival shoved the local machine: momentum the predictor cannot simulate,
+    // so it re-seeds its scratch drive from the next authoritative state.
+    const selfDriveImpulse = hasAuthoritativeDriveImpulse(drainedEvents, net.playerId);
     const drainedEventsLength = drainedEvents.length;
     const eventsStart = perf.startTime();
     traceStart = perf.startTrace();
@@ -4270,6 +4295,7 @@ async function startGame(
           onlineJitterMs,
           alpha,
           frameDt,
+          selfDriveImpulse,
         );
     const cameraLastSnapAge = net.lastSnapAt > 0 ? performance.now() - net.lastSnapAt : -1;
     traceStart = perf.startTrace();

@@ -29,12 +29,18 @@ import { corpseLootAvailability } from '../src/game/corpse_loot_availability';
 import type { ClientWorld } from '../src/net/online';
 import { mechHeldWeaponOverride, visualKeyFor } from '../src/render/characters/manifest';
 import { MOUNT_RACE_START_PLATFORM, type MountKey } from '../src/sim/content/mounts';
+import {
+  ARC_SHELL_CHARGES,
+  REALM_RACERS_ABILITY_ID,
+  resolveRealmRacersKit,
+} from '../src/sim/content/realm_racers';
 import { COMBO_RECIPES } from '../src/sim/content/recipes';
 import { BUILTIN_WORLD, DELVES, GATHER_NODES, ITEMS, MOBS } from '../src/sim/data';
 import { createMob } from '../src/sim/entity';
 import { MOUNT_RACE_COUNTDOWN_TICKS } from '../src/sim/mount_race';
 import { Sim } from '../src/sim/sim';
 import { type Aura, DT, type PlayerClass, type WorldContent } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { terrainHeight } from '../src/sim/world';
 import { absorbTotal } from '../src/ui/absorb_bar';
 import { auraEffectDescriptor } from '../src/ui/aura_effect';
@@ -3186,6 +3192,109 @@ describe('lockpick view rebuilds from events on the online client', () => {
   });
 });
 
+// Same shape as the flair suite above: the REAL server emit into the REAL client
+// mirror. The drive state is actionable, not cosmetic (the online
+// self-extrapolator runs the same movement kernel off it), so both halves of the
+// round trip are pinned rather than a hand-built wire record.
+describe('vehicle drive state over the wire', () => {
+  it('mirrors a pilot machine onto another client and stays off every entity on foot', () => {
+    const sim = new Sim({ seed: 7, playerClass: 'warrior' });
+    const e = sim.player;
+
+    // An ordinary player carries no drive key at all: the record of everyone
+    // else in the world must be byte-unchanged by this feature.
+    expect(wireEntity(e)).not.toHaveProperty('drv');
+
+    e.drive = createVehicleDrive('tank');
+    e.drive.speed = 18.25;
+    e.drive.slip = -2.5;
+    e.drive.yawRate = 0.75;
+    e.drive.spin = -1.25;
+    e.drive.handbrake = 1;
+    e.drive.gripMult = 0.5;
+    e.drive.dragMult = 3;
+    e.drive.speedCap = 0.8;
+
+    const wire = wireEntity(e);
+    expect(wire.drv).toEqual({
+      k: 'tank',
+      sp: 18.25,
+      sl: -2.5,
+      yr: 0.75,
+      sn: -1.25,
+      hb: 1,
+      g: 0.5,
+      dg: 3,
+      c: 0.8,
+    });
+
+    const client = bareClient(e.id + 1000);
+    (client as any).applySnapshot({ t: 'snap', ents: [wire] });
+    expect(client.entities.get(e.id)?.drive).toEqual(e.drive);
+
+    // The control lock rides only while it is SET, so an ordinary driving frame
+    // pays nothing for it; the mirror decodes an absent key as "the pilot has
+    // the controls". The client greys its weapon slot off this exact fact, so a
+    // key that failed to cross would offer a shot the server then refuses.
+    e.drive.controlsLocked = true;
+    const locked = wireEntity(e);
+    expect(locked.drv).toMatchObject({ lk: 1 });
+    (client as any).applySnapshot({ t: 'snap', ents: [locked] });
+    expect(client.entities.get(e.id)?.drive?.controlsLocked).toBe(true);
+    e.drive.controlsLocked = false;
+    expect(wireEntity(e).drv).not.toHaveProperty('lk');
+    (client as any).applySnapshot({ t: 'snap', ents: [wireEntity(e)] });
+    expect(client.entities.get(e.id)?.drive?.controlsLocked).toBe(false);
+
+    // A rally weapon's charge pool crosses as a COUNT, so the mirror derives the
+    // FIXED kind from the kit the server said the racer is holding. Without it
+    // the client cannot tell an empty race budget from a pool mid-recharge, and
+    // it would keep offering an aiming mode for a shot the server then refuses.
+    const rallyClient = bareClient(e.id);
+    (rallyClient as any).applySnapshot({
+      t: 'snap',
+      ents: [],
+      // Both keys on the SAME snapshot, which is the ordering trap: `achg`
+      // decodes above `rrkit`, so a mirror that read the kit at the count would
+      // miss the very first frame after a racer is seated.
+      self: {
+        ...wireEntity(e),
+        rrkit: { active: true, w: REALM_RACERS_ABILITY_ID, c: ARC_SHELL_CHARGES },
+        achg: { [REALM_RACERS_ABILITY_ID]: 0, fireball: 0 },
+      },
+    });
+    const mirrored = rallyClient.player.abilityCharges;
+    expect(mirrored?.[REALM_RACERS_ABILITY_ID]).toMatchObject({ charges: 0, fixed: true });
+    // ...and only that one: an ordinary recharge pool at zero is a TIMER, and
+    // marking it fixed would grey a slot that is about to come back.
+    expect(mirrored?.fireball?.fixed).toBeUndefined();
+
+    // Leaving the machine clears the mirror too: a stale drive state would keep
+    // the restored character on the vehicle movement model.
+    e.drive = null;
+    (client as any).applySnapshot({ t: 'snap', ents: [wireEntity(e)] });
+    expect(client.entities.get(e.id)?.drive).toBeNull();
+  });
+
+  it('refuses a streamed facing from a driver: a machine is steered, not aimed', () => {
+    const server = new GameServer();
+    const ws = fakeWs();
+    const session = joinServer(server, ws, 1, 'Pilot');
+    const e = server.sim.entities.get(session.pid)!;
+    e.facing = 0.5;
+
+    // On foot the client owns its heading, exactly as before.
+    server.handleMessage(session, JSON.stringify({ t: 'input', facing: 1.25 }));
+    expect(e.facing).toBe(1.25);
+
+    // Behind the wheel the server integrates the heading from the steering
+    // input, so a streamed facing (honest or forged) is dropped outright.
+    e.drive = createVehicleDrive('tank');
+    server.handleMessage(session, JSON.stringify({ t: 'input', facing: -2 }));
+    expect(e.facing).toBe(1.25);
+  });
+});
+
 describe('online mount command and race-event transport', () => {
   it('round-trips client frames through actor-scoped server dispatch and mirrors the race lifecycle', () => {
     const server = new GameServer();
@@ -3364,6 +3473,8 @@ const ALL_DELTA_KEYS = [
   'qdone',
   'qlog',
   'renown',
+  'rr',
+  'rrkit',
   'salv',
   'sport',
   'stats',
@@ -3439,6 +3550,7 @@ const TERSE_TO_IWORLD: Record<string, string> = {
   qdone: 'questsDone',
   qlog: 'questLog',
   res: 'resource',
+  rr: 'realmRacersInfo',
   rtype: 'resourceType',
   rxp: 'restedXp',
   salv: 'lastSalvageResult',
@@ -3719,6 +3831,13 @@ function dirtyEveryDeltaField(): {
     materialItemId: 'spider_leg',
     count: 2,
   };
+  // The Rally kit flag is a heavy delta derived from the active match id AND
+  // from the kit the racer was actually granted (it names the weapon in their
+  // slot, so a mirror never guesses which ability a pilot holds). This fixture
+  // owns codec coverage rather than gameplay validity, so seed both source
+  // fields exactly as the seating path writes them.
+  meta.realmRacersMatchId = 99;
+  meta.known = resolveRealmRacersKit(REALM_RACERS_ABILITY_ID, ARC_SHELL_CHARGES);
 
   return { server, fc, leader, memberPid: mp };
 }
@@ -4050,6 +4169,8 @@ describe('full self-state snapshot delta fixture', () => {
     expect(client.talentSpec).toBe('arms');
     expect(client.loadouts).toEqual([{ name: 'PvP', alloc: { spec: 'arms', rows: {} }, bar: [] }]);
     expect(client.activeLoadout).toBe(0);
+    expect(client.realmRacersInfo).toEqual(server.sim.realmRacersInfoFor(leader.pid));
+    expect(client.known.map((known) => known.def.id)).toEqual(['rally_arc_shell']);
     // hbl -> the login action-bar restore (self-only, resolved once on the first
     // self payload). A stored server layout arrives as a 'server' win; like tal
     // it is asserted directly (no TERSE_TO_IWORLD rename entry).
@@ -4203,7 +4324,9 @@ describe('gather node cooldown wire round trip (ncd)', () => {
 
 describe('delta-key contract pins (anti-drift)', () => {
   it('ALL_DELTA_KEYS contains exactly 64 unique keys in sorted order', () => {
-    expect(ALL_DELTA_KEYS).toHaveLength(64); // +1: guildBank (Guild Bank Phase 2)
+    // +1: guildBank (Guild Bank Phase 2), +2: the Realm Racers state and
+    // temporary-kit keys.
+    expect(ALL_DELTA_KEYS).toHaveLength(66);
     expect(new Set(ALL_DELTA_KEYS).size).toBe(64);
     expect([...ALL_DELTA_KEYS]).toEqual([...ALL_DELTA_KEYS].sort());
   });
@@ -4226,8 +4349,10 @@ describe('delta-key contract pins (anti-drift)', () => {
     // The base-merge union: v0.31's 56 (incl. the market-collect key mktU) plus
     // the Rift + mounts and worn-instance keys (einst, mntRtd and the rift
     // snapshot fragments) for 61, then v0.32's master-loot key mloot for 62,
-    // plus the packet's slotted-tool-effects key tslot for 63.
-    expect(scraped.size).toBe(64); // +1: guildBank (Guild Bank Phase 2)
+    // plus the packet's slotted-tool-effects key tslot for 63, guildBank for 64
+    // (Guild Bank Phase 2), and the Realm Racers state and temporary-kit keys
+    // for 66.
+    expect(scraped.size).toBe(66);
     expect([...scraped].sort()).toEqual([...ALL_DELTA_KEYS].sort());
   });
 
@@ -4311,6 +4436,9 @@ describe('delta-key contract pins (anti-drift)', () => {
     // past the sorted-membership and delta-key-or-scalar checks; pin it out here.
     expect('vcup' in TERSE_TO_IWORLD).toBe(false);
     expect('vcupb' in TERSE_TO_IWORLD).toBe(false);
+    // rrkit selects a temporary client-side ability resolver rather than
+    // mirroring one IWorld member, so it is asserted directly in the round trip.
+    expect('rrkit' in TERSE_TO_IWORLD).toBe(false);
     // sorted-membership pin: adding or renaming an entry must be a deliberate,
     // reviewable change landing in alphabetical order
     expect(Object.keys(TERSE_TO_IWORLD)).toEqual([...Object.keys(TERSE_TO_IWORLD)].sort());

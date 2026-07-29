@@ -1444,3 +1444,83 @@ export function sparkleTexture(): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
+
+// Kerb stripes: one red block plus one white block per repeat, so the arc
+// length UV lays a classic alternating kerb down the outside of a corner.
+export function rallyKerbTexture(): THREE.CanvasTexture {
+  return makeCanvas(64, (ctx, s) => {
+    ctx.fillStyle = '#e8e2d4';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#b8402f';
+    ctx.fillRect(0, 0, s / 2, s);
+    ctx.fillStyle = 'rgba(40,30,24,0.18)';
+    ctx.fillRect(0, 0, s, 3);
+    ctx.fillRect(0, s - 3, s, 3);
+  });
+}
+
+/**
+ * The Arc Shell's ground marker: a hazard-striped annulus with four inward
+ * chevrons, drawn onto a transparent square and mapped over the whole circle.
+ *
+ * It is deliberately loud. The circle is ACTIONABLE information (it is the only
+ * warning a rival gets that a shell is about to land on them) and it has to read
+ * at a glance from a machine doing 58 yd/s with a camera behind it, which a thin
+ * outline does not.
+ */
+export function rallyShellMarkerTexture(): THREE.CanvasTexture {
+  const tex = makeCanvas(256, (ctx, s) => {
+    const mid = s / 2;
+    ctx.clearRect(0, 0, s, s);
+    ctx.translate(mid, mid);
+    // The hazard band: alternating wedges around the rim, the universal "stand
+    // clear of this ground" pattern.
+    const outer = mid * 0.98;
+    const inner = mid * 0.8;
+    for (let wedge = 0; wedge < 24; wedge++) {
+      const a0 = (wedge / 24) * Math.PI * 2;
+      const a1 = ((wedge + 1) / 24) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, outer, a0, a1);
+      ctx.arc(0, 0, inner, a1, a0, true);
+      ctx.closePath();
+      ctx.fillStyle = wedge % 2 === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.28)';
+      ctx.fill();
+    }
+    // Four chevrons pointing at the centre: the shot comes down HERE.
+    ctx.lineWidth = s * 0.035;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let arm = 0; arm < 4; arm++) {
+      ctx.save();
+      ctx.rotate((arm / 4) * Math.PI * 2);
+      const tip = mid * 0.34;
+      const back = mid * 0.66;
+      const wide = mid * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(-wide, -back);
+      ctx.lineTo(0, -tip);
+      ctx.lineTo(wide, -back);
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+  // One circle over the whole quad: repeating it would tile the hazard band.
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// The start/finish chequer, four blocks across the road per repeat.
+export function rallyStartGridTexture(): THREE.CanvasTexture {
+  return makeCanvas(64, (ctx, s) => {
+    const cell = s / 4;
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        ctx.fillStyle = (row + col) % 2 === 0 ? '#f2efe6' : '#22201d';
+        ctx.fillRect(col * cell, row * cell, cell, cell);
+      }
+    }
+  });
+}

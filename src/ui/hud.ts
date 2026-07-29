@@ -30,6 +30,7 @@ import { currentDayNightPhase } from '../render/day_night_clock';
 import { globalDayness, skyTintForDayness } from '../render/day_night_core';
 import { isFriendlyPet, mobTooltipConColor } from '../render/reaction';
 import type { Renderer } from '../render/renderer';
+import { isAbilityBudgetSpent, isAbilityLockedByActivity } from '../sim/ability_budget';
 import {
   type ChatSenderFlair,
   normalizeStreamerLink,
@@ -548,6 +549,8 @@ import { questMarkerTooltipTag } from './quest_marker_tags';
 import { questProgressEventText } from './quest_progress_text';
 import { lockoutParts, lockoutShape } from './raid_lockout';
 import { type RaidLockoutI18n, raidLockoutPanelHtml } from './raid_lockout_view';
+import { RealmRacersUi } from './realm_racers';
+import type { RallyControlAction } from './realm_racers_view';
 import { restView } from './rest_indicator';
 import { isTalentRowUnlockLevel } from './row_unlock_toast';
 import { localizeServerText } from './server_i18n';
@@ -1810,6 +1813,7 @@ export class Hud {
         const match = this.sim.cupInfo?.match;
         return !!match && match.team !== null;
       },
+      isInRealmRacers: () => this.sim.realmRacersInfo.match !== null,
       showAttackButton: () => this.optionsHooks?.settings.get('showAttackButton') ?? true,
       // Persistence seam: online, the ClientWorld debounces a per-character wire
       // save; offline, Sim.saveActionBarLayout is a no-op (localStorage is the
@@ -2651,6 +2655,7 @@ export class Hud {
     $('#mm-arena').addEventListener('click', () => this.toggleArena());
     $('#mm-dfinder').addEventListener('click', () => this.toggleDungeonFinder());
     $('#mm-valecup').addEventListener('click', () => this.toggleValeCup());
+    $('#mm-rally').addEventListener('click', () => this.toggleRealmRacers());
     $('#mm-cardduel').addEventListener('click', () => this.toggleCardDuel());
     $('#mm-leaderboard').addEventListener('click', () => this.toggleLeaderboard());
     $('#mm-discord')?.addEventListener('click', () => this.discordHook?.());
@@ -3142,6 +3147,9 @@ export class Hud {
       case 'valecup-window':
         // Route through the painter so focus returns to the opener (WCAG 2.2 AA).
         this.valeCupWindow.close();
+        break;
+      case 'realm-racers-window':
+        this.realmRacersUi.close();
         break;
       case 'card-duel-window':
         // Route through the painter so focus returns to the opener (WCAG 2.2 AA).
@@ -4368,6 +4376,40 @@ export class Hud {
     closeOthers: () => this.closeOtherWindows('#valecup-window'),
     ...this.windowFocus('#valecup-window'),
   });
+  private readonly realmRacersUi = new RealmRacersUi({
+    root: () => $('#realm-racers-window'),
+    layer: () => document.getElementById('ui'),
+    world: () => this.sim,
+    closeOthers: () => this.closeOtherWindows('#realm-racers-window'),
+    // The rally's practice tutorial teaches the keys the player ACTUALLY has,
+    // so the binding lookup is resolved here (the rally module never reaches
+    // into the game layer's keybind profile) and the touch HUD is told to drop
+    // the key column entirely.
+    controlKeys: (action) => this.rallyControlKeys(action),
+    isTouchHud: () => document.body.classList.contains('mobile-touch'),
+    writers: this.writerFacet,
+    ...this.windowFocus('#realm-racers-window'),
+  });
+
+  /**
+   * The bound keys behind one taught rally control. Steering is two bindings by
+   * nature; the rest resolve their primary and secondary slots, so a player who
+   * drives on the arrow keys is taught the arrow keys.
+   */
+  private rallyControlKeys(action: RallyControlAction): string[] {
+    const RALLY_CONTROL_BINDS: Record<RallyControlAction, string[]> = {
+      throttle: ['forward'],
+      brake: ['back'],
+      steer: ['turnLeft', 'turnRight'],
+      handbrake: ['jump'],
+    };
+    const labels: string[] = [];
+    for (const bind of RALLY_CONTROL_BINDS[action]) {
+      const label = this.keybinds.primaryLabel(bind);
+      if (label) labels.push(label);
+    }
+    return labels;
+  }
   // Card Duel window painter (card_duel_view.ts model + card_duel_window.ts
   // painter, the ValeCupWindow shape scaled down). The Card Master NPC's gossip
   // menu AND the persistent #mm-cardduel micromenu button (the sim allows
@@ -5722,6 +5764,7 @@ export class Hud {
     // Same text-independent-sig contract for the Vale Cup surfaces: clear the
     // sigs so the next render/update rebuilds with fresh t().
     this.valeCupWindow.relocalize();
+    this.realmRacersUi.relocalize();
     this.vcupBetting.relocalize();
     this.vcupIndicator.relocalize();
     this.vcupMatchHud.relocalize();
@@ -6145,7 +6188,7 @@ export class Hud {
       this.cancelGroundAim();
       return;
     }
-    const aim = clampAimToRange(this.sim.player, rawPoint, res.def.range);
+    const aim = clampAimToRange(this.sim.player, rawPoint, res.def.range, res.def.id);
     this.groundAimPoint = aim.point;
     this.groundAimClamped = aim.clamped;
   }
@@ -6178,7 +6221,7 @@ export class Hud {
       return true;
     }
     const point = rawPoint
-      ? clampAimToRange(this.sim.player, rawPoint, res.def.range).point
+      ? clampAimToRange(this.sim.player, rawPoint, res.def.range, res.def.id).point
       : this.groundTargetAim();
     const committed = commitGroundAim(this.groundAim);
     this.groundAim = committed.state;
@@ -6187,6 +6230,32 @@ export class Hud {
     this.renderer.setGroundAimReticle(null);
     this.sim.castAbilityAt(abilityId, point);
     return true;
+  }
+
+  /**
+   * An activity that lent this kit is refusing the ability: never open an aiming
+   * mode the cast would then reject. Returns true when the press is spent here.
+   *
+   * The two reasons come from the SAME predicate the sim refuses on, so the
+   * affordance and the authority cannot disagree. Running out of ammunition
+   * borrows the sim's own words, because "nothing happened" is indistinguishable
+   * from a broken key; being held on the grid stays silent, since a racer
+   * waiting for the flag can see perfectly well why they cannot shoot.
+   */
+  private refuseLockedAbility(abilityId: string, barSlot: number): boolean {
+    const player = this.sim.player;
+    if (!isAbilityLockedByActivity(player, abilityId)) return false;
+    this.flashActionSlot(barSlot);
+    if (isAbilityBudgetSpent(player, abilityId)) this.showError(t('hud.errors.outOfCharges'));
+    return true;
+  }
+
+  /** Cast a ground-targeted ability from a bar slot: the shared path for the
+   *  hotbar press and for the fixed slot 0 while an activity owns the kit. */
+  private castPositionAbility(abilityId: string, barSlot: number): void {
+    if (this.refuseLockedAbility(abilityId, barSlot)) return;
+    if (this.groundReticleEnabled(abilityId)) this.beginGroundAim(abilityId, barSlot);
+    else this.sim.castAbilityAt(abilityId, this.groundTargetAim());
   }
 
   private activateFixedAttackSlot(): void {
@@ -6199,6 +6268,9 @@ export class Hud {
       this.flashActionSlot(0);
       return;
     }
+    // The circuit needs no arm here: an activity kit takes slot 0 outright
+    // (ActionBarController.activityKitWeaponId), so the fixed attack slot does
+    // not exist during a race and this method is never reached from one.
     if (this.sim.player.autoAttack) this.sim.stopAutoAttack();
     else this.sim.startAutoAttack();
     this.flashActionSlot(0);
@@ -6238,10 +6310,8 @@ export class Hud {
           if (this.isSportAbilityId(action.id)) {
             // Sport moves autocast toward facing (no reticle, no point-and-click).
             this.castSportTap(action.id, resolved.def.range);
-          } else if (this.groundReticleEnabled(action.id)) {
-            this.beginGroundAim(action.id, barSlot);
           } else {
-            this.sim.castAbilityAt(action.id, this.groundTargetAim());
+            this.castPositionAbility(action.id, barSlot);
           }
         } else {
           // Clique-style mouseover cast: a friendly (heal/buff) ability pressed
@@ -7269,6 +7339,7 @@ export class Hud {
       ['#mm-arena', 'arena', 'hud.core.mobileArena'],
       ['#mm-dfinder', 'dungeonFinder', 'hudChrome.finder.title'],
       ['#mm-valecup', 'valecup', 'hudChrome.keybinds.valecup'],
+      ['#mm-rally', 'rally', 'hudChrome.rally.title'],
       ['#mm-leaderboard', 'leaderboard', 'game.leaderboard.title'],
       ['#mm-emote', 'emoteWheel', 'hudChrome.emoteWheel.label'],
       ['#mm-social', 'social', 'hud.social.friendsTab'],
@@ -8624,6 +8695,7 @@ export class Hud {
       if ($('#dungeon-finder-window').style.display === 'flex') this.dungeonFinderWindow.render();
       if (this.dungeonFinderProposalPopup.isOpen) this.dungeonFinderProposalPopup.render();
       if ($('#valecup-window').style.display === 'block') this.valeCupWindow.render();
+      this.realmRacersUi.update();
       // Auto-open the Card Duel window the instant a queued match starts (a
       // false->true transition on match presence), mirroring updateTradeWindow's
       // transition-based auto-open: the sim allows playing a card from anywhere
@@ -9633,6 +9705,10 @@ export class Hud {
 
   toggleValeCup(): void {
     this.valeCupWindow.toggle();
+  }
+
+  toggleRealmRacers(): void {
+    this.realmRacersUi.toggle();
   }
 
   toggleCardDuel(): void {
@@ -11930,6 +12006,76 @@ export class Hud {
             audio.death();
           }
           break;
+        case 'realmRacersQueued':
+          if (ev.pid === sim.playerId) {
+            this.log(
+              t('hudChrome.rally.logQueued', {
+                position: formatNumber(ev.position, { maximumFractionDigits: 0 }),
+              }),
+              '#dcb75b',
+            );
+          }
+          break;
+        case 'realmRacersUnqueued':
+          if (ev.pid === sim.playerId) this.log(t('hudChrome.rally.logUnqueued'), '#dcb75b');
+          break;
+        case 'realmRacersFound':
+          if (ev.pid === sim.playerId) {
+            this.showBanner(t('hudChrome.rally.bannerFound', { name: ev.opponentName }));
+            audio.duelChallenge();
+          }
+          break;
+        case 'realmRacersGo':
+          if (ev.pid === sim.playerId) {
+            this.showBanner(t('hudChrome.rally.bannerGo'));
+            audio.vcupKickoff();
+          }
+          break;
+        case 'realmRacersLap':
+          if (ev.pid === sim.playerId) {
+            this.showBanner(
+              t('hudChrome.rally.bannerLap', {
+                lap: formatNumber(ev.lap, { maximumFractionDigits: 0 }),
+                total: formatNumber(ev.totalLaps, { maximumFractionDigits: 0 }),
+              }),
+            );
+            audio.fiestaScorePing(true);
+          }
+          break;
+        // The shell is heard by everyone near it, not just its two parties: the
+        // report is a world sound anchored on the shot, the same way the crater
+        // and the sparks are world visuals. Both cues are placeholders reused
+        // from the Fiesta set; the bespoke recordings are the audio pass's.
+        case 'realmRacersShellFired':
+          audio.fiestaAugment();
+          break;
+        case 'realmRacersShellHit':
+          audio.fiestaDown();
+          break;
+        // Contact is rendered in the world (sparks, ring, shake), never in the
+        // HUD: a banner on every nudge would bury the lap and result lines.
+        case 'realmRacersBump':
+          break;
+        case 'realmRacersResult':
+          if (ev.pid !== sim.playerId) break;
+          if (!ev.winnerName) {
+            this.showBanner(t('hudChrome.rally.bannerDraw'));
+            this.combatLog(t('hudChrome.rally.bannerDraw'), '#dcb75b');
+            audio.duelEnd();
+          } else if (ev.won) {
+            this.showBanner(t('hudChrome.rally.bannerWin'));
+            this.combatLog(t('hudChrome.rally.logWin'), '#7fdc4f');
+            audio.duelEnd();
+          } else if (ev.forfeited) {
+            this.showBanner(t('hudChrome.rally.bannerLoss', { name: ev.winnerName }));
+            this.combatLog(t('hudChrome.rally.logForfeit', { name: ev.winnerName }), '#ff9b72');
+            audio.arenaLoss();
+          } else {
+            this.showBanner(t('hudChrome.rally.bannerLoss', { name: ev.winnerName }));
+            this.combatLog(t('hudChrome.rally.logLoss', { name: ev.winnerName }), '#ff7a6a');
+            audio.arenaLoss();
+          }
+          break;
         case 'cardDuelMatchStart':
           audio.cardShuffle();
           break;
@@ -12732,6 +12878,7 @@ export class Hud {
       'You are silenced!': 'hud.errors.silenced',
       'You are busy.': 'hud.errors.busy',
       'That ability is not ready yet.': 'hud.errors.abilityNotReady',
+      'You are out of charges.': 'hud.errors.outOfCharges',
       'Not enough rage!': 'hud.errors.notEnoughRage',
       'Not enough energy!': 'hud.errors.notEnoughEnergy',
       'Not enough mana!': 'hud.errors.notEnoughMana',

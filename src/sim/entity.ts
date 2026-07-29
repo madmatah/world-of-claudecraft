@@ -209,6 +209,7 @@ function baseEntity(id: number, pos: Vec3): Entity {
     skinCatalog: 'class',
     skin: 0,
     mountKey: '',
+    drive: null,
     mountCastRemaining: 0,
     mountCastKey: '',
     mainhandItemId: null,

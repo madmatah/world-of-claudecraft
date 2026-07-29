@@ -21,6 +21,7 @@ export const ACTION_BAR_LAYOUT_FORMS = [
   'cat_stealth',
   'stealth',
   'sport',
+  'rally',
 ] as const;
 export type ActionBarLayoutForm = (typeof ACTION_BAR_LAYOUT_FORMS)[number];
 

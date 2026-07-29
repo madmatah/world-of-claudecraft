@@ -97,6 +97,7 @@ interface WorldOpts {
   };
   stealthed?: boolean;
   auras?: ActionBarAuraInput[];
+  drive?: { controlsLocked: boolean } | null;
 }
 
 function world(opts: WorldOpts = {}): ActionBarWorldInput {
@@ -113,6 +114,7 @@ function world(opts: WorldOpts = {}): ActionBarWorldInput {
       pos: opts.playerPos ?? { x: 0, y: 0, z: 0 },
       abilityCharges: opts.abilityCharges,
       auras: opts.auras ?? [],
+      drive: opts.drive ?? null,
     },
     target: targetPos === null ? null : { dead: opts.targetDead ?? false, pos: targetPos },
     inventory: opts.inventory ?? [],
@@ -864,5 +866,30 @@ describe('actionBarView: instance-parameterized + parity', () => {
     const simState = structuredClone(createActionBarView(desc, fakeDeps()).tick(simWorld));
     const clientState = structuredClone(createActionBarView(desc, fakeDeps()).tick(clientWorld));
     expect(clientState).toEqual(simState);
+  });
+});
+
+describe('actionBarView: an activity holding the controls', () => {
+  it('greys every ability slot without pretending it is on cooldown', () => {
+    // A racer held on the grid before the flag. Nothing is cooling down, the
+    // pilot simply does not have the machine yet, so the slot must read as
+    // unusable rather than sweeping a timer that is not running.
+    const desc = descriptor(slot(0, { ability: ability('fireball') }));
+    const free = createActionBarView(desc, fakeDeps()).tick(world()).slots;
+    expect(free[0].usable).toBe(true);
+
+    const held = createActionBarView(desc, fakeDeps()).tick(
+      world({ drive: { controlsLocked: true } }),
+    ).slots;
+    expect(held[0].usable).toBe(false);
+    expect(held[0].cooldownPercent).toBe(0);
+    expect(held[0].cdText).toBe('');
+  });
+
+  it('hands the slot straight back when the controls unlock', () => {
+    const desc = descriptor(slot(0, { ability: ability('fireball') }));
+    const view = createActionBarView(desc, fakeDeps());
+    expect(view.tick(world({ drive: { controlsLocked: true } })).slots[0].usable).toBe(false);
+    expect(view.tick(world({ drive: { controlsLocked: false } })).slots[0].usable).toBe(true);
   });
 });

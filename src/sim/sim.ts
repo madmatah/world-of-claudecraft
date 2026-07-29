@@ -437,6 +437,7 @@ import { prestige as prestigeImpl, updateRested } from './progression/xp';
 import { advancePendingProjectiles, type PendingProjectile } from './projectile_travel';
 import * as honorMod from './pvp';
 import { sanitizeCreditedObjects } from './quests/interact_object_credit';
+import type { RallyDriverTier } from './realm_racers_driver';
 import { sanitizeRemovedZone1Content } from './removed_zone1_content';
 import { rideSteepnessAt, shoreStepOut, stepWaterLevel } from './ride_height';
 import { Rng } from './rng';
@@ -582,6 +583,9 @@ import {
 import * as fiestaBotsMod from './social/fiesta_bots';
 import { PartyMachine } from './social/party';
 import * as readyCheckMod from './social/ready_check';
+import * as realmRacersMod from './social/realm_racers';
+import { createRealmRacersState, type RealmRacersState } from './social/realm_racers';
+import * as realmRacersBotsMod from './social/realm_racers_bots';
 import * as valeCupMod from './social/vale_cup';
 import { createVcState, type VcState } from './social/vale_cup';
 import * as valeCupBotsMod from './social/vale_cup_bots';
@@ -1301,6 +1305,9 @@ export interface PlayerMeta {
   // snapshot). The W/L/D standing persists in CharacterState, absent until the
   // first result so pre-cup saves and the parity samples are untouched.
   sportRole: SportRole | null;
+  // Temporary Realm Racers kit/vehicle marker. Session-only and never
+  // persisted; null outside a live Rally match.
+  realmRacersMatchId: number | null;
   vcupWins: number;
   vcupLosses: number;
   vcupDraws: number;
@@ -1872,6 +1879,8 @@ export class Sim {
   // per-bracket queues, the single Sowfield match slot, the Groundskeeper's
   // deserter book, and the live bot pids), exposed as the live ctx.vcup view.
   vcup: VcState = createVcState();
+  // The Realm Racers FIFO and single instanced match.
+  realmRacers: RealmRacersState = createRealmRacersState();
   // per-player chat token bucket (anti-spam); refilled lazily by sim time
   private chatTokens = new Map<number, { tokens: number; at: number }>();
   // per-player set of opt-in global channels (world, lfg) joined via /join
@@ -2020,6 +2029,7 @@ export class Sim {
       lockoutNowMs: cfg.lockoutNowMs ?? (() => Math.floor(this.time * 1000)),
       raidResetMs: cfg.raidResetMs ?? ((nowMs: number) => nowMs + DEFAULT_RAID_LOCKOUT_MS),
       valeCupShowcase: cfg.valeCupShowcase ?? false,
+      realmRacersBackfill: cfg.realmRacersBackfill ?? false,
       // Carried through so the renderer (which reaches the Sim as IWorld) can read
       // the same custom world via sim.cfg.world. Undefined for the built-in world.
       world: cfg.world,
@@ -2668,6 +2678,7 @@ export class Sim {
       arena2v2Wins: savedArena2v2.wins,
       arena2v2Losses: savedArena2v2.losses,
       sportRole: null,
+      realmRacersMatchId: null,
       vcupWins: savedState?.vcupWins ?? 0,
       vcupLosses: savedState?.vcupLosses ?? 0,
       vcupDraws: savedState?.vcupDraws ?? 0,
@@ -3528,6 +3539,7 @@ export class Sim {
     // before the leave save (vcupResolveDesertion is a public delegate).
     valeCupMod.vcupDequeue(this.ctx, pid);
     valeCupMod.vcupResolveDesertion(this.ctx, pid);
+    realmRacersMod.realmRacersForfeit(this.ctx, pid, true);
     this.party.partyInvites.delete(pid);
     this.tradeInvites.delete(pid);
     this.duelInvites.delete(pid);
@@ -3581,6 +3593,9 @@ export class Sim {
     // after it: without this a disconnecting player could still be matched, or burn a
     // whole 30-second proposal for four other players. onPlayerRemoved is idempotent.
     this.dungeonFinder.onPlayerRemoved(pid);
+    // Resolve and restore the Rally before persistence captures temporary kit,
+    // vehicle, pools, or instance coordinates.
+    realmRacersMod.realmRacersForfeit(this.ctx, pid, true);
     // Trades are not escrowed. Cancel before the leave snapshot so the other
     // party cannot confirm during the persistence await and receive an item
     // that the departing character's already-captured save still contains.
@@ -3649,7 +3664,8 @@ export class Sim {
     // mid-pitch position (a mid-match save or desertion must not strand the
     // character on the Sowfield). The stowed pet persists via serializePet's
     // delvePetStash fallback; known/sportRole are session-derived, not saved.
-    const cupReturn = valeCupMod.vcupReturnFor(this.ctx, pid);
+    const activityReturn =
+      realmRacersMod.realmRacersReturnFor(this.ctx, pid) ?? valeCupMod.vcupReturnFor(this.ctx, pid);
     // One fold serves both persisted proficiency keys below: the live counters
     // plus any still-queued grants (foldPendingGatherGrants), so a leave-time
     // save landing between the tick that queued a grant and the tick that
@@ -3705,8 +3721,10 @@ export class Sim {
         e.resource,
         e.savedMana,
       ),
-      pos: cupReturn ? { x: cupReturn.x, z: cupReturn.z } : { x: e.pos.x, z: e.pos.z },
-      facing: cupReturn ? cupReturn.facing : e.facing,
+      pos: activityReturn
+        ? { x: activityReturn.x, z: activityReturn.z }
+        : { x: e.pos.x, z: e.pos.z },
+      facing: activityReturn ? activityReturn.facing : e.facing,
       // Death state: a released spirit resumes its corpse run on relog, and a
       // dead-but-unreleased corpse auto-releases on load (see addPlayer).
       dead: e.dead,
@@ -4794,6 +4812,9 @@ export class Sim {
       get vcup() {
         return sim.vcup;
       },
+      get realmRacers() {
+        return sim.realmRacers;
+      },
       // Book of Deeds live views (all mutated in place, never reassigned).
       get deedDirtyPids() {
         return sim.deedDirtyPids;
@@ -5212,6 +5233,7 @@ export class Sim {
         valeCupMod.vcupSportDash(sim.ctx, caster, distance, catchBall),
       vcupSportShove: (caster, target, distance) =>
         valeCupMod.vcupSportShove(sim.ctx, caster, target, distance),
+      realmRacersFireShell: (caster) => realmRacersMod.realmRacersFireShell(sim.ctx, caster),
     };
     return createSimContext(host);
   }
@@ -5615,6 +5637,10 @@ export class Sim {
     // tick-staggered bots), so appending it here cannot fork the draw order.
     this.updateValeCup();
     lap?.('valecup');
+    // Rally checks both racers after all movement has completed, so same-tick
+    // finishes are independent of player insertion order. It draws zero RNG.
+    this.updateRealmRacers();
+    lap?.('realmRacers');
     // The Dungeon Finder phase draws ZERO rng (queue bookkeeping + role
     // matching on the sim clock), so appending it here cannot fork the draw order.
     this.updateDungeonFinder();
@@ -6071,7 +6097,12 @@ export class Sim {
     }
     // The race countdown is a real start lock, not just a client animation.
     // Hold every forced/manual locomotion mode until the authoritative GO tick.
-    if (meta.mountRace?.phase === 'countdown') return;
+    if (
+      meta.mountRace?.phase === 'countdown' ||
+      (meta.realmRacersMatchId !== null &&
+        realmRacersMod.realmRacersCountdownLocked(this.ctx, meta.entityId))
+    )
+      return;
     if (advanceHeroicLeap(this.ctx, p)) return;
     // A ledge climb owns movement while it runs, and an airborne body that
     // gets its hands on a reachable ledge starts one. Sits after the leap arc
@@ -9595,6 +9626,62 @@ export class Sim {
   private updateValeCup(): void {
     valeCupMod.updateValeCup(this.ctx);
     valeCupBotsMod.updateValeCupBots(this);
+  }
+
+  // -------------------------------------------------------------------------
+  // The Realm Racers: two-player vehicle racing (social/realm_racers.ts +
+  // social/realm_racers_bots.ts). State stays on Sim (`this.realmRacers`);
+  // Sim keeps thin same-named delegates for the IWorld facet, the server, and
+  // tests. The house pilots are driven inside the same tick phase (they need
+  // Sim-only affordances), so the offline Practice button and the server's
+  // queue backfill run identical code.
+  // -------------------------------------------------------------------------
+
+  private updateRealmRacers(): void {
+    realmRacersMod.updateRealmRacers(this.ctx);
+    realmRacersBotsMod.updateRealmRacersBots(this);
+  }
+
+  realmRacersQueueJoin(pid?: number): void {
+    realmRacersMod.realmRacersQueueJoin(this.ctx, pid);
+  }
+
+  realmRacersQueueLeave(pid?: number): void {
+    realmRacersMod.realmRacersQueueLeave(this.ctx, pid);
+  }
+
+  realmRacersForfeit(pid?: number): void {
+    realmRacersMod.realmRacersForfeit(this.ctx, pid);
+  }
+
+  realmRacersInfoFor(pid: number): import('../world_api/realm_racers').RealmRacersInfo {
+    return realmRacersMod.realmRacersInfoFor(this.ctx, pid);
+  }
+
+  get realmRacersInfo(): import('../world_api/realm_racers').RealmRacersInfo {
+    return this.realmRacersInfoFor(this.primaryId);
+  }
+
+  joinRealmRacersQueue(): void {
+    this.realmRacersQueueJoin(this.primaryId);
+  }
+
+  leaveRealmRacersQueue(): void {
+    this.realmRacersQueueLeave(this.primaryId);
+  }
+
+  forfeitRealmRacers(): void {
+    this.realmRacersForfeit(this.primaryId);
+  }
+
+  /** Race a house pilot immediately, with no queue and no wait. Runs
+   *  identically offline and on the server (via realm_racers_practice). */
+  realmRacersPracticeStart(tier: RallyDriverTier, pid?: number): void {
+    realmRacersBotsMod.startRealmRacersPractice(this, tier, pid);
+  }
+
+  startRealmRacersPractice(tier: RallyDriverTier): void {
+    this.realmRacersPracticeStart(tier, this.primaryId);
   }
 
   vcupQueueJoin(

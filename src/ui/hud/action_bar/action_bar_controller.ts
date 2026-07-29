@@ -1,3 +1,4 @@
+import { REALM_RACERS_ABILITIES } from '../../../sim/content/realm_racers';
 import { SPORT_ABILITIES } from '../../../sim/content/vale_cup';
 import { ABILITIES, ITEMS } from '../../../sim/data';
 import type { PlayerClass } from '../../../sim/types';
@@ -32,7 +33,7 @@ import {
 
 export { ACTION_BAR_ABILITY_SLOTS } from './action_bar_layout_core';
 
-export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'sport';
+export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'sport' | 'rally';
 
 const FORM_TOGGLE_IDS = new Set(['bear_form', 'cat_form', 'travel_form']);
 
@@ -43,6 +44,7 @@ export interface ActionBarControllerDeps {
   knownAbilityIds(): readonly string[];
   hasAura(kind: string): boolean;
   isInSportMatch(): boolean;
+  isInRealmRacers?(): boolean;
   showAttackButton(): boolean;
   // The persistence seam: called after a user-driven layout change (never during
   // initial load) with the FULL captured layout. Offline it is a no-op
@@ -128,6 +130,7 @@ export class ActionBarController {
   }
 
   resolveActiveForm(): HotbarForm {
+    if (this.deps.isInRealmRacers?.()) return 'rally';
     if (this.deps.isInSportMatch()) return 'sport';
     if (this.deps.playerClass === 'druid') {
       if (this.deps.hasAura('form_bear')) return 'bear';
@@ -187,7 +190,10 @@ export class ActionBarController {
       this.actionState,
       knownAbilityIds,
       autoPlaceAbilityIds,
-      (id) => !this.isAbilityPlacementAllowed(id),
+      // Also strips the slot-0 weapon out of the assignable rows, which is what
+      // MIGRATES a bar seeded by an earlier build: those put the rally weapon in
+      // row slot 1, and it would otherwise now appear twice.
+      (id) => !this.isAbilityPlacementAllowed(id) || id === this.activityKitWeaponId(),
     );
     this.actionState = synced.actions;
     if (synced.changed) this.saveActions();
@@ -279,12 +285,34 @@ export class ActionBarController {
     );
   }
 
+  /**
+   * The weapon an ACTIVITY kit puts in the player's hands, or null when no
+   * activity owns the bar.
+   *
+   * While one is set it OWNS slot 0. The auto-attack toggle has no meaning on
+   * the circuit (there is no target and no swing), so leaving it there cost the
+   * leftmost key twice over: pressing it answered "Invalid attack target.", and
+   * once the key was remapped to fire the weapon it still SHOWED an attack icon,
+   * which is a key that does one thing and says another.
+   *
+   * Scope note: the Vale Cup's sport kit has exactly the same shape and is
+   * deliberately NOT changed here, so its bar keeps the behavior it shipped
+   * with; extending this is a one-line change to the form check.
+   */
+  private activityKitWeaponId(form: HotbarForm = this.activeFormState): string | null {
+    if (form !== 'rally') return null;
+    return this.deps.knownAbilityIds().find((id) => REALM_RACERS_ABILITIES[id]) ?? null;
+  }
+
   isAttackSlotFixed(): boolean {
+    if (this.activityKitWeaponId() !== null) return false;
     return this.deps.showAttackButton();
   }
 
   actionForSlot(barSlot: number): HotbarAction {
     if (barSlot === 0) {
+      const weapon = this.activityKitWeaponId();
+      if (weapon !== null) return { type: 'ability', id: weapon };
       return actionForAttackSlot(this.isAttackSlotFixed(), this.attackActionState);
     }
     return this.actionState[barSlot - 1] ?? null;
@@ -319,8 +347,13 @@ export class ActionBarController {
   private shouldAutoPlaceOnForm(id: string, form: HotbarForm): boolean {
     // Passives never castable: keep them off every seeded/form kit bar too.
     if (!this.isAbilityPlacementAllowed(id)) return false;
+    // The weapon slot 0 already holds is not placed a second time in the
+    // assignable rows; anything else the kit grants (a later pickup) still is.
+    if (form === 'rally') {
+      return !!REALM_RACERS_ABILITIES[id] && id !== this.activityKitWeaponId(form);
+    }
     if (form === 'sport') return !!SPORT_ABILITIES[id];
-    if (SPORT_ABILITIES[id]) return false;
+    if (SPORT_ABILITIES[id] || REALM_RACERS_ABILITIES[id]) return false;
     if (this.isStealthForm(form)) return false;
     if (form === 'bear' || form === 'cat') {
       return ABILITIES[id]?.requiresForm === form || FORM_TOGGLE_IDS.has(id);
@@ -337,7 +370,7 @@ export class ActionBarController {
   }
 
   private abilityDef(id: string) {
-    return ABILITIES[id] ?? SPORT_ABILITIES[id];
+    return ABILITIES[id] ?? SPORT_ABILITIES[id] ?? REALM_RACERS_ABILITIES[id];
   }
 
   private isAbilityPlacementAllowed(id: string): boolean {
@@ -468,10 +501,10 @@ export class ActionBarController {
         // Storage can be unavailable in private browsing modes.
       }
     }
-    if (this.activeFormState === 'sport') {
+    if (this.activeFormState === 'sport' || this.activeFormState === 'rally') {
       if (parsed.every((action) => action === null)) {
         this.actionState = buildDefaultFormBar(
-          this.formKitAbilityIds('sport'),
+          this.formKitAbilityIds(this.activeFormState),
           ACTION_BAR_ABILITY_SLOTS,
         );
         this.loadedFromStorage = true;

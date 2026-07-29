@@ -12,6 +12,7 @@ import { createMobScanCounters } from '../src/sim/mob/scan_counters';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
 import { createSimContext, type SimContextHost } from '../src/sim/sim_context';
+import { createRealmRacersState } from '../src/sim/social/realm_racers';
 import { createVcState } from '../src/sim/social/vale_cup';
 import { SpatialGrid } from '../src/sim/spatial';
 import type { Entity, SimEvent } from '../src/sim/types';
@@ -242,6 +243,7 @@ const CALLBACK_KEYS = [
   'vcupShoot',
   'vcupSportDash',
   'vcupSportShove',
+  'realmRacersFireShell',
 ] as const;
 
 // A fully-spied fake host. `clock` is mutable so a test can prove the context reads
@@ -324,6 +326,7 @@ function makeFakeHost() {
     bankerIds: [],
     guildBanks: new Map(),
     vcup: createVcState(),
+    realmRacers: createRealmRacersState(),
     deedDirtyPids: new Set<number>(),
     deedDirtyKeys: new Map<number, Set<string>>(),
     worldBossEntityIds: [],
@@ -560,6 +563,7 @@ function makeFakeHost() {
     vcupShoot: vi.fn(),
     vcupSportDash: vi.fn(),
     vcupSportShove: vi.fn(),
+    realmRacersFireShell: vi.fn(),
   };
   return { host, rng, entities, clock };
 }

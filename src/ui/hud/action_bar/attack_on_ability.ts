@@ -116,6 +116,7 @@ const EFFECT_CLASS: Record<AbilityEffect['type'], AutoAttackClass> = {
   ballShoot: 'other',
   sportDash: 'other',
   sportShove: 'other',
+  realmRacersShell: 'other',
 };
 
 /**

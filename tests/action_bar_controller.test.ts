@@ -28,6 +28,7 @@ interface MutableState {
   known: string[];
   auras: string[];
   sportTeam: number | null | undefined;
+  inRally: boolean;
   showAttackButton: boolean;
 }
 
@@ -54,6 +55,7 @@ function makeHarness(
     known: [...known],
     auras: [],
     sportTeam: undefined,
+    inRally: false,
     showAttackButton: true,
   };
   const controller = new ActionBarController({
@@ -63,6 +65,7 @@ function makeHarness(
     knownAbilityIds: () => state.known,
     hasAura: (kind) => state.auras.includes(kind),
     isInSportMatch: () => state.sportTeam !== undefined && state.sportTeam !== null,
+    isInRealmRacers: () => state.inRally,
     showAttackButton: () => state.showAttackButton,
   });
   controller.replaceActions(initialBar);
@@ -348,6 +351,49 @@ describe('ActionBarController form persistence', () => {
     harness.state.sportTeam = null;
     harness.controller.syncActiveForm();
     expect(harness.controller.actions).toEqual(bar('sinister_strike'));
+  });
+
+  it('gives the Rally its own one-button page and restores the class page afterward', () => {
+    const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
+    harness.controller.syncKnownAbilities();
+    harness.state.known.push('rally_arc_shell');
+    harness.controller.syncKnownAbilities();
+
+    harness.state.inRally = true;
+    harness.controller.syncActiveForm();
+    expect(harness.controller.activeForm).toBe('rally');
+    // The weapon IS slot 0, so the assignable rows behind it stay empty: the
+    // machine's one button sits under the leftmost key rather than beside an
+    // attack toggle that means nothing on a circuit.
+    expect(harness.controller.actionForSlot(0)).toEqual({
+      type: 'ability',
+      id: 'rally_arc_shell',
+    });
+    expect(harness.controller.isAttackSlotFixed()).toBe(false);
+    expect(harness.controller.actions).toEqual(bar());
+
+    harness.state.inRally = false;
+    harness.controller.syncActiveForm();
+    expect(harness.controller.actions).toEqual(bar('sinister_strike'));
+    // ...and the attack toggle comes straight back off the circuit.
+    expect(harness.controller.isAttackSlotFixed()).toBe(true);
+    expect(harness.controller.actionForSlot(0)).toBeNull();
+  });
+
+  it('migrates a Rally page seeded by an earlier build off the duplicate row slot', () => {
+    // Bars persisted before the weapon owned slot 0 carry it in row slot 1, so
+    // without the strip a returning pilot sees the same shell twice.
+    const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
+    harness.state.known.push('rally_arc_shell');
+    harness.state.inRally = true;
+    harness.controller.syncActiveForm();
+    harness.controller.replaceActions(bar('rally_arc_shell'));
+    harness.controller.syncKnownAbilities();
+    expect(harness.controller.actions).toEqual(bar());
+    expect(harness.controller.actionForSlot(0)).toEqual({
+      type: 'ability',
+      id: 'rally_arc_shell',
+    });
   });
 
   it('never seeds or auto-populates a stealth form kit', () => {

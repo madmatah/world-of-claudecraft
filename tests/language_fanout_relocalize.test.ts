@@ -33,6 +33,8 @@ import { DelveTrackerController } from '../src/ui/hud/delve/delve_tracker_contro
 import { LockpickWindow } from '../src/ui/hud/delve/lockpick_window';
 import { ensureLocaleLoaded, setLanguage, type TranslationKey, t } from '../src/ui/i18n';
 import { MailboxWindow, type MailboxWindowDeps } from '../src/ui/mailbox_window';
+import { makeWriterFacet } from '../src/ui/painter_host';
+import { RealmRacersUi } from '../src/ui/realm_racers';
 import { SocialWindow, type SocialWindowDeps } from '../src/ui/social_window';
 import { TutorialOverlay } from '../src/ui/tutorial';
 import type { DelveRunInfo, IWorld, LockpickView } from '../src/world_api';
@@ -42,7 +44,7 @@ import type { DelveRunInfo, IWorld, LockpickView } from '../src/world_api';
 const OTHER = 'es';
 
 beforeAll(async () => {
-  await ensureLocaleLoaded(OTHER);
+  await Promise.all([ensureLocaleLoaded(OTHER), ensureLocaleLoaded('zh_CN')]);
 });
 
 beforeEach(() => {
@@ -86,6 +88,40 @@ function mount(id: string, display = 'none'): HTMLElement {
   el.style.display = display;
   document.body.appendChild(el);
   return el;
+}
+
+function realmRacersWorld(): IWorld {
+  return {
+    realmRacersInfo: {
+      queued: false,
+      queuePosition: 0,
+      queueSize: 0,
+      match: null,
+    },
+    joinRealmRacersQueue: () => {},
+    leaveRealmRacersQueue: () => {},
+    forfeitRealmRacers: () => {},
+    startRealmRacersPractice: () => {},
+  } as unknown as IWorld;
+}
+
+function openRealmRacers(): { ui: RealmRacersUi; root: HTMLElement } {
+  const root = mount('realm-racers-window');
+  const layer = mount('ui');
+  const noop = (): void => {};
+  const ui = new RealmRacersUi({
+    root: () => root,
+    layer: () => layer,
+    world: () => realmRacersWorld(),
+    closeOthers: noop,
+    captureFocus: () => null,
+    restoreFocus: noop,
+    controlKeys: () => ['W'],
+    isTouchHud: () => false,
+    writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
+  });
+  ui.toggle();
+  return { ui, root };
 }
 
 // ---------------------------------------------------------------------------
@@ -788,7 +824,37 @@ describe('#2529 tutorial: the coachmark card re-localizes mid-step', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. The contract every one of them states: safe to call while closed
+// 8. Realm Racers
+// ---------------------------------------------------------------------------
+
+describe('Realm Racers: an open queue window re-localizes on demand', () => {
+  it('holds the old locale through update(), then rebuilds once on relocalize()', () => {
+    setLanguage('en');
+    const english = t('hudChrome.rally.join');
+    setLanguage('zh_CN');
+    const chinese = t('hudChrome.rally.join');
+    expect(chinese).not.toBe(english);
+    setLanguage('en');
+
+    const { ui, root } = openRealmRacers();
+    const action = (): HTMLElement =>
+      root.querySelector<HTMLElement>('[data-rally-join]') as HTMLElement;
+    expect(action().textContent).toBe(english);
+
+    setLanguage('zh_CN');
+    ui.update();
+    expect(action().textContent).toBe(english);
+
+    ui.relocalize();
+    const rebuilt = action();
+    expect(rebuilt.textContent).toBe(chinese);
+    ui.update();
+    expect(action(), 'the Rally window rebuilt twice on unchanged data').toBe(rebuilt);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. The contract every one of them states: safe to call while closed
 // ---------------------------------------------------------------------------
 
 // Every relocalize doc comment in the change claims to be self-gated so the
@@ -848,6 +914,16 @@ describe('#2529 a closed surface paints nothing when the fan-out reaches it', ()
         panel.innerHTML = '';
         win.relocalize();
         return panel;
+      },
+    ],
+    [
+      'Realm Racers',
+      () => {
+        const { ui, root } = openRealmRacers();
+        ui.close();
+        root.innerHTML = '';
+        ui.relocalize();
+        return root;
       },
     ],
   ];

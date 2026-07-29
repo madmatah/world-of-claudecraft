@@ -128,6 +128,10 @@ function normalizeAbilityCharges(
   }
   if (!player.abilityCharges) return;
   for (const [abilityId, state] of Object.entries(player.abilityCharges)) {
+    // A fixed activity budget is not a talent-resolved cap: it belongs to
+    // whatever granted it, and reconciling it against the class kit below would
+    // give it a recharge length and turn it back into a refilling pool.
+    if (state.fixed) continue;
     const ability = meta.known.find((known) => known.def.id === abilityId);
     if (!ability) {
       // Temporarily unlearned talent abilities can come back through another

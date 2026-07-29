@@ -2092,6 +2092,40 @@ export const TARGETS = [
     },
   },
   {
+    key: 'realm-racers-race',
+    label: 'Realm Racers: the in-race view once the match starts',
+    when: ['ui/realm_racers', 'sim/social/realm_racers'],
+    variants: [
+      { key: 'desktop', charClass: 'warrior', charName: 'Thorgar' },
+      { key: 'mobile', charClass: 'warrior', charName: 'Thorgar', mobile: true },
+    ],
+    // The whole point of the shot is what covers the viewport once the lights go
+    // out, so this keeps the FULL frame rather than clipping to the strip: the
+    // before shows the queue window still centered over the circuit, the after
+    // shows it gone with the race strip (and its forfeit control) in its place.
+    //
+    // The rally needs two racers and there is no practice bot yet, so a second
+    // local player is added and both are queued; the FIFO pairs them on the next
+    // tick, and the countdown phase is where the covering window was worst.
+    async capture(page) {
+      const staged = await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        if (!sim || !game?.hud) return { ok: false, reason: 'offline world is unavailable' };
+        game.hud.toggleRealmRacers?.();
+        const rival = sim.addPlayer('warrior', 'Briar');
+        sim.realmRacersQueueJoin(sim.playerId);
+        sim.realmRacersQueueJoin(rival);
+        for (let i = 0; i < 20; i++) sim.tick();
+        return { ok: sim.realmRacersInfo.match !== null, reason: 'the rally never paired' };
+      });
+      if (!staged.ok) throw new Error(staged.reason);
+      const lit = await pollForSize(page, '#realm-racers-hud');
+      if (!lit) throw new Error('#realm-racers-hud did not appear');
+      return {};
+    },
+  },
+  {
     key: 'card-duel',
     label: 'Card Duel window (Card Master)',
     when: [

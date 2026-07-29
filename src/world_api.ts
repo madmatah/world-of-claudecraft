@@ -44,6 +44,7 @@
 //   guild_bank.ts       IWorldGuildBank      shared guild treasury + item store (officer-plus,
 //                                            proximity-gated info + gold/item/buy-slots commands)
 //   vale_cup.ts         IWorldValeCup        Vale Cup boarball queue/roles/betting/practice
+//   realm_racers.ts     IWorldRealmRacers    Realm Racers queue, practice, race, Arc Shell
 //   mounts.ts           IWorldMounts         rideable ground mounts: pick + mount/dismount
 //   dungeon_finder.ts   IWorldDungeonFinder  Dungeon Finder queue/proposals/premade board
 //   deeds.ts            IWorldDeeds          earned deeds, lifetime stats, renown, active title,
@@ -85,6 +86,7 @@ import type { IWorldPet } from './world_api/pet';
 import type { IWorldProfessions } from './world_api/professions';
 import type { IWorldProgressionXp } from './world_api/progression_xp';
 import type { IWorldQuests } from './world_api/quests';
+import type { IWorldRealmRacers } from './world_api/realm_racers';
 import type { IWorldSocialGraph } from './world_api/social_graph';
 import type { IWorldTalents } from './world_api/talents';
 import type { IWorldTargeting } from './world_api/targeting';
@@ -115,7 +117,7 @@ export type {
 // discriminator. Changing the authoritative town layout requires a new epoch:
 // the strict discriminator makes both rolling-deploy directions fail closed
 // before either binary loads a character into a differently shaped world.
-export const ONLINE_WORLD_LAYOUT_VERSION = 3 as const;
+export const ONLINE_WORLD_LAYOUT_VERSION = 4 as const;
 export const ONLINE_WORLD_AUTH_TYPE = `auth-world-${ONLINE_WORLD_LAYOUT_VERSION}` as const;
 // The one wire literal both sides emit for a layout-epoch mismatch. The server
 // rejects with it, the client synthesizes it for pre-epoch servers, and the UI
@@ -217,6 +219,14 @@ export type {
   LeaderboardEntry,
 } from './world_api/progression_xp';
 export type {
+  RallyDriverTier,
+  RealmRacersInfo,
+  RealmRacersMatchInfo,
+  RealmRacersPhase,
+  RealmRacersRacerInfo,
+  RealmRacersResult,
+} from './world_api/realm_racers';
+export type {
   CharacterProfile,
   CharacterSearchResult,
   FriendInfo,
@@ -276,7 +286,8 @@ export interface IWorld
     IWorldDungeonFinder,
     IWorldActionBar,
     IWorldDeeds,
-    IWorldMounts {}
+    IWorldMounts,
+    IWorldRealmRacers {}
 
 // ---------------------------------------------------------------------------
 // Command schema (W0b): the shared wire-token vocabulary.
@@ -531,6 +542,12 @@ export const COMMAND_NAMES = [
   // 20 Hz snapshot, because the payload is cold, identical for every officer of
   // the guild, and 50 rows wide. Sent only while the log view is open.
   'guild_bank_log',
+  // The Realm Racers queue and active-race forfeit, plus the Practice start
+  // that seats a house pilot against you immediately (no queue, no wait).
+  'realm_racers_join',
+  'realm_racers_leave',
+  'realm_racers_forfeit',
+  'realm_racers_practice',
 ] as const;
 
 // The union both the send path (`online.ts`) and the dispatch switch
@@ -610,7 +627,8 @@ export type WorldFacet =
   | 'IWorldDungeonFinder'
   | 'IWorldActionBar'
   | 'IWorldDeeds'
-  | 'IWorldMounts';
+  | 'IWorldMounts'
+  | 'IWorldRealmRacers';
 
 export const COMMAND_FACETS = {
   // IWorldCombat: ability casts, auto-attack, spirit release.
@@ -800,6 +818,10 @@ export const COMMAND_FACETS = {
   vcup_ready: 'IWorldValeCup',
   vcup_bet: 'IWorldValeCup',
   vcup_practice: 'IWorldValeCup',
+  realm_racers_join: 'IWorldRealmRacers',
+  realm_racers_leave: 'IWorldRealmRacers',
+  realm_racers_forfeit: 'IWorldRealmRacers',
+  realm_racers_practice: 'IWorldRealmRacers',
   // IWorldMounts: pick + mount/dismount (snake_case wire strings, by design).
   // The active mount is a self-snapshot read (terse `mnt`, no send, untagged);
   // summoning one is an item use (use_item), not a mount command.

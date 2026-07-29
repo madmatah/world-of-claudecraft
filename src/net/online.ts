@@ -13,6 +13,7 @@ import {
 import { bagCapacity } from '../sim/bags';
 import { signChallenge } from '../sim/client_challenge';
 import { MOUNT_RACE_COURSE, type MountKey, normalizeMountKey } from '../sim/content/mounts';
+import { resolveRealmRacersKit } from '../sim/content/realm_racers';
 import { mechChromaItemId, mechChromaSkinIndex } from '../sim/content/skins';
 import {
   computeTalentModifiers,
@@ -123,6 +124,8 @@ import {
   type PlayerProfessionsView,
   type PresenceStatus,
   type RaidLockout,
+  type RallyDriverTier,
+  type RealmRacersInfo,
   type RecipeDef,
   type RiftFloorView,
   type SocialInfo,
@@ -1386,6 +1389,7 @@ function blankEntity(id: number): Entity {
     skinCatalog: 'class',
     skin: 0,
     mountKey: '',
+    drive: null,
     mountCastRemaining: 0,
     mountCastKey: '',
     mainhandItemId: null,
@@ -1485,6 +1489,14 @@ export class ClientWorld implements IWorld {
   // resolveSportKit instead of the class/level/talent derivation, so the
   // ONLINE action bar shows the sport kit (docs/prd/vale-cup.md wire trap).
   sportRole: SportRole | null = null;
+  realmRacersInfo: RealmRacersInfo = {
+    queued: false,
+    queuePosition: 0,
+    queueSize: 0,
+    match: null,
+    practiceAvailable: true,
+  };
+  private realmRacersKit: { abilityId: string; charges: number | null } | null = null;
   // --- IWorldSocialGraph: persistent friends/blocks/guild, set ONLY by the
   // `social`/`socialpos` frames (there is no `s.social` snapshot field). ---
   socialInfo: SocialInfo | null = null;
@@ -2838,6 +2850,25 @@ export class ClientWorld implements IWorld {
       // movement root, which reads mountCastRemaining.
       e.mountCastRemaining = w.mcr ?? 0;
       e.mountCastKey = w.mck ?? '';
+      // Vehicle state (volatile): absent means on foot, which is what selects
+      // the character path in the shared movement kernel. Rebuilt into a fresh
+      // object rather than kept by reference, so the display-only self
+      // extrapolator can never write back into this mirror.
+      e.drive = w.drv
+        ? {
+            profileKey: w.drv.k ?? '',
+            speed: w.drv.sp ?? 0,
+            slip: w.drv.sl ?? 0,
+            yawRate: w.drv.yr ?? 0,
+            spin: w.drv.sn ?? 0,
+            handbrake: w.drv.hb ?? 0,
+            gripMult: w.drv.g ?? 1,
+            dragMult: w.drv.dg ?? 1,
+            speedCap: w.drv.c ?? 1,
+            // Sent only while set, so absent means the pilot has the controls.
+            controlsLocked: !!w.drv.lk,
+          }
+        : null;
       e.sitting = !!w.sit;
       e.riftSliding = !!w.sld;
       e.climbing = !!w.cl;
@@ -3300,9 +3331,33 @@ export class ClientWorld implements IWorld {
       // shared resolver (identical to the Sim's swap); otherwise the normal
       // class/level/talent derivation below applies.
       if (s.sport !== undefined) this.sportRole = s.sport ? (s.sport.role ?? null) : null;
-      this.known = this.sportRole
-        ? resolveSportKit(this.sportRole)
-        : abilitiesKnownAt(this.cfg.playerClass, e.level, talentMods);
+      // The Rally kit rides the same wireRev-gated block for the same reason,
+      // and carries WHICH weapon plus its per-race budget: the kit is resolved
+      // from the racer's slot server-side, so a mirror that re-derived a
+      // hardcoded ability would show the wrong slot the moment a machine or a
+      // pickup hands out a different one. The live count rides `achg` like every
+      // other charge-limited ability.
+      if (s.rrkit !== undefined) {
+        this.realmRacersKit =
+          s.rrkit && s.rrkit.active === true
+            ? { abilityId: String(s.rrkit.w ?? ''), charges: s.rrkit.c ?? null }
+            : null;
+      }
+      const rallyKit = this.realmRacersKit;
+      // The weapon's charge pool is a FIXED race budget, not the refilling
+      // recharge model, and the wire carries counts only. It is stamped HERE
+      // rather than where `achg` decodes because that block runs ABOVE this one:
+      // reading the kit there would take it from the previous snapshot, so the
+      // first frame after a racer is seated would mirror their budget as an
+      // ordinary pool. The HUD greys a spent slot (and declines to open an
+      // aiming mode) off exactly this flag.
+      const budget = rallyKit ? e?.abilityCharges?.[rallyKit.abilityId] : undefined;
+      if (budget) budget.fixed = true;
+      this.known = rallyKit
+        ? resolveRealmRacersKit(rallyKit.abilityId, rallyKit.charges)
+        : this.sportRole
+          ? resolveSportKit(this.sportRole)
+          : abilitiesKnownAt(this.cfg.playerClass, e.level, talentMods);
       // --- IWorldParty: party roster + raid markers, delta-omitted self-decode
       // (keep the prior value when absent; `marks: null` clears on disband). ---
       if (s.party !== undefined) this.partyInfo = s.party;
@@ -3317,6 +3372,14 @@ export class ClientWorld implements IWorld {
       if (s.df !== undefined) this.dungeonFinderInfo = s.df;
       if (s.dfb !== undefined) this.dungeonFinderBoard = s.dfb;
       if (s.cardDuel !== undefined) this.cardMinigameInfo = s.cardDuel;
+      if (s.rr !== undefined)
+        this.realmRacersInfo = s.rr ?? {
+          queued: false,
+          queuePosition: 0,
+          queueSize: 0,
+          match: null,
+          practiceAvailable: true,
+        };
       if (s.honor !== undefined) this.honor = s.honor ?? 0;
       if (s.lhonor !== undefined) this.lifetimeHonor = s.lhonor ?? 0;
       if (s.vcup !== undefined) this.lastVcupRemainder = s.vcup as VcViewerReadout | null;
@@ -4402,6 +4465,21 @@ export class ClientWorld implements IWorld {
   // every other practice. Same command online and off.
   vcupPracticeStart(bracket: VcBracket): void {
     this.cmd({ cmd: 'vcup_practice', bracket });
+  }
+  joinRealmRacersQueue(): void {
+    this.cmd({ cmd: 'realm_racers_join' });
+  }
+  leaveRealmRacersQueue(): void {
+    this.cmd({ cmd: 'realm_racers_leave' });
+  }
+  forfeitRealmRacers(): void {
+    this.cmd({ cmd: 'realm_racers_forfeit' });
+  }
+  // Practice: the server seats the sender against a house pilot on the ONE
+  // circuit immediately. Same command online and off, and the server re-checks
+  // the tier and the circuit before seating anyone.
+  startRealmRacersPractice(tier: RallyDriverTier): void {
+    this.cmd({ cmd: 'realm_racers_practice', tier });
   }
   // --- IWorldSocialGraph: persistent social command sends (resolved server-side by
   // character name) + the REST character typeahead. socialInfo arrives via the

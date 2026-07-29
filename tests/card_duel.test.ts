@@ -50,6 +50,7 @@ function makeCtx(
     cardDuelQueue: [] as number[],
     cardDuels: new Map(),
     vcup: { botPids: [] as number[] },
+    realmRacers: { bots: new Map<number, string>() },
     bumpDeedStat,
     error,
     emit,
@@ -104,6 +105,7 @@ describe('card_duel', () => {
       cardDuelQueue: [] as number[],
       cardDuels: new Map(),
       vcup: { botPids: [] as number[] },
+      realmRacers: { bots: new Map<number, string>() },
       bumpDeedStat: vi.fn(),
       error,
       emit: vi.fn(),
@@ -514,15 +516,25 @@ describe('card_duel', () => {
     expect(cardDuelMatchFor(ctx, 1)).toBeNull();
   });
 
-  it('cardMinigameAvailable ignores Fiesta/Vale Cup bots (offline bot matches must not fake availability)', () => {
-    const { ctx, error } = makeCtx();
-    (ctx.players.get(2) as unknown as { isFiestaBot?: boolean }).isFiestaBot = true;
-    ctx.vcup.botPids.push(3);
-    // Only pids 2 and 3 exist besides 1, and both are bots: no queueable
-    // human opponent exists, so joining must still be refused.
-    joinCardMinigameQueue(ctx, 1);
-    expect(error).toHaveBeenCalledWith(1, 'Card Duel requires another player online.');
-    expect(ctx.cardDuelQueue).toEqual([]);
+  it('cardMinigameAvailable ignores every bot family (offline bot matches must not fake availability)', () => {
+    // One arm per family, so a family added to the sim and forgotten here
+    // cannot pass by riding another family's exclusion.
+    for (const family of ['fiesta', 'valeCup', 'rally'] as const) {
+      const { ctx, error } = makeCtx();
+      const other = ctx.players.get(2) as unknown as { isFiestaBot?: boolean };
+      if (family === 'fiesta') other.isFiestaBot = true;
+      if (family === 'valeCup') ctx.vcup.botPids.push(2);
+      if (family === 'rally') ctx.realmRacers.bots.set(2, 'driver');
+      // Marking pid 3 with a DIFFERENT family each time would let the arm pass
+      // on the other exclusion, so 3 is always a fiesta bot and 2 is the one
+      // under test.
+      (ctx.players.get(3) as unknown as { isFiestaBot?: boolean }).isFiestaBot = true;
+      // Only pids 2 and 3 exist besides 1, and both are bots: no queueable
+      // human opponent exists, so joining must still be refused.
+      joinCardMinigameQueue(ctx, 1);
+      expect(error, family).toHaveBeenCalledWith(1, 'Card Duel requires another player online.');
+      expect(ctx.cardDuelQueue, family).toEqual([]);
+    }
   });
 
   it('does not forfeit a match before its round deadline has passed', () => {

@@ -15,6 +15,7 @@ import {
   TEMPORAL_HOURGLASS_SELF_RADIUS,
   type WeaponInfo,
 } from '../types';
+import { REALM_RACERS_ABILITIES } from './realm_racers';
 import { TALENT_ABILITIES_V2 } from './talent_abilities_v2';
 import type { TalentModifiers } from './talents';
 import { SPORT_ABILITIES } from './vale_cup';
@@ -6261,6 +6262,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   // resolves sport ids; no class lists them, so abilitiesKnownAt never grants
   // them outside a match (resolveSportKit is the only entry).
   ...SPORT_ABILITIES,
+  ...REALM_RACERS_ABILITIES,
 };
 
 // A class ability resolved to a concrete rank, with talent modifiers already

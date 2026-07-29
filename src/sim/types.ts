@@ -2363,6 +2363,12 @@ export type AbilityEffect =
   | { type: 'ballShoot'; power: number; loft: number }
   | { type: 'sportDash'; distance: number; catchBall?: boolean }
   | { type: 'sportShove'; distance: number }
+  // The Realm Racers's single mounted action. The social system owns the
+  // straight-line shell and silently ignores casts outside an active race.
+  // The Realm Racers weapon slot's shot. Ground-targeted: it lands where the
+  // pilot aimed, and `radius` is the blast, carried on the effect so the aiming
+  // reticle draws the exact circle the sim will resolve.
+  | { type: 'realmRacersShell'; radius: number }
   | {
       type: 'consumeAura';
       auraIds?: string[];
@@ -2522,6 +2528,9 @@ export interface AbilityDef {
   // stunned, polymorphed, incapacitated, silenced, or locked out, so it always frees
   // the caster. The CC cast gate in casting_lifecycle skips those checks for it.
   usableWhileControlled?: boolean;
+  // Most abilities intentionally dismount on cast. Activity kits may opt into
+  // staying mounted while the authoritative activity itself owns the vehicle.
+  usableWhileMounted?: boolean;
   targetType?: 'enemy' | 'friendly' | 'any';
   // Restrict a friendly-target ability to the caster or a member of the caster's
   // group/raid (never an external friendly player, pet, or friendly NPC). Cascada
@@ -3262,6 +3271,62 @@ export interface ClientMirroredEntityFields {
   climbProgress?: number;
 }
 
+/**
+ * Live driving state of an entity piloting a VEHICLE (the Realm Racers
+ * racers). Present only while the owning activity seats a pilot; null everywhere
+ * else, which is what selects the character path in the movement kernel.
+ *
+ * It rides the ENTITY rather than a system module because the movement kernel
+ * (src/sim/player_motion.ts) is pure and host-agnostic: it has no SimContext,
+ * exactly like `mountKey`, so both the authoritative Sim and the online
+ * self-extrapolator read the same state and predict the same motion.
+ *
+ * The three surface multipliers are the seam between the generic vehicle model
+ * and whatever activity owns the vehicle: the kernel never knows what a circuit
+ * is, and the rally writes these each tick from the racer's projection onto the
+ * track (src/sim/social/realm_racers.ts).
+ */
+export interface VehicleDrive {
+  /** Which VEHICLE_PROFILES record supplies every handling number. */
+  profileKey: string;
+  /** Forward speed along facing, yd/s. Negative is reverse. */
+  speed: number;
+  /** Lateral velocity in the body frame, yd/s: the drift component. */
+  slip: number;
+  /** Yaw rate, rad/s (positive turns left, the repo's facing convention). */
+  yawRate: number;
+  /**
+   * Rotation the machine is carrying that the STEERING did not ask for, rad/s:
+   * the spin a contact put into it. It rides beside `yawRate` rather than
+   * inside it because the steering servo pulls `yawRate` back to the wheel's
+   * demand within ~0.1 s, which would erase a shove before a player could feel
+   * it; this decays on its own (`spinDecay`) so being put sideways lasts long
+   * enough to be a moment the pilot has to catch.
+   */
+  spin: number;
+  /** Handbrake engagement 0..1, ramped for the drift VFX and the audio. */
+  handbrake: number;
+  /** Surface grip multiplier, written by the owning activity. 1 = road. */
+  gripMult: number;
+  /** Surface drag multiplier, written by the owning activity. 1 = road. */
+  dragMult: number;
+  /** Surface top-speed multiplier, written by the owning activity. 1 = road. */
+  speedCap: number;
+  /**
+   * The owning activity has taken the controls away: the machine is held where
+   * it stands and its weapons are inert. The Realm Racers sets it on the grid
+   * before the flag and again once the race is over.
+   *
+   * It gates the CAST, not just the shot's effect, which is the whole reason it
+   * exists as state rather than as a check inside the weapon: a refusal made
+   * after the cast resolves has already armed the cooldown, so a pilot mashing
+   * the trigger through the countdown would roll onto a circuit with their
+   * weapon on cooldown for nothing. It rides the wire (`drv.lk`) so the client
+   * can grey the slot with the same fact the server refuses on.
+   */
+  controlsLocked: boolean;
+}
+
 export interface Entity extends ClientMirroredEntityFields {
   // Transient talent-proc counters and internal cooldowns (combat/talent_procs.ts).
   // Never serialized; reset on death.
@@ -3322,6 +3387,14 @@ export interface Entity extends ClientMirroredEntityFields {
       // queued behind its twin). Optional for old JSONB saves: absent means
       // legacy sequential state, converted on the first recharge tick.
       recharges?: number[];
+      // A FIXED BUDGET rather than the recharge model above: N uses granted by
+      // an activity for its duration, never refilled (the Realm Racers's
+      // weapon slot). The recharge tick skips it entirely, and a spent-out fixed
+      // pool refuses the cast as EMPTY rather than as cooling down, which the
+      // action bar draws differently. It is a flag and not merely
+      // `rechargeLength: 0` because the recharge tick reads a zero length as an
+      // instant refill and silently hands the pool straight back.
+      fixed?: boolean;
     }
   >;
   id: number;
@@ -3840,6 +3913,11 @@ export interface Entity extends ClientMirroredEntityFields {
   // online self-extrapolator predicts mounted speed in lockstep. The persisted
   // selection lives on PlayerMeta.selectedMount (src/sim/content/mounts.ts).
   mountKey: string;
+  // Live vehicle state (players only; null = on foot). Non-null selects the
+  // vehicle branch of the one movement kernel, so it must reach the online
+  // self-extrapolator: it syncs on the wire (terse `drv`) like mountKey, and
+  // only the seated racers of a live minigame ever carry it.
+  drive: VehicleDrive | null;
   // Mount summon/dismount transition (players only; 0 = idle). Seconds left in the
   // call-the-mount summon or the dismount, driven per tick by updateMountTransition
   // (src/sim/mounts.ts). The sim READS it: player_motion.stepPlayerMotion roots the
@@ -4525,6 +4603,62 @@ export type SimEvent = { pid?: number } & (
     }
   // personal outcome line for each fighter (rides beside the anchored vcupEnd)
   | { type: 'vcupResult'; won: boolean; draw: boolean }
+  // The Realm Racers. Queue/match lifecycle is personal; shell effects carry
+  // world coordinates plus entity ids so nearby clients can render them.
+  | { type: 'realmRacersQueued'; position: number }
+  | { type: 'realmRacersUnqueued' }
+  | {
+      type: 'realmRacersFound';
+      matchId: number;
+      opponentName: string;
+      countdownTicks: number;
+    }
+  | { type: 'realmRacersGo' }
+  | { type: 'realmRacersLap'; lap: number; totalLaps: number }
+  | {
+      type: 'realmRacersResult';
+      won: boolean;
+      forfeited: boolean;
+      winnerName: string;
+      returnTicks: number;
+    }
+  // An Arc Shell left the barrel. It carries the IMPACT POINT, which is decided
+  // at fire time and never revised, so one event buys the client the muzzle
+  // flash, the whole arc, and the ground marker that makes the shot dodgeable,
+  // with no per-tick traffic behind it.
+  | {
+      type: 'realmRacersShellFired';
+      sourceId: number;
+      /** Muzzle. */
+      x: number;
+      z: number;
+      targetX: number;
+      targetZ: number;
+      flightSeconds: number;
+    }
+  // And it landed. Emitted whether or not it caught anyone, because a missed
+  // shot still craters: `targetId` is the racer nearest the centre, or null on
+  // empty track, and `impact` is that racer's 0..1 blast falloff.
+  | {
+      type: 'realmRacersShellHit';
+      sourceId: number;
+      targetId: number | null;
+      x: number;
+      z: number;
+      impact: number;
+    }
+  // Two racers made contact. World-visible and text-free like the shell pair
+  // above, and throttled at the emit site: a sustained side-by-side lean is one
+  // impact to a player, not one event every tick it lasts.
+  | {
+      type: 'realmRacersBump';
+      aId: number;
+      bId: number;
+      x: number;
+      z: number;
+      /** Closing speed along the contact normal, yd/s: how hard it was. */
+      impact: number;
+    }
   // Card Duel minigame (src/sim/social/card_duel.ts). Personal (pid), text-free
   // on purpose (the client picks its own audio/copy off the structured
   // fields, same as gatherResult/craftResult above).
@@ -5585,6 +5719,12 @@ export interface SimConfig {
   // bet on). Server + offline game enable it; tests/goldens leave it off so the
   // idle timer never perturbs a deterministic scenario.
   valeCupShowcase?: boolean;
+  // When true, a player left ALONE in the Realm Racers queue past the
+  // backfill wait is paired with a house pilot instead of waiting for a rival
+  // who may never come. The server enables it; tests/goldens leave it off so no
+  // bot ever spawns inside a deterministic scenario. The Practice button is NOT
+  // gated by this: it is an explicit player action, always available.
+  realmRacersBackfill?: boolean;
 }
 
 export function emptyMoveInput(): MoveInput {

@@ -234,6 +234,13 @@ export const BIND_ACTIONS: BindAction[] = [
     kind: 'edge',
     defaults: ['KeyY'],
   },
+  {
+    id: 'rally',
+    label: 'Realm Racers',
+    category: 'Interface',
+    kind: 'edge',
+    defaults: ['Shift+KeyY'],
+  },
   // Mount / dismount toggle: Backquote avoids the release-owned KeyZ layers
   // for weapon sheathing and the Book of Deeds.
   {

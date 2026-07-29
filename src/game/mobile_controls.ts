@@ -133,6 +133,7 @@ export interface MobileControlCallbacks {
   onDungeonFinder(): void;
   /** Open the Vale Cup window (queue/roster board for the boarball minigame). */
   onValeCup(): void;
+  onRally?(): void;
   onQuestLog(): void;
   onCharacter(): void;
   onBags(): void;
@@ -287,6 +288,8 @@ export class MobileControls {
   /** Rendered (transform-scaled) wheel radius: the input throw distance. */
   private moveRadius = 1;
   private moveAutorunLocked = false;
+  /** Whether the jump button currently reads as the handbrake (see setHandbrakeMode). */
+  private handbrakeMode = false;
   /** Layout (pre-transform) wheel radius: what style.left/top and the stick's
    *  translate use; the --joy-scale transform scales those visually. */
   private moveStickRadius = 1;
@@ -502,6 +505,7 @@ export class MobileControls {
     this.bindButton('mobile-arena', () => this.callbacks.onArena());
     this.bindButton('mobile-dfinder', () => this.callbacks.onDungeonFinder());
     this.bindButton('mobile-valecup', () => this.callbacks.onValeCup());
+    this.bindButton('mobile-rally', () => this.callbacks.onRally?.());
     this.bindButton('mobile-quest', () => this.callbacks.onQuestLog());
     this.bindButton('mobile-char', () => this.callbacks.onCharacter());
     this.bindButton('mobile-bags', () => this.callbacks.onBags());
@@ -900,6 +904,25 @@ export class MobileControls {
   syncAutorun(on: boolean): void {
     this.moveAutorunLocked = false;
     this.syncMoveAutorunTarget(on ? 'locked' : 'hidden');
+  }
+
+  /**
+   * Behind the wheel, the jump control IS the handbrake: the movement kernel
+   * reads the same flag either way, so the button keeps its element, its hit
+   * area and its binding and only ever changes what it SAYS. Called from the
+   * frame loop on the state edge, so an unchanged frame does no DOM work.
+   */
+  setHandbrakeMode(on: boolean): void {
+    if (this.handbrakeMode === on) return;
+    this.handbrakeMode = on;
+    const button = document.getElementById('mobile-jump');
+    if (!button) return;
+    const text = on ? t('hudChrome.rally.handbrake') : t('hudChrome.mobile.jump');
+    const name = on ? t('hudChrome.rally.handbrake') : t('hud.keybinds.actions.jump');
+    const label = button.querySelector('.mobile-label');
+    if (label) label.textContent = text;
+    button.setAttribute('aria-label', name);
+    button.setAttribute('title', name);
   }
 
   private onCameraDown(e: PointerEvent): void {

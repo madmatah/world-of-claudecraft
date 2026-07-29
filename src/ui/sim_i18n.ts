@@ -399,6 +399,11 @@ const baseEnTable = {
   'log.channelInterrupted': '{mechanic} is interrupted!',
   'aura.tamed': 'Tamed',
   'aura.causticSpores': 'Caustic Spores',
+  // The Realm Racers's two off-track penalties (social/realm_racers.ts):
+  // the mown verge just off the racing surface, then the garden beyond it.
+  'aura.rallySoftVerge': 'Soft Verge',
+  'aura.rallyGardenLawn': 'Garden Lawn',
+  'aura.rallyWading': 'Wading',
   'aura.elixirBear': 'Might of the Bear',
   // Crafted alchemy elixir auras (content/profession_items.ts): the
   // buff_sta aura name shown on the buff bar / combat log when the crafted elixir
@@ -8040,6 +8045,9 @@ const AURA_NAME_KEY: Record<string, SimMessageKey> = {
   // procced by Bloodletting and Red Harvest; shown on the buff bar.
   Enraged: 'aura.enraged',
   Tamed: 'aura.tamed',
+  'Soft Verge': 'aura.rallySoftVerge',
+  'Garden Lawn': 'aura.rallyGardenLawn',
+  Wading: 'aura.rallyWading',
   'Temporal Exhaustion': 'aura.temporalExhaustion',
   'Cauterize Fatigue': 'aura.cauterizeFatigue',
   'Might of the Bear': 'aura.elixirBear',

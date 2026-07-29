@@ -117,6 +117,7 @@ const FANOUT_ARMS: readonly string[] = [
   'this.dungeonFinderWindow.relocalize|',
   'this.dungeonFinderProposalPopup.relocalize|',
   'this.valeCupWindow.relocalize|',
+  'this.realmRacersUi.relocalize|',
   'this.vcupBetting.relocalize|',
   'this.vcupIndicator.relocalize|',
   'this.vcupMatchHud.relocalize|',
@@ -242,6 +243,12 @@ const ANSWERED: readonly AnsweredSurface[] = [
     memos: ['lastSig'],
     answer: 'this.dungeonFinderWindow.relocalize',
     why: 'the view core signature (queue state, role counts and party ids) joined with the open pane name',
+  },
+  {
+    file: 'realm_racers.ts',
+    memos: ['lastHudSig', 'lastWindowSig'],
+    answer: 'this.realmRacersUi.relocalize',
+    why: 'the queue state, opponent, race phase, lap and result that gate the localized Rally window and HUD rebuilds',
   },
   {
     file: 'hud/action_bar/mobile_action_ring_painter.ts',

@@ -20,6 +20,7 @@
 import { isInstancedRegion, MANTLE_REACH, slopeGlueHeight } from './colliders';
 import { isRooted, isStunned } from './combat/cc';
 import { mountMoveSpeedPct } from './content/mounts';
+import { vehicleProfile } from './content/vehicles';
 import { PLAYER_BODY_RADIUS, PLAYER_MAX_CLIMB_SLOPE, PLAYER_SWIM_DEPTH } from './pathfind';
 import {
   type CharacterMoveParams,
@@ -38,7 +39,14 @@ import {
   normAngle,
   RUN_SPEED,
   TURN_SPEED,
+  type VehicleDrive,
 } from './types';
+import {
+  advanceVehicleDrive,
+  applyAchievedVehicleVelocity,
+  vehicleVelocityX,
+  vehicleVelocityZ,
+} from './vehicle_motion';
 import {
   groundHeight,
   terrainDownhill,
@@ -92,13 +100,12 @@ const SWIM_DEPTH = PLAYER_SWIM_DEPTH; // ground this far under the water line = 
 const MAX_CLIMB_SLOPE = PLAYER_MAX_CLIMB_SLOPE;
 const BODY_RADIUS = PLAYER_BODY_RADIUS;
 
-// Movement speed multiplier over the entity's own state (ghost flag + auras).
-// The Fiesta move-speed augment lives on PlayerMeta, so the live Sim passes it
-// via extraSpeedPct; hosts without PlayerMeta (the client extrapolator) pass 0.
-export function moveSpeedMult(e: Entity, extraSpeedPct = 0): number {
-  // A released spirit runs at a fixed boosted speed and is immune to snares (a ghost
-  // cannot be slowed): short-circuit the aura scan with the ghost-run multiplier.
-  if (e.ghost) return GHOST_RUN_MULT;
+// Kernel-owned scratch for the aura speed scan: one reused pair keeps the
+// hot path (every player, every tick) allocation-free, the same discipline the
+// physics scratch above uses.
+const auraSpeedScan = { slow: 1, speed: 1 };
+
+function scanAuraSpeed(e: Entity): void {
   let slow = 1,
     speed = 1;
   for (const a of e.auras) {
@@ -110,6 +117,30 @@ export function moveSpeedMult(e: Entity, extraSpeedPct = 0): number {
     // Fury Enrage: +10% move speed (non-stacking with other speed buffs).
     if (a.kind === 'enrage') speed = Math.max(speed, ENRAGE_MOVE_MULT);
   }
+  auraSpeedScan.slow = slow;
+  auraSpeedScan.speed = speed;
+}
+
+// The AURA-ONLY half of moveSpeedMult: snares and speed buffs, with neither the
+// mount bonus nor the Fiesta augment folded in. The vehicle model replaces the
+// mount bonus outright but must still be snared and hasted like everyone else,
+// so it scales itself by this; moveSpeedMult below shares the one scan, which
+// is what stops the two from drifting apart.
+export function auraSpeedMult(e: Entity): number {
+  if (e.ghost) return GHOST_RUN_MULT;
+  scanAuraSpeed(e);
+  return auraSpeedScan.slow * auraSpeedScan.speed;
+}
+
+// Movement speed multiplier over the entity's own state (ghost flag + auras).
+// The Fiesta move-speed augment lives on PlayerMeta, so the live Sim passes it
+// via extraSpeedPct; hosts without PlayerMeta (the client extrapolator) pass 0.
+export function moveSpeedMult(e: Entity, extraSpeedPct = 0): number {
+  // A released spirit runs at a fixed boosted speed and is immune to snares (a ghost
+  // cannot be slowed): short-circuit the aura scan with the ghost-run multiplier.
+  if (e.ghost) return GHOST_RUN_MULT;
+  scanAuraSpeed(e);
+  let speed = auraSpeedScan.speed;
   // Mounted travel: the active ground mount rides the entity mirror (mountKey,
   // synced over the wire like skin), so the online self-extrapolator predicts
   // mounted speed in lockstep with the server. Additive with buff_speed like
@@ -117,7 +148,7 @@ export function moveSpeedMult(e: Entity, extraSpeedPct = 0): number {
   if (e.mountKey) speed += mountMoveSpeedPct(e.mountKey);
   // Fiesta move-speed augments (only ever non-zero inside a Fiesta bout).
   if (extraSpeedPct) speed += extraSpeedPct;
-  return slow * speed;
+  return auraSpeedScan.slow * speed;
 }
 
 // Fiesta "Moon Boots" power-up: a buff_jump aura multiplies jump height.
@@ -172,6 +203,15 @@ export interface PlayerMotionDeps {
 }
 
 export function stepPlayerMotion(deps: PlayerMotionDeps, p: Entity, inp: MoveInput): void {
+  // A pilot at the wheel drives; everyone else runs. The branch sits at the top
+  // of the ONE shared movement entry point on purpose: both hosts (the
+  // authoritative Sim and the online self-extrapolator) run this function, so
+  // vehicle motion predicts in lockstep by construction. A second entry point
+  // beside this one would silently rubber-band every race.
+  if (p.drive) {
+    stepVehicleMotion(deps, p, inp);
+    return;
+  }
   const stepStartX = p.pos.x;
   const stepStartZ = p.pos.z;
   // Convention: facing f points along (sin f, cos f); the camera sits behind
@@ -349,8 +389,95 @@ export function stepPlayerMotion(deps: PlayerMotionDeps, p: Entity, inp: MoveInp
     }
   }
 
-  verticalPass(deps, p, inp, wishX, wishZ, wishSpeed, swimming, steepGround, mountLocked);
+  verticalPass(deps, p, inp.jump, wishX, wishZ, wishSpeed, swimming, steepGround, mountLocked);
   standoffPass(deps, p, stepStartX, stepStartZ, wishX, wishZ, wishSpeed, movingOnGround);
+}
+
+// The VEHICLE arm of the kernel: read the controls, advance the pure driving
+// model (vehicle_motion.ts), integrate the heading, sweep the resulting
+// displacement through the same static collision the character path uses, and
+// re-derive the drive velocity from what the sweep actually achieved.
+//
+// Space is the HANDBRAKE while driving, not a jump: the whole input chain
+// (keyboard, gamepad, mobile) reaches the kernel as `inp.jump`, so rebinding it
+// here is what makes every surface follow with no new keybind. The vertical
+// pass is shared with the character path (gravity, landing, fall damage) with
+// the jump arm held down, so a machine popped into the air by a shell or a bump
+// lands exactly like a body does.
+//
+// The standoff pass is deliberately NOT run: it eases a body off a TERRAIN
+// wall, and every vehicle today drives an instanced flat floor where it is a
+// no-op. A vehicle in the open world would want it back.
+function stepVehicleMotion(deps: PlayerMotionDeps, p: Entity, inp: MoveInput): void {
+  const drive = p.drive as VehicleDrive;
+  const profile = vehicleProfile(drive.profileKey);
+  // Stun and root take the controls away but never the momentum: a machine that
+  // is hit keeps rolling and coasts to a stop.
+  const controlled = !isStunned(p) && !isRooted(p);
+  // Turn keys AND strafe keys both steer: a machine has no strafe, and every
+  // player expects A/D to point the machine.
+  const steer = controlled
+    ? (inp.turnLeft || inp.strafeLeft ? 1 : 0) - (inp.turnRight || inp.strafeRight ? 1 : 0)
+    : 0;
+  const yawDelta = advanceVehicleDrive(drive, profile, {
+    throttle: controlled ? (inp.forward ? 1 : 0) - (inp.back ? 1 : 0) : 0,
+    steer,
+    handbrake: controlled && inp.jump,
+    onGround: p.onGround,
+    auraMult: auraSpeedMult(p),
+  });
+  p.facing = normAngle(p.facing + yawDelta);
+
+  const beforeX = p.pos.x;
+  const beforeZ = p.pos.z;
+  stepVehicleHorizontal(
+    deps,
+    p,
+    vehicleVelocityX(drive, p.facing) * DT,
+    vehicleVelocityZ(drive, p.facing) * DT,
+    profile.bodyRadius,
+  );
+  applyAchievedVehicleVelocity(drive, p.facing, (p.pos.x - beforeX) / DT, (p.pos.z - beforeZ) / DT);
+  // Not swimming and never on steep ground: vehicles live on instanced floors,
+  // where the ridden surface is flat and there is no waterline to tread.
+  verticalPass(deps, p, false, 0, 0, 0, false, false, false);
+}
+
+// The horizontal sweep for a vehicle: the same two solvers the character path
+// picks between, at the machine's own body radius. Fences are never ignored (a
+// vehicle has no jump arc to clear them with).
+function stepVehicleHorizontal(
+  deps: PlayerMotionDeps,
+  p: Entity,
+  stepX: number,
+  stepZ: number,
+  radius: number,
+): void {
+  if (isInstancedRegion(p.pos.x)) {
+    const resolved = deps.resolveMove(
+      p.pos.x,
+      p.pos.z,
+      p.pos.x + stepX,
+      p.pos.z + stepZ,
+      radius,
+      p,
+      false,
+    );
+    p.pos.x = resolved.x;
+    p.pos.z = resolved.z;
+    return;
+  }
+  moveParams.seed = deps.seed;
+  moveParams.radius = radius;
+  moveParams.stepHeight = MAX_STEP_HEIGHT;
+  moveParams.maxSlope = MAX_CLIMB_SLOPE;
+  moveParams.grounded = p.onGround;
+  moveParams.swimming = false;
+  moveParams.ignoreFences = false;
+  moveCharacter(moveParams, p.pos.x, p.pos.y, p.pos.z, stepX, stepZ, moveOut);
+  p.pos.x = moveOut.x;
+  p.pos.z = moveOut.z;
+  if (moveOut.stepped > 0) p.pos.y = moveOut.y;
 }
 
 // Instanced interiors (dungeons, delves, arena, the Yumi maze): flat floors
@@ -468,7 +595,10 @@ function stepInstancedRegion(
 function verticalPass(
   deps: PlayerMotionDeps,
   p: Entity,
-  inp: MoveInput,
+  // The jump flag alone, not the whole input: the vehicle arm shares this pass
+  // with the jump held down (Space is its handbrake), and passing the boolean
+  // makes that impossible to get wrong.
+  jumpHeld: boolean,
   wishX: number,
   wishZ: number,
   wishSpeed: number,
@@ -502,7 +632,7 @@ function verticalPass(
     p.onGround = true;
     p.jumping = false;
     p.fallStartY = p.pos.y;
-    if (inp.jump && !isRooted(p) && !mountLocked) {
+    if (jumpHeld && !isRooted(p) && !mountLocked) {
       // small hop to climb onto shores and docks
       p.vy = JUMP_VELOCITY * 0.7 * jumpMult(p);
       p.vx = wishX * wishSpeed;
@@ -525,7 +655,7 @@ function verticalPass(
     p.vy <= 0 &&
     p.vy > -GRAVITY * COYOTE_TIME &&
     terrainSteepnessAt(p.pos.x, p.pos.z, deps.seed) <= MAX_CLIMB_SLOPE;
-  if (inp.jump && (p.onGround || coyote) && !isRooted(p) && !steepGround && !mountLocked) {
+  if (jumpHeld && (p.onGround || coyote) && !isRooted(p) && !steepGround && !mountLocked) {
     p.vy = JUMP_VELOCITY * jumpMult(p);
     p.vx = wishX * wishSpeed;
     p.vz = wishZ * wishSpeed;

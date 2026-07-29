@@ -376,7 +376,15 @@ describe('Eastbrook polish capture contract', () => {
       // or geometry value changed, and no capture was retaken: Eastbrook itself is
       // untouched by all of it. Re-minted with
       // scripts/assets/eastbrook_grand_armoury/remint_polish_provenance.mjs.
-      fingerprint: '6b02ff15264e961e2a91ecfecc67f547382c77d76dcce9cedf6218405b94c71d',
+      // Re-minted once more for the v0.34.0 rebase: Realm Racers edits
+      // src/render/renderer.ts on top of the release, which moves the
+      // rendererIntegration leaf and with it the composite, so the merged tree
+      // matches neither parent's literal. Still no pipeline input or geometry
+      // value changed, the Rally circuit stays isolated in its distant
+      // instance band, and no capture was retaken (the five per-asset seal
+      // suites stay green untouched).
+      fingerprint: '663382511a430542d61b49e0811003c2379d73443e666046d5067d0c7a17f835',
+
       components: {
         captureContract: {
           id: 'polish-v2',

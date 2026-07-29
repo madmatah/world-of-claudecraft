@@ -724,6 +724,7 @@ export const hudChromeStrings = {
     // Discord is a brand name; it stays identical across locales.
     discord: 'Discord',
     valecup: 'Vale Cup',
+    rally: 'Realm Racers',
     sheathe: 'Sheathe/Unsheathe Weapon',
     // Pet bar (Ctrl+1..5 by default) key-binding rows + category header.
     categoryPet: 'Pet',
@@ -1029,6 +1030,97 @@ export const hudChromeStrings = {
       lostLog: 'Your Vale Cup bet lost: {amount}.',
       refundLog: 'Bets voided, your {amount} stake was returned.',
     },
+  },
+  rally: {
+    kicker: 'Evergarden Racing Society',
+    title: 'Realm Racers',
+    close: 'Close the Realm Racers window',
+    pitch:
+      'Steel through the hedges. Find the line, trust the slide, and leave every rival eating dust.',
+    // Timeless promise chips under the pitch: no pilot counts, no lap counts.
+    // Those change with circuits and formats; the feel of the race does not.
+    promiseCircuit: 'Garden circuit',
+    promiseSlide: 'Handbrake slides',
+    promiseRival: 'Live rivals',
+    // One short primer on the front screen, because the QUEUE route never
+    // passes through the practice setup screen and its full control list. The
+    // rules that used to sit here (checkpoints, the weapon, equal machines) are
+    // either learned in the first corner or about to stop being true, and none
+    // of them belong between a player and the button they came to press.
+    howToPlayTitle: 'How to play',
+    howToPlay:
+      'Throttle, brake and steer with your movement keys, and hold the jump control to pull the handbrake and slide a tight corner. First across the finish line takes the win.',
+    // Separator between the two ways onto the grid.
+    orRace: 'or',
+    // Label of the mobile action button while a race is running: the jump
+    // button becomes the handbrake for as long as the player is driving.
+    handbrake: 'Handbrake',
+    join: 'Join the Race Queue',
+    leave: 'Leave the Queue',
+    forfeit: 'Forfeit Race',
+    // Armed label of the race strip's two-step forfeit control. The first press
+    // swaps to this, a second press inside the arm window ends the race. Kept
+    // close to the idle label in length: the button reserves one fixed width for
+    // both, so a centred stats row never shifts when the state flips.
+    forfeitConfirm: 'Confirm forfeit',
+    waiting: '{count} pilots waiting for a rival.',
+    queued: 'Queue position {position} of {count}. Your machine is being readied.',
+    racingAgainst: 'Your race against {name} is underway.',
+    // Practice: one button on the front screen, then a setup screen that picks
+    // the rival and teaches the controls, so the start countdown is never the
+    // first time a player meets the machine. Every practice race runs on its own
+    // private copy of the circuit, so it waits on nobody.
+    practice: 'Practice',
+    practiceIntro:
+      'A private circuit, all yours. Pick your rival, learn the controls, then drop the flag when you are ready.',
+    practiceUnavailable: 'Every practice circuit is in use right now. Try again in a few minutes.',
+    practiceTierLegend: 'Choose your rival',
+    practiceControlsLegend: 'Your controls',
+    practicePlay: 'Start the race',
+    practiceBack: 'Back',
+    practiceTouchNote:
+      'On a touch screen the left stick steers and drives, and the jump button is your handbrake.',
+    tierRookie: 'Rookie',
+    tierDriver: 'Driver',
+    tierAce: 'Ace',
+    tierRookieHint: 'Learning the line. Beatable on your first lap.',
+    tierDriverHint: 'Knows the circuit and brakes late. A fair race.',
+    tierAceHint: 'Takes every apex and slides the hairpin. Bring your best.',
+    controlThrottle: 'Throttle',
+    controlThrottleHint: 'Hold to accelerate. The machine has real inertia, so it builds speed.',
+    controlBrake: 'Brake and reverse',
+    controlBrakeHint: 'Hold to slow down, and hold again from a stop to back up.',
+    controlSteer: 'Steer',
+    controlSteerHint: 'Point the nose into the corner. Turning is sharper at moderate speed.',
+    controlHandbrake: 'Handbrake',
+    controlHandbrakeHint: 'Break grip on purpose and slide the machine through a tight corner.',
+    racingAgainstBot: 'Your practice race against {name} ({tier}) is underway.',
+    versusBot: 'Racing {name} ({tier})',
+    won: 'Victory. The Evergarden has a new champion.',
+    lost: 'Second place today. The next starting grid awaits.',
+    draw: 'Dead heat. The race stewards declare a draw.',
+    versus: 'Racing {name}',
+    position: 'Position {position}/2',
+    lap: 'Lap {lap}/{total}',
+    time: '{minutes}:{seconds}',
+    countdown: 'Engines locked. Start in {seconds}',
+    go: 'GO!',
+    finalLap: 'FINAL LAP',
+    wonReturn: 'VICTORY. Returning in {seconds}',
+    lostReturn: 'FINISH. Returning in {seconds}',
+    drawReturn: 'DRAW. Returning in {seconds}',
+    logQueued: 'Realm Racers queue position: {position}.',
+    logUnqueued: 'You left the Realm Racers queue.',
+    bannerFound: 'Race found: {name}',
+    bannerGo: 'GO!',
+    bannerLap: 'Lap {lap} of {total}',
+    bannerWin: 'You win the race!',
+    bannerLoss: '{name} wins the race.',
+    bannerDraw: 'The race ends in a draw.',
+    logWin: 'Victory. You crossed the line first.',
+    logLoss: '{name} crossed the finish line first.',
+    logForfeit: 'You forfeited the race. {name} wins.',
+    mobileLabel: 'Racers',
   },
   // Click-to-move mouse-button toggle labels (Key Bindings panel). The button id
   // 0/2 maps to these at the HUD render boundary.

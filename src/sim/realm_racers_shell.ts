@@ -1,0 +1,247 @@
+// The Arc Shell: where a shot lands, and what landing there does to a machine.
+//
+// Two decisions, both pure. WHERE: the PLAYER aims, on the ground, with the same
+// reticle every ground-targeted spell in the game uses; this module owns only
+// the rules that reticle obeys (a forward cone, a range band) and it is the
+// authority on them, because the aim arrives over the wire and a cheat client
+// can ask for anything. WHAT: a blast with a geometric falloff that pops, shoves
+// and spins whatever is standing in it, applied to the same drive state the
+// driving model and the contact pass write.
+//
+// Pure leaf: no SimContext, no rng, no clock, no entities. The match module owns
+// everything this deliberately does not know about: which racers exist, when the
+// impact tick arrives, the vertical pop on the entity, the grip loss, and the
+// events.
+//
+// Aiming was auto-ranged onto the nearest rival at first, with the shot leading
+// their velocity. It was dropped after the maintainer drove it: an automatic
+// range that sometimes finds the rival and sometimes drops the shell beside you
+// is unreadable, because nothing on screen tells you which of the two just
+// happened. Leading a moving machine is now the PLAYER's job, which is the whole
+// skill of the weapon, and the ground circle says exactly where the shell will
+// land before they commit to it.
+
+import { normAngle, TICK_RATE, type VehicleDrive } from './types';
+import { MAX_BUMP_SPIN } from './vehicle_contact';
+import { applyAchievedVehicleVelocity, vehicleVelocityX, vehicleVelocityZ } from './vehicle_motion';
+
+/** Closest a shell may be placed, yards. A point-blank aim slides out to here
+ *  rather than landing under the caster's own nose. */
+export const SHELL_MIN_RANGE = 9;
+/**
+ * Furthest a shell may be placed, yards. It has to cover the LEAD, not just the
+ * gap: a rival twenty yards ahead at racing speed will be around fifty-five
+ * yards away by the time the shell arrives, and a player who reads that
+ * correctly must be able to aim there.
+ */
+export const SHELL_MAX_RANGE = 70;
+/** Where a shot with no aim at all lands, yards. Only a cast that arrives with
+ *  no ground point takes it (a bare keybind with nothing under the cursor). */
+export const SHELL_BLIND_RANGE = 22;
+/**
+ * Half-angle of the aiming cone, radians: how far off the machine's nose a shell
+ * may be placed. The barrel is fixed to the chassis, so a pilot lines the shot
+ * up by pointing the machine, and the cone is what stops the weapon from being a
+ * turret that fires backwards out of a corner.
+ */
+export const SHELL_AIM_CONE_RAD = Math.PI / 4;
+/** Notional shell speed, yd/s. Only ever used to turn a distance into a flight
+ *  time; the shell is never stepped. */
+export const SHELL_SPEED = 110;
+/** The dodge window: a close shot still gives the rival this long to react, and
+ *  a long one never hangs in the air past this. */
+export const SHELL_MIN_FLIGHT = 0.45;
+export const SHELL_MAX_FLIGHT = 0.9;
+/** Blast radius, yards. Measured centre to centre, so it is also the width of
+ *  the prediction error a rival holding a straight line may carry and still be
+ *  caught. */
+export const SHELL_BLAST_RADIUS = 6;
+/**
+ * Upward velocity a dead-centre hit adds, yd/s. THE knob for how big a hit
+ * feels, and the arithmetic is simple enough to tune against directly: at
+ * GRAVITY = 16 the apex is `v^2 / 32` yards and the machine is airborne for
+ * `v / 8` seconds. At 11 that is a 3.8 yd apex and 1.4 s off the ground, which
+ * at racing speed is roughly seventy yards of flight with a quarter of the
+ * usual steering (`airSteerFraction`) to fight it with.
+ *
+ * The whole cost of a hit compounds from that number, because airborne the grip
+ * model does not run: the shove below is never trimmed by `maxSlip`, and the
+ * spin keeps rotating the body under a velocity that does not turn with it, so
+ * the machine lands genuinely sideways and has to be caught.
+ */
+export const SHELL_POP_VELOCITY = 12;
+/** Horizontal shove away from the blast, yd/s at the centre. It survives the
+ *  whole flight (there is nothing to grip in the air), so this is how far
+ *  off-line a hit really throws a rival, not just an initial nudge. */
+export const SHELL_PUSH = 22;
+/**
+ * Yaw kick at the centre, rad/s, added to the contact SPIN rather than to the
+ * steering yaw rate. The steering servo pulls `yawRate` back to the wheel's
+ * demand inside about a tenth of a second, so a kick delivered there would be
+ * erased before the pilot felt it; `spin` decays on the profile's own clock and
+ * is what a shove has to ride (workstream 04 found this the hard way).
+ *
+ * Total rotation is roughly the kick divided by the profile's `spinDecay`
+ * (1.6), so 4.5 turns the machine about 160 degrees before it is spent: a real
+ * spin to drive out of, and still inside the shared `MAX_BUMP_SPIN` ceiling.
+ */
+export const SHELL_YAW_KICK = 4.5;
+/** How long a hit machine drives on ice afterwards, ticks. It starts at the
+ *  moment of impact, so most of it is spent in the air and the rest covers the
+ *  landing, which is where it matters. */
+export const SHELL_SHOCK_TICKS = 30;
+/** Fraction of the surface's grip that survives the shock. */
+export const SHELL_SHOCK_GRIP = 0.25;
+
+/**
+ * The speed aura a hit leaves behind, as the MULTIPLIER `moveSpeedMult` reads
+ * (0.6 keeps three fifths of the top speed), and how long it lasts.
+ *
+ * It is deliberately gentler than the 0.22 the first version applied: read the
+ * right way round that was a 78% snare, and now that a hit also pops, shoves,
+ * spins and de-grips the machine, the aura's job is only to put the hit in the
+ * HUD's debuff row where the player can see it.
+ */
+export const SHELL_CONTROL_SPEED_MULT = 0.6;
+export const SHELL_CONTROL_SECONDS = 1.5;
+
+const clamp = (n: number, lo: number, hi: number): number => (n < lo ? lo : n > hi ? hi : n);
+
+/** A pilot's pose, which is all the aim rules are measured against. */
+export interface ShellShooter {
+  x: number;
+  z: number;
+  facing: number;
+}
+
+export interface ShellAim {
+  /** Impact point, decided at fire time and never revised. */
+  x: number;
+  z: number;
+  /** Whole ticks of flight, so the ground marker's countdown and the blast can
+   *  never disagree about when the shell lands. */
+  flightTicks: number;
+  /** The request was outside the cone or the range band and was pulled to the
+   *  edge. The reticle dims on this, so a player can see the limit they are
+   *  pressing against instead of guessing where the shot really went. */
+  clamped: boolean;
+}
+
+/**
+ * How long a shell placed that far away stays in the air. Exported because
+ * anyone LEADING a moving target needs it before they choose the point: the bot
+ * brain reads it, and a human reads it off how long the circle sits there.
+ */
+export function shellFlightSeconds(distance: number): number {
+  return (
+    Math.round(clamp(distance / SHELL_SPEED, SHELL_MIN_FLIGHT, SHELL_MAX_FLIGHT) * TICK_RATE) /
+    TICK_RATE
+  );
+}
+
+/**
+ * The one authority on where a shell may be placed, shared verbatim by the
+ * reticle and by the sim.
+ *
+ * Sharing it is the point. The circle a player commits to must be the crater
+ * they get, so the client cannot own a softer rule than the server; and the
+ * server cannot trust the point at all, because the aim arrives over the wire.
+ * Running the same pure clamp on both sides is what makes those two facts one
+ * piece of code instead of two that drift.
+ *
+ * Out of bounds is pulled to the EDGE rather than refused: a shot that lands
+ * somewhere visible teaches the player where the limit is, while a refusal at
+ * racing speed just reads as the button not working.
+ *
+ * `requested` null (a keybind pressed with nothing under the cursor) fires
+ * straight down the nose at the blind range.
+ */
+export function resolveShellAim(
+  shooter: ShellShooter,
+  requested: { x: number; z: number } | null,
+): ShellAim {
+  let angle = 0;
+  let distance = SHELL_BLIND_RANGE;
+  let clamped = false;
+  if (requested) {
+    const dx = requested.x - shooter.x;
+    const dz = requested.z - shooter.z;
+    const asked = Math.hypot(dx, dz);
+    // An aim on the caster's own spot carries no direction, so there is nothing
+    // to clamp toward: it is the same nothing a missing point is.
+    if (asked > 1e-6) {
+      const offNose = normAngle(Math.atan2(dx, dz) - shooter.facing);
+      angle = clamp(offNose, -SHELL_AIM_CONE_RAD, SHELL_AIM_CONE_RAD);
+      distance = clamp(asked, SHELL_MIN_RANGE, SHELL_MAX_RANGE);
+      clamped = angle !== offNose || distance !== asked;
+    }
+  }
+  const heading = shooter.facing + angle;
+  // Further is slower, which is the trade the player is making when they lead a
+  // rival a long way up the road: a longer flight is a longer look at the
+  // circle for whoever is standing on it.
+  return {
+    x: shooter.x + Math.sin(heading) * distance,
+    z: shooter.z + Math.cos(heading) * distance,
+    flightTicks: Math.round(shellFlightSeconds(distance) * TICK_RATE),
+    clamped,
+  };
+}
+
+/** A machine standing in a blast: its pose plus the drive state the shove is
+ *  written into. */
+export interface ShellBlastBody {
+  x: number;
+  z: number;
+  facing: number;
+  drive: VehicleDrive;
+}
+
+export interface ShellBlastResult {
+  /** 1 at the centre, falling to 0 at the rim. Zero means untouched. */
+  falloff: number;
+  /** Upward velocity the caller must add to the body, yd/s. Returned rather
+   *  than applied because the drive state carries no vertical component: the
+   *  hop rides the entity's own air pass, exactly like a jump. */
+  pop: number;
+}
+
+/**
+ * Resolve one machine against one blast, mutating its drive state in place.
+ *
+ * Everything here is geometric: no rng, so the same blast on the same machine
+ * always does the same thing on every host. Visual variation is the client's to
+ * derive from the impact coordinates.
+ */
+export function resolveShellBlast(body: ShellBlastBody, x: number, z: number): ShellBlastResult {
+  const dx = body.x - x;
+  const dz = body.z - z;
+  const dist = Math.hypot(dx, dz);
+  if (dist >= SHELL_BLAST_RADIUS) return { falloff: 0, pop: 0 };
+  const falloff = 1 - dist / SHELL_BLAST_RADIUS;
+
+  // Away from the blast. A machine sitting exactly on the impact point has no
+  // direction to be thrown in, so it takes the pop alone: arbitrary is not an
+  // option here, a draw would fork the world between hosts.
+  const awayX = dist > 0 ? dx / dist : 0;
+  const awayZ = dist > 0 ? dz / dist : 0;
+  const push = SHELL_PUSH * falloff;
+  applyAchievedVehicleVelocity(
+    body.drive,
+    body.facing,
+    vehicleVelocityX(body.drive, body.facing) + awayX * push,
+    vehicleVelocityZ(body.drive, body.facing) + awayZ * push,
+  );
+
+  // Which side of the machine the blast went off on, as a signed unit component
+  // along the body's right vector (-cos f, sin f). A hit taken square on the
+  // nose or the tail has no side and spins nobody; a glancing one slews the
+  // machine away from the blast, and the further off-centre the harder.
+  const side = awayX * Math.cos(body.facing) - awayZ * Math.sin(body.facing);
+  const spin = body.drive.spin + SHELL_YAW_KICK * falloff * side;
+  // The one ceiling on carried spin, wherever the shove came from: a machine
+  // shelled while already spinning off a contact must not run away past it.
+  body.drive.spin = clamp(spin, -MAX_BUMP_SPIN, MAX_BUMP_SPIN);
+
+  return { falloff, pop: SHELL_POP_VELOCITY * falloff };
+}

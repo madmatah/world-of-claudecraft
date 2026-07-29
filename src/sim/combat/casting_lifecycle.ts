@@ -27,6 +27,7 @@
 // DOM/Three/render/ui/game/net, no Math.random/Date.now), enforced by
 // tests/architecture.test.ts.
 
+import { areAbilityControlsLocked, isAbilityBudgetSpent } from '../ability_budget';
 import { isDispellableAura } from '../aura_classify';
 import { ITEMS, isDelvePos, MOBS, zoneAt } from '../data';
 import { recalcPlayerStats } from '../entity';
@@ -699,6 +700,16 @@ export function castAbility(
     ? SHAMAN_SHOCK_COOLDOWN_IDS.find((id) => p.cooldowns.has(id))
     : undefined;
   const leavingRestrictedToggle = togglingOff && ability.requiresOutsideInstance;
+  // The two refusals an ACTIVITY that lent this kit owns. Both land BEFORE the
+  // cooldown is armed, which is the whole reason they are here rather than
+  // inside the ability's own effect: a refusal made after the cast resolves has
+  // already spent the cooldown, so a racer mashing the trigger through the
+  // countdown would roll onto the circuit with nothing to fire.
+  if (areAbilityControlsLocked(p)) return; // silent: the player can SEE they are held
+  if (isAbilityBudgetSpent(p, ability.id)) {
+    ctx.error(p.id, 'You are out of charges.');
+    return;
+  }
   // Charge-limited abilities (the abilityCharges recharge model, driven by
   // bonusCharges: Double Charge, extra Blink/Frost Nova/Ice Block): a running
   // cooldown is only the RECHARGE timer; the cast is blocked only once every
@@ -1003,8 +1014,9 @@ export function castAbility(
   if (ability.id !== 'ghost_wolf' && p.auras.some((a) => a.id === 'ghost_wolf')) {
     ctx.breakGhostWolf(p);
   }
-  // Auto-dismount when the player is mounted or mid-summon-channel and casts any ability.
-  if (p.mountKey !== '') forceDismount(ctx, p);
+  // Auto-dismount on ordinary casts. Activity-owned mounted kits opt out while
+  // their system remains authoritative over the vehicle.
+  if (p.mountKey !== '' && !ability.usableWhileMounted) forceDismount(ctx, p);
   if (p.mountCastKey !== '') {
     p.mountCastRemaining = 0;
     p.mountCastKey = '';

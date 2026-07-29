@@ -36,6 +36,7 @@ import { gatherNodePreloadInternalsForTest } from '../src/render/gather_nodes';
 import { mailboxPreloadInternalsForTest } from '../src/render/mailbox';
 import { propPreloadInternalsForTest } from '../src/render/props';
 import { questObjectPreloadInternalsForTest } from '../src/render/quest_objects';
+import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
 import { stationsPreloadInternalsForTest } from '../src/render/stations';
 import { wildheartPropsPreloadInternalsForTest } from '../src/render/wildheart_props';
 import { yumiMazePreloadInternalsForTest } from '../src/render/yumi_maze';
@@ -706,6 +707,12 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
 
   it('Great Maze hedge wall and arch assets', () => {
     for (const url of Object.values(gardenFeaturesPreloadInternalsForTest.mazeAssetUrl)) {
+      expectAssetExistsAndManifested(url);
+    }
+  });
+
+  it('Realm Racers circuit assets', () => {
+    for (const url of realmRacersPreloadInternalsForTest.assetUrls) {
       expectAssetExistsAndManifested(url);
     }
   });

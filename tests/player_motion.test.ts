@@ -3,8 +3,10 @@ import { isBlocked, moverHeight, resolveMovement } from '../src/sim/colliders';
 import { BUILTIN_WORLD } from '../src/sim/data';
 import { PLAYER_BODY_RADIUS, PLAYER_MAX_CLIMB_SLOPE } from '../src/sim/pathfind';
 import { moveSpeedMult, type PlayerMotionDeps, stepPlayerMotion } from '../src/sim/player_motion';
+import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
-import type { Entity, MoveInput, WorldContent } from '../src/sim/types';
+import type { Entity, MoveInput, VehicleDrive, WorldContent } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import {
   groundHeight,
   terrainHeight,
@@ -269,6 +271,65 @@ describe('player motion kernel parity with the live Sim', () => {
     teleport(sim, 0, -40);
     sim.player.ghost = true;
     runParity(sim, mi({ forward: true }), 20 * 2, 'ghost run');
+  });
+
+  // The single most important test of the vehicle kernel: a DRIVING entity must
+  // step identically under the client dep shape and the live Sim. If the two
+  // ever fork, the online local racer predicts one machine while the server
+  // simulates another, and every race rubber-bands.
+  it('drives a vehicle identically (throttle, steering, handbrake, wall scrape)', () => {
+    const sim = makeSim();
+    const start = realmRacersStarts()[0];
+    // groundHeight, not terrainHeight: the circuit sits on the flat instance
+    // floor past DUNGEON_X_THRESHOLD, and seating a racer at the open-world
+    // surface height instead drops them through a long fall before the first
+    // corner (which is a test bug, but it took a parity failure to find).
+    teleport(sim, start.x, start.z);
+    sim.player.pos.y = groundHeight(start.x, start.z, sim.cfg.seed);
+    sim.player.prevPos = { ...sim.player.pos };
+    sim.player.fallStartY = sim.player.pos.y;
+    sim.player.facing = start.facing;
+    sim.player.mountKey = 'tank';
+    sim.player.drive = createVehicleDrive('tank');
+
+    const deps = clientDeps(SEED);
+    const actor = mirrorActor(sim);
+    actor.drive = { ...(sim.player.drive as VehicleDrive) };
+
+    // A multi-second script: spool up, corner, handbrake through a corner,
+    // brake, reverse, and turn on the spot, all against the real circuit
+    // colliders (the perimeter wall and the basin's wade clamp are live).
+    const script: MoveInput[] = [
+      ...Array.from({ length: 40 }, () => mi({ forward: true })),
+      ...Array.from({ length: 30 }, () => mi({ forward: true, turnLeft: true })),
+      ...Array.from({ length: 20 }, () => mi({ forward: true, turnLeft: true, jump: true })),
+      ...Array.from({ length: 20 }, () => mi({ forward: true, strafeRight: true })),
+      ...Array.from({ length: 20 }, () => mi({ back: true })),
+      ...Array.from({ length: 30 }, () => mi({ back: true, turnRight: true })),
+      ...Array.from({ length: 20 }, () => mi()),
+    ];
+    for (let i = 0; i < script.length; i++) {
+      // A contact lands mid-corner: the spin is authoritative state both hosts
+      // then integrate and decay themselves, so it belongs inside the parity
+      // script rather than beside it.
+      if (i === 45) {
+        (sim.player.drive as VehicleDrive).spin = 2.4;
+        (actor.drive as VehicleDrive).spin = 2.4;
+      }
+      tickBoth(sim, actor, deps, script[i]);
+      expectSamePose(sim, actor, `drive tick ${i}`);
+      const live = sim.player.drive as VehicleDrive;
+      const mirror = actor.drive as VehicleDrive;
+      expect(mirror.speed, `drive tick ${i}: speed`).toBe(live.speed);
+      expect(mirror.slip, `drive tick ${i}: slip`).toBe(live.slip);
+      expect(mirror.yawRate, `drive tick ${i}: yawRate`).toBe(live.yawRate);
+      expect(mirror.spin, `drive tick ${i}: spin`).toBe(live.spin);
+      expect(mirror.handbrake, `drive tick ${i}: handbrake`).toBe(live.handbrake);
+    }
+    // The script really drove: the machine moved a meaningful distance and the
+    // heading came from steering, not from an assignment.
+    expect(Math.hypot(sim.player.pos.x - start.x, sim.player.pos.z - start.z)).toBeGreaterThan(10);
+    expect(sim.player.facing).not.toBe(start.facing);
   });
 
   it('is deterministic: the same kernel trajectory twice', () => {

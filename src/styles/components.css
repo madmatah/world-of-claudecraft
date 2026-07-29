@@ -13873,3 +13873,465 @@
   line-height: 1.25;
   font-weight: 600;
 }
+
+/* -------------------------------------------------------------------------
+   The Realm Racers
+   ------------------------------------------------------------------------- */
+/* The window keeps the shared .window / .panel frame (and therefore the shared
+   resize grip, which is drawn as a background layer on the window itself: an id
+   selector setting the `background` SHORTHAND here would silently wipe it). The
+   rally identity lives on the header and the accent border, not on a bespoke
+   body background. */
+#realm-racers-window {
+  width: min(560px, calc(100vw - 32px));
+  border-color: #caa859;
+  box-shadow:
+    0 20px 60px #000a,
+    inset 0 0 0 1px #f2d78324;
+}
+#realm-racers-window > .panel-title {
+  border-bottom: 1px solid #caa85955;
+  background: linear-gradient(90deg, #243b2b 0%, #17251d 65%, #2d2415 100%);
+}
+.rally-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rally-kicker {
+  color: #d7be70;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+#realm-racers-title {
+  color: #fff2bc;
+  font-family: var(--font-display, serif);
+  font-size: 25px;
+  letter-spacing: 0.025em;
+}
+.rally-body {
+  padding: 4px 4px 2px;
+}
+.rally-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 78px 1fr;
+  gap: 16px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 16px 14px;
+  overflow: hidden;
+  border: 1px solid #caa85944;
+  border-radius: 10px;
+  background:
+    radial-gradient(ellipse 80% 120% at 0% 50%, #3d6a4533 0%, transparent 55%),
+    linear-gradient(135deg, #1a2c20 0%, #121c16 48%, #2a2214 100%);
+  box-shadow: inset 0 1px 0 #f2d78318;
+}
+.rally-hero::before {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 0%, #dfc36c0a 50%, transparent 100%),
+    repeating-linear-gradient(-18deg, transparent 0 10px, #ffffff03 10px 11px);
+  content: "";
+  pointer-events: none;
+}
+.rally-hero-mark,
+.rally-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+.rally-hero-mark {
+  display: grid;
+  place-items: center;
+}
+.rally-crest {
+  position: relative;
+  display: block;
+  width: 64px;
+  height: 64px;
+  border: 2px solid #dfc36c;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #5a8a5e 0%, #2a4a32 52%, #15251b 100%);
+  box-shadow:
+    0 0 26px #82b36a55,
+    inset 0 0 0 1px #ffe99e33;
+}
+.rally-crest::before,
+.rally-crest::after {
+  position: absolute;
+  left: 50%;
+  border-style: solid;
+  border-color: transparent;
+  content: "";
+  transform: translateX(-50%);
+}
+.rally-crest::before {
+  top: 16px;
+  border-width: 0 11px 14px;
+  border-bottom-color: #ffe99e;
+  filter: drop-shadow(0 10px 0 #dfc36caa);
+}
+.rally-crest::after {
+  top: 34px;
+  width: 18px;
+  height: 3px;
+  border: 0;
+  background: #ffe99ecc;
+  border-radius: 1px;
+}
+.rally-pitch {
+  margin: 0 0 12px;
+  color: #f3eccf;
+  font-family: var(--font-display, serif);
+  font-size: 16px;
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  text-wrap: pretty;
+}
+.rally-promises {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rally-promises > li {
+  padding: 4px 9px;
+  border: 1px solid #caa85955;
+  border-radius: 999px;
+  color: #d7be70;
+  background: #0c150fcc;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* One primer card, not four rule cards. The grid of cards was most of the
+   panel's height and pushed the two ways onto the grid into each other; what a
+   first-time pilot actually needs is what the machine does under their hands. */
+.rally-howto {
+  padding: 12px;
+  border: 1px solid #bda45b3d;
+  border-radius: 8px;
+  background: #0c150fb0;
+}
+.rally-howto strong,
+.rally-howto span {
+  display: block;
+}
+.rally-howto strong {
+  margin-bottom: 6px;
+  color: #d7be70;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.rally-howto span {
+  color: #aebba9;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.rally-status {
+  margin: 15px 0 10px;
+  padding: 10px 12px;
+  border-left: 3px solid #7fa866;
+  color: #d8e4d3;
+  background: #0c140ee8;
+  font-size: 12px;
+}
+.rally-status.queued {
+  border-color: #e0bd5d;
+  color: #f2df9f;
+}
+.rally-status.live {
+  border-color: #69c7d6;
+}
+#realm-racers-window .rally-cta {
+  width: 100%;
+  min-height: 46px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#realm-racers-window .rally-cta.leave {
+  color: #e5cfc4;
+  border-color: #8f5e4c;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+/* Practice is the second, quieter route onto the grid. The two CTAs sat close
+   enough to be pressed by accident, so a labelled rule separates them. */
+.rally-or {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 14px 0 10px;
+  color: #7d8b7a;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.rally-or::before,
+.rally-or::after {
+  flex: 1 1 auto;
+  height: 1px;
+  background: #bda45b33;
+  content: "";
+}
+#realm-racers-window .rally-practice-cta {
+  border-color: #7fa86680;
+  color: #d8e4d3;
+  background: linear-gradient(180deg, #2a3f30 0%, #1a281e 100%);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- the practice setup screen: pick a rival, learn the controls, go ---- */
+.rally-setup-intro {
+  margin: 2px 0 14px;
+  color: #d7dfd2;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.rally-legend {
+  margin: 0 0 8px;
+  color: #d7be70;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.rally-tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.rally-tier {
+  display: block;
+  min-height: 40px;
+  padding: 10px;
+  border: 1px solid #bda45b3d;
+  border-radius: 8px;
+  color: inherit;
+  background: #0c150fb0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rally-tier > strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #efd98e;
+  font-size: 13px;
+}
+.rally-tier > span {
+  display: block;
+  color: #aebba9;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.rally-tier.selected {
+  border-color: #dfc36c;
+  background: #1b2e22;
+  box-shadow: inset 0 0 0 1px #dfc36c55;
+}
+.rally-tier.selected > strong {
+  color: #fff2bc;
+}
+.rally-controls {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.rally-control {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 11px;
+  border: 1px solid #bda45b26;
+  border-radius: 8px;
+  background: #0c150f8c;
+}
+.rally-control-copy > strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #efd98e;
+  font-size: 12px;
+}
+.rally-control-copy > span {
+  display: block;
+  color: #aebba9;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.rally-control-keys {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+}
+.rally-key {
+  min-width: 26px;
+  padding: 4px 7px;
+  border: 1px solid #dfc36c66;
+  border-radius: 5px;
+  color: #fff2bc;
+  background: #1b2e22;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+.rally-key-sep {
+  color: #7d8b7a;
+  font-size: 10px;
+}
+.rally-touch-note {
+  margin: 0 0 14px;
+  color: #aebba9;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.rally-setup-actions {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+#realm-racers-window .rally-back {
+  flex: 0 0 auto;
+  min-width: 96px;
+  min-height: 44px;
+  color: #e5cfc4;
+  border-color: #8f5e4c;
+}
+#realm-racers-window .rally-play {
+  flex: 1 1 auto;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+#realm-racers-hud {
+  position: absolute;
+  z-index: 58;
+  top: 74px;
+  left: 50%;
+  width: min(420px, calc(100vw - 34px));
+  transform: translateX(-50%);
+  pointer-events: none;
+  color: #fff8d8;
+  filter: drop-shadow(0 3px 6px #000c);
+}
+.rallyhud-top,
+.rallyhud-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rallyhud-top {
+  gap: 9px;
+  margin: 0 auto;
+  width: max-content;
+  max-width: 100%;
+  padding: 4px 14px 5px 7px;
+  border: 1px solid #dfc36c99;
+  border-radius: 999px;
+  background: #122218e8;
+}
+.rallyhud-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #17301e;
+  background: #e1c765;
+  font-family: var(--font-display, serif);
+  font-weight: 900;
+}
+.rallyhud-opponent {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rallyhud-stats {
+  gap: 0;
+  margin-top: 5px;
+}
+.rallyhud-stats > span {
+  min-width: 92px;
+  padding: 5px 10px;
+  border: 1px solid #dfc36c55;
+  background: #0d160fcf;
+  color: #f4e7b5;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+.rallyhud-stats > span:first-child {
+  border-radius: 6px 0 0 6px;
+}
+/* last-OF-TYPE, not last-child: the forfeit button now closes this row. */
+.rallyhud-stats > span:last-of-type {
+  border-radius: 0 6px 6px 0;
+}
+.rallyhud-phase {
+  margin-top: 7px;
+  color: #fff3a8;
+  font-family: var(--font-display, serif);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 0 14px #d9b83f99;
+}
+/* The strip carries the only in-race forfeit control: the queue window closes
+   itself when the match starts, so nothing else is reachable at speed. It rides
+   in the stats row (the row centres the whole group), in the destructive red the
+   readout pills deliberately do not use, so it reads as an action and not as one
+   more readout. The strip is pointer-transparent, so the button re-enables
+   pointer events on its own box only.
+
+   min-width is sized for the ARMED label so the two-step swap never resizes the
+   row: a centred row that grew mid-race would slide the readouts sideways. */
+.rallyhud-forfeit {
+  min-width: 132px;
+  margin-left: 8px;
+  padding: 5px 12px;
+  border: 1px solid #a8503c;
+  border-radius: 6px;
+  background: #38130ee0;
+  color: #ffc4b0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.rallyhud-forfeit:hover {
+  border-color: #d46a4e;
+  color: #ffe3d8;
+}
+.rallyhud-forfeit.armed {
+  border-color: #ff8a63;
+  background: #8e2c17ec;
+  color: #fff1e6;
+}
+.rallyhud-forfeit:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}

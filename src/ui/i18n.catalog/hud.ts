@@ -345,6 +345,7 @@ const hudStringsEn = {
       silenced: 'You are silenced!',
       busy: 'You are busy.',
       abilityNotReady: 'That ability is not ready yet.',
+      outOfCharges: 'You are out of charges.',
       notEnoughRage: 'Not enough rage!',
       notEnoughEnergy: 'Not enough energy!',
       notEnoughMana: 'Not enough mana!',

@@ -42,6 +42,7 @@ import type {
 } from './sim';
 import type { CardDuelMatch } from './social/card_duel';
 import type { FinderFormationUnit } from './social/party';
+import type { RealmRacersState } from './social/realm_racers';
 import type { VcState } from './social/vale_cup';
 import type { SpatialGrid } from './spatial';
 import type {
@@ -258,6 +259,9 @@ export interface SimContextPrimitives {
   // the holder), so a read-only live view suffices. Consumed by the vale_cup
   // module, the damage no-damage floor, and targeting's candidate arm.
   readonly vcup: VcState;
+  // The Realm Racers queue and single live two-racer match. The holder is
+  // mutated in place by social/realm_racers.ts.
+  readonly realmRacers: RealmRacersState;
   // Book of Deeds: players whose deed-relevant state changed this tick,
   // evaluated and cleared at the tick tail (deeds.ts updateDeeds). Sim-owned
   // Set mutated in place, so a read-only live view.
@@ -973,6 +977,7 @@ export interface SimContextCallbacks {
   vcupShoot(caster: Entity, power: number, loft: number, range: number): void;
   vcupSportDash(caster: Entity, distance: number, catchBall: boolean): void;
   vcupSportShove(caster: Entity, target: Entity, distance: number): void;
+  realmRacersFireShell(caster: Entity): void;
 }
 
 // The seam consumed by extracted modules.
@@ -1215,6 +1220,9 @@ export function createSimContext(host: SimContextHost): SimContext {
     },
     get vcup() {
       return host.vcup;
+    },
+    get realmRacers() {
+      return host.realmRacers;
     },
     get deedDirtyPids() {
       return host.deedDirtyPids;
@@ -1473,5 +1481,6 @@ export function createSimContext(host: SimContextHost): SimContext {
     vcupShoot: host.vcupShoot,
     vcupSportDash: host.vcupSportDash,
     vcupSportShove: host.vcupSportShove,
+    realmRacersFireShell: host.realmRacersFireShell,
   };
 }

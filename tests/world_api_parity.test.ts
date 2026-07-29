@@ -68,6 +68,7 @@ import type { IWorldPet } from '../src/world_api/pet';
 import type { IWorldProfessions } from '../src/world_api/professions';
 import type { IWorldProgressionXp } from '../src/world_api/progression_xp';
 import type { IWorldQuests } from '../src/world_api/quests';
+import type { IWorldRealmRacers } from '../src/world_api/realm_racers';
 import type { IWorldSocialGraph } from '../src/world_api/social_graph';
 import type { IWorldTalents } from '../src/world_api/talents';
 import type { IWorldTargeting } from '../src/world_api/targeting';
@@ -257,6 +258,15 @@ export const IWORLD_MEMBERS = [
   { name: 'vcupReady', kind: 'method' },
   { name: 'vcupBet', kind: 'method' },
   { name: 'vcupPracticeStart', kind: 'method' },
+  // --- The Realm Racers vehicle-racing minigame (IWorldRealmRacers).
+  // The facet shipped without a pin here, so its four original members join
+  // together with startRealmRacersPractice rather than leaving the facet
+  // one-fifth pinned. ---
+  { name: 'realmRacersInfo', kind: 'data' },
+  { name: 'joinRealmRacersQueue', kind: 'method' },
+  { name: 'leaveRealmRacersQueue', kind: 'method' },
+  { name: 'forfeitRealmRacers', kind: 'method' },
+  { name: 'startRealmRacersPractice', kind: 'method' },
   // --- market commands ---
   { name: 'marketSearch', kind: 'method' },
   { name: 'marketList', kind: 'method' },
@@ -528,10 +538,12 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
     // IWorldGuildBank members (guildBankInfo, one data read, plus five
     // commands), leaving 287. The guild bank ACTIVITY LOG adds one read member
     // (guildBankLog, a method because reading it is what requests the cold
-    // payload on demand: it has no snapshot key), leaving 288.
-    expect(IWORLD_MEMBERS.length).toBe(289);
-    expect(DATA_MEMBERS.length).toBe(74);
-    expect(METHOD_MEMBERS.length).toBe(215);
+    // payload on demand: it has no snapshot key), leaving 288. The Realm Racers
+    // facet then joins the pin (it had shipped unpinned): realmRacersInfo (one
+    // data read) plus the four queue/forfeit/practice methods, leaving 294.
+    expect(IWORLD_MEMBERS.length).toBe(294);
+    expect(DATA_MEMBERS.length).toBe(75);
+    expect(METHOD_MEMBERS.length).toBe(219);
   });
   it('has no duplicate member names', () => {
     const names = IWORLD_MEMBERS.map((m) => m.name);
@@ -645,6 +657,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'equipmentInstances',
       'feedPet',
       'forfeitCardDuel',
+      'forfeitRealmRacers',
       'friendAdd',
       'friendRemove',
       'friendlyTabTarget',
@@ -680,6 +693,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'interact',
       'inventory',
       'joinCardDuelQueue',
+      'joinRealmRacersQueue',
       'known',
       'lastCraftResult',
       'lastDisenchantResult',
@@ -691,6 +705,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'leaveCardDuelQueue',
       'leaveDelve',
       'leaveDungeon',
+      'leaveRealmRacersQueue',
       'lifetimeHonor',
       'lifetimeXp',
       'loadouts',
@@ -752,6 +767,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'reactiveAbilityWindowRemaining',
       'readyCheckRespond',
       'realm',
+      'realmRacersInfo',
       'rechargeToolEffect',
       'recipeList',
       'releaseEmpoweredAbility',
@@ -791,6 +807,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'socketRiftGem',
       'spinDailyReward',
       'startAutoAttack',
+      'startRealmRacersPractice',
       'stationPlacements',
       'stopAutoAttack',
       'submitLootRoll',
@@ -894,6 +911,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'questLog',
       'questsDone',
       'realm',
+      'realmRacersInfo',
       'recipeList',
       'renown',
       'restedXp',
@@ -988,6 +1006,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'equipItemToSlot',
       'feedPet',
       'forfeitCardDuel',
+      'forfeitRealmRacers',
       'friendAdd',
       'friendRemove',
       'friendlyTabTarget',
@@ -1018,11 +1037,13 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'ignoreRemove',
       'interact',
       'joinCardDuelQueue',
+      'joinRealmRacersQueue',
       'leaderboard',
       'learnRiding',
       'leaveCardDuelQueue',
       'leaveDelve',
       'leaveDungeon',
+      'leaveRealmRacersQueue',
       'lockpickAbort',
       'lockpickAction',
       'lockpickEngage',
@@ -1100,6 +1121,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'socketRiftGem',
       'spinDailyReward',
       'startAutoAttack',
+      'startRealmRacersPractice',
       'stopAutoAttack',
       'submitLootRoll',
       'switchLoadout',
@@ -1545,6 +1567,17 @@ const FACET_VALE_CUP = [
 ] as const satisfies readonly (keyof IWorldValeCup)[];
 type _ExhaustValeCup = AssertNever<Exclude<keyof IWorldValeCup, (typeof FACET_VALE_CUP)[number]>>;
 
+const FACET_REALM_RACERS = [
+  'realmRacersInfo',
+  'joinRealmRacersQueue',
+  'leaveRealmRacersQueue',
+  'forfeitRealmRacers',
+  'startRealmRacersPractice',
+] as const satisfies readonly (keyof IWorldRealmRacers)[];
+type _ExhaustRealmRacers = AssertNever<
+  Exclude<keyof IWorldRealmRacers, (typeof FACET_REALM_RACERS)[number]>
+>;
+
 const FACET_MOUNTS = [
   'ownedMounts',
   'ridingTrained',
@@ -1654,6 +1687,7 @@ const FACET_MEMBER_ARRAYS: Readonly<Record<string, readonly string[]>> = {
   telemetry: FACET_TELEMETRY,
   professions: FACET_PROFESSIONS,
   valeCup: FACET_VALE_CUP,
+  realmRacers: FACET_REALM_RACERS,
   mounts: FACET_MOUNTS,
   dungeonFinder: FACET_DUNGEON_FINDER,
   deeds: FACET_DEEDS,
@@ -1672,7 +1706,7 @@ describe('W1: aggregate IWorld member set equals the disjoint union of the facet
     }
   });
 
-  it('the 28 facet arrays are pairwise disjoint (no member filed in two facets)', () => {
+  it('the facet arrays are pairwise disjoint (no member filed in two facets)', () => {
     const entries = Object.entries(FACET_MEMBER_ARRAYS);
     const overlaps: string[] = [];
     for (let i = 0; i < entries.length; i++) {
@@ -1690,8 +1724,8 @@ describe('W1: aggregate IWorld member set equals the disjoint union of the facet
 
   it('the facet union equals the pinned IWORLD_MEMBERS set', () => {
     const union = Object.values(FACET_MEMBER_ARRAYS).flatMap((arr) => [...arr]);
-    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(289);
-    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(289);
+    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(294);
+    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(294);
     const sortedUnion = [...union].sort();
     const pinned = IWORLD_MEMBERS.map((m) => m.name).sort();
     expect(sortedUnion).toEqual(pinned);

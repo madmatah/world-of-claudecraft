@@ -16,9 +16,9 @@ describe('self motion frame buffer', () => {
   it('updates one stable frame object in place', () => {
     const buffer = new SelfMotionFrameBuffer();
     const firstMove = moveInput(true);
-    const first = buffer.write(true, firstMove, 1, 80, 4, 0.5, 1 / 60);
+    const first = buffer.write(true, firstMove, 1, 80, 4, 0.5, 1 / 60, true);
     const secondMove = moveInput(false);
-    const second = buffer.write(false, secondMove, 2, 120, 8, 0.75, 1 / 30);
+    const second = buffer.write(false, secondMove, 2, 120, 8, 0.75, 1 / 30, false);
 
     expect(second).toBe(first);
     expect(second).toEqual({
@@ -29,6 +29,11 @@ describe('self motion frame buffer', () => {
       jitterMs: 8,
       alpha: 0.75,
       frameDt: 1 / 30,
+      driveImpulse: false,
     });
+    // The impulse flag is per-frame state, not a latch: a frame that does not
+    // carry a shove must clear the one that did, or the predictor re-seeds
+    // from an authoritative state forever after the first collision.
+    expect(first.driveImpulse).toBe(false);
   });
 });

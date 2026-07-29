@@ -26,8 +26,21 @@
 // against a real lagging Sim.
 
 import { moverHeight, resolveMovement } from '../sim/colliders';
-import { moveSpeedMult, type PlayerMotionDeps, stepPlayerMotion } from '../sim/player_motion';
-import { DT, type Entity, type MoveInput, RUN_SPEED, type SimEvent } from '../sim/types';
+import {
+  auraSpeedMult,
+  moveSpeedMult,
+  type PlayerMotionDeps,
+  stepPlayerMotion,
+} from '../sim/player_motion';
+import {
+  DT,
+  type Entity,
+  type MoveInput,
+  RUN_SPEED,
+  type SimEvent,
+  type VehicleDrive,
+} from '../sim/types';
+import { vehicleTopSpeedFor } from '../sim/vehicle_motion';
 
 // Latency cap on the extrapolation window: at least one snapshot-ish interval
 // so low-ping links still get the start-of-motion snap, and a hard ceiling so
@@ -83,6 +96,12 @@ export interface SelfMotionFrame {
   /** The frame's snapshot alpha (same value handed to renderer.sync). */
   alpha: number;
   frameDt: number;
+  /**
+   * The authority changed the machine's MOMENTUM this frame, by something the
+   * predictor cannot simulate (a rival's bump). See the latch in `step`: the
+   * scratch drive is re-seeded from the next authoritative state to arrive.
+   */
+  driveImpulse?: boolean;
 }
 
 export interface Vec3Like {
@@ -93,6 +112,18 @@ export interface Vec3Like {
 
 const clamp = (n: number, min: number, max: number): number => Math.max(min, Math.min(max, n));
 
+/**
+ * The honest upper bound on how fast this body can legitimately travel, which
+ * is what both the display leash and the lead telemetry are measured in. A
+ * runner's is their run speed; a PILOT's is their machine's top speed, and
+ * sizing a driver's leash off run speed instead would clamp the display every
+ * frame of a race and read as permanent rubber-banding.
+ */
+function displaySpeedBudget(e: Entity): number {
+  if (e.drive) return vehicleTopSpeedFor(e.drive, auraSpeedMult(e));
+  return RUN_SPEED * moveSpeedMult(e, 0);
+}
+
 export function hasAuthoritativeSelfPositionDiscontinuity(
   events: readonly SimEvent[],
   playerId: number,
@@ -102,6 +133,31 @@ export function hasAuthoritativeSelfPositionDiscontinuity(
       event.type === 'unstuck' &&
       event.phase === 'completed' &&
       (event.pid === undefined || event.pid === playerId),
+  );
+}
+
+/**
+ * Did the authority just change the local machine's momentum in a way the
+ * predictor could not have simulated? A vehicle carries VELOCITY across ticks
+ * (a runner re-derives it from held input every step), so a shove the predictor
+ * never saw would otherwise live on in the scratch state and steer against the
+ * server for the rest of the corner. Two events do it: a rival's contact, and an
+ * Arc Shell going off under the machine.
+ *
+ * Only the momentum needs this. The HEADING a contact turns the machine through
+ * arrives on its own: a driver's predicted facing is re-anchored on the wire
+ * value every step (main.ts hands the interpolated server facing down while
+ * driving, since a pilot does not claim the facing channel), so a server-side
+ * rotation lands on the display an echo later with nothing to replay.
+ */
+export function hasAuthoritativeDriveImpulse(
+  events: readonly SimEvent[],
+  playerId: number,
+): boolean {
+  return events.some(
+    (event) =>
+      (event.type === 'realmRacersBump' && (event.aId === playerId || event.bId === playerId)) ||
+      (event.type === 'realmRacersShellHit' && event.targetId === playerId),
   );
 }
 
@@ -157,8 +213,27 @@ export class SelfMotionPredictor {
     return this.actor?.onGround ?? true;
   }
 
+  /** True while the predicted pose is DRIVING: its heading comes from the
+   *  vehicle kernel's steering rather than from the camera. */
+  get driving(): boolean {
+    return this.actor?.drive != null;
+  }
+
+  /** The predicted heading. Only meaningful while `driving`: on foot the
+   *  heading is client-authoritative input and never predicted here. */
+  get facing(): number {
+    return this.actor?.facing ?? 0;
+  }
+
   private readonly deps: PlayerMotionDeps;
   private actor: Entity | null = null;
+  // An authoritative momentum change is waiting to be adopted, plus the
+  // mirrored drive object that was current when it was announced: the event
+  // frame reaches the client BEFORE the snapshot carrying its result (the
+  // server routes events, then broadcasts), so the resync waits for the mirror
+  // to actually turn over rather than stamping the pre-bump velocity.
+  private pendingDriveResync = false;
+  private resyncMirror: VehicleDrive | null = null;
   private lastSelfId = -1;
   private lastDead = false;
   private lastGhost = false;
@@ -206,6 +281,8 @@ export class SelfMotionPredictor {
     this.histCount = 0;
     this.histHead = 0;
     this.leadMs = 0;
+    this.pendingDriveResync = false;
+    this.resyncMirror = null;
   }
 
   private recordHistory(x: number, y: number, z: number): void {
@@ -269,6 +346,20 @@ export class SelfMotionPredictor {
     const ay = self.prevPos.y + (self.pos.y - self.prevPos.y) * alpha;
     const az = self.prevPos.z + (self.pos.z - self.prevPos.z) * alpha;
 
+    const latencyMs = frame.echoMs + 0.5 * frame.jitterMs;
+    const capMs = clamp(latencyMs, SELF_MOTION_CAP_MIN_MS, SELF_MOTION_CAP_MAX_MS);
+    // The teleport rule, widened for a VEHICLE only: the six-yard constant is
+    // the right rule for a runner (12.6 yd/s at the 350 ms cap leads by 4.4
+    // yards, never near six) and every stall and resync guarantee here is tuned
+    // around it, so it stays theirs untouched. A machine at 60 yd/s legitimately
+    // leads by nine yards on a 150 ms link: against a constant six it would read
+    // ordinary racing as a teleport, reset the scratch actor every frame, and
+    // kill prediction exactly where the speed makes it matter most. So a driver
+    // gets the six yards PLUS one echo of its own legitimate travel.
+    const snapDistSq = self.drive
+      ? (Math.sqrt(SELF_MOTION_SNAP_DIST_SQ) + (displaySpeedBudget(self) * capMs) / 1000) ** 2
+      : SELF_MOTION_SNAP_DIST_SQ;
+
     // Re-adopt the authoritative pose outright on identity/life-state flips and
     // teleports; otherwise keep the persistent scratch actor.
     const flipped =
@@ -281,7 +372,7 @@ export class SelfMotionPredictor {
       const dx = actor.pos.x - ax;
       const dy = actor.pos.y - ay;
       const dz = actor.pos.z - az;
-      if (dx * dx + dy * dy + dz * dz > SELF_MOTION_SNAP_DIST_SQ) actor = null;
+      if (dx * dx + dy * dy + dz * dz > snapDistSq) actor = null;
     } else {
       actor = null;
     }
@@ -297,6 +388,10 @@ export class SelfMotionPredictor {
         onGround: true,
         jumping: false,
         fallStartY: ay,
+        // Never the mirror's own object: the spread would hand the kernel the
+        // ClientWorld entity's drive state to mutate, and this layer may not
+        // write into mirrored state (see the header's property 3).
+        drive: self.drive ? { ...self.drive } : null,
       };
       this.actor = actor;
       this.acc = 0;
@@ -332,13 +427,59 @@ export class SelfMotionPredictor {
     // (mountCastKey === '') does not root movement and is move-cancelable.
     actor.mountCastRemaining = self.mountCastRemaining;
     actor.mountCastKey = self.mountCastKey;
-
-    // Fixed-step advance with the held intent. Turn flags are stripped: the
-    // heading is assigned from the one display source each step, and letting
-    // the kernel integrate tl/tr on top would double the turn.
+    // Vehicle mode follows the authority the frame it flips (a race start, a
+    // teardown), and the state is CLONED: the predictor integrates its own copy
+    // every step, so it never writes into the mirrored ClientWorld entity. The
+    // running values are deliberately NOT re-seeded from the wire each frame:
+    // the server's are one echo old, and stamping them onto the present pose
+    // would be the same mistake as snapping the position to the anchor.
+    if (frame.driveImpulse) {
+      this.pendingDriveResync = true;
+      this.resyncMirror = self.drive;
+    }
+    if (!self.drive) actor.drive = null;
+    else if (!actor.drive) actor.drive = { ...self.drive };
+    else {
+      // The MOTION follows the wire exactly once per announced impulse, on the
+      // first snapshot that carries its result. The predicted machine cannot
+      // know a rival shoved it, so without this it would keep the pre-bump
+      // velocity: the position correction below would drag the pose back every
+      // frame while the scratch state drove it out again, for the rest of the
+      // corner. A CONTINUOUS follow is not the fix (it is what the running
+      // values deliberately do not do): the wire is one echo old, so pulling
+      // toward it every frame settles the prediction a full echo behind the
+      // truth under any sustained acceleration, which is the whole lead the
+      // predictor exists to provide.
+      if (this.pendingDriveResync && self.drive !== this.resyncMirror) {
+        actor.drive.speed = self.drive.speed;
+        actor.drive.slip = self.drive.slip;
+        actor.drive.yawRate = self.drive.yawRate;
+        // The contact spin comes with them: it rotates the body every tick it
+        // lives, and the body rotation is what turns forward speed into slide,
+        // so a predictor left at zero spin would keep re-deriving a velocity
+        // the server no longer has.
+        actor.drive.spin = self.drive.spin;
+        this.pendingDriveResync = false;
+        this.resyncMirror = null;
+      }
+      // The surface under the machine is authoritative and not predictable
+      // (it comes from the server's projection onto the circuit), so it is the
+      // one part of the state that does follow the wire.
+      actor.drive.gripMult = self.drive.gripMult;
+      actor.drive.dragMult = self.drive.dragMult;
+      actor.drive.speedCap = self.drive.speedCap;
+    }
+    // Fixed-step advance with the held intent. Turn flags are stripped ON FOOT:
+    // the heading is assigned from the one display source each step, and letting
+    // the kernel integrate tl/tr on top would double the turn. DRIVING they are
+    // kept, because there the turn keys are the steering and the kernel owns the
+    // heading (the server refuses the streamed facing for a driver).
+    const driving = actor.drive != null;
     const inp = this.stepInput;
     inp.forward = frame.moveInput.forward;
     inp.back = frame.moveInput.back;
+    inp.turnLeft = driving && frame.moveInput.turnLeft;
+    inp.turnRight = driving && frame.moveInput.turnRight;
     inp.strafeLeft = frame.moveInput.strafeLeft;
     inp.strafeRight = frame.moveInput.strafeRight;
     inp.jump = frame.moveInput.jump;
@@ -371,8 +512,6 @@ export class SelfMotionPredictor {
     // glides the visual back at SELF_MOTION_BLEND_RATE. Server-driven motion
     // with no local intent (charge, knockback) is also captured: the history
     // stands still while the anchor moves, so the error tracks the ride.
-    const latencyMs = frame.echoMs + 0.5 * frame.jitterMs;
-    const capMs = clamp(latencyMs, SELF_MOTION_CAP_MIN_MS, SELF_MOTION_CAP_MAX_MS);
     const measureMs = clamp(latencyMs, SELF_MOTION_CAP_MIN_MS, SELF_MOTION_MEASURE_MAX_MS);
     const past = this.sampleHistory(this.timeMs - measureMs);
     if (past) {
@@ -407,7 +546,7 @@ export class SelfMotionPredictor {
     // budget is the honest upper bound; only corrections consume the slack).
     // Vertical is exempt (a jump apex must not be leash-clipped; gravity
     // bounds it).
-    const budget = (RUN_SPEED * moveSpeedMult(actor, 0) * capMs) / 1000 + LEASH_SLACK_YD;
+    const budget = (displaySpeedBudget(actor) * capMs) / 1000 + LEASH_SLACK_YD;
     const ex = actor.pos.x - ax;
     const ez = actor.pos.z - az;
     const elen = Math.hypot(ex, ez);
@@ -425,9 +564,9 @@ export class SelfMotionPredictor {
     this.out.y = actor.prevPos.y + (actor.pos.y - actor.prevPos.y) * frac;
     this.out.z = actor.prevPos.z + (actor.pos.z - actor.prevPos.z) * frac;
     this.recordHistory(this.out.x, this.out.y, this.out.z);
-    const runSpeed = RUN_SPEED * moveSpeedMult(actor, 0);
+    const speedBudget = displaySpeedBudget(actor);
     this.leadMs =
-      runSpeed > 0 ? (Math.hypot(this.out.x - ax, this.out.z - az) / runSpeed) * 1000 : 0;
+      speedBudget > 0 ? (Math.hypot(this.out.x - ax, this.out.z - az) / speedBudget) * 1000 : 0;
     return this.out;
   }
 }
