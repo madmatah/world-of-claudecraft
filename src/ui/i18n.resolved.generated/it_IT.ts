@@ -7483,8 +7483,8 @@ export const it_IT: EnTranslations = {
         "name": "Gambe Fresche",
         "description": "Ritrovi le gambe: ti muovi il 50% più veloce per 4 sec."
       },
-      "rally_arc_shell": {
-        "name": "Arc Shell",
+      "rally_ground_blast": {
+        "name": "Ground Blast",
         "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
       },
       "flamestrike": {

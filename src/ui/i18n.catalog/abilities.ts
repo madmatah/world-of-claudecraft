@@ -601,8 +601,8 @@ const classAbilityNamesEn = {
       ],
       ['sport_second_wind', 'Fresh Legs', 'Find your legs: move 50% faster for 4 sec.'],
       [
-        'rally_arc_shell',
-        'Arc Shell',
+        'rally_ground_blast',
+        'Ground Blast',
         'Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race.',
       ],
       [

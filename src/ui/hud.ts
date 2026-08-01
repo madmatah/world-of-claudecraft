@@ -12051,8 +12051,8 @@ export class Hud {
             audio.realmRacersLap();
           }
           break;
-        case 'realmRacersShellFired':
-        case 'realmRacersShellHit':
+        case 'realmRacersGroundBlastFired':
+        case 'realmRacersGroundBlastHit':
           break;
         // Contact is rendered in the world (sparks, ring, shake), never in the
         // HUD: a banner on every nudge would bury the lap and result lines.

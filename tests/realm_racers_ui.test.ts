@@ -186,7 +186,7 @@ describe('Realm Racers practice setup screen', () => {
     const h = harness();
     h.ui.toggle();
     practiceButton(h.root)?.click();
-    expect(h.root.textContent).not.toContain('Arc Shell');
+    expect(h.root.textContent).not.toContain('Ground Blast');
   });
 
   it('drops the keycaps on a touch HUD and explains the on-screen controls instead', () => {

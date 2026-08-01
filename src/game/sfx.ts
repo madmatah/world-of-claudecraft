@@ -37,16 +37,16 @@ export const MAX_DISTANCE = 46; // hard cutoff: beyond this, sources are silent/
 // The race camera can trail its machine by 22 yd. Keep nearby cannon fire in
 // the panner's full-volume zone instead of compensating for camera falloff with
 // an unsafe source gain that also applies when the camera is close.
-export const REALM_RACERS_SHELL_REF_DISTANCE = 24;
+export const REALM_RACERS_GROUND_BLAST_REF_DISTANCE = 24;
 // With the conformed clip at -6 dBTP and its +5 dB catalog trim, 1.25 keeps a
 // close shot below unity through the 0.85 sampled-clip master. Disable jitter
 // for this cue too: its random +10% gain branch would consume that headroom.
-const REALM_RACERS_SHELL_GAIN = 1.25;
+const REALM_RACERS_GROUND_BLAST_GAIN = 1.25;
 // Groundshaker impact loudness knob. With the current -7.2 dBTP asset, +5 dB
 // catalog trim, max impact strength, and 0.85 sample master, 1.5 is the safe
 // upper target. Keep shell-impact jitter disabled so it cannot consume that
 // remaining peak headroom.
-const REALM_RACERS_SHELL_IMPACT_GAIN = 1.5;
+const REALM_RACERS_GROUND_BLAST_IMPACT_GAIN = 1.5;
 const POINT_AMBIENCE_GAIN = 0.18;
 // amb_forge's custom recording still reads quiet in-game even with the
 // catalog's keyTrimDb ceiling (scripts/sfx/sfx_gain_map.json) applied at its
@@ -1069,7 +1069,7 @@ class Sfx {
   }
 
   realmRacersEvent(
-    kind: 'shellFire' | 'shellImpact' | 'bump' | 'scrape',
+    kind: 'groundBlastFire' | 'groundBlastImpact' | 'bump' | 'scrape',
     x: number,
     y: number,
     z: number,
@@ -1078,24 +1078,24 @@ class Sfx {
     const strength = Math.min(1, Math.max(0.2, impact));
     const contactGain = (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25;
     const key =
-      kind === 'shellFire'
+      kind === 'groundBlastFire'
         ? 'proj_groundshaker'
-        : kind === 'shellImpact'
+        : kind === 'groundBlastImpact'
           ? 'impact_groundshaker'
           : 'impact_arcane';
     const [audioX, audioY, audioZ] =
-      kind === 'shellImpact' ? this.realmRacersPlayerAnchoredPosition(x, y, z) : [x, y, z];
+      kind === 'groundBlastImpact' ? this.realmRacersPlayerAnchoredPosition(x, y, z) : [x, y, z];
     this.playAt(key, audioX, audioY, audioZ, {
       gain:
-        kind === 'shellFire'
-          ? REALM_RACERS_SHELL_GAIN
-          : kind === 'shellImpact'
-            ? contactGain * REALM_RACERS_SHELL_IMPACT_GAIN
+        kind === 'groundBlastFire'
+          ? REALM_RACERS_GROUND_BLAST_GAIN
+          : kind === 'groundBlastImpact'
+            ? contactGain * REALM_RACERS_GROUND_BLAST_IMPACT_GAIN
             : contactGain,
       rate: kind === 'scrape' ? 1.2 : 0.9 + strength * 0.2,
       cooldown: kind === 'scrape' ? 0.16 : 0.04,
-      jitter: kind !== 'shellFire' && kind !== 'shellImpact',
-      refDistance: kind === 'shellFire' ? REALM_RACERS_SHELL_REF_DISTANCE : undefined,
+      jitter: kind !== 'groundBlastFire' && kind !== 'groundBlastImpact',
+      refDistance: kind === 'groundBlastFire' ? REALM_RACERS_GROUND_BLAST_REF_DISTANCE : undefined,
       release: kind === 'scrape' ? 0.18 : undefined,
     });
   }

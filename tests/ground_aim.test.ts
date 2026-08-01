@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { ABILITIES } from '../src/sim/data';
 import {
-  resolveShellAim,
-  SHELL_AIM_CONE_RAD,
-  SHELL_MAX_RANGE,
-} from '../src/sim/realm_racers_shell';
+  GROUND_BLAST_AIM_CONE_RAD,
+  GROUND_BLAST_MAX_RANGE,
+  resolveGroundBlastAim,
+} from '../src/sim/realm_racers_ground_blast';
 import type { AbilityEffect, Entity } from '../src/sim/types';
 import {
   abilityAoeRadius,
@@ -51,14 +51,19 @@ describe('ground_aim', () => {
     // where the cursor asked. The clamp is the sim's own function, so what the
     // player commits to is exactly what the server will resolve.
     const point = { x: 30, z: 0 };
-    const aim = clampAimToRange(casterAt(0, 0), point, SHELL_MAX_RANGE, REALM_RACERS_ABILITY_ID);
-    const mirror = resolveShellAim({ x: 0, z: 0, facing: 0 }, point);
+    const aim = clampAimToRange(
+      casterAt(0, 0),
+      point,
+      GROUND_BLAST_MAX_RANGE,
+      REALM_RACERS_ABILITY_ID,
+    );
+    const mirror = resolveGroundBlastAim({ x: 0, z: 0, facing: 0 }, point);
     expect(aim.clamped).toBe(true);
     expect(aim.point).toEqual({ x: mirror.x, z: mirror.z });
-    expect(Math.atan2(aim.point.x, aim.point.z)).toBeCloseTo(SHELL_AIM_CONE_RAD, 9);
+    expect(Math.atan2(aim.point.x, aim.point.z)).toBeCloseTo(GROUND_BLAST_AIM_CONE_RAD, 9);
     // The same request under any OTHER ability id keeps the plain range clamp,
     // so the cone is the rally weapon's rule and nobody else's.
-    const plain = clampAimToRange(casterAt(0, 0), point, SHELL_MAX_RANGE, 'flamestrike');
+    const plain = clampAimToRange(casterAt(0, 0), point, GROUND_BLAST_MAX_RANGE, 'flamestrike');
     expect(plain.point).toEqual(point);
   });
 

@@ -10,8 +10,8 @@ import { describe, expect, it } from 'vitest';
 import {
   driveRealmRacers,
   RALLY_DRIVER_TIERS,
+  type RallyDriverBlast,
   type RallyDriverInput,
-  type RallyDriverShell,
   type RallyDriverTier,
   rallyDriverProfile,
   rallyRacingLineOffset,
@@ -34,7 +34,7 @@ interface Placement {
   slip?: number;
   tier?: RallyDriverTier;
   rival?: { x: number; z: number; vx?: number; vz?: number } | null;
-  incoming?: RallyDriverShell[];
+  incoming?: RallyDriverBlast[];
   weaponReady?: boolean;
   tick?: number;
   pid?: number;
@@ -254,7 +254,7 @@ describe('Realm Racers driver: the dodge', () => {
   const DODGE_SPEED = 30;
   const DODGE_TICKS = 10;
 
-  function markedAhead(offset = 0): RallyDriverShell {
+  function markedAhead(offset = 0): RallyDriverBlast {
     const flight = DODGE_TICKS / 20;
     const here = realmRacersTrack().pointAt(START_STRAIGHT_S);
     return {
@@ -302,7 +302,7 @@ describe('Realm Racers driver: the dodge', () => {
   });
 
   it('ignores a marker still further out than the tier can read', () => {
-    const early: RallyDriverShell = {
+    const early: RallyDriverBlast = {
       ...markedAhead(),
       ticksToImpact: rallyDriverProfile('driver').dodgeLeadTicks + 1,
     };
@@ -328,7 +328,7 @@ describe('Realm Racers driver: purity', () => {
     // shared numeric helpers: an rng or a SimContext would make the bot a source
     // of draw-order drift.
     const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]).sort();
-    expect(imports).toEqual(['./realm_racers_shell', './realm_racers_spline', './types']);
+    expect(imports).toEqual(['./realm_racers_ground_blast', './realm_racers_spline', './types']);
   });
 
   it('exposes a profile for every tier', () => {

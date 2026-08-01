@@ -61,7 +61,7 @@ const gains: FakeGain[] = [];
 const panners: FakePanner[] = [];
 let nowT = 0;
 const WOOD_BUFFER = { duration: 0.37 };
-const RALLY_SHELL_BUFFER = { duration: 3 };
+const RALLY_GROUND_BLAST_BUFFER = { duration: 3 };
 const GROUND_SHAKER_IMPACT_BUFFER = { duration: 3.08 };
 const ARCANE_IMPACT_BUFFER = { duration: 0.5 };
 
@@ -197,7 +197,7 @@ beforeEach(() => {
   buffers.set('foot_wood', WOOD_BUFFER);
   buffers.set('foot_stone', { duration: 0.5 });
   buffers.set('foot_dirt', { duration: 0.5 });
-  buffers.set('proj_groundshaker', RALLY_SHELL_BUFFER);
+  buffers.set('proj_groundshaker', RALLY_GROUND_BLAST_BUFFER);
   buffers.set('impact_groundshaker', GROUND_SHAKER_IMPACT_BUFFER);
   buffers.set('impact_arcane', ARCANE_IMPACT_BUFFER);
 });
@@ -573,7 +573,7 @@ describe('Realm Racers vehicle loops', () => {
   it('maps live shell/contact events and scrape telemetry to the intended one-shots', () => {
     expect(
       realmRacersSpatialAudioCue({
-        type: 'realmRacersShellFired',
+        type: 'realmRacersGroundBlastFired',
         sourceId: 1,
         x: 2,
         z: 3,
@@ -581,17 +581,17 @@ describe('Realm Racers vehicle loops', () => {
         targetZ: 5,
         flightSeconds: 0.8,
       }),
-    ).toEqual({ kind: 'shellFire', x: 2, z: 3, heightOffset: 1 });
+    ).toEqual({ kind: 'groundBlastFire', x: 2, z: 3, heightOffset: 1 });
     expect(
       realmRacersSpatialAudioCue({
-        type: 'realmRacersShellHit',
+        type: 'realmRacersGroundBlastHit',
         sourceId: 1,
         targetId: null,
         x: 4,
         z: 5,
         impact: 0.7,
       }),
-    ).toEqual({ kind: 'shellImpact', x: 4, z: 5, heightOffset: 0, impact: 0.7 });
+    ).toEqual({ kind: 'groundBlastImpact', x: 4, z: 5, heightOffset: 0, impact: 0.7 });
     expect(
       realmRacersSpatialAudioCue({
         type: 'realmRacersBump',
@@ -613,15 +613,15 @@ describe('Realm Racers vehicle loops', () => {
 
     const before = sources.length;
     const ground = (x: number, z: number): number => x + z;
-    // Camera and player deliberately differ: only shellImpact should translate
+    // Camera and player deliberately differ: only groundBlastImpact should translate
     // around the camera so WebAudio receives the player-to-impact vector.
     sfx.setListener(15, 8, 28, 0, 0, 1, 10, 2, 20);
     const shellGainIndex = gains.length;
     const shellPannerIndex = panners.length;
-    // An extreme random value proves shellFire bypasses the generic +10% gain jitter.
+    // An extreme random value proves groundBlastFire bypasses the generic +10% gain jitter.
     vi.mocked(Math.random).mockReturnValue(1);
     playRealmRacersEventAudio(sfx, ground, {
-      type: 'realmRacersShellFired',
+      type: 'realmRacersGroundBlastFired',
       sourceId: 1,
       x: 2,
       z: 3,
@@ -641,7 +641,7 @@ describe('Realm Racers vehicle loops', () => {
     const impactPannerIndex = panners.length;
     vi.mocked(Math.random).mockReturnValue(1);
     playRealmRacersEventAudio(sfx, ground, {
-      type: 'realmRacersShellHit',
+      type: 'realmRacersGroundBlastHit',
       sourceId: 1,
       targetId: null,
       x: 4,
@@ -681,7 +681,7 @@ describe('Realm Racers vehicle loops', () => {
     expect(panners[scrapePannerIndex]?.refDistance).toBe(5);
     playRealmRacersEventAudio(sfx, ground, { type: 'realmRacersGo' });
     expect(sources.slice(before).map((source) => source.buffer)).toEqual([
-      RALLY_SHELL_BUFFER,
+      RALLY_GROUND_BLAST_BUFFER,
       GROUND_SHAKER_IMPACT_BUFFER,
       ARCANE_IMPACT_BUFFER,
       ARCANE_IMPACT_BUFFER,

@@ -142,7 +142,7 @@ function displaySpeedBudget(e: Entity): number {
  * (a runner re-derives it from held input every step), so a shove the predictor
  * never saw would otherwise live on in the scratch state and steer against the
  * server for the rest of the corner. Two events do it: a rival's contact, and an
- * Arc Shell going off under the machine.
+ * Ground Blast going off under the machine.
  *
  * Only the momentum needs this. The HEADING a contact turns the machine through
  * arrives on its own: a driver's predicted facing is re-anchored on the wire
@@ -157,7 +157,7 @@ export function hasAuthoritativeDriveImpulse(
   return events.some(
     (event) =>
       (event.type === 'realmRacersBump' && (event.aId === playerId || event.bId === playerId)) ||
-      (event.type === 'realmRacersShellHit' && event.targetId === playerId),
+      (event.type === 'realmRacersGroundBlastHit' && event.targetId === playerId),
   );
 }
 

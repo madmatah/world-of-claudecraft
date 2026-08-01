@@ -32,7 +32,7 @@ describe('vehicle lean presentation', () => {
     expect(at30.roll).toBeCloseTo(at60.roll, 2);
   });
 
-  it('does not turn an asphalt Arc Shell grip penalty into off-road dust', () => {
+  it('does not turn an asphalt Ground Blast grip penalty into off-road dust', () => {
     expect(vehicleIsOffRoad(1)).toBe(false);
     expect(vehicleIsOffRoad(1.06)).toBe(true);
   });

@@ -5,8 +5,8 @@ import { MOUNTS, type MountKey } from '../src/sim/content/mounts';
 import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { forceDismount } from '../src/sim/mounts';
+import { GROUND_BLAST_CONTROL_SPEED_MULT } from '../src/sim/realm_racers_ground_blast';
 import { REALM_RACERS_ORIGIN, REALM_RACERS_PERIMETER_HALF_X } from '../src/sim/realm_racers_layout';
-import { SHELL_CONTROL_SPEED_MULT } from '../src/sim/realm_racers_shell';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
@@ -20,7 +20,7 @@ import {
   REALM_RACERS_VEHICLE_KEY,
   REALM_RACERS_VERGE_BAND,
   REALM_RACERS_WATER_BAND,
-  realmRacersFireShell,
+  realmRacersFireGroundBlast,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import type { Entity, SimEvent } from '../src/sim/types';
@@ -124,7 +124,7 @@ describe('The Realm Racers lifecycle', () => {
     expect(entity(sim, a).mountKey).toBe('terrorspark_groundshaker');
     expect(entity(sim, b).mountKey).toBe('terrorspark_groundshaker');
     const aMeta = required(sim.players.get(a), `player ${a}`);
-    expect(aMeta.known.map((known) => known.def.id)).toEqual(['rally_arc_shell']);
+    expect(aMeta.known.map((known) => known.def.id)).toEqual(['rally_ground_blast']);
     const before = { ...entity(sim, a).pos };
     aMeta.moveInput.forward = true;
     for (let i = 0; i < 119; i++) sim.tick();
@@ -169,7 +169,7 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.realmRacersInfoFor(b).match?.result).toBe('draw');
   });
 
-  it('keeps Arc Shell mounted and applies one short no-damage destabilization', () => {
+  it('keeps Ground Blast mounted and applies one short no-damage destabilization', () => {
     const { sim, a, b } = startMatch();
     const liveMatch = match(sim);
     liveMatch.phase = 'racing';
@@ -187,16 +187,16 @@ describe('The Realm Racers lifecycle', () => {
     // point: here, straight onto a parked rival.
     sim.castAbility(REALM_RACERS_ABILITY_ID, a, { x: target.pos.x, z: target.pos.z });
     expect(caster.mountKey).toBe('terrorspark_groundshaker');
-    expect(liveMatch.shells).toHaveLength(1);
-    for (let i = 0; i < 25 && liveMatch.shells.length > 0; i++) sim.tick();
-    expect(liveMatch.shells).toHaveLength(0);
+    expect(liveMatch.groundBlasts).toHaveLength(1);
+    for (let i = 0; i < 25 && liveMatch.groundBlasts.length > 0; i++) sim.tick();
+    expect(liveMatch.groundBlasts).toHaveLength(0);
     expect(target.hp).toBe(hp);
-    expect(target.auras.find((aura) => aura.id === 'realm_racers_arc_shell_control')).toMatchObject(
-      {
-        kind: 'slow',
-        value: SHELL_CONTROL_SPEED_MULT,
-      },
-    );
+    expect(
+      target.auras.find((aura) => aura.id === 'realm_racers_ground_blast_control'),
+    ).toMatchObject({
+      kind: 'slow',
+      value: GROUND_BLAST_CONTROL_SPEED_MULT,
+    });
   });
 
   it('shows the forfeit result, then restores position, facing, pools, kit, and prior mount', () => {
@@ -244,7 +244,7 @@ describe('The Realm Racers lifecycle', () => {
     expect(aEntity.cooldowns.get('charge')).toBe(8.95);
     const restoredMeta = required(sim.players.get(a), `player ${a}`);
     expect(restoredMeta.realmRacersMatchId).toBeNull();
-    expect(restoredMeta.known.some((known) => known.def.id === 'rally_arc_shell')).toBe(false);
+    expect(restoredMeta.known.some((known) => known.def.id === 'rally_ground_blast')).toBe(false);
   });
 
   it('restores temporary Rally state before a disconnect save', () => {
@@ -573,7 +573,7 @@ describe('The Realm Racers lifecycle', () => {
   it('fires no shell outside an active Rally match', () => {
     const sim = makeWorld();
     const a = addAt(sim, 'warrior', 'Aster');
-    realmRacersFireShell(sim.ctx, entity(sim, a));
+    realmRacersFireGroundBlast(sim.ctx, entity(sim, a));
     expect(sim.realmRacers.match).toBeNull();
   });
 });

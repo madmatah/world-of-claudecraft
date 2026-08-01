@@ -10,8 +10,8 @@
 
 export const pending: Record<string, readonly string[]> = {
   "es": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -86,8 +86,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "es_ES": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -162,8 +162,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "fr_FR": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -238,8 +238,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "fr_CA": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -315,8 +315,8 @@ export const pending: Record<string, readonly string[]> = {
   ],
   "en_CA": [],
   "it_IT": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -391,8 +391,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "de_DE": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -466,13 +466,25 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
   ],
-  "zh_CN": [],
-  "zh_TW": [],
-  "ko_KR": [],
-  "ja_JP": [],
+  "zh_CN": [
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name"
+  ],
+  "zh_TW": [
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name"
+  ],
+  "ko_KR": [
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name"
+  ],
+  "ja_JP": [
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name"
+  ],
   "pt_BR": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -546,10 +558,13 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
   ],
-  "ru_RU": [],
+  "ru_RU": [
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name"
+  ],
   "cs_CZ": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -624,8 +639,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "nl_NL": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -700,8 +715,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "pl_PL": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -776,8 +791,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "id_ID": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -852,8 +867,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "tr_TR": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -928,8 +943,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "sv_SE": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -1004,8 +1019,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "vi_VN": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",
@@ -1080,8 +1095,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "da_DK": [
-    "entities.abilities.rally_arc_shell.description",
-    "entities.abilities.rally_arc_shell.name",
+    "entities.abilities.rally_ground_blast.description",
+    "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
     "hudChrome.keybinds.rally",
     "hudChrome.rally.bannerDraw",

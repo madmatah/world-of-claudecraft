@@ -1,4 +1,4 @@
-// The Arc Shell. Two halves, tested at the level each one actually lives at:
+// The Ground Blast. Two halves, tested at the level each one actually lives at:
 // the pure leaf (where a shot lands, what the blast does to a machine) driven
 // directly with plain numbers, then the whole weapon driven through a live Sim
 // (the charge budget, the phase gate, the impact tick, the grip loss).
@@ -10,33 +10,33 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  ARC_SHELL_CHARGES,
   REALM_RACERS_ABILITY_ID,
+  REALM_RACERS_WEAPON_CHARGES,
   resolveRealmRacersKit,
 } from '../src/sim/content/realm_racers';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { GRAVITY } from '../src/sim/player_motion';
 import {
-  resolveShellAim,
-  resolveShellBlast,
-  SHELL_AIM_CONE_RAD,
-  SHELL_BLAST_RADIUS,
-  SHELL_BLIND_RANGE,
-  SHELL_MAX_FLIGHT,
-  SHELL_MAX_RANGE,
-  SHELL_MIN_FLIGHT,
-  SHELL_MIN_RANGE,
-  SHELL_POP_VELOCITY,
-  SHELL_PUSH,
-  SHELL_SHOCK_GRIP,
-  SHELL_SHOCK_TICKS,
-  SHELL_SPEED,
-  SHELL_YAW_KICK,
-} from '../src/sim/realm_racers_shell';
+  GROUND_BLAST_AIM_CONE_RAD,
+  GROUND_BLAST_BLIND_RANGE,
+  GROUND_BLAST_MAX_FLIGHT,
+  GROUND_BLAST_MAX_RANGE,
+  GROUND_BLAST_MIN_FLIGHT,
+  GROUND_BLAST_MIN_RANGE,
+  GROUND_BLAST_POP_VELOCITY,
+  GROUND_BLAST_PUSH,
+  GROUND_BLAST_RADIUS,
+  GROUND_BLAST_SHOCK_GRIP,
+  GROUND_BLAST_SHOCK_TICKS,
+  GROUND_BLAST_SPEED,
+  GROUND_BLAST_YAW_KICK,
+  resolveGroundBlastAim,
+  resolveGroundBlastImpact,
+} from '../src/sim/realm_racers_ground_blast';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_RETURN_TICKS,
-  realmRacersFireShell,
+  realmRacersFireGroundBlast,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE, type VehicleDrive } from '../src/sim/types';
@@ -77,7 +77,7 @@ function racing(): { sim: Sim; a: number; b: number } {
 /** Aim from the origin facing +z at a requested ground point. Facing 0 points
  *  along +z (forward = (sin f, cos f)), so +z is straight ahead and +x is left. */
 function shotAt(requested: { x: number; z: number } | null) {
-  return resolveShellAim({ x: 0, z: 0, facing: 0 }, requested);
+  return resolveGroundBlastAim({ x: 0, z: 0, facing: 0 }, requested);
 }
 
 /** Angle of an aim off the caster's nose (facing 0), radians. */
@@ -94,22 +94,22 @@ function body(over: Partial<{ x: number; z: number; facing: number; drive: Vehic
   };
 }
 
-describe('Arc Shell: where the player may place a shot', () => {
+describe('Ground Blast: where the player may place a shot', () => {
   it('lands exactly where it was aimed, inside the cone and the range band', () => {
     const aim = shotAt({ x: 6, z: 20 });
     expect(aim.x).toBeCloseTo(6, 9);
     expect(aim.z).toBeCloseTo(20, 9);
     expect(aim.clamped).toBe(false);
     const seconds = aim.flightTicks / TICK_RATE;
-    expect(seconds).toBeGreaterThanOrEqual(SHELL_MIN_FLIGHT);
-    expect(seconds).toBeLessThanOrEqual(SHELL_MAX_FLIGHT);
+    expect(seconds).toBeGreaterThanOrEqual(GROUND_BLAST_MIN_FLIGHT);
+    expect(seconds).toBeLessThanOrEqual(GROUND_BLAST_MAX_FLIGHT);
   });
 
   it('pulls an aim outside the cone onto the cone edge, keeping its distance', () => {
     // Straight out to the side: 90 degrees off the nose, well past the 45 the
     // barrel allows.
     const aim = shotAt({ x: 30, z: 0 });
-    expect(offNose(aim)).toBeCloseTo(SHELL_AIM_CONE_RAD, 9);
+    expect(offNose(aim)).toBeCloseTo(GROUND_BLAST_AIM_CONE_RAD, 9);
     expect(Math.hypot(aim.x, aim.z)).toBeCloseTo(30, 9);
     expect(aim.clamped).toBe(true);
   });
@@ -117,7 +117,7 @@ describe('Arc Shell: where the player may place a shot', () => {
   it('clamps to the same edge on the other side, mirrored', () => {
     const left = shotAt({ x: 30, z: 0 });
     const right = shotAt({ x: -30, z: 0 });
-    expect(offNose(right)).toBeCloseTo(-SHELL_AIM_CONE_RAD, 9);
+    expect(offNose(right)).toBeCloseTo(-GROUND_BLAST_AIM_CONE_RAD, 9);
     expect(right.x).toBeCloseTo(-left.x, 9);
     expect(right.z).toBeCloseTo(left.z, 9);
   });
@@ -126,22 +126,22 @@ describe('Arc Shell: where the player may place a shot', () => {
     // The barrel is bolted to the chassis: there is no shot backwards, only the
     // furthest forward angle the machine can be pointed at.
     const aim = shotAt({ x: 0, z: -20 });
-    expect(Math.abs(offNose(aim))).toBeCloseTo(SHELL_AIM_CONE_RAD, 9);
+    expect(Math.abs(offNose(aim))).toBeCloseTo(GROUND_BLAST_AIM_CONE_RAD, 9);
     expect(aim.z).toBeGreaterThan(0);
     expect(aim.clamped).toBe(true);
   });
 
   it('clamps a point-blank aim out to the minimum range, clear of the caster', () => {
     const aim = shotAt({ x: 0, z: 4 });
-    expect(aim.z).toBeCloseTo(SHELL_MIN_RANGE, 9);
+    expect(aim.z).toBeCloseTo(GROUND_BLAST_MIN_RANGE, 9);
     expect(aim.clamped).toBe(true);
     // The caster's own centre sits outside the blast it just dropped.
-    expect(Math.hypot(aim.x, aim.z)).toBeGreaterThan(SHELL_BLAST_RADIUS + LOANER.bodyRadius);
+    expect(Math.hypot(aim.x, aim.z)).toBeGreaterThan(GROUND_BLAST_RADIUS + LOANER.bodyRadius);
   });
 
   it('clamps an aim past the maximum range back onto the edge', () => {
-    const aim = shotAt({ x: 0, z: SHELL_MAX_RANGE + 40 });
-    expect(aim.z).toBeCloseTo(SHELL_MAX_RANGE, 9);
+    const aim = shotAt({ x: 0, z: GROUND_BLAST_MAX_RANGE + 40 });
+    expect(aim.z).toBeCloseTo(GROUND_BLAST_MAX_RANGE, 9);
     expect(aim.clamped).toBe(true);
   });
 
@@ -149,22 +149,28 @@ describe('Arc Shell: where the player may place a shot', () => {
     // Derived from the constants, never pinned to today's numbers: which end of
     // the range band saturates the flight window is a pure accident of the
     // speed-to-range ratio, and the operator retunes both from the seat.
-    const near = shotAt({ x: 0, z: SHELL_MIN_RANGE });
-    const far = shotAt({ x: 0, z: SHELL_MAX_RANGE });
+    const near = shotAt({ x: 0, z: GROUND_BLAST_MIN_RANGE });
+    const far = shotAt({ x: 0, z: GROUND_BLAST_MAX_RANGE });
     expect(far.flightTicks).toBeGreaterThan(near.flightTicks);
     for (const [label, aim] of [
       ['near', near],
       ['far', far],
     ] as const) {
       const seconds = aim.flightTicks / TICK_RATE;
-      expect(seconds, label).toBeGreaterThanOrEqual(SHELL_MIN_FLIGHT - 1 / TICK_RATE);
-      expect(seconds, label).toBeLessThanOrEqual(SHELL_MAX_FLIGHT + 1 / TICK_RATE);
+      expect(seconds, label).toBeGreaterThanOrEqual(GROUND_BLAST_MIN_FLIGHT - 1 / TICK_RATE);
+      expect(seconds, label).toBeLessThanOrEqual(GROUND_BLAST_MAX_FLIGHT + 1 / TICK_RATE);
     }
     // And between the clamps the flight really tracks the distance rather than
     // sitting at one end of the window: a shot at the midpoint of whatever band
     // is unclamped is strictly slower than the shortest legal one.
-    const unclamped = Math.min(SHELL_MAX_RANGE, SHELL_MAX_FLIGHT * SHELL_SPEED);
-    const middle = shotAt({ x: 0, z: (SHELL_MIN_FLIGHT * SHELL_SPEED + unclamped) / 2 });
+    const unclamped = Math.min(
+      GROUND_BLAST_MAX_RANGE,
+      GROUND_BLAST_MAX_FLIGHT * GROUND_BLAST_SPEED,
+    );
+    const middle = shotAt({
+      x: 0,
+      z: (GROUND_BLAST_MIN_FLIGHT * GROUND_BLAST_SPEED + unclamped) / 2,
+    });
     expect(middle.flightTicks).toBeGreaterThan(near.flightTicks);
     expect(middle.flightTicks).toBeLessThanOrEqual(far.flightTicks);
   });
@@ -173,32 +179,32 @@ describe('Arc Shell: where the player may place a shot', () => {
     for (const nothing of [null, { x: 0, z: 0 }]) {
       const aim = shotAt(nothing);
       expect(aim.x).toBeCloseTo(0, 9);
-      expect(aim.z).toBeCloseTo(SHELL_BLIND_RANGE, 9);
+      expect(aim.z).toBeCloseTo(GROUND_BLAST_BLIND_RANGE, 9);
       expect(aim.clamped).toBe(false);
     }
   });
 
   it('reads the barrel, not the world axes', () => {
     const shooter = { x: 10, z: -3, facing: Math.PI / 2 }; // forward = (1, 0)
-    const blind = resolveShellAim(shooter, null);
-    expect(blind.x).toBeCloseTo(10 + SHELL_BLIND_RANGE, 6);
+    const blind = resolveGroundBlastAim(shooter, null);
+    expect(blind.x).toBeCloseTo(10 + GROUND_BLAST_BLIND_RANGE, 6);
     expect(blind.z).toBeCloseTo(-3, 6);
     // And the cone turns with the machine: a point due +z is 90 degrees off
     // THIS nose and clamps, though it would have been dead ahead at facing 0.
-    const sideways = resolveShellAim(shooter, { x: 10, z: -3 + 20 });
+    const sideways = resolveGroundBlastAim(shooter, { x: 10, z: -3 + 20 });
     expect(sideways.clamped).toBe(true);
     expect(sideways.x).toBeGreaterThan(10);
   });
 });
 
-describe('Arc Shell: the blast', () => {
+describe('Ground Blast: the blast', () => {
   it('falls off with distance and stops at the rim', () => {
-    const centre = resolveShellBlast(body({ x: 0, z: 0 }), 0, 0);
-    const near = resolveShellBlast(body({ x: 0, z: SHELL_BLAST_RADIUS * 0.9 }), 0, 0);
-    const rim = resolveShellBlast(body({ x: 0, z: SHELL_BLAST_RADIUS }), 0, 0);
+    const centre = resolveGroundBlastImpact(body({ x: 0, z: 0 }), 0, 0);
+    const near = resolveGroundBlastImpact(body({ x: 0, z: GROUND_BLAST_RADIUS * 0.9 }), 0, 0);
+    const rim = resolveGroundBlastImpact(body({ x: 0, z: GROUND_BLAST_RADIUS }), 0, 0);
     expect(centre.falloff).toBeCloseTo(1, 9);
     expect(near.falloff).toBeCloseTo(0.1, 9);
-    expect(centre.pop).toBeCloseTo(SHELL_POP_VELOCITY, 9);
+    expect(centre.pop).toBeCloseTo(GROUND_BLAST_POP_VELOCITY, 9);
     expect(centre.pop).toBeGreaterThan(near.pop);
     expect(rim).toEqual({ falloff: 0, pop: 0 });
   });
@@ -208,16 +214,24 @@ describe('Arc Shell: the blast', () => {
     // HALF the blast radius behind the impact, facing +z, so the falloff is
     // exactly one half whatever the radius is tuned to. The shove is straight
     // backwards, which in the body frame is pure negative forward speed.
-    const result = resolveShellBlast(body({ x: 0, z: -SHELL_BLAST_RADIUS / 2, drive }), 0, 0);
+    const result = resolveGroundBlastImpact(
+      body({ x: 0, z: -GROUND_BLAST_RADIUS / 2, drive }),
+      0,
+      0,
+    );
     expect(result.falloff).toBeCloseTo(0.5, 9);
-    expect(vehicleVelocityZ(drive, 0)).toBeCloseTo(-SHELL_PUSH * 0.5, 9);
+    expect(vehicleVelocityZ(drive, 0)).toBeCloseTo(-GROUND_BLAST_PUSH * 0.5, 9);
     expect(vehicleVelocityX(drive, 0)).toBeCloseTo(0, 9);
   });
 
   it('leaves a machine outside the radius completely untouched', () => {
     const drive = createVehicleDrive('rally_loaner');
     drive.speed = 30;
-    const result = resolveShellBlast(body({ x: 0, z: SHELL_BLAST_RADIUS + 0.5, drive }), 0, 0);
+    const result = resolveGroundBlastImpact(
+      body({ x: 0, z: GROUND_BLAST_RADIUS + 0.5, drive }),
+      0,
+      0,
+    );
     expect(result).toEqual({ falloff: 0, pop: 0 });
     expect(drive).toEqual({ ...createVehicleDrive('rally_loaner'), speed: 30 });
   });
@@ -225,17 +239,17 @@ describe('Arc Shell: the blast', () => {
   it('spins the machine away from whichever side the blast went off on', () => {
     // Facing +z, so the machine's right is -x. A blast at -x is on its right.
     const onRight = createVehicleDrive('rally_loaner');
-    resolveShellBlast(body({ x: 0, z: 0, drive: onRight }), -1, 0);
+    resolveGroundBlastImpact(body({ x: 0, z: 0, drive: onRight }), -1, 0);
     const onLeft = createVehicleDrive('rally_loaner');
-    resolveShellBlast(body({ x: 0, z: 0, drive: onLeft }), 1, 0);
-    expect(onRight.spin).toBeCloseTo(SHELL_YAW_KICK * (1 - 1 / SHELL_BLAST_RADIUS), 9);
+    resolveGroundBlastImpact(body({ x: 0, z: 0, drive: onLeft }), 1, 0);
+    expect(onRight.spin).toBeCloseTo(GROUND_BLAST_YAW_KICK * (1 - 1 / GROUND_BLAST_RADIUS), 9);
     expect(onLeft.spin).toBeCloseTo(-onRight.spin, 9);
     expect(onRight.spin).toBeGreaterThan(0);
   });
 
   it('spins nobody on a hit taken square on the nose', () => {
     const nose = createVehicleDrive('rally_loaner');
-    const result = resolveShellBlast(body({ x: 0, z: 0, drive: nose }), 0, 2);
+    const result = resolveGroundBlastImpact(body({ x: 0, z: 0, drive: nose }), 0, 2);
     expect(result.falloff).toBeGreaterThan(0);
     expect(nose.spin).toBeCloseTo(0, 9);
     // And it is a real hit, not a no-op: the shove is straight backwards.
@@ -244,23 +258,23 @@ describe('Arc Shell: the blast', () => {
 
   it('spins nobody, and throws nobody sideways, dead on the impact point', () => {
     const drive = createVehicleDrive('rally_loaner');
-    const result = resolveShellBlast(body({ x: 0, z: 0, drive }), 0, 0);
+    const result = resolveGroundBlastImpact(body({ x: 0, z: 0, drive }), 0, 0);
     expect(result.falloff).toBeCloseTo(1, 9);
-    expect(result.pop).toBeCloseTo(SHELL_POP_VELOCITY, 9);
+    expect(result.pop).toBeCloseTo(GROUND_BLAST_POP_VELOCITY, 9);
     expect(drive.spin).toBe(0);
     expect(drive.speed).toBe(0);
     expect(drive.slip).toBe(0);
   });
 });
 
-describe('Arc Shell: the weapon slot', () => {
+describe('Ground Blast: the weapon slot', () => {
   it('resolves the ability its argument names, not a hardcoded one', () => {
-    const kit = resolveRealmRacersKit(REALM_RACERS_ABILITY_ID, ARC_SHELL_CHARGES);
+    const kit = resolveRealmRacersKit(REALM_RACERS_ABILITY_ID, REALM_RACERS_WEAPON_CHARGES);
     expect(kit).toHaveLength(1);
     expect(kit[0].def.id).toBe(REALM_RACERS_ABILITY_ID);
-    expect(kit[0].charges).toBe(ARC_SHELL_CHARGES);
+    expect(kit[0].charges).toBe(REALM_RACERS_WEAPON_CHARGES);
     // A weapon the table does not know resolves to no kit at all rather than
-    // silently falling back to Arc Shell.
+    // silently falling back to Ground Blast.
     expect(resolveRealmRacersKit('rally_moss_slick', 3)).toEqual([]);
   });
 
@@ -286,16 +300,16 @@ describe('Arc Shell: the weapon slot', () => {
     for (const pid of [a, b]) {
       expect(live.progress.get(pid)?.heldWeapon).toEqual({
         abilityId: LOANER.weaponAbilityId,
-        charges: ARC_SHELL_CHARGES,
+        charges: REALM_RACERS_WEAPON_CHARGES,
       });
       expect(entity(sim, pid).abilityCharges?.[LOANER.weaponAbilityId]).toMatchObject({
-        charges: ARC_SHELL_CHARGES,
-        maxCharges: ARC_SHELL_CHARGES,
+        charges: REALM_RACERS_WEAPON_CHARGES,
+        maxCharges: REALM_RACERS_WEAPON_CHARGES,
         // `fixed` is what marks a race budget apart from the refilling charge
         // model: the recharge tick skips it, and the cast gate reads it.
         fixed: true,
       });
-      expect(sim.players.get(pid)?.known[0]?.charges).toBe(ARC_SHELL_CHARGES);
+      expect(sim.players.get(pid)?.known[0]?.charges).toBe(REALM_RACERS_WEAPON_CHARGES);
     }
   });
 
@@ -304,16 +318,16 @@ describe('Arc Shell: the weapon slot', () => {
     const live = match(sim);
     const held = required(live.progress.get(a)?.heldWeapon, 'held weapon');
     const caster = entity(sim, a);
-    for (let shot = 1; shot <= ARC_SHELL_CHARGES; shot++) {
+    for (let shot = 1; shot <= REALM_RACERS_WEAPON_CHARGES; shot++) {
       caster.cooldowns.delete(REALM_RACERS_ABILITY_ID);
       sim.castAbility(REALM_RACERS_ABILITY_ID, a);
-      expect(held.charges, `after shot ${shot}`).toBe(ARC_SHELL_CHARGES - shot);
+      expect(held.charges, `after shot ${shot}`).toBe(REALM_RACERS_WEAPON_CHARGES - shot);
     }
     caster.cooldowns.delete(REALM_RACERS_ABILITY_ID);
-    const shellsBefore = live.shells.length;
+    const blastsBefore = live.groundBlasts.length;
     sim.castAbility(REALM_RACERS_ABILITY_ID, a);
     expect(held.charges).toBe(0);
-    expect(live.shells).toHaveLength(shellsBefore);
+    expect(live.groundBlasts).toHaveLength(blastsBefore);
     // Refused as EMPTY, never as cooling down: the two must not read alike.
     expect(caster.cooldowns.has(REALM_RACERS_ABILITY_ID)).toBe(false);
     expect(entity(sim, a).abilityCharges?.[REALM_RACERS_ABILITY_ID]?.charges).toBe(0);
@@ -329,9 +343,9 @@ describe('Arc Shell: the weapon slot', () => {
     const caster = entity(sim, a);
     sim.castAbility(REALM_RACERS_ABILITY_ID, a);
     const pool = required(caster.abilityCharges?.[REALM_RACERS_ABILITY_ID], 'charge pool');
-    expect(pool.charges).toBe(ARC_SHELL_CHARGES - 1);
+    expect(pool.charges).toBe(REALM_RACERS_WEAPON_CHARGES - 1);
     for (let tick = 0; tick < 5 * TICK_RATE; tick++) sim.tick();
-    expect(pool.charges).toBe(ARC_SHELL_CHARGES - 1);
+    expect(pool.charges).toBe(REALM_RACERS_WEAPON_CHARGES - 1);
     // And the ordinary cooldown still ran out in that time, so the two clocks
     // are genuinely independent: the budget is the ammunition, the cooldown is
     // only the pacing between shots.
@@ -365,15 +379,15 @@ describe('Arc Shell: the weapon slot', () => {
     const held = required(live.progress.get(a)?.heldWeapon, 'held weapon');
     sim.castAbility(REALM_RACERS_ABILITY_ID, a, { x: caster.pos.x, z: caster.pos.z + 20 });
     expect(caster.cooldowns.has(REALM_RACERS_ABILITY_ID)).toBe(false);
-    expect(held.charges).toBe(ARC_SHELL_CHARGES);
-    expect(live.shells).toHaveLength(0);
+    expect(held.charges).toBe(REALM_RACERS_WEAPON_CHARGES);
+    expect(live.groundBlasts).toHaveLength(0);
 
     // ...and the very same press works the moment the flag drops.
     live.phase = 'racing';
     updateRealmRacers(sim.ctx);
     sim.castAbility(REALM_RACERS_ABILITY_ID, a, { x: caster.pos.x, z: caster.pos.z + 20 });
-    expect(held.charges).toBe(ARC_SHELL_CHARGES - 1);
-    expect(live.shells).toHaveLength(1);
+    expect(held.charges).toBe(REALM_RACERS_WEAPON_CHARGES - 1);
+    expect(live.groundBlasts).toHaveLength(1);
   });
 
   it('costs nothing for a trigger pull the phase gate refuses', () => {
@@ -381,15 +395,15 @@ describe('Arc Shell: the weapon slot', () => {
     const live = match(sim);
     const held = required(live.progress.get(a)?.heldWeapon, 'held weapon');
     live.phase = 'countdown';
-    realmRacersFireShell(sim.ctx, entity(sim, a));
-    expect(held.charges).toBe(ARC_SHELL_CHARGES);
-    expect(live.shells).toHaveLength(0);
+    realmRacersFireGroundBlast(sim.ctx, entity(sim, a));
+    expect(held.charges).toBe(REALM_RACERS_WEAPON_CHARGES);
+    expect(live.groundBlasts).toHaveLength(0);
   });
 
   it('starts the next race at a full budget and leaves no residue behind', () => {
     const { sim, a, b } = racing();
-    realmRacersFireShell(sim.ctx, entity(sim, a));
-    expect(match(sim).progress.get(a)?.heldWeapon?.charges).toBe(ARC_SHELL_CHARGES - 1);
+    realmRacersFireGroundBlast(sim.ctx, entity(sim, a));
+    expect(match(sim).progress.get(a)?.heldWeapon?.charges).toBe(REALM_RACERS_WEAPON_CHARGES - 1);
     sim.realmRacersForfeit(a);
     for (let tick = 0; tick <= REALM_RACERS_RETURN_TICKS; tick++) sim.tick();
     // The gameplay parenthesis closed: the racer is back to their own kit with
@@ -399,11 +413,11 @@ describe('Arc Shell: the weapon slot', () => {
     sim.realmRacersQueueJoin(a);
     sim.realmRacersQueueJoin(b);
     sim.tick();
-    expect(match(sim).progress.get(a)?.heldWeapon?.charges).toBe(ARC_SHELL_CHARGES);
+    expect(match(sim).progress.get(a)?.heldWeapon?.charges).toBe(REALM_RACERS_WEAPON_CHARGES);
   });
 });
 
-describe('Arc Shell: landing it in a live race', () => {
+describe('Ground Blast: landing it in a live race', () => {
   /** Park both machines nose to tail, aim the circle at the rival's feet the way
    *  a player would, and fire. */
   function stagedShot(gap: number) {
@@ -416,21 +430,21 @@ describe('Arc Shell: landing it in a live race', () => {
     teleport(sim, a, caster.pos.x, caster.pos.z);
     teleport(sim, b, caster.pos.x, caster.pos.z + gap);
     caster.castAim = { x: rival.pos.x, y: rival.pos.y, z: rival.pos.z };
-    realmRacersFireShell(sim.ctx, caster);
-    return { sim, a, b, live, caster, rival, shell: live.shells[0] };
+    realmRacersFireGroundBlast(sim.ctx, caster);
+    return { sim, a, b, live, caster, rival, shell: live.groundBlasts[0] };
   }
 
   it('holds the shell until its impact tick, then lands it exactly once', () => {
     const { sim, live, shell } = stagedShot(14);
-    expect(live.shells).toHaveLength(1);
+    expect(live.groundBlasts).toHaveLength(1);
     const flightTicks = shell.impactTick - sim.tickCount;
-    expect(flightTicks).toBeGreaterThanOrEqual(SHELL_MIN_FLIGHT * TICK_RATE);
+    expect(flightTicks).toBeGreaterThanOrEqual(GROUND_BLAST_MIN_FLIGHT * TICK_RATE);
     let hits = 0;
     for (let tick = 0; tick < flightTicks + 4; tick++) {
-      hits += sim.tick().filter((e) => e.type === 'realmRacersShellHit').length;
+      hits += sim.tick().filter((e) => e.type === 'realmRacersGroundBlastHit').length;
     }
     expect(hits).toBe(1);
-    expect(live.shells).toHaveLength(0);
+    expect(live.groundBlasts).toHaveLength(0);
   });
 
   it('throws a rival that held its line into the air, off its line and onto ice', () => {
@@ -444,11 +458,11 @@ describe('Arc Shell: landing it in a live race', () => {
     let hit: { targetId: number | null; impact: number } | null = null;
     for (let tick = 0; tick <= flightTicks; tick++) {
       for (const ev of sim.tick()) {
-        if (ev.type === 'realmRacersShellHit') hit = ev;
+        if (ev.type === 'realmRacersGroundBlastHit') hit = ev;
       }
     }
     expect(hit).toMatchObject({ targetId: b, sourceId: a });
-    expect(required(hit, 'hit').impact).toBeCloseTo(1 - 1 / SHELL_BLAST_RADIUS, 6);
+    expect(required(hit, 'hit').impact).toBeCloseTo(1 - 1 / GROUND_BLAST_RADIUS, 6);
     expect(rival.onGround).toBe(false);
     expect(rival.vy).toBeGreaterThan(0);
     const lifted = rival.pos.y;
@@ -456,8 +470,12 @@ describe('Arc Shell: landing it in a live race', () => {
     // machine's right is -x, so a push toward +x is negative slip.
     expect(required(rival.drive, 'rival drive').slip).toBeLessThan(0);
     expect(required(rival.drive, 'rival drive').spin).not.toBe(0);
-    expect(live.progress.get(b)?.shellShockUntilTick).toBe(shell.impactTick + SHELL_SHOCK_TICKS);
-    expect(rival.auras.find((aura) => aura.id === 'realm_racers_arc_shell_control')).toMatchObject({
+    expect(live.progress.get(b)?.groundBlastShockUntilTick).toBe(
+      shell.impactTick + GROUND_BLAST_SHOCK_TICKS,
+    );
+    expect(
+      rival.auras.find((aura) => aura.id === 'realm_racers_ground_blast_control'),
+    ).toMatchObject({
       kind: 'slow',
     });
     // No damage: the rally is a race, not a duel.
@@ -467,8 +485,8 @@ describe('Arc Shell: landing it in a live race', () => {
     // rises, then comes back down and lands, with no fall damage billed for a
     // drop the shell caused.
     // The airtime is 2v/g, so the budget is derived from the pop rather than
-    // guessed: raising SHELL_POP_VELOCITY must not silently make this vacuous.
-    const airTicks = Math.ceil((2 * SHELL_POP_VELOCITY) / GRAVITY / (1 / TICK_RATE)) + 4;
+    // guessed: raising GROUND_BLAST_POP_VELOCITY must not silently make this vacuous.
+    const airTicks = Math.ceil((2 * GROUND_BLAST_POP_VELOCITY) / GRAVITY / (1 / TICK_RATE)) + 4;
     let apex = lifted;
     for (let tick = 0; tick < airTicks && !rival.onGround; tick++) {
       sim.tick();
@@ -484,17 +502,17 @@ describe('Arc Shell: landing it in a live race', () => {
     const flightTicks = shell.impactTick - sim.tickCount;
     // Sidestep by more than the blast: the same escape a player makes by
     // steering off the marked ground during the flight.
-    teleport(sim, b, rival.pos.x + SHELL_BLAST_RADIUS + 2, rival.pos.z);
+    teleport(sim, b, rival.pos.x + GROUND_BLAST_RADIUS + 2, rival.pos.z);
     let hit: { targetId: number | null } | null = null;
     for (let tick = 0; tick <= flightTicks; tick++) {
       for (const ev of sim.tick()) {
-        if (ev.type === 'realmRacersShellHit') hit = ev;
+        if (ev.type === 'realmRacersGroundBlastHit') hit = ev;
       }
     }
     // The crater still happens, with nobody in it.
     expect(hit).toMatchObject({ targetId: null, impact: 0 });
     expect(rival.onGround).toBe(true);
-    expect(live.progress.get(b)?.shellShockUntilTick).toBe(0);
+    expect(live.progress.get(b)?.groundBlastShockUntilTick).toBe(0);
   });
 
   it('never catches the caster in its own blast', () => {
@@ -503,9 +521,9 @@ describe('Arc Shell: landing it in a live race', () => {
     const before = { ...required(caster.drive, 'caster drive') };
     for (let tick = 0; tick <= flightTicks; tick++) sim.tick();
     expect(caster.onGround).toBe(true);
-    expect(match(sim).progress.get(a)?.shellShockUntilTick).toBe(0);
+    expect(match(sim).progress.get(a)?.groundBlastShockUntilTick).toBe(0);
     expect(
-      caster.auras.find((aura) => aura.id === 'realm_racers_arc_shell_control'),
+      caster.auras.find((aura) => aura.id === 'realm_racers_ground_blast_control'),
     ).toBeUndefined();
     expect(required(caster.drive, 'caster drive').spin).toBe(before.spin);
   });
@@ -520,9 +538,12 @@ describe('Arc Shell: landing it in a live race', () => {
     // surface it is standing on multiplies in too: a shock on the grass is both.
     updateRealmRacers(sim.ctx);
     const surfaceGrip = required(rival.drive, 'drive').gripMult;
-    progress.shellShockUntilTick = shockUntil;
+    progress.groundBlastShockUntilTick = shockUntil;
     updateRealmRacers(sim.ctx);
-    expect(required(rival.drive, 'drive').gripMult).toBeCloseTo(surfaceGrip * SHELL_SHOCK_GRIP, 9);
+    expect(required(rival.drive, 'drive').gripMult).toBeCloseTo(
+      surfaceGrip * GROUND_BLAST_SHOCK_GRIP,
+      9,
+    );
     // Restored the exact tick it expires on, with nothing left to clean up.
     sim.tickCount = shockUntil;
     updateRealmRacers(sim.ctx);

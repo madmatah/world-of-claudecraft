@@ -7483,8 +7483,8 @@ export const de_DE: EnTranslations = {
         "name": "Frische Beine",
         "description": "Finde deine Beine: Bewege dich 4 Sek. lang 50% schneller."
       },
-      "rally_arc_shell": {
-        "name": "Arc Shell",
+      "rally_ground_blast": {
+        "name": "Ground Blast",
         "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
       },
       "flamestrike": {

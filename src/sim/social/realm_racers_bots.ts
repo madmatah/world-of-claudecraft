@@ -36,7 +36,7 @@ import {
 import { auraSpeedMult } from '../player_motion';
 import {
   driveRealmRacers,
-  type RallyDriverShell,
+  type RallyDriverBlast,
   type RallyDriverTier,
 } from '../realm_racers_driver';
 import { realmRacersTrack } from '../realm_racers_spline';
@@ -217,11 +217,11 @@ function driveRallyBot(
   // The match module reprojected this racer earlier in the same tick, so its
   // search hint is current and this costs a local window scan, not a lap scan.
   const projection = realmRacersTrack().project(here.x, here.z, progress.trackIndex);
-  const incoming: RallyDriverShell[] = [];
-  for (const shell of match.shells) {
-    if (shell.ownerPid === pid) continue;
-    const at = realmRacersToCanonical(match, shell.x, shell.z);
-    incoming.push({ x: at.x, z: at.z, ticksToImpact: shell.impactTick - sim.tickCount });
+  const incoming: RallyDriverBlast[] = [];
+  for (const blast of match.groundBlasts) {
+    if (blast.ownerPid === pid) continue;
+    const at = realmRacersToCanonical(match, blast.x, blast.z);
+    incoming.push({ x: at.x, z: at.z, ticksToImpact: blast.impactTick - sim.tickCount });
   }
   const rival = nearestRival(sim, match, pid);
   // The slot, never a hardcoded id: a bot handed a different weapon by a pickup

@@ -12,11 +12,11 @@ export interface RealmRacersSpatialAudioCue {
 /** Authoritative world event -> one positional rally cue. */
 export function realmRacersSpatialAudioCue(event: SimEvent): RealmRacersSpatialAudioCue | null {
   switch (event.type) {
-    case 'realmRacersShellFired':
-      return { kind: 'shellFire', x: event.x, z: event.z, heightOffset: 1 };
-    case 'realmRacersShellHit':
+    case 'realmRacersGroundBlastFired':
+      return { kind: 'groundBlastFire', x: event.x, z: event.z, heightOffset: 1 };
+    case 'realmRacersGroundBlastHit':
       return {
-        kind: 'shellImpact',
+        kind: 'groundBlastImpact',
         x: event.x,
         z: event.z,
         heightOffset: 0,

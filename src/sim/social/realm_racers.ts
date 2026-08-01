@@ -1,7 +1,7 @@
 // The Realm Racers: a deterministic two-player vehicle race. This module owns
 // the FIFO queue, the single instanced match, arc-length lap progress, finish
 // arbitration (public and practice races may run different lap counts),
-// straight-line Arc Shell projectiles, and the complete gameplay parenthesis
+// straight-line Ground Blast projectiles, and the complete gameplay parenthesis
 // (temporary kit/mount in, exact return state out).
 //
 // It is also what puts a racer BEHIND THE WHEEL: seating a pilot hands them a
@@ -27,6 +27,14 @@ import { abilitiesKnownAt, DUNGEON_X_THRESHOLD } from '../data';
 import { restorePetFromDelveStash, stowPetForDelve } from '../pet/pet_commands';
 import type { RallyDriverTier } from '../realm_racers_driver';
 import {
+  GROUND_BLAST_CONTROL_SECONDS,
+  GROUND_BLAST_CONTROL_SPEED_MULT,
+  GROUND_BLAST_SHOCK_GRIP,
+  GROUND_BLAST_SHOCK_TICKS,
+  resolveGroundBlastAim,
+  resolveGroundBlastImpact,
+} from '../realm_racers_ground_blast';
+import {
   type RallyPoint,
   REALM_RACERS_LAPS,
   REALM_RACERS_PRACTICE_LAPS,
@@ -41,14 +49,6 @@ import {
   stepRealmRacersProgress,
   travelledFromArc,
 } from '../realm_racers_progress';
-import {
-  resolveShellAim,
-  resolveShellBlast,
-  SHELL_CONTROL_SECONDS,
-  SHELL_CONTROL_SPEED_MULT,
-  SHELL_SHOCK_GRIP,
-  SHELL_SHOCK_TICKS,
-} from '../realm_racers_shell';
 import {
   type RallyProjection,
   rallyBasinEdgeOffsetAt,
@@ -80,8 +80,8 @@ export const REALM_RACERS_RESET_LOCK_TICKS = 2 * TICK_RATE;
 export const REALM_RACERS_STUCK_TICKS = 3 * TICK_RATE;
 export const REALM_RACERS_WRONG_WAY_TICKS = Math.ceil(TICK_RATE / 2);
 export const REALM_RACERS_STUCK_SPEED = 0.75;
-/** The debuff an Arc Shell hit leaves in the victim's HUD aura row. */
-export const REALM_RACERS_SHELL_AURA = 'realm_racers_arc_shell_control';
+/** The debuff an Ground Blast hit leaves in the victim's HUD aura row. */
+export const REALM_RACERS_GROUND_BLAST_AURA = 'realm_racers_ground_blast_control';
 export interface RealmRacersSlowBand {
   /** Player-visible aura name, localized at the client boundary. */
   name: string;
@@ -190,7 +190,7 @@ export interface RealmRacersProgress {
   heldWeapon: RealmRacersWeaponSlot | null;
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
-  shellShockUntilTick: number;
+  groundBlastShockUntilTick: number;
 }
 
 /**
@@ -199,7 +199,7 @@ export interface RealmRacersProgress {
  * lets one event carry the whole ground marker, and it removes the tunnelling
  * a straight-line stepper has against a machine covering three yards a tick.
  */
-export interface RealmRacersShell {
+export interface RealmRacersGroundBlast {
   ownerPid: number;
   /** Impact point, world coordinates on this race's copy of the circuit. */
   x: number;
@@ -226,7 +226,7 @@ export interface RealmRacersMatch {
   returns: Map<number, RealmRacersReturn>;
   preMatchPools: Map<number, ArenaReturnPools>;
   progress: Map<number, RealmRacersProgress>;
-  shells: RealmRacersShell[];
+  groundBlasts: RealmRacersGroundBlast[];
   /** Last tick each racer PAIR announced a bump, keyed by pair index, so the
    *  throttle is per pair rather than per match and a bigger grid keeps one
    *  duel from silencing another. */
@@ -577,11 +577,11 @@ function startMatch(
             abilityId: profile.weaponAbilityId,
             charges: realmRacersWeaponCharges(profile.weaponAbilityId),
           },
-          shellShockUntilTick: 0,
+          groundBlastShockUntilTick: 0,
         },
       ]),
     ),
-    shells: [],
+    groundBlasts: [],
     bumpTicks: new Map(),
     origin: practice ? realmRacersSlotOffset(practice.slot) : { x: 0, z: 0 },
     practice: practice ? { ownerPid: practice.ownerPid, slot: practice.slot } : null,
@@ -623,7 +623,7 @@ function endMatch(
   match.finishTick = ctx.tickCount;
   match.winnerPid = winnerPid;
   match.forfeiterPid = forfeiterPid;
-  match.shells.length = 0;
+  match.groundBlasts.length = 0;
   const winnerName = winnerPid === null ? '' : (ctx.players.get(winnerPid)?.name ?? '');
   for (const pid of match.pids) {
     const drive = ctx.entities.get(pid)?.drive;
@@ -754,13 +754,13 @@ export function realmRacersReturnFor(
  * and range band. The second clamp is the load-bearing one: the aim is a wire
  * value, so a cheat client could otherwise drop a shell anywhere on the circuit.
  */
-export function realmRacersFireShell(ctx: SimContext, caster: Entity): void {
+export function realmRacersFireGroundBlast(ctx: SimContext, caster: Entity): void {
   const match = realmRacersMatchOf(ctx, caster.id);
   if (!match || match.phase !== 'racing' || caster.dead) return;
   const progress = match.progress.get(caster.id);
   const held = progress?.heldWeapon;
   if (!held || held.charges === 0) return;
-  const aim = resolveShellAim(
+  const aim = resolveGroundBlastAim(
     { x: caster.pos.x, z: caster.pos.z, facing: caster.facing },
     caster.castAim,
   );
@@ -768,14 +768,14 @@ export function realmRacersFireShell(ctx: SimContext, caster: Entity): void {
     held.charges--;
     publishWeaponCharges(caster, held);
   }
-  match.shells.push({
+  match.groundBlasts.push({
     ownerPid: caster.id,
     x: aim.x,
     z: aim.z,
     impactTick: ctx.tickCount + aim.flightTicks,
   });
   ctx.emit({
-    type: 'realmRacersShellFired',
+    type: 'realmRacersGroundBlastFired',
     sourceId: caster.id,
     x: caster.pos.x + Math.sin(caster.facing) * 2,
     z: caster.pos.z + Math.cos(caster.facing) * 2,
@@ -795,21 +795,21 @@ export function realmRacersFireShell(ctx: SimContext, caster: Entity): void {
  * still: at 58 yd/s a pilot drives through their own impact point long before it
  * lands, and shooting yourself in the back is frustration, not a mechanic.
  */
-function tickShells(ctx: SimContext, match: RealmRacersMatch): void {
-  for (let i = match.shells.length - 1; i >= 0; i--) {
-    const shell = match.shells[i];
-    if (ctx.tickCount < shell.impactTick) continue;
-    match.shells.splice(i, 1);
+function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
+  for (let i = match.groundBlasts.length - 1; i >= 0; i--) {
+    const shot = match.groundBlasts[i];
+    if (ctx.tickCount < shot.impactTick) continue;
+    match.groundBlasts.splice(i, 1);
     let nearestPid: number | null = null;
     let nearestImpact = 0;
     for (const pid of match.pids) {
-      if (pid === shell.ownerPid) continue;
+      if (pid === shot.ownerPid) continue;
       const racer = ctx.entities.get(pid);
       if (!racer?.drive || racer.dead) continue;
-      const blast = resolveShellBlast(
+      const blast = resolveGroundBlastImpact(
         { x: racer.pos.x, z: racer.pos.z, facing: racer.facing, drive: racer.drive },
-        shell.x,
-        shell.z,
+        shot.x,
+        shot.z,
       );
       if (blast.falloff <= 0) continue;
       // The pop rides the entity's own air pass, so the machine really leaves
@@ -820,15 +820,15 @@ function tickShells(ctx: SimContext, match: RealmRacersMatch): void {
       racer.onGround = false;
       racer.fallStartY = racer.pos.y;
       const progress = match.progress.get(pid);
-      if (progress) progress.shellShockUntilTick = ctx.tickCount + SHELL_SHOCK_TICKS;
+      if (progress) progress.groundBlastShockUntilTick = ctx.tickCount + GROUND_BLAST_SHOCK_TICKS;
       ctx.applyAura(racer, {
-        id: REALM_RACERS_SHELL_AURA,
-        name: 'Arc Shell',
+        id: REALM_RACERS_GROUND_BLAST_AURA,
+        name: 'Ground Blast',
         kind: 'slow',
-        remaining: SHELL_CONTROL_SECONDS,
-        duration: SHELL_CONTROL_SECONDS,
-        value: SHELL_CONTROL_SPEED_MULT,
-        sourceId: shell.ownerPid,
+        remaining: GROUND_BLAST_CONTROL_SECONDS,
+        duration: GROUND_BLAST_CONTROL_SECONDS,
+        value: GROUND_BLAST_CONTROL_SPEED_MULT,
+        sourceId: shot.ownerPid,
         school: 'physical',
       });
       if (blast.falloff > nearestImpact) {
@@ -840,11 +840,11 @@ function tickShells(ctx: SimContext, match: RealmRacersMatch): void {
     // track still craters, and that crater is most of the feedback the first
     // version was missing.
     ctx.emit({
-      type: 'realmRacersShellHit',
-      sourceId: shell.ownerPid,
+      type: 'realmRacersGroundBlastHit',
+      sourceId: shot.ownerPid,
       targetId: nearestPid,
-      x: shell.x,
-      z: shell.z,
+      x: shot.x,
+      z: shot.z,
       impact: nearestImpact,
     });
   }
@@ -965,7 +965,7 @@ function applyVehicleSurface(
   shocked: boolean,
 ): void {
   if (!racer.drive) return;
-  racer.drive.gripMult = (band ? band.gripMult : 1) * (shocked ? SHELL_SHOCK_GRIP : 1);
+  racer.drive.gripMult = (band ? band.gripMult : 1) * (shocked ? GROUND_BLAST_SHOCK_GRIP : 1);
   racer.drive.dragMult = band ? band.dragMult : 1;
   // The band's speed loss rides its slow AURA, which the kernel already folds
   // into the top speed, so the surface cap stays neutral and nothing is charged
@@ -1001,7 +1001,7 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
       progress.stuckTicks = 0;
     }
 
-    const shockUntil = progress.shellShockUntilTick;
+    const shockUntil = progress.groundBlastShockUntilTick;
     applyVehicleSurface(racer, band, ctx.tickCount < shockUntil);
     const existing = racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
     if (!band) {
@@ -1208,7 +1208,7 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
   tickProgress(ctx, match);
   if (match.phase === 'racing') {
     tickTrackLimits(ctx, match);
-    tickShells(ctx, match);
+    tickGroundBlasts(ctx, match);
   }
 }
 

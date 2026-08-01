@@ -5233,7 +5233,8 @@ export class Sim {
         valeCupMod.vcupSportDash(sim.ctx, caster, distance, catchBall),
       vcupSportShove: (caster, target, distance) =>
         valeCupMod.vcupSportShove(sim.ctx, caster, target, distance),
-      realmRacersFireShell: (caster) => realmRacersMod.realmRacersFireShell(sim.ctx, caster),
+      realmRacersFireGroundBlast: (caster) =>
+        realmRacersMod.realmRacersFireGroundBlast(sim.ctx, caster),
     };
     return createSimContext(host);
   }

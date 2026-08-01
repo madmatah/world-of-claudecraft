@@ -392,7 +392,7 @@ function makeCtx() {
     vcupShoot: vi.fn(),
     vcupSportDash: vi.fn(),
     vcupSportShove: vi.fn(),
-    realmRacersFireShell: vi.fn(),
+    realmRacersFireGroundBlast: vi.fn(),
   };
   const ctx = createSimContext(host);
   return {

@@ -7483,8 +7483,8 @@ export const pt_BR: EnTranslations = {
         "name": "Pernas Novas",
         "description": "Recupere as pernas: mova-se 50% mais rápido por 4 s."
       },
-      "rally_arc_shell": {
-        "name": "Arc Shell",
+      "rally_ground_blast": {
+        "name": "Ground Blast",
         "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
       },
       "flamestrike": {

@@ -6,16 +6,16 @@
 // brain is `src/sim/realm_racers_driver.ts` and the lifecycle around it is
 // `src/sim/social/realm_racers_bots.ts`.
 
-import { SHELL_BLAST_RADIUS, SHELL_MAX_RANGE } from '../realm_racers_shell';
+import { GROUND_BLAST_MAX_RANGE, GROUND_BLAST_RADIUS } from '../realm_racers_ground_blast';
 import type { AbilityDef, PlayerClass } from '../types';
 import type { KnownAbility } from './classes';
 
-export const REALM_RACERS_ABILITY_ID = 'rally_arc_shell';
+export const REALM_RACERS_ABILITY_ID = 'rally_ground_blast';
 
 export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
   [REALM_RACERS_ABILITY_ID]: {
     id: REALM_RACERS_ABILITY_ID,
-    name: 'Arc Shell',
+    name: 'Ground Blast',
     class: 'warrior',
     learnLevel: 1,
     cost: 0,
@@ -25,8 +25,8 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     // `targetMode: 'position'` cast like every other ground-targeted spell and
     // gets the shared reticle for free. Its range is the outer edge of the
     // aiming band; the forward CONE (and the minimum range) are the shell's own
-    // rules, re-clamped authoritatively in `src/sim/realm_racers_shell.ts`.
-    range: SHELL_MAX_RANGE,
+    // rules, re-clamped authoritatively in `src/sim/realm_racers_ground_blast.ts`.
+    range: GROUND_BLAST_MAX_RANGE,
     targetMode: 'position',
     school: 'physical',
     requiresTarget: false,
@@ -34,7 +34,7 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     usableWhileMounted: true,
     // The radius is on the effect so the aiming circle, the marker during the
     // flight and the blast are all one number a player can trust.
-    effects: [{ type: 'realmRacersShell', radius: SHELL_BLAST_RADIUS }],
+    effects: [{ type: 'realmRacersGroundBlast', radius: GROUND_BLAST_RADIUS }],
     description:
       'Lob a shell onto the track ahead. Aim it yourself within a wide arc of your nose: lead a rival and they drive into it, follow them and they are gone. Where it will land is circled on the ground for the whole flight, and a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race.',
   },
@@ -57,10 +57,10 @@ export interface RealmRacersWeapon {
  * a choice: spend it on the rival beside you now, or save it for the hairpin on
  * the last lap.
  */
-export const ARC_SHELL_CHARGES = 3;
+export const REALM_RACERS_WEAPON_CHARGES = 3;
 
 export const REALM_RACERS_WEAPONS: Record<string, RealmRacersWeapon> = {
-  [REALM_RACERS_ABILITY_ID]: { charges: ARC_SHELL_CHARGES },
+  [REALM_RACERS_ABILITY_ID]: { charges: REALM_RACERS_WEAPON_CHARGES },
 };
 
 /** The budget a weapon starts a race with. An id with no rally record fires

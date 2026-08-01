@@ -2368,7 +2368,7 @@ export type AbilityEffect =
   // The Realm Racers weapon slot's shot. Ground-targeted: it lands where the
   // pilot aimed, and `radius` is the blast, carried on the effect so the aiming
   // reticle draws the exact circle the sim will resolve.
-  | { type: 'realmRacersShell'; radius: number }
+  | { type: 'realmRacersGroundBlast'; radius: number }
   | {
       type: 'consumeAura';
       auraIds?: string[];
@@ -4628,12 +4628,12 @@ export type SimEvent = { pid?: number } & (
       winnerName: string;
       returnTicks: number;
     }
-  // An Arc Shell left the barrel. It carries the IMPACT POINT, which is decided
+  // An Ground Blast left the barrel. It carries the IMPACT POINT, which is decided
   // at fire time and never revised, so one event buys the client the muzzle
   // flash, the whole arc, and the ground marker that makes the shot dodgeable,
   // with no per-tick traffic behind it.
   | {
-      type: 'realmRacersShellFired';
+      type: 'realmRacersGroundBlastFired';
       sourceId: number;
       /** Muzzle. */
       x: number;
@@ -4646,7 +4646,7 @@ export type SimEvent = { pid?: number } & (
   // shot still craters: `targetId` is the racer nearest the centre, or null on
   // empty track, and `impact` is that racer's 0..1 blast falloff.
   | {
-      type: 'realmRacersShellHit';
+      type: 'realmRacersGroundBlastHit';
       sourceId: number;
       targetId: number | null;
       x: number;

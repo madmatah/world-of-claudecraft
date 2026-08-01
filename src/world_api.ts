@@ -44,7 +44,7 @@
 //   guild_bank.ts       IWorldGuildBank      shared guild treasury + item store (officer-plus,
 //                                            proximity-gated info + gold/item/buy-slots commands)
 //   vale_cup.ts         IWorldValeCup        Vale Cup boarball queue/roles/betting/practice
-//   realm_racers.ts     IWorldRealmRacers    Realm Racers queue, practice, race, Arc Shell
+//   realm_racers.ts     IWorldRealmRacers    Realm Racers queue, practice, race, Ground Blast
 //   mounts.ts           IWorldMounts         rideable ground mounts: pick + mount/dismount
 //   dungeon_finder.ts   IWorldDungeonFinder  Dungeon Finder queue/proposals/premade board
 //   deeds.ts            IWorldDeeds          earned deeds, lifetime stats, renown, active title,

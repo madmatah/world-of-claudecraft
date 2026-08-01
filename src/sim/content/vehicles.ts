@@ -99,7 +99,7 @@ export const VEHICLE_PROFILES: Record<string, VehicleProfile> = {
     airSteerFraction: 0.25,
     bodyRadius: 1.7,
     mass: 1,
-    weaponAbilityId: 'rally_arc_shell',
+    weaponAbilityId: 'rally_ground_blast',
   },
 };
 

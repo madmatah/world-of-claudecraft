@@ -356,7 +356,7 @@ describe('ActionBarController form persistence', () => {
   it('gives the Rally its own one-button page and restores the class page afterward', () => {
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
     harness.controller.syncKnownAbilities();
-    harness.state.known.push('rally_arc_shell');
+    harness.state.known.push('rally_ground_blast');
     harness.controller.syncKnownAbilities();
 
     harness.state.inRally = true;
@@ -367,7 +367,7 @@ describe('ActionBarController form persistence', () => {
     // attack toggle that means nothing on a circuit.
     expect(harness.controller.actionForSlot(0)).toEqual({
       type: 'ability',
-      id: 'rally_arc_shell',
+      id: 'rally_ground_blast',
     });
     expect(harness.controller.isAttackSlotFixed()).toBe(false);
     expect(harness.controller.actions).toEqual(bar());
@@ -384,15 +384,15 @@ describe('ActionBarController form persistence', () => {
     // Bars persisted before the weapon owned slot 0 carry it in row slot 1, so
     // without the strip a returning pilot sees the same shell twice.
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
-    harness.state.known.push('rally_arc_shell');
+    harness.state.known.push('rally_ground_blast');
     harness.state.inRally = true;
     harness.controller.syncActiveForm();
-    harness.controller.replaceActions(bar('rally_arc_shell'));
+    harness.controller.replaceActions(bar('rally_ground_blast'));
     harness.controller.syncKnownAbilities();
     expect(harness.controller.actions).toEqual(bar());
     expect(harness.controller.actionForSlot(0)).toEqual({
       type: 'ability',
-      id: 'rally_arc_shell',
+      id: 'rally_ground_blast',
     });
   });
 

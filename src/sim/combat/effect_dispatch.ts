@@ -2682,8 +2682,8 @@ export function runEffects(
         ctx.vcupSportShove(p, target, eff.distance);
         break;
       }
-      case 'realmRacersShell': {
-        ctx.realmRacersFireShell(p);
+      case 'realmRacersGroundBlast': {
+        ctx.realmRacersFireGroundBlast(p);
         break;
       }
       case 'sunder': {

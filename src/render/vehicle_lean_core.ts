@@ -19,7 +19,7 @@ const SPEED_FILTER_OMEGA = 12;
 
 const clamp = (value: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, value));
 
-/** Surface presentation follows drag, not grip: Arc Shell temporarily lowers
+/** Surface presentation follows drag, not grip: Ground Blast temporarily lowers
  * grip on asphalt and must not masquerade as dirt dust/footfall audio. */
 export function vehicleIsOffRoad(dragMult: number): boolean {
   return dragMult > 1.05;

@@ -55,7 +55,7 @@ const result = (won: boolean, forfeited: boolean, winnerName: string, pid = 7): 
   }) as SimEvent;
 
 interface RendererHarness {
-  realmRacersShells: { fire: ReturnType<typeof vi.fn>; impact: ReturnType<typeof vi.fn> };
+  realmRacersGroundBlasts: { fire: ReturnType<typeof vi.fn>; impact: ReturnType<typeof vi.fn> };
   groundSample(x: number, z: number): number;
   vfx: { burst: ReturnType<typeof vi.fn>; groundPuff: ReturnType<typeof vi.fn> };
   audioSink: {
@@ -81,7 +81,7 @@ interface RendererHarness {
 
 function rendererHarness(): RendererHarness {
   const renderer = Object.create(Renderer.prototype) as unknown as RendererHarness;
-  renderer.realmRacersShells = { fire: vi.fn(), impact: vi.fn() };
+  renderer.realmRacersGroundBlasts = { fire: vi.fn(), impact: vi.fn() };
   renderer.groundSample = (x, z) => x + z;
   renderer.vfx = { burst: vi.fn(), groundPuff: vi.fn() };
   renderer.audioSink = {
@@ -134,7 +134,7 @@ describe('Realm Racers coordinator audio wiring', () => {
   it('executes the real renderer event branches and preserves kind, ground height, and impact', () => {
     const renderer = rendererHarness();
     renderer.handleEvent({
-      type: 'realmRacersShellFired',
+      type: 'realmRacersGroundBlastFired',
       sourceId: 1,
       x: 2,
       z: 3,
@@ -143,7 +143,7 @@ describe('Realm Racers coordinator audio wiring', () => {
       flightSeconds: 0.8,
     });
     renderer.handleEvent({
-      type: 'realmRacersShellHit',
+      type: 'realmRacersGroundBlastHit',
       sourceId: 1,
       targetId: null,
       x: 4,
@@ -160,8 +160,8 @@ describe('Realm Racers coordinator audio wiring', () => {
     });
 
     expect(renderer.audioSink.realmRacersEvent.mock.calls).toEqual([
-      ['shellFire', 2, 6, 3, undefined],
-      ['shellImpact', 4, 9, 5, 0.7],
+      ['groundBlastFire', 2, 6, 3, undefined],
+      ['groundBlastImpact', 4, 9, 5, 0.7],
       ['bump', 6, 13.5, 7, 0.5],
     ]);
   });

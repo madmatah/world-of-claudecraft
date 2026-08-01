@@ -6,7 +6,7 @@
 import type { BiomeId } from '../sim/types';
 
 export type Surface = 'grass' | 'dirt' | 'stone' | 'wood' | 'snow' | 'water';
-export type RealmRacersAudioEvent = 'shellFire' | 'shellImpact' | 'bump' | 'scrape';
+export type RealmRacersAudioEvent = 'groundBlastFire' | 'groundBlastImpact' | 'bump' | 'scrape';
 
 export interface AmbientPointSource {
   readonly id: string;

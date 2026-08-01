@@ -34,8 +34,8 @@ import {
   zoneAt,
 } from '../sim/data';
 import type { DelveModuleId } from '../sim/delve_layout';
+import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
 import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
-import { SHELL_BLAST_RADIUS } from '../sim/realm_racers_shell';
 import { generateRiftFloor, riftLiftAt } from '../sim/rift/rift_gen';
 import type { BiomeId, ZoneDef } from '../sim/types';
 import { ALL_CLASSES, type Entity, type SimEvent } from '../sim/types';
@@ -309,7 +309,7 @@ import {
   playRealmRacersScrapeAudio,
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
-import { RealmRacersShellVisuals } from './realm_racers_shell';
+import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { buildRealmRacersTrack, type RealmRacersTrackView } from './realm_racers_track';
 import {
   RenderBudgetGovernor,
@@ -1693,7 +1693,7 @@ export class Renderer {
   private valeCupSky = new ValeCupPracticeSky();
   private valeCupTeamRings: ValeCupTeamRingsView;
   private realmRacersTrack: RealmRacersTrackView;
-  private realmRacersShells = new RealmRacersShellVisuals();
+  private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
   private vcupFireworks: {
     at: number;
     x: number;
@@ -2290,8 +2290,8 @@ export class Renderer {
     this.realmRacersTrack = buildRealmRacersTrack();
     setRenderCategory(this.realmRacersTrack.group, 'props');
     this.scene.add(this.realmRacersTrack.group);
-    setRenderCategory(this.realmRacersShells.group, 'vfx');
-    this.scene.add(this.realmRacersShells.group);
+    setRenderCategory(this.realmRacersGroundBlasts.group, 'vfx');
+    this.scene.add(this.realmRacersGroundBlasts.group);
     this.propsView = props;
 
     // Eastbrook's replacement town is a distinct, stable scene subtree. Its
@@ -6453,11 +6453,11 @@ export class Renderer {
         });
         if (ev.entityId === this.sim.playerId) this.addShake(0.5);
         break;
-      case 'realmRacersShellFired':
+      case 'realmRacersGroundBlastFired':
         // Muzzle flash and smoke at the barrel, then the arc and the ground
         // marker the shot is dodged off. The marker's own richness never scales:
         // only this burst does, and it is the pooled cloud's business.
-        this.realmRacersShells.fire(
+        this.realmRacersGroundBlasts.fire(
           ev.x,
           ev.z,
           ev.targetX,
@@ -6468,13 +6468,13 @@ export class Renderer {
         this.vfx.burst(new THREE.Vector3(ev.x, 1.1, ev.z), 'arcane', 14, 0.65);
         playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
         break;
-      case 'realmRacersShellHit': {
+      case 'realmRacersGroundBlastHit': {
         // The crater fires whether or not anyone was caught: a miss that lands
         // silently is most of what made the first version read as nothing
         // happening. Flash and shockwave are the shell module's own pooled
         // meshes; the ring and the dust are the shared pools.
-        this.realmRacersShells.impact(ev.x, ev.z, this.groundSample(ev.x, ev.z));
-        this.spawnAoeRing(ev.x, ev.z, SHELL_BLAST_RADIUS, 'physical');
+        this.realmRacersGroundBlasts.impact(ev.x, ev.z, this.groundSample(ev.x, ev.z));
+        this.spawnAoeRing(ev.x, ev.z, GROUND_BLAST_RADIUS, 'physical');
         this.vfx.burst(
           new THREE.Vector3(ev.x, 1.1, ev.z),
           'arcane',
@@ -9988,7 +9988,7 @@ export class Renderer {
     // null-safe cupInfo read: the offline Sim may predate the Vale Cup module
     this.valeCupStadium.update(p.pos.x, p.pos.z, dt, this.sim.cupInfo ?? null);
     this.realmRacersTrack.update(p.pos.x, p.pos.z, this.time, this.sim.realmRacersInfo.match);
-    this.realmRacersShells.update(dt);
+    this.realmRacersGroundBlasts.update(dt);
     // Team rings ride the live entity views (positions are fresh: the entity loop
     // ran above). Reads cupInfo.match for a participant, else cupInfo.spectate (a
     // nearby walk-up at the Sowfield): the sim only fills spectate near the field,

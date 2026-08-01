@@ -383,7 +383,7 @@ describe('Eastbrook polish capture contract', () => {
       // value changed, the Rally circuit stays isolated in its distant
       // instance band, and no capture was retaken (the five per-asset seal
       // suites stay green untouched).
-      fingerprint: '7b9e6acdd774bfc5b72cd2e03e19d077bd7db629cbd195dab8eb13451d30c481',
+      fingerprint: '0f7a253f26c8390b23e3a4ef270bc938926ec5d8bec7980344f6d143e3f1b949',
 
       components: {
         captureContract: {

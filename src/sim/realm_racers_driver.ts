@@ -15,7 +15,7 @@
 // every other system in the world. Every "personality" difference is a pure
 // function of the tier, the bot's pid and the tick count.
 
-import { SHELL_AIM_CONE_RAD, shellFlightSeconds } from './realm_racers_shell';
+import { GROUND_BLAST_AIM_CONE_RAD, groundBlastFlightSeconds } from './realm_racers_ground_blast';
 import { type RallyProjection, rallyForwardDot, realmRacersTrack } from './realm_racers_spline';
 import { normAngle, TICK_RATE } from './types';
 
@@ -34,7 +34,7 @@ export function isRallyDriverTier(value: unknown): value is RallyDriverTier {
  * marker, which is the point: the bot's dodge is the player's dodge, not a
  * bot-only sense.
  */
-export interface RallyDriverShell {
+export interface RallyDriverBlast {
   x: number;
   z: number;
   ticksToImpact: number;
@@ -58,7 +58,7 @@ export interface RallyDriverInput {
    *  The velocity is what the bot leads with, exactly as a human leads by eye. */
   rival: { x: number; z: number; vx: number; vz: number } | null;
   /** Shells in flight that are NOT this bot's own. */
-  incoming: readonly RallyDriverShell[];
+  incoming: readonly RallyDriverBlast[];
   weaponReady: boolean;
   tier: RallyDriverTier;
   /** The sim tick count. A stagger key, never a clock: no wall time here. */
@@ -189,11 +189,11 @@ const UNSTICK_CYCLE = 24;
 /** Yards ahead the recovery aim point sits, on the centerline itself. */
 const RECOVERY_LOOKAHEAD = 12;
 /** Range a shot is taken at, yards. Comfortably inside the auto-range's reach
- *  once the lead is added (SHELL_MAX_RANGE is 60). */
+ *  once the lead is added (GROUND_BLAST_MAX_RANGE is 60). */
 const FIRE_RANGE = 12.5;
 /**
  * How near a marked impact point the bot is willing to be when it lands, yards.
- * Wider than SHELL_BLAST_RADIUS (4) on purpose: leaving the blast by a hair is
+ * Wider than GROUND_BLAST_RADIUS (4) on purpose: leaving the blast by a hair is
  * a coin flip against the machine's own drift, and a margin is what makes the
  * dodge read as a driver getting out of the way.
  */
@@ -296,11 +296,11 @@ function dodgeDemand(input: RallyDriverInput, profile: RallyDriverProfile): numb
   // decomposition the driving model integrates.
   const vx = input.speed * fx - input.slip * fz;
   const vz = input.speed * fz + input.slip * fx;
-  for (const shell of input.incoming) {
-    if (shell.ticksToImpact < 0 || shell.ticksToImpact > profile.dodgeLeadTicks) continue;
-    const flight = shell.ticksToImpact / TICK_RATE;
-    let missX = input.x + vx * flight - shell.x;
-    let missZ = input.z + vz * flight - shell.z;
+  for (const blast of input.incoming) {
+    if (blast.ticksToImpact < 0 || blast.ticksToImpact > profile.dodgeLeadTicks) continue;
+    const flight = blast.ticksToImpact / TICK_RATE;
+    let missX = input.x + vx * flight - blast.x;
+    let missZ = input.z + vz * flight - blast.z;
     if (Math.hypot(missX, missZ) > DODGE_RADIUS) continue;
     if (Math.hypot(missX, missZ) < 1e-6) {
       // Predicted dead on the centre, so there is no side to step to: take the
@@ -345,13 +345,13 @@ function fireAim(
   if ((input.tick + input.pid) % profile.firePeriod !== 0) return null;
   const gap2 = dist2(input.x, input.z, rival.x, rival.z);
   if (gap2 > FIRE_RANGE * FIRE_RANGE) return null;
-  const flight = shellFlightSeconds(Math.sqrt(gap2));
+  const flight = groundBlastFlightSeconds(Math.sqrt(gap2));
   const aimX = rival.x + rival.vx * flight;
   const aimZ = rival.z + rival.vz * flight;
   // The barrel is fixed to the chassis: a shot the cone would clamp is a shot
   // that lands somewhere the bot did not choose, so it holds fire instead.
   const demand = demandTo(input.facing, input.x, input.z, aimX, aimZ);
-  if (Math.abs(demand) > Math.min(profile.fireCone, SHELL_AIM_CONE_RAD)) return null;
+  if (Math.abs(demand) > Math.min(profile.fireCone, GROUND_BLAST_AIM_CONE_RAD)) return null;
   return { x: aimX, z: aimZ };
 }
 

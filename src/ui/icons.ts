@@ -2413,7 +2413,7 @@ function r(
 
 const ABILITY_RECIPES: Record<string, IconRecipe> = {
   // Realm Racers temporary vehicle kit
-  rally_arc_shell: r('storm', 'sky', ['bolt', { p: 'lightning', ...BR }], ['motion', 'arcs']),
+  rally_ground_blast: r('storm', 'sky', ['bolt', { p: 'lightning', ...BR }], ['motion', 'arcs']),
   // Talents 2.0 ground-targeted spells (each aimed AoE gets a distinct recipe;
   // grouped here so the family reads together, order within the map is cosmetic).
   flamestrike: r('fire', 'ember', ['meteor', { p: 'sunburst', ...BIG }], ['glow']),

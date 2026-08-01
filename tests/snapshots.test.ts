@@ -30,8 +30,8 @@ import type { ClientWorld } from '../src/net/online';
 import { mechHeldWeaponOverride, visualKeyFor } from '../src/render/characters/manifest';
 import { MOUNT_RACE_START_PLATFORM, type MountKey } from '../src/sim/content/mounts';
 import {
-  ARC_SHELL_CHARGES,
   REALM_RACERS_ABILITY_ID,
+  REALM_RACERS_WEAPON_CHARGES,
   resolveRealmRacersKit,
 } from '../src/sim/content/realm_racers';
 import { COMBO_RECIPES } from '../src/sim/content/recipes';
@@ -3271,7 +3271,7 @@ describe('vehicle drive state over the wire', () => {
       // miss the very first frame after a racer is seated.
       self: {
         ...wireEntity(e),
-        rrkit: { active: true, w: REALM_RACERS_ABILITY_ID, c: ARC_SHELL_CHARGES },
+        rrkit: { active: true, w: REALM_RACERS_ABILITY_ID, c: REALM_RACERS_WEAPON_CHARGES },
         achg: { [REALM_RACERS_ABILITY_ID]: 0, fireball: 0 },
       },
     });
@@ -3849,7 +3849,7 @@ function dirtyEveryDeltaField(): {
   // owns codec coverage rather than gameplay validity, so seed both source
   // fields exactly as the seating path writes them.
   meta.realmRacersMatchId = 99;
-  meta.known = resolveRealmRacersKit(REALM_RACERS_ABILITY_ID, ARC_SHELL_CHARGES);
+  meta.known = resolveRealmRacersKit(REALM_RACERS_ABILITY_ID, REALM_RACERS_WEAPON_CHARGES);
 
   return { server, fc, leader, memberPid: mp };
 }
@@ -4182,7 +4182,7 @@ describe('full self-state snapshot delta fixture', () => {
     expect(client.loadouts).toEqual([{ name: 'PvP', alloc: { spec: 'arms', rows: {} }, bar: [] }]);
     expect(client.activeLoadout).toBe(0);
     expect(client.realmRacersInfo).toEqual(server.sim.realmRacersInfoFor(leader.pid));
-    expect(client.known.map((known) => known.def.id)).toEqual(['rally_arc_shell']);
+    expect(client.known.map((known) => known.def.id)).toEqual(['rally_ground_blast']);
     // hbl -> the login action-bar restore (self-only, resolved once on the first
     // self payload). A stored server layout arrives as a 'server' win; like tal
     // it is asserted directly (no TERSE_TO_IWORLD rename entry).

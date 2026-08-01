@@ -7483,9 +7483,9 @@ export const zh_TW: EnTranslations = {
         "name": "重振旗鼓",
         "description": "找回狀態：移動速度提高50%，持續4秒。"
       },
-      "rally_arc_shell": {
-        "name": "電弧砲彈",
-        "description": "向正前方發射一枚電弧砲彈。被擊中的對手會短暫失去控制。"
+      "rally_ground_blast": {
+        "name": "Ground Blast",
+        "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
       },
       "flamestrike": {
         "name": "烈焰風暴",
@@ -8678,6 +8678,10 @@ export const zh_TW: EnTranslations = {
       "revive_pet": {
         "name": "修補",
         "description": "修補你的寵物。若其存活，在 12 秒內每 3 秒恢復一次生命值，共恢復 {overTime} 點；若其死亡，則以 35% 生命值將其復活。"
+      },
+      "rally_arc_shell": {
+        "name": "電弧砲彈",
+        "description": "向正前方發射一枚電弧砲彈。被擊中的對手會短暫失去控制。"
       }
     },
     "items": {

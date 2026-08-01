@@ -7483,8 +7483,8 @@ export const id_ID: EnTranslations = {
         "name": "Kaki Segar",
         "description": "Temukan kembali tenagamu: bergerak 50% lebih cepat selama 4 detik."
       },
-      "rally_arc_shell": {
-        "name": "Arc Shell",
+      "rally_ground_blast": {
+        "name": "Ground Blast",
         "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
       },
       "flamestrike": {

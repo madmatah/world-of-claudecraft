@@ -977,7 +977,7 @@ export interface SimContextCallbacks {
   vcupShoot(caster: Entity, power: number, loft: number, range: number): void;
   vcupSportDash(caster: Entity, distance: number, catchBall: boolean): void;
   vcupSportShove(caster: Entity, target: Entity, distance: number): void;
-  realmRacersFireShell(caster: Entity): void;
+  realmRacersFireGroundBlast(caster: Entity): void;
 }
 
 // The seam consumed by extracted modules.
@@ -1481,6 +1481,6 @@ export function createSimContext(host: SimContextHost): SimContext {
     vcupShoot: host.vcupShoot,
     vcupSportDash: host.vcupSportDash,
     vcupSportShove: host.vcupSportShove,
-    realmRacersFireShell: host.realmRacersFireShell,
+    realmRacersFireGroundBlast: host.realmRacersFireGroundBlast,
   };
 }

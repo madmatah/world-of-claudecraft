@@ -243,7 +243,7 @@ const CALLBACK_KEYS = [
   'vcupShoot',
   'vcupSportDash',
   'vcupSportShove',
-  'realmRacersFireShell',
+  'realmRacersFireGroundBlast',
 ] as const;
 
 // A fully-spied fake host. `clock` is mutable so a test can prove the context reads
@@ -563,7 +563,7 @@ function makeFakeHost() {
     vcupShoot: vi.fn(),
     vcupSportDash: vi.fn(),
     vcupSportShove: vi.fn(),
-    realmRacersFireShell: vi.fn(),
+    realmRacersFireGroundBlast: vi.fn(),
   };
   return { host, rng, entities, clock };
 }

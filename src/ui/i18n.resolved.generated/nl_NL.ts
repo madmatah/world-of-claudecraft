@@ -7483,8 +7483,8 @@ export const nl_NL: EnTranslations = {
         "name": "Frisse Benen",
         "description": "Vind je benen terug: beweeg 4 sec lang 50% sneller."
       },
-      "rally_arc_shell": {
-        "name": "Arc Shell",
+      "rally_ground_blast": {
+        "name": "Ground Blast",
         "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
       },
       "flamestrike": {

@@ -180,7 +180,7 @@ describe('Realm Racers online parity', () => {
     // hardcoded one. The live remaining count rides `achg`, not this.
     expect(selfFields(aClient, 'rrkit').at(-1)).toEqual({
       active: true,
-      w: 'rally_arc_shell',
+      w: 'rally_ground_blast',
       c: 3,
     });
 

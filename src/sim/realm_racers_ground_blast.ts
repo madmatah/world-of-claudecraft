@@ -1,4 +1,4 @@
-// The Arc Shell: where a shot lands, and what landing there does to a machine.
+// The Ground Blast: where a shot lands, and what landing there does to a machine.
 //
 // Two decisions, both pure. WHERE: the PLAYER aims, on the ground, with the same
 // reticle every ground-targeted spell in the game uses; this module owns only
@@ -31,35 +31,35 @@ import {
 
 /** Closest a shell may be placed, yards. A point-blank aim slides out to here
  *  rather than landing under the caster's own nose. */
-export const SHELL_MIN_RANGE = 9;
+export const GROUND_BLAST_MIN_RANGE = 9;
 /**
  * Furthest a shell may be placed, yards. It has to cover the LEAD, not just the
  * gap: a rival twenty yards ahead at racing speed will be around fifty-five
  * yards away by the time the shell arrives, and a player who reads that
  * correctly must be able to aim there.
  */
-export const SHELL_MAX_RANGE = 70;
+export const GROUND_BLAST_MAX_RANGE = 70;
 /** Where a shot with no aim at all lands, yards. Only a cast that arrives with
  *  no ground point takes it (a bare keybind with nothing under the cursor). */
-export const SHELL_BLIND_RANGE = 22;
+export const GROUND_BLAST_BLIND_RANGE = 22;
 /**
  * Half-angle of the aiming cone, radians: how far off the machine's nose a shell
  * may be placed. The barrel is fixed to the chassis, so a pilot lines the shot
  * up by pointing the machine, and the cone is what stops the weapon from being a
  * turret that fires backwards out of a corner.
  */
-export const SHELL_AIM_CONE_RAD = Math.PI / 4;
+export const GROUND_BLAST_AIM_CONE_RAD = Math.PI / 4;
 /** Notional shell speed, yd/s. Only ever used to turn a distance into a flight
  *  time; the shell is never stepped. */
-export const SHELL_SPEED = 110;
+export const GROUND_BLAST_SPEED = 110;
 /** The dodge window: a close shot still gives the rival this long to react, and
  *  a long one never hangs in the air past this. */
-export const SHELL_MIN_FLIGHT = 0.45;
-export const SHELL_MAX_FLIGHT = 0.9;
+export const GROUND_BLAST_MIN_FLIGHT = 0.45;
+export const GROUND_BLAST_MAX_FLIGHT = 0.9;
 /** Blast radius, yards. Measured centre to centre, so it is also the width of
  *  the prediction error a rival holding a straight line may carry and still be
  *  caught. */
-export const SHELL_BLAST_RADIUS = 6;
+export const GROUND_BLAST_RADIUS = 6;
 /**
  * Upward velocity a dead-centre hit adds, yd/s. THE knob for how big a hit
  * feels, and the arithmetic is simple enough to tune against directly: at
@@ -73,11 +73,11 @@ export const SHELL_BLAST_RADIUS = 6;
  * spin keeps rotating the body under a velocity that does not turn with it, so
  * the machine lands genuinely sideways and has to be caught.
  */
-export const SHELL_POP_VELOCITY = 12;
+export const GROUND_BLAST_POP_VELOCITY = 12;
 /** Horizontal shove away from the blast, yd/s at the centre. It survives the
  *  whole flight (there is nothing to grip in the air), so this is how far
  *  off-line a hit really throws a rival, not just an initial nudge. */
-export const SHELL_PUSH = 22;
+export const GROUND_BLAST_PUSH = 22;
 /**
  * Yaw kick at the centre, rad/s, added to the contact SPIN rather than to the
  * steering yaw rate. The steering servo pulls `yawRate` back to the wheel's
@@ -89,13 +89,13 @@ export const SHELL_PUSH = 22;
  * (1.6), so 4.5 turns the machine about 160 degrees before it is spent: a real
  * spin to drive out of, and still inside the shared `MAX_VEHICLE_SPIN` ceiling.
  */
-export const SHELL_YAW_KICK = 4.5;
+export const GROUND_BLAST_YAW_KICK = 4.5;
 /** How long a hit machine drives on ice afterwards, ticks. It starts at the
  *  moment of impact, so most of it is spent in the air and the rest covers the
  *  landing, which is where it matters. */
-export const SHELL_SHOCK_TICKS = 30;
+export const GROUND_BLAST_SHOCK_TICKS = 30;
 /** Fraction of the surface's grip that survives the shock. */
-export const SHELL_SHOCK_GRIP = 0.25;
+export const GROUND_BLAST_SHOCK_GRIP = 0.25;
 
 /**
  * The speed aura a hit leaves behind, as the MULTIPLIER `moveSpeedMult` reads
@@ -106,19 +106,19 @@ export const SHELL_SHOCK_GRIP = 0.25;
  * spins and de-grips the machine, the aura's job is only to put the hit in the
  * HUD's debuff row where the player can see it.
  */
-export const SHELL_CONTROL_SPEED_MULT = 0.6;
-export const SHELL_CONTROL_SECONDS = 1.5;
+export const GROUND_BLAST_CONTROL_SPEED_MULT = 0.6;
+export const GROUND_BLAST_CONTROL_SECONDS = 1.5;
 
 const clamp = (n: number, lo: number, hi: number): number => (n < lo ? lo : n > hi ? hi : n);
 
 /** A pilot's pose, which is all the aim rules are measured against. */
-export interface ShellShooter {
+export interface GroundBlastShooter {
   x: number;
   z: number;
   facing: number;
 }
 
-export interface ShellAim {
+export interface GroundBlastAim {
   /** Impact point, decided at fire time and never revised. */
   x: number;
   z: number;
@@ -136,10 +136,12 @@ export interface ShellAim {
  * anyone LEADING a moving target needs it before they choose the point: the bot
  * brain reads it, and a human reads it off how long the circle sits there.
  */
-export function shellFlightSeconds(distance: number): number {
+export function groundBlastFlightSeconds(distance: number): number {
   return (
-    Math.round(clamp(distance / SHELL_SPEED, SHELL_MIN_FLIGHT, SHELL_MAX_FLIGHT) * TICK_RATE) /
-    TICK_RATE
+    Math.round(
+      clamp(distance / GROUND_BLAST_SPEED, GROUND_BLAST_MIN_FLIGHT, GROUND_BLAST_MAX_FLIGHT) *
+        TICK_RATE,
+    ) / TICK_RATE
   );
 }
 
@@ -160,12 +162,12 @@ export function shellFlightSeconds(distance: number): number {
  * `requested` null (a keybind pressed with nothing under the cursor) fires
  * straight down the nose at the blind range.
  */
-export function resolveShellAim(
-  shooter: ShellShooter,
+export function resolveGroundBlastAim(
+  shooter: GroundBlastShooter,
   requested: { x: number; z: number } | null,
-): ShellAim {
+): GroundBlastAim {
   let angle = 0;
-  let distance = SHELL_BLIND_RANGE;
+  let distance = GROUND_BLAST_BLIND_RANGE;
   let clamped = false;
   if (requested) {
     const dx = requested.x - shooter.x;
@@ -175,8 +177,8 @@ export function resolveShellAim(
     // to clamp toward: it is the same nothing a missing point is.
     if (asked > 1e-6) {
       const offNose = normAngle(Math.atan2(dx, dz) - shooter.facing);
-      angle = clamp(offNose, -SHELL_AIM_CONE_RAD, SHELL_AIM_CONE_RAD);
-      distance = clamp(asked, SHELL_MIN_RANGE, SHELL_MAX_RANGE);
+      angle = clamp(offNose, -GROUND_BLAST_AIM_CONE_RAD, GROUND_BLAST_AIM_CONE_RAD);
+      distance = clamp(asked, GROUND_BLAST_MIN_RANGE, GROUND_BLAST_MAX_RANGE);
       clamped = angle !== offNose || distance !== asked;
     }
   }
@@ -187,21 +189,21 @@ export function resolveShellAim(
   return {
     x: shooter.x + Math.sin(heading) * distance,
     z: shooter.z + Math.cos(heading) * distance,
-    flightTicks: Math.round(shellFlightSeconds(distance) * TICK_RATE),
+    flightTicks: Math.round(groundBlastFlightSeconds(distance) * TICK_RATE),
     clamped,
   };
 }
 
 /** A machine standing in a blast: its pose plus the drive state the shove is
  *  written into. */
-export interface ShellBlastBody {
+export interface GroundBlastBody {
   x: number;
   z: number;
   facing: number;
   drive: VehicleDrive;
 }
 
-export interface ShellBlastResult {
+export interface GroundBlastResult {
   /** 1 at the centre, falling to 0 at the rim. Zero means untouched. */
   falloff: number;
   /** Upward velocity the caller must add to the body, yd/s. Returned rather
@@ -217,19 +219,23 @@ export interface ShellBlastResult {
  * always does the same thing on every host. Visual variation is the client's to
  * derive from the impact coordinates.
  */
-export function resolveShellBlast(body: ShellBlastBody, x: number, z: number): ShellBlastResult {
+export function resolveGroundBlastImpact(
+  body: GroundBlastBody,
+  x: number,
+  z: number,
+): GroundBlastResult {
   const dx = body.x - x;
   const dz = body.z - z;
   const dist = Math.hypot(dx, dz);
-  if (dist >= SHELL_BLAST_RADIUS) return { falloff: 0, pop: 0 };
-  const falloff = 1 - dist / SHELL_BLAST_RADIUS;
+  if (dist >= GROUND_BLAST_RADIUS) return { falloff: 0, pop: 0 };
+  const falloff = 1 - dist / GROUND_BLAST_RADIUS;
 
   // Away from the blast. A machine sitting exactly on the impact point has no
   // direction to be thrown in, so it takes the pop alone: arbitrary is not an
   // option here, a draw would fork the world between hosts.
   const awayX = dist > 0 ? dx / dist : 0;
   const awayZ = dist > 0 ? dz / dist : 0;
-  const push = SHELL_PUSH * falloff;
+  const push = GROUND_BLAST_PUSH * falloff;
   applyAchievedVehicleVelocity(
     body.drive,
     body.facing,
@@ -245,7 +251,7 @@ export function resolveShellBlast(body: ShellBlastBody, x: number, z: number): S
   // The shared add carries the one ceiling on carried spin, wherever the shove
   // came from: a machine shelled while already spinning off a contact must not
   // run away past it.
-  addVehicleSpin(body.drive, SHELL_YAW_KICK * falloff * side);
+  addVehicleSpin(body.drive, GROUND_BLAST_YAW_KICK * falloff * side);
 
-  return { falloff, pop: SHELL_POP_VELOCITY * falloff };
+  return { falloff, pop: GROUND_BLAST_POP_VELOCITY * falloff };
 }

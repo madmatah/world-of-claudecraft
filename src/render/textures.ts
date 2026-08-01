@@ -1460,7 +1460,7 @@ export function rallyKerbTexture(): THREE.CanvasTexture {
 }
 
 /**
- * The Arc Shell's ground marker: a hazard-striped annulus with four inward
+ * The Ground Blast's ground marker: a hazard-striped annulus with four inward
  * chevrons, drawn onto a transparent square and mapped over the whole circle.
  *
  * It is deliberately loud. The circle is ACTIONABLE information (it is the only
@@ -1468,7 +1468,7 @@ export function rallyKerbTexture(): THREE.CanvasTexture {
  * at a glance from a machine doing 58 yd/s with a camera behind it, which a thin
  * outline does not.
  */
-export function rallyShellMarkerTexture(): THREE.CanvasTexture {
+export function rallyGroundBlastMarkerTexture(): THREE.CanvasTexture {
   const tex = makeCanvas(256, (ctx, s) => {
     const mid = s / 2;
     ctx.clearRect(0, 0, s, s);

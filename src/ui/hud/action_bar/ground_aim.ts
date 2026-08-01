@@ -1,5 +1,5 @@
 import { REALM_RACERS_ABILITIES } from '../../../sim/content/realm_racers';
-import { resolveShellAim } from '../../../sim/realm_racers_shell';
+import { resolveGroundBlastAim } from '../../../sim/realm_racers_ground_blast';
 import type { AbilityEffect, Entity } from '../../../sim/types';
 
 export interface AimPoint {
@@ -79,7 +79,10 @@ export function clampAimToRange(
   clamped: boolean;
 } {
   if (abilityId !== undefined && REALM_RACERS_ABILITIES[abilityId]) {
-    const aim = resolveShellAim({ x: caster.pos.x, z: caster.pos.z, facing: caster.facing }, point);
+    const aim = resolveGroundBlastAim(
+      { x: caster.pos.x, z: caster.pos.z, facing: caster.facing },
+      point,
+    );
     return { point: { x: aim.x, z: aim.z }, clamped: aim.clamped };
   }
   const maxRange = range > 0 ? range : 5;
@@ -101,7 +104,7 @@ export function abilityAoeRadius(res: { effects: readonly AbilityEffect[] }): nu
     (eff) =>
       eff.type === 'aoeDamage' ||
       eff.type === 'groundAoE' ||
-      eff.type === 'realmRacersShell' ||
+      eff.type === 'realmRacersGroundBlast' ||
       eff.type === 'temporalHourglass',
   );
   if (effect?.type === 'temporalHourglass') return effect.captureRadius;

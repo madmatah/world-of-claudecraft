@@ -42,7 +42,7 @@ function mockTextures(): void {
   };
   vi.doMock('../src/render/textures', () => ({
     rallyKerbTexture: vi.fn(texture),
-    rallyShellMarkerTexture: vi.fn(texture),
+    rallyGroundBlastMarkerTexture: vi.fn(texture),
     rallyStartGridTexture: vi.fn(texture),
     flowerTuftTexture: vi.fn(texture),
     // The circuit now dresses itself in the world's own ground material, so the
@@ -563,54 +563,56 @@ describe('Realm Racers procedural render', () => {
     }
   });
 
-  describe('the Arc Shell visuals', () => {
-    async function shellVisuals() {
-      const { RealmRacersShellVisuals } = await import('../src/render/realm_racers_shell');
-      return new RealmRacersShellVisuals();
+  describe('the Ground Blast visuals', () => {
+    async function groundBlastVisuals() {
+      const { RealmRacersGroundBlastVisuals } = await import(
+        '../src/render/realm_racers_ground_blast'
+      );
+      return new RealmRacersGroundBlastVisuals();
     }
 
     /** Addressed by NAME, never by child order: the visual pass reshuffles the
      *  order every time it adds a layer, and a positional read would either
      *  break or, worse, quietly assert about the wrong mesh. */
-    function part(shells: { group: THREE.Object3D }, name: string): THREE.Object3D {
-      const found = shells.group.getObjectByName(name);
-      if (!found) throw new Error(`no ${name} in the shell pool`);
+    function part(blasts: { group: THREE.Object3D }, name: string): THREE.Object3D {
+      const found = blasts.group.getObjectByName(name);
+      if (!found) throw new Error(`no ${name} in the blast pool`);
       return found;
     }
 
     it('arcs from the barrel and meets the marked point at exactly the flight time', async () => {
-      const shells = await shellVisuals();
-      shells.fire(10, 20, 10, 50, 0.6, 0);
-      const shell = part(shells, 'shell0');
-      expect(shell.position.z).toBeCloseTo(20, 6);
-      shells.update(0.3);
+      const blasts = await groundBlastVisuals();
+      blasts.fire(10, 20, 10, 50, 0.6, 0);
+      const projectile = part(blasts, 'groundBlast0');
+      expect(projectile.position.z).toBeCloseTo(20, 6);
+      blasts.update(0.3);
       // Halfway: halfway across, and off the ground (the whole point of an arc
       // a player can watch rather than a bolt that vanishes).
-      expect(shell.position.z).toBeCloseTo(35, 6);
-      expect(shell.position.y).toBeGreaterThan(2);
-      shells.update(0.3);
-      expect(shell.position.z).toBeCloseTo(50, 6);
-      expect(shell.position.y).toBeCloseTo(0, 6);
-      expect(part(shells, 'core0').scale.x).toBeLessThan(0.2);
+      expect(projectile.position.z).toBeCloseTo(35, 6);
+      expect(projectile.position.y).toBeGreaterThan(2);
+      blasts.update(0.3);
+      expect(projectile.position.z).toBeCloseTo(50, 6);
+      expect(projectile.position.y).toBeCloseTo(0, 6);
+      expect(part(blasts, 'core0').scale.x).toBeLessThan(0.2);
     });
 
     it('marks the impact point for the whole flight and retires it on impact', async () => {
-      const shells = await shellVisuals();
-      shells.fire(10, 20, 10, 50, 0.5, 0);
-      const marker = part(shells, 'marker0');
-      const core = part(shells, 'core0');
-      const column = part(shells, 'column0');
+      const blasts = await groundBlastVisuals();
+      blasts.fire(10, 20, 10, 50, 0.5, 0);
+      const marker = part(blasts, 'marker0');
+      const core = part(blasts, 'core0');
+      const column = part(blasts, 'column0');
       expect([marker.position.x, marker.position.z]).toEqual([10, 50]);
       expect([column.position.x, column.position.z]).toEqual([10, 50]);
       for (let step = 0; step < 4; step++) {
         expect(marker.visible, `step ${step}`).toBe(true);
         expect(core.visible, `step ${step}`).toBe(true);
         expect(column.visible, `step ${step}`).toBe(true);
-        shells.update(0.1);
+        blasts.update(0.1);
       }
-      expect(shells.inFlight).toBe(1);
-      shells.update(0.1);
-      expect(shells.inFlight).toBe(0);
+      expect(blasts.inFlight).toBe(1);
+      blasts.update(0.1);
+      expect(blasts.inFlight).toBe(0);
       expect(marker.visible).toBe(false);
       expect(core.visible).toBe(false);
       expect(column.visible).toBe(false);
@@ -620,16 +622,16 @@ describe('Realm Racers procedural render', () => {
       // Gameplay-neutral: the disc IS the blast the player reacts to, so its
       // size is fixed for the whole flight and identical on every preset. Only
       // the fill inside it and its colour carry the countdown.
-      const shells = await shellVisuals();
-      shells.fire(0, 0, 0, 30, 0.5, 0);
-      const marker = part(shells, 'marker0') as THREE.Mesh;
-      const core = part(shells, 'core0');
+      const blasts = await groundBlastVisuals();
+      blasts.fire(0, 0, 0, 30, 0.5, 0);
+      const marker = part(blasts, 'marker0') as THREE.Mesh;
+      const core = part(blasts, 'core0');
       const opening = core.scale.x;
       const startColor = (marker.material as THREE.MeshBasicMaterial).color.getHex();
       for (let step = 0; step < 4; step++) {
         expect(marker.scale.x, `step ${step}`).toBe(1);
         expect(marker.scale.y, `step ${step}`).toBe(1);
-        shells.update(0.1);
+        blasts.update(0.1);
       }
       expect(core.scale.x).toBeLessThan(opening);
       expect((marker.material as THREE.MeshBasicMaterial).color.getHex()).not.toBe(startColor);
@@ -642,27 +644,27 @@ describe('Realm Racers procedural render', () => {
       // Checked on the imports rather than on the source text, so the reasoning
       // above can say the words without failing the guard that enforces it.
       const src = readFileSync(
-        new URL('../src/render/realm_racers_shell.ts', import.meta.url),
+        new URL('../src/render/realm_racers_ground_blast.ts', import.meta.url),
         'utf8',
       );
       const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]).sort();
-      expect(imports).toEqual(['../sim/realm_racers_shell', './textures', 'three']);
+      expect(imports).toEqual(['../sim/realm_racers_ground_blast', './textures', 'three']);
     });
 
     it('pools its meshes rather than growing one set per shot', async () => {
-      const shells = await shellVisuals();
+      const blasts = await groundBlastVisuals();
       const cycle = () => {
-        shells.fire(0, 0, 0, 20, 0.5, 0);
-        shells.impact(0, 20, 0);
-        shells.update(0.6);
+        blasts.fire(0, 0, 0, 20, 0.5, 0);
+        blasts.impact(0, 20, 0);
+        blasts.update(0.6);
       };
       // The pool fills lazily, so let it saturate first, then keep firing.
       for (let shot = 0; shot < 12; shot++) cycle();
-      const pooled = shells.group.children.length;
+      const pooled = blasts.group.children.length;
       for (let shot = 0; shot < 60; shot++) cycle();
-      expect(shells.inFlight).toBe(0);
+      expect(blasts.inFlight).toBe(0);
       // Saturated and reused from there: sixty more shots add nothing.
-      expect(shells.group.children.length).toBe(pooled);
+      expect(blasts.group.children.length).toBe(pooled);
       expect(pooled).toBeLessThanOrEqual(48);
     });
   });

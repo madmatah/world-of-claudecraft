@@ -1,4 +1,4 @@
-// The Arc Shell, drawn: a shell that visibly leaves the barrel, arcs through the
+// The Ground Blast, drawn: a shell that visibly leaves the barrel, arcs through the
 // air behind a trail, and lands where the ground said it would.
 //
 // The GROUND MARKER is the load-bearing part. It is what makes the shot
@@ -16,8 +16,8 @@
 // exactly the flight and no event ordering can strand one on the ground.
 
 import * as THREE from 'three';
-import { SHELL_BLAST_RADIUS } from '../sim/realm_racers_shell';
-import { rallyShellMarkerTexture } from './textures';
+import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
+import { rallyGroundBlastMarkerTexture } from './textures';
 
 /** How high the shell arcs, as a fraction of how far it is going, bounded so a
  *  point-blank lob still clears the machine and a long one is not a mortar. */
@@ -49,8 +49,8 @@ const SHOCKWAVE_REACH = 2.4;
 const COOL = new THREE.Color(0x6fd8ff);
 const HOT = new THREE.Color(0xffb04a);
 
-interface ShellSlot {
-  shell: THREE.Mesh;
+interface GroundBlastSlot {
+  projectile: THREE.Mesh;
   glow: THREE.Mesh;
   trail: THREE.InstancedMesh;
   /** Age of each trail mote, seconds; past TRAIL_LIFE the mote is spent. */
@@ -85,22 +85,25 @@ const POOL_SIZE = 6;
 
 const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
 
-export class RealmRacersShellVisuals {
+export class RealmRacersGroundBlastVisuals {
   readonly group = new THREE.Group();
-  private slots: ShellSlot[] = [];
+  private slots: GroundBlastSlot[] = [];
   private bursts: BurstSlot[] = [];
   private nextSlot = 0;
   private nextBurst = 0;
   private scratch = new THREE.Object3D();
 
-  private shellGeometry = new THREE.IcosahedronGeometry(0.3, 1);
+  private projectileGeometry = new THREE.IcosahedronGeometry(0.3, 1);
   private glowGeometry = new THREE.IcosahedronGeometry(0.72, 1);
   private moteGeometry = new THREE.IcosahedronGeometry(0.2, 0);
-  private markerGeometry = new THREE.PlaneGeometry(SHELL_BLAST_RADIUS * 2, SHELL_BLAST_RADIUS * 2);
-  private coreGeometry = new THREE.CircleGeometry(SHELL_BLAST_RADIUS, 40);
+  private markerGeometry = new THREE.PlaneGeometry(
+    GROUND_BLAST_RADIUS * 2,
+    GROUND_BLAST_RADIUS * 2,
+  );
+  private coreGeometry = new THREE.CircleGeometry(GROUND_BLAST_RADIUS, 40);
   private columnGeometry = new THREE.CylinderGeometry(
-    SHELL_BLAST_RADIUS * 0.94,
-    SHELL_BLAST_RADIUS * 0.94,
+    GROUND_BLAST_RADIUS * 0.94,
+    GROUND_BLAST_RADIUS * 0.94,
     COLUMN_HEIGHT,
     28,
     1,
@@ -109,8 +112,8 @@ export class RealmRacersShellVisuals {
   private waveGeometry = new THREE.RingGeometry(0.82, 1, 48, 1);
   private flashGeometry = new THREE.IcosahedronGeometry(1, 2);
 
-  private markerTexture = rallyShellMarkerTexture();
-  private shellMaterial = new THREE.MeshBasicMaterial({ color: 0xdcf7ff });
+  private markerTexture = rallyGroundBlastMarkerTexture();
+  private projectileMaterial = new THREE.MeshBasicMaterial({ color: 0xdcf7ff });
   private glowMaterial = new THREE.MeshBasicMaterial({
     color: 0x63d5ff,
     transparent: true,
@@ -165,10 +168,10 @@ export class RealmRacersShellVisuals {
     blending: THREE.AdditiveBlending,
   });
 
-  private slotAt(index: number): ShellSlot {
+  private slotAt(index: number): GroundBlastSlot {
     const existing = this.slots[index];
     if (existing) return existing;
-    const shell = new THREE.Mesh(this.shellGeometry, this.shellMaterial);
+    const projectile = new THREE.Mesh(this.projectileGeometry, this.projectileMaterial);
     const glow = new THREE.Mesh(this.glowGeometry, this.glowMaterial);
     const trail = new THREE.InstancedMesh(this.moteGeometry, this.trailMaterial, TRAIL_MOTES);
     trail.frustumCulled = false;
@@ -179,10 +182,10 @@ export class RealmRacersShellVisuals {
     // the track, and a billboard would read as a UI element floating over it.
     marker.rotation.x = -Math.PI / 2;
     core.rotation.x = -Math.PI / 2;
-    // Named per slot so a test can address one part of one shell without
+    // Named per slot so a test can address one part of one blast without
     // depending on the child ORDER, which every visual pass reshuffles.
     for (const [name, mesh] of [
-      ['shell', shell],
+      ['groundBlast', projectile],
       ['glow', glow],
       ['trail', trail],
       ['marker', marker],
@@ -192,9 +195,9 @@ export class RealmRacersShellVisuals {
       mesh.castShadow = false;
       mesh.name = `${name}${index}`;
     }
-    this.group.add(shell, glow, trail, marker, core, column);
-    const slot: ShellSlot = {
-      shell,
+    this.group.add(projectile, glow, trail, marker, core, column);
+    const slot: GroundBlastSlot = {
+      projectile,
       glow,
       trail,
       trailAge: new Float32Array(TRAIL_MOTES).fill(TRAIL_LIFE),
@@ -235,9 +238,9 @@ export class RealmRacersShellVisuals {
     return slot;
   }
 
-  private retire(slot: ShellSlot): void {
+  private retire(slot: GroundBlastSlot): void {
     slot.live = false;
-    slot.shell.visible = false;
+    slot.projectile.visible = false;
     slot.glow.visible = false;
     slot.trail.visible = false;
     slot.marker.visible = false;
@@ -273,7 +276,7 @@ export class RealmRacersShellVisuals {
     slot.trailAge.fill(TRAIL_LIFE);
     slot.trailNext = 0;
     slot.trailSince = 0;
-    slot.shell.visible = true;
+    slot.projectile.visible = true;
     slot.glow.visible = true;
     slot.trail.visible = true;
     slot.marker.visible = true;
@@ -300,7 +303,7 @@ export class RealmRacersShellVisuals {
     this.stepBurst(slot, 0);
   }
 
-  private step(slot: ShellSlot, dt: number): void {
+  private step(slot: GroundBlastSlot, dt: number): void {
     slot.elapsed += dt;
     const t = Math.min(1, slot.elapsed / slot.flight);
     const x = slot.fromX + (slot.toX - slot.fromX) * t;
@@ -308,10 +311,10 @@ export class RealmRacersShellVisuals {
     // A parabola through both ends: 4*t*(1-t) peaks at 1 halfway across, so the
     // shell leaves the barrel and meets the marker at ground level.
     const y = slot.groundY + 1.1 * (1 - t) + slot.arc * 4 * t * (1 - t);
-    slot.shell.position.set(x, y, z);
+    slot.projectile.position.set(x, y, z);
     slot.glow.position.set(x, y, z);
-    slot.shell.rotation.y += dt * 9;
-    slot.shell.rotation.x += dt * 6;
+    slot.projectile.rotation.y += dt * 9;
+    slot.projectile.rotation.x += dt * 6;
     const pulse = 1 + Math.sin(slot.elapsed * 30) * 0.12;
     slot.glow.scale.setScalar(pulse);
 
@@ -343,7 +346,7 @@ export class RealmRacersShellVisuals {
   /** Drop a mote behind the shell at a fixed cadence and age the rest. The motes
    *  are one InstancedMesh per slot, so a trail costs one draw call and no
    *  per-frame allocation. */
-  private stepTrail(slot: ShellSlot, dt: number, x: number, y: number, z: number): void {
+  private stepTrail(slot: GroundBlastSlot, dt: number, x: number, y: number, z: number): void {
     slot.trailSince += dt;
     const interval = TRAIL_LIFE / TRAIL_MOTES;
     if (slot.trailSince >= interval || dt === 0) {
@@ -374,9 +377,9 @@ export class RealmRacersShellVisuals {
     const flashMat = slot.flash.material as THREE.MeshBasicMaterial;
     const waveMat = slot.wave.material as THREE.MeshBasicMaterial;
     // The flash blooms out fast and dies; the wave keeps going and thins.
-    slot.flash.scale.setScalar(SHELL_BLAST_RADIUS * (0.35 + 0.9 * flashT));
+    slot.flash.scale.setScalar(GROUND_BLAST_RADIUS * (0.35 + 0.9 * flashT));
     flashMat.opacity = (1 - flashT) ** 2;
-    slot.wave.scale.setScalar(SHELL_BLAST_RADIUS * (0.4 + SHOCKWAVE_REACH * waveT));
+    slot.wave.scale.setScalar(GROUND_BLAST_RADIUS * (0.4 + SHOCKWAVE_REACH * waveT));
     waveMat.opacity = 0.9 * (1 - waveT) ** 1.5;
     if (flashT >= 1) slot.flash.visible = false;
     if (waveT >= 1) {
