@@ -28,6 +28,7 @@ import {
   MOB_ACTIONS,
 } from '../scripts/sfx/sfx_manifest_builder.mjs';
 import { SFX } from '../scripts/sfx/sfx_prompts.mjs';
+import { SFX_CLIPS } from '../src/game/sfx_manifest.generated';
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const realSfxDir = path.join(repoRoot, 'public/audio/sfx');
@@ -162,9 +163,9 @@ describe('buildManifest', () => {
     expect(manifest).toContain('cast_lightning_bolt');
   });
 
-  it('keeps the release catalog, all 9 mount cues, and all 62 UI cues in one 247-key inventory', () => {
+  it('keeps the release catalog, all 9 mount cues, and all 62 UI cues in one 248-key inventory', () => {
     const keys = new Set(SFX.map((entry) => entry.key));
-    expect(keys.size).toBe(247);
+    expect(keys.size).toBe(248);
     expect([...keys].filter((key) => key.startsWith('ui_'))).toHaveLength(62);
     for (const key of [
       'cast_lightning_bolt',
@@ -213,6 +214,7 @@ describe('buildManifest', () => {
       'sinister_strike',
       'eviscerate',
       'stealth',
+      'move_groundshaker_engine',
     ]) {
       expect(keys.has(key), key).toBe(true);
     }
@@ -225,7 +227,13 @@ describe('buildManifest', () => {
     // purely filesystem-discovered.
     const mobFamilyKeys = [...keys].filter((key) => key.startsWith('mob_'));
     expect(mobFamilyKeys).toHaveLength(65); // 13 families x 5 actions
-    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(247);
+    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(248);
+  });
+
+  it('lazy-loads the Realm Racers engine without changing movement defaults', () => {
+    expect(SFX.find((entry) => entry.key === 'move_groundshaker_engine')?.preload).toBe('lazy');
+    expect(SFX_CLIPS.move_groundshaker_engine.preload).toBe('lazy');
+    expect(SFX_CLIPS.move_jump.preload).toBe('startup');
   });
 });
 

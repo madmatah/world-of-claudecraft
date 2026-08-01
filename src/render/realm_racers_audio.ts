@@ -12,6 +12,7 @@ import { vehicleIsOffRoad } from './vehicle_lean_core';
 export interface RealmRacersRuntimeAudioSink {
   vehicle(
     entityId: number,
+    self: boolean,
     x: number,
     y: number,
     z: number,
@@ -70,6 +71,7 @@ export function playRealmRacersScrapeAudio(
 export function syncRealmRacersVehicleAudio(
   sink: RealmRacersRuntimeAudioSink | null,
   entityId: number,
+  self: boolean,
   wasActive: boolean,
   drive: VehicleDrive | null,
   audible: boolean,
@@ -90,6 +92,7 @@ export function syncRealmRacersVehicleAudio(
   const effort = Math.min(1, speedFraction * 0.2 + Math.max(0, acceleration) / vehicle.engineAccel);
   sink.vehicle(
     entityId,
+    self,
     x,
     y,
     z,

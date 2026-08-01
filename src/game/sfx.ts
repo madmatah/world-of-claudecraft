@@ -80,29 +80,42 @@ export const FORGE_MAX_DISTANCE = 38;
 // Realm Racers vehicle bed. These are PER-CALL targets, so they move the race
 // mix and nothing else: vehicle() has one caller in the whole game
 // (src/render/realm_racers_audio.ts). The catalog trims are the wrong knob for
-// the same job, because the clips are shared: mount_run_* is every mount's run
-// loop and foot_stone / foot_dirt is every character's footstep.
+// the same job, because foot_stone / foot_dirt are every character's footstep.
 //
 // Raised over the first pass (engine 0.1/0.22/0.12, skid 0.16, roll 0.11/0.06),
 // which sat well under the race music: the music runs at a constant 0.5 x the
 // volume slider through a compressor, while the bed is spatialized, fades with
-// distance, and is heard from the CAMERA, which trails the racer. The two mount
-// clips make it worse than the raw numbers suggest: both are under a second, so
-// they conform on the PEAK branch (-6 dBFS true peak, not -14 LUFS), and their
-// manifest gain is a flat 1 (SFX_GAIN_LIMITS is the authoring ceiling, not an
-// applied trim), where the foot clips they mix against carry 1.82. So the engine
-// and skid targets carry the whole level here and the roll target is held back.
+// distance, and is heard from the CAMERA, which trails the racer. The skid clip
+// is under a second, so it conforms on the PEAK branch (-6 dBFS true peak, not
+// -14 LUFS). Its playback profile and the foot clips both add about 1.8 gain,
+// while the dedicated engine stays neutral in the manifest. The contact gains
+// are therefore included explicitly in the per-vehicle budget below.
 //
-// Headroom: with the ceiling above, the three loops at once peak at about
-// (0.96 + 0.42 + 0.20 x 1.82) x 0.5, scaled by the master, which lands near 0.74
-// with the slider wide open. Under 1.0, and the bus has no limiter, so keep that
-// sum in view when retuning.
+// Groundshaker engine adjustment knobs. The master gain raises idle, speed and
+// acceleration together. VEHICLE_ENGINE_LOAD and VEHICLE_ENGINE_LOAD_RATE
+// control how strongly engine effort (mostly positive acceleration, plus a
+// small cruise floor) adds body and revs. The supplied loop loses about 6 dB
+// to true-peak safety and about 3.5 dB when its stereo channels are folded to
+// the positional mono path. In-game tuning with the local engine anchored to
+// the player settled at 2.2 so it remains present against the race music. At
+// full load the engine alone commands 2.11, which stays below unity after the
+// asset's -6 dB true-peak ceiling and the 0.85 sampled-clip master.
+const REALM_RACERS_ENGINE_GAIN = 2.2;
 const VEHICLE_ENGINE_IDLE = 0.26;
 const VEHICLE_ENGINE_SPEED = 0.48;
 const VEHICLE_ENGINE_LOAD = 0.22;
+const VEHICLE_ENGINE_IDLE_RATE = 0.72;
+const VEHICLE_ENGINE_SPEED_RATE = 0.6;
+const VEHICLE_ENGINE_LOAD_RATE = 0.14;
 const VEHICLE_SKID_GAIN = 0.42;
 const VEHICLE_ROLL_DIRT = 0.2;
 const VEHICLE_ROLL_ROAD = 0.12;
+// Per-vehicle mixed-target ceiling before the common -6 dB true-peak asset
+// ceiling and 0.85 sampled master. Preserve the validated engine level and
+// duck tyre/surface contact only when all three layers would exceed this
+// budget. A vehicle-only limiter catches aggregate peaks from nearby racers
+// without changing any sound outside Realm Racers.
+const VEHICLE_MIX_TARGET_BUDGET = 2.25;
 const FOOTSTEP_CUES: Partial<Record<string, string>> = {
   grass: 'foot_grass',
   dirt: 'foot_dirt',
@@ -153,6 +166,7 @@ interface LoopSlot {
   panner: PannerNode | null;
   target: number; // last commanded gain; skip re-arming the ramp when unchanged
   rate: number;
+  output: AudioNode;
   x?: number;
   y?: number;
   z?: number;
@@ -166,6 +180,7 @@ interface PendingLoop {
   z?: number;
   maxDistance?: number;
   rate: number;
+  output?: AudioNode;
 }
 
 // 'kind' is the closed set of point-ambience station sources today (campfire,
@@ -186,6 +201,7 @@ interface AmbientPointSource {
 class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private vehicleLimiter: DynamicsCompressorNode | null = null;
   private clips: Record<string, SfxEntry> = SFX_CLIPS;
   private clipsReady: Promise<void> | null = null;
   private buffers = new Map<string, AudioBuffer>();
@@ -238,6 +254,15 @@ class Sfx {
       this.master = this.ctx.createGain();
       this.master.gain.value = SAMPLE_GAIN * this.vol;
       this.master.connect(this.ctx.destination);
+      if (typeof this.ctx.createDynamicsCompressor === 'function') {
+        this.vehicleLimiter = this.ctx.createDynamicsCompressor();
+        this.vehicleLimiter.threshold.value = 0;
+        this.vehicleLimiter.knee.value = 0;
+        this.vehicleLimiter.ratio.value = 20;
+        this.vehicleLimiter.attack.value = 0;
+        this.vehicleLimiter.release.value = 0.1;
+        this.vehicleLimiter.connect(this.master);
+      }
       resumeWhenAllowed(this.ctx);
       const l = this.ctx.listener;
       if (l.upX) {
@@ -729,13 +754,15 @@ class Sfx {
     z?: number,
     maxDistance?: number,
     rate = 1,
+    output?: AudioNode,
   ): void {
     const ctx = this.ctx,
       master = this.master;
     if (!ctx || !master) return;
+    const destination = output ?? master;
     const positional = x !== undefined && y !== undefined && z !== undefined;
     let slot = this.loops.get(id);
-    if (slot && slot.key !== key) {
+    if (slot && (slot.key !== key || slot.output !== destination)) {
       this.unloop(id, 0);
       slot = undefined;
     }
@@ -752,7 +779,7 @@ class Sfx {
           this.pendingLoopVariants.delete(id);
           return;
         }
-        this.pendingLoops.set(id, { key, target, x, y, z, maxDistance, rate });
+        this.pendingLoops.set(id, { key, target, x, y, z, maxDistance, rate, output });
         this.pendingLoopVariants.set(id, variantIndex);
         if (this.pendingLoopLoads.get(id) !== key) {
           this.pendingLoopLoads.set(id, key);
@@ -778,6 +805,7 @@ class Sfx {
               pending.z,
               pending.maxDistance,
               pending.rate,
+              pending.output,
             );
           });
         }
@@ -790,12 +818,12 @@ class Sfx {
       const g = ctx.createGain();
       g.gain.value = 0;
       const panner = positional ? this.makePanner(x, y, z, undefined, maxDistance) : null;
-      if (panner) src.connect(g).connect(panner).connect(master);
-      else src.connect(g).connect(master);
+      if (panner) src.connect(g).connect(panner).connect(destination);
+      else src.connect(g).connect(destination);
       src.start();
       this.commitVariant(key, variantIndex);
       this.pendingLoopVariants.delete(id);
-      slot = { key, src, gain: g, panner, target: -1, rate, x, y, z };
+      slot = { key, src, gain: g, panner, target: -1, rate, output: destination, x, y, z };
       this.loops.set(id, slot);
     } else if (positional && slot.panner) {
       if (slot.x !== x || slot.y !== y || slot.z !== z) {
@@ -954,6 +982,7 @@ class Sfx {
 
   vehicle(
     entityId: number,
+    self: boolean,
     x: number,
     y: number,
     z: number,
@@ -970,37 +999,63 @@ class Sfx {
     const speed = Math.min(1, Math.max(0, speedFraction));
     const load = Math.min(1, Math.max(0, effort));
     const slide = Math.min(1, Math.max(0, (Math.abs(slip) - 2) / 10));
+    const rollKey = offRoad ? 'foot_dirt' : 'foot_stone';
+    const engineTarget =
+      REALM_RACERS_ENGINE_GAIN *
+      (VEHICLE_ENGINE_IDLE + speed * VEHICLE_ENGINE_SPEED + load * VEHICLE_ENGINE_LOAD);
+    const skidTarget = slide * VEHICLE_SKID_GAIN;
+    const rollTarget = speed * (offRoad ? VEHICLE_ROLL_DIRT : VEHICLE_ROLL_ROAD);
+    const mixedContactTarget =
+      skidTarget * (this.entry('mount_run_stalkglider_snail')?.gain ?? 1) +
+      rollTarget * (this.entry(rollKey)?.gain ?? 1);
+    const contactScale =
+      mixedContactTarget > 0
+        ? Math.min(1, Math.max(0, VEHICLE_MIX_TARGET_BUDGET - engineTarget) / mixedContactTarget)
+        : 1;
+    // The local engine is heard from the player instead of the chase camera.
+    // Keep rival engines at their world positions so distance and panning still
+    // communicate where the other racers are. Tyre and surface loops remain
+    // world-positioned for both, preserving their contact with the track.
+    const engineX = self ? this.lx + x - this.playerAudioAnchorX : x;
+    const engineY = self ? this.ly + y - this.playerAudioAnchorY : y;
+    const engineZ = self ? this.lz + z - this.playerAudioAnchorZ : z;
+    const vehicleOutput = this.vehicleLimiter ?? this.master ?? undefined;
     this.loop(
       ids.engine,
-      'mount_run_terrorspark_groundshaker',
-      VEHICLE_ENGINE_IDLE + speed * VEHICLE_ENGINE_SPEED + load * VEHICLE_ENGINE_LOAD,
-      x,
-      y,
-      z,
+      'move_groundshaker_engine',
+      engineTarget,
+      engineX,
+      engineY,
+      engineZ,
       MAX_DISTANCE,
-      0.62 + speed * 1.05,
+      VEHICLE_ENGINE_IDLE_RATE +
+        speed * VEHICLE_ENGINE_SPEED_RATE +
+        load * VEHICLE_ENGINE_LOAD_RATE,
+      vehicleOutput,
     );
     if (slide > 0)
       this.loop(
         ids.skid,
         'mount_run_stalkglider_snail',
-        slide * VEHICLE_SKID_GAIN,
+        skidTarget * contactScale,
         x,
         y,
         z,
         MAX_DISTANCE,
         0.78 + slide * 0.42,
+        vehicleOutput,
       );
     else this.unloop(ids.skid, 0.15);
     this.loop(
       ids.roll,
-      offRoad ? 'foot_dirt' : 'foot_stone',
-      speed * (offRoad ? VEHICLE_ROLL_DIRT : VEHICLE_ROLL_ROAD),
+      rollKey,
+      rollTarget * contactScale,
       x,
       y,
       z,
       MAX_DISTANCE,
       0.72 + speed * 0.42,
+      vehicleOutput,
     );
   }
 

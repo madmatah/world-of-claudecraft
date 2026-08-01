@@ -3580,6 +3580,7 @@ export class Renderer {
     view.vehicleAudioActive = syncRealmRacersVehicleAudio(
       this.audioSink,
       entity.id,
+      entity.id === this.sim.playerId,
       view.vehicleAudioActive,
       entity.drive,
       audible,

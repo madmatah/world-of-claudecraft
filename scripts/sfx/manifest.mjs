@@ -50,6 +50,7 @@ export const SFX_MOB_EXTENSION_FAMILIES = Object.freeze([...MOB_VOICE_FAMILIES].
 export const SFX_MOB_EXTENSION_KEY_PATTERN = CANONICAL_MOB_EXTENSION_KEY_PATTERN;
 
 const CATALOG_KEYS = new Set(SFX_FIXED_CATALOG_KEYS);
+const CATALOG_SOURCES = new Map(SFX.map((source) => [source.key, source]));
 
 export function isSfxMobExtensionKey(key) {
   if (typeof key !== 'string' || CATALOG_KEYS.has(key)) return false;
@@ -74,6 +75,14 @@ export function preloadForSfx(key) {
     return 'startup';
   }
   return 'lazy';
+}
+
+function preloadForCatalogSource(source) {
+  if (source.preload === undefined) return preloadForSfx(source.key);
+  if (source.preload !== 'startup' && source.preload !== 'lazy') {
+    throw new Error(`invalid preload policy for ${source.key}: ${source.preload}`);
+  }
+  return source.preload;
 }
 
 export function spatialForSfx(key) {
@@ -174,7 +183,7 @@ export function catalogHashForEntries() {
         {
           loop: !!source.loop,
           category: categoryForSfx(source.key),
-          preload: preloadForSfx(source.key),
+          preload: preloadForCatalogSource(source),
           spatial: spatialForSfx(source.key),
         },
       ]),
@@ -280,7 +289,9 @@ export function buildSfxManifestData(
       url: primary.url,
       loop: source.loop,
       category: categoryForSfx(key),
-      preload: preloadForSfx(key),
+      preload: CATALOG_SOURCES.has(key)
+        ? preloadForCatalogSource(CATALOG_SOURCES.get(key))
+        : preloadForSfx(key),
       spatial: spatialForSfx(key),
       gain: profile.gain,
       playbackRate: profile.playbackRate,

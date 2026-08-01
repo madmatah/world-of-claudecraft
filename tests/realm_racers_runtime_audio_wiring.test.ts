@@ -173,7 +173,21 @@ describe('Realm Racers coordinator audio wiring', () => {
 
     renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
     expect(view.vehicleAudioActive).toBe(true);
-    expect(renderer.audioSink.vehicle).toHaveBeenCalledOnce();
+    expect(renderer.audioSink.vehicle).toHaveBeenCalledWith(77, false, 2, 0, 3, 0.5, 0.4, 4, true);
+
+    renderer.sim.playerId = 77;
+    renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
+    expect(renderer.audioSink.vehicle).toHaveBeenLastCalledWith(
+      77,
+      true,
+      2,
+      0,
+      3,
+      0.5,
+      0.4,
+      4,
+      true,
+    );
 
     entity.drive = null;
     renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);

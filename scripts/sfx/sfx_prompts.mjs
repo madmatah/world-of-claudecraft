@@ -1,6 +1,6 @@
 // Authoritative sound-effect catalog — consumed by scripts/gen_sfx.mjs.
 // Each entry: { key, prompt, duration (seconds 0.5 to 30), loop?, generator?,
-// custom?, stereo? }. Additional takes are discovered from <key>_1.mp3,
+// custom?, stereo?, preload? }. Additional takes are discovered from <key>_1.mp3,
 // <key>_2.mp3, and so on. The runtime cycles those files in numeric order.
 // Human-readable design + spatial behaviour: docs/design/sound_effects.md.
 //
@@ -128,6 +128,15 @@ export const SFX = [
     // pitched down in sfx_speed_map.json so the heavier raptor reads deeper.
     key: 'mount_run_drakemaw_raptor',
     custom: true,
+  },
+  {
+    key: 'move_groundshaker_engine',
+    custom: true,
+    duration: 4,
+    loop: true,
+    preload: 'lazy',
+    prompt:
+      'A heavy tracked vehicle engine loop used by the Terrorspark Groundshaker in Realm Racers.',
   },
   {
     key: 'move_jump',

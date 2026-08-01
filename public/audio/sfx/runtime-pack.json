@@ -1,8 +1,8 @@
 {
   "format": "woc-sfx-runtime-pack",
   "version": 1,
-  "bundleId": "8a498abf5fcf7174e769cd63844ed3593e22f54532cffbda86db8a66039b6d2c",
-  "catalogHash": "f22fd1a3299b0745ba3ef7ec1585470331cfaf25c7e7f65a16ab710ae5473df3",
+  "bundleId": "965086ca1a70e3292effe2d26f7ab733137e6bc35c67b2ac0d23f225398ea3ea",
+  "catalogHash": "b5c583df32f0a369906ee26ff0e14d6a62b5752497a142fe53381207ffbb5e56",
   "clips": {
     "amb_birds": {
       "variants": [
@@ -2897,6 +2897,18 @@
           "url": "/audio/sfx/mount_run_valorsteed.mp3?v=d4e79277b2cb",
           "bytes": 10701,
           "sha256": "d4e79277b2cb1da5d5941c6116136f2ca7104376e12d455c6306919a3e862002"
+        }
+      ],
+      "gain": 1,
+      "playbackRate": 1
+    },
+    "move_groundshaker_engine": {
+      "variants": [
+        {
+          "id": "main",
+          "url": "/audio/sfx/move_groundshaker_engine.mp3?v=d5287ed1b557",
+          "bytes": 97218,
+          "sha256": "d5287ed1b557c8550844a424a40956ca154a451aaf15ed5d50001e0acb4df3ce"
         }
       ],
       "gain": 1,

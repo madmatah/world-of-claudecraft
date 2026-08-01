@@ -81,6 +81,7 @@ export interface SpatialAudioSink {
   /** Continuous engine, tyre and surface loops for one visible vehicle. */
   vehicle(
     entityId: number,
+    self: boolean,
     x: number,
     y: number,
     z: number,

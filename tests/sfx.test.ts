@@ -34,7 +34,8 @@ interface FakeSource {
 }
 
 interface FakeGain {
-  gain: { value: number; ramps: number[] };
+  gain: { value: number; ramps: number[]; targets: number[] };
+  connectedTo?: unknown;
 }
 
 interface FakePanner {
@@ -43,6 +44,16 @@ interface FakePanner {
   x: number;
   y: number;
   z: number;
+  connectedTo?: unknown;
+}
+
+interface FakeCompressor {
+  threshold: { value: number };
+  knee: { value: number };
+  ratio: { value: number };
+  attack: { value: number };
+  release: { value: number };
+  connectedTo?: unknown;
 }
 
 const sources: FakeSource[] = [];
@@ -68,11 +79,14 @@ function installAudioStub(): void {
   const param = () => ({
     value: 0,
     ramps: [] as number[],
+    targets: [] as number[],
     setValueAtTime() {},
     linearRampToValueAtTime(value: number) {
       this.ramps.push(value);
     },
-    setTargetAtTime() {},
+    setTargetAtTime(value: number) {
+      this.targets.push(value);
+    },
   });
   class FakeCtx {
     get currentTime() {
@@ -83,7 +97,9 @@ function installAudioStub(): void {
     createGain() {
       const gain = {
         gain: param(),
+        connectedTo: undefined as unknown,
         connect(n: unknown) {
+          this.connectedTo = n;
           return n;
         },
         disconnect() {},
@@ -101,18 +117,35 @@ function installAudioStub(): void {
         x: 0,
         y: 0,
         z: 0,
+        connectedTo: undefined as unknown,
         setPosition(x: number, y: number, z: number) {
           this.x = x;
           this.y = y;
           this.z = z;
         },
         connect(n: unknown) {
+          this.connectedTo = n;
           return n;
         },
         disconnect() {},
       };
       panners.push(panner);
       return panner;
+    }
+    createDynamicsCompressor() {
+      const compressor: FakeCompressor & { connect(n: unknown): unknown; disconnect(): void } = {
+        threshold: param(),
+        knee: param(),
+        ratio: param(),
+        attack: param(),
+        release: param(),
+        connect(n: unknown) {
+          this.connectedTo = n;
+          return n;
+        },
+        disconnect() {},
+      };
+      return compressor;
     }
     createBufferSource(): FakeSource {
       const s: FakeSource = {
@@ -160,6 +193,7 @@ beforeEach(() => {
   for (const [index, mountKey] of MOUNT_KEYS.entries()) {
     buffers.set(`mount_run_${mountKey}`, { duration: 0.5 + index / 100 });
   }
+  buffers.set('move_groundshaker_engine', { duration: 4 });
   buffers.set('foot_wood', WOOD_BUFFER);
   buffers.set('foot_stone', { duration: 0.5 });
   buffers.set('foot_dirt', { duration: 0.5 });
@@ -359,7 +393,7 @@ describe('Realm Racers vehicle loops', () => {
   beforeEach(() => sfx.setListener(0, 0, 0, 0, 0, 1));
 
   it('keeps one engine source and raises its pitch with speed', () => {
-    sfx.vehicle(77, 2, 0, 0, 0.2, 0.2, 0, false);
+    sfx.vehicle(77, false, 2, 0, 0, 0.2, 0.2, 0, false);
     const loops = (
       sfx as unknown as {
         loops: Map<string, { src: FakeSource }>;
@@ -368,22 +402,103 @@ describe('Realm Racers vehicle loops', () => {
     const first = loops.get('realm-racers-engine-77')?.src;
     expect(first).toBeDefined();
     const lowRate = first?.playbackRate.value ?? 0;
-    sfx.vehicle(77, 3, 0, 0, 0.85, 0.8, 5, false);
+    sfx.vehicle(77, false, 3, 0, 0, 0.85, 0.8, 5, false);
     const second = loops.get('realm-racers-engine-77')?.src;
     expect(second).toBe(first);
     expect(second?.playbackRate.value).toBeGreaterThan(lowRate);
     expect(sfx.hasLoop('realm-racers-skid-77')).toBe(true);
     const buffers = (sfx as unknown as { buffers: Map<string, { duration: number }> }).buffers;
     expect(loops.get('realm-racers-engine-77')?.src.buffer).toBe(
-      buffers.get('mount_run_terrorspark_groundshaker'),
+      buffers.get('move_groundshaker_engine'),
     );
     expect(loops.get('realm-racers-skid-77')?.src.buffer).toBe(
       buffers.get('mount_run_stalkglider_snail'),
     );
     expect(loops.get('realm-racers-roll-77')?.src.buffer).toBe(buffers.get('foot_stone'));
 
-    sfx.vehicle(77, 3, 0, 0, 0.85, 0.8, 0, true);
+    sfx.vehicle(77, false, 3, 0, 0, 0.85, 0.8, 0, true);
     expect(loops.get('realm-racers-roll-77')?.src.buffer).toBe(buffers.get('foot_dirt'));
+  });
+
+  it('pins the validated engine response to speed and acceleration load', () => {
+    sfx.vehicle(85, false, 2, 0, 0, 0, 0, 0, false);
+    const loops = (
+      sfx as unknown as {
+        loops: Map<string, { src: FakeSource; gain: FakeGain }>;
+      }
+    ).loops;
+    const engine = loops.get('realm-racers-engine-85');
+    expect(engine?.src.playbackRate.value).toBeCloseTo(0.72, 6);
+    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * 0.26, 6);
+
+    sfx.vehicle(85, false, 2, 0, 0, 1, 0, 0, false);
+    expect(engine?.src.playbackRate.value).toBeCloseTo(0.72 + 0.6, 6);
+    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48), 6);
+
+    sfx.vehicle(85, false, 2, 0, 0, 1, 1, 0, false);
+    expect(engine?.src.playbackRate.value).toBeCloseTo(0.72 + 0.6 + 0.14, 6);
+    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48 + 0.22), 6);
+  });
+
+  it('preserves the engine target, ducks contacts to the per-vehicle budget, and limits the vehicle bus', () => {
+    sfx.vehicle(86, false, 2, 0, 0, 1, 1, 12, true);
+    const internals = sfx as unknown as {
+      loops: Map<string, { gain: FakeGain; panner: FakePanner | null; output: unknown }>;
+      vehicleLimiter: FakeCompressor;
+      master: FakeGain;
+    };
+    const engine = internals.loops.get('realm-racers-engine-86');
+    const skid = internals.loops.get('realm-racers-skid-86');
+    const roll = internals.loops.get('realm-racers-roll-86');
+    const targets = [engine, skid, roll].map((loop) => loop?.gain.gain.targets.at(-1) ?? 0);
+    expect(targets[0]).toBeCloseTo(2.2 * (0.26 + 0.48 + 0.22), 6);
+    expect(targets.reduce((sum, target) => sum + target, 0)).toBeCloseTo(2.25, 6);
+    expect(skid?.gain.gain.targets.at(-1)).toBeLessThan(
+      0.42 * SFX_CLIPS.mount_run_stalkglider_snail.gain,
+    );
+    expect(roll?.gain.gain.targets.at(-1)).toBeLessThan(0.2 * SFX_CLIPS.foot_dirt.gain);
+
+    expect(internals.vehicleLimiter.threshold.value).toBe(0);
+    expect(internals.vehicleLimiter.knee.value).toBe(0);
+    expect(internals.vehicleLimiter.ratio.value).toBe(20);
+    expect(internals.vehicleLimiter.attack.value).toBe(0);
+    expect(internals.vehicleLimiter.release.value).toBe(0.1);
+    expect(internals.vehicleLimiter.connectedTo).toBe(internals.master);
+    for (const loop of [engine, skid, roll]) {
+      expect(loop?.output).toBe(internals.vehicleLimiter);
+      expect(loop?.panner?.connectedTo).toBe(internals.vehicleLimiter);
+    }
+  });
+
+  it('does not duck tyre contact while the vehicle mix remains under budget', () => {
+    sfx.vehicle(87, false, 2, 0, 0, 0.2, 0, 3, false);
+    const loops = (sfx as unknown as { loops: Map<string, { gain: FakeGain }> }).loops;
+    expect(loops.get('realm-racers-skid-87')?.gain.gain.targets.at(-1)).toBeCloseTo(
+      0.042 * SFX_CLIPS.mount_run_stalkglider_snail.gain,
+      6,
+    );
+    expect(loops.get('realm-racers-roll-87')?.gain.gain.targets.at(-1)).toBeCloseTo(
+      0.2 * 0.12 * SFX_CLIPS.foot_stone.gain,
+      6,
+    );
+  });
+
+  it('anchors only the local engine to the player while rivals and track contact stay spatial', () => {
+    sfx.setListener(15, 8, 28, 0, 0, 1, 10, 2, 20);
+    sfx.vehicle(83, true, 12, 3, 24, 0.5, 0.4, 5, false);
+    sfx.vehicle(84, false, 18, 3, 26, 0.5, 0.4, 5, false);
+
+    const loops = (
+      sfx as unknown as {
+        loops: Map<string, { panner: FakePanner | null }>;
+      }
+    ).loops;
+    expect(loops.get('realm-racers-engine-83')?.panner).toMatchObject({ x: 17, y: 9, z: 32 });
+    expect(loops.get('realm-racers-roll-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
+    expect(loops.get('realm-racers-skid-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
+    expect(loops.get('realm-racers-engine-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
+    expect(loops.get('realm-racers-roll-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
+    expect(loops.get('realm-racers-skid-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
   });
 
   it('tears every loop down on race exit and on leaving audible range', () => {
@@ -400,17 +515,17 @@ describe('Realm Racers vehicle loops', () => {
       collisionImpact: 0,
       controlsLocked: false,
     };
-    expect(syncRealmRacersVehicleAudio(sfx, 78, false, drive, true, 2, 0, 0, 6)).toBe(true);
+    expect(syncRealmRacersVehicleAudio(sfx, 78, true, false, drive, true, 2, 0, 0, 6)).toBe(true);
     expect(realmRacersVehicleAudioAction(true, false, true)).toBe('stop');
-    expect(syncRealmRacersVehicleAudio(sfx, 78, true, null, true, 2, 0, 0, 0)).toBe(false);
+    expect(syncRealmRacersVehicleAudio(sfx, 78, true, true, null, true, 2, 0, 0, 0)).toBe(false);
     expect(sfx.hasLoop('realm-racers-engine-78')).toBe(false);
     expect(sfx.hasLoop('realm-racers-skid-78')).toBe(false);
     expect(sfx.hasLoop('realm-racers-roll-78')).toBe(false);
 
-    expect(syncRealmRacersVehicleAudio(sfx, 79, false, drive, true, 2, 0, 0, 0)).toBe(true);
+    expect(syncRealmRacersVehicleAudio(sfx, 79, false, false, drive, true, 2, 0, 0, 0)).toBe(true);
     expect(sfx.hasLoop('realm-racers-engine-79')).toBe(true);
     expect(realmRacersVehicleAudioAction(true, true, false)).toBe('stop');
-    expect(syncRealmRacersVehicleAudio(sfx, 79, true, drive, false, 2, 0, 0, 0)).toBe(false);
+    expect(syncRealmRacersVehicleAudio(sfx, 79, false, true, drive, false, 2, 0, 0, 0)).toBe(false);
     expect(sfx.hasLoop('realm-racers-engine-79')).toBe(false);
     expect(realmRacersVehicleAudioAction(false, false, true)).toBe('none');
     expect(realmRacersVehicleAudioAction(false, true, true)).toBe('run');
@@ -424,7 +539,7 @@ describe('Realm Racers vehicle loops', () => {
     };
 
     // full tilt: top speed, full throttle load, drifting, off the racing surface
-    sfx.vehicle(80, 0, 0, 0, 1, 1, 12, true);
+    sfx.vehicle(80, false, 0, 0, 0, 1, 1, 12, true);
     const engine = loopTarget('realm-racers-engine-80');
     const skid = loopTarget('realm-racers-skid-80');
     const roll = loopTarget('realm-racers-roll-80');
@@ -445,13 +560,13 @@ describe('Realm Racers vehicle loops', () => {
     const loopTarget = (id: string): number =>
       (sfx as unknown as { loops: Map<string, { target: number }> }).loops.get(id)?.target ?? 0;
 
-    sfx.vehicle(81, 0, 0, 0, 0, 0, 0, false);
+    sfx.vehicle(81, false, 0, 0, 0, 0, 0, 0, false);
     expect(loopTarget('realm-racers-engine-81')).toBeGreaterThan(0);
     expect(sfx.hasLoop('realm-racers-skid-81')).toBe(false);
 
-    sfx.vehicle(82, 0, 0, 0, 1, 0, 0, false);
+    sfx.vehicle(82, false, 0, 0, 0, 1, 0, 0, false);
     const onRoad = loopTarget('realm-racers-roll-82');
-    sfx.vehicle(82, 0, 0, 0, 1, 0, 0, true);
+    sfx.vehicle(82, false, 0, 0, 0, 1, 0, 0, true);
     expect(loopTarget('realm-racers-roll-82')).toBeGreaterThan(onRoad);
   });
 
