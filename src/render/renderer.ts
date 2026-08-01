@@ -10692,7 +10692,7 @@ export class Renderer {
         fy = eyeY - cpy,
         fz = pz - cpz;
       const fl = Math.hypot(fx, fy, fz) || 1;
-      sink.setListener(cpx, cpy, cpz, fx / fl, fy / fl, fz / fl);
+      sink.setListener(cpx, cpy, cpz, fx / fl, fy / fl, fz / fl, px, py, pz);
       const inDungeon = px > DUNGEON_X_THRESHOLD;
       const biome = zoneBiomeAt(px, pz);
       const precip =

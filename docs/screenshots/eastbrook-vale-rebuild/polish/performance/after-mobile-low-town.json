@@ -14,7 +14,7 @@
     "mode": "composite-sha256",
     "algorithm": "sha256",
     "baselineRevision": "3ab740db453bd8b5858a52c304edc811c9d520ca",
-    "fingerprint": "cc2ac3b13f7a14a9cc7cbb294a5b27c5da2439ea072951ff595d65d80120a50d",
+    "fingerprint": "38426833771ecfec70844c36fd2660e19f542f422b2edb9e9149b652ced95614",
     "components": {
       "townAsset": {
         "source": "scripts/assets/eastbrook_town/source_fingerprint.mjs",
@@ -43,7 +43,7 @@
         },
         "renderer": {
           "path": "src/render/renderer.ts",
-          "sha256": "7b1c906addda3b5547f2d830ba0ac208db65eabe1a8398f3d01ebcafbee34061"
+          "sha256": "4a3d1c3905bc3cd29e938e74848c2608bfedc0f301e41345b0d1f7987eddc6d5"
         },
         "viewPriorityPolicy": {
           "path": "src/render/prewarm_policy.ts",
@@ -96,7 +96,8 @@
       "fences": [
         "eastbrook_fence_smithy_west",
         "eastbrook_fence_smithy_outer",
-        "eastbrook_fence_smithy_east"
+        "eastbrook_fence_smithy_east",
+        "eastbrook_fence_market_outer"
       ],
       "artisanRow": [],
       "benches": [

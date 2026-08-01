@@ -53,8 +53,20 @@ export interface AbilityAudioOpts {
 }
 
 export interface SpatialAudioSink {
-  /** Listener pose each frame: position + forward unit vector (camera). */
-  setListener(x: number, y: number, z: number, fx: number, fy: number, fz: number): void;
+  /** Listener pose each frame: camera position/orientation plus the local-player
+   *  anchor used by opt-in Realm Racers effects. The player coordinates are
+   *  optional so non-renderer callers retain the camera-relative default. */
+  setListener(
+    x: number,
+    y: number,
+    z: number,
+    fx: number,
+    fy: number,
+    fz: number,
+    playerX?: number,
+    playerY?: number,
+    playerZ?: number,
+  ): void;
   /** One footfall for an entity (self or other) at a world position. */
   footstep(
     x: number,

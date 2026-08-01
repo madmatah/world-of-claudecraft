@@ -419,6 +419,13 @@ export const SFX = [
       'An earthy nature impact, a wet splat of poison and snapping vines. Single hit, no music.',
   },
   {
+    key: 'impact_groundshaker',
+    custom: true,
+    duration: 3,
+    prompt:
+      'A large explosion used when the Terrorspark Groundshaker shell lands. Single blast, no music, no voice.',
+  },
+  {
     key: 'spell_nova',
     custom: true,
     duration: 0.9,

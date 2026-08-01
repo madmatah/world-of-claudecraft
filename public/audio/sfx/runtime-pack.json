@@ -1,8 +1,8 @@
 {
   "format": "woc-sfx-runtime-pack",
   "version": 1,
-  "bundleId": "8ba9bafc118bd4c122799888bdd8a5cb50cc09e1404346b952665425623a2c33",
-  "catalogHash": "8000decc82943e70ca7f5cb3bd9ef4936a800740cf79468e2276932216a74064",
+  "bundleId": "8a498abf5fcf7174e769cd63844ed3593e22f54532cffbda86db8a66039b6d2c",
+  "catalogHash": "f22fd1a3299b0745ba3ef7ec1585470331cfaf25c7e7f65a16ab710ae5473df3",
   "clips": {
     "amb_birds": {
       "variants": [
@@ -890,6 +890,18 @@
         }
       ],
       "gain": 1.698244,
+      "playbackRate": 1
+    },
+    "impact_groundshaker": {
+      "variants": [
+        {
+          "id": "main",
+          "url": "/audio/sfx/impact_groundshaker.mp3?v=47c7e49397c4",
+          "bytes": 74648,
+          "sha256": "47c7e49397c4c5fe86a02a063bae90fa38f3113af0ca69e0a7bb5815103a0473"
+        }
+      ],
+      "gain": 1.778279,
       "playbackRate": 1
     },
     "impact_holy": {

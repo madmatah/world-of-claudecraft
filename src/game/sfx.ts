@@ -42,6 +42,11 @@ export const REALM_RACERS_SHELL_REF_DISTANCE = 24;
 // close shot below unity through the 0.85 sampled-clip master. Disable jitter
 // for this cue too: its random +10% gain branch would consume that headroom.
 const REALM_RACERS_SHELL_GAIN = 1.25;
+// Groundshaker impact loudness knob. With the current -7.2 dBTP asset, +5 dB
+// catalog trim, max impact strength, and 0.85 sample master, 1.5 is the safe
+// upper target. Keep shell-impact jitter disabled so it cannot consume that
+// remaining peak headroom.
+const REALM_RACERS_SHELL_IMPACT_GAIN = 1.5;
 const POINT_AMBIENCE_GAIN = 0.18;
 // amb_forge's custom recording still reads quiet in-game even with the
 // catalog's keyTrimDb ceiling (scripts/sfx/sfx_gain_map.json) applied at its
@@ -200,7 +205,11 @@ class Sfx {
   private vehicleLoopIds = new Map<number, { engine: string; skid: string; roll: string }>();
   private footstepsOn = false; // off by default; driven by the footstepSfx setting
   private lx = 0;
-  private lz = 0; // cached listener position
+  private ly = 0;
+  private lz = 0; // cached camera-listener position
+  private playerAudioAnchorX = 0;
+  private playerAudioAnchorY = 0;
+  private playerAudioAnchorZ = 0;
   // per-ability synth layer state (see the abilityAudio section)
   private synthNoise: AudioBuffer | null = null;
   private abilityVoiceEnds = new Float64Array(ABILITY_VOICES);
@@ -422,12 +431,26 @@ class Sfx {
     return buf;
   }
 
-  /** Position + forward vector of the listener (camera), once per frame. */
-  setListener(x: number, y: number, z: number, fx: number, fy: number, fz: number): void {
+  /** Camera listener pose plus an optional local-player distance anchor. */
+  setListener(
+    x: number,
+    y: number,
+    z: number,
+    fx: number,
+    fy: number,
+    fz: number,
+    playerX = x,
+    playerY = y,
+    playerZ = z,
+  ): void {
+    this.lx = x;
+    this.ly = y;
+    this.lz = z;
+    this.playerAudioAnchorX = playerX;
+    this.playerAudioAnchorY = playerY;
+    this.playerAudioAnchorZ = playerZ;
     const ctx = this.ctx;
     if (!ctx) return;
-    this.lx = x;
-    this.lz = z;
     const l = ctx.listener;
     if (l.positionX) {
       l.positionX.value = x;
@@ -448,6 +471,21 @@ class Sfx {
       p.positionY.value = y;
       p.positionZ.value = z;
     } else if (p.setPosition) p.setPosition(x, y, z);
+  }
+
+  /** Translate a world source around the camera so WebAudio sees the same
+   *  relative vector it would see from the local player. Realm Racers effects
+   *  opt into this individually; every other game sound remains camera-based. */
+  private realmRacersPlayerAnchoredPosition(
+    x: number,
+    y: number,
+    z: number,
+  ): readonly [number, number, number] {
+    return [
+      this.lx + x - this.playerAudioAnchorX,
+      this.ly + y - this.playerAudioAnchorY,
+      this.lz + z - this.playerAudioAnchorZ,
+    ];
   }
 
   // refDistance/maxDistance default to the shared constants so every existing
@@ -983,20 +1021,25 @@ class Sfx {
     impact = 1,
   ): void {
     const strength = Math.min(1, Math.max(0.2, impact));
+    const contactGain = (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25;
     const key =
       kind === 'shellFire'
         ? 'proj_groundshaker'
         : kind === 'shellImpact'
-          ? 'impact_nature'
+          ? 'impact_groundshaker'
           : 'impact_arcane';
-    this.playAt(key, x, y, z, {
+    const [audioX, audioY, audioZ] =
+      kind === 'shellImpact' ? this.realmRacersPlayerAnchoredPosition(x, y, z) : [x, y, z];
+    this.playAt(key, audioX, audioY, audioZ, {
       gain:
         kind === 'shellFire'
           ? REALM_RACERS_SHELL_GAIN
-          : (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25,
+          : kind === 'shellImpact'
+            ? contactGain * REALM_RACERS_SHELL_IMPACT_GAIN
+            : contactGain,
       rate: kind === 'scrape' ? 1.2 : 0.9 + strength * 0.2,
       cooldown: kind === 'scrape' ? 0.16 : 0.04,
-      jitter: kind !== 'shellFire',
+      jitter: kind !== 'shellFire' && kind !== 'shellImpact',
       refDistance: kind === 'shellFire' ? REALM_RACERS_SHELL_REF_DISTANCE : undefined,
       release: kind === 'scrape' ? 0.18 : undefined,
     });

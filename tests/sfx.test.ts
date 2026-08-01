@@ -40,6 +40,9 @@ interface FakeGain {
 interface FakePanner {
   refDistance: number;
   maxDistance: number;
+  x: number;
+  y: number;
+  z: number;
 }
 
 const sources: FakeSource[] = [];
@@ -48,7 +51,7 @@ const panners: FakePanner[] = [];
 let nowT = 0;
 const WOOD_BUFFER = { duration: 0.37 };
 const RALLY_SHELL_BUFFER = { duration: 3 };
-const NATURE_IMPACT_BUFFER = { duration: 0.5 };
+const GROUND_SHAKER_IMPACT_BUFFER = { duration: 3.08 };
 const ARCANE_IMPACT_BUFFER = { duration: 0.5 };
 
 function lastSource(): FakeSource {
@@ -95,7 +98,14 @@ function installAudioStub(): void {
         refDistance: 0,
         maxDistance: 0,
         rolloffFactor: 0,
-        setPosition() {},
+        x: 0,
+        y: 0,
+        z: 0,
+        setPosition(x: number, y: number, z: number) {
+          this.x = x;
+          this.y = y;
+          this.z = z;
+        },
         connect(n: unknown) {
           return n;
         },
@@ -154,7 +164,7 @@ beforeEach(() => {
   buffers.set('foot_stone', { duration: 0.5 });
   buffers.set('foot_dirt', { duration: 0.5 });
   buffers.set('proj_groundshaker', RALLY_SHELL_BUFFER);
-  buffers.set('impact_nature', NATURE_IMPACT_BUFFER);
+  buffers.set('impact_groundshaker', GROUND_SHAKER_IMPACT_BUFFER);
   buffers.set('impact_arcane', ARCANE_IMPACT_BUFFER);
 });
 
@@ -488,6 +498,9 @@ describe('Realm Racers vehicle loops', () => {
 
     const before = sources.length;
     const ground = (x: number, z: number): number => x + z;
+    // Camera and player deliberately differ: only shellImpact should translate
+    // around the camera so WebAudio receives the player-to-impact vector.
+    sfx.setListener(15, 8, 28, 0, 0, 1, 10, 2, 20);
     const shellGainIndex = gains.length;
     const shellPannerIndex = panners.length;
     // An extreme random value proves shellFire bypasses the generic +10% gain jitter.
@@ -504,12 +517,14 @@ describe('Realm Racers vehicle loops', () => {
     expect(gains[shellGainIndex]?.gain.value).toBe(1.25 * SFX_CLIPS.proj_groundshaker.gain);
     expect(panners[shellPannerIndex]?.refDistance).toBe(24);
     expect(panners[shellPannerIndex]?.maxDistance).toBe(46);
+    expect(panners[shellPannerIndex]).toMatchObject({ x: 2, y: 6, z: 3 });
     // -6 dBTP asset ceiling x runtime gain x +5 dB catalog trim x sample master.
     expect(10 ** (-6 / 20) * 1.25 * SFX_CLIPS.proj_groundshaker.gain * 0.85).toBeLessThan(1);
     vi.mocked(Math.random).mockReturnValue(0.5);
 
     const impactGainIndex = gains.length;
     const impactPannerIndex = panners.length;
+    vi.mocked(Math.random).mockReturnValue(1);
     playRealmRacersEventAudio(sfx, ground, {
       type: 'realmRacersShellHit',
       sourceId: 1,
@@ -518,8 +533,16 @@ describe('Realm Racers vehicle loops', () => {
       z: 5,
       impact: 0.7,
     });
-    expect(gains[impactGainIndex]?.gain.value).toBe(0.825 * SFX_CLIPS.impact_nature.gain);
+    expect(gains[impactGainIndex]?.gain.value).toBe(
+      0.825 * 1.5 * SFX_CLIPS.impact_groundshaker.gain,
+    );
     expect(panners[impactPannerIndex]?.refDistance).toBe(5);
+    expect(panners[impactPannerIndex]).toMatchObject({ x: 9, y: 15, z: 13 });
+    // Current -7.2 dBTP asset x max-strength runtime gain x +5 dB catalog trim x master.
+    expect(10 ** (-7.2 / 20) * 0.9 * 1.5 * SFX_CLIPS.impact_groundshaker.gain * 0.85).toBeLessThan(
+      1,
+    );
+    vi.mocked(Math.random).mockReturnValue(0.5);
 
     const bumpGainIndex = gains.length;
     const bumpPannerIndex = panners.length;
@@ -533,6 +556,7 @@ describe('Realm Racers vehicle loops', () => {
     });
     expect(gains[bumpGainIndex]?.gain.value).toBe(0.775 * SFX_CLIPS.impact_arcane.gain);
     expect(panners[bumpPannerIndex]?.refDistance).toBe(5);
+    expect(panners[bumpPannerIndex]).toMatchObject({ x: 6, y: 13.5, z: 7 });
 
     nowT += 1;
     const scrapeGainIndex = gains.length;
@@ -543,7 +567,7 @@ describe('Realm Racers vehicle loops', () => {
     playRealmRacersEventAudio(sfx, ground, { type: 'realmRacersGo' });
     expect(sources.slice(before).map((source) => source.buffer)).toEqual([
       RALLY_SHELL_BUFFER,
-      NATURE_IMPACT_BUFFER,
+      GROUND_SHAKER_IMPACT_BUFFER,
       ARCANE_IMPACT_BUFFER,
       ARCANE_IMPACT_BUFFER,
     ]);

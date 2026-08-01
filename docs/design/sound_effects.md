@@ -255,7 +255,7 @@ until that loop stops.
 | `proj_nature` | 0.5 | a glob of nature energy flying, organic whoosh |
 | `proj_groundshaker` | 1.2 | a synthesized explosion for the Terrorspark Groundshaker cannon |
 
-### Spell impacts (spatial one-shots)
+### Spell and Realm Racers impacts (spatial one-shots)
 | key | dur | prompt summary |
 |---|---|---|
 | `impact_fire` | 0.8 | a fireball exploding, fiery burst and crackling flames |
@@ -264,6 +264,7 @@ until that loop stops.
 | `impact_shadow` | 0.7 | a shadow spell imploding darkly, ominous magical burst |
 | `impact_holy` | 0.7 | a radiant burst of holy light, shimmering divine impact |
 | `impact_nature` | 0.7 | an earthy nature impact, wet splat of poison and vines |
+| `impact_groundshaker` | 3.0 | a large explosion when the Terrorspark Groundshaker shell lands |
 | `spell_nova` | 0.9 | an expanding magical nova shockwave bursting outward in all directions |
 
 ### Heals & auras (spatial / proximal)
