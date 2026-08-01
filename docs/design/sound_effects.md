@@ -58,8 +58,10 @@ through it before writing, so a regenerated clip already meets the standard.
   (`conformSfxAudio` in `scripts/sfx/conform_audio.mjs`). `npm run sfx:check`
   accepts that peak-constrained shortfall and hard-fails an over-target LUFS
   or a true-peak overshoot (`classify` in `scripts/sfx/sfx_conform_rules.mjs`).
-  On top of the asset ceiling, the engine caps per-play gain at 1.0 under a
-  0.85 master, so runtime gain staging cannot clip a conformed clip.
+  On top of the asset ceiling, sampled clips run through a 0.85 master. Catalog
+  trims and specialized per-play gains may exceed 1.0, so those paths must
+  account for their cumulative gain and any jitter against the clip's measured
+  true-peak headroom.
 - **Channels (mono/stereo policy per playback path):** mono, except global
   ambience beds. `playAt` positions a clip through an equalpower `PannerNode` that
   downmixes to mono before panning, and `playUi` sums to the mono master, so for
@@ -251,6 +253,7 @@ until that loop stops.
 | `proj_shadow` | 0.6 | a shadow bolt flying, dark whooshing void streak |
 | `proj_holy` | 0.5 | a bolt of holy light streaking, bright shimmering zip |
 | `proj_nature` | 0.5 | a glob of nature energy flying, organic whoosh |
+| `proj_groundshaker` | 1.2 | a synthesized explosion for the Terrorspark Groundshaker cannon |
 
 ### Spell impacts (spatial one-shots)
 | key | dur | prompt summary |

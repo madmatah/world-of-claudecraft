@@ -34,6 +34,14 @@ const ABILITY_VOICES = 8;
 const ABILITY_GAIN = 0.34;
 export const REF_DISTANCE = 5; // world units at which a sound is at full volume
 export const MAX_DISTANCE = 46; // hard cutoff: beyond this, sources are silent/skipped
+// The race camera can trail its machine by 22 yd. Keep nearby cannon fire in
+// the panner's full-volume zone instead of compensating for camera falloff with
+// an unsafe source gain that also applies when the camera is close.
+export const REALM_RACERS_SHELL_REF_DISTANCE = 24;
+// With the conformed clip at -6 dBTP and its +5 dB catalog trim, 1.25 keeps a
+// close shot below unity through the 0.85 sampled-clip master. Disable jitter
+// for this cue too: its random +10% gain branch would consume that headroom.
+const REALM_RACERS_SHELL_GAIN = 1.25;
 const POINT_AMBIENCE_GAIN = 0.18;
 // amb_forge's custom recording still reads quiet in-game even with the
 // catalog's keyTrimDb ceiling (scripts/sfx/sfx_gain_map.json) applied at its
@@ -120,10 +128,11 @@ function retainDecodedBuffer(
 }
 
 export interface PlayOpts {
-  gain?: number; // 0..1 multiplier (default 1)
+  gain?: number; // positive multiplier (default 1)
   rate?: number; // playback-rate multiplier (default 1); ±6% jitter added
   cooldown?: number; // min seconds between plays of this key (default 0.03)
   jitter?: boolean; // randomize rate/gain slightly (default true)
+  refDistance?: number; // full-volume radius for this positional one-shot
   // Percussive amplitude envelope. `release` truncates the clip to a crisp
   // transient that fully decays within `attack + release` seconds, used by fast
   // retriggered sounds (footsteps) so successive plays of the same sample don't
@@ -561,7 +570,7 @@ class Sfx {
       (opts?.gain ?? 1) *
       (this.entry(key)?.gain ?? 1) *
       (jitter ? 1 + (Math.random() * 2 - 1) * 0.1 : 1);
-    const panner = this.makePanner(x, y, z);
+    const panner = this.makePanner(x, y, z, opts?.refDistance);
     src.connect(g).connect(panner).connect(master);
     this.active++;
     src.onended = () => {
@@ -981,9 +990,14 @@ class Sfx {
           ? 'impact_nature'
           : 'impact_arcane';
     this.playAt(key, x, y, z, {
-      gain: (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25,
+      gain:
+        kind === 'shellFire'
+          ? REALM_RACERS_SHELL_GAIN
+          : (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25,
       rate: kind === 'scrape' ? 1.2 : 0.9 + strength * 0.2,
       cooldown: kind === 'scrape' ? 0.16 : 0.04,
+      jitter: kind !== 'shellFire',
+      refDistance: kind === 'shellFire' ? REALM_RACERS_SHELL_REF_DISTANCE : undefined,
       release: kind === 'scrape' ? 0.18 : undefined,
     });
   }

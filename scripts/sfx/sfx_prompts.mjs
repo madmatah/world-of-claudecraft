@@ -352,9 +352,9 @@ export const SFX = [
   {
     key: 'proj_groundshaker',
     custom: true,
-    duration: 3,
+    duration: 1.2,
     prompt:
-      'A heavy vehicle cannon firing one Arc Shell: deep concussive launch with a short mechanical tail. Single shot, no music, no voice.',
+      'A synthesized explosion used for the Terrorspark Groundshaker cannon. Single shot, no music, no voice.',
   },
   {
     key: 'proj_shadow',

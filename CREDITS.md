@@ -206,13 +206,13 @@ non-commercial. For commercial use, arrange your own licence with the author.
 | Hover-Cycle movement layer (`mount_run_aether_hover_cycle.mp3`) | Umplix | [Hovermobile SFX](https://opengameart.org/content/hovermobile-sfx) | CC0 1.0 | Yes |
 | Stormfeather and Grand Gobbler wing layers (`mount_run_stormfeather_griffin.mp3`, `mount_run_thunderstrut_gobbler.mp3`) | AntumDeluge, derived from dave.des | [Large Wings Flap](https://opengameart.org/content/large-wings-flap) | CC0 1.0 | Yes |
 | Terrorspark Groundshaker movement layer (`mount_run_terrorspark_groundshaker.mp3`) | World of ClaudeCraft | Original deterministic FFmpeg synthesis via `scripts/gen_terrorspark_groundshaker_sfx.mjs` | Project asset | With the project only |
-| Realm Racers Arc Shell launch (`proj_groundshaker.mp3`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
+| Realm Racers Terrorspark Groundshaker cannon (`proj_groundshaker.mp3`) | qubodup | [Synthesized explosion](https://opengameart.org/content/synthesized-explosion) | CC0 1.0 | Yes |
 | Quest event sounds (`quest_accept`, `quest_ready`, `quest_complete`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
 | Lockpick minigame sounds (`lockpick_*`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
 | Wand auto-attack sounds (`wand_*`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
 | Level-up and Book of Deeds achievement chimes (`ui_level_up`, `ui_achievement`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
 | Magic-school impact and casting-support one-shots (`impact_*`, `heal_impact`, `buff_apply`, `debuff_apply`, `spell_nova`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
-| Magic-school projectile launches (`proj_*`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
+| Magic-school projectile launches (`proj_fire`, `proj_frost`, `proj_arcane`, `proj_shadow`, `proj_holy`, `proj_nature`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
 | Melee, footstep, movement, combat-reaction, and player-state sounds (`melee_*`, `foot_*`, `move_*`, `combat_*`, `player_death*`, `player_hurt*`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
 | Creature vocalizations, every mob family (`mob_*`) | @jamiecypher | Original work | CC BY-NC 4.0 (+ perpetual commercial grant to World of ClaudeCraft) | Non-commercial only, with attribution |
 

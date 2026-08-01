@@ -33,7 +33,18 @@ interface FakeSource {
   stop(t?: number): void;
 }
 
+interface FakeGain {
+  gain: { value: number; ramps: number[] };
+}
+
+interface FakePanner {
+  refDistance: number;
+  maxDistance: number;
+}
+
 const sources: FakeSource[] = [];
+const gains: FakeGain[] = [];
+const panners: FakePanner[] = [];
 let nowT = 0;
 const WOOD_BUFFER = { duration: 0.37 };
 const RALLY_SHELL_BUFFER = { duration: 3 };
@@ -48,11 +59,16 @@ function lastSource(): FakeSource {
 
 function installAudioStub(): void {
   sources.length = 0;
+  gains.length = 0;
+  panners.length = 0;
   nowT += 1000; // monotonic across tests so the singleton's cooldown map never blocks
   const param = () => ({
     value: 0,
+    ramps: [] as number[],
     setValueAtTime() {},
-    linearRampToValueAtTime() {},
+    linearRampToValueAtTime(value: number) {
+      this.ramps.push(value);
+    },
     setTargetAtTime() {},
   });
   class FakeCtx {
@@ -62,16 +78,18 @@ function installAudioStub(): void {
     destination = {};
     listener = {} as Record<string, unknown>;
     createGain() {
-      return {
+      const gain = {
         gain: param(),
         connect(n: unknown) {
           return n;
         },
         disconnect() {},
       };
+      gains.push(gain);
+      return gain;
     }
     createPanner() {
-      return {
+      const panner = {
         panningModel: '',
         distanceModel: '',
         refDistance: 0,
@@ -83,6 +101,8 @@ function installAudioStub(): void {
         },
         disconnect() {},
       };
+      panners.push(panner);
+      return panner;
     }
     createBufferSource(): FakeSource {
       const s: FakeSource = {
@@ -468,6 +488,10 @@ describe('Realm Racers vehicle loops', () => {
 
     const before = sources.length;
     const ground = (x: number, z: number): number => x + z;
+    const shellGainIndex = gains.length;
+    const shellPannerIndex = panners.length;
+    // An extreme random value proves shellFire bypasses the generic +10% gain jitter.
+    vi.mocked(Math.random).mockReturnValue(1);
     playRealmRacersEventAudio(sfx, ground, {
       type: 'realmRacersShellFired',
       sourceId: 1,
@@ -477,6 +501,15 @@ describe('Realm Racers vehicle loops', () => {
       targetZ: 5,
       flightSeconds: 0.8,
     });
+    expect(gains[shellGainIndex]?.gain.value).toBe(1.25 * SFX_CLIPS.proj_groundshaker.gain);
+    expect(panners[shellPannerIndex]?.refDistance).toBe(24);
+    expect(panners[shellPannerIndex]?.maxDistance).toBe(46);
+    // -6 dBTP asset ceiling x runtime gain x +5 dB catalog trim x sample master.
+    expect(10 ** (-6 / 20) * 1.25 * SFX_CLIPS.proj_groundshaker.gain * 0.85).toBeLessThan(1);
+    vi.mocked(Math.random).mockReturnValue(0.5);
+
+    const impactGainIndex = gains.length;
+    const impactPannerIndex = panners.length;
     playRealmRacersEventAudio(sfx, ground, {
       type: 'realmRacersShellHit',
       sourceId: 1,
@@ -485,6 +518,11 @@ describe('Realm Racers vehicle loops', () => {
       z: 5,
       impact: 0.7,
     });
+    expect(gains[impactGainIndex]?.gain.value).toBe(0.825 * SFX_CLIPS.impact_nature.gain);
+    expect(panners[impactPannerIndex]?.refDistance).toBe(5);
+
+    const bumpGainIndex = gains.length;
+    const bumpPannerIndex = panners.length;
     playRealmRacersEventAudio(sfx, ground, {
       type: 'realmRacersBump',
       aId: 1,
@@ -493,8 +531,15 @@ describe('Realm Racers vehicle loops', () => {
       z: 7,
       impact: 12,
     });
+    expect(gains[bumpGainIndex]?.gain.value).toBe(0.775 * SFX_CLIPS.impact_arcane.gain);
+    expect(panners[bumpPannerIndex]?.refDistance).toBe(5);
+
     nowT += 1;
+    const scrapeGainIndex = gains.length;
+    const scrapePannerIndex = panners.length;
     playRealmRacersScrapeAudio(sfx, ground, 8, 9, 0.4);
+    expect(gains[scrapeGainIndex]?.gain.ramps).toContain(0.55 * SFX_CLIPS.impact_arcane.gain);
+    expect(panners[scrapePannerIndex]?.refDistance).toBe(5);
     playRealmRacersEventAudio(sfx, ground, { type: 'realmRacersGo' });
     expect(sources.slice(before).map((source) => source.buffer)).toEqual([
       RALLY_SHELL_BUFFER,
