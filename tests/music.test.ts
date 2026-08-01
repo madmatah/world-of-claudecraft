@@ -8,7 +8,7 @@ import {
   shouldResetMusicForDungeonEntry,
   THEME_TRIM,
 } from '../src/game/music';
-import { COMBAT_STREAM_URLS, ZONE_STREAM_URLS } from '../src/game/music_tracks';
+import { AREA_TRACK_URLS, COMBAT_STREAM_URLS, ZONE_STREAM_URLS } from '../src/game/music_tracks';
 import { RIFT_THEMES } from '../src/sim/content/rift/themes';
 import type { BiomeId } from '../src/sim/types';
 
@@ -401,6 +401,114 @@ describe('MusicDirector boss combat loop', () => {
     director.setBossCombat(false);
     expect(source.stop).toHaveBeenCalledTimes(1);
     expect(source.disconnect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MusicDirector area file tracks', () => {
+  let director: MusicDirector;
+  let timeouts: (() => void)[];
+
+  beforeEach(() => {
+    timeouts = [];
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    vi.stubGlobal('Audio', FakeAudio);
+    vi.stubGlobal('window', {
+      setInterval: vi.fn(() => 1),
+      setTimeout: vi.fn((fn: () => void) => {
+        timeouts.push(fn);
+        return timeouts.length;
+      }),
+    });
+    director = makeDirector();
+  });
+
+  afterEach(() => {
+    clearInterval(internals(director).timer);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    FakeAudio.instances = [];
+  });
+
+  const areaEls = () =>
+    (director as unknown as { areaEls: Partial<Record<string, FakeAudio>> }).areaEls;
+
+  it('gives the race track the mix on the circuit and ducks the procedural score', () => {
+    const master = (director as unknown as { master: FakeGain }).master;
+    director.update('vale', false);
+    director.setAreaTrack('realm_racers');
+
+    const race = areaEls().realm_racers;
+    expect(race?.src).toBe(AREA_TRACK_URLS.realm_racers);
+    expect(race?.loop).toBe(true);
+    expect(race?.play).toHaveBeenCalled();
+    expect(master.gain.value).toBe(0);
+    // the zone stream stops decoding once the keeper sees it faded out
+    internals(director).streamKeeper();
+    internals(director).ctx.currentTime += 5;
+    internals(director).streamKeeper();
+    expect(internals(director).zoneStreams.vale?.el?.paused).toBe(true);
+  });
+
+  it('downloads only the tracks of the place the player is in', () => {
+    director.setAreaTrack('realm_racers');
+    expect(Object.keys(areaEls()).sort()).toEqual(['realm_racers']);
+
+    director.setAreaTrack('sowfield_waiting');
+    // the Sowfield pair warms together: its kickoff crossfade is instant
+    expect(Object.keys(areaEls()).sort()).toEqual([
+      'realm_racers',
+      'sowfield_match',
+      'sowfield_waiting',
+    ]);
+  });
+
+  it('hands the mix back to the zone streams when the player leaves', () => {
+    const master = (director as unknown as { master: FakeGain }).master;
+    director.update('vale', false);
+    director.setAreaTrack('realm_racers');
+    internals(director).streamKeeper();
+    internals(director).ctx.currentTime += 5;
+    internals(director).streamKeeper();
+    expect(internals(director).zoneStreams.vale?.el?.paused).toBe(true);
+
+    director.setAreaTrack(null);
+    expect(master.gain.value).toBe(0.5); // STREAM_LEVEL at the default volume
+    // the handback revives the zone stream at once, not a keeper tick later
+    expect(internals(director).zoneStreams.vale?.el?.paused).toBe(false);
+    const race = areaEls().realm_racers;
+    expect(race?.paused).toBe(false); // still fading out, not cut mid-tail
+    for (const fn of timeouts) fn();
+    expect(race?.paused).toBe(true);
+  });
+
+  it('never fades two area tracks up at once', () => {
+    const gains = (director as unknown as { areaGains: Record<string, FakeGain> }).areaGains;
+    for (const track of ['sowfield_waiting', 'sowfield_match', 'realm_racers', null] as const) {
+      director.setAreaTrack(track);
+      const up = Object.values(gains).filter((gain) => gain.gain.value > 0);
+      expect(up).toHaveLength(track === null ? 0 : 1);
+    }
+  });
+
+  it('stops decoding the race track while the mix is silenced, and resumes after', () => {
+    director.setAreaTrack('realm_racers');
+    const race = areaEls().realm_racers;
+    if (!race) throw new Error('race track element missing');
+    director.setVolume(0);
+    for (const fn of timeouts) fn();
+    expect(race.paused).toBe(true);
+
+    race.play.mockClear();
+    director.setVolume(1);
+    expect(race.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a re-entry within the fade window playing instead of pausing it', () => {
+    director.setAreaTrack('realm_racers');
+    director.setAreaTrack(null);
+    director.setAreaTrack('realm_racers');
+    for (const fn of timeouts) fn();
+    expect(areaEls().realm_racers?.paused).toBe(false);
   });
 });
 

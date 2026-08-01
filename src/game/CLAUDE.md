@@ -133,6 +133,14 @@ into a pure module if needed), then the smallest change that turns it green.
   pipeline know it, render and remaster it to `public/audio/music/<zone>.mp3`,
   map it in `ZONE_STREAM_URLS` (music_tracks.ts, pinned by
   `tests/music_tracks.test.ts`), and drive it from `music.update(zone, inCombat)`.
+- **A new AREA track** (a place with its own supplied soundtrack rather than a
+  render of a composed theme, like the Sowfield stadium or the Realm Racers
+  circuit): add an `AreaTrackId` with its url and group in `AREA_TRACK_URLS` /
+  `AREA_TRACK_GROUP` (music_tracks.ts), drop the mp3 at the top level of
+  `public/audio/`, and decide it in `instanceMusicDecision` (instance_music.ts),
+  which drives `music.setAreaTrack(id)`. An area track OWNS the mix: it ducks
+  the procedural score and the zone streams for as long as it is active, and at
+  most one is ever active. Do not add a `MusicZone` for it.
 
 ## Never
 - Never read `localStorage`/`window`/`AudioContext` from a constructor without a

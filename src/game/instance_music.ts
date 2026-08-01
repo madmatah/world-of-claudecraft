@@ -1,4 +1,5 @@
 import { delveAt, dungeonAt, isDelvePos, type ZoneDef } from '../sim/data';
+import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
 import { isAtSowfield } from '../sim/vale_cup_layout';
 import {
   type MusicZone,
@@ -6,6 +7,7 @@ import {
   riftMusicZoneForTheme,
   shouldResetMusicForDungeonEntry,
 } from './music';
+import type { AreaTrackId } from './music_tracks';
 
 export interface InstanceMusicEntity {
   kind: string;
@@ -56,7 +58,7 @@ export interface InstanceMusicDecision {
   bossEngaged: boolean;
   instanceId: string | null;
   atSowfield: boolean;
-  sowfieldTrack: 'match' | 'waiting' | null;
+  areaTrack: AreaTrackId | null;
 }
 
 export interface InstanceMusicPort {
@@ -65,7 +67,7 @@ export interface InstanceMusicPort {
   resetForDungeonEntry(dungeonId: string | null, zone?: MusicZone): void;
   update(zone: MusicZone, inCombat: boolean): void;
   setBossCombat(active: boolean): void;
-  setSowfieldTrack(track: 'match' | 'waiting' | null): void;
+  setAreaTrack(track: AreaTrackId | null): void;
 }
 
 const RAID_ARENA_ID = 'nythraxis_boss_arena';
@@ -97,6 +99,11 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
     ? (delveAt(input.playerPos.x)?.id ?? FALLBACK_DELVE_ID)
     : (dungeon?.id ?? null);
   const atSowfield = !input.inDungeon && isAtSowfield(input.playerPos.x, input.playerPos.z);
+  // The rally circuit sits on the flat instance plane, so inDungeon is true
+  // there and the zone cue would otherwise fall back to the dungeon crawl
+  // theme. Its own race track owns the mix instead, for the whole visit:
+  // players only ever stand there for a race (grid, countdown, laps, results).
+  const atRealmRacers = isAtRealmRacersXZ(input.playerPos.x, input.playerPos.z);
   const riftFloor = input.riftFloor;
   const zone = atSowfield
     ? 'vale_cup'
@@ -130,7 +137,14 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
     bossEngaged,
     instanceId: musicInstanceId,
     atSowfield,
-    sowfieldTrack: atSowfield || inPracticeMatch ? (cupKickedOff ? 'match' : 'waiting') : null,
+    areaTrack:
+      atSowfield || inPracticeMatch
+        ? cupKickedOff
+          ? 'sowfield_match'
+          : 'sowfield_waiting'
+        : atRealmRacers
+          ? 'realm_racers'
+          : null,
   };
 }
 
@@ -147,7 +161,7 @@ export class InstanceMusicController {
     this.lastInstanceId = decision.instanceId;
     this.music.update(decision.zone, decision.musicCombat);
     this.music.setBossCombat(decision.bossEngaged);
-    this.music.setSowfieldTrack(decision.sowfieldTrack);
+    this.music.setAreaTrack(decision.areaTrack);
     return decision;
   }
 }

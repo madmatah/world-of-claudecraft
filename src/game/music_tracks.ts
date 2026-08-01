@@ -50,6 +50,31 @@ export const ZONE_STREAM_URLS: Record<MusicZone, string | null> = {
   rift_tide: '/audio/music/dungeon_sunken_bastion.mp3',
 };
 
+/** Area file tracks: looped mp3s that OWN the mix while the player stands in a
+ *  place with its own soundtrack, ducking the procedural score and the zone
+ *  streams for as long as one is active. Unlike the zone cues these are not
+ *  renders of a composed theme in music.ts, so they live at the top level of
+ *  public/audio/ next to the boss loop rather than under music/. At most one is
+ *  active at a time: their areas are mutually exclusive. */
+export type AreaTrackId = 'sowfield_waiting' | 'sowfield_match' | 'realm_racers';
+
+export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
+  sowfield_waiting: '/audio/sowfield-waiting.mp3',
+  sowfield_match: '/audio/sowfield-match.mp3',
+  realm_racers: '/audio/realm-racers.mp3',
+};
+
+/** Which tracks belong to the same place. Activating one warms every track of
+ *  its group, because the next crossfade inside a place is abrupt and must not
+ *  wait on a first-byte fetch (the Sowfield flips waiting to match on kickoff);
+ *  the other groups stay undownloaded, since reaching them means a loading
+ *  screen or a long ride. */
+export const AREA_TRACK_GROUP: Record<AreaTrackId, string> = {
+  sowfield_waiting: 'sowfield',
+  sowfield_match: 'sowfield',
+  realm_racers: 'realm_racers',
+};
+
 /** The remastered battle themes; each fight opens on one chosen at random. */
 export const COMBAT_STREAM_URLS: string[] = [
   '/audio/music/combat_1.mp3',

@@ -12,7 +12,14 @@
 import type { BiomeId } from '../sim/types';
 import { resumeWhenAllowed } from './audio_unlock';
 import { MUSIC_OVERRIDES } from './music_overrides.generated';
-import { COMBAT_STREAM_URLS, pickCombatTrackIndex, ZONE_STREAM_URLS } from './music_tracks';
+import {
+  AREA_TRACK_GROUP,
+  AREA_TRACK_URLS,
+  type AreaTrackId,
+  COMBAT_STREAM_URLS,
+  pickCombatTrackIndex,
+  ZONE_STREAM_URLS,
+} from './music_tracks';
 
 export type MusicZone =
   | 'town_eastbrook'
@@ -3947,6 +3954,10 @@ const STREAM_LEVEL = 0.5;
 // a zone picks its theme back up mid-phrase.
 const STREAM_PAUSE_AFTER_S = 4;
 const STREAM_KEEPER_MS = 500;
+// Same idea for the area file tracks, whose gain fades on a 0.5s time constant:
+// after 2.5s the outgoing track sits below 1% (under -40 dB), so pausing it then
+// is inaudible where pausing it mid-fade would clip the tail.
+const AREA_FADE_PAUSE_MS = 2500;
 
 export function buildMusicThemes(withOverrides = true): Record<string, Theme> {
   const composed: Record<string, Theme> = {
@@ -4811,15 +4822,14 @@ export class MusicDirector {
   // Boss-fight override: a looped file track routed through the same AudioContext
   // that user gestures already unlock for the procedural soundtrack.
   private bossActive = false;
-  // Sowfield area music: two looped mp3s ('waiting' before a game, 'match' once
-  // one has kicked off) that crossfade against each other and duck the procedural
-  // score while you stand at the stadium. Same file-track pattern as the boss loop.
-  private sowfieldWaitingEl: HTMLAudioElement | null = null;
-  private sowfieldMatchEl: HTMLAudioElement | null = null;
-  private sowfieldWaitingGain: GainNode | null = null;
-  private sowfieldMatchGain: GainNode | null = null;
-  private sowfieldSrcMade = false;
-  private sowfieldTrack: 'waiting' | 'match' | null = null;
+  // Area music (the Sowfield stadium's waiting/match pair, the Realm Racers
+  // circuit): looped mp3s that crossfade against each other and duck the
+  // procedural score while you stand there. Same file-track pattern as the boss
+  // loop; catalog in music_tracks.ts.
+  private areaEls: Partial<Record<AreaTrackId, HTMLAudioElement>> = {};
+  private areaGains: Partial<Record<AreaTrackId, GainNode>> = {};
+  private areaPauseTimer = 0;
+  private areaTrack: AreaTrackId | null = null;
 
   get enabled(): boolean {
     return this._enabled;
@@ -4828,8 +4838,7 @@ export class MusicDirector {
   // master gain target given the enabled flag and volume (base STREAM_LEVEL).
   // The dedicated Nythraxis track owns the mix while active.
   private masterTarget(): number {
-    if (!this._enabled || this._menuPaused || this.bossActive || this.sowfieldTrack !== null)
-      return 0;
+    if (!this._enabled || this._menuPaused || this.bossActive || this.areaTrack !== null) return 0;
     return STREAM_LEVEL * this._vol;
   }
 
@@ -4949,18 +4958,19 @@ export class MusicDirector {
     this.bossSource = null;
   }
 
-  /** Drive the Sowfield area music: 'waiting' before a game, 'match' once one has
-   *  kicked off, null when you are away from the stadium. Idempotent; the HUD calls
-   *  it every frame. Crossfades the two tracks and ducks the procedural score while
-   *  active. */
-  setSowfieldTrack(track: 'waiting' | 'match' | null): void {
-    if (track === this.sowfieldTrack) {
-      this.applySowfield();
+  /** Drive the area music: which dedicated file track owns the mix right now
+   *  ('sowfield_waiting' before a Vale Cup game, 'sowfield_match' once one has
+   *  kicked off, 'realm_racers' on the rally circuit), null when the player is
+   *  in none of those places. Idempotent; the HUD calls it every frame.
+   *  Crossfades between the tracks and ducks the procedural score while active. */
+  setAreaTrack(track: AreaTrackId | null): void {
+    if (track === this.areaTrack) {
+      this.applyAreaTracks();
       return;
     }
-    const enteringOrLeaving = (this.sowfieldTrack === null) !== (track === null);
-    this.sowfieldTrack = track;
-    this.applySowfield();
+    const enteringOrLeaving = (this.areaTrack === null) !== (track === null);
+    this.areaTrack = track;
+    this.applyAreaTracks();
     if (this.ctx && this.master && enteringOrLeaving) {
       this.master.gain.setTargetAtTime(
         this.masterTarget(),
@@ -4968,54 +4978,70 @@ export class MusicDirector {
         track ? 0.4 : 0.7,
       );
     }
-    // walking away from the stadium must revive paused streams now
+    // walking away from the area must revive paused streams now
     if (enteringOrLeaving && track === null) this.streamKeeper();
   }
 
-  private ensureSowfieldElements(): void {
-    if (this.sowfieldSrcMade || !this.ctx || typeof Audio !== 'function') return;
-    this.sowfieldSrcMade = true;
-    const mk = (url: string, gain: GainNode | null): HTMLAudioElement => {
+  // Create (and so start downloading) the tracks of the active track's place.
+  // Lazily and per group: an area soundtrack is minutes long, and the places
+  // are far apart, so nothing warms a track the player cannot hear next.
+  private ensureAreaElements(active: AreaTrackId): void {
+    if (!this.ctx || typeof Audio !== 'function') return;
+    for (const [id, url] of Object.entries(AREA_TRACK_URLS) as [AreaTrackId, string][]) {
+      if (AREA_TRACK_GROUP[id] !== AREA_TRACK_GROUP[active] || this.areaEls[id]) continue;
       const el = new Audio(url);
       el.loop = true;
       el.preload = 'auto';
       try {
         const src = this.ctx?.createMediaElementSource(el);
+        const gain = this.areaGains[id];
         if (src && gain) src.connect(gain);
       } catch {
         /* element already wired or unsupported */
       }
-      return el;
-    };
-    this.sowfieldWaitingEl = mk('/audio/sowfield-waiting.mp3', this.sowfieldWaitingGain);
-    this.sowfieldMatchEl = mk('/audio/sowfield-match.mp3', this.sowfieldMatchGain);
+      this.areaEls[id] = el;
+    }
   }
 
-  private applySowfield(): void {
+  // Which area track should be audible right now: the selected one unless the
+  // toggle, the menu fade, or a zero volume has the whole mix down. Same rule
+  // as streamsAudible(), so a silenced track stops decoding rather than playing
+  // to nobody.
+  private audibleAreaTrack(): AreaTrackId | null {
+    return this._enabled && !this._menuPaused && this._vol > 0 ? this.areaTrack : null;
+  }
+
+  private applyAreaTracks(): void {
     if (!this.ctx) return;
-    const active = this.sowfieldTrack !== null && this._enabled && !this._menuPaused;
+    const playing = this.audibleAreaTrack();
     const level = 0.5 * this._vol;
-    if (active) {
+    if (playing) {
       resumeWhenAllowed(this.ctx);
-      this.ensureSowfieldElements();
-      void this.sowfieldWaitingEl?.play().catch(() => {});
-      void this.sowfieldMatchEl?.play().catch(() => {});
+      this.ensureAreaElements(playing);
+      void this.areaEls[playing]?.play().catch(() => {});
     }
-    const wTarget = active && this.sowfieldTrack === 'waiting' ? level : 0;
-    const mTarget = active && this.sowfieldTrack === 'match' ? level : 0;
-    if (this.sowfieldWaitingGain)
-      this.sowfieldWaitingGain.gain.setTargetAtTime(wTarget, this.ctx.currentTime, 0.5);
-    if (this.sowfieldMatchGain)
-      this.sowfieldMatchGain.gain.setTargetAtTime(mTarget, this.ctx.currentTime, 0.5);
-    if (!active && this.sowfieldSrcMade) {
-      // Fade to silence, then pause once we are truly away (guard against a quick
-      // re-entry flipping the track back on before the timeout fires).
-      window.setTimeout(() => {
-        if (this.sowfieldTrack === null) {
-          this.sowfieldWaitingEl?.pause();
-          this.sowfieldMatchEl?.pause();
+    for (const id of Object.keys(AREA_TRACK_URLS) as AreaTrackId[]) {
+      this.areaGains[id]?.gain.setTargetAtTime(
+        id === playing ? level : 0,
+        this.ctx.currentTime,
+        0.5,
+      );
+    }
+    // Let the gain fade finish, then pause whatever no longer owns the mix so it
+    // stops decoding and downloading (pausing it mid-fade would clip the tail).
+    // Re-checked inside the timeout: a quick re-entry may have handed the mix
+    // straight back before it fires.
+    const stale = (Object.keys(this.areaEls) as AreaTrackId[]).some(
+      (id) => id !== playing && this.areaEls[id]?.paused === false,
+    );
+    if (stale && this.areaPauseTimer === 0) {
+      this.areaPauseTimer = window.setTimeout(() => {
+        this.areaPauseTimer = 0;
+        const keep = this.audibleAreaTrack();
+        for (const id of Object.keys(this.areaEls) as AreaTrackId[]) {
+          if (id !== keep) this.areaEls[id]?.pause();
         }
-      }, 700);
+      }, AREA_FADE_PAUSE_MS);
     }
   }
 
@@ -5026,7 +5052,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.2);
     }
     this.applyBossPlayback();
-    this.applySowfield();
+    this.applyAreaTracks();
     // leaving volume 0 must revive paused streams now, not a tick later
     if (this.streamsAudible()) this.streamKeeper();
   }
@@ -5056,12 +5082,12 @@ export class MusicDirector {
     this.bossGain = ctx.createGain();
     this.bossGain.gain.value = 0;
     this.bossGain.connect(compressor);
-    this.sowfieldWaitingGain = ctx.createGain();
-    this.sowfieldWaitingGain.gain.value = 0;
-    this.sowfieldWaitingGain.connect(compressor);
-    this.sowfieldMatchGain = ctx.createGain();
-    this.sowfieldMatchGain.gain.value = 0;
-    this.sowfieldMatchGain.connect(compressor);
+    for (const id of Object.keys(AREA_TRACK_URLS) as AreaTrackId[]) {
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      gain.connect(compressor);
+      this.areaGains[id] = gain;
+    }
 
     // Register both battle themes now (and warm their downloads whenever the
     // mix is audible, see streamKeeper): a fight can start at any moment and
@@ -5114,7 +5140,7 @@ export class MusicDirector {
 
   // Streams are audible only when nothing has the master ducked to zero: the
   // toggle, the menu fade, the volume slider, and the dedicated boss and
-  // Sowfield file tracks (which own the mix while active). While inaudible,
+  // area file tracks (which own the mix while active). While inaudible,
   // streams pause instead of decoding silence.
   private streamsAudible(): boolean {
     return (
@@ -5122,7 +5148,7 @@ export class MusicDirector {
       !this._menuPaused &&
       this._vol > 0 &&
       !this.bossActive &&
-      this.sowfieldTrack === null
+      this.areaTrack === null
     );
   }
 
@@ -5149,7 +5175,7 @@ export class MusicDirector {
   }
 
   // Runs every STREAM_KEEPER_MS (and directly on unmute, menu close, volume
-  // restore, and boss/Sowfield handback so revival is instant): pauses cues
+  // restore, and boss/area-track handback so revival is instant): pauses cues
   // that finished fading out, so an inaudible stream costs no decoding or
   // bandwidth, revives active cues that a refused autoplay, a tab restore,
   // or a mute window left paused, and keeps the battle themes' downloads
@@ -5187,7 +5213,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.3);
     }
     this.applyBossPlayback();
-    this.applySowfield();
+    this.applyAreaTracks();
     // re-enabling must revive paused streams now, not a keeper tick later
     if (on) this.streamKeeper();
   }
@@ -5202,7 +5228,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
     }
     this.applyBossPlayback();
-    this.applySowfield();
+    this.applyAreaTracks();
   }
 
   /** Restore playback after closing the game menu. */
@@ -5215,7 +5241,7 @@ export class MusicDirector {
       this.master.gain.setTargetAtTime(this.masterTarget(), this.ctx.currentTime, 0.35);
     }
     this.applyBossPlayback();
-    this.applySowfield();
+    this.applyAreaTracks();
     // closing the menu must revive paused streams now, not a keeper tick later
     this.streamKeeper();
   }

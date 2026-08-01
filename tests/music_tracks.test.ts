@@ -4,6 +4,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { MusicZone } from '../src/game/music';
 import {
+  AREA_TRACK_URLS,
+  type AreaTrackId,
   COMBAT_STREAM_URLS,
   pickCombatTrackIndex,
   ZONE_STREAM_URLS,
@@ -26,6 +28,25 @@ describe('remastered soundtrack catalog', () => {
 
   it('leaves vale_cup streamless: the Sowfield mp3 pair owns that mix', () => {
     expect(ZONE_STREAM_URLS.vale_cup).toBeNull();
+  });
+
+  it('ships every area file track at the top level of public/audio', () => {
+    const ids: AreaTrackId[] = ['sowfield_waiting', 'sowfield_match', 'realm_racers'];
+    expect(Object.keys(AREA_TRACK_URLS).sort()).toEqual([...ids].sort());
+    for (const [id, url] of Object.entries(AREA_TRACK_URLS)) {
+      expect(url, `area track '${id}'`).toMatch(/^\/audio\/[a-z0-9-]+\.mp3$/);
+      expect(existsSync(assetPath(url)), `missing asset for area track '${id}': ${url}`).toBe(true);
+    }
+  });
+
+  it('routes the Realm Racers race track to its supplied master', () => {
+    expect(AREA_TRACK_URLS.realm_racers).toBe('/audio/realm-racers.mp3');
+    const hash = createHash('sha256')
+      .update(readFileSync(assetPath(AREA_TRACK_URLS.realm_racers)))
+      .digest('hex');
+    expect(hash, 'realm racers race track bytes').toBe(
+      'ee8e8fc83501acbb260e843dd8d3c3fc44444c79c4983bb68915ffd102161ae3',
+    );
   });
 
   it('routes each supplied new-zone remaster to its matching music cue', () => {

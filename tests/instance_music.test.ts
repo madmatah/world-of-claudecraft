@@ -6,6 +6,7 @@ import {
   instanceMusicDecision,
 } from '../src/game/instance_music';
 import { DELVE_X_MIN, ZONES } from '../src/sim/data';
+import { REALM_RACERS_ORIGIN, realmRacersSlotOrigin } from '../src/sim/realm_racers_layout';
 import { SOWFIELD_CENTER } from '../src/sim/vale_cup_layout';
 
 const eastbrookFixture = ZONES.find((zone) => zone.id === 'eastbrook_vale');
@@ -47,7 +48,7 @@ describe('instance music policy', () => {
       resetForDungeonEntry: vi.fn(),
       update: vi.fn(),
       setBossCombat: vi.fn(),
-      setSowfieldTrack: vi.fn(),
+      setAreaTrack: vi.fn(),
     };
     const controller = new InstanceMusicController(port);
     const delveInput = input({
@@ -77,7 +78,7 @@ describe('instance music policy', () => {
     );
     expect(waiting.atSowfield).toBe(true);
     expect(waiting.zone).toBe('vale_cup');
-    expect(waiting.sowfieldTrack).toBe('waiting');
+    expect(waiting.areaTrack).toBe('sowfield_waiting');
 
     const active = instanceMusicDecision(
       input({
@@ -90,7 +91,7 @@ describe('instance music policy', () => {
     );
     expect(active.atSowfield).toBe(true);
     expect(active.zone).toBe('vale_cup');
-    expect(active.sowfieldTrack).toBe('match');
+    expect(active.areaTrack).toBe('sowfield_match');
   });
 
   it('routes private-practice phases through the Vale Cup tracks', () => {
@@ -104,7 +105,7 @@ describe('instance music policy', () => {
         },
       }),
     );
-    expect(practice.sowfieldTrack).toBe('match');
+    expect(practice.areaTrack).toBe('sowfield_match');
 
     const waiting = instanceMusicDecision(
       input({
@@ -115,6 +116,37 @@ describe('instance music policy', () => {
         },
       }),
     );
-    expect(waiting.sowfieldTrack).toBeNull();
+    expect(waiting.areaTrack).toBeNull();
+  });
+
+  it('gives the Realm Racers circuit its own race track instead of the dungeon crawl cue', () => {
+    const onCircuit = input({
+      // the circuit sits on the flat instance plane, so the HUD reports inDungeon
+      playerPos: { x: REALM_RACERS_ORIGIN.x, z: REALM_RACERS_ORIGIN.z },
+      inDungeon: true,
+    });
+
+    const racing = instanceMusicDecision(onCircuit);
+    expect(racing.areaTrack).toBe('realm_racers');
+    expect(racing.atSowfield).toBe(false);
+
+    const port = {
+      resetForDungeonEntry: vi.fn(),
+      update: vi.fn(),
+      setBossCombat: vi.fn(),
+      setAreaTrack: vi.fn(),
+    };
+    new InstanceMusicController(port).update(onCircuit);
+    expect(port.setAreaTrack).toHaveBeenCalledWith('realm_racers');
+  });
+
+  it('covers the private practice copies and drops the track back in the world', () => {
+    const practiceSlot = instanceMusicDecision(
+      input({ playerPos: realmRacersSlotOrigin(3), inDungeon: true }),
+    );
+    expect(practiceSlot.areaTrack).toBe('realm_racers');
+
+    // default fixture position: the Eastbrook hub, nowhere near the band
+    expect(instanceMusicDecision(input()).areaTrack).toBeNull();
   });
 });
