@@ -22,8 +22,12 @@
 // land before they commit to it.
 
 import { normAngle, TICK_RATE, type VehicleDrive } from './types';
-import { MAX_BUMP_SPIN } from './vehicle_contact';
-import { applyAchievedVehicleVelocity, vehicleVelocityX, vehicleVelocityZ } from './vehicle_motion';
+import {
+  addVehicleSpin,
+  applyAchievedVehicleVelocity,
+  vehicleVelocityX,
+  vehicleVelocityZ,
+} from './vehicle_motion';
 
 /** Closest a shell may be placed, yards. A point-blank aim slides out to here
  *  rather than landing under the caster's own nose. */
@@ -83,7 +87,7 @@ export const SHELL_PUSH = 22;
  *
  * Total rotation is roughly the kick divided by the profile's `spinDecay`
  * (1.6), so 4.5 turns the machine about 160 degrees before it is spent: a real
- * spin to drive out of, and still inside the shared `MAX_BUMP_SPIN` ceiling.
+ * spin to drive out of, and still inside the shared `MAX_VEHICLE_SPIN` ceiling.
  */
 export const SHELL_YAW_KICK = 4.5;
 /** How long a hit machine drives on ice afterwards, ticks. It starts at the
@@ -238,10 +242,10 @@ export function resolveShellBlast(body: ShellBlastBody, x: number, z: number): S
   // nose or the tail has no side and spins nobody; a glancing one slews the
   // machine away from the blast, and the further off-centre the harder.
   const side = awayX * Math.cos(body.facing) - awayZ * Math.sin(body.facing);
-  const spin = body.drive.spin + SHELL_YAW_KICK * falloff * side;
-  // The one ceiling on carried spin, wherever the shove came from: a machine
-  // shelled while already spinning off a contact must not run away past it.
-  body.drive.spin = clamp(spin, -MAX_BUMP_SPIN, MAX_BUMP_SPIN);
+  // The shared add carries the one ceiling on carried spin, wherever the shove
+  // came from: a machine shelled while already spinning off a contact must not
+  // run away past it.
+  addVehicleSpin(body.drive, SHELL_YAW_KICK * falloff * side);
 
   return { falloff, pop: SHELL_POP_VELOCITY * falloff };
 }

@@ -7,10 +7,14 @@ import {
   BUMP_SPIN_VICTIM,
   type ContactBody,
   MAX_BUMP_IMPULSE,
-  MAX_BUMP_SPIN,
   resolveVehicleContact,
 } from '../src/sim/vehicle_contact';
-import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../src/sim/vehicle_motion';
+import {
+  createVehicleDrive,
+  MAX_VEHICLE_SPIN,
+  vehicleVelocityX,
+  vehicleVelocityZ,
+} from '../src/sim/vehicle_motion';
 
 // Wheel-to-wheel contact, driven directly. Everything here is the pure leaf:
 // the rally module's use of it (the re-clamp through static collision, the
@@ -213,17 +217,17 @@ describe('vehicle contact', () => {
     const violent = body({ x: 0, z: 0, speed: 400, slip: -2 });
     const parked = body({ x: 3, z: 0 });
     resolveVehicleContact(violent, parked);
-    expect(Math.abs(parked.drive.spin)).toBeCloseTo(MAX_BUMP_SPIN, 9);
-    expect(Math.abs(violent.drive.spin)).toBeLessThanOrEqual(MAX_BUMP_SPIN);
+    expect(Math.abs(parked.drive.spin)).toBeCloseTo(MAX_VEHICLE_SPIN, 9);
+    expect(Math.abs(violent.drive.spin)).toBeLessThanOrEqual(MAX_VEHICLE_SPIN);
 
     // Pre-loaded spin plus another contact must not exceed the ceiling: the
     // clamp is on the TOTAL, not on each added delta alone.
     const stacked = body({ x: 0, z: 0, speed: 80, slip: -4 });
     const target = body({ x: 3, z: 0, speed: 20 });
-    stacked.drive.spin = MAX_BUMP_SPIN - 0.1;
+    stacked.drive.spin = MAX_VEHICLE_SPIN - 0.1;
     resolveVehicleContact(stacked, target);
-    expect(Math.abs(stacked.drive.spin)).toBeLessThanOrEqual(MAX_BUMP_SPIN);
-    expect(Math.abs(target.drive.spin)).toBeLessThanOrEqual(MAX_BUMP_SPIN);
+    expect(Math.abs(stacked.drive.spin)).toBeLessThanOrEqual(MAX_VEHICLE_SPIN);
+    expect(Math.abs(target.drive.spin)).toBeLessThanOrEqual(MAX_VEHICLE_SPIN);
 
     // Equal aggressor weight (both lean in) with a pace scrape: mass alone
     // decides the spin split.

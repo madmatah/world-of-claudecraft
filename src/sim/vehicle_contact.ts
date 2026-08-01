@@ -17,7 +17,12 @@
 // roster of machines would have to rewrite.
 
 import type { VehicleDrive } from './types';
-import { applyAchievedVehicleVelocity, vehicleVelocityX, vehicleVelocityZ } from './vehicle_motion';
+import {
+  addVehicleSpin,
+  applyAchievedVehicleVelocity,
+  vehicleVelocityX,
+  vehicleVelocityZ,
+} from './vehicle_motion';
 
 /** How much of the closing speed comes back as bounce. Mostly absorbed: two
  *  machines leaning on each other should settle, not ping apart. */
@@ -51,9 +56,6 @@ export const BUMP_SPIN = 0.28;
 export const BUMP_SPIN_ATTACKER = -0.25;
 /** Scrape-spin scale on the receiver: full kick, turned wide of the contact. */
 export const BUMP_SPIN_VICTIM = 1;
-/** Ceiling on a body's carried spin, rad/s. Applied to the TOTAL after each
- *  contact add, so stacked bumps cannot runaway past this. */
-export const MAX_BUMP_SPIN = 5;
 
 export interface ContactBody {
   x: number;
@@ -75,13 +77,6 @@ export interface ContactResult {
   /** Contact midpoint after depenetration, for the caller's event anchor. */
   x: number;
   z: number;
-}
-
-const clampSpin = (spin: number): number =>
-  spin < -MAX_BUMP_SPIN ? -MAX_BUMP_SPIN : spin > MAX_BUMP_SPIN ? MAX_BUMP_SPIN : spin;
-
-function addSpin(drive: VehicleDrive, delta: number): void {
-  drive.spin = clampSpin(drive.spin + delta);
 }
 
 /** Bleed a body's forward speed toward zero, never through it: a scrub slows a
@@ -152,8 +147,8 @@ export function resolveVehicleContact(a: ContactBody, b: ContactBody): ContactRe
 
   const relT = (avx - bvx) * -nz + (avz - bvz) * nx;
   const kick = BUMP_SPIN * relT;
-  addSpin(a.drive, (kick * scaleA) / a.mass);
-  addSpin(b.drive, (kick * scaleB) / b.mass);
+  addVehicleSpin(a.drive, (kick * scaleA) / a.mass);
+  addVehicleSpin(b.drive, (kick * scaleB) / b.mass);
 
   const j = Math.min(MAX_BUMP_IMPULSE, ((1 + BUMP_RESTITUTION) * relN) / (1 / a.mass + 1 / b.mass));
   avx -= (nx * j) / a.mass;

@@ -253,6 +253,27 @@ export function vehicleVelocityZ(drive: VehicleDrive, facing: number): number {
 }
 
 /**
+ * Ceiling on a body's carried spin, rad/s. Applied to the TOTAL after each add,
+ * so stacked shoves cannot run away past it.
+ *
+ * It lives here, with the drive state it bounds, rather than with any one of the
+ * things that shove a machine: a contact and a weapon both write `spin`, and a
+ * ceiling that named either of them would be the wrong ceiling for the other.
+ */
+export const MAX_VEHICLE_SPIN = 5;
+
+/** Add to a body's carried spin, held inside the shared ceiling. */
+export function addVehicleSpin(drive: VehicleDrive, delta: number): void {
+  const spin = drive.spin + delta;
+  drive.spin =
+    spin < -MAX_VEHICLE_SPIN
+      ? -MAX_VEHICLE_SPIN
+      : spin > MAX_VEHICLE_SPIN
+        ? MAX_VEHICLE_SPIN
+        : spin;
+}
+
+/**
  * Re-derive the drive velocity from the displacement the collision solver
  * ACTUALLY achieved. This is the whole wall story in two lines: scraping a
  * barrier kills the into-the-wall component and keeps the along-the-wall one,
