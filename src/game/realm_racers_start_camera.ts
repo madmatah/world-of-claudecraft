@@ -3,10 +3,7 @@
 // and frame rate cannot change when the camera reaches the normal chase view.
 
 import { TICK_RATE } from '../sim/types';
-import type {
-  RealmRacersMatchInfo,
-  RealmRacersPhase,
-} from '../world_api/realm_racers';
+import type { RealmRacersMatchInfo, RealmRacersPhase } from '../world_api/realm_racers';
 import type { CameraPose } from './spawn_cinematic';
 
 export const REALM_RACERS_START_TICKS = 9 * TICK_RATE;

@@ -15,8 +15,8 @@ import {
   REALM_RACERS_CAMERA_BOOM_PROFILE,
 } from '../src/render/camera_boom_core';
 import { rallyDressingSpots } from '../src/render/realm_racers_track_core';
-import { REALM_RACERS_COUNTDOWN_TICKS } from '../src/sim/social/realm_racers';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
+import { REALM_RACERS_COUNTDOWN_TICKS } from '../src/sim/social/realm_racers';
 
 describe('Realm Racers start camera', () => {
   it('pins one six-second panorama and the shared nine-second start', () => {
