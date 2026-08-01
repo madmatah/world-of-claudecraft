@@ -386,6 +386,45 @@ describe('Realm Racers vehicle loops', () => {
     expect(realmRacersVehicleAudioAction(false, true, true)).toBe('run');
   });
 
+  it('mixes the bed over the race music and still leaves the bus headroom', () => {
+    const loopTarget = (id: string): number => {
+      const slot = (sfx as unknown as { loops: Map<string, { target: number }> }).loops.get(id);
+      if (!slot) throw new Error(`expected loop ${id}`);
+      return slot.target; // the commanded target already multiplied by the catalog trim
+    };
+
+    // full tilt: top speed, full throttle load, drifting, off the racing surface
+    sfx.vehicle(80, 0, 0, 0, 1, 1, 12, true);
+    const engine = loopTarget('realm-racers-engine-80');
+    const skid = loopTarget('realm-racers-skid-80');
+    const roll = loopTarget('realm-racers-roll-80');
+
+    // the engine is the bed: it must clear the race music, which plays at a flat
+    // 0.5 x the music slider (music.ts) and, unlike this, never fades with distance
+    expect(engine).toBeGreaterThan(0.5);
+    expect(engine).toBeGreaterThan(skid);
+    expect(skid).toBeGreaterThan(roll);
+
+    // headroom: every clip conforms to a -6 dBFS true peak or below
+    // (docs/design/sound_effects.md) and the SFX bus has no limiter, so the three
+    // loops at once must stay under unity with the slider wide open (master = SAMPLE_GAIN).
+    expect((engine + skid + roll) * 0.5 * 0.85).toBeLessThan(1);
+  });
+
+  it('keeps an idling machine audible and rolls quieter on the road than off it', () => {
+    const loopTarget = (id: string): number =>
+      (sfx as unknown as { loops: Map<string, { target: number }> }).loops.get(id)?.target ?? 0;
+
+    sfx.vehicle(81, 0, 0, 0, 0, 0, 0, false);
+    expect(loopTarget('realm-racers-engine-81')).toBeGreaterThan(0);
+    expect(sfx.hasLoop('realm-racers-skid-81')).toBe(false);
+
+    sfx.vehicle(82, 0, 0, 0, 1, 0, 0, false);
+    const onRoad = loopTarget('realm-racers-roll-82');
+    sfx.vehicle(82, 0, 0, 0, 1, 0, 0, true);
+    expect(loopTarget('realm-racers-roll-82')).toBeGreaterThan(onRoad);
+  });
+
   it('maps live shell/contact events and scrape telemetry to the intended one-shots', () => {
     expect(
       realmRacersSpatialAudioCue({

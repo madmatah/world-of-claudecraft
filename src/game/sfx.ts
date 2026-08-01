@@ -64,6 +64,32 @@ const FORGE_AMBIENCE_GAIN = 0.625;
 // 6) heading into town, and still 8 units narrower than the shared 46
 // default.
 export const FORGE_MAX_DISTANCE = 38;
+// Realm Racers vehicle bed. These are PER-CALL targets, so they move the race
+// mix and nothing else: vehicle() has one caller in the whole game
+// (src/render/realm_racers_audio.ts). The catalog trims are the wrong knob for
+// the same job, because the clips are shared: mount_run_* is every mount's run
+// loop and foot_stone / foot_dirt is every character's footstep.
+//
+// Raised over the first pass (engine 0.1/0.22/0.12, skid 0.16, roll 0.11/0.06),
+// which sat well under the race music: the music runs at a constant 0.5 x the
+// volume slider through a compressor, while the bed is spatialized, fades with
+// distance, and is heard from the CAMERA, which trails the racer. The two mount
+// clips make it worse than the raw numbers suggest: both are under a second, so
+// they conform on the PEAK branch (-6 dBFS true peak, not -14 LUFS), and their
+// manifest gain is a flat 1 (SFX_GAIN_LIMITS is the authoring ceiling, not an
+// applied trim), where the foot clips they mix against carry 1.82. So the engine
+// and skid targets carry the whole level here and the roll target is held back.
+//
+// Headroom: with the ceiling above, the three loops at once peak at about
+// (0.96 + 0.42 + 0.20 x 1.82) x 0.5, scaled by the master, which lands near 0.74
+// with the slider wide open. Under 1.0, and the bus has no limiter, so keep that
+// sum in view when retuning.
+const VEHICLE_ENGINE_IDLE = 0.26;
+const VEHICLE_ENGINE_SPEED = 0.48;
+const VEHICLE_ENGINE_LOAD = 0.22;
+const VEHICLE_SKID_GAIN = 0.42;
+const VEHICLE_ROLL_DIRT = 0.2;
+const VEHICLE_ROLL_ROAD = 0.12;
 const FOOTSTEP_CUES: Partial<Record<string, string>> = {
   grass: 'foot_grass',
   dirt: 'foot_dirt',
@@ -900,7 +926,7 @@ class Sfx {
     this.loop(
       ids.engine,
       'mount_run_terrorspark_groundshaker',
-      0.1 + speed * 0.22 + load * 0.12,
+      VEHICLE_ENGINE_IDLE + speed * VEHICLE_ENGINE_SPEED + load * VEHICLE_ENGINE_LOAD,
       x,
       y,
       z,
@@ -911,7 +937,7 @@ class Sfx {
       this.loop(
         ids.skid,
         'mount_run_stalkglider_snail',
-        slide * 0.16,
+        slide * VEHICLE_SKID_GAIN,
         x,
         y,
         z,
@@ -922,7 +948,7 @@ class Sfx {
     this.loop(
       ids.roll,
       offRoad ? 'foot_dirt' : 'foot_stone',
-      speed * (offRoad ? 0.11 : 0.06),
+      speed * (offRoad ? VEHICLE_ROLL_DIRT : VEHICLE_ROLL_ROAD),
       x,
       y,
       z,
