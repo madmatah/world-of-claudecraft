@@ -57,6 +57,24 @@ export function buildInstanceGroundMaterial(origin: SurfaceOrigin): THREE.Materi
 }
 
 /**
+ * A second layer mixed into the base one, per vertex.
+ *
+ * The world never cuts one ground layer against another: a road core is 85%
+ * dirt over the biome's grass, and that dirt share ramps to zero across the
+ * next 1.4 yards (terrain_chunk_build.ts, the roadDistance pass). A band built
+ * from single-layer surfaces has no such ramp, so its road meets its lawn on a
+ * geometric edge and reads as a decal rather than as ground.
+ *
+ * The pair always sums to 1: the base layer takes whatever this one leaves.
+ */
+export interface GroundBlend {
+  layer: GroundLayer;
+  tint: number;
+  /** This layer's share at one vertex, 0..1, by vertex index. */
+  weightAt(vertexIndex: number): number;
+}
+
+/**
  * Gives a world-space XZ surface everything the ground material reads: the
  * splat weights, the (all-zero) extras, the biome tint, and a strip-planar uv
  * so the Lambert tier's detail map lands on its authored period out here too.
@@ -68,6 +86,7 @@ export function paintInstanceGround(
   origin: SurfaceOrigin,
   layer: GroundLayer,
   tint: number,
+  blend?: GroundBlend,
 ): THREE.BufferGeometry {
   const position = geo.getAttribute('position');
   const count = position.count;
@@ -78,12 +97,24 @@ export function paintInstanceGround(
   const colors = new Float32Array(count * 3);
   const uvs = new Float32Array(count * 2);
   const index = LAYER_INDEX[layer];
+  const blendIndex = blend ? LAYER_INDEX[blend.layer] : index;
   const colour = new THREE.Color(tint);
+  const blendColour = new THREE.Color(blend ? blend.tint : tint);
+  const mixed = new THREE.Color();
   for (let i = 0; i < count; i++) {
-    splat[i * 4 + index] = 1;
-    colors[i * 3] = colour.r;
-    colors[i * 3 + 1] = colour.g;
-    colors[i * 3 + 2] = colour.b;
+    // Clamped, not trusted: a weight past the ends would either darken the
+    // albedo by the missing share or push a negative one, and both read as a
+    // lighting bug rather than as the authoring mistake they are.
+    const w = blend ? Math.min(1, Math.max(0, blend.weightAt(i))) : 0;
+    splat[i * 4 + index] = 1 - w;
+    splat[i * 4 + blendIndex] += w;
+    // The tint follows the same ramp as the weights. It has to: the vertex
+    // colour is a full ground colour the albedo multiplies into, so leaving it
+    // flat would draw the layer boundary back in as a colour step.
+    mixed.copy(colour).lerp(blendColour, w);
+    colors[i * 3] = mixed.r;
+    colors[i * 3 + 1] = mixed.g;
+    colors[i * 3 + 2] = mixed.b;
     uvs[i * 2] = (position.getX(i) - origin.x) / GROUND_DETAIL_UV_YARDS.x;
     uvs[i * 2 + 1] = (position.getZ(i) - origin.z) / GROUND_DETAIL_UV_YARDS.z;
   }

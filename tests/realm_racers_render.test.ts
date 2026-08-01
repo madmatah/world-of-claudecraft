@@ -214,6 +214,73 @@ describe('Realm Racers procedural render', () => {
     expect(new Set(ground.map((mesh) => mesh.material)).size).toBe(1);
   });
 
+  it('meets road and lawn on a ramp, and never on a pure layer', async () => {
+    // The world lays a road as 0.85 dirt over the biome grass and ramps that
+    // share to zero across the next yards (terrain_chunk_build's roadDistance
+    // pass). Two single-layer surfaces meeting on a geometric edge is what
+    // made the circuit's verge read as a decal instead of as ground.
+    const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+    const rally = buildRealmRacersTrack();
+    const ground = rally.group.children.filter(
+      (child) => child instanceof THREE.Mesh && child.geometry.getAttribute('aSplat'),
+    ) as THREE.Mesh[];
+    let ramped = 0;
+    for (const mesh of ground) {
+      const splat = mesh.geometry.getAttribute('aSplat');
+      const grass: number[] = [];
+      for (let i = 0; i < splat.count; i++) {
+        expect(splat.getX(i) + splat.getY(i), 'grass + dirt').toBeCloseTo(1, 5);
+        grass.push(splat.getX(i));
+      }
+      const min = Math.min(...grass);
+      const max = Math.max(...grass);
+      // The lawn is the one legitimately pure surface: it borders only the
+      // runoff, which arrives at full grass to meet it.
+      if (min === 1) continue;
+      // Every OTHER surface keeps both layers alive, so no seam is a step
+      // between a pure layer and a mix.
+      expect(min, 'no pure-dirt ground surface').toBeGreaterThan(0);
+      if (max > min) ramped++;
+    }
+    // The two runoff strips ramp; the road holds its constant mix.
+    expect(ramped).toBe(2);
+  });
+
+  it('keeps the kerbs out of the ground material, so no ramp can touch them', async () => {
+    // The red/white bands are their own textured strip laid over the seam.
+    // They read no splat weight at all, which is what makes the verge ramp
+    // safe to tune: it cannot bleed into the one thing that must stay crisp.
+    const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+    const { rallyKerbRuns } = await import('../src/render/realm_racers_track_core');
+    const rally = buildRealmRacersTrack();
+    const meshes = rally.group.children.filter(
+      (child) => child instanceof THREE.Mesh,
+    ) as THREE.Mesh[];
+    const ground = meshes.filter((mesh) => mesh.geometry.getAttribute('aSplat'));
+    const groundMaterial = ground[0].material;
+    // The lawn, the road and one runoff strip each side: the ground material
+    // is on those four and nothing else, which is the decisive half. Counting
+    // only the meshes that LACK aSplat would pass even if a kerb had joined
+    // the material, because that kerb would leave the set being checked.
+    expect(ground).toHaveLength(4);
+    expect(meshes.filter((mesh) => mesh.material === groundMaterial)).toHaveLength(4);
+    // Kerbs are identified positively: one shared material, two strips per
+    // painted corner run, so a kerb that changed material fails here too.
+    const kerbs = meshes.filter(
+      (mesh) => mesh.material !== groundMaterial && !mesh.geometry.getAttribute('aSplat'),
+    );
+    const kerbMaterials = new Set(kerbs.map((mesh) => mesh.material));
+    const expectedKerbs = rallyKerbRuns().length * 2;
+    const kerbMaterial = [...kerbMaterials].find(
+      (material) => kerbs.filter((mesh) => mesh.material === material).length === expectedKerbs,
+    );
+    expect(kerbMaterial, 'the shared kerb material').toBeDefined();
+    for (const kerb of kerbs.filter((mesh) => mesh.material === kerbMaterial)) {
+      expect(kerb.geometry.getAttribute('aSplat')).toBeUndefined();
+      expect(kerb.geometry.getAttribute('aTerrainPresenceMask')).toBeUndefined();
+    }
+  });
+
   it('builds no flat surface face-down', async () => {
     // Half the circuit's swept surfaces were mirrored, which reverses their
     // triangle winding, and every material here is FrontSide: the right-hand

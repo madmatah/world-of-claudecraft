@@ -66,6 +66,83 @@ describe('instanced ground surface', () => {
     }
   });
 
+  it('ramps a blended surface between two layers, summing to 1 at every vertex', () => {
+    // The world never cuts one layer against another (a road core is 0.85 dirt
+    // over grass, ramping to 0 across 1.4 yards), so a band that does reads as
+    // a decal. A blended surface reproduces that ramp.
+    const geo = paintInstanceGround(quad(40), ORIGIN, 'dirt', 0x8a7a5a, {
+      layer: 'grass',
+      tint: 0x58a04e,
+      // The quad's corners run -x/-z, +x/-z, -x/+z, +x/+z: this ramps along x.
+      weightAt: (i) => [0.15, 0.5, 0.15, 1][i],
+    });
+    const splat = geo.getAttribute('aSplat');
+    const seen: number[] = [];
+    for (let i = 0; i < splat.count; i++) {
+      const dirt = splat.getY(i);
+      const grass = splat.getX(i);
+      expect(dirt + grass, `vertex ${i}`).toBeCloseTo(1, 6);
+      // Nothing else leaks in: rock and sand stay off, or the presence mask
+      // below would light layers this surface does not have.
+      expect([splat.getZ(i), splat.getW(i)], `vertex ${i}`).toEqual([0, 0]);
+      seen.push(grass);
+    }
+    // Float32 storage, so compare with a tolerance; the SHAPE is what matters.
+    const wanted = [0.15, 0.5, 0.15, 1];
+    for (const [i, grass] of seen.entries()) {
+      expect(grass, `vertex ${i}`).toBeCloseTo(wanted[i], 6);
+    }
+  });
+
+  it('clamps a blend weight rather than letting it unbalance the pair', () => {
+    // An out-of-range weight would either darken the albedo by the missing
+    // share or drive a negative one. Both read as a lighting bug, so the pair
+    // is held to 1 at the seam instead of trusting the caller.
+    const geo = paintInstanceGround(quad(), ORIGIN, 'dirt', 0x8a7a5a, {
+      layer: 'grass',
+      tint: 0x58a04e,
+      weightAt: (i) => (i % 2 === 0 ? -0.4 : 1.6),
+    });
+    const splat = geo.getAttribute('aSplat');
+    for (let i = 0; i < splat.count; i++) {
+      expect(splat.getY(i) + splat.getX(i), `vertex ${i}`).toBeCloseTo(1, 6);
+      expect(splat.getX(i), `vertex ${i}`).toBe(i % 2 === 0 ? 0 : 1);
+    }
+  });
+
+  it('moves the vertex tint along the same ramp as the weights', () => {
+    // The vertex colour is a full ground colour the albedo multiplies into, so
+    // a flat tint under ramped weights would draw the boundary back in as a
+    // colour step: the exact artifact the ramp exists to remove.
+    const dirt = new THREE.Color(0x8a7a5a);
+    const grass = new THREE.Color(0x58a04e);
+    const geo = paintInstanceGround(quad(), ORIGIN, 'dirt', 0x8a7a5a, {
+      layer: 'grass',
+      tint: 0x58a04e,
+      weightAt: (i) => (i % 2 === 0 ? 0 : 1),
+    });
+    const colours = geo.getAttribute('color');
+    for (let i = 0; i < colours.count; i++) {
+      const expected = i % 2 === 0 ? dirt : grass;
+      expect(colours.getX(i), `vertex ${i}`).toBeCloseTo(expected.r, 5);
+      expect(colours.getY(i), `vertex ${i}`).toBeCloseTo(expected.g, 5);
+      expect(colours.getZ(i), `vertex ${i}`).toBeCloseTo(expected.b, 5);
+    }
+  });
+
+  it('declares BOTH layers present on a blended surface', () => {
+    // The shader culls a layer whose presence bit is 0. A ramp that reached a
+    // layer the mask denied would fade toward nothing instead of toward grass.
+    const geo = paintInstanceGround(quad(), ORIGIN, 'dirt', 0x8a7a5a, {
+      layer: 'grass',
+      tint: 0x58a04e,
+      weightAt: (i) => (i % 2 === 0 ? 0.15 : 1),
+    });
+    const mask = geo.getAttribute('aTerrainPresenceMask');
+    // bit 0 grass, bit 1 dirt; no rock, no sand, no mud, no snow.
+    for (let i = 0; i < mask.count; i++) expect(mask.getX(i)).toBe(0b000011);
+  });
+
   it('carries the biome tint as a vertex colour in the working space', () => {
     const tint = biomeGroundTint('garden');
     const geo = paintInstanceGround(quad(), ORIGIN, 'grass', tint.grass);

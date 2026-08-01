@@ -33,6 +33,7 @@ import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from '.
 import {
   biomeGroundTint,
   buildInstanceGroundMaterial,
+  type GroundBlend,
   type GroundLayer,
   paintInstanceGround,
 } from './instance_surface';
@@ -236,8 +237,29 @@ function paintGround(
   geo: THREE.BufferGeometry,
   layer: GroundLayer,
   tint: number,
+  blend?: GroundBlend,
 ): THREE.BufferGeometry {
-  return paintInstanceGround(geo, REALM_RACERS_ORIGIN, layer, tint);
+  return paintInstanceGround(geo, REALM_RACERS_ORIGIN, layer, tint, blend);
+}
+
+/**
+ * The grass share the ROAD itself keeps, matching the world's road core
+ * (terrain_chunk_build.ts lays 0.85 dirt over the biome grass, never 1.0).
+ * Nothing on the circuit is ever a pure layer, so no surface can read as a
+ * decal laid on another.
+ */
+const ROAD_GRASS_MIX = 0.15;
+
+/**
+ * The runoff's grass share per vertex. A `ribbon` row is exactly two vertices,
+ * inner then outer (see `ribbon`), so an even index is the road edge and an
+ * odd one the lawn edge: the strip carries the road's own mix where it meets
+ * the road and full grass where it meets the lawn, and the rasterizer ramps
+ * between them across the 3.5 yard width. Both seams therefore match on both
+ * sides, which is the whole point: a hard edge is a mismatch, not a width.
+ */
+function runoffGrassWeight(vertexIndex: number): number {
+  return vertexIndex % 2 === 0 ? ROAD_GRASS_MIX : 1;
 }
 
 /**
@@ -500,8 +522,9 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
             (s) => side * (s.halfWidth + REALM_RACERS_RUNOFF_WIDTH),
             RUNOFF_Y,
           ),
-          'grass',
-          tint.grass,
+          'dirt',
+          tint.dirt,
+          { layer: 'grass', tint: tint.grass, weightAt: runoffGrassWeight },
         ),
         ground,
       ),
@@ -520,6 +543,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
         ),
         'dirt',
         tint.dirt,
+        { layer: 'grass', tint: tint.grass, weightAt: () => ROAD_GRASS_MIX },
       ),
       ground,
     ),
