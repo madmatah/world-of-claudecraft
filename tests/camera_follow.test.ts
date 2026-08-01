@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cameraFollowFacing,
   cameraFollowShouldSettle,
   cameraIsManual,
   isRespawnFacingResyncEdge,
@@ -8,6 +9,13 @@ import {
 } from '../src/game/camera_follow';
 
 describe('camera follow', () => {
+  it('uses the predicted vehicle heading for the online chase camera', () => {
+    expect(cameraFollowFacing(true, 1.4, null, 0.8)).toBe(1.4);
+    expect(cameraFollowFacing(true, null, null, 0.8)).toBe(0.8);
+    expect(cameraFollowFacing(false, null, 1.1, 0.8)).toBe(1.1);
+    expect(cameraFollowFacing(false, null, null, 0.8)).toBe(0.8);
+  });
+
   it('wraps angles to the shortest signed turn', () => {
     expect(wrapAngle(Math.PI * 1.5)).toBeCloseTo(-Math.PI / 2);
     expect(wrapAngle(-Math.PI * 1.5)).toBeCloseTo(Math.PI / 2);

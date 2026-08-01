@@ -40,7 +40,13 @@ import {
   type SimEvent,
   type VehicleDrive,
 } from '../sim/types';
-import { vehicleTopSpeedFor } from '../sim/vehicle_motion';
+import {
+  applyAchievedVehicleVelocity,
+  vehicleTopSpeedFor,
+  vehicleVelocityX,
+  vehicleVelocityZ,
+} from '../sim/vehicle_motion';
+import { wrapAngle } from './facing_smooth';
 
 // Latency cap on the extrapolation window: at least one snapshot-ish interval
 // so low-ping links still get the start-of-motion snap, and a hard ceiling so
@@ -75,6 +81,10 @@ export const SELF_MOTION_BLEND_RATE = 12; // 1/s
 // history sampling is frame-quantized; inside this radius the pose is left
 // alone so a settled stop never jiggles. Real corrections are far larger.
 export const SELF_MOTION_DEADBAND_YD = 0.05;
+// The wire rounds facing to 0.01 rad. Corrections inside that quantization
+// band are noise, not a real disagreement between the predicted machine and
+// the delayed authority.
+export const SELF_MOTION_FACING_DEADBAND_RAD = 0.01;
 // Same teleport rule the renderer's self smoother uses (6 yd).
 export const SELF_MOTION_SNAP_DIST_SQ = 6 * 6;
 const MAX_FRAME_DT = 0.25; // matches the main-loop frame clamp
@@ -93,6 +103,8 @@ export interface SelfMotionFrame {
   displayFacing: number;
   echoMs: number;
   jitterMs: number;
+  /** Monotonic token for the latest authoritative snapshot (`lastSnapAt`). */
+  authorityToken: number;
   /** The frame's snapshot alpha (same value handed to renderer.sync). */
   alpha: number;
   frameDt: number;
@@ -210,11 +222,26 @@ export class SelfMotionPredictor {
   /** The predicted heading. Only meaningful while `driving`: on foot the
    *  heading is client-authoritative input and never predicted here. */
   get facing(): number {
-    return this.actor?.facing ?? 0;
+    return this.renderFacing;
+  }
+
+  /** Predicted world-space velocity for the driving camera's look-ahead and
+   *  speed FOV. Keeping these on the same scratch state as `facing` avoids
+   *  mixing a present display pose with one-echo-old mirrored momentum. */
+  get velocityX(): number {
+    const actor = this.actor;
+    return actor?.drive ? vehicleVelocityX(actor.drive, actor.facing) : 0;
+  }
+
+  get velocityZ(): number {
+    const actor = this.actor;
+    return actor?.drive ? vehicleVelocityZ(actor.drive, actor.facing) : 0;
   }
 
   private readonly deps: PlayerMotionDeps;
   private actor: Entity | null = null;
+  private previousStepFacing = 0;
+  private renderFacing = 0;
   // An authoritative momentum change is waiting to be adopted, plus the
   // mirrored drive object that was current when it was announced: the event
   // frame reaches the client BEFORE the snapshot carrying its result (the
@@ -222,6 +249,7 @@ export class SelfMotionPredictor {
   // to actually turn over rather than stamping the pre-bump velocity.
   private pendingDriveResync = false;
   private resyncMirror: VehicleDrive | null = null;
+  private lastAuthorityToken = Number.NaN;
   private lastSelfId = -1;
   private lastDead = false;
   private lastGhost = false;
@@ -235,7 +263,8 @@ export class SelfMotionPredictor {
   private readonly histX = new Float64Array(HISTORY_SIZE);
   private readonly histY = new Float64Array(HISTORY_SIZE);
   private readonly histZ = new Float64Array(HISTORY_SIZE);
-  private readonly histSample: Vec3Like = { x: 0, y: 0, z: 0 };
+  private readonly histFacing = new Float64Array(HISTORY_SIZE);
+  private readonly histSample: Vec3Like & { facing: number } = { x: 0, y: 0, z: 0, facing: 0 };
   private readonly stepInput: MoveInput = {
     forward: false,
     back: false,
@@ -271,21 +300,25 @@ export class SelfMotionPredictor {
     this.leadMs = 0;
     this.pendingDriveResync = false;
     this.resyncMirror = null;
+    this.lastAuthorityToken = Number.NaN;
+    this.previousStepFacing = 0;
+    this.renderFacing = 0;
   }
 
-  private recordHistory(x: number, y: number, z: number): void {
+  private recordHistory(x: number, y: number, z: number, facing: number): void {
     const i = this.histHead;
     this.histT[i] = this.timeMs;
     this.histX[i] = x;
     this.histY[i] = y;
     this.histZ[i] = z;
+    this.histFacing[i] = facing;
     this.histHead = (i + 1) % HISTORY_SIZE;
     if (this.histCount < HISTORY_SIZE) this.histCount++;
   }
 
   // The display pose at time tMs (linear between recorded frames; clamped to
   // the oldest/newest sample). Writes into histSample and returns it.
-  private sampleHistory(tMs: number): Vec3Like | null {
+  private sampleHistory(tMs: number): (Vec3Like & { facing: number }) | null {
     if (this.histCount === 0) return null;
     const n = this.histCount;
     let newer = (this.histHead - 1 + HISTORY_SIZE) % HISTORY_SIZE;
@@ -293,6 +326,7 @@ export class SelfMotionPredictor {
       this.histSample.x = this.histX[newer];
       this.histSample.y = this.histY[newer];
       this.histSample.z = this.histZ[newer];
+      this.histSample.facing = this.histFacing[newer];
       return this.histSample;
     }
     for (let step = 1; step < n; step++) {
@@ -303,6 +337,9 @@ export class SelfMotionPredictor {
         this.histSample.x = this.histX[older] + (this.histX[newer] - this.histX[older]) * f;
         this.histSample.y = this.histY[older] + (this.histY[newer] - this.histY[older]) * f;
         this.histSample.z = this.histZ[older] + (this.histZ[newer] - this.histZ[older]) * f;
+        this.histSample.facing = wrapAngle(
+          this.histFacing[older] + wrapAngle(this.histFacing[newer] - this.histFacing[older]) * f,
+        );
         return this.histSample;
       }
       newer = older;
@@ -310,6 +347,7 @@ export class SelfMotionPredictor {
     this.histSample.x = this.histX[newer];
     this.histSample.y = this.histY[newer];
     this.histSample.z = this.histZ[newer];
+    this.histSample.facing = this.histFacing[newer];
     return this.histSample;
   }
 
@@ -325,6 +363,8 @@ export class SelfMotionPredictor {
     }
     const dt = clamp(frame.frameDt, 0, MAX_FRAME_DT);
     this.timeMs += dt * 1000;
+    const freshAuthority = frame.authorityToken !== this.lastAuthorityToken;
+    this.lastAuthorityToken = frame.authorityToken;
     // The authoritative anchor. Alpha is capped at 1 (unlike the renderer's
     // 1.25 display extrapolation): an extrapolated anchor overshoots every
     // stop and then retreats when the stationary snapshot lands, and that
@@ -383,6 +423,8 @@ export class SelfMotionPredictor {
       };
       this.actor = actor;
       this.acc = 0;
+      this.previousStepFacing = actor.facing;
+      this.renderFacing = actor.facing;
       // The old display trajectory is meaningless relative to the new anchor
       // (teleport / life-state flip); comparing against it would fling the pose.
       this.histCount = 0;
@@ -395,7 +437,7 @@ export class SelfMotionPredictor {
       this.out.x = ax;
       this.out.y = ay;
       this.out.z = az;
-      this.recordHistory(ax, ay, az);
+      this.recordHistory(ax, ay, az, actor.facing);
       this.leadMs = 0;
       return this.out;
     }
@@ -426,8 +468,11 @@ export class SelfMotionPredictor {
       this.resyncMirror = self.drive;
     }
     if (!self.drive) actor.drive = null;
-    else if (!actor.drive) actor.drive = { ...self.drive };
-    else {
+    else if (!actor.drive) {
+      actor.drive = { ...self.drive };
+      this.previousStepFacing = actor.facing;
+      this.renderFacing = actor.facing;
+    } else {
       // The MOTION follows the wire exactly once per announced impulse, on the
       // first snapshot that carries its result. The predicted machine cannot
       // know a rival shoved it, so without this it would keep the pre-bump
@@ -439,6 +484,8 @@ export class SelfMotionPredictor {
       // truth under any sustained acceleration, which is the whole lead the
       // predictor exists to provide.
       if (this.pendingDriveResync && self.drive !== this.resyncMirror) {
+        const authorityVx = vehicleVelocityX(self.drive, self.facing);
+        const authorityVz = vehicleVelocityZ(self.drive, self.facing);
         actor.drive.speed = self.drive.speed;
         actor.drive.slip = self.drive.slip;
         actor.drive.yawRate = self.drive.yawRate;
@@ -447,6 +494,11 @@ export class SelfMotionPredictor {
         // so a predictor left at zero spin would keep re-deriving a velocity
         // the server no longer has.
         actor.drive.spin = self.drive.spin;
+        // The wire components are expressed in the authority's delayed body
+        // frame. Re-express that SAME world momentum in the scratch actor's
+        // predicted frame; copying the components verbatim was only valid while
+        // facing itself was snapped to the wire every tick.
+        applyAchievedVehicleVelocity(actor.drive, actor.facing, authorityVx, authorityVz);
         this.pendingDriveResync = false;
         this.resyncMirror = null;
       }
@@ -487,7 +539,13 @@ export class SelfMotionPredictor {
       actor.prevPos.x = actor.pos.x;
       actor.prevPos.y = actor.pos.y;
       actor.prevPos.z = actor.pos.z;
-      actor.facing = frame.displayFacing;
+      this.previousStepFacing = actor.facing;
+      // On foot, facing is client-authoritative input and the display source
+      // owns it outright. A vehicle is different: steering is simulated by the
+      // shared kernel, so reassigning the delayed wire heading here erases all
+      // but the latest predicted yaw tick. Its persistent scratch heading is
+      // reconciled against delayed history below instead.
+      if (!driving) actor.facing = frame.displayFacing;
       stepPlayerMotion(this.deps, actor, inp);
       this.acc -= DT;
     }
@@ -526,6 +584,34 @@ export class SelfMotionPredictor {
       actor.prevPos.x += errX * scale;
       actor.prevPos.y += errY * scale;
       actor.prevPos.z += errZ * scale;
+
+      // The same delay-aligned servo owns driving yaw. Compare the
+      // authoritative heading with what the display showed one echo ago, not
+      // with the present predicted heading: agreed steering then has zero
+      // error, while bumps, shell impulses and other authority-only rotations
+      // converge without deleting the local steering lead every tick.
+      if (driving && freshAuthority) {
+        const facingErr = wrapAngle(frame.displayFacing - past.facing);
+        const facingLen = Math.abs(facingErr);
+        // Unlike position, heading correction runs once per authoritative
+        // snapshot. Reusing a frozen heading on every rAF during a broadcast
+        // stall would make the servo steer against a still-held local turn.
+        const facingK = 1 - Math.exp(-rate * Math.min(DT, 1 / 30));
+        const facingScale =
+          facingLen > SELF_MOTION_FACING_DEADBAND_RAD
+            ? ((facingLen - SELF_MOTION_FACING_DEADBAND_RAD) / facingLen) * facingK
+            : 0;
+        const correction = facingErr * facingScale;
+        if (correction !== 0 && actor.drive) {
+          // A heading correction rotates the body, not its world momentum.
+          // Re-project speed/slip into the corrected body frame so the servo
+          // cannot manufacture a lateral position error of its own.
+          const worldVx = vehicleVelocityX(actor.drive, actor.facing);
+          const worldVz = vehicleVelocityZ(actor.drive, actor.facing);
+          actor.facing = wrapAngle(actor.facing + correction);
+          applyAchievedVehicleVelocity(actor.drive, actor.facing, worldVx, worldVz);
+        }
+      }
     }
 
     // Horizontal leash: never show the player farther from the authoritative
@@ -551,7 +637,10 @@ export class SelfMotionPredictor {
     this.out.x = actor.prevPos.x + (actor.pos.x - actor.prevPos.x) * frac;
     this.out.y = actor.prevPos.y + (actor.pos.y - actor.prevPos.y) * frac;
     this.out.z = actor.prevPos.z + (actor.pos.z - actor.prevPos.z) * frac;
-    this.recordHistory(this.out.x, this.out.y, this.out.z);
+    this.renderFacing = wrapAngle(
+      this.previousStepFacing + wrapAngle(actor.facing - this.previousStepFacing) * frac,
+    );
+    this.recordHistory(this.out.x, this.out.y, this.out.z, this.renderFacing);
     const speedBudget = displaySpeedBudget(actor);
     this.leadMs =
       speedBudget > 0 ? (Math.hypot(this.out.x - ax, this.out.z - az) / speedBudget) * 1000 : 0;

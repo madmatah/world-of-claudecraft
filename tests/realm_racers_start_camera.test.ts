@@ -193,7 +193,17 @@ describe('Realm Racers start camera', () => {
     expect(main.match(/rallyCameraTick\(/g)).toHaveLength(2); // offline + online
     expect(main).toContain('const rallyCameraTick =');
     expect(main).toContain('applyRealmRacersStartCameraFromWorld(');
+    expect(main).toContain('renderer.selfMotionFacing');
+    expect(main).toMatch(
+      /onlineJitterMs,\s+net\.lastSnapAt,\s+alpha,\s+frameDt,\s+selfDriveImpulse/,
+    );
+    expect(main).toContain('updateCamera(frameDt, onlineCameraFacing)');
+    expect(main).toContain('rallyCameraTick(onlineCameraFacing)');
     expect(renderer).toContain('stepCameraBoomForDriving(');
     expect(renderer).toContain('stepCameraFeelForDriving(');
+    expect(renderer).toContain('this.selfMotionPredictor.velocityX');
+    expect(renderer).toContain('this.selfMotionPredictor.velocityZ');
+    expect(renderer).toContain('vehicleVelocityX(p.drive, p.facing)');
+    expect(renderer).toContain('vehicleVelocityZ(p.drive, p.facing)');
   });
 });

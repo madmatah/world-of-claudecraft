@@ -29,6 +29,20 @@ export interface CameraFollowMoveInput {
   strafeRight: boolean;
 }
 
+/** Select the heading the online chase camera follows. A driver does not own
+ *  the wire-facing channel, so its local zero-latency source is the display
+ *  predictor; on foot the existing keyboard-facing layer remains authoritative.
+ *  Both fall back to the interpolated server heading while their local source
+ *  is not ready (first vehicle frame, inactive keyboard turn). */
+export function cameraFollowFacing(
+  driving: boolean,
+  predictedDrivingFacing: number | null,
+  keyboardFacing: number | null,
+  serverFacing: number,
+): number {
+  return driving ? (predictedDrivingFacing ?? serverFacing) : (keyboardFacing ?? serverFacing);
+}
+
 const SETTLE_RATE = 6;
 const MAX_SETTLE_STEP = 0.16;
 const CLICK_MOVE_SETTLE_RATE = 1.8;

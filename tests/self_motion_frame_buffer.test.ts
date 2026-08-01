@@ -16,9 +16,9 @@ describe('self motion frame buffer', () => {
   it('updates one stable frame object in place', () => {
     const buffer = new SelfMotionFrameBuffer();
     const firstMove = moveInput(true);
-    const first = buffer.write(true, firstMove, 1, 80, 4, 0.5, 1 / 60, true);
+    const first = buffer.write(true, firstMove, 1, 80, 4, 1_000, 0.5, 1 / 60, true);
     const secondMove = moveInput(false);
-    const second = buffer.write(false, secondMove, 2, 120, 8, 0.75, 1 / 30, false);
+    const second = buffer.write(false, secondMove, 2, 120, 8, 1_050, 0.75, 1 / 30, false);
 
     expect(second).toBe(first);
     expect(second).toEqual({
@@ -27,6 +27,7 @@ describe('self motion frame buffer', () => {
       displayFacing: 2,
       echoMs: 120,
       jitterMs: 8,
+      authorityToken: 1_050,
       alpha: 0.75,
       frameDt: 1 / 30,
       driveImpulse: false,

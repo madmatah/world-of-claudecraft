@@ -39,6 +39,8 @@ import { SHELL_BLAST_RADIUS } from '../sim/realm_racers_shell';
 import { generateRiftFloor, riftLiftAt } from '../sim/rift/rift_gen';
 import type { BiomeId, ZoneDef } from '../sim/types';
 import { ALL_CLASSES, type Entity, type SimEvent } from '../sim/types';
+import { isAtSowfield } from '../sim/vale_cup_layout';
+import { vehicleVelocityX, vehicleVelocityZ } from '../sim/vehicle_motion';
 import { groundHeight, waterLevelAt, zoneBiomeAt } from '../sim/world';
 import type { ChatBubbleStyle } from '../ui/chat_bubble_style';
 import { tEntity } from '../ui/entity_i18n';
@@ -1455,6 +1457,15 @@ export class Renderer {
   get selfMotionLeadMs(): number | null {
     return this.selfMotionActive && this.selfMotionPredictor
       ? this.selfMotionPredictor.leadMs
+      : null;
+  }
+
+  /** Previous rendered frame's predicted driving heading for main.ts's chase
+   *  camera follower. Null on foot, while inactive, and on the first vehicle
+   *  frame before the predictor has adopted the drive state. */
+  get selfMotionFacing(): number | null {
+    return this.selfMotionActive && this.selfMotionPredictor?.driving
+      ? this.selfMotionPredictor.facing
       : null;
   }
 
@@ -10570,10 +10581,13 @@ export class Renderer {
     let velX = 0;
     let velZ = 0;
     if (p.drive) {
-      const sin = Math.sin(p.facing);
-      const cos = Math.cos(p.facing);
-      velX = sin * p.drive.speed + cos * p.drive.slip;
-      velZ = cos * p.drive.speed - sin * p.drive.slip;
+      if (this.selfMotionActive && this.selfMotionPredictor?.driving) {
+        velX = this.selfMotionPredictor.velocityX;
+        velZ = this.selfMotionPredictor.velocityZ;
+      } else {
+        velX = vehicleVelocityX(p.drive, p.facing);
+        velZ = vehicleVelocityZ(p.drive, p.facing);
+      }
     } else if (this.lastLocalPos && dt > 1e-4) {
       velX = (selfPos.x - this.lastLocalPos.x) / dt;
       velZ = (selfPos.z - this.lastLocalPos.z) / dt;

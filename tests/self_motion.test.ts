@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { wrapAngle } from '../src/render/facing_smooth';
 import {
   SELF_MOTION_CAP_MAX_MS,
   SELF_MOTION_CAP_MIN_MS,
@@ -11,7 +12,7 @@ import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
 import { type Entity, type MoveInput, RUN_SPEED } from '../src/sim/types';
 import { resolveVehicleContact } from '../src/sim/vehicle_contact';
-import { createVehicleDrive } from '../src/sim/vehicle_motion';
+import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../src/sim/vehicle_motion';
 import { groundHeight, terrainHeight } from '../src/sim/world';
 
 // Policy tests for the online display-only self extrapolator, driven against a
@@ -120,6 +121,11 @@ class Lab {
     this.inputLog.push({ atMs: this.nowMs, input });
   }
 
+  rotateAuthority(delta: number): void {
+    this.srv.player.facing = wrapAngle(this.srv.player.facing + delta);
+    this.srv.player.prevFacing = this.srv.player.facing;
+  }
+
   // What the server has received by time t (inputs travel lagMs).
   private serverInputAt(tMs: number): MoveInput {
     let eff = this.inputLog[0].input;
@@ -146,6 +152,8 @@ class Lab {
       // the 20 Hz snapshot: prev pose = last wire pose, pose = fresh server pose
       this.self.prevPos = { ...this.self.pos };
       this.self.pos = { ...this.srv.player.pos };
+      this.self.prevFacing = this.self.facing;
+      this.self.facing = this.srv.player.facing;
       this.self.dead = this.srv.player.dead;
       this.self.ghost = this.srv.player.ghost;
       // applyWire rebuilds the drive state into a fresh object every snapshot.
@@ -157,12 +165,16 @@ class Lab {
       delivered = true;
     }
     const alpha = Math.min(1.25, (this.nowMs - this.lastSnapMs) / SNAP_MS);
+    const displayFacing =
+      this.self.prevFacing +
+      wrapAngle(this.self.facing - this.self.prevFacing) * Math.min(1, alpha);
     const frame: SelfMotionFrame = {
       enabled: this.enabled,
       moveInput: this.localInput,
-      displayFacing: this.facing,
+      displayFacing,
       echoMs: this.lagMs,
       jitterMs: 0,
+      authorityToken: this.lastSnapMs,
       alpha,
       frameDt: this.frameMs / 1000,
       driveImpulse: this.driveImpulse,
@@ -204,6 +216,7 @@ describe('SelfMotionPredictor', () => {
       displayFacing: 0,
       echoMs: 100,
       jitterMs: 0,
+      authorityToken: 1,
       alpha: 1,
       frameDt: 0.05,
     };
@@ -708,8 +721,11 @@ describe('SelfMotionPredictor', () => {
     // off the grid heading, in the direction the pilot steered (left, which
     // increases facing), and it leads the echo-delayed authoritative one.
     expect(lab.predictor.facing).not.toBe(start.facing);
-    expect(lab.predictor.facing).toBeGreaterThan(start.facing);
-    expect(lab.predictor.facing).toBeGreaterThan(lab.self.facing);
+    // At 150 ms echo the local machine must retain a meaningful accumulated
+    // steering lead beyond the delayed wire heading. Re-anchoring to the
+    // mirrored facing before every step leaves only the latest yaw delta and
+    // keeps this gap near zero, despite the comment claiming zero-latency yaw.
+    expect(wrapAngle(lab.predictor.facing - lab.self.facing)).toBeGreaterThan(0.08);
 
     // ...and the display is not being permanently clamped: a leash budget
     // sized off RUN_SPEED (not the machine's top speed) would ride the
@@ -721,6 +737,95 @@ describe('SelfMotionPredictor', () => {
     );
     expect(lead).toBeGreaterThan(lab.budget()); // a machine outruns a runner's budget
     expect(lead).toBeLessThan((26 * SELF_MOTION_CAP_MAX_MS) / 1000); // but stays leashed
+  });
+
+  it('keeps steering locally while authoritative driving snapshots are stalled', () => {
+    const lab = new Lab(150, FRAME_MS, {
+      start: { x: 113_700, z: -1_000 },
+      facing: 0,
+      drive: true,
+    });
+    lab.setInput(mi({ forward: true }));
+    for (let i = 0; i < 120; i++) lab.frame();
+    lab.setInput(mi({ forward: true, turnLeft: true }));
+    for (let i = 0; i < 30; i++) lab.frame();
+
+    // Four hundred milliseconds without a delivery: the server keeps ticking,
+    // but the client must not reuse the frozen heading as fresh authority on
+    // every rAF and steer against the still-held local turn.
+    lab.skipDeliveries = 8;
+    let previous = lab.predictor.facing;
+    let totalTurn = 0;
+    let worstStep = Number.POSITIVE_INFINITY;
+    let stalledFrames = 0;
+    for (let guard = 0; guard < 60; guard++) {
+      const result = lab.frame();
+      if (result.delivered) break;
+      const next = lab.predictor.facing;
+      const step = wrapAngle(next - previous);
+      totalTurn += step;
+      worstStep = Math.min(worstStep, step);
+      previous = next;
+      stalledFrames++;
+    }
+    expect(stalledFrames).toBeGreaterThan(20);
+    expect(totalTurn).toBeGreaterThan(0.2);
+    expect(worstStep).toBeGreaterThanOrEqual(-0.005);
+  });
+
+  it('interpolates predicted driving heading between fixed simulation ticks', () => {
+    const lab = new Lab(150, FRAME_MS, {
+      start: { x: 113_700, z: -1_000 },
+      facing: 0,
+      drive: true,
+    });
+    lab.setInput(mi({ forward: true }));
+    for (let i = 0; i < 120; i++) lab.frame();
+    lab.setInput(mi({ forward: true, turnLeft: true }));
+    for (let i = 0; i < 30; i++) lab.frame();
+
+    let previous = lab.predictor.facing;
+    let worstStep = 0;
+    let movingFrames = 0;
+    for (let i = 0; i < 30; i++) {
+      lab.frame();
+      const next = lab.predictor.facing;
+      const step = wrapAngle(next - previous);
+      worstStep = Math.max(worstStep, Math.abs(step));
+      if (step > 0.005) movingFrames++;
+      previous = next;
+    }
+
+    // A raw 20 Hz heading sits still for two rAFs, then jumps by up to 0.13
+    // rad. The camera-facing value must instead advance on almost every 60 Hz
+    // frame with steps near one third of that size.
+    expect(movingFrames).toBeGreaterThan(24);
+    expect(worstStep).toBeLessThan(0.07);
+  });
+
+  it('reconciles an authority-only driving rotation across the angle seam', () => {
+    const lab = new Lab(150, FRAME_MS, {
+      start: { x: 113_700, z: -1_000 },
+      facing: Math.PI - 0.04,
+      drive: true,
+    });
+    lab.setInput(mi({ forward: true }));
+    for (let i = 0; i < 120; i++) lab.frame();
+
+    // Model a rotation the local predictor could not know (bump/shell), and
+    // cross +PI to -PI so the servo must take the short arc.
+    lab.rotateAuthority(0.16);
+    let previous = lab.predictor.facing;
+    let worstStep = 0;
+    for (let i = 0; i < 120; i++) {
+      lab.frame();
+      const next = lab.predictor.facing;
+      worstStep = Math.max(worstStep, Math.abs(wrapAngle(next - previous)));
+      previous = next;
+    }
+
+    expect(worstStep).toBeLessThan(0.12);
+    expect(Math.abs(wrapAngle(lab.predictor.facing - lab.self.facing))).toBeLessThan(0.06);
   });
 
   it('adopts a bump it could not predict instead of driving against it', () => {
@@ -779,6 +884,7 @@ describe('SelfMotionPredictor', () => {
       // two numbers that are both nearly zero and prove nothing.
       const spinFrames = 30;
       let gap = 0;
+      let worldGap = 0;
       let spinGap = 0;
       let lead = 0;
       for (let i = 0; i < frames; i++) {
@@ -790,18 +896,31 @@ describe('SelfMotionPredictor', () => {
         }
         if (i < frames - window) continue;
         gap += Math.abs((predicted?.slip ?? 0) - (truth?.slip ?? 0)) / window;
+        if (predicted && truth) {
+          worldGap +=
+            Math.hypot(
+              lab.predictor.velocityX - vehicleVelocityX(truth, lab.srv.player.facing),
+              lab.predictor.velocityZ - vehicleVelocityZ(truth, lab.srv.player.facing),
+            ) / window;
+        }
         lead +=
           Math.hypot((result.pose?.x ?? 0) - result.ac.x, (result.pose?.z ?? 0) - result.ac.z) /
           window;
       }
-      return { gap, spinGap, lead };
+      return { gap, worldGap, spinGap, lead };
     };
 
     const adopted = race(true);
     const ignored = race(false);
     // Adopted: a second later the predicted machine carries the authority's
-    // lateral velocity, so the display and the server are driving the same line.
-    expect(adopted.gap).toBeLessThan(0.45);
+    // WORLD velocity, so its predicted body frame cannot rotate the adopted
+    // speed/slip vector onto a different line.
+    expect(adopted.worldGap).toBeLessThan(3);
+    expect(ignored.worldGap).toBeGreaterThan(5 * adopted.worldGap);
+    expect(ignored.worldGap).toBeGreaterThan(10);
+    // The body-frame lateral component converges too, within the ordinary
+    // 20 Hz-vs-60 Hz sampling phase of the lab.
+    expect(adopted.gap).toBeLessThan(0.6);
     // Ignored: it is still sliding a different way, which is what the position
     // correction would have to fight for the rest of the corner.
     expect(ignored.gap).toBeGreaterThan(4 * adopted.gap);

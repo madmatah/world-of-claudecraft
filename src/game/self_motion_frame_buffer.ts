@@ -6,6 +6,7 @@ export interface BufferedSelfMotionFrame {
   displayFacing: number;
   echoMs: number;
   jitterMs: number;
+  authorityToken: number;
   alpha: number;
   frameDt: number;
   driveImpulse: boolean;
@@ -20,6 +21,7 @@ export class SelfMotionFrameBuffer {
     displayFacing: number,
     echoMs: number,
     jitterMs: number,
+    authorityToken: number,
     alpha: number,
     frameDt: number,
     driveImpulse: boolean,
@@ -31,6 +33,7 @@ export class SelfMotionFrameBuffer {
         displayFacing,
         echoMs,
         jitterMs,
+        authorityToken,
         alpha,
         frameDt,
         driveImpulse,
@@ -41,6 +44,7 @@ export class SelfMotionFrameBuffer {
       this.frame.displayFacing = displayFacing;
       this.frame.echoMs = echoMs;
       this.frame.jitterMs = jitterMs;
+      this.frame.authorityToken = authorityToken;
       this.frame.alpha = alpha;
       this.frame.frameDt = frameDt;
       this.frame.driveImpulse = driveImpulse;

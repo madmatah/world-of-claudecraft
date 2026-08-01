@@ -19,6 +19,7 @@ import {
 import { hideBrowserSupportNotice, initBrowserSupportNotice } from './game/browser_support_notice';
 import { isCameraDrivenFacingActive } from './game/camera_driven_facing';
 import {
+  cameraFollowFacing,
   cameraFollowShouldSettle,
   isRespawnFacingResyncEdge,
   updateFollowCameraYaw,
@@ -4299,14 +4300,21 @@ async function startGame(
           netFacing ?? interpServerFacing,
           onlineInputEchoMs,
           onlineJitterMs,
+          net.lastSnapAt,
           alpha,
           frameDt,
           selfDriveImpulse,
         );
     const cameraLastSnapAge = net.lastSnapAt > 0 ? performance.now() - net.lastSnapAt : -1;
+    const onlineCameraFacing = cameraFollowFacing(
+      driving,
+      renderer.selfMotionFacing,
+      kbFacing,
+      interpServerFacing,
+    );
     traceStart = perf.startTrace();
     try {
-      updateCamera(frameDt, kbFacing ?? interpServerFacing);
+      updateCamera(frameDt, onlineCameraFacing);
     } finally {
       perf.finishTrace(
         'camera.follow',
@@ -4322,7 +4330,7 @@ async function startGame(
       );
     }
     introCameraTick(now);
-    rallyCameraTick(kbFacing ?? interpServerFacing);
+    rallyCameraTick(onlineCameraFacing);
     renderer.camYaw = input.camYaw;
     renderer.camPitch = input.camPitch;
     renderer.camDist = input.camDist;
