@@ -27,10 +27,17 @@ describe('character view visibility hysteresis', () => {
     },
   );
 
-  it('pins renderer wiring to the previous visibility and exact create/destroy ranges', () => {
+  it('pins renderer wiring through the Realm Racers exception to the exact ranges', () => {
     const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toMatch(
-      /characterViewOutsideHysteresis\(\s*v\.group\.visible,\s*d2,\s*this\.entityViewCreateRangeSq,\s*this\.entityViewDestroyRangeSq,\s*\)/,
+      /isOutsideRealmRacersDrawRange\(\s*participantIds,\s*p\.id,\s*id,\s*v\.group\.visible,\s*d2,\s*this\.entityViewCreateRangeSq,\s*this\.entityViewDestroyRangeSq,\s*\)/,
+    );
+    const realmRacersCore = readFileSync(
+      new URL('../src/render/realm_racers_visibility_core.ts', import.meta.url),
+      'utf8',
+    );
+    expect(realmRacersCore).toMatch(
+      /characterViewOutsideHysteresis\(\s*wasVisible,\s*distanceSq,\s*createRangeSq,\s*destroyRangeSq,?\s*\)/,
     );
   });
 });

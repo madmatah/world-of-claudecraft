@@ -15,6 +15,7 @@ type RallyMatch = NonNullable<RealmRacersInfo['match']>;
 function match(over: Partial<RallyMatch> = {}): RallyMatch {
   return {
     id: 7,
+    participantIds: [1, 2],
     phase: 'countdown',
     countdown: 3,
     countdownTicks: 60,

@@ -1247,6 +1247,7 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
       : 0;
   return {
     id: match.id,
+    participantIds: [...match.pids],
     phase: match.phase,
     countdown,
     countdownTicks,

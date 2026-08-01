@@ -20,6 +20,8 @@ export interface RealmRacersRacerInfo {
 
 export interface RealmRacersMatchInfo {
   id: number;
+  /** Every seated pilot in frozen grid order, including the local player. */
+  participantIds: number[];
   phase: RealmRacersPhase;
   countdown: number;
   /** Authoritative sub-second remainder used by the physical start lights. */

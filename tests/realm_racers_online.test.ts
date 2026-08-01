@@ -153,7 +153,12 @@ describe('Realm Racers online parity', () => {
     // The opponent's tier reaches the viewer through the same `rr` self key
     // the rest of the rally state rides, so the HUD needs no second channel.
     expect(selfFields(client, 'rr').at(-1)).toMatchObject({
-      match: { practice: true, totalLaps: 4, opponent: { botTier: 'rookie' } },
+      match: {
+        practice: true,
+        totalLaps: 4,
+        participantIds: match?.pids,
+        opponent: { botTier: 'rookie' },
+      },
     });
   });
 

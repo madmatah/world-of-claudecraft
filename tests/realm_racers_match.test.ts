@@ -120,7 +120,12 @@ describe('The Realm Racers lifecycle', () => {
     sim.tick();
     const liveMatch = match(sim);
     expect(liveMatch.goTick - sim.tickCount).toBe(180);
-    expect(sim.realmRacersInfoFor(a).match).toMatchObject({ countdown: 0, countdownTicks: 180 });
+    expect(sim.realmRacersInfoFor(a).match).toMatchObject({
+      countdown: 0,
+      countdownTicks: 180,
+      participantIds: [a, b],
+    });
+    expect(sim.realmRacersInfoFor(b).match?.participantIds).toEqual([a, b]);
     expect(entity(sim, a).mountKey).toBe('terrorspark_groundshaker');
     expect(entity(sim, b).mountKey).toBe('terrorspark_groundshaker');
     const aMeta = required(sim.players.get(a), `player ${a}`);

@@ -1,0 +1,33 @@
+import type { SimContext } from '../src/sim/sim_context';
+import { realmRacersMatchOf } from '../src/sim/social/realm_racers';
+
+const NO_REALM_RACERS_INTEREST_PINS: readonly number[] = [];
+
+/**
+ * Every seated pilot except the entity used as the snapshot anchor. The order
+ * stays the match's frozen grid order so the four-pilot rollout can extend the
+ * roster without changing the visibility policy.
+ */
+export function otherRealmRacersParticipantIds(
+  participantIds: readonly number[],
+  anchorEntityId: number,
+): number[] {
+  const pins: number[] = [];
+  for (const pid of participantIds) {
+    if (pid === anchorEntityId || pins.includes(pid)) continue;
+    pins.push(pid);
+  }
+  return pins;
+}
+
+/** Match-scoped interest pins for a player or the player observed by a spectator. */
+export function realmRacersInterestParticipantIds(
+  ctx: SimContext,
+  anchorPid: number,
+  anchorEntityId: number,
+): readonly number[] {
+  const match = realmRacersMatchOf(ctx, anchorPid);
+  return match
+    ? otherRealmRacersParticipantIds(match.pids, anchorEntityId)
+    : NO_REALM_RACERS_INTEREST_PINS;
+}

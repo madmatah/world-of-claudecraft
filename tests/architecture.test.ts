@@ -406,6 +406,7 @@ const RENDER_PURE_CORES = [
   'src/render/ground_aim_reticle_core.ts',
   'src/render/realm_racers_audio_core.ts',
   'src/render/realm_racers_track_core.ts',
+  'src/render/realm_racers_visibility_core.ts',
   'src/render/stations_core.ts',
   'src/render/delve_interactable_visibility_core.ts',
   'src/render/env_prefilter_core.ts',

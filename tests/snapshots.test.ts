@@ -98,6 +98,28 @@ function feedEventFrame(client: ClientWorld, frame: unknown): void {
   (client as any).onMessage(JSON.stringify(frame));
 }
 
+describe('Realm Racers self-wire round-trip', () => {
+  it('preserves the frozen participant grid through rr into ClientWorld', () => {
+    const server = new GameServer();
+    const aWire = fakeWs();
+    const bWire = fakeWs();
+    const a = joinServer(server, aWire, 91, 'GridA');
+    const b = joinServer(server, bWire, 92, 'GridB');
+    server.sim.realmRacersQueueJoin(a.pid);
+    server.sim.realmRacersQueueJoin(b.pid);
+    server.sim.tick();
+    broadcast(server);
+
+    const expected = server.sim.realmRacersInfoFor(a.pid);
+    expect(expected.match?.participantIds).toEqual([a.pid, b.pid]);
+    const client = bareClient(a.pid);
+    (client as unknown as SnapshotApplier).applySnapshot(lastSnap(aWire.sent));
+
+    expect(client.realmRacersInfo).toEqual(expected);
+    expect(client.realmRacersInfo.match?.participantIds).toEqual([a.pid, b.pid]);
+  });
+});
+
 describe('self stat wire round-trip', () => {
   it('mirrors Warrior shield block stats from the live equip command path', () => {
     const server = new GameServer();

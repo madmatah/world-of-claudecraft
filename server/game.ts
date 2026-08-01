@@ -279,10 +279,16 @@ import { PartyFrameProjectionCache } from './party_frame_projection';
 import { applyBoostKitToPlayer, pbeBoostEnabled } from './pbe_boost';
 import { nextRaidResetMs } from './raid_reset';
 import { REALM, REALM_PUBLIC_ORIGIN, REALM_RESET_TIME_ZONE } from './realm';
+import { realmRacersInterestParticipantIds } from './realm_racers_interest';
 import { createRealmReadoutMemo, realmReadoutJson, realmReadoutObject } from './realm_readout_memo';
 import { RiftAssetCoordinator, riftAssetConfigFromEnv } from './rift_assets';
 import { RiftUpgradeCoordinator, riftUpgraderConfigFromEnv } from './rift_upgrader';
 import { createSerialWriter } from './serial_writer';
+import {
+  appendSnapshotEntity,
+  type EntityWireView,
+  type SentEntityVersions,
+} from './snapshot_entity_stream';
 import {
   jsonWithField,
   StableAuraWireCache,
@@ -957,22 +963,6 @@ export interface ClientSession {
   initialHotbarLayout: ActionBarLayout | null;
 }
 
-interface SentEntityVersions {
-  idVer: number;
-  dynVer: number;
-  // Stable timer-wire recipients diff aura composition separately from the
-  // ordinary dynamic record, so a deferred distance-tier update cannot lose an
-  // aura change. Legacy recipients leave this at 0.
-  auraVer: number;
-  // sim tick of the last full/lite record, so distance-tiered rates hold
-  // even when one broadcast covers several catch-up sim ticks
-  sentAtTick: number;
-  // an entity whose state stopped changing gets one final "settle" record
-  // before riding the keep list — without it the client's extrapolation
-  // would leave it rendered slightly past where it actually stopped
-  settled: boolean;
-}
-
 export interface AdminServerStats {
   online: number;
   onlineAccounts: number;
@@ -1416,16 +1406,6 @@ interface EntityWireCache {
   auraCache: StableAuraWireCache;
   legacy: EntityWireVariantCache;
   stable: EntityWireVariantCache;
-}
-
-interface EntityWireView {
-  idVer: number;
-  dynVer: number;
-  auraVer: number;
-  fullJson: string;
-  liteJson: string;
-  fullAuraJson: string;
-  liteAuraJson: string;
 }
 
 // One session's resolved interest anchor for a broadcast pass: the entity whose
@@ -7600,6 +7580,11 @@ export class GameServer {
         const ents: string[] = [];
         const keep: number[] = [];
         const present = new Set<number>();
+        const pinnedIds = realmRacersInterestParticipantIds(
+          this.sim.ctx,
+          anchorSession.pid,
+          anchorEntity.id,
+        );
         const gridStart = this.perfDetailActive ? process.hrtime.bigint() : 0n;
         for (const e of candidates.forSession(session.pid)) {
           // Re-apply the exact viewer-relative cutoff the single grid query used
@@ -7616,7 +7601,8 @@ export class GameServer {
           // cutoff, never on the padded per-cell candidate list.
           if (this.perfDetailActive) this.bcVisits++;
           if (e.id === anchorEntity.id) continue;
-          if (!this.canObserveEntity(anchorEntity, e, d2)) continue;
+          const pinned = pinnedIds.includes(e.id);
+          if (!pinned && !this.canObserveEntity(anchorEntity, e, d2)) continue;
           const known = session.sentEnts.get(e.id);
           // the viewer's current target stays in interest to the widest drop
           // radius so its unit frame doesn't vanish mid-chase
@@ -7624,47 +7610,37 @@ export class GameServer {
             anchorEntity.targetId === e.id
               ? NPC_DROP_RADIUS * NPC_DROP_RADIUS
               : interestLimitSq(e, known !== undefined);
-          if (d2 > limitSq) continue;
-          present.add(e.id);
-          const cache = this.wireCacheFor(e, stableTimerWire);
-          if (known === undefined) {
-            // first sight carries the at-rest state exactly, so no settle
-            // record is owed until it moves again
-            ents.push(stableTimerWire ? cache.fullAuraJson : cache.fullJson);
-            session.sentEnts.set(e.id, {
-              idVer: cache.idVer,
-              dynVer: cache.dynVer,
-              auraVer: cache.auraVer,
-              sentAtTick: tick,
-              settled: true,
-            });
-            continue;
-          }
-          const auraChanged = stableTimerWire && known.auraVer !== cache.auraVer;
-          if (known.idVer !== cache.idVer) {
-            ents.push(auraChanged ? cache.fullAuraJson : cache.fullJson);
-            known.idVer = cache.idVer;
-            known.dynVer = cache.dynVer;
-            known.auraVer = cache.auraVer;
-            known.sentAtTick = tick;
-            known.settled = false;
-            continue;
-          }
-          if (
-            !isUpdateDue(tick, e, d2, anchorEntity, known.sentAtTick) ||
-            (known.dynVer === cache.dynVer && !auraChanged && known.settled)
-          ) {
-            // not due at this distance tier yet, or unchanged and already
-            // settled: a bare id keeps it alive on the client
-            keep.push(e.id);
-            continue;
-          }
-          // due, and either changed or owing its one settle record
-          known.settled = known.dynVer === cache.dynVer;
-          known.dynVer = cache.dynVer;
-          known.auraVer = cache.auraVer;
-          known.sentAtTick = tick;
-          ents.push(auraChanged ? cache.liteAuraJson : cache.liteJson);
+          if (!pinned && d2 > limitSq) continue;
+          appendSnapshotEntity(
+            e.id,
+            tick,
+            stableTimerWire,
+            pinned || isUpdateDue(tick, e, d2, anchorEntity, known?.sentAtTick ?? tick),
+            session.sentEnts,
+            present,
+            ents,
+            keep,
+            this.wireCacheFor(e, stableTimerWire),
+          );
+        }
+        // Match pilots can sit beyond the widest shared grid query. Fetch the
+        // exact authoritative roster ids directly, then converge on the same
+        // full/lite/keep encoder as ordinary interest candidates.
+        for (const id of pinnedIds) {
+          if (present.has(id)) continue;
+          const e = this.sim.entities.get(id);
+          if (!e) continue;
+          appendSnapshotEntity(
+            e.id,
+            tick,
+            stableTimerWire,
+            true,
+            session.sentEnts,
+            present,
+            ents,
+            keep,
+            this.wireCacheFor(e, stableTimerWire),
+          );
         }
         // forget entities that left interest, so a re-entry sends identity again
         for (const id of session.sentEnts.keys()) {

@@ -88,7 +88,6 @@ import {
   nextRecklessnessSkullsLatch,
   shouldRunCharacterPresentationWork,
 } from './character_presentation_core';
-import { characterViewOutsideHysteresis } from './character_view_core';
 import {
   type AnimState,
   type CharacterVisual,
@@ -312,6 +311,11 @@ import {
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { buildRealmRacersTrack, type RealmRacersTrackView } from './realm_racers_track';
 import {
+  isOutsideRealmRacersDrawRange,
+  isOutsideRealmRacersRetainRange,
+  isRealmRacersCoPilot,
+} from './realm_racers_visibility_core';
+import {
   RenderBudgetGovernor,
   type RenderBudgetSample,
   type RenderBudgetState,
@@ -420,6 +424,7 @@ const FESTIVAL_GOLD_COLORS: readonly number[] = [0xffd14d, 0xfff2c0];
 const ENTITY_DRAW_RANGE = 80;
 const ENTITY_VIEW_CREATE_RANGE_SQ = ENTITY_DRAW_RANGE * ENTITY_DRAW_RANGE;
 const ENTITY_VIEW_DESTROY_RANGE_SQ = 96 * 96;
+const NO_REALM_RACERS_PARTICIPANTS: readonly number[] = [];
 const VIEW_CREATE_BUDGET_LOW = 2;
 const VIEW_CREATE_BUDGET_HIGH = 8;
 const VIEW_CREATE_SLOW_FRAME_MS = 33;
@@ -4295,11 +4300,20 @@ export class Renderer {
     return 1;
   }
 
-  private createRequiredViews(player: Entity, createdViewTypes: string[]): number {
-    return (
+  private createRequiredViews(
+    player: Entity,
+    createdViewTypes: string[],
+    participantIds: readonly number[] = this.sim.realmRacersInfo.match?.participantIds ??
+      NO_REALM_RACERS_PARTICIPANTS,
+  ): number {
+    let created =
       this.createRequiredView(player.id, createdViewTypes) +
-      this.createRequiredView(player.targetId, createdViewTypes)
-    );
+      this.createRequiredView(player.targetId, createdViewTypes);
+    for (const id of participantIds) {
+      if (!isRealmRacersCoPilot(participantIds, player.id, id)) continue;
+      created += this.createRequiredView(id, createdViewTypes);
+    }
+    return created;
   }
 
   private async createMandatoryLandmarkViews(
@@ -8431,6 +8445,8 @@ export class Renderer {
     }
     const sim = this.sim;
     const p = sim.player;
+    const realmRacersInfo = sim.realmRacersInfo;
+    const participantIds = realmRacersInfo.match?.participantIds ?? NO_REALM_RACERS_PARTICIPANTS;
     if (this.lastSelfId !== p.id) {
       this.lastSelfId = p.id;
       this.selfRenderPositionReady = false;
@@ -8453,7 +8469,7 @@ export class Renderer {
 
     // Dynamic worlds create nearby views lazily and drop views for leavers or
     // entities that moved well outside the draw band.
-    createdViews += this.createRequiredViews(p, createdViewTypes);
+    createdViews += this.createRequiredViews(p, createdViewTypes, participantIds);
     this.collectMissingViewCandidates(p, this.entityViewCreateRangeSq, false);
     createdViews += this.createCandidateViews(
       this.runtimeViewCreateBudget(dt),
@@ -8468,7 +8484,13 @@ export class Renderer {
         (!isPersistentPortalObject(e) &&
           id !== p.id &&
           id !== p.targetId &&
-          distSqXZ(e, p) > this.entityViewDestroyRangeSq)
+          isOutsideRealmRacersRetainRange(
+            participantIds,
+            p.id,
+            id,
+            distSqXZ(e, p),
+            this.entityViewDestroyRangeSq,
+          ))
       ) {
         this.doomedIds.push(id);
       }
@@ -8520,7 +8542,10 @@ export class Renderer {
       const isSelf = id === p.id;
       if (
         !isSelf &&
-        characterViewOutsideHysteresis(
+        isOutsideRealmRacersDrawRange(
+          participantIds,
+          p.id,
+          id,
           v.group.visible,
           d2,
           this.entityViewCreateRangeSq,
@@ -9987,7 +10012,7 @@ export class Renderer {
     this.impactSite.update(p.pos.x, p.pos.z, dt);
     // null-safe cupInfo read: the offline Sim may predate the Vale Cup module
     this.valeCupStadium.update(p.pos.x, p.pos.z, dt, this.sim.cupInfo ?? null);
-    this.realmRacersTrack.update(p.pos.x, p.pos.z, this.time, this.sim.realmRacersInfo.match);
+    this.realmRacersTrack.update(p.pos.x, p.pos.z, this.time, realmRacersInfo.match);
     this.realmRacersGroundBlasts.update(dt);
     // Team rings ride the live entity views (positions are fresh: the entity loop
     // ran above). Reads cupInfo.match for a participant, else cupInfo.spectate (a

@@ -115,6 +115,7 @@ describe('Realm Racers procedural render', () => {
     const rally = buildRealmRacersTrack();
     rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 1, {
       id: 7,
+      participantIds: [1, 2] as number[],
       phase: 'countdown',
       countdown: 1,
       countdownTicks: 20,
@@ -143,6 +144,7 @@ describe('Realm Racers procedural render', () => {
     rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 2, {
       ...({
         id: 7,
+        participantIds: [1, 2],
         phase: 'racing',
         countdown: 0,
         countdownTicks: 0,
@@ -163,6 +165,7 @@ describe('Realm Racers procedural render', () => {
 
     const racing = {
       id: 7,
+      participantIds: [1, 2] as number[],
       phase: 'racing',
       countdown: 0,
       countdownTicks: 0,

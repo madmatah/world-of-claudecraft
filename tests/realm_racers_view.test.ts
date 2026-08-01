@@ -24,6 +24,7 @@ function live(
 ): NonNullable<RealmRacersInfo['match']> {
   return {
     id: 7,
+    participantIds: [1, 2],
     phase: 'racing',
     countdown: 0,
     countdownTicks: 0,
