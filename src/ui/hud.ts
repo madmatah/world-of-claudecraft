@@ -8657,6 +8657,7 @@ export class Hud {
         inDungeon,
         entities: sim.entities.values(),
         cupInfo: sim.cupInfo,
+        realmRacersMatchId: sim.realmRacersInfo.match?.id ?? null,
         riftFloor: sim.riftFloor,
       });
       const inCombat = musicState.inCombat;

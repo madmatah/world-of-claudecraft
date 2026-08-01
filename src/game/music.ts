@@ -4963,7 +4963,21 @@ export class MusicDirector {
    *  kicked off, 'realm_racers' on the rally circuit), null when the player is
    *  in none of those places. Idempotent; the HUD calls it every frame.
    *  Crossfades between the tracks and ducks the procedural score while active. */
-  setAreaTrack(track: AreaTrackId | null): void {
+  setAreaTrack(track: AreaTrackId | null, restart = false): void {
+    const changed = track !== this.areaTrack;
+    if (track === 'realm_racers' && (changed || restart)) {
+      // Keep the downloaded element cached, but start each circuit visit and
+      // each new match from the top of the soundtrack.
+      this.ensureAreaElements(track);
+      const race = this.areaEls[track];
+      if (race) {
+        try {
+          race.currentTime = 0;
+        } catch {
+          /* browser may reject seeking before metadata */
+        }
+      }
+    }
     if (track === this.areaTrack) {
       this.applyAreaTracks();
       return;

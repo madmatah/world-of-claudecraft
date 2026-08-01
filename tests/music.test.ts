@@ -494,6 +494,7 @@ describe('MusicDirector area file tracks', () => {
     director.setAreaTrack('realm_racers');
     const race = areaEls().realm_racers;
     if (!race) throw new Error('race track element missing');
+    race.currentTime = 42;
     director.setVolume(0);
     for (const fn of timeouts) fn();
     expect(race.paused).toBe(true);
@@ -501,14 +502,45 @@ describe('MusicDirector area file tracks', () => {
     race.play.mockClear();
     director.setVolume(1);
     expect(race.play).toHaveBeenCalledTimes(1);
+    expect(race.currentTime).toBe(42);
   });
 
   it('keeps a re-entry within the fade window playing instead of pausing it', () => {
     director.setAreaTrack('realm_racers');
+    const race = areaEls().realm_racers;
+    if (!race) throw new Error('race track element missing');
+    race.currentTime = 31;
     director.setAreaTrack(null);
     director.setAreaTrack('realm_racers');
     for (const fn of timeouts) fn();
-    expect(areaEls().realm_racers?.paused).toBe(false);
+    expect(race.paused).toBe(false);
+    expect(race.currentTime).toBe(0);
+  });
+
+  it('preserves the race soundtrack position across idempotent, menu, and enable cycles', () => {
+    director.setAreaTrack('realm_racers');
+    const race = areaEls().realm_racers;
+    if (!race) throw new Error('race track element missing');
+    race.currentTime = 53;
+
+    director.setAreaTrack('realm_racers');
+    director.pauseForMenu();
+    director.resumeFromMenu();
+    director.setEnabled(false);
+    director.setEnabled(true);
+
+    expect(race.currentTime).toBe(53);
+  });
+
+  it('restarts the race soundtrack from the beginning when a new match is requested', () => {
+    director.setAreaTrack('realm_racers');
+    const race = areaEls().realm_racers;
+    if (!race) throw new Error('race track element missing');
+    race.currentTime = 67;
+
+    director.setAreaTrack('realm_racers', true);
+
+    expect(race.currentTime).toBe(0);
   });
 });
 

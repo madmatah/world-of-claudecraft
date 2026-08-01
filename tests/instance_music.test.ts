@@ -24,6 +24,7 @@ function input(overrides: Partial<InstanceMusicInput> = {}): InstanceMusicInput 
     inDungeon: false,
     entities: [],
     cupInfo: null,
+    realmRacersMatchId: null,
     riftFloor: null,
     ...overrides,
   };
@@ -148,5 +149,28 @@ describe('instance music policy', () => {
 
     // default fixture position: the Eastbrook hub, nowhere near the band
     expect(instanceMusicDecision(input()).areaTrack).toBeNull();
+  });
+
+  it('restarts the Realm Racers track when a new race begins without leaving the circuit', () => {
+    const port = {
+      resetForDungeonEntry: vi.fn(),
+      update: vi.fn(),
+      setBossCombat: vi.fn(),
+      setAreaTrack: vi.fn(),
+    };
+    const controller = new InstanceMusicController(port);
+    const onCircuit = input({
+      playerPos: { x: REALM_RACERS_ORIGIN.x, z: REALM_RACERS_ORIGIN.z },
+      inDungeon: true,
+      realmRacersMatchId: 41,
+    });
+
+    controller.update(onCircuit);
+    controller.update(onCircuit);
+    controller.update({ ...onCircuit, realmRacersMatchId: 42 });
+
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(1, 'realm_racers', true);
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(2, 'realm_racers');
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(3, 'realm_racers', true);
   });
 });

@@ -44,6 +44,7 @@ export interface InstanceMusicInput {
   inDungeon: boolean;
   entities: Iterable<InstanceMusicEntity>;
   cupInfo: InstanceMusicCupInfo | null;
+  realmRacersMatchId: number | null;
   // The active procedural Rift floor (null outside a rift). A rift floor scores
   // by its RiftTheme, not the dungeon fallback, and each floor counts as its own
   // instance entry so the crawl cue re-phrases from the top even when two floors
@@ -67,7 +68,7 @@ export interface InstanceMusicPort {
   resetForDungeonEntry(dungeonId: string | null, zone?: MusicZone): void;
   update(zone: MusicZone, inCombat: boolean): void;
   setBossCombat(active: boolean): void;
-  setAreaTrack(track: AreaTrackId | null): void;
+  setAreaTrack(track: AreaTrackId | null, restart?: boolean): void;
 }
 
 const RAID_ARENA_ID = 'nythraxis_boss_arena';
@@ -150,18 +151,25 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
 
 export class InstanceMusicController {
   private lastInstanceId: string | null = null;
+  private lastRealmRacersMatchId: number | null = null;
 
   constructor(private readonly music: InstanceMusicPort) {}
 
   update(input: InstanceMusicInput): InstanceMusicDecision {
     const decision = instanceMusicDecision(input);
+    const restartRealmRacers =
+      decision.areaTrack === 'realm_racers' &&
+      input.realmRacersMatchId !== null &&
+      input.realmRacersMatchId !== this.lastRealmRacersMatchId;
     if (shouldResetMusicForDungeonEntry(this.lastInstanceId, decision.instanceId)) {
       this.music.resetForDungeonEntry(decision.instanceId, decision.zone);
     }
     this.lastInstanceId = decision.instanceId;
+    this.lastRealmRacersMatchId = input.realmRacersMatchId;
     this.music.update(decision.zone, decision.musicCombat);
     this.music.setBossCombat(decision.bossEngaged);
-    this.music.setAreaTrack(decision.areaTrack);
+    if (restartRealmRacers) this.music.setAreaTrack(decision.areaTrack, true);
+    else this.music.setAreaTrack(decision.areaTrack);
     return decision;
   }
 }
