@@ -10575,7 +10575,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logLoss': '{name} 率先衝過終點線。',
   'hudChrome.rally.logForfeit': '你退出了比賽。{name} 獲勝。',
   'hudChrome.rally.mobileLabel': '競速賽',
-  'entities.abilities.rally_arc_shell.name': '電弧砲彈',
-  'entities.abilities.rally_arc_shell.description':
-    '向正前方發射一枚電弧砲彈。被擊中的對手會短暫失去控制。',
+  'entities.abilities.rally_ground_blast.name': '震地爆破',
+  'entities.abilities.rally_ground_blast.description':
+    '發射一枚重型爆破砲彈，落地即爆，震動地面並將附近的對手炸飛。',
 };

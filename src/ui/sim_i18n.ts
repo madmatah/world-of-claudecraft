@@ -404,6 +404,9 @@ const baseEnTable = {
   'aura.rallySoftVerge': 'Soft Verge',
   'aura.rallyGardenLawn': 'Garden Lawn',
   'aura.rallyWading': 'Wading',
+  // The debuff a Ground Blast hit leaves behind. Its aura is not in ABILITIES,
+  // so the HUD row resolves its label through here rather than through tEntity.
+  'aura.rallyGroundBlast': 'Ground Blast',
   'aura.elixirBear': 'Might of the Bear',
   // Crafted alchemy elixir auras (content/profession_items.ts): the
   // buff_sta aura name shown on the buff bar / combat log when the crafted elixir
@@ -8048,6 +8051,7 @@ const AURA_NAME_KEY: Record<string, SimMessageKey> = {
   'Soft Verge': 'aura.rallySoftVerge',
   'Garden Lawn': 'aura.rallyGardenLawn',
   Wading: 'aura.rallyWading',
+  'Ground Blast': 'aura.rallyGroundBlast',
   'Temporal Exhaustion': 'aura.temporalExhaustion',
   'Cauterize Fatigue': 'aura.cauterizeFatigue',
   'Might of the Bear': 'aura.elixirBear',

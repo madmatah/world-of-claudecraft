@@ -36,7 +36,7 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     // flight and the blast are all one number a player can trust.
     effects: [{ type: 'realmRacersGroundBlast', radius: GROUND_BLAST_RADIUS }],
     description:
-      'Lob a shell onto the track ahead. Aim it yourself within a wide arc of your nose: lead a rival and they drive into it, follow them and they are gone. Where it will land is circled on the ground for the whole flight, and a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race.',
+      'Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals.',
   },
 };
 

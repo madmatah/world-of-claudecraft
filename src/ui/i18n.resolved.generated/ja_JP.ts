@@ -7484,8 +7484,8 @@ export const ja_JP: EnTranslations = {
         "description": "脚を取り戻す:4秒間、移動速度が50%上昇する。"
       },
       "rally_ground_blast": {
-        "name": "Ground Blast",
-        "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
+        "name": "グラウンドブラスト",
+        "description": "重爆発弾を発射し、着弾と同時に爆発して地面を揺らし、周囲のライバルを吹き飛ばします。"
       },
       "flamestrike": {
         "name": "フレイムストライク",
@@ -8678,10 +8678,6 @@ export const ja_JP: EnTranslations = {
       "revive_pet": {
         "name": "応急処置",
         "description": "ペットを応急処置する。生存している場合は12秒間、3秒ごとに回復し、合計{overTime}の体力を回復する。死亡している場合は体力35%で蘇生する。"
-      },
-      "rally_arc_shell": {
-        "name": "アークシェル",
-        "description": "正面に電撃を帯びた砲弾を発射します。命中したライバルは短時間操作を失います。"
       }
     },
     "items": {

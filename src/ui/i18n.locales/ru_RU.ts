@@ -11246,7 +11246,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logLoss': '{name} первым пересекает финишную черту.',
   'hudChrome.rally.logForfeit': 'Вы сошли с гонки. Побеждает {name}.',
   'hudChrome.rally.mobileLabel': 'Гонки',
-  'entities.abilities.rally_arc_shell.name': 'Дуговой снаряд',
-  'entities.abilities.rally_arc_shell.description':
-    'Запускает вперёд потрескивающий снаряд. Попавший под удар соперник ненадолго теряет управление.',
+  'entities.abilities.rally_ground_blast.name': 'Наземный взрыв',
+  'entities.abilities.rally_ground_blast.description':
+    'Выстреливает тяжёлым фугасным снарядом, который взрывается при попадании, сотрясая землю и отбрасывая соперников поблизости.',
 };

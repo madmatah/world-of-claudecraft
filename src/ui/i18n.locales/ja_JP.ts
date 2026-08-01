@@ -11080,7 +11080,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logLoss': '{name}が先にゴールラインを越えました。',
   'hudChrome.rally.logForfeit': 'レースを棄権しました。{name}の勝利です。',
   'hudChrome.rally.mobileLabel': 'レーサーズ',
-  'entities.abilities.rally_arc_shell.name': 'アークシェル',
-  'entities.abilities.rally_arc_shell.description':
-    '正面に電撃を帯びた砲弾を発射します。命中したライバルは短時間操作を失います。',
+  'entities.abilities.rally_ground_blast.name': 'グラウンドブラスト',
+  'entities.abilities.rally_ground_blast.description':
+    '重爆発弾を発射し、着弾と同時に爆発して地面を揺らし、周囲のライバルを吹き飛ばします。',
 };

@@ -11070,7 +11070,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logLoss': '{name}님이 결승선을 먼저 넘었습니다.',
   'hudChrome.rally.logForfeit': '경기를 포기했습니다. {name}님이 승리합니다.',
   'hudChrome.rally.mobileLabel': '레이서즈',
-  'entities.abilities.rally_arc_shell.name': '아크 포탄',
-  'entities.abilities.rally_arc_shell.description':
-    '정면으로 전기가 흐르는 포탄을 발사합니다. 맞은 상대는 잠시 조종력을 잃습니다.',
+  'entities.abilities.rally_ground_blast.name': '그라운드 블래스트',
+  'entities.abilities.rally_ground_blast.description':
+    '무거운 폭발 포탄을 발사하여 착탄 시 폭발해 지면을 뒤흔들고 주변 경쟁자를 날려버립니다.',
 };

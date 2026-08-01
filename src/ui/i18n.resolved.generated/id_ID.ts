@@ -7485,7 +7485,7 @@ export const id_ID: EnTranslations = {
       },
       "rally_ground_blast": {
         "name": "Ground Blast",
-        "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
+        "description": "Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals."
       },
       "flamestrike": {
         "name": "Hantaman Api",

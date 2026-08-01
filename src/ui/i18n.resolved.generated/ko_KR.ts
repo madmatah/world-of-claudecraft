@@ -7484,8 +7484,8 @@ export const ko_KR: EnTranslations = {
         "description": "기운을 되찾습니다: 4초 동안 이동 속도가 50% 증가합니다."
       },
       "rally_ground_blast": {
-        "name": "Ground Blast",
-        "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
+        "name": "그라운드 블래스트",
+        "description": "무거운 폭발 포탄을 발사하여 착탄 시 폭발해 지면을 뒤흔들고 주변 경쟁자를 날려버립니다."
       },
       "flamestrike": {
         "name": "화염 폭발",
@@ -8678,10 +8678,6 @@ export const ko_KR: EnTranslations = {
       "revive_pet": {
         "name": "응급 처치",
         "description": "소환수를 응급 처치합니다. 살아 있으면 12초에 걸쳐 3초마다 생명력을 회복해 총 {overTime}의 생명력을 회복합니다. 죽어 있으면 35%의 생명력으로 되살립니다."
-      },
-      "rally_arc_shell": {
-        "name": "아크 포탄",
-        "description": "정면으로 전기가 흐르는 포탄을 발사합니다. 맞은 상대는 잠시 조종력을 잃습니다."
       }
     },
     "items": {

@@ -466,22 +466,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
   ],
-  "zh_CN": [
-    "entities.abilities.rally_ground_blast.description",
-    "entities.abilities.rally_ground_blast.name"
-  ],
-  "zh_TW": [
-    "entities.abilities.rally_ground_blast.description",
-    "entities.abilities.rally_ground_blast.name"
-  ],
-  "ko_KR": [
-    "entities.abilities.rally_ground_blast.description",
-    "entities.abilities.rally_ground_blast.name"
-  ],
-  "ja_JP": [
-    "entities.abilities.rally_ground_blast.description",
-    "entities.abilities.rally_ground_blast.name"
-  ],
+  "zh_CN": [],
+  "zh_TW": [],
+  "ko_KR": [],
+  "ja_JP": [],
   "pt_BR": [
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
@@ -558,10 +546,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
   ],
-  "ru_RU": [
-    "entities.abilities.rally_ground_blast.description",
-    "entities.abilities.rally_ground_blast.name"
-  ],
+  "ru_RU": [],
   "cs_CZ": [
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",

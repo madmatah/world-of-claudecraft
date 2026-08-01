@@ -7484,8 +7484,8 @@ export const ru_RU: EnTranslations = {
         "description": "Обретите ноги: скорость передвижения повышена на 50% на 4 сек."
       },
       "rally_ground_blast": {
-        "name": "Ground Blast",
-        "description": "Lob a shell at the track ahead, ranged onto the rival you are pointed at. Where it will land is marked on the ground during the flight: a machine caught in the blast is thrown into the air, shoved off its line and left sliding. Three shots per race."
+        "name": "Наземный взрыв",
+        "description": "Выстреливает тяжёлым фугасным снарядом, который взрывается при попадании, сотрясая землю и отбрасывая соперников поблизости."
       },
       "flamestrike": {
         "name": "Огненный удар",
@@ -8678,10 +8678,6 @@ export const ru_RU: EnTranslations = {
       "revive_pet": {
         "name": "Подлатать",
         "description": "Подлечивает питомца: если он жив, восстанавливает ему {overTime} ед. здоровья за 12 сек. с шагом в 3 сек. Если питомец мёртв, воскрешает его с 35% здоровья."
-      },
-      "rally_arc_shell": {
-        "name": "Дуговой снаряд",
-        "description": "Запускает вперёд потрескивающий снаряд. Попавший под удар соперник ненадолго теряет управление."
       }
     },
     "items": {
