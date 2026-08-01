@@ -365,6 +365,8 @@ describe('sampled SFX loading', () => {
       x: 8,
       y: 9,
       z: 10,
+      maxDistance: undefined,
+      rate: 1,
     });
 
     gate.resolve(response());
