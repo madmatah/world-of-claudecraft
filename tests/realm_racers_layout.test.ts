@@ -18,11 +18,11 @@ const track = realmRacersTrack();
 const gates = realmRacersGates();
 const starts = realmRacersStarts();
 
-describe('Realm Racers gates', () => {
-  it('over-covers the road at every gate (the 4.8-vs-5.5 checkpoint bug)', () => {
+describe('Realm Racers recovery gates', () => {
+  it('over-covers the road at every gate (the 4.8-vs-5.5 recovery bug)', () => {
     // The shipped circuit banded gates NARROWER than the road, so a racer
     // hugging the outer edge crossed the road without crossing the gate and
-    // silently failed the checkpoint.
+    // silently missed the recovery anchor.
     for (const gate of gates) {
       expect(gate.halfWidth).toBeGreaterThanOrEqual(
         track.halfWidthAt(gate.s) + REALM_RACERS_GATE_MARGIN,
@@ -32,8 +32,8 @@ describe('Realm Racers gates', () => {
 
   it('carries no physical fixture of its own', () => {
     // The shipped circuit planted posts at gate.halfWidth + 0.35, INSIDE the
-    // 5.5 road half-width: solid obstacles on the racing surface. Checkpoints
-    // are now pure sim geometry, so a gate record describes a crossing band and
+    // 5.5 road half-width: solid obstacles on the racing surface. Recovery
+    // anchors are pure sim geometry, so a gate record describes a crossing band and
     // nothing a racer can hit; only the start line gets a built fixture.
     for (const gate of gates) {
       expect(Object.keys(gate).sort()).toEqual(
@@ -45,7 +45,7 @@ describe('Realm Racers gates', () => {
     }
   });
 
-  it('orders the checkpoints by arc length, starting on the finish line', () => {
+  it('orders the recovery anchors by arc length, starting on the finish line', () => {
     expect(gates).toHaveLength(REALM_RACERS_GATE_FRACTIONS.length);
     expect(gates.map((gate) => gate.index)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
     expect(gates[0].s).toBe(0);

@@ -14233,7 +14233,8 @@
   filter: drop-shadow(0 3px 6px #000c);
 }
 .rallyhud-top,
-.rallyhud-stats {
+.rallyhud-stats,
+.rallyhud-actions {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -14271,7 +14272,7 @@
   margin-top: 5px;
 }
 .rallyhud-stats > span {
-  min-width: 92px;
+  min-width: 82px;
   padding: 5px 10px;
   border: 1px solid #dfc36c55;
   background: #0d160fcf;
@@ -14297,6 +14298,33 @@
   text-align: center;
   text-shadow: 0 0 14px #d9b83f99;
 }
+.rallyhud-actions {
+  gap: 8px;
+  margin-top: 7px;
+  pointer-events: none;
+}
+.rallyhud-wrong-way {
+  width: max-content;
+  margin: 8px auto 0;
+  padding: 7px 18px;
+  border: 2px solid #ffb24a;
+  border-radius: 5px;
+  background: #761d12ee;
+  color: #fff4cf;
+  font-family: var(--font-display, serif);
+  font-size: 24px;
+  font-weight: 1000;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-shadow: 0 1px 4px #000;
+  animation: rally-wrong-way-pulse 0.7s ease-in-out infinite alternate;
+}
+@keyframes rally-wrong-way-pulse {
+  to {
+    border-color: #fff3b0;
+    transform: scale(1.04);
+  }
+}
 /* The strip carries the only in-race forfeit control: the queue window closes
    itself when the match starts, so nothing else is reachable at speed. It rides
    in the stats row (the row centres the whole group), in the destructive red the
@@ -14306,9 +14334,9 @@
 
    min-width is sized for the ARMED label so the two-step swap never resizes the
    row: a centred row that grew mid-race would slide the readouts sideways. */
+.rallyhud-reset,
 .rallyhud-forfeit {
   min-width: 132px;
-  margin-left: 8px;
   padding: 5px 12px;
   border: 1px solid #a8503c;
   border-radius: 6px;
@@ -14322,6 +14350,19 @@
   cursor: pointer;
   pointer-events: auto;
 }
+.rallyhud-reset {
+  border-color: #7da96e;
+  background: #17351ce8;
+  color: #dcf2c8;
+}
+.rallyhud-reset:hover:not(:disabled) {
+  border-color: #b3da95;
+  color: #fff;
+}
+.rallyhud-reset:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
 .rallyhud-forfeit:hover {
   border-color: #d46a4e;
   color: #ffe3d8;
@@ -14331,7 +14372,13 @@
   background: #8e2c17ec;
   color: #fff1e6;
 }
+.rallyhud-reset:focus-visible,
 .rallyhud-forfeit:focus-visible {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rallyhud-wrong-way {
+    animation: none;
+  }
 }

@@ -936,7 +936,7 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
   },
   {
     call: 'this.realmRacersUi.update',
-    band: 'medium',
+    band: 'frame',
     gate: '',
     surface: 'window',
     guard: {

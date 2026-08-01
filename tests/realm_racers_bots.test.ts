@@ -309,7 +309,7 @@ describe('Realm Racers online backfill', () => {
 
 describe('Realm Racers house pilots: they can actually drive', () => {
   // The single most valuable test in the workstream: it proves the brain, the
-  // vehicle kernel, the collision set and the checkpoint gates work together,
+  // vehicle kernel, the collision set and continuous spline progress work together,
   // ON A PRACTICE COPY, which also proves the whole frame shift is right.
   // Nothing here is mocked, and the pilot holds the same controls a human does.
   for (const tier of RALLY_DRIVER_TIERS) {

@@ -43,9 +43,10 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 // (the activity log's on-demand READ request; its answer comes back on its own
 // one-shot 'gbanklog' frame, not the snapshot), and +4 on both for the Realm
 // Racers commands: the queue pair, the forfeit, and realm_racers_practice,
-// which races a house pilot immediately with no queue and no wait.
-const EXPECTED_SEND_COUNT = 186;
-const EXPECTED_DISPATCH_COUNT = 198;
+// which races a house pilot immediately with no queue and no wait, and +1 on
+// both for the race-feel pass's recovery command.
+const EXPECTED_SEND_COUNT = 187;
+const EXPECTED_DISPATCH_COUNT = 199;
 const EXPECTED_DISPATCH_ONLY_COUNT = 12;
 
 // The chat sub-channel routing switch (server/game.ts `switch

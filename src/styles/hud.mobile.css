@@ -5697,7 +5697,7 @@
       width: min(470px, calc(100vw - 108px));
     }
     body.mobile-touch .rallyhud-stats > span {
-      min-width: 76px;
+      min-width: 66px;
       padding-inline: 6px;
     }
     body.mobile-touch .rallyhud-phase {
@@ -5705,8 +5705,12 @@
     }
     /* The strip sits top-center and the mobile action bar owns the bottom edge,
        so the forfeit control only has to clear the tap-target floor here. */
+    body.mobile-touch .rallyhud-reset,
     body.mobile-touch .rallyhud-forfeit {
       min-height: 40px;
+    }
+    body.mobile-touch .rallyhud-wrong-way {
+      font-size: 20px;
     }
   }
 }

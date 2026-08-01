@@ -1,6 +1,6 @@
 // The Realm Racers circuit, drawn. Every surface here is swept along the
 // SHARED sim spline (src/sim/realm_racers_spline.ts), so the road a racer
-// sees, the checkpoint bands the sim tests against, and the off-track bands
+// sees, the recovery gates the sim tests against, and the off-track bands
 // that cost them time are all one piece of geometry. Placement decisions
 // (which corners get kerbs, how the arch is scaled and turned, where the
 // garden is sown) live in the Three-free core beside this file; this module
@@ -25,6 +25,7 @@ import {
   realmRacersBasinOutline,
   realmRacersTrack,
 } from '../sim/realm_racers_spline';
+import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
@@ -46,6 +47,8 @@ import {
   rallyPerimeterPieces,
   rallyReedSpots,
   rallyStartArchPlacement,
+  rallyStartLightPlacements,
+  realmRacersStartLightSignal,
 } from './realm_racers_track_core';
 import {
   type FlowerKind,
@@ -57,7 +60,7 @@ import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_mat
 
 export interface RealmRacersTrackView {
   group: THREE.Group;
-  update(px: number, pz: number, time: number): void;
+  update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
 }
 
 // Surface heights, all relative to the instance band's flat floor (y = 0, the
@@ -239,7 +242,7 @@ function paintGround(
 
 /**
  * The start/finish arch, the circuit's one visible fixture. Every other
- * checkpoint stays invisible, the way a racing game's checkpoints always have:
+ * recovery gate stays invisible: it is a reset anchor, not race progress:
  * the shipped version built a 31-yard gantry over all eight, which read as
  * scaffolding rather than a garden.
  *
@@ -273,6 +276,36 @@ function buildStartArch(group: THREE.Group): void {
       sz: banner.scale,
     })),
   );
+}
+
+function buildStartLights(group: THREE.Group): THREE.Mesh[] {
+  const fixture = new THREE.Group();
+  fixture.name = 'realm-racers-start-lights';
+  const housingGeo = new THREE.BoxGeometry(0.72, 0.68, 0.48);
+  const lensGeo = new THREE.CircleGeometry(0.24, 16);
+  const housingMat = surfaceMat({ color: 0x171816, roughness: 0.72 });
+  const offMat = new THREE.MeshBasicMaterial({ color: 0x241c12 });
+  const lenses: THREE.Mesh[] = [];
+  for (const [index, place] of rallyStartLightPlacements().entries()) {
+    const housing = new THREE.Mesh(housingGeo, housingMat);
+    housing.position.set(place.x, GRASS_Y + place.lift, place.z);
+    housing.rotation.y = place.yaw;
+    housing.name = `realm-racers-start-light-housing-${index + 1}`;
+    fixture.add(housing);
+
+    const lens = new THREE.Mesh(lensGeo, offMat);
+    lens.position.set(
+      place.x + Math.sin(place.yaw) * 0.25,
+      GRASS_Y + place.lift,
+      place.z + Math.cos(place.yaw) * 0.25,
+    );
+    lens.rotation.y = place.yaw;
+    lens.name = `realm-racers-start-light-${index + 1}`;
+    fixture.add(lens);
+    lenses.push(lens);
+  }
+  group.add(fixture);
+  return lenses;
 }
 
 /**
@@ -531,6 +564,11 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
 
   buildBasin(group);
   buildStartArch(group);
+  const startLightLenses = buildStartLights(group);
+  const startLightOff = startLightLenses[0]?.material as THREE.Material;
+  const startLightRed = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
+  const startLightGreen = new THREE.MeshBasicMaterial({ color: 0x45e06f });
+  let lastStartLightSignal = '';
   buildFlowers(group);
 
   // --- the infield landmark, on its island out in the water ---
@@ -621,7 +659,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
 
   return {
     group,
-    update(px, pz, time) {
+    update(px, pz, time, match) {
       // The circuit exists in several identical COPIES stacked along the band
       // (the public one plus the private practice copies), and a viewer can only
       // ever be on one of them. Rather than build the same half-megabyte of
@@ -633,6 +671,18 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
       if (slot === null) return;
       const offset = realmRacersSlotOffset(slot);
       if (group.position.z !== offset.z) group.position.set(offset.x, 0, offset.z);
+      const signal = realmRacersStartLightSignal(
+        match?.phase ?? null,
+        match?.countdownTicks ?? 0,
+        match?.elapsed ?? 0,
+      );
+      const signalKey = `${signal.colour}:${signal.litCount}`;
+      if (signalKey !== lastStartLightSignal) {
+        lastStartLightSignal = signalKey;
+        const on = signal.colour === 'green' ? startLightGreen : startLightRed;
+        for (let i = 0; i < startLightLenses.length; i++)
+          startLightLenses[i].material = i < signal.litCount ? on : startLightOff;
+      }
       // The fountain's tiny breath is cosmetic and frame-time based.
       fountain.scale.setScalar(fountainScale + Math.sin(time * 1.7) * 0.006);
     },

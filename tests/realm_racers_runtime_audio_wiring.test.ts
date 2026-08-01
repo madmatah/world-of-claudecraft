@@ -1,0 +1,241 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SimEvent, VehicleDrive } from '../src/sim/types';
+
+const audioSpies = vi.hoisted(() => ({ realmRacersResult: vi.fn() }));
+vi.mock('../src/game/audio', () => ({ audio: audioSpies }));
+
+import { Renderer } from '../src/render/renderer';
+import { Hud } from '../src/ui/hud';
+
+interface HudHarness {
+  sim: {
+    playerId: number;
+    player: { pos: { x: number; z: number } };
+    craftingIdentity: { synced: boolean };
+    craftSkills: Record<string, number>;
+  };
+  renderer: { handleEvent: ReturnType<typeof vi.fn> };
+  playEventSfx: ReturnType<typeof vi.fn>;
+  meters: { onEvent: ReturnType<typeof vi.fn> };
+  isNythraxisEvent: ReturnType<typeof vi.fn>;
+  showBanner: ReturnType<typeof vi.fn>;
+  combatLog: ReturnType<typeof vi.fn>;
+  prevCraftSkills: Record<string, number> | null;
+  craftTierUpDrains: number;
+  handleEvents(events: SimEvent[]): void;
+}
+
+function hudHarness(): HudHarness {
+  const hud = Object.create(Hud.prototype) as unknown as HudHarness;
+  hud.sim = {
+    playerId: 7,
+    player: { pos: { x: 0, z: 0 } },
+    craftingIdentity: { synced: false },
+    craftSkills: {},
+  };
+  hud.renderer = { handleEvent: vi.fn() };
+  hud.playEventSfx = vi.fn();
+  hud.meters = { onEvent: vi.fn() };
+  hud.isNythraxisEvent = vi.fn(() => false);
+  hud.showBanner = vi.fn();
+  hud.combatLog = vi.fn();
+  hud.prevCraftSkills = null;
+  hud.craftTierUpDrains = 0;
+  return hud;
+}
+
+const result = (won: boolean, forfeited: boolean, winnerName: string, pid = 7): SimEvent =>
+  ({
+    type: 'realmRacersResult',
+    won,
+    forfeited,
+    winnerName,
+    returnTicks: 80,
+    pid,
+  }) as SimEvent;
+
+interface RendererHarness {
+  realmRacersShells: { fire: ReturnType<typeof vi.fn>; impact: ReturnType<typeof vi.fn> };
+  groundSample(x: number, z: number): number;
+  vfx: { burst: ReturnType<typeof vi.fn>; groundPuff: ReturnType<typeof vi.fn> };
+  audioSink: {
+    realmRacersEvent: ReturnType<typeof vi.fn>;
+    vehicle: ReturnType<typeof vi.fn>;
+    stopVehicle: ReturnType<typeof vi.fn>;
+  };
+  spawnAoeRing: ReturnType<typeof vi.fn>;
+  sim: { playerId: number };
+  triggerHit: ReturnType<typeof vi.fn>;
+  addShake: ReturnType<typeof vi.fn>;
+  punchFov: ReturnType<typeof vi.fn>;
+  handleEvent(event: SimEvent): void;
+  syncRealmRacersVehicleAudioForView(
+    entity: { id: number; drive: VehicleDrive | null },
+    view: { vehicleAudioActive: boolean; vehicleLean: { acceleration: number } },
+    audible: boolean,
+    x: number,
+    y: number,
+    z: number,
+  ): void;
+}
+
+function rendererHarness(): RendererHarness {
+  const renderer = Object.create(Renderer.prototype) as unknown as RendererHarness;
+  renderer.realmRacersShells = { fire: vi.fn(), impact: vi.fn() };
+  renderer.groundSample = (x, z) => x + z;
+  renderer.vfx = { burst: vi.fn(), groundPuff: vi.fn() };
+  renderer.audioSink = {
+    realmRacersEvent: vi.fn(),
+    vehicle: vi.fn(),
+    stopVehicle: vi.fn(),
+  };
+  renderer.spawnAoeRing = vi.fn();
+  renderer.sim = { playerId: 1 };
+  renderer.triggerHit = vi.fn();
+  renderer.addShake = vi.fn();
+  renderer.punchFov = vi.fn();
+  return renderer;
+}
+
+const drive = (): VehicleDrive => ({
+  profileKey: 'rally_loaner',
+  speed: 30,
+  slip: 4,
+  yawRate: 0,
+  spin: 0,
+  handbrake: 0,
+  gripMult: 1,
+  dragMult: 1.8,
+  speedCap: 1,
+  collisionImpact: 0,
+  controlsLocked: false,
+});
+
+beforeEach(() => vi.clearAllMocks());
+
+describe('Realm Racers coordinator audio wiring', () => {
+  it('executes the real HUD result branch with the viewer pid and leaves draws/others silent', () => {
+    const hud = hudHarness();
+    hud.handleEvents([
+      result(true, false, 'Me'),
+      result(false, false, 'Rival'),
+      result(false, true, 'Rival'),
+      result(false, false, ''),
+      result(true, false, 'Other', 8),
+    ]);
+
+    expect(audioSpies.realmRacersResult.mock.calls.map(([won]) => won)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it('executes the real renderer event branches and preserves kind, ground height, and impact', () => {
+    const renderer = rendererHarness();
+    renderer.handleEvent({
+      type: 'realmRacersShellFired',
+      sourceId: 1,
+      x: 2,
+      z: 3,
+      targetX: 4,
+      targetZ: 5,
+      flightSeconds: 0.8,
+    });
+    renderer.handleEvent({
+      type: 'realmRacersShellHit',
+      sourceId: 1,
+      targetId: null,
+      x: 4,
+      z: 5,
+      impact: 0.7,
+    });
+    renderer.handleEvent({
+      type: 'realmRacersBump',
+      aId: 1,
+      bId: 2,
+      x: 6,
+      z: 7,
+      impact: 12,
+    });
+
+    expect(renderer.audioSink.realmRacersEvent.mock.calls).toEqual([
+      ['shellFire', 2, 6, 3, undefined],
+      ['shellImpact', 4, 9, 5, 0.7],
+      ['bump', 6, 13.5, 7, 0.5],
+    ]);
+  });
+
+  it('executes the renderer vehicle-view coordinator through run and race exit', () => {
+    const renderer = rendererHarness();
+    const entity: { id: number; drive: VehicleDrive | null } = { id: 77, drive: drive() };
+    const view = { vehicleAudioActive: false, vehicleLean: { acceleration: 6 } };
+
+    renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
+    expect(view.vehicleAudioActive).toBe(true);
+    expect(renderer.audioSink.vehicle).toHaveBeenCalledOnce();
+
+    entity.drive = null;
+    renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
+    expect(view.vehicleAudioActive).toBe(false);
+    expect(renderer.audioSink.stopVehicle).toHaveBeenCalledWith(77);
+  });
+
+  it('stops a racer vehicle loop when its view is dropped for leaving interest range', () => {
+    const renderer = rendererHarness() as unknown as {
+      views: Map<number, unknown>;
+      scene: { remove: ReturnType<typeof vi.fn> };
+      lightOwnerGroups: { delete: ReturnType<typeof vi.fn> };
+      viewLights: unknown[];
+      clickTargets: unknown[];
+      audioSink: { stopVehicle: ReturnType<typeof vi.fn> };
+      removeView(id: number): void;
+    };
+    renderer.scene = { remove: vi.fn() };
+    renderer.lightOwnerGroups = { delete: vi.fn() };
+    renderer.viewLights = [];
+    renderer.clickTargets = [];
+    const view = {
+      vehicleAudioActive: true,
+      group: {},
+      viewLights: [],
+      nameplate: { remove: vi.fn() },
+      clickTarget: {},
+      visual: { dispose: vi.fn() },
+      visualPoolKey: null,
+    };
+    renderer.views = new Map([[77, view]]);
+
+    // The server stopped including this racer's entity in the snapshot (it
+    // left the ~120yd interest scope), so the interest-churn sweep drops its
+    // view. This is the literal "leaving interest range" path, distinct from
+    // the audible-range mute covered by the run/race-exit test above.
+    renderer.removeView(77);
+
+    expect(renderer.audioSink.stopVehicle).toHaveBeenCalledWith(77);
+    expect(renderer.views.has(77)).toBe(false);
+  });
+
+  it('pins the exact Renderer.sync vehicle arguments and camera output dataflow', () => {
+    const prototype = Renderer.prototype as unknown as {
+      sync: (...args: unknown[]) => void;
+      updateCamera: (...args: unknown[]) => void;
+    };
+    const syncSource = prototype.sync.toString();
+    expect(syncSource).toMatch(
+      /this\.syncRealmRacersVehicleAudioForView\(\s*e,\s*v,\s*d2 < SFX_MOVE_RANGE_SQ,\s*ax,\s*ay,\s*az,?\s*\)/,
+    );
+
+    const cameraSource = prototype.updateCamera
+      .toString()
+      .replace(/\(0,__vite_ssr_import_\d+__\.([A-Za-z0-9_]+)\)\(/g, '$1(');
+    expect(cameraSource).toMatch(
+      /const boomProfile = stepCameraBoomForDriving\(\s*this\.camBoom,\s*selfPos\.x,\s*selfPos\.y,\s*selfPos\.z,\s*dt,\s*reduce \? 4 : 1,\s*driving,?\s*\)/,
+    );
+    expect(cameraSource).toContain('cameraBoomDistance(pose.dist, boomProfile)');
+    expect(cameraSource).toMatch(
+      /const feelFovOffset = stepCameraFeelForDriving\([\s\S]*?driving\s*\)/,
+    );
+    expect(cameraSource).toContain('cameraFeelFovTarget(CAMERA_BASE_FOV, feelFovOffset)');
+  });
+});

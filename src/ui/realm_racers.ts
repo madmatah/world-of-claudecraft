@@ -76,6 +76,8 @@ export interface RealmRacersDeps {
   controlKeys(action: RallyControlAction): readonly string[];
   /** True on the touch HUD, where naming keys would be nonsense. */
   isTouchHud(): boolean;
+  /** One sampled cue per authoritative countdown number. */
+  countdownTick(): void;
   writers: PainterHostWriters;
 }
 
@@ -87,10 +89,14 @@ export class RealmRacersUi {
   private lapEl: HTMLElement | null = null;
   private positionEl: HTMLElement | null = null;
   private timeEl: HTMLElement | null = null;
+  private speedEl: HTMLElement | null = null;
+  private wrongWayEl: HTMLElement | null = null;
   private phaseEl: HTMLElement | null = null;
+  private resetEl: HTMLElement | null = null;
   private forfeitEl: HTMLElement | null = null;
   private forfeitArmedUntil = 0;
   private wasInMatch = false;
+  private lastCountdown = 0;
   /**
    * The practice setup screen's own state, presentation-only: whether the
    * player has stepped into it, and which rival they have picked. Neither ever
@@ -149,6 +155,9 @@ export class RealmRacersUi {
       if (this.isOpen) this.close();
     }
     this.wasInMatch = inMatch;
+    const countdown = info.match?.phase === 'countdown' ? info.match.countdown : 0;
+    if (countdown > 0 && countdown !== this.lastCountdown) this.deps.countdownTick();
+    this.lastCountdown = countdown;
     if (this.isOpen) this.renderWindow();
     this.renderHud(buildRealmRacersHudView(info));
   }
@@ -346,6 +355,7 @@ export class RealmRacersUi {
     if (!view.active) {
       if (this.hudRoot) w.setDisplay(this.hudRoot, 'none');
       this.forfeitArmedUntil = 0;
+      this.lastCountdown = 0;
       return;
     }
     const root = this.ensureHud();
@@ -366,16 +376,26 @@ export class RealmRacersUi {
         `<span class="rallyhud-opponent">${esc(versus)}</span></div>` +
         `<div class="rallyhud-stats"><span class="rallyhud-position"></span>` +
         `<span class="rallyhud-lap"></span><span class="rallyhud-time"></span>` +
+        `<span class="rallyhud-speed"></span></div>` +
+        `<div class="rallyhud-actions">` +
+        (view.canReset
+          ? `<button type="button" class="rallyhud-reset" data-rally-hud-reset${view.resetLocked ? ' disabled' : ''}></button>`
+          : '') +
         (view.canForfeit
           ? `<button type="button" class="rallyhud-forfeit" data-rally-hud-forfeit></button>`
           : '') +
         `</div>` +
+        `<div class="rallyhud-wrong-way" role="alert" aria-live="assertive"></div>` +
         `<div class="rallyhud-phase" aria-live="polite"></div>`;
       this.positionEl = root.querySelector('.rallyhud-position');
       this.lapEl = root.querySelector('.rallyhud-lap');
       this.timeEl = root.querySelector('.rallyhud-time');
+      this.speedEl = root.querySelector('.rallyhud-speed');
+      this.wrongWayEl = root.querySelector('.rallyhud-wrong-way');
       this.phaseEl = root.querySelector('.rallyhud-phase');
+      this.resetEl = root.querySelector('.rallyhud-reset');
       this.forfeitEl = root.querySelector('.rallyhud-forfeit');
+      this.resetEl?.addEventListener('click', () => this.deps.world().resetRealmRacersPosition());
       this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
     }
     if (this.positionEl)
@@ -396,10 +416,23 @@ export class RealmRacersUi {
         }),
       );
     }
+    if (this.speedEl)
+      w.setText(this.speedEl, t('hudChrome.rally.speed', { speed: num(view.speed) }));
+    if (this.wrongWayEl) {
+      w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
+      w.setDisplay(this.wrongWayEl, view.wrongWay ? 'block' : 'none');
+    }
+    if (this.resetEl) {
+      w.setText(this.resetEl, t('hudChrome.rally.reset'));
+      const resetButton = this.resetEl as HTMLButtonElement;
+      if (resetButton.disabled !== view.resetLocked) resetButton.disabled = view.resetLocked;
+    }
     if (this.phaseEl) {
       const phase =
         view.phase === 'countdown'
-          ? t('hudChrome.rally.countdown', { seconds: num(view.countdown) })
+          ? view.countdown > 0
+            ? t('hudChrome.rally.countdown', { seconds: num(view.countdown) })
+            : ''
           : view.phase === 'finished'
             ? view.result === 'won'
               ? t('hudChrome.rally.wonReturn', { seconds: num(view.returnIn) })

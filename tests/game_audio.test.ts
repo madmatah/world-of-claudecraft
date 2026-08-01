@@ -14,6 +14,10 @@ const sfxMock = vi.hoisted(() => ({
 vi.mock('../src/game/sfx', () => ({ sfx: sfxMock }));
 
 import { GameAudio, UI_CUES } from '../src/game/audio';
+import {
+  playRealmRacersResultAudio,
+  realmRacersResultAudioOutcome,
+} from '../src/game/realm_racers_audio_routing';
 
 const ROOT = join(import.meta.dirname, '..');
 
@@ -67,6 +71,10 @@ describe('sampled GameAudio facade', () => {
       ['invitePrompt', 'ui_duel_challenge'],
       ['partyInvite', 'quest_ready'],
       ['duelCountdownTick', 'ui_duel_countdown'],
+      ['realmRacersFound', 'ui_duel_challenge'],
+      ['realmRacersCountdownTick', 'ui_fiesta_word_0'],
+      ['realmRacersGo', 'ui_fiesta_word_3'],
+      ['realmRacersLap', 'ui_fiesta_score_mine'],
       ['duelStart', 'ui_duel_start'],
       ['vcupKickoff', 'ui_vcup_kickoff'],
       ['duelEnd', 'ui_duel_end'],
@@ -88,6 +96,63 @@ describe('sampled GameAudio facade', () => {
       expect(sfxMock.playUi).toHaveBeenLastCalledWith(key, { jitter: false });
     }
     expect(sfxMock.playUi).toHaveBeenCalledTimes(routes.length);
+  });
+
+  it('uses the quest completion sting for victory and the death sting for defeat', () => {
+    const audio = new GameAudio();
+    audio.realmRacersResult(true);
+    audio.realmRacersResult(false);
+    expect(sfxMock.playUi.mock.calls.map(([key]) => key)).toEqual(['ui_quest_done', 'ui_death']);
+  });
+
+  it('routes live race results by outcome and keeps draws and recovery gates silent', () => {
+    const hud = readFileSync(join(ROOT, 'src/ui/hud.ts'), 'utf8');
+    const rallyUi = readFileSync(join(ROOT, 'src/ui/realm_racers.ts'), 'utf8');
+    expect(rallyUi).toContain('this.deps.countdownTick()');
+    expect(hud).toContain('audio.realmRacersGo()');
+    expect(hud).toContain('audio.realmRacersLap()');
+    const result = (won: boolean, forfeited: boolean, winnerName: string, pid = 7) =>
+      realmRacersResultAudioOutcome(
+        { type: 'realmRacersResult', won, forfeited, winnerName, returnTicks: 80, pid },
+        7,
+      );
+    expect(result(true, false, 'Me')).toBe('victory');
+    expect(result(false, false, 'Rival')).toBe('defeat');
+    expect(result(false, true, 'Rival')).toBe('defeat');
+    expect(result(false, false, '')).toBeNull();
+    expect(result(true, false, 'Other', 8)).toBeNull();
+
+    const audio = new GameAudio();
+    for (const event of [
+      {
+        type: 'realmRacersResult' as const,
+        won: true,
+        forfeited: false,
+        winnerName: 'Me',
+        returnTicks: 80,
+        pid: 7,
+      },
+      {
+        type: 'realmRacersResult' as const,
+        won: false,
+        forfeited: true,
+        winnerName: 'Rival',
+        returnTicks: 80,
+        pid: 7,
+      },
+      {
+        type: 'realmRacersResult' as const,
+        won: false,
+        forfeited: false,
+        winnerName: '',
+        returnTicks: 80,
+        pid: 7,
+      },
+    ]) {
+      playRealmRacersResultAudio(event, 7, audio);
+    }
+    expect(sfxMock.playUi.mock.calls.map(([key]) => key)).toEqual(['ui_quest_done', 'ui_death']);
+    expect(`${hud}\n${rallyUi}`).not.toContain('realmRacersCheckpoint');
   });
 
   it('rate-limits the error cue so spamming a failure does not spam the sound', () => {

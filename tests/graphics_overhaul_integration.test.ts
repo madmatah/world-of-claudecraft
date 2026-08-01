@@ -32,7 +32,7 @@ describe('graphics-overhaul integration', () => {
     const removedModule = ['camera', 'collision.ts'].join('_');
     expect(existsSync(path.join(__dirname, '..', 'src/render', removedModule))).toBe(false);
     expect(renderer).toContain(
-      'const cx = px - Math.sin(pose.yaw) * Math.cos(pose.pitch) * pose.dist;',
+      'const cx = px - Math.sin(pose.yaw) * Math.cos(pose.pitch) * boomDistance;',
     );
     expect(renderer).toContain('this.camera.position.set(cx, Math.max(cy, groundY), cz);');
     const chaseCamera = renderer.slice(
@@ -42,7 +42,7 @@ describe('graphics-overhaul integration', () => {
     expect(chaseCamera.match(/\bcx\s*=/g)).toHaveLength(1);
     expect(chaseCamera.match(/\bcy\s*=/g)).toHaveLength(1);
     expect(chaseCamera.match(/\bcz\s*=/g)).toHaveLength(1);
-    expect(renderer).toContain('Math.max(50, CAMERA_BASE_FOV + cameraFovOffset(this.camFeel))');
+    expect(renderer).toContain('cameraFeelFovTarget(CAMERA_BASE_FOV, feelFovOffset)');
   });
 
   it('routes reduced motion through every occluder-fade consumer', () => {

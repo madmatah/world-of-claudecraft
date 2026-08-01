@@ -104,7 +104,7 @@ describe('The Realm Racers loaned machine', () => {
 });
 
 describe('The Realm Racers lifecycle', () => {
-  it('waits for exactly two racers, forces the loaned machine, and pins a five-second start lock', () => {
+  it('waits for exactly two racers, then runs a silent overview before the three-count', () => {
     const sim = makeWorld();
     const a = addAt(sim, 'warrior', 'Aster');
     const b = addAt(sim, 'mage', 'Briar', 3, -40);
@@ -119,16 +119,22 @@ describe('The Realm Racers lifecycle', () => {
     sim.realmRacersQueueJoin(b);
     sim.tick();
     const liveMatch = match(sim);
-    expect(liveMatch.goTick - sim.tickCount).toBe(100);
+    expect(liveMatch.goTick - sim.tickCount).toBe(180);
+    expect(sim.realmRacersInfoFor(a).match).toMatchObject({ countdown: 0, countdownTicks: 180 });
     expect(entity(sim, a).mountKey).toBe('terrorspark_groundshaker');
     expect(entity(sim, b).mountKey).toBe('terrorspark_groundshaker');
     const aMeta = required(sim.players.get(a), `player ${a}`);
     expect(aMeta.known.map((known) => known.def.id)).toEqual(['rally_arc_shell']);
     const before = { ...entity(sim, a).pos };
     aMeta.moveInput.forward = true;
-    for (let i = 0; i < 99; i++) sim.tick();
+    for (let i = 0; i < 119; i++) sim.tick();
     expect(entity(sim, a).pos.x).toBeCloseTo(before.x, 6);
     expect(entity(sim, a).pos.z).toBeCloseTo(before.z, 6);
+    expect(sim.realmRacersInfoFor(a).match).toMatchObject({ countdown: 0, countdownTicks: 61 });
+    sim.tick();
+    expect(sim.realmRacersInfoFor(a).match).toMatchObject({ countdown: 3, countdownTicks: 60 });
+    for (let i = 0; i < 59; i++) sim.tick();
+    expect(liveMatch.phase).toBe('countdown');
     sim.tick();
     expect(liveMatch.phase).toBe('racing');
   });

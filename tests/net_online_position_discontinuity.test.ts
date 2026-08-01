@@ -1,0 +1,113 @@
+import { describe, expect, it } from 'vitest';
+import { ClientWorld } from '../src/net/online';
+
+class StubWebSocket {
+  static readonly OPEN = 1;
+  onopen: (() => void) | null = null;
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  readyState = StubWebSocket.OPEN;
+  constructor(public readonly url: string) {}
+  send(): void {}
+  close(): void {}
+}
+
+interface ClientInternals {
+  onMessage(raw: string): void;
+}
+
+function makeWorld(): { world: ClientWorld; wire: ClientInternals } {
+  const g = globalThis as Record<string, unknown>;
+  const previousWebSocket = g.WebSocket;
+  const previousWindow = g.window;
+  g.WebSocket = StubWebSocket as unknown;
+  g.window = { setInterval: () => 0, clearInterval: () => undefined };
+  try {
+    const world = new ClientWorld('recovery-latch-token', 1, 'warrior', 'http://localhost');
+    world.close();
+    const wire = world as unknown as ClientInternals;
+    wire.onMessage(JSON.stringify({ t: 'hello', pid: 1, seed: 20061 }));
+    return { world, wire };
+  } finally {
+    g.WebSocket = previousWebSocket;
+    g.window = previousWindow;
+  }
+}
+
+function playerWire(x: number, z: number): Record<string, unknown> {
+  return {
+    id: 1,
+    k: 'player',
+    tid: 'warrior',
+    nm: 'Me',
+    lv: 12,
+    x,
+    y: 0,
+    z,
+    f: 0,
+    hp: 100,
+    mhp: 100,
+  };
+}
+
+describe('ClientWorld authoritative position-discontinuity latch', () => {
+  it('waits through an event-to-rAF gap and snaps on the following snapshot exactly once', () => {
+    const { world, wire } = makeWorld();
+    wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(0, 0) }));
+
+    wire.onMessage(JSON.stringify({ t: 'events', list: [{ type: 'realmRacersReset', pid: 1 }] }));
+    expect(world.drainEvents()).toEqual([{ type: 'realmRacersReset', pid: 1 }]);
+    // This is the rAF that can run between the server's event and snapshot frames.
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
+
+    wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(4, 0) }));
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(true);
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
+  });
+
+  it('ignores another racer reset and promotes event-plus-snapshot received before rAF', () => {
+    const { world, wire } = makeWorld();
+    wire.onMessage(JSON.stringify({ t: 'events', list: [{ type: 'realmRacersReset', pid: 2 }] }));
+    wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(0, 0) }));
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
+
+    wire.onMessage(JSON.stringify({ t: 'events', list: [{ type: 'realmRacersReset', pid: 1 }] }));
+    wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(4, 0) }));
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(true);
+  });
+
+  it('also latches on a completed unstuck for the local player, and ignores a mid-countdown one', () => {
+    const { world, wire } = makeWorld();
+    wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(0, 0) }));
+
+    // A running countdown is not a discontinuity yet: only 'completed' teleports the racer.
+    wire.onMessage(
+      JSON.stringify({ t: 'events', list: [{ type: 'unstuck', phase: 'countdown', seconds: 4 }] }),
+    );
+    wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(0, 0) }));
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
+
+    wire.onMessage(
+      JSON.stringify({
+        t: 'events',
+        list: [
+          {
+            type: 'unstuck',
+            phase: 'completed',
+            pid: 1,
+            reason: 'moved_to_graveyard',
+            area: { kind: 'overworld', id: 'eastbrook_vale' },
+            origin: { x: 0, y: 0, z: 0, localX: 0, localZ: 0 },
+            destination: { x: 4, y: 0, z: 0, localX: 4, localZ: 0 },
+            duration: 10,
+            distance: 4,
+          },
+        ],
+      }),
+    );
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
+    wire.onMessage(JSON.stringify({ t: 'snap', ents: [], self: playerWire(4, 0) }));
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(true);
+    expect(world.consumeSelfPositionDiscontinuity()).toBe(false);
+  });
+});

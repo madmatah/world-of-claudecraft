@@ -65,7 +65,7 @@ describe('renderer CPU hot path', () => {
 
   it('manually updates the camera once on ordinary frames', () => {
     expect(renderer).toContain('this.camera.matrixWorldAutoUpdate = false');
-    expect(renderer).toContain('if (shakeX !== 0 || shakeY !== 0) this.camera.updateMatrixWorld()');
+    expect(renderer).toContain('if (shaking) this.camera.updateMatrixWorld()');
   });
 
   it('preserves completed submit and total timings through the reused frame-start buffers', () => {

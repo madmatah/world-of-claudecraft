@@ -430,14 +430,16 @@ function stepVehicleMotion(deps: PlayerMotionDeps, p: Entity, inp: MoveInput): v
 
   const beforeX = p.pos.x;
   const beforeZ = p.pos.z;
-  stepVehicleHorizontal(
-    deps,
-    p,
-    vehicleVelocityX(drive, p.facing) * DT,
-    vehicleVelocityZ(drive, p.facing) * DT,
-    profile.bodyRadius,
+  const intendedVx = vehicleVelocityX(drive, p.facing);
+  const intendedVz = vehicleVelocityZ(drive, p.facing);
+  stepVehicleHorizontal(deps, p, intendedVx * DT, intendedVz * DT, profile.bodyRadius);
+  const achievedVx = (p.pos.x - beforeX) / DT;
+  const achievedVz = (p.pos.z - beforeZ) / DT;
+  drive.collisionImpact = Math.max(
+    0,
+    Math.hypot(intendedVx, intendedVz) - Math.hypot(achievedVx, achievedVz),
   );
-  applyAchievedVehicleVelocity(drive, p.facing, (p.pos.x - beforeX) / DT, (p.pos.z - beforeZ) / DT);
+  applyAchievedVehicleVelocity(drive, p.facing, achievedVx, achievedVz);
   // Not swimming and never on steep ground: vehicles live on instanced floors,
   // where the ridden surface is flat and there is no waterline to tread.
   verticalPass(deps, p, false, 0, 0, 0, false, false, false);

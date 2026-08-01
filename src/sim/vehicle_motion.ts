@@ -78,6 +78,7 @@ export function createVehicleDrive(profileKey: string): VehicleDrive {
     gripMult: 1,
     dragMult: 1,
     speedCap: 1,
+    collisionImpact: 0,
     controlsLocked: false,
   };
 }
@@ -91,6 +92,7 @@ export function resetVehicleDrive(drive: VehicleDrive): void {
   drive.yawRate = 0;
   drive.spin = 0;
   drive.handbrake = 0;
+  drive.collisionImpact = 0;
 }
 
 /** Top forward speed available right now: the profile's maximum, cut by the

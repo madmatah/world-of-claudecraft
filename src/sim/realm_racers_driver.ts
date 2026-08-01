@@ -411,7 +411,7 @@ export function driveRealmRacers(input: RallyDriverInput): RallyDriverOutput {
   if (wrongWay) {
     // Pointing back up the circuit with speed on: kill the speed while turning
     // the nose around. Driving on would only take the machine further the wrong
-    // way, and the checkpoint gates would not credit a yard of it.
+    // way, and the continuous spline progress would not credit a yard of it.
     return {
       ...IDLE,
       forward: input.speed < -RECOVERY_CRAWL,

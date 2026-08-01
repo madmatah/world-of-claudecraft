@@ -1784,6 +1784,12 @@ export class ClientWorld implements IWorld {
   private readonly base: string;
   private readonly clientSeed: string;
   private eventQueue: SimEvent[] = [];
+  // Position-recovery events and their authoritative self pose travel in two
+  // ordered WebSocket frames (events first, snapshot second). A render frame
+  // may land between them, so the renderer must not consume the discontinuity
+  // until the first subsequent snapshot has actually updated the mirror.
+  private selfPositionDiscontinuityPending = false;
+  private selfPositionDiscontinuityReady = false;
   activeFrostRings: ActiveFrostRing[] = [];
   activeTemporalHourglasses: ActiveTemporalHourglass[] = [];
   private counterfangWindowDeadlineMs = 0;
@@ -2060,6 +2066,13 @@ export class ClientWorld implements IWorld {
     const out = this.eventQueue;
     this.eventQueue = [];
     return out;
+  }
+
+  /** Consume one recovery snap only after its following authoritative snapshot. */
+  consumeSelfPositionDiscontinuity(): boolean {
+    const ready = this.selfPositionDiscontinuityReady;
+    this.selfPositionDiscontinuityReady = false;
+    return ready;
   }
 
   setMoveInput(input: unknown, facing?: unknown): void {
@@ -2390,6 +2403,15 @@ export class ClientWorld implements IWorld {
         this.applyUnstuckEvent(ev as SimEvent);
         this.applyPrestigeEvent(ev as SimEvent);
         this.applyGuildRenamedEvent(ev as SimEvent);
+        if (
+          (((ev as SimEvent).type === 'unstuck' &&
+            (ev as Extract<SimEvent, { type: 'unstuck' }>).phase === 'completed') ||
+            (ev as SimEvent).type === 'realmRacersReset') &&
+          ((ev as { pid?: number }).pid === undefined ||
+            (ev as { pid?: number }).pid === this.playerId)
+        ) {
+          this.selfPositionDiscontinuityPending = true;
+        }
         this.eventQueue.push(ev as SimEvent);
       }
       return;
@@ -2450,6 +2472,10 @@ export class ClientWorld implements IWorld {
       const applyStart = performance.now();
       const rawGapMs = this.lastSnapAt > 0 ? applyStart - this.lastSnapAt : null;
       this.applySnapshot(msg);
+      if (this.selfPositionDiscontinuityPending) {
+        this.selfPositionDiscontinuityPending = false;
+        this.selfPositionDiscontinuityReady = true;
+      }
       this.netPipeline().recordSnapshot({
         nowMs: applyStart,
         approxBytes: raw.length,
@@ -2865,6 +2891,7 @@ export class ClientWorld implements IWorld {
             gripMult: w.drv.g ?? 1,
             dragMult: w.drv.dg ?? 1,
             speedCap: w.drv.c ?? 1,
+            collisionImpact: w.drv.ci ?? 0,
             // Sent only while set, so absent means the pilot has the controls.
             controlsLocked: !!w.drv.lk,
           }
@@ -4474,6 +4501,9 @@ export class ClientWorld implements IWorld {
   }
   forfeitRealmRacers(): void {
     this.cmd({ cmd: 'realm_racers_forfeit' });
+  }
+  resetRealmRacersPosition(): void {
+    this.cmd({ cmd: 'realm_racers_reset' });
   }
   // Practice: the server seats the sender against a house pilot on the ONE
   // circuit immediately. Same command online and off, and the server re-checks

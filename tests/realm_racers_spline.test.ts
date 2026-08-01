@@ -78,7 +78,7 @@ describe('Realm Racers spline', () => {
 
   it('matches the full scan on a good hint and recovers from a stale one', () => {
     // A good hint must be lossless: the windowed search agrees with the full
-    // scan everywhere on the road, or a racer's checkpoint math would drift
+    // scan everywhere on the road, or a racer's continuous progress would drift
     // depending only on where they happened to be last tick.
     for (let i = 0; i < track.samples.length; i += 7) {
       const sample = track.samples[i];

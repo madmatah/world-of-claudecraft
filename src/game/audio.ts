@@ -282,6 +282,26 @@ export class GameAudio {
     this.play(UI_CUES.duelCountdown);
   }
 
+  realmRacersFound(): void {
+    this.play(UI_CUES.duelChallenge);
+  }
+
+  realmRacersCountdownTick(): void {
+    this.play(UI_CUES.fiestaWords[0]);
+  }
+
+  realmRacersGo(): void {
+    this.play(UI_CUES.fiestaWords[3]);
+  }
+
+  realmRacersLap(): void {
+    this.play(UI_CUES.fiestaScoreMine);
+  }
+
+  realmRacersResult(won: boolean): void {
+    this.play(won ? UI_CUES.questDone : UI_CUES.death);
+  }
+
   duelStart(): void {
     this.play(UI_CUES.duelStart);
   }

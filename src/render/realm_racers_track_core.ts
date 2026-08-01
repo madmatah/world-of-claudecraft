@@ -31,6 +31,8 @@ import {
   realmRacersTrack,
 } from '../sim/realm_racers_spline';
 import { hash2 } from '../sim/rng';
+import { TICK_RATE } from '../sim/types';
+import type { RealmRacersPhase } from '../world_api/realm_racers';
 
 /**
  * A contiguous run of centerline samples that gets a kerb. `from` is a real
@@ -90,6 +92,35 @@ export interface RallyStartArchPlacement {
   banners: RallyBannerPlacement[];
 }
 
+export interface RallyStartLightPlacement {
+  x: number;
+  z: number;
+  lift: number;
+  /** Faces back down the approach straight. */
+  yaw: number;
+}
+
+export interface RealmRacersStartLightSignal {
+  colour: 'off' | 'red' | 'green';
+  litCount: number;
+}
+
+/** The authoritative three-lamp decision, including the one-second green GO. */
+export function realmRacersStartLightSignal(
+  phase: RealmRacersPhase | null,
+  countdownTicks: number,
+  elapsedSeconds: number,
+): RealmRacersStartLightSignal {
+  if (phase === 'racing' && elapsedSeconds === 0) return { colour: 'green', litCount: 3 };
+  if (phase !== 'countdown' || countdownTicks > 3 * TICK_RATE)
+    return { colour: 'off', litCount: 0 };
+  const elapsed = 3 * TICK_RATE - Math.max(0, countdownTicks);
+  return {
+    colour: 'red',
+    litCount: Math.max(1, Math.min(3, 1 + Math.floor(elapsed / TICK_RATE))),
+  };
+}
+
 export interface RallyFlowerSpot {
   x: number;
   z: number;
@@ -123,6 +154,13 @@ const KERB_MIN_LENGTH = 10;
 const DRESSING_SPACING = 16;
 /** Clear grass between the perimeter wall and the dressing ring, yards. */
 const DRESSING_MARGIN = 2.5;
+/** Keep the authored opening orbit out of the south dressing ring. The tree
+ * previously generated here sat directly on the camera path for both grid slots. */
+const START_PANORAMA_TREE_CLEARANCE = {
+  x: REALM_RACERS_ORIGIN.x - 16,
+  z: REALM_RACERS_ORIGIN.z - 87,
+  radius: 8,
+};
 
 const DRESSING_KINDS: readonly { kind: RallyDressingKind; radius: number }[] = [
   { kind: 'bedSquareA', radius: 4.5 },
@@ -213,10 +251,19 @@ export function rallyDressingSpots(): RallyDressingSpot[] {
     const [ex, ez] = perimeterPoint(along, halfX, halfZ);
     const outward = DRESSING_MARGIN + spec.radius + roll * 6;
     const norm = Math.hypot(ex, ez) || 1;
+    const x = REALM_RACERS_ORIGIN.x + ex + (ex / norm) * outward;
+    const z = REALM_RACERS_ORIGIN.z + ez + (ez / norm) * outward;
+    if (
+      spec.kind === 'tree' &&
+      Math.hypot(x - START_PANORAMA_TREE_CLEARANCE.x, z - START_PANORAMA_TREE_CLEARANCE.z) <
+        START_PANORAMA_TREE_CLEARANCE.radius
+    ) {
+      continue;
+    }
     out.push({
       kind: spec.kind,
-      x: REALM_RACERS_ORIGIN.x + ex + (ex / norm) * outward,
-      z: REALM_RACERS_ORIGIN.z + ez + (ez / norm) * outward,
+      x,
+      z,
       rot: roll * Math.PI * 2,
       radius: spec.radius,
     });
@@ -355,6 +402,22 @@ export function rallyStartArchPlacement(): RallyStartArchPlacement {
       scale: bannerScale,
     })),
   };
+}
+
+/** Three physical lamps tucked under the start arch's beam. */
+export function rallyStartLightPlacements(): RallyStartLightPlacement[] {
+  const place = rallyStartArchPlacement();
+  const line = realmRacersTrack().pointAt(0);
+  const lift = ARCH_SOURCE_HEIGHT * place.uprightScale - 0.8;
+  return Array.from({ length: 3 }, (_, index) => {
+    const across = ((index - 1) / 3) * place.span * 0.55;
+    return {
+      x: place.x + place.normalX * across,
+      z: place.z + place.normalZ * across,
+      lift,
+      yaw: Math.atan2(-line.tx, -line.tz),
+    };
+  });
 }
 
 /**

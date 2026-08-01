@@ -33,9 +33,14 @@ import {
   REALM_RACERS_PRACTICE_SLOTS,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
+  rallyGateCrossingFraction,
   realmRacersSlotOffset,
 } from '../realm_racers_layout';
-import { stepRealmRacersProgress, travelledFromArc } from '../realm_racers_progress';
+import {
+  forwardArcDelta,
+  stepRealmRacersProgress,
+  travelledFromArc,
+} from '../realm_racers_progress';
 import {
   resolveShellAim,
   resolveShellBlast,
@@ -47,6 +52,8 @@ import {
 import {
   type RallyProjection,
   rallyBasinEdgeOffsetAt,
+  rallyForwardDot,
+  realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
 } from '../realm_racers_spline';
@@ -66,9 +73,13 @@ export const REALM_RACERS_VEHICLE_KEY = 'rally_loaner';
  *  namespaces: Entity.mountKey is a bare string, so a stale literal would not
  *  fail to compile, it would just render a pilot with no machine under them. */
 export const REALM_RACERS_MOUNT_KEY: string = vehicleProfile(REALM_RACERS_VEHICLE_KEY).key;
-export const REALM_RACERS_COUNTDOWN_TICKS = 5 * TICK_RATE;
+export const REALM_RACERS_COUNTDOWN_TICKS = 9 * TICK_RATE;
 export const REALM_RACERS_TIME_LIMIT_TICKS = 180 * TICK_RATE;
 export const REALM_RACERS_RETURN_TICKS = 6 * TICK_RATE;
+export const REALM_RACERS_RESET_LOCK_TICKS = 2 * TICK_RATE;
+export const REALM_RACERS_STUCK_TICKS = 3 * TICK_RATE;
+export const REALM_RACERS_WRONG_WAY_TICKS = Math.ceil(TICK_RATE / 2);
+export const REALM_RACERS_STUCK_SPEED = 0.75;
 /** The debuff an Arc Shell hit leaves in the victim's HUD aura row. */
 export const REALM_RACERS_SHELL_AURA = 'realm_racers_arc_shell_control';
 export interface RealmRacersSlowBand {
@@ -165,6 +176,17 @@ export interface RealmRacersProgress {
   distanceSinceWrap: number;
   /** Yards down the circuit, monotonic across laps; the live ranking key. */
   travelled: number;
+  /** Ordered recovery-anchor state. It never replaces spline lap validation. */
+  nextResetGate: number;
+  resetS: number;
+  resetLap: number;
+  resetDistanceSinceWrap: number;
+  /** Automatic recovery counter and manual post-teleport control lock. */
+  stuckTicks: number;
+  resetLockedUntilTick: number;
+  /** Sustained direction state exposed to the HUD. */
+  wrongWayTicks: number;
+  wrongWay: boolean;
   heldWeapon: RealmRacersWeaponSlot | null;
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
@@ -377,6 +399,9 @@ function seedProgress(match: RealmRacersMatch, pid: number, e: Entity): void {
   const lapLength = realmRacersTrack().length;
   progress.lastS = projection.s;
   progress.travelled = travelledFromArc(progress.lap, projection.s, lapLength);
+  progress.resetS = projection.s;
+  progress.resetLap = progress.lap;
+  progress.resetDistanceSinceWrap = progress.distanceSinceWrap;
 }
 
 function placeRacer(ctx: SimContext, match: RealmRacersMatch, e: Entity, slot: number): void {
@@ -540,6 +565,14 @@ function startMatch(
           lastS: 0,
           distanceSinceWrap: 0,
           travelled: 0,
+          nextResetGate: 0,
+          resetS: 0,
+          resetLap: 1,
+          resetDistanceSinceWrap: 0,
+          stuckTicks: 0,
+          resetLockedUntilTick: 0,
+          wrongWayTicks: 0,
+          wrongWay: false,
           heldWeapon: {
             abilityId: profile.weaponAbilityId,
             charges: realmRacersWeaponCharges(profile.weaponAbilityId),
@@ -593,6 +626,11 @@ function endMatch(
   match.shells.length = 0;
   const winnerName = winnerPid === null ? '' : (ctx.players.get(winnerPid)?.name ?? '');
   for (const pid of match.pids) {
+    const drive = ctx.entities.get(pid)?.drive;
+    if (drive) {
+      resetVehicleDrive(drive);
+      drive.controlsLocked = true;
+    }
     ctx.emit({
       type: 'realmRacersResult',
       won: winnerPid === pid,
@@ -633,6 +671,67 @@ export function realmRacersForfeit(
   // it. A voluntary forfeit keeps the result tableau visible for the normal
   // six-second victory lap before returning both pilots.
   if (restoreImmediately) teardownMatch(ctx, match);
+}
+
+/** Put a racer back on the last ordered recovery anchor. The progress snapshot
+ * travels with it, so recovery can never be used to bank distance. Manual
+ * recovery adds a settle lock; automatic recovery has already charged its
+ * three-second stop and returns control immediately. */
+function resetRacerToRecoveryAnchor(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  pid: number,
+  manual: boolean,
+): boolean {
+  const racer = ctx.entities.get(pid);
+  const progress = match.progress.get(pid);
+  if (
+    match.phase !== 'racing' ||
+    !racer?.drive ||
+    !progress ||
+    progress.finishedTick !== null ||
+    ctx.tickCount < progress.resetLockedUntilTick
+  )
+    return false;
+
+  const track = realmRacersTrack();
+  const anchor = track.pointAt(progress.resetS);
+  const world = realmRacersToWorld(match, anchor.x, anchor.z);
+  racer.pos = ctx.groundPos(world.x, world.z);
+  racer.prevPos = { ...racer.pos };
+  racer.facing = Math.atan2(anchor.tx, anchor.tz);
+  resetVehicleDrive(racer.drive);
+  racer.drive.controlsLocked = manual;
+  racer.drive.gripMult = 1;
+  racer.drive.dragMult = 1;
+  racer.drive.speedCap = 1;
+
+  progress.lap = progress.resetLap;
+  progress.lastS = progress.resetS;
+  progress.distanceSinceWrap = progress.resetDistanceSinceWrap;
+  progress.travelled = travelledFromArc(progress.resetLap, progress.resetS, track.length);
+  progress.trackIndex = track.project(anchor.x, anchor.z, progress.trackIndex).index;
+  progress.stuckTicks = 0;
+  progress.wrongWayTicks = 0;
+  progress.wrongWay = false;
+  // Commands land between fixed ticks. The first movement pass observes N+1,
+  // so an exclusive bound needs the extra tick to hold exactly 40 passes.
+  progress.resetLockedUntilTick = manual ? ctx.tickCount + REALM_RACERS_RESET_LOCK_TICKS + 1 : 0;
+  racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_OFF_TRACK_AURA);
+  ctx.rebucket(racer);
+  // Recovery is a position discontinuity for the online predictor, but it is
+  // not a resurrection: a dedicated silent event avoids the generic respawn
+  // message while still making a short rewind snap on the owning client.
+  ctx.emit({ type: 'realmRacersReset', pid });
+  return true;
+}
+
+/** Authoritative manual recovery entry point, shared by offline and online worlds. */
+export function realmRacersResetPosition(ctx: SimContext, pid?: number): void {
+  const id = ctx.resolve(pid)?.meta.entityId ?? pid;
+  if (id === undefined) return;
+  const match = realmRacersMatchOf(ctx, id);
+  if (match) resetRacerToRecoveryAnchor(ctx, match, id, true);
 }
 
 export function realmRacersReturnFor(
@@ -878,9 +977,31 @@ function applyVehicleSurface(
 function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
   for (const pid of match.pids) {
     const racer = ctx.entities.get(pid);
-    if (!racer) continue;
-    const band = offTrackBand(reproject(match, pid, racer));
-    const shockUntil = match.progress.get(pid)?.shellShockUntilTick ?? 0;
+    const progress = match.progress.get(pid);
+    if (!racer || !progress) continue;
+    const projection = reproject(match, pid, racer);
+    const band = offTrackBand(projection);
+    const forwardDot = rallyForwardDot(projection, Math.sin(racer.facing), Math.cos(racer.facing));
+    if (forwardDot < -0.2) {
+      progress.wrongWayTicks++;
+      progress.wrongWay = progress.wrongWayTicks >= REALM_RACERS_WRONG_WAY_TICKS;
+    } else if (forwardDot > 0.2) {
+      progress.wrongWayTicks = 0;
+      progress.wrongWay = false;
+    }
+
+    const resetLocked = ctx.tickCount < progress.resetLockedUntilTick;
+    if (band && !resetLocked && Math.abs(racer.drive?.speed ?? 0) <= REALM_RACERS_STUCK_SPEED) {
+      progress.stuckTicks++;
+      if (progress.stuckTicks >= REALM_RACERS_STUCK_TICKS) {
+        resetRacerToRecoveryAnchor(ctx, match, pid, false);
+        continue;
+      }
+    } else {
+      progress.stuckTicks = 0;
+    }
+
+    const shockUntil = progress.shellShockUntilTick;
     applyVehicleSurface(racer, band, ctx.tickCount < shockUntil);
     const existing = racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
     if (!band) {
@@ -916,12 +1037,16 @@ interface FinishCandidate {
 
 function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
   const lapLength = realmRacersTrack().length;
+  const gates = realmRacersGates();
   const finishers: FinishCandidate[] = [];
   for (let slot = 0; slot < match.pids.length; slot++) {
     const pid = match.pids[slot];
     const e = ctx.entities.get(pid);
     const progress = match.progress.get(pid);
     if (!e || !progress || progress.finishedTick !== null) continue;
+    const previousLap = progress.lap;
+    const previousLastS = progress.lastS;
+    const previousDistanceSinceWrap = progress.distanceSinceWrap;
     const projection = reproject(match, pid, e);
     const step = stepRealmRacersProgress({
       lap: progress.lap,
@@ -935,6 +1060,27 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
     progress.lastS = step.lastS;
     progress.distanceSinceWrap = step.distanceSinceWrap;
     progress.travelled = step.travelled;
+    const from = realmRacersToCanonical(match, e.prevPos.x, e.prevPos.z);
+    const to = realmRacersToCanonical(match, e.pos.x, e.pos.z);
+    const gate = gates[progress.nextResetGate];
+    const crossing = gate ? rallyGateCrossingFraction(from, to, gate) : null;
+    if (gate && crossing !== null) {
+      // Snapshot progress AT the recovery plane, not at the end of this tick's
+      // segment. Otherwise the piece after the gate is retained by a reset and
+      // counted a second time when the racer drives it again.
+      const forwardThisTick = Math.max(0, forwardArcDelta(previousLastS, projection.s, lapLength));
+      progress.resetS = gate.s;
+      progress.resetLap = previousLap;
+      progress.resetDistanceSinceWrap = previousDistanceSinceWrap + forwardThisTick * crossing;
+      // A valid start-line wrap begins the next lap exactly on the line. The
+      // finish case is terminal, so keeping the prior lap there is harmless;
+      // this branch matters for ordinary lap transitions.
+      if (gate.index === 0 && step.wrapped && !step.finished) {
+        progress.resetLap = step.lap;
+        progress.resetDistanceSinceWrap = 0;
+      }
+      progress.nextResetGate = (progress.nextResetGate + 1) % gates.length;
+    }
     if (!step.wrapped) continue;
     if (step.finished) {
       progress.finishedTick = ctx.tickCount;
@@ -1010,7 +1156,11 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
     // controls are the Society's, not the pilot's. Written every tick and read
     // by the CAST gate, so a trigger pull outside the race arms no cooldown and
     // the action bar can grey the slot rather than pretending it is ready.
-    e.drive.controlsLocked = match.phase !== 'racing';
+    const resetLocked =
+      ctx.tickCount <
+      ((match.progress.get(pid) as RealmRacersProgress | undefined)?.resetLockedUntilTick ?? 0);
+    e.drive.controlsLocked = match.phase !== 'racing' || resetLocked;
+    if (resetLocked) resetVehicleDrive(e.drive);
   }
 
   if (match.phase === 'countdown') {
@@ -1085,10 +1235,9 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
       match.pids.indexOf(pid) < match.pids.indexOf(opponentPid))
       ? 1
       : 2;
-  const countdown =
-    match.phase === 'countdown'
-      ? Math.max(0, Math.ceil((match.goTick - ctx.tickCount) / TICK_RATE))
-      : 0;
+  const countdownTicks =
+    match.phase === 'countdown' ? Math.max(0, match.goTick - ctx.tickCount) : 0;
+  const countdown = countdownTicks > 3 * TICK_RATE ? 0 : Math.ceil(countdownTicks / TICK_RATE);
   const returnIn =
     match.phase === 'finished' && match.finishTick !== null
       ? Math.max(
@@ -1100,6 +1249,7 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     id: match.id,
     phase: match.phase,
     countdown,
+    countdownTicks,
     elapsed:
       match.phase === 'countdown'
         ? 0
@@ -1111,6 +1261,9 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     me: racerInfo(ctx, match, pid),
     opponent: racerInfo(ctx, match, opponentPid),
     position,
+    speed: Math.abs(ctx.entities.get(pid)?.drive?.speed ?? 0),
+    wrongWay: me.wrongWay,
+    resetLocked: ctx.tickCount < me.resetLockedUntilTick,
     totalLaps: match.totalLaps,
     // A practice lap is a real race on a private copy of the circuit, and the
     // readout says which it is rather than dressing one up as the other.
@@ -1149,6 +1302,9 @@ export function realmRacersInfoFor(ctx: SimContext, pid: number): RealmRacersInf
  * movement gate asks; keeping the answer here means the gate never has to know
  * which of the live races the racer is in.
  */
-export function realmRacersCountdownLocked(ctx: SimContext, pid: number): boolean {
-  return realmRacersMatchOf(ctx, pid)?.phase === 'countdown';
+export function realmRacersMovementLocked(ctx: SimContext, pid: number): boolean {
+  const match = realmRacersMatchOf(ctx, pid);
+  if (!match) return false;
+  if (match.phase !== 'racing') return true;
+  return ctx.tickCount < (match.progress.get(pid)?.resetLockedUntilTick ?? 0);
 }

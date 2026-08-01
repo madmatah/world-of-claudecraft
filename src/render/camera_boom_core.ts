@@ -24,6 +24,15 @@ export interface CameraBoomState {
   active: boolean;
 }
 
+export interface CameraBoomProfile {
+  omegaXZ: number;
+  omegaY: number;
+  leashXZ: number;
+  leashY: number;
+  distanceScale: number;
+  eyeHeight: number;
+}
+
 /** Horizontal pull rate (1/s). Higher = tighter follow; ~70 ms of trail. */
 export const BOOM_OMEGA_XZ = 12;
 /** Vertical pull rate (1/s): softer, ~150 ms, the jump/land weight. */
@@ -34,6 +43,32 @@ export const BOOM_LEASH_XZ = 1.1;
 export const BOOM_LEASH_Y = 1.6;
 /** Beyond this the motion is a teleport: adopt the target outright. */
 export const BOOM_SNAP_DIST = 6;
+
+export const DEFAULT_CAMERA_BOOM_PROFILE: CameraBoomProfile = {
+  omegaXZ: BOOM_OMEGA_XZ,
+  omegaY: BOOM_OMEGA_Y,
+  leashXZ: BOOM_LEASH_XZ,
+  leashY: BOOM_LEASH_Y,
+  distanceScale: 1,
+  eyeHeight: 2,
+};
+
+export const REALM_RACERS_CAMERA_BOOM_PROFILE: CameraBoomProfile = {
+  omegaXZ: 9.5,
+  omegaY: 5.5,
+  leashXZ: 2.5,
+  leashY: 1.9,
+  distanceScale: 1.16,
+  eyeHeight: 1.8,
+};
+
+export function cameraBoomProfileForDriving(driving: boolean): CameraBoomProfile {
+  return driving ? REALM_RACERS_CAMERA_BOOM_PROFILE : DEFAULT_CAMERA_BOOM_PROFILE;
+}
+
+export function cameraBoomDistance(distance: number, profile: CameraBoomProfile): number {
+  return distance * profile.distanceScale;
+}
 
 export function createCameraBoom(): CameraBoomState {
   return { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, active: false };
@@ -66,6 +101,7 @@ export function stepCameraBoom(
   tz: number,
   dt: number,
   stiffness = 1,
+  profile: CameraBoomProfile = DEFAULT_CAMERA_BOOM_PROFILE,
 ): void {
   const dx = s.x - tx;
   const dy = s.y - ty;
@@ -81,9 +117,9 @@ export function stepCameraBoom(
     return;
   }
   const step = Math.min(Math.max(dt, 0), 0.25);
-  const ax = dampAxis(s.x, s.vx, tx, BOOM_OMEGA_XZ * stiffness, step);
-  const az = dampAxis(s.z, s.vz, tz, BOOM_OMEGA_XZ * stiffness, step);
-  const ay = dampAxis(s.y, s.vy, ty, BOOM_OMEGA_Y * stiffness, step);
+  const ax = dampAxis(s.x, s.vx, tx, profile.omegaXZ * stiffness, step);
+  const az = dampAxis(s.z, s.vz, tz, profile.omegaXZ * stiffness, step);
+  const ay = dampAxis(s.y, s.vy, ty, profile.omegaY * stiffness, step);
   s.x = ax.pos;
   s.vx = ax.vel;
   s.z = az.pos;
@@ -95,12 +131,27 @@ export function stepCameraBoom(
   const ox = s.x - tx;
   const oz = s.z - tz;
   const horiz = Math.hypot(ox, oz);
-  if (horiz > BOOM_LEASH_XZ) {
-    const k = BOOM_LEASH_XZ / horiz;
+  if (horiz > profile.leashXZ) {
+    const k = profile.leashXZ / horiz;
     s.x = tx + ox * k;
     s.z = tz + oz * k;
   }
   const oy = s.y - ty;
-  if (oy > BOOM_LEASH_Y) s.y = ty + BOOM_LEASH_Y;
-  else if (oy < -BOOM_LEASH_Y) s.y = ty - BOOM_LEASH_Y;
+  if (oy > profile.leashY) s.y = ty + profile.leashY;
+  else if (oy < -profile.leashY) s.y = ty - profile.leashY;
+}
+
+/** Select and execute the complete boom step used by the renderer. */
+export function stepCameraBoomForDriving(
+  s: CameraBoomState,
+  tx: number,
+  ty: number,
+  tz: number,
+  dt: number,
+  stiffness: number,
+  driving: boolean,
+): CameraBoomProfile {
+  const profile = cameraBoomProfileForDriving(driving);
+  stepCameraBoom(s, tx, ty, tz, dt, stiffness, profile);
+  return profile;
 }

@@ -2,7 +2,18 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FORGE_MAX_DISTANCE, MAX_DISTANCE, REF_DISTANCE, sfx } from '../src/game/sfx';
 import { SFX_CLIPS, type SfxEntry } from '../src/game/sfx_manifest.generated';
+import {
+  playRealmRacersEventAudio,
+  playRealmRacersScrapeAudio,
+  syncRealmRacersVehicleAudio,
+} from '../src/render/realm_racers_audio';
+import {
+  realmRacersScrapeAudioCue,
+  realmRacersSpatialAudioCue,
+  realmRacersVehicleAudioAction,
+} from '../src/render/realm_racers_audio_core';
 import { MOUNT_KEYS } from '../src/sim/content/mounts';
+import type { VehicleDrive } from '../src/sim/types';
 
 // The footstep "jingling" bug: foot clips are ~0.48s but steps fire every ~0.22s
 // at a run, so flat retriggers overlap two pitch-jittered copies of one sample and
@@ -17,6 +28,7 @@ interface FakeSource {
   started: boolean;
   stopAt: number | null;
   connect(n: unknown): unknown;
+  disconnect(): void;
   start(): void;
   stop(t?: number): void;
 }
@@ -24,6 +36,9 @@ interface FakeSource {
 const sources: FakeSource[] = [];
 let nowT = 0;
 const WOOD_BUFFER = { duration: 0.37 };
+const RALLY_SHELL_BUFFER = { duration: 3 };
+const NATURE_IMPACT_BUFFER = { duration: 0.5 };
+const ARCANE_IMPACT_BUFFER = { duration: 0.5 };
 
 function lastSource(): FakeSource {
   const source = sources.at(-1);
@@ -79,6 +94,7 @@ function installAudioStub(): void {
         connect(n: unknown) {
           return n;
         },
+        disconnect() {},
         start() {
           this.started = true;
         },
@@ -115,6 +131,11 @@ beforeEach(() => {
     buffers.set(`mount_run_${mountKey}`, { duration: 0.5 + index / 100 });
   }
   buffers.set('foot_wood', WOOD_BUFFER);
+  buffers.set('foot_stone', { duration: 0.5 });
+  buffers.set('foot_dirt', { duration: 0.5 });
+  buffers.set('proj_groundshaker', RALLY_SHELL_BUFFER);
+  buffers.set('impact_nature', NATURE_IMPACT_BUFFER);
+  buffers.set('impact_arcane', ARCANE_IMPACT_BUFFER);
 });
 
 describe('footstep audio', () => {
@@ -301,6 +322,147 @@ describe('mount running audio', () => {
     const before = sources.length;
     sfx.mountRun(0, 0, 0, 'unknown_mount', true);
     expect(sources.length).toBe(before);
+  });
+});
+
+describe('Realm Racers vehicle loops', () => {
+  beforeEach(() => sfx.setListener(0, 0, 0, 0, 0, 1));
+
+  it('keeps one engine source and raises its pitch with speed', () => {
+    sfx.vehicle(77, 2, 0, 0, 0.2, 0.2, 0, false);
+    const loops = (
+      sfx as unknown as {
+        loops: Map<string, { src: FakeSource }>;
+      }
+    ).loops;
+    const first = loops.get('realm-racers-engine-77')?.src;
+    expect(first).toBeDefined();
+    const lowRate = first?.playbackRate.value ?? 0;
+    sfx.vehicle(77, 3, 0, 0, 0.85, 0.8, 5, false);
+    const second = loops.get('realm-racers-engine-77')?.src;
+    expect(second).toBe(first);
+    expect(second?.playbackRate.value).toBeGreaterThan(lowRate);
+    expect(sfx.hasLoop('realm-racers-skid-77')).toBe(true);
+    const buffers = (sfx as unknown as { buffers: Map<string, { duration: number }> }).buffers;
+    expect(loops.get('realm-racers-engine-77')?.src.buffer).toBe(
+      buffers.get('mount_run_terrorspark_groundshaker'),
+    );
+    expect(loops.get('realm-racers-skid-77')?.src.buffer).toBe(
+      buffers.get('mount_run_stalkglider_snail'),
+    );
+    expect(loops.get('realm-racers-roll-77')?.src.buffer).toBe(buffers.get('foot_stone'));
+
+    sfx.vehicle(77, 3, 0, 0, 0.85, 0.8, 0, true);
+    expect(loops.get('realm-racers-roll-77')?.src.buffer).toBe(buffers.get('foot_dirt'));
+  });
+
+  it('tears every loop down on race exit and on leaving audible range', () => {
+    const drive: VehicleDrive = {
+      profileKey: 'rally_loaner',
+      speed: 30,
+      slip: 4,
+      yawRate: 0,
+      spin: 0,
+      handbrake: 0,
+      gripMult: 1,
+      dragMult: 1.8,
+      speedCap: 1,
+      collisionImpact: 0,
+      controlsLocked: false,
+    };
+    expect(syncRealmRacersVehicleAudio(sfx, 78, false, drive, true, 2, 0, 0, 6)).toBe(true);
+    expect(realmRacersVehicleAudioAction(true, false, true)).toBe('stop');
+    expect(syncRealmRacersVehicleAudio(sfx, 78, true, null, true, 2, 0, 0, 0)).toBe(false);
+    expect(sfx.hasLoop('realm-racers-engine-78')).toBe(false);
+    expect(sfx.hasLoop('realm-racers-skid-78')).toBe(false);
+    expect(sfx.hasLoop('realm-racers-roll-78')).toBe(false);
+
+    expect(syncRealmRacersVehicleAudio(sfx, 79, false, drive, true, 2, 0, 0, 0)).toBe(true);
+    expect(sfx.hasLoop('realm-racers-engine-79')).toBe(true);
+    expect(realmRacersVehicleAudioAction(true, true, false)).toBe('stop');
+    expect(syncRealmRacersVehicleAudio(sfx, 79, true, drive, false, 2, 0, 0, 0)).toBe(false);
+    expect(sfx.hasLoop('realm-racers-engine-79')).toBe(false);
+    expect(realmRacersVehicleAudioAction(false, false, true)).toBe('none');
+    expect(realmRacersVehicleAudioAction(false, true, true)).toBe('run');
+  });
+
+  it('maps live shell/contact events and scrape telemetry to the intended one-shots', () => {
+    expect(
+      realmRacersSpatialAudioCue({
+        type: 'realmRacersShellFired',
+        sourceId: 1,
+        x: 2,
+        z: 3,
+        targetX: 4,
+        targetZ: 5,
+        flightSeconds: 0.8,
+      }),
+    ).toEqual({ kind: 'shellFire', x: 2, z: 3, heightOffset: 1 });
+    expect(
+      realmRacersSpatialAudioCue({
+        type: 'realmRacersShellHit',
+        sourceId: 1,
+        targetId: null,
+        x: 4,
+        z: 5,
+        impact: 0.7,
+      }),
+    ).toEqual({ kind: 'shellImpact', x: 4, z: 5, heightOffset: 0, impact: 0.7 });
+    expect(
+      realmRacersSpatialAudioCue({
+        type: 'realmRacersBump',
+        aId: 1,
+        bId: 2,
+        x: 6,
+        z: 7,
+        impact: 12,
+      }),
+    ).toEqual({ kind: 'bump', x: 6, z: 7, heightOffset: 0.5, impact: 0.5 });
+    expect(realmRacersScrapeAudioCue(8, 9, 0.4)).toEqual({
+      kind: 'scrape',
+      x: 8,
+      z: 9,
+      heightOffset: 0.5,
+      impact: 0.4,
+    });
+    expect(realmRacersSpatialAudioCue({ type: 'realmRacersGo' })).toBeNull();
+
+    const before = sources.length;
+    const ground = (x: number, z: number): number => x + z;
+    playRealmRacersEventAudio(sfx, ground, {
+      type: 'realmRacersShellFired',
+      sourceId: 1,
+      x: 2,
+      z: 3,
+      targetX: 4,
+      targetZ: 5,
+      flightSeconds: 0.8,
+    });
+    playRealmRacersEventAudio(sfx, ground, {
+      type: 'realmRacersShellHit',
+      sourceId: 1,
+      targetId: null,
+      x: 4,
+      z: 5,
+      impact: 0.7,
+    });
+    playRealmRacersEventAudio(sfx, ground, {
+      type: 'realmRacersBump',
+      aId: 1,
+      bId: 2,
+      x: 6,
+      z: 7,
+      impact: 12,
+    });
+    nowT += 1;
+    playRealmRacersScrapeAudio(sfx, ground, 8, 9, 0.4);
+    playRealmRacersEventAudio(sfx, ground, { type: 'realmRacersGo' });
+    expect(sources.slice(before).map((source) => source.buffer)).toEqual([
+      RALLY_SHELL_BUFFER,
+      NATURE_IMPACT_BUFFER,
+      ARCANE_IMPACT_BUFFER,
+      ARCANE_IMPACT_BUFFER,
+    ]);
   });
 });
 

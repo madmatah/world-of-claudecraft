@@ -78,6 +78,8 @@ export interface RealmRacersHudView {
   totalLaps: number;
   position: 1 | 2;
   elapsed: number;
+  speed: number;
+  wrongWay: boolean;
   opponent: string;
   opponentBotTier: RallyDriverTier | null;
   result: 'won' | 'lost' | 'draw' | 'forfeit' | null;
@@ -89,6 +91,9 @@ export interface RealmRacersHudView {
    * forfeit through the return countdown.
    */
   canForfeit: boolean;
+  /** Manual recovery to the latest spline anchor, only while the flag is live. */
+  canReset: boolean;
+  resetLocked: boolean;
   sig: string;
 }
 
@@ -100,11 +105,15 @@ const HUD_OFF: RealmRacersHudView = {
   totalLaps: 0,
   position: 1,
   elapsed: 0,
+  speed: 0,
+  wrongWay: false,
   opponent: '',
   opponentBotTier: null,
   result: null,
   returnIn: 0,
   canForfeit: false,
+  canReset: false,
+  resetLocked: false,
   sig: 'off',
 };
 
@@ -173,6 +182,7 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
   const match = info.match;
   if (!match) return HUD_OFF;
   const canForfeit = match.phase !== 'finished';
+  const canReset = match.phase === 'racing';
   return {
     active: true,
     phase: match.phase,
@@ -181,11 +191,17 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
     totalLaps: match.totalLaps,
     position: match.position,
     elapsed: match.elapsed,
+    speed: match.speed,
+    wrongWay: match.wrongWay,
     opponent: match.opponent.name,
     opponentBotTier: match.opponent.botTier,
     result: match.result,
     returnIn: match.returnIn,
     canForfeit,
-    sig: `${match.id}|${match.opponent.pid}|${match.opponent.botTier ?? '-'}|${canForfeit ? 'quit' : 'done'}`,
+    canReset,
+    resetLocked: match.resetLocked,
+    // Lock state is a live button property, not structure: keeping it out of
+    // the signature preserves keyboard focus when the reset becomes disabled.
+    sig: `${match.id}|${match.opponent.pid}|${match.opponent.botTier ?? '-'}|${canForfeit ? 'quit' : 'done'}|${canReset ? 'reset' : 'no-reset'}`,
   };
 }

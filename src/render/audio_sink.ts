@@ -6,6 +6,7 @@
 import type { BiomeId } from '../sim/types';
 
 export type Surface = 'grass' | 'dirt' | 'stone' | 'wood' | 'snow' | 'water';
+export type RealmRacersAudioEvent = 'shellFire' | 'shellImpact' | 'bump' | 'scrape';
 
 export interface AmbientPointSource {
   readonly id: string;
@@ -65,6 +66,25 @@ export interface SpatialAudioSink {
   ): void;
   /** One custom running stride for a mounted entity. */
   mountRun(x: number, y: number, z: number, mountKey: string, self: boolean): void;
+  /** Continuous engine, tyre and surface loops for one visible vehicle. */
+  vehicle(
+    entityId: number,
+    x: number,
+    y: number,
+    z: number,
+    speedFraction: number,
+    effort: number,
+    slip: number,
+    offRoad: boolean,
+  ): void;
+  stopVehicle(entityId: number): void;
+  realmRacersEvent(
+    kind: RealmRacersAudioEvent,
+    x: number,
+    y: number,
+    z: number,
+    impact?: number,
+  ): void;
   /** A discrete movement event (jump / land / water entry / swim stroke). */
   movement(
     kind: 'jump' | 'land' | 'splash' | 'swim',

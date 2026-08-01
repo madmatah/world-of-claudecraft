@@ -116,6 +116,10 @@ import { padReelItemId } from './game/pad_reel';
 import { createPerfMonitor } from './game/perf';
 import { initPerfNudge } from './game/perf_nudge';
 import { startPerfReporter } from './game/perf_reporter';
+import {
+  applyRealmRacersStartCameraFromWorld,
+  createRealmRacersStartCamera,
+} from './game/realm_racers_start_camera';
 import { adaptiveSelfAlphaLead } from './game/self_alpha_lead';
 import { SelfMotionFrameBuffer } from './game/self_motion_frame_buffer';
 import {
@@ -234,11 +238,7 @@ import {
   resolveGfxProfile,
 } from './render/gfx';
 import { Renderer } from './render/renderer';
-import {
-  hasAuthoritativeDriveImpulse,
-  hasAuthoritativeSelfPositionDiscontinuity,
-  type SelfMotionFrame,
-} from './render/self_motion';
+import { hasAuthoritativeDriveImpulse, type SelfMotionFrame } from './render/self_motion';
 import { ensureSkyAssetsAt, navigatorSaveData } from './render/sky';
 import { ARRIVAL_NEIGHBOR_STREAM_RADIUS } from './render/zone_streaming';
 import { desktopBridge } from './runtime';
@@ -3596,6 +3596,7 @@ async function startGame(
     echoMs: 0,
     frameDt: 0,
   };
+  const rallyStartCamera = createRealmRacersStartCamera();
   function updateCamera(frameDt: number, interpFacing: number): void {
     const mi = input.readMoveInput();
     const clickMoving = !!input.clickMoveTarget && !input.suspendMovement && !movementFrozen();
@@ -4083,6 +4084,7 @@ async function startGame(
         perf.finishTrace('camera.follow', traceStart, 'mode', 'offline', 'frameDtMs', frameDtMs);
       }
       introCameraTick(now);
+      rallyCameraTick(pp.facing);
       renderer.camYaw = input.camYaw;
       renderer.camPitch = input.camPitch;
       renderer.camDist = input.camDist;
@@ -4206,10 +4208,10 @@ async function startGame(
     }
     net.pendingFacingDelta = 0; // superseded by the interpolated follow below
     const drainedEvents = net.drainEvents();
-    const selfAuthoritativeDiscontinuity = hasAuthoritativeSelfPositionDiscontinuity(
-      drainedEvents,
-      net.playerId,
-    );
+    // The event frame precedes its authoritative snapshot. ClientWorld holds
+    // this edge across any intervening rAF and exposes it only after that
+    // snapshot has updated the self mirror.
+    const selfAuthoritativeDiscontinuity = net.consumeSelfPositionDiscontinuity();
     // A rival shoved the local machine: momentum the predictor cannot simulate,
     // so it re-seeds its scratch drive from the next authoritative state.
     const selfDriveImpulse = hasAuthoritativeDriveImpulse(drainedEvents, net.playerId);
@@ -4288,7 +4290,11 @@ async function startGame(
             // A ledge climb is a server-owned scripted move the client does
             // not re-simulate: predicting a fall through it would fight the
             // authoritative pull-up and show the correction as a stutter.
-            pe.climbing !== true,
+            pe.climbing !== true &&
+            // The Realm Racers authority owns countdown/manual-recovery locks.
+            // Keep the predictor present but disabled so it resets its scratch
+            // vehicle instead of visually driving through the server-side lock.
+            pe.drive?.controlsLocked !== true,
           resolved.mi,
           netFacing ?? interpServerFacing,
           onlineInputEchoMs,
@@ -4316,6 +4322,7 @@ async function startGame(
       );
     }
     introCameraTick(now);
+    rallyCameraTick(kbFacing ?? interpServerFacing);
     renderer.camYaw = input.camYaw;
     renderer.camPitch = input.camPitch;
     renderer.camDist = input.camDist;
@@ -4465,6 +4472,15 @@ async function startGame(
   const osReducedMotion =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const rallyCameraTick = (facing: number): void => {
+    applyRealmRacersStartCameraFromWorld(
+      rallyStartCamera,
+      input,
+      world,
+      facing,
+      settings.get('reduceMotion') || osReducedMotion,
+    );
+  };
   const introPolicy = decideSpawnCinematic({
     requested: playIntro,
     seen: introSeen,

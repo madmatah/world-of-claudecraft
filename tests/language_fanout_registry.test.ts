@@ -246,7 +246,7 @@ const ANSWERED: readonly AnsweredSurface[] = [
   },
   {
     file: 'realm_racers.ts',
-    memos: ['lastHudSig', 'lastWindowSig'],
+    memos: ['lastCountdown', 'lastHudSig', 'lastWindowSig'],
     answer: 'this.realmRacersUi.relocalize',
     why: 'the queue state, opponent, race phase, lap and result that gate the localized Rally window and HUD rebuilds',
   },

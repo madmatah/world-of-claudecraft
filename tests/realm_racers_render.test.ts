@@ -12,6 +12,8 @@ import {
   rallyPerimeterPieces,
   rallyReedSpots,
   rallyStartArchPlacement,
+  rallyStartLightPlacements,
+  realmRacersStartLightSignal,
 } from '../src/render/realm_racers_track_core';
 import {
   REALM_RACERS_BASIN_DEPTH_MAX,
@@ -76,10 +78,108 @@ describe('Realm Racers procedural render', () => {
     // water, the flowers and the fountain.
     expect(rally.group.children.length).toBeGreaterThan(14);
 
-    rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 1);
+    rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 1, null);
     expect(rally.group.visible).toBe(true);
-    rally.update(0, 0, 2);
+    rally.update(0, 0, 2, null);
     expect(rally.group.visible).toBe(false);
+  });
+
+  it('shows three red countdown lamps, turns them green at GO, then extinguishes them', async () => {
+    expect(rallyStartLightPlacements()).toHaveLength(3);
+    expect(realmRacersStartLightSignal('countdown', 61, 0)).toEqual({
+      colour: 'off',
+      litCount: 0,
+    });
+    expect(realmRacersStartLightSignal('countdown', 60, 0)).toEqual({
+      colour: 'red',
+      litCount: 1,
+    });
+    expect(realmRacersStartLightSignal('countdown', 40, 0)).toEqual({
+      colour: 'red',
+      litCount: 2,
+    });
+    expect(realmRacersStartLightSignal('countdown', 20, 0)).toEqual({
+      colour: 'red',
+      litCount: 3,
+    });
+    expect(realmRacersStartLightSignal('racing', 0, 0)).toEqual({
+      colour: 'green',
+      litCount: 3,
+    });
+    expect(realmRacersStartLightSignal('racing', 0, 1)).toEqual({
+      colour: 'off',
+      litCount: 0,
+    });
+
+    const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+    const rally = buildRealmRacersTrack();
+    rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 1, {
+      id: 7,
+      phase: 'countdown',
+      countdown: 1,
+      countdownTicks: 20,
+      elapsed: 0,
+      returnIn: 0,
+      me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
+      opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
+      position: 1,
+      speed: 0,
+      wrongWay: false,
+      resetLocked: false,
+      totalLaps: 3,
+      practice: false,
+      result: null,
+    });
+    const fixture = rally.group.getObjectByName('realm-racers-start-lights') as THREE.Group;
+    expect(fixture.children.filter((child) => child.name.match(/start-light-\d+$/))).toHaveLength(
+      3,
+    );
+    const colours = (): number[] =>
+      fixture.children
+        .filter((child) => child.name.match(/start-light-\d+$/))
+        .map((child) => ((child as THREE.Mesh).material as THREE.MeshBasicMaterial).color.getHex());
+    expect(colours()).toEqual([0xff3b1f, 0xff3b1f, 0xff3b1f]);
+
+    rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 2, {
+      ...({
+        id: 7,
+        phase: 'racing',
+        countdown: 0,
+        countdownTicks: 0,
+        elapsed: 0,
+        returnIn: 0,
+        me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
+        opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
+        position: 1,
+        speed: 0,
+        wrongWay: false,
+        resetLocked: false,
+        totalLaps: 3,
+        practice: false,
+        result: null,
+      } as const),
+    });
+    expect(colours()).toEqual([0x45e06f, 0x45e06f, 0x45e06f]);
+
+    const racing = {
+      id: 7,
+      phase: 'racing',
+      countdown: 0,
+      countdownTicks: 0,
+      elapsed: 1,
+      returnIn: 0,
+      me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
+      opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
+      position: 1,
+      speed: 0,
+      wrongWay: false,
+      resetLocked: false,
+      totalLaps: 3,
+      practice: false,
+      result: null,
+    } as const;
+    rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 3, racing);
+    expect(colours()).toEqual([0x241c12, 0x241c12, 0x241c12]);
   });
 
   it('dresses every ground surface in the world material, already world-placed', async () => {

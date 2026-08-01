@@ -3232,6 +3232,18 @@ describe('vehicle drive state over the wire', () => {
     (client as any).applySnapshot({ t: 'snap', ents: [wire] });
     expect(client.entities.get(e.id)?.drive).toEqual(e.drive);
 
+    // A live scrape impulse is sparse like the lock below, but when present it
+    // must survive the real server/client round trip for sparks and impact SFX.
+    e.drive.collisionImpact = 7.25;
+    const impacted = wireEntity(e);
+    expect(impacted.drv).toMatchObject({ ci: 7.25 });
+    (client as any).applySnapshot({ t: 'snap', ents: [impacted] });
+    expect(client.entities.get(e.id)?.drive?.collisionImpact).toBe(7.25);
+    e.drive.collisionImpact = 0;
+    expect(wireEntity(e).drv).not.toHaveProperty('ci');
+    (client as any).applySnapshot({ t: 'snap', ents: [wireEntity(e)] });
+    expect(client.entities.get(e.id)?.drive?.collisionImpact).toBe(0);
+
     // The control lock rides only while it is SET, so an ordinary driving frame
     // pays nothing for it; the mirror decodes an absent key as "the pilot has
     // the controls". The client greys its weapon slot off this exact fact, so a

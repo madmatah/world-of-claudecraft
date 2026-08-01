@@ -6095,12 +6095,12 @@ export class Sim {
       // no-op unless the player is currently AFK. Do Not Disturb survives.
       clearAfkOnMove(this.ctx, meta, p);
     }
-    // The race countdown is a real start lock, not just a client animation.
-    // Hold every forced/manual locomotion mode until the authoritative GO tick.
+    // Race start and recovery locks are authoritative, not client animation.
+    // Hold every forced/manual locomotion mode until the owning activity says so.
     if (
       meta.mountRace?.phase === 'countdown' ||
       (meta.realmRacersMatchId !== null &&
-        realmRacersMod.realmRacersCountdownLocked(this.ctx, meta.entityId))
+        realmRacersMod.realmRacersMovementLocked(this.ctx, meta.entityId))
     )
       return;
     if (advanceHeroicLeap(this.ctx, p)) return;
@@ -9654,6 +9654,10 @@ export class Sim {
     realmRacersMod.realmRacersForfeit(this.ctx, pid);
   }
 
+  realmRacersResetPosition(pid?: number): void {
+    realmRacersMod.realmRacersResetPosition(this.ctx, pid);
+  }
+
   realmRacersInfoFor(pid: number): import('../world_api/realm_racers').RealmRacersInfo {
     return realmRacersMod.realmRacersInfoFor(this.ctx, pid);
   }
@@ -9672,6 +9676,10 @@ export class Sim {
 
   forfeitRealmRacers(): void {
     this.realmRacersForfeit(this.primaryId);
+  }
+
+  resetRealmRacersPosition(): void {
+    this.realmRacersResetPosition(this.primaryId);
   }
 
   /** Race a house pilot immediately, with no queue and no wait. Runs

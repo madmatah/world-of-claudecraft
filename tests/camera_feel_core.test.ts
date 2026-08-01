@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addCameraShake,
+  cameraFeelFovTarget,
+  cameraFeelProfileForDriving,
   cameraFovOffset,
+  cameraShakeOffsetInto,
   createCameraFeel,
+  DEFAULT_CAMERA_FEEL_PROFILE,
   LEAD_MAX,
   LEAD_TIME,
   punchCameraFov,
+  REALM_RACERS_CAMERA_FEEL_PROFILE,
   SPEED_FOV_MAX,
   stepCameraFeel,
+  stepCameraFeelForDriving,
   stepLandingDetector,
 } from '../src/render/camera_feel_core';
 import { RUN_SPEED } from '../src/sim/types';
@@ -54,6 +61,67 @@ describe('FOV kicks', () => {
     expect(cameraFovOffset(s)).toBeLessThanOrEqual(12);
     punchCameraFov(s, -300);
     expect(cameraFovOffset(s)).toBeGreaterThanOrEqual(-8);
+  });
+
+  it('uses a stronger unsaturated speed curve for the rally profile', () => {
+    const normal = createCameraFeel();
+    const rally = createCameraFeel();
+    for (let i = 0; i < 300; i++) {
+      stepCameraFeel(normal, 0, 26, 1 / 60);
+      stepCameraFeel(rally, 0, 26, 1 / 60, true, REALM_RACERS_CAMERA_FEEL_PROFILE);
+    }
+    expect(cameraFovOffset(rally, REALM_RACERS_CAMERA_FEEL_PROFILE)).toBeGreaterThan(
+      cameraFovOffset(normal),
+    );
+    expect(rally.speedKick).toBeCloseTo(8.24, 1);
+    expect(REALM_RACERS_CAMERA_FEEL_PROFILE.speedFovMax).toBe(14);
+    expect(DEFAULT_CAMERA_FEEL_PROFILE.speedFovMax).toBe(SPEED_FOV_MAX);
+  });
+
+  it('caps the rally speed widening at fourteen degrees', () => {
+    const rally = createCameraFeel();
+    for (let i = 0; i < 300; i++)
+      stepCameraFeel(rally, 0, 80, 1 / 60, true, REALM_RACERS_CAMERA_FEEL_PROFILE);
+    expect(cameraFovOffset(rally, REALM_RACERS_CAMERA_FEEL_PROFILE)).toBeCloseTo(14, 3);
+  });
+
+  it('selects and carries the rally profile through stepping and FOV projection', () => {
+    const normalProfile = cameraFeelProfileForDriving(false);
+    const rallyProfile = cameraFeelProfileForDriving(true);
+    expect(normalProfile).toBe(DEFAULT_CAMERA_FEEL_PROFILE);
+    expect(rallyProfile).toBe(REALM_RACERS_CAMERA_FEEL_PROFILE);
+    const normal = createCameraFeel();
+    const rally = createCameraFeel();
+    let normalFov = 0;
+    let rallyFov = 0;
+    for (let i = 0; i < 300; i++) {
+      normalFov = stepCameraFeelForDriving(normal, 0, 26, 1 / 60, true, false);
+      rallyFov = stepCameraFeelForDriving(rally, 0, 26, 1 / 60, true, true);
+    }
+    expect(rallyFov).toBeGreaterThan(normalFov);
+    expect(cameraFeelFovTarget(65, rallyFov)).toBeCloseTo(65 + rallyFov, 5);
+    expect(cameraFeelFovTarget(98, 14)).toBe(100);
+  });
+});
+
+describe('positional shake channel', () => {
+  it('decays deterministically and is zero throughout reduced motion', () => {
+    const s = createCameraFeel();
+    const out = { x: 0, y: 0, z: 0 };
+    addCameraShake(s, 8);
+    expect(s.shakeTrauma).toBe(1);
+    stepCameraFeel(s, 0, 0, 1 / 60);
+    cameraShakeOffsetInto(s, out);
+    expect(Math.hypot(out.x, out.y, out.z)).toBeGreaterThan(0);
+    for (let i = 0; i < 120; i++) stepCameraFeel(s, 0, 0, 1 / 60);
+    cameraShakeOffsetInto(s, out);
+    expect(s.shakeTrauma).toBe(0);
+    expect(out).toEqual({ x: 0, y: 0, z: 0 });
+
+    addCameraShake(s, 0.8);
+    stepCameraFeel(s, 0, 0, 1 / 60, false, REALM_RACERS_CAMERA_FEEL_PROFILE);
+    cameraShakeOffsetInto(s, out);
+    expect(out).toEqual({ x: 0, y: 0, z: 0 });
   });
 });
 

@@ -112,6 +112,7 @@ interface LoopSlot {
   gain: GainNode;
   panner: PannerNode | null;
   target: number; // last commanded gain; skip re-arming the ramp when unchanged
+  rate: number;
   x?: number;
   y?: number;
   z?: number;
@@ -124,6 +125,7 @@ interface PendingLoop {
   y?: number;
   z?: number;
   maxDistance?: number;
+  rate: number;
 }
 
 // 'kind' is the closed set of point-ambience station sources today (campfire,
@@ -160,6 +162,7 @@ class Sfx {
   private loops = new Map<string, LoopSlot>();
   // Pending auto-stop timers for timedGroundLoop, keyed the same as `loops`.
   private groundLoopTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private vehicleLoopIds = new Map<number, { engine: string; skid: string; roll: string }>();
   private footstepsOn = false; // off by default; driven by the footstepSfx setting
   private lx = 0;
   private lz = 0; // cached listener position
@@ -652,6 +655,7 @@ class Sfx {
     y?: number,
     z?: number,
     maxDistance?: number,
+    rate = 1,
   ): void {
     const ctx = this.ctx,
       master = this.master;
@@ -675,7 +679,7 @@ class Sfx {
           this.pendingLoopVariants.delete(id);
           return;
         }
-        this.pendingLoops.set(id, { key, target, x, y, z, maxDistance });
+        this.pendingLoops.set(id, { key, target, x, y, z, maxDistance, rate });
         this.pendingLoopVariants.set(id, variantIndex);
         if (this.pendingLoopLoads.get(id) !== key) {
           this.pendingLoopLoads.set(id, key);
@@ -700,6 +704,7 @@ class Sfx {
               pending.y,
               pending.z,
               pending.maxDistance,
+              pending.rate,
             );
           });
         }
@@ -708,7 +713,7 @@ class Sfx {
       const src = ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
-      src.playbackRate.value = this.authoredPlaybackRate(key);
+      src.playbackRate.value = this.authoredPlaybackRate(key) * rate;
       const g = ctx.createGain();
       g.gain.value = 0;
       const panner = positional ? this.makePanner(x, y, z, undefined, maxDistance) : null;
@@ -717,7 +722,7 @@ class Sfx {
       src.start();
       this.commitVariant(key, variantIndex);
       this.pendingLoopVariants.delete(id);
-      slot = { key, src, gain: g, panner, target: -1, x, y, z };
+      slot = { key, src, gain: g, panner, target: -1, rate, x, y, z };
       this.loops.set(id, slot);
     } else if (positional && slot.panner) {
       if (slot.x !== x || slot.y !== y || slot.z !== z) {
@@ -734,6 +739,10 @@ class Sfx {
       const resolvedMax = maxDistance ?? MAX_DISTANCE;
       if (slot.panner.refDistance !== REF_DISTANCE) slot.panner.refDistance = REF_DISTANCE;
       if (slot.panner.maxDistance !== resolvedMax) slot.panner.maxDistance = resolvedMax;
+    }
+    if (slot.rate !== rate) {
+      slot.rate = rate;
+      slot.src.playbackRate.value = this.authoredPlaybackRate(key) * rate;
     }
     // Only (re)arm the ramp when the target actually changes. loop() is called
     // every frame for active ambience, so this keeps the hot path allocation-free.
@@ -854,6 +863,102 @@ class Sfx {
       rate: 1,
       cooldown: 0.05,
       release: 0.44,
+    });
+  }
+
+  private vehicleIds(entityId: number): { engine: string; skid: string; roll: string } {
+    let ids = this.vehicleLoopIds.get(entityId);
+    if (!ids) {
+      ids = {
+        engine: `realm-racers-engine-${entityId}`,
+        skid: `realm-racers-skid-${entityId}`,
+        roll: `realm-racers-roll-${entityId}`,
+      };
+      this.vehicleLoopIds.set(entityId, ids);
+    }
+    return ids;
+  }
+
+  vehicle(
+    entityId: number,
+    x: number,
+    y: number,
+    z: number,
+    speedFraction: number,
+    effort: number,
+    slip: number,
+    offRoad: boolean,
+  ): void {
+    if (this.tooFar(x, z)) {
+      this.stopVehicle(entityId);
+      return;
+    }
+    const ids = this.vehicleIds(entityId);
+    const speed = Math.min(1, Math.max(0, speedFraction));
+    const load = Math.min(1, Math.max(0, effort));
+    const slide = Math.min(1, Math.max(0, (Math.abs(slip) - 2) / 10));
+    this.loop(
+      ids.engine,
+      'mount_run_terrorspark_groundshaker',
+      0.1 + speed * 0.22 + load * 0.12,
+      x,
+      y,
+      z,
+      MAX_DISTANCE,
+      0.62 + speed * 1.05,
+    );
+    if (slide > 0)
+      this.loop(
+        ids.skid,
+        'mount_run_stalkglider_snail',
+        slide * 0.16,
+        x,
+        y,
+        z,
+        MAX_DISTANCE,
+        0.78 + slide * 0.42,
+      );
+    else this.unloop(ids.skid, 0.15);
+    this.loop(
+      ids.roll,
+      offRoad ? 'foot_dirt' : 'foot_stone',
+      speed * (offRoad ? 0.11 : 0.06),
+      x,
+      y,
+      z,
+      MAX_DISTANCE,
+      0.72 + speed * 0.42,
+    );
+  }
+
+  stopVehicle(entityId: number): void {
+    const ids = this.vehicleLoopIds.get(entityId);
+    if (!ids) return;
+    this.unloop(ids.engine, 0.18);
+    this.unloop(ids.skid, 0.12);
+    this.unloop(ids.roll, 0.18);
+    this.vehicleLoopIds.delete(entityId);
+  }
+
+  realmRacersEvent(
+    kind: 'shellFire' | 'shellImpact' | 'bump' | 'scrape',
+    x: number,
+    y: number,
+    z: number,
+    impact = 1,
+  ): void {
+    const strength = Math.min(1, Math.max(0.2, impact));
+    const key =
+      kind === 'shellFire'
+        ? 'proj_groundshaker'
+        : kind === 'shellImpact'
+          ? 'impact_nature'
+          : 'impact_arcane';
+    this.playAt(key, x, y, z, {
+      gain: (kind === 'scrape' ? 0.45 : 0.65) + strength * 0.25,
+      rate: kind === 'scrape' ? 1.2 : 0.9 + strength * 0.2,
+      cooldown: kind === 'scrape' ? 0.16 : 0.04,
+      release: kind === 'scrape' ? 0.18 : undefined,
     });
   }
 

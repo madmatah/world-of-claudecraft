@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { NumberSampleRing } from '../game/sample_ring';
 import { coerceFxTier, nameplateIntervalSec } from '../game/ui_tier_knobs';
 import { supportHeightAt } from '../sim/colliders';
+import { vehicleProfile } from '../sim/content/vehicles';
 import {
   ABILITIES,
   ARENA_SLOT_COUNT,
@@ -54,7 +55,7 @@ import { createBackgroundGpuQueue, GPU_WORK_PRIORITY } from './background_gpu_qu
 import { attachBankerChestToNpcView } from './banker_chest';
 import { type BirdsView, buildBirds } from './birds';
 import { type BladeGrassView, buildBladeGrass } from './blade_grass';
-import { createCameraBoom, stepCameraBoom } from './camera_boom_core';
+import { cameraBoomDistance, createCameraBoom, stepCameraBoomForDriving } from './camera_boom_core';
 import {
   cancelCameraDirective,
   createCameraDirector,
@@ -63,10 +64,12 @@ import {
   stepCameraDirector,
 } from './camera_director_core';
 import {
-  cameraFovOffset,
+  addCameraShake,
+  cameraFeelFovTarget,
+  cameraShakeOffsetInto,
   createCameraFeel,
   punchCameraFov,
-  stepCameraFeel,
+  stepCameraFeelForDriving,
   stepLandingDetector,
 } from './camera_feel_core';
 import { canopyDetailPrewarmTextures } from './canopy_detail';
@@ -299,6 +302,11 @@ import { buildGroundQuestObject } from './quest_objects';
 import { RaceLine } from './race_line';
 import { isOwnedPetHostile } from './reaction';
 import { buildRealmFlora, type RealmFloraView } from './realm_flora';
+import {
+  playRealmRacersEventAudio,
+  playRealmRacersScrapeAudio,
+  syncRealmRacersVehicleAudio,
+} from './realm_racers_audio';
 import { RealmRacersShellVisuals } from './realm_racers_shell';
 import { buildRealmRacersTrack, type RealmRacersTrackView } from './realm_racers_track';
 import {
@@ -362,6 +370,12 @@ import { nationColors } from './vale_cup_flags';
 import { ValeCupPracticeSky } from './vale_cup_practice_sky';
 import { buildValeCupStadium, type ValeCupStadiumView } from './vale_cup_stadium';
 import { buildValeCupTeamRings, type ValeCupTeamRingsView } from './vale_cup_team_ring';
+import {
+  createVehicleLean,
+  stepVehicleLean,
+  type VehicleLeanState,
+  vehicleIsOffRoad,
+} from './vehicle_lean_core';
 import { SCHOOL_COLORS, Vfx } from './vfx';
 import {
   finishViewCandidates,
@@ -950,6 +964,8 @@ export interface EntityView {
   waterContactAccum: number;
   wasAirborne: boolean;
   wasSwimming: boolean;
+  vehicleAudioActive: boolean;
+  vehicleScrapeCooldown: number;
   // consecutive frames the foot-height heuristic read airborne (debounce)
   airborneHeurFrames: number;
   // mount summon/dismount transition edge-detects. lastMountKey fires the summon
@@ -968,6 +984,7 @@ export interface EntityView {
   fallSpeed: number;
   /** Damped terrain lean plus its cadence-sampled gradient. */
   groundTilt: GroundTiltState;
+  vehicleLean: VehicleLeanState;
   tiltGradX: number;
   tiltGradZ: number;
   tiltOnProp: boolean;
@@ -1642,10 +1659,9 @@ export class Renderer {
   private audioSink: SpatialAudioSink | null = null;
   private readonly ambientPointSources: readonly AmbientPointSource[];
 
-  // 2v2 Fiesta juice: trauma-based screen shake (decays each frame) and the
-  // hazard-ring wall (built lazily the first time a Fiesta bout asks for it).
-  private shakeTrauma = 0;
-  private shakeElapsed = 0;
+  // Shared positional camera-shake scratch. The state and decay live in the
+  // pure camera feel core; this vector only avoids a per-frame allocation.
+  private readonly shakeOffset = new THREE.Vector3();
   private fiestaRing: THREE.Mesh | null = null;
   private fiestaPowerupMeshes = new Map<number, THREE.Mesh>();
   // Per-entity power-up glow: emits a coloured swirl around the carrier until it expires.
@@ -3533,7 +3549,34 @@ export class Renderer {
 
   /** main.ts injects the spatial sound engine here (render never imports game/). */
   setAudioSink(sink: SpatialAudioSink | null): void {
+    if (this.audioSink && this.audioSink !== sink) {
+      for (const [id, view] of this.views) {
+        if (view.vehicleAudioActive) this.audioSink.stopVehicle(id);
+        view.vehicleAudioActive = false;
+      }
+    }
     this.audioSink = sink;
+  }
+
+  private syncRealmRacersVehicleAudioForView(
+    entity: Entity,
+    view: EntityView,
+    audible: boolean,
+    x: number,
+    y: number,
+    z: number,
+  ): void {
+    view.vehicleAudioActive = syncRealmRacersVehicleAudio(
+      this.audioSink,
+      entity.id,
+      view.vehicleAudioActive,
+      entity.drive,
+      audible,
+      x,
+      y,
+      z,
+      view.vehicleLean.acceleration,
+    );
   }
 
   // Surface under (x,z) for footstep timbre. Sampled only at a footfall (cheap).
@@ -6411,6 +6454,7 @@ export class Renderer {
           this.groundSample(ev.targetX, ev.targetZ),
         );
         this.vfx.burst(new THREE.Vector3(ev.x, 1.1, ev.z), 'arcane', 14, 0.65);
+        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
         break;
       case 'realmRacersShellHit': {
         // The crater fires whether or not anyone was caught: a miss that lands
@@ -6430,6 +6474,7 @@ export class Renderer {
           1.1 + ev.impact,
           0xbfae92,
         );
+        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
         if (ev.targetId !== null) this.triggerHit(ev.targetId);
         if (ev.targetId === this.sim.playerId) {
           this.addShake(0.2 + 0.35 * ev.impact);
@@ -6449,6 +6494,7 @@ export class Renderer {
           0.5 + force,
         );
         this.spawnAoeRing(ev.x, ev.z, 1.6 + 1.4 * force, 'physical');
+        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
         if (ev.aId === this.sim.playerId || ev.bId === this.sim.playerId) {
           this.addShake(0.12 + 0.28 * force);
         }
@@ -6583,7 +6629,7 @@ export class Renderer {
   // reduced-motion players (OS query or the in-game switch).
   addShake(amount: number): void {
     if (this.reducedMotion()) return;
-    this.shakeTrauma = Math.min(1, this.shakeTrauma + amount);
+    addCameraShake(this.camFeel, amount);
   }
 
   // Zone-entry vista sweep (hud.ts fires it on the zone-banner edge): the
@@ -7066,11 +7112,14 @@ export class Renderer {
       waterContactAccum: 0,
       wasAirborne: false,
       wasSwimming: false,
+      vehicleAudioActive: false,
+      vehicleScrapeCooldown: 0,
       airborneHeurFrames: 0,
       lastMountKey: e.mountKey,
       wasMountCasting: e.mountCastRemaining > 0,
       stepSmooth: createStepSmooth(),
       groundTilt: createGroundTilt(),
+      vehicleLean: createVehicleLean(),
       prevRenderY: 0,
       hasPrevY: false,
       fallSpeed: 0,
@@ -8204,6 +8253,7 @@ export class Renderer {
   private removeView(id: number, terminal = false): void {
     const v = this.views.get(id);
     if (!v) return;
+    if (v.vehicleAudioActive) this.audioSink?.stopVehicle(id);
     this.scene.remove(v.group);
     this.lightOwnerGroups.delete(v.group);
     if (v.viewLights.length > 0) {
@@ -9144,7 +9194,19 @@ export class Renderer {
           settled && !v.tiltOnProp,
           dt,
         );
-        v.visual.setGroundTilt(v.groundTilt.pitch, v.groundTilt.roll);
+        const profile = e.drive ? vehicleProfile(e.drive.profileKey) : null;
+        stepVehicleLean(
+          v.vehicleLean,
+          e.drive?.speed ?? 0,
+          e.drive?.slip ?? 0,
+          profile?.maxSlip ?? 1,
+          dt,
+          !!e.drive && settled && !this.reducedMotion(),
+        );
+        v.visual.setGroundTilt(
+          v.groundTilt.pitch + v.vehicleLean.pitch,
+          v.groundTilt.roll + v.vehicleLean.roll,
+        );
       }
       // Ledge climb: the sim owns the move (Entity.climb offline, the mirrored
       // progress online); the visual poses it by hand, tracking the move's
@@ -9192,6 +9254,7 @@ export class Renderer {
       // --- spatial movement audio (self + others) --------------------------
       // All gated by audibility (squared distance) so far entities cost nothing.
       const sink = this.audioSink;
+      this.syncRealmRacersVehicleAudioForView(e, v, d2 < SFX_MOVE_RANGE_SQ, ax, ay, az);
       if (sink && d2 < SFX_MOVE_RANGE_SQ) {
         // jump / land / water-entry edges
         if (airborne && !v.wasAirborne && !visuallyDead) sink.movement('jump', ax, ay, az, isSelf);
@@ -9225,7 +9288,7 @@ export class Renderer {
             v.stepAccum = 0;
             sink.movement('swim', ax, ay, az, isSelf);
           }
-        } else if (logicallyMounted && moving && !airborne) {
+        } else if (logicallyMounted && !e.drive && moving && !airborne) {
           if (loco.speed >= FOOT_RUN_SPEED) {
             v.stepAccum += loco.speed * dt;
             if (v.stepAccum >= MOUNT_STRIDE_RUN) {
@@ -9431,6 +9494,10 @@ export class Renderer {
         mst.swimming = st.swimming;
         if (runCharacterPresentation) {
           v.mountVisual.update(dt, mst, animate);
+          v.mountVisual.setGroundTilt(
+            v.groundTilt.pitch + v.vehicleLean.pitch,
+            v.groundTilt.roll + v.vehicleLean.roll,
+          );
           // the rider floats WITH the procedural bob (the hover cycle's idle
           // float), not just the mount body
           const bob = mountBobY(mountSpec, this.time, moving);
@@ -9445,6 +9512,21 @@ export class Renderer {
           }
         } else {
           v.mountVisual.advanceOffscreen(dt);
+        }
+      }
+      if (e.drive && settled && !v.isFar) {
+        this.vfx.vehicleDriftSmoke(v.group.position, facing, e.drive.slip, dt);
+        if (vehicleIsOffRoad(e.drive.dragMult))
+          this.vfx.vehicleSurfaceDust(v.group.position, facing, e.drive.speed, dt);
+        this.vfx.vehicleExhaust(v.group.position, facing, v.vehicleLean.acceleration > 1, dt);
+        v.vehicleScrapeCooldown = Math.max(0, v.vehicleScrapeCooldown - dt);
+        if (e.drive.collisionImpact > 3 && v.vehicleScrapeCooldown <= 0) {
+          const impact = Math.min(1, e.drive.collisionImpact / 24);
+          this.tmpV.set(ax, ay + 0.55, az);
+          this.vfx.vehicleScrapeSparks(this.tmpV, impact);
+          playRealmRacersScrapeAudio(this.audioSink, this.groundSample, ax, az, impact);
+          if (isSelf) this.addShake(0.05 + impact * 0.14);
+          v.vehicleScrapeCooldown = 0.18;
         }
       }
 
@@ -9893,7 +9975,7 @@ export class Renderer {
     this.impactSite.update(p.pos.x, p.pos.z, dt);
     // null-safe cupInfo read: the offline Sim may predate the Vale Cup module
     this.valeCupStadium.update(p.pos.x, p.pos.z, dt, this.sim.cupInfo ?? null);
-    this.realmRacersTrack.update(p.pos.x, p.pos.z, this.time);
+    this.realmRacersTrack.update(p.pos.x, p.pos.z, this.time, this.sim.realmRacersInfo.match);
     this.realmRacersShells.update(dt);
     // Team rings ride the live entity views (positions are fresh: the entity loop
     // ran above). Reads cupInfo.match for a participant, else cupInfo.spectate (a
@@ -9965,18 +10047,9 @@ export class Renderer {
     phaseStart = this.markRendererPhase(framePhaseMs, 'nameplates', phaseStart);
     this.updateTravelSpeedFx(p, selfPos, dt);
     // Fiesta screen shake: trauma^2 jitter offsets the camera for the draw only.
-    let shakeX = 0,
-      shakeY = 0;
-    if (this.shakeTrauma > 0) {
-      this.shakeElapsed += dt;
-      const intensity = this.shakeTrauma * this.shakeTrauma;
-      const t = this.shakeElapsed * 60;
-      shakeX = Math.sin(t * 1.7) * intensity * 0.6;
-      shakeY = Math.sin(t * 2.3 + 1.1) * intensity * 0.45;
-      this.camera.position.x += shakeX;
-      this.camera.position.y += shakeY;
-      this.shakeTrauma = Math.max(0, this.shakeTrauma - dt * 1.8);
-    }
+    cameraShakeOffsetInto(this.camFeel, this.shakeOffset);
+    const shaking = this.shakeOffset.lengthSq() > 0;
+    if (shaking) this.camera.position.add(this.shakeOffset);
     this.jailScene.updateVisibility(this.camera, this.sun);
     if (this.sun.castShadow) {
       this.shadowLightDirection.subVectors(this.sun.position, this.sun.target.position).normalize();
@@ -9984,7 +10057,7 @@ export class Renderer {
       this.valeCupStadium.updateShadowVisibility(this.camera, this.shadowLightDirection, true);
     }
     this.updateOpaqueDrawOrder(dt);
-    if (shakeX !== 0 || shakeY !== 0) this.camera.updateMatrixWorld();
+    if (shaking) this.camera.updateMatrixWorld();
     this.vfx.prepareDraw(this.camera);
     if (this.post) {
       // screen-fx pass state (ripple re-projection, flash decay) advances
@@ -9992,10 +10065,7 @@ export class Renderer {
       this.post.updateScreenFx(dt);
       this.post.render();
     } else this.webgl.render(this.scene, this.camera);
-    if (shakeX !== 0 || shakeY !== 0) {
-      this.camera.position.x -= shakeX;
-      this.camera.position.y -= shakeY;
-    }
+    if (shaking) this.camera.position.sub(this.shakeOffset);
     phaseStart = this.markRendererPhase(framePhaseMs, 'submit', phaseStart);
     const totalMs = performance.now() - totalStart;
     framePhaseMs.total = roundMs(totalMs);
@@ -10472,11 +10542,20 @@ export class Renderer {
     const p = this.sim.player;
     const seed = this.sim.cfg.seed;
     const reduce = this.reducedMotion();
+    const driving = p.drive !== null;
 
     // Spring-arm lag: the look pivot trails the avatar on a critically damped
     // spring (vertical softer), so runs, jumps, mantles, and landings carry
     // weight. Reduced motion stiffens it to near-rigid instead of branching.
-    stepCameraBoom(this.camBoom, selfPos.x, selfPos.y, selfPos.z, dt, reduce ? 4 : 1);
+    const boomProfile = stepCameraBoomForDriving(
+      this.camBoom,
+      selfPos.x,
+      selfPos.y,
+      selfPos.z,
+      dt,
+      reduce ? 4 : 1,
+      driving,
+    );
 
     // Landing thump, detected from the display trajectory alone (works in
     // both hosts): a short FOV dip plus a touch of trauma, scaled by fall
@@ -10490,7 +10569,12 @@ export class Renderer {
     // Look-ahead lead + speed FOV, fed by the horizontal display velocity.
     let velX = 0;
     let velZ = 0;
-    if (this.lastLocalPos && dt > 1e-4) {
+    if (p.drive) {
+      const sin = Math.sin(p.facing);
+      const cos = Math.cos(p.facing);
+      velX = sin * p.drive.speed + cos * p.drive.slip;
+      velZ = cos * p.drive.speed - sin * p.drive.slip;
+    } else if (this.lastLocalPos && dt > 1e-4) {
       velX = (selfPos.x - this.lastLocalPos.x) / dt;
       velZ = (selfPos.z - this.lastLocalPos.z) / dt;
       // A teleport is not velocity.
@@ -10499,7 +10583,7 @@ export class Renderer {
         velZ = 0;
       }
     }
-    stepCameraFeel(this.camFeel, velX, velZ, dt, !reduce);
+    const feelFovOffset = stepCameraFeelForDriving(this.camFeel, velX, velZ, dt, !reduce, driving);
 
     // Flipping reduce motion on mid-directive blends any running move out.
     if (reduce) cancelCameraDirective(this.camDirector);
@@ -10552,10 +10636,14 @@ export class Renderer {
     const px = this.camBoom.x + this.camFeel.leadX;
     const py = this.camBoom.y;
     const pz = this.camBoom.z + this.camFeel.leadZ;
-    const eyeY = py + 2.0;
-    const cx = px - Math.sin(pose.yaw) * Math.cos(pose.pitch) * pose.dist;
-    const cy = eyeY + Math.sin(pose.pitch) * pose.dist;
-    const cz = pz - Math.cos(pose.yaw) * Math.cos(pose.pitch) * pose.dist;
+    // The rally profile lowers the eye and lengthens the arm, so the boom
+    // distance and eye height come from the active profile rather than the
+    // on-foot constants.
+    const eyeY = py + boomProfile.eyeHeight;
+    const boomDistance = cameraBoomDistance(pose.dist, boomProfile);
+    const cx = px - Math.sin(pose.yaw) * Math.cos(pose.pitch) * boomDistance;
+    const cy = eyeY + Math.sin(pose.pitch) * boomDistance;
+    const cz = pz - Math.cos(pose.yaw) * Math.cos(pose.pitch) * boomDistance;
     let groundY = groundHeight(cx, cz, seed) + 0.6;
     // On a raised rift tier the flat ground clamp would let the camera sink
     // into the riser: add the same lift the sim stands entities on.
@@ -10569,8 +10657,9 @@ export class Renderer {
     // way the old terrain walls lifted it.
     groundY += gardenMazeCameraLift(cx, cz);
     this.camera.position.set(cx, Math.max(cy, groundY), cz);
-    // Base FOV plus the feel kicks; the latter are zero under reduced motion.
-    const fovTarget = Math.min(100, Math.max(50, CAMERA_BASE_FOV + cameraFovOffset(this.camFeel)));
+    // Base FOV plus the feel kicks (speed widen, landing dip, level-up punch);
+    // the offset is 0 under reduced motion.
+    const fovTarget = cameraFeelFovTarget(CAMERA_BASE_FOV, feelFovOffset);
     if (Math.abs(this.camera.fov - fovTarget) > 0.01) {
       this.camera.fov = fovTarget;
       this.camera.updateProjectionMatrix();

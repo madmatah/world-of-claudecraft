@@ -26,7 +26,11 @@ function live(
     id: 7,
     phase: 'racing',
     countdown: 0,
+    countdownTicks: 0,
     elapsed: 61,
+    speed: 42,
+    wrongWay: false,
+    resetLocked: false,
     returnIn: 0,
     me: {
       pid: 1,
@@ -196,6 +200,24 @@ describe('Realm Racers pure views', () => {
       true,
     );
     expect(buildRealmRacersHudView(info()).canForfeit).toBe(false);
+  });
+
+  it('exposes racing speed, wrong-way, and reset availability', () => {
+    const view = buildRealmRacersHudView(
+      info({ match: live({ speed: 53, wrongWay: true, resetLocked: true }) }),
+    );
+    expect(view).toMatchObject({
+      speed: 53,
+      wrongWay: true,
+      canReset: true,
+      resetLocked: true,
+    });
+    expect(buildRealmRacersHudView(info({ match: live({ phase: 'countdown' }) })).canReset).toBe(
+      false,
+    );
+    const unlocked = buildRealmRacersHudView(info({ match: live({ resetLocked: false }) }));
+    const locked = buildRealmRacersHudView(info({ match: live({ resetLocked: true }) }));
+    expect(locked.sig).toBe(unlocked.sig);
   });
 
   it('withdraws the forfeit control once the race is decided, and moves the signature', () => {

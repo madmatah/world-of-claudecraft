@@ -1288,6 +1288,7 @@ function dynamicFields(e: Entity, includeAuras = true): Record<string, unknown> 
       g: round2(e.drive.gripMult),
       dg: round2(e.drive.dragMult),
       c: round2(e.drive.speedCap),
+      ...(e.drive.collisionImpact > 0.01 ? { ci: round2(e.drive.collisionImpact) } : {}),
       // The activity holding the controls (a racer on the grid). Sent only
       // while true, so an ordinary driving frame costs nothing: the client
       // greys the weapon slot off exactly the fact the server refuses on.
@@ -6899,6 +6900,9 @@ export class GameServer {
         break;
       case 'realm_racers_forfeit':
         sim.realmRacersForfeit(pid);
+        break;
+      case 'realm_racers_reset':
+        sim.realmRacersResetPosition(pid);
         break;
       case 'realm_racers_practice':
         // Race a house pilot now. The Sim re-validates the one circuit being

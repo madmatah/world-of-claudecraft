@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  hasAuthoritativeSelfPositionDiscontinuity,
   SELF_MOTION_CAP_MAX_MS,
   SELF_MOTION_CAP_MIN_MS,
   SELF_MOTION_SNAP_DIST_SQ,
@@ -191,28 +190,6 @@ class Lab {
 }
 
 describe('SelfMotionPredictor', () => {
-  it('recognizes only the local completed-unstuck event as an authoritative discontinuity', () => {
-    const completed = {
-      type: 'unstuck',
-      phase: 'completed',
-      pid: 7,
-      reason: 'moved_to_graveyard',
-      area: { kind: 'overworld', id: 'eastbrook_vale' },
-      origin: { x: 0, y: 0, z: 0, localX: 0, localZ: 0 },
-      destination: { x: 0, y: 0, z: 4, localX: 0, localZ: 4 },
-      duration: 10,
-      distance: 4,
-    } as const;
-    expect(hasAuthoritativeSelfPositionDiscontinuity([completed], 7)).toBe(true);
-    expect(hasAuthoritativeSelfPositionDiscontinuity([completed], 8)).toBe(false);
-    expect(
-      hasAuthoritativeSelfPositionDiscontinuity(
-        [{ type: 'unstuck', phase: 'countdown', seconds: 4 }],
-        7,
-      ),
-    ).toBe(false);
-  });
-
   it('snaps both predictive and fallback poses on a sub-threshold authoritative recovery', () => {
     const sim = new Sim({ seed: SEED, playerClass: 'warrior', autoEquip: true });
     teleport(sim, 0, -40);

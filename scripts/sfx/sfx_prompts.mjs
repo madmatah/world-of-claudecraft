@@ -350,6 +350,13 @@ export const SFX = [
       'An arcane missile zapping through the air, a magical electric zip. Single shot, no music.',
   },
   {
+    key: 'proj_groundshaker',
+    custom: true,
+    duration: 3,
+    prompt:
+      'A heavy vehicle cannon firing one Arc Shell: deep concussive launch with a short mechanical tail. Single shot, no music, no voice.',
+  },
+  {
     key: 'proj_shadow',
     custom: true,
     duration: 0.6,

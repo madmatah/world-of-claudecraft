@@ -1,8 +1,8 @@
 // Everything DERIVED from the authored Realm Racers layout: the resampled
-// centerline, the arc-length table, nearest-point projection, the checkpoint
+// centerline, the arc-length table, nearest-point projection, the recovery
 // gates, the start grid, and the two lateral boundaries (the garden's edge and
-// the basin's shore). One source of truth, shared by the sim (checkpoints,
-// track limits) and the renderer (the road ribbon, the kerbs, the sown borders,
+// the basin's shore). One source of truth, shared by the sim (progress,
+// recovery, track limits) and the renderer (the road ribbon, kerbs, borders,
 // the water), so what a racer sees and what a racer drives on cannot drift.
 //
 // Pure leaf: no SimContext, no rng, no DOM, no three. The curve is a closed
@@ -383,7 +383,7 @@ export function rallyGardenEdgeOffsetAt(s: number): number {
 
 let cachedGates: readonly RallyGate[] | null = null;
 
-/** The ordered checkpoints, derived from the authored lap fractions. */
+/** Ordered reset anchors derived from spline fractions, never lap-validation checkpoints. */
 export function realmRacersGates(): readonly RallyGate[] {
   if (cachedGates) return cachedGates;
   const track = realmRacersTrack();

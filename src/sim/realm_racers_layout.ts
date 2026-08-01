@@ -92,13 +92,12 @@ export const REALM_RACERS_MIN_HALF_WIDTH = 6.0;
 export const REALM_RACERS_SAMPLE_STEP = 1.0;
 
 /**
- * Checkpoints as lap fractions, decoupled from the control points: eight gates
+ * Recovery anchors as lap fractions, decoupled from the control points: eight gates
  * evenly spaced around the lap, the first ON the start/finish line.
  *
- * They are INVISIBLE by design, as in every racing game: nothing in the HUD
- * reads them and nothing is built over them. They exist so that a lap has to be
- * a whole lap: no shape of infield hazard can enforce that on its own, because
- * none of them stop a racer reversing back and forth over the line.
+ * They are INVISIBLE recovery anchors: nothing in the HUD reads them and
+ * nothing is built over them. Continuous spline distance validates laps and
+ * prevents shortcuts; these fractions only decide where a reset may return.
  */
 export const REALM_RACERS_GATE_FRACTIONS: readonly number[] = [
   0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875,
@@ -107,7 +106,7 @@ export const REALM_RACERS_GATE_FRACTIONS: readonly number[] = [
 /**
  * How far a gate's crossing band reaches PAST the local road edge. The band
  * must always over-cover the road, or a racer hugging the outer edge crosses
- * the road without crossing the gate and silently fails the checkpoint.
+ * the road without crossing the gate and silently misses a recovery anchor.
  */
 export const REALM_RACERS_GATE_MARGIN = 1.5;
 

@@ -124,18 +124,6 @@ function displaySpeedBudget(e: Entity): number {
   return RUN_SPEED * moveSpeedMult(e, 0);
 }
 
-export function hasAuthoritativeSelfPositionDiscontinuity(
-  events: readonly SimEvent[],
-  playerId: number,
-): boolean {
-  return events.some(
-    (event) =>
-      event.type === 'unstuck' &&
-      event.phase === 'completed' &&
-      (event.pid === undefined || event.pid === playerId),
-  );
-}
-
 /**
  * Did the authority just change the local machine's momentum in a way the
  * predictor could not have simulated? A vehicle carries VELOCITY across ticks

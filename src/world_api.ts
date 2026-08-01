@@ -548,6 +548,7 @@ export const COMMAND_NAMES = [
   'realm_racers_leave',
   'realm_racers_forfeit',
   'realm_racers_practice',
+  'realm_racers_reset',
 ] as const;
 
 // The union both the send path (`online.ts`) and the dispatch switch
@@ -822,6 +823,7 @@ export const COMMAND_FACETS = {
   realm_racers_leave: 'IWorldRealmRacers',
   realm_racers_forfeit: 'IWorldRealmRacers',
   realm_racers_practice: 'IWorldRealmRacers',
+  realm_racers_reset: 'IWorldRealmRacers',
   // IWorldMounts: pick + mount/dismount (snake_case wire strings, by design).
   // The active mount is a self-snapshot read (terse `mnt`, no send, untagged);
   // summoning one is an item use (use_item), not a mount command.

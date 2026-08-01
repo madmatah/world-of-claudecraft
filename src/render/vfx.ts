@@ -1491,6 +1491,94 @@ export class Vfx {
     );
   }
 
+  /** Pale, broad rear-tyre smoke from a sustained lateral slide. */
+  vehicleDriftSmoke(at: THREE.Vector3, yaw: number, slip: number, dt: number): void {
+    const strength = Math.min(1, Math.max(0, (Math.abs(slip) - 2) / 10));
+    if (strength <= 0 || !this.emitChance(12 + strength * 38, dt)) return;
+    const backX = -Math.sin(yaw);
+    const backZ = -Math.cos(yaw);
+    const side = Math.random() < 0.5 ? -0.75 : 0.75;
+    const sideX = Math.cos(yaw) * side;
+    const sideZ = -Math.sin(yaw) * side;
+    this.spawn(
+      at.x + backX * 1.15 + sideX,
+      at.y + 0.1,
+      at.z + backZ * 1.15 + sideZ,
+      -backX * 0.35 + (Math.random() - 0.5) * 0.8,
+      0.28 + Math.random() * 0.35,
+      -backZ * 0.35 + (Math.random() - 0.5) * 0.8,
+      0xd8d5cf,
+      0.55 + strength * 0.4,
+      0.8 + Math.random() * 0.35,
+      -0.2,
+      SPR.smoke,
+    );
+  }
+
+  /** Ochre dust and chunky debris while the machine is cutting through runoff. */
+  vehicleSurfaceDust(at: THREE.Vector3, yaw: number, speed: number, dt: number): void {
+    const strength = Math.min(1, Math.abs(speed) / 35);
+    if (strength <= 0.05 || !this.emitChance(8 + strength * 30, dt)) return;
+    const backX = -Math.sin(yaw);
+    const backZ = -Math.cos(yaw);
+    this.spawn(
+      at.x + backX * 1.2 + (Math.random() - 0.5) * 1.3,
+      at.y + 0.12,
+      at.z + backZ * 1.2 + (Math.random() - 0.5) * 1.3,
+      backX * (0.5 + strength) + (Math.random() - 0.5),
+      0.25 + Math.random() * 0.65,
+      backZ * (0.5 + strength) + (Math.random() - 0.5),
+      Math.random() < 0.45 ? 0xc89955 : 0x8d6336,
+      0.32 + strength * 0.42,
+      0.55 + Math.random() * 0.45,
+      -2.2,
+      Math.random() < 0.55 ? SPR.debris : SPR.smoke,
+    );
+  }
+
+  /** Narrow dark exhaust at the tail, sparse at idle and denser under throttle. */
+  vehicleExhaust(at: THREE.Vector3, yaw: number, accelerating: boolean, dt: number): void {
+    if (!this.emitChance(accelerating ? 16 : 2, dt)) return;
+    const backX = -Math.sin(yaw);
+    const backZ = -Math.cos(yaw);
+    this.spawn(
+      at.x + backX * 1.45,
+      at.y + 0.82,
+      at.z + backZ * 1.45,
+      backX * (accelerating ? 1.4 : 0.5) + (Math.random() - 0.5) * 0.25,
+      0.2 + Math.random() * 0.3,
+      backZ * (accelerating ? 1.4 : 0.5) + (Math.random() - 0.5) * 0.25,
+      0x3d4142,
+      accelerating ? 0.34 : 0.24,
+      0.48 + Math.random() * 0.28,
+      -0.15,
+      SPR.smoke,
+    );
+  }
+
+  /** Short hot spark shower for hard body or wall contact. */
+  vehicleScrapeSparks(at: THREE.Vector3, impact: number): void {
+    const strength = Math.min(1, Math.max(0.2, impact));
+    const count = this.scaledCount(6 + Math.round(12 * strength));
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * (5 + strength * 6);
+      this.spawn(
+        at.x,
+        at.y,
+        at.z,
+        Math.sin(angle) * speed,
+        0.4 + Math.random() * (1.2 + strength * 1.8),
+        Math.cos(angle) * speed,
+        i % 3 === 0 ? 0xfff1a8 : 0xff9d2e,
+        0.18 + Math.random() * 0.16,
+        0.2 + Math.random() * 0.22,
+        -9,
+        i % 2 === 0 ? SPR.trace : SPR.sparkBurst,
+      );
+    }
+  }
+
   /**
    * Ground impact puff: the visual weight of a landing, and the scuff of a
    * body striding up onto a ledge. `power` (0..1) scales count, spread, and

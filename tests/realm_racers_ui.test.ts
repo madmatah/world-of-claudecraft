@@ -17,7 +17,11 @@ function match(over: Partial<RallyMatch> = {}): RallyMatch {
     id: 7,
     phase: 'countdown',
     countdown: 3,
+    countdownTicks: 60,
     elapsed: 0,
+    speed: 0,
+    wrongWay: false,
+    resetLocked: false,
     returnIn: 0,
     me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
     opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
@@ -44,7 +48,9 @@ function harness() {
     practiceAvailable: true,
   };
   const forfeitRealmRacers = vi.fn();
+  const resetRealmRacersPosition = vi.fn();
   const startRealmRacersPractice = vi.fn();
+  const countdownTick = vi.fn();
   const touch = { value: false };
   const restoreFocus = vi.fn();
   const world = {
@@ -52,6 +58,7 @@ function harness() {
     joinRealmRacersQueue: vi.fn(),
     leaveRealmRacersQueue: vi.fn(),
     forfeitRealmRacers,
+    resetRealmRacersPosition,
     startRealmRacersPractice,
   } as unknown as IWorld;
   const noop = (): void => {};
@@ -64,6 +71,7 @@ function harness() {
     restoreFocus,
     controlKeys: (action) => CONTROL_KEYS[action],
     isTouchHud: () => touch.value,
+    countdownTick,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
   });
   const forfeitButton = (): HTMLButtonElement | null =>
@@ -76,6 +84,8 @@ function harness() {
     opener,
     restoreFocus,
     forfeitRealmRacers,
+    resetRealmRacersPosition,
+    countdownTick,
     startRealmRacersPractice,
     forfeitButton,
     touch,
@@ -400,5 +410,55 @@ describe('Realm Racers strip forfeit control', () => {
     });
     h.ui.update();
     expect(h.forfeitButton()).toBeNull();
+  });
+});
+
+describe('Realm Racers race-feel HUD', () => {
+  it('shows speed and wrong-way state, and routes manual recovery', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'racing', speed: 47.4, wrongWay: true });
+    h.ui.update();
+
+    expect(h.layer.querySelector('.rallyhud-speed')?.textContent).toBe(
+      t('hudChrome.rally.speed', { speed: '47' }),
+    );
+    const warning = h.layer.querySelector('.rallyhud-wrong-way') as HTMLElement;
+    expect(warning.textContent).toBe(t('hudChrome.rally.wrongWay'));
+    expect(warning.style.display).toBe('block');
+    (h.layer.querySelector('.rallyhud-reset') as HTMLButtonElement).click();
+    expect(h.resetRealmRacersPosition).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables recovery during the authoritative post-reset lock', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'racing', resetLocked: false });
+    h.ui.update();
+    const button = h.layer.querySelector('.rallyhud-reset') as HTMLButtonElement;
+    button.focus();
+    h.info.match = match({ phase: 'racing', resetLocked: true });
+    h.ui.update();
+    expect(button.disabled).toBe(true);
+    expect(h.layer.querySelector('.rallyhud-reset')).toBe(button);
+    expect(document.activeElement).toBe(button);
+    button.click();
+    expect(h.resetRealmRacersPosition).not.toHaveBeenCalled();
+  });
+
+  it('plays one countdown cue per changed authoritative second', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'countdown', countdown: 0, countdownTicks: 140 });
+    h.ui.update();
+    expect(h.countdownTick).not.toHaveBeenCalled();
+    expect(h.layer.querySelector('.rallyhud-phase')?.textContent).toBe('');
+    h.info.match = match({ phase: 'countdown', countdown: 3 });
+    h.ui.update();
+    h.ui.update();
+    expect(h.countdownTick).toHaveBeenCalledTimes(1);
+    h.info.match = match({ phase: 'countdown', countdown: 2, countdownTicks: 40 });
+    h.ui.update();
+    expect(h.countdownTick).toHaveBeenCalledTimes(2);
+    h.info.match = match({ phase: 'racing', countdown: 0, countdownTicks: 0 });
+    h.ui.update();
+    expect(h.countdownTick).toHaveBeenCalledTimes(2);
   });
 });

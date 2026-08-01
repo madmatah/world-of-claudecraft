@@ -26,6 +26,25 @@ export interface CameraFeelState {
   lastVy: number;
   fallFrames: number;
   detectorActive: boolean;
+  /** Positional shake lives in this same deterministic feel channel. */
+  shakeTrauma: number;
+  shakePhase: number;
+}
+
+export interface CameraFeelProfile {
+  leadTime: number;
+  leadMax: number;
+  leadOmega: number;
+  speedFovMax: number;
+  speedKickStart: number;
+  speedKickFull: number;
+  /** Curve exponent after speed normalization. Below one widens earlier. */
+  speedFovExponent: number;
+  speedFovOmega: number;
+  fovMin: number;
+  fovMax: number;
+  shakeDecay: number;
+  shakeFrequency: number;
 }
 
 /** Seconds of travel the look pivot leads by while moving. */
@@ -49,6 +68,41 @@ export const THUMP_MAX_FALL = 20;
 export const THUMP_MIN_FALL_FRAMES = 3;
 const MAX_STEP = 0.25;
 
+export const DEFAULT_CAMERA_FEEL_PROFILE: CameraFeelProfile = {
+  leadTime: LEAD_TIME,
+  leadMax: LEAD_MAX,
+  leadOmega: LEAD_OMEGA,
+  speedFovMax: SPEED_FOV_MAX,
+  speedKickStart: RUN_SPEED,
+  speedKickFull: RUN_SPEED * 1.45,
+  speedFovExponent: 1,
+  speedFovOmega: SPEED_FOV_OMEGA,
+  fovMin: -8,
+  fovMax: 12,
+  shakeDecay: 1.8,
+  shakeFrequency: 60,
+};
+
+/** Wider, slower-settling chase grammar for the 60 yd/s rally machine. */
+export const REALM_RACERS_CAMERA_FEEL_PROFILE: CameraFeelProfile = {
+  leadTime: 0.22,
+  leadMax: 3.5,
+  leadOmega: 3,
+  speedFovMax: 14,
+  speedKickStart: 8,
+  speedKickFull: 60,
+  speedFovExponent: 0.5,
+  speedFovOmega: 2.5,
+  fovMin: -10,
+  fovMax: 18,
+  shakeDecay: 1.6,
+  shakeFrequency: 54,
+};
+
+export function cameraFeelProfileForDriving(driving: boolean): CameraFeelProfile {
+  return driving ? REALM_RACERS_CAMERA_FEEL_PROFILE : DEFAULT_CAMERA_FEEL_PROFILE;
+}
+
 export function createCameraFeel(): CameraFeelState {
   return {
     leadX: 0,
@@ -59,6 +113,8 @@ export function createCameraFeel(): CameraFeelState {
     lastVy: 0,
     fallFrames: 0,
     detectorActive: false,
+    shakeTrauma: 0,
+    shakePhase: 0,
   };
 }
 
@@ -75,6 +131,7 @@ export function stepCameraFeel(
   vz: number,
   dt: number,
   enabled = true,
+  profile: CameraFeelProfile = DEFAULT_CAMERA_FEEL_PROFILE,
 ): void {
   const step = Math.min(Math.max(dt, 0), MAX_STEP);
   const speed = Math.hypot(vx, vz);
@@ -82,16 +139,28 @@ export function stepCameraFeel(
   let targetZ = 0;
   let targetKick = 0;
   if (enabled && speed > 0.05) {
-    const lead = Math.min(LEAD_MAX, speed * LEAD_TIME);
+    const lead = Math.min(profile.leadMax, speed * profile.leadTime);
     targetX = (vx / speed) * lead;
     targetZ = (vz / speed) * lead;
     // Widen only ABOVE base run speed (travel form 1.4x maps to ~full kick).
-    targetKick = SPEED_FOV_MAX * Math.min(1, Math.max(0, (speed - RUN_SPEED) / (RUN_SPEED * 0.45)));
+    const speedProgress = Math.min(
+      1,
+      Math.max(
+        0,
+        (speed - profile.speedKickStart) / (profile.speedKickFull - profile.speedKickStart),
+      ),
+    );
+    targetKick = profile.speedFovMax * speedProgress ** profile.speedFovExponent;
   }
-  s.leadX = ease(s.leadX, targetX, LEAD_OMEGA, step);
-  s.leadZ = ease(s.leadZ, targetZ, LEAD_OMEGA, step);
-  s.speedKick = ease(s.speedKick, targetKick, SPEED_FOV_OMEGA, step);
+  s.leadX = ease(s.leadX, targetX, profile.leadOmega, step);
+  s.leadZ = ease(s.leadZ, targetZ, profile.leadOmega, step);
+  s.speedKick = ease(s.speedKick, targetKick, profile.speedFovOmega, step);
   s.punchKick = ease(s.punchKick, 0, PUNCH_DECAY, step);
+  if (!enabled) s.shakeTrauma = 0;
+  else {
+    s.shakePhase += step * profile.shakeFrequency;
+    s.shakeTrauma = Math.max(0, s.shakeTrauma - step * profile.shakeDecay);
+  }
 }
 
 /** Add a transient FOV impulse in degrees (negative = a dip, e.g. landings). */
@@ -100,9 +169,50 @@ export function punchCameraFov(s: CameraFeelState, degrees: number): void {
 }
 
 /** Total FOV offset to add on top of the base camera FOV. */
-export function cameraFovOffset(s: CameraFeelState): number {
+export function cameraFovOffset(
+  s: CameraFeelState,
+  profile: CameraFeelProfile = DEFAULT_CAMERA_FEEL_PROFILE,
+): number {
   const total = s.speedKick + s.punchKick;
-  return Math.min(12, Math.max(-8, total));
+  return Math.min(profile.fovMax, Math.max(profile.fovMin, total));
+}
+
+/** Select, step, and project the complete feel profile used by the renderer. */
+export function stepCameraFeelForDriving(
+  s: CameraFeelState,
+  vx: number,
+  vz: number,
+  dt: number,
+  enabled: boolean,
+  driving: boolean,
+): number {
+  const profile = cameraFeelProfileForDriving(driving);
+  stepCameraFeel(s, vx, vz, dt, enabled, profile);
+  return cameraFovOffset(s, profile);
+}
+
+export function cameraFeelFovTarget(baseFov: number, feelOffset: number): number {
+  return Math.min(100, Math.max(50, baseFov + feelOffset));
+}
+
+export function addCameraShake(s: CameraFeelState, amount: number): void {
+  s.shakeTrauma = Math.min(1, s.shakeTrauma + Math.max(0, amount));
+}
+
+export function cameraShakeOffsetInto(
+  s: CameraFeelState,
+  out: { x: number; y: number; z: number },
+): void {
+  const intensity = s.shakeTrauma * s.shakeTrauma;
+  if (intensity === 0) {
+    out.x = 0;
+    out.y = 0;
+    out.z = 0;
+    return;
+  }
+  out.x = Math.sin(s.shakePhase * 1.7) * intensity * 0.6;
+  out.y = Math.sin(s.shakePhase * 2.3 + 1.1) * intensity * 0.45;
+  out.z = Math.sin(s.shakePhase * 1.3 + 2.4) * intensity * 0.18;
 }
 
 /**

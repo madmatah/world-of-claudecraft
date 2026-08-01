@@ -30,11 +30,13 @@ vi.mock('../server/db', () => ({
   releaseCharacterLease: vi.fn(async () => {}),
   heartbeatCharacterLeases: vi.fn(async () => {}),
   releaseAllCharacterLeases: vi.fn(async () => {}),
+  loadAccountFlair: vi.fn(async () => ({ ai: false, streamer: false, links: {} })),
 }));
 
 import { type ClientSession, GameServer } from '../server/game';
 import { ClientWorld } from '../src/net/online';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 setActiveWorldContent({
   ...BUILTIN_WORLD,
@@ -115,11 +117,13 @@ describe('Realm Racers online parity', () => {
     ClientWorld.prototype.joinRealmRacersQueue.call(probe as never);
     ClientWorld.prototype.leaveRealmRacersQueue.call(probe as never);
     ClientWorld.prototype.forfeitRealmRacers.call(probe as never);
+    ClientWorld.prototype.resetRealmRacersPosition.call(probe as never);
     ClientWorld.prototype.startRealmRacersPractice.call(probe as never, 'ace');
     expect(cmd.mock.calls).toEqual([
       [{ cmd: 'realm_racers_join' }],
       [{ cmd: 'realm_racers_leave' }],
       [{ cmd: 'realm_racers_forfeit' }],
+      [{ cmd: 'realm_racers_reset' }],
       [{ cmd: 'realm_racers_practice', tier: 'ace' }],
     ]);
   });
@@ -190,5 +194,36 @@ describe('Realm Racers online parity', () => {
       won: true,
       winnerName: 'Briar',
     });
+  });
+
+  it('dispatches recovery, routes its silent snap event, and mirrors the movement lock', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+    advance(server);
+    const match = server.sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    match.phase = 'racing';
+    const racer = server.sim.entities.get(session.pid);
+    if (!racer) throw new Error('missing racer');
+    const progress = match.progress.get(session.pid);
+    if (!progress) throw new Error('missing racer progress');
+    const anchor = realmRacersTrack().pointAt(progress.resetS);
+    const anchorX = match.origin.x + anchor.x;
+    const anchorZ = match.origin.z + anchor.z;
+    racer.pos.x += 4;
+    racer.prevPos = { ...racer.pos };
+    client.sent.length = 0;
+
+    command(server, session, 'realm_racers_reset');
+    advance(server);
+
+    // groundPos may resolve the horizontal sample onto a nearby terrain
+    // triangle; the recovery still lands at the authored track anchor.
+    expect(Math.hypot(racer.pos.x - anchorX, racer.pos.z - anchorZ)).toBeLessThan(0.2);
+    expect(events(client, 'realmRacersReset')).toHaveLength(1);
+    expect(selfFields(client, 'rr').at(-1)).toMatchObject({ match: { resetLocked: true } });
+    expect(selfFields(client, 'drv').at(-1)).toMatchObject({ lk: 1 });
   });
 });

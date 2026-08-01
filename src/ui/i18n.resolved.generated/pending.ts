@@ -68,6 +68,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -80,7 +82,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "es_ES": [
     "entities.abilities.rally_arc_shell.description",
@@ -141,6 +144,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -153,7 +158,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "fr_FR": [
     "entities.abilities.rally_arc_shell.description",
@@ -214,6 +220,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -226,7 +234,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "fr_CA": [
     "entities.abilities.rally_arc_shell.description",
@@ -287,6 +296,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -299,7 +310,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "en_CA": [],
   "it_IT": [
@@ -361,6 +373,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -373,7 +387,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "de_DE": [
     "entities.abilities.rally_arc_shell.description",
@@ -434,6 +449,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -446,7 +463,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "zh_CN": [],
   "zh_TW": [],
@@ -511,6 +529,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -523,7 +543,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "ru_RU": [],
   "cs_CZ": [
@@ -585,6 +606,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -597,7 +620,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "nl_NL": [
     "entities.abilities.rally_arc_shell.description",
@@ -658,6 +682,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -670,7 +696,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "pl_PL": [
     "entities.abilities.rally_arc_shell.description",
@@ -731,6 +758,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -743,7 +772,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "id_ID": [
     "entities.abilities.rally_arc_shell.description",
@@ -804,6 +834,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -816,7 +848,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "tr_TR": [
     "entities.abilities.rally_arc_shell.description",
@@ -877,6 +910,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -889,7 +924,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "sv_SE": [
     "entities.abilities.rally_arc_shell.description",
@@ -950,6 +986,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -962,7 +1000,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "vi_VN": [
     "entities.abilities.rally_arc_shell.description",
@@ -1023,6 +1062,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -1035,7 +1076,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ],
   "da_DK": [
     "entities.abilities.rally_arc_shell.description",
@@ -1096,6 +1138,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.queued",
     "hudChrome.rally.racingAgainst",
     "hudChrome.rally.racingAgainstBot",
+    "hudChrome.rally.reset",
+    "hudChrome.rally.speed",
     "hudChrome.rally.tierAce",
     "hudChrome.rally.tierAceHint",
     "hudChrome.rally.tierDriver",
@@ -1108,6 +1152,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.versusBot",
     "hudChrome.rally.waiting",
     "hudChrome.rally.won",
-    "hudChrome.rally.wonReturn"
+    "hudChrome.rally.wonReturn",
+    "hudChrome.rally.wrongWay"
   ]
 };

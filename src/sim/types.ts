@@ -3312,6 +3312,9 @@ export interface VehicleDrive {
   dragMult: number;
   /** Surface top-speed multiplier, written by the owning activity. 1 = road. */
   speedCap: number;
+  /** Speed rejected by static collision on the latest movement tick, yd/s.
+   * Presentation-only: scrape sparks and audio consume it. */
+  collisionImpact: number;
   /**
    * The owning activity has taken the controls away: the machine is held where
    * it stands and its weapons are inert. The Realm Racers sets it on the grid
@@ -4614,6 +4617,9 @@ export type SimEvent = { pid?: number } & (
       countdownTicks: number;
     }
   | { type: 'realmRacersGo' }
+  // Personal, silent recovery discontinuity. It is distinct from `respawn`:
+  // no one died, but the online renderer must snap even for a short rewind.
+  | { type: 'realmRacersReset' }
   | { type: 'realmRacersLap'; lap: number; totalLaps: number }
   | {
       type: 'realmRacersResult';

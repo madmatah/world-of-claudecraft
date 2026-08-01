@@ -3,8 +3,13 @@ import {
   BOOM_LEASH_XZ,
   BOOM_LEASH_Y,
   type CameraBoomState,
+  cameraBoomDistance,
+  cameraBoomProfileForDriving,
   createCameraBoom,
+  DEFAULT_CAMERA_BOOM_PROFILE,
+  REALM_RACERS_CAMERA_BOOM_PROFILE,
   stepCameraBoom,
+  stepCameraBoomForDriving,
 } from '../src/render/camera_boom_core';
 
 // The spring-arm pivot: exact critically damped follow with a leash and a
@@ -96,5 +101,45 @@ describe('camera boom (spring-arm lag)', () => {
       stepCameraBoom(stiff, 1, 0, 0, 1 / 60, 4);
     }
     expect(1 - stiff.x).toBeLessThan((1 - soft.x) * 0.5);
+  });
+
+  it('keeps default boom constants exact and lets the rally trail wider', () => {
+    expect(DEFAULT_CAMERA_BOOM_PROFILE).toMatchObject({
+      omegaXZ: 12,
+      omegaY: 6.5,
+      leashXZ: BOOM_LEASH_XZ,
+      leashY: BOOM_LEASH_Y,
+      distanceScale: 1,
+      eyeHeight: 2,
+    });
+    const normal = createCameraBoom();
+    const rally = createCameraBoom();
+    stepCameraBoom(normal, 0, 0, 0, 1 / 60);
+    stepCameraBoom(rally, 0, 0, 0, 1 / 60, 1, REALM_RACERS_CAMERA_BOOM_PROFILE);
+    for (let i = 0; i < 8; i++) {
+      stepCameraBoom(normal, 2, 0, 0, 1 / 60);
+      stepCameraBoom(rally, 2, 0, 0, 1 / 60, 1, REALM_RACERS_CAMERA_BOOM_PROFILE);
+    }
+    expect(2 - rally.x).toBeGreaterThan(2 - normal.x);
+    expect(REALM_RACERS_CAMERA_BOOM_PROFILE.distanceScale).toBeGreaterThan(1);
+  });
+
+  it('selects the rally boom only while driving', () => {
+    expect(cameraBoomProfileForDriving(false)).toBe(DEFAULT_CAMERA_BOOM_PROFILE);
+    expect(cameraBoomProfileForDriving(true)).toBe(REALM_RACERS_CAMERA_BOOM_PROFILE);
+  });
+
+  it('executes the runtime driving selector inside the real boom step', () => {
+    const normal = createCameraBoom();
+    const rally = createCameraBoom();
+    stepCameraBoomForDriving(normal, 0, 0, 0, 1 / 60, 1, false);
+    stepCameraBoomForDriving(rally, 0, 0, 0, 1 / 60, 1, true);
+    for (let i = 0; i < 8; i++) {
+      stepCameraBoomForDriving(normal, 2, 0, 0, 1 / 60, 1, false);
+      stepCameraBoomForDriving(rally, 2, 0, 0, 1 / 60, 1, true);
+    }
+    expect(2 - rally.x).toBeGreaterThan(2 - normal.x);
+    expect(cameraBoomDistance(12, cameraBoomProfileForDriving(false))).toBe(12);
+    expect(cameraBoomDistance(12, cameraBoomProfileForDriving(true))).toBeCloseTo(13.92, 5);
   });
 });

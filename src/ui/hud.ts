@@ -5,6 +5,7 @@ import type { GraphicsSettingsSnapshot } from '../game/graphics_rebuild_core';
 import { InstanceMusicController } from '../game/instance_music';
 import { type Keybinds, keyCapLabel, keyLabel } from '../game/keybinds';
 import { music } from '../game/music';
+import { playRealmRacersResultAudio } from '../game/realm_racers_audio_routing';
 import type { GameSettings, Settings } from '../game/settings';
 import { sfx } from '../game/sfx';
 import type { UiEffectsTier } from '../game/ui_effects_profile';
@@ -4387,6 +4388,7 @@ export class Hud {
     // the key column entirely.
     controlKeys: (action) => this.rallyControlKeys(action),
     isTouchHud: () => document.body.classList.contains('mobile-touch'),
+    countdownTick: () => audio.realmRacersCountdownTick(),
     writers: this.writerFacet,
     ...this.windowFocus('#realm-racers-window'),
   });
@@ -8076,6 +8078,10 @@ export class Hud {
     this.meters.update();
     this.mountRaceStrip.repaintIfChanged();
     this.mountRaceControls.update();
+    // The live race strip and countdown audio follow authoritative state every
+    // frame. Its writer facets elide unchanged DOM; the queue/setup window
+    // still rebuilds only on its structural signature.
+    this.realmRacersUi.update();
     this.lockpickController.repaintIfChanged();
     this.tutorial.update(sim, this.renderer, this.keybinds);
     this.lootRolls.update(now);
@@ -8695,7 +8701,6 @@ export class Hud {
       if ($('#dungeon-finder-window').style.display === 'flex') this.dungeonFinderWindow.render();
       if (this.dungeonFinderProposalPopup.isOpen) this.dungeonFinderProposalPopup.render();
       if ($('#valecup-window').style.display === 'block') this.valeCupWindow.render();
-      this.realmRacersUi.update();
       // Auto-open the Card Duel window the instant a queued match starts (a
       // false->true transition on match presence), mirroring updateTradeWindow's
       // transition-based auto-open: the sim allows playing a card from anywhere
@@ -12022,14 +12027,17 @@ export class Hud {
         case 'realmRacersFound':
           if (ev.pid === sim.playerId) {
             this.showBanner(t('hudChrome.rally.bannerFound', { name: ev.opponentName }));
-            audio.duelChallenge();
+            audio.realmRacersFound();
           }
           break;
         case 'realmRacersGo':
           if (ev.pid === sim.playerId) {
             this.showBanner(t('hudChrome.rally.bannerGo'));
-            audio.vcupKickoff();
+            audio.realmRacersGo();
           }
+          break;
+        case 'realmRacersReset':
+          // A silent recovery marker for the online position predictor.
           break;
         case 'realmRacersLap':
           if (ev.pid === sim.playerId) {
@@ -12039,43 +12047,34 @@ export class Hud {
                 total: formatNumber(ev.totalLaps, { maximumFractionDigits: 0 }),
               }),
             );
-            audio.fiestaScorePing(true);
+            audio.realmRacersLap();
           }
           break;
-        // The shell is heard by everyone near it, not just its two parties: the
-        // report is a world sound anchored on the shot, the same way the crater
-        // and the sparks are world visuals. Both cues are placeholders reused
-        // from the Fiesta set; the bespoke recordings are the audio pass's.
         case 'realmRacersShellFired':
-          audio.fiestaAugment();
-          break;
         case 'realmRacersShellHit':
-          audio.fiestaDown();
           break;
         // Contact is rendered in the world (sparks, ring, shake), never in the
         // HUD: a banner on every nudge would bury the lap and result lines.
         case 'realmRacersBump':
           break;
-        case 'realmRacersResult':
+        case 'realmRacersResult': {
           if (ev.pid !== sim.playerId) break;
           if (!ev.winnerName) {
             this.showBanner(t('hudChrome.rally.bannerDraw'));
             this.combatLog(t('hudChrome.rally.bannerDraw'), '#dcb75b');
-            audio.duelEnd();
           } else if (ev.won) {
             this.showBanner(t('hudChrome.rally.bannerWin'));
             this.combatLog(t('hudChrome.rally.logWin'), '#7fdc4f');
-            audio.duelEnd();
           } else if (ev.forfeited) {
             this.showBanner(t('hudChrome.rally.bannerLoss', { name: ev.winnerName }));
             this.combatLog(t('hudChrome.rally.logForfeit', { name: ev.winnerName }), '#ff9b72');
-            audio.arenaLoss();
           } else {
             this.showBanner(t('hudChrome.rally.bannerLoss', { name: ev.winnerName }));
             this.combatLog(t('hudChrome.rally.logLoss', { name: ev.winnerName }), '#ff7a6a');
-            audio.arenaLoss();
           }
+          playRealmRacersResultAudio(ev, sim.playerId, audio);
           break;
+        }
         case 'cardDuelMatchStart':
           audio.cardShuffle();
           break;

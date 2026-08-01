@@ -101,6 +101,7 @@ function realmRacersWorld(): IWorld {
     joinRealmRacersQueue: () => {},
     leaveRealmRacersQueue: () => {},
     forfeitRealmRacers: () => {},
+    resetRealmRacersPosition: () => {},
     startRealmRacersPractice: () => {},
   } as unknown as IWorld;
 }
@@ -118,6 +119,7 @@ function openRealmRacers(): { ui: RealmRacersUi; root: HTMLElement } {
     restoreFocus: noop,
     controlKeys: () => ['W'],
     isTouchHud: () => false,
+    countdownTick: noop,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
   });
   ui.toggle();
