@@ -9,7 +9,7 @@
 // them: re-deriving them from today's records would pass no matter what the
 // move broke.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_CIRCUITS,
@@ -20,9 +20,17 @@ import {
 } from '../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import {
+  realmRacersCircuitErrors,
+  realmRacersCircuitMetrics,
+} from '../src/sim/realm_racers_circuit_metrics';
+import {
+  REALM_RACERS_GATE_SNAP_FRACTION,
+  REALM_RACERS_GATE_SPACING,
   REALM_RACERS_GRID_SIZE,
+  REALM_RACERS_LANE_CLEARANCE,
   REALM_RACERS_LANE_DZ,
   REALM_RACERS_LANES,
+  REALM_RACERS_MIN_GATES,
   REALM_RACERS_MIN_HALF_WIDTH,
   REALM_RACERS_ORIGIN,
   realmRacersLaneAt,
@@ -46,11 +54,6 @@ import { addAt, makeWorld } from './vale_cup_util';
 
 const GARDEN = REALM_RACERS_PRACTICE_CIRCUIT;
 
-/** Clear air between two lanes' region envelopes, yards. The interest scan is
- *  ~120 yd, so anything past that keeps a private copy genuinely private
- *  instead of merely far away. */
-const LANE_CLEARANCE = 200;
-
 describe('Realm Racers circuits: the move preserved the garden circuit exactly', () => {
   // Every literal in this block was produced by the single-circuit code at
   // commit HEAD~, before the records existed.
@@ -61,27 +64,13 @@ describe('Realm Racers circuits: the move preserved the garden circuit exactly',
     expect(track.samples).toHaveLength(454);
   });
 
-  it('derives the same eight recovery gates', () => {
-    const before = [
-      [0, 113698, -54, 12],
-      [56.78735671453765, 113754.30233460678, -48.488177083196476, 12],
-      [113.5747134290753, 113784.15280953028, -4.414858797031457, 11],
-      [170.36207014361295, 113757.02291995204, 41.53925609701661, 11.208333333333334],
-      [227.1494268581506, 113701.94329758595, 40.82168968949675, 11.5],
-      [283.9367835726882, 113647.05268376536, 45.75362075125248, 10.041666666666666],
-      [340.7241402872259, 113614.09993902876, 2.0090594496661778, 10.214285714285714],
-      [397.5114970017636, 113643.39890457637, -44.29757819711956, 9.5],
-    ];
-    const gates = realmRacersGates(GARDEN);
-    expect(gates).toHaveLength(before.length);
-    gates.forEach((gate, i) => {
-      const [s, x, z, halfWidth] = before[i];
-      expect(gate.s, `gate ${i} s`).toBeCloseTo(s, 10);
-      expect(gate.x, `gate ${i} x`).toBeCloseTo(x, 10);
-      expect(gate.z, `gate ${i} z`).toBeCloseTo(z, 10);
-      expect(gate.halfWidth, `gate ${i} halfWidth`).toBeCloseTo(halfWidth, 12);
-    });
-  });
+  // The gate pin that stood here is deliberately GONE. It held the eight
+  // evenly spaced recovery anchors the record used to author, computed from the
+  // pre-records code, as evidence that splitting one circuit into a table of
+  // them changed no geometry. The anchors are derived from the curve now
+  // (nothing about where one sits was ever a design decision), so that pin
+  // holds a rule the tree no longer has. The three blocks around it still prove
+  // the move: the lap, the start row, and the width and apron profile.
 
   it('derives the same four-abreast start row', () => {
     const before = [
@@ -134,11 +123,22 @@ describe('Realm Racers circuits: every record is well formed', () => {
         );
       }
 
-      // Recovery gates: ordered fractions, the first ON the start line.
-      expect(circuit.gateFractions[0]).toBe(0);
-      for (let i = 1; i < circuit.gateFractions.length; i++) {
-        expect(circuit.gateFractions[i]).toBeGreaterThan(circuit.gateFractions[i - 1]);
-        expect(circuit.gateFractions[i]).toBeLessThan(1);
+      // An apron ceiling, where a circuit authors one, is the same band shape as
+      // the road width: sorted, spanning the whole lap, and a positive number of
+      // yards (a zero would delete the drivable garden rather than narrow it).
+      const apronBands = circuit.apronBands;
+      if (apronBands) {
+        expect(apronBands.length).toBeGreaterThan(0);
+        expect(apronBands[0].s).toBe(0);
+        expect(apronBands[apronBands.length - 1].s).toBe(1);
+        for (let i = 1; i < apronBands.length; i++) {
+          expect(apronBands[i].s, `apron band ${i} of ${circuit.id}`).toBeGreaterThan(
+            apronBands[i - 1].s,
+          );
+        }
+        for (const band of apronBands) {
+          expect(band.maxApron, `apron band at s=${band.s}`).toBeGreaterThan(0);
+        }
       }
 
       // The race has to be finishable, and the region has to contain the wall.
@@ -147,6 +147,22 @@ describe('Realm Racers circuits: every record is well formed', () => {
       expect(circuit.timeLimitSeconds).toBeGreaterThan(0);
       expect(circuit.regionHalfX).toBeGreaterThan(circuit.perimeter.halfX);
       expect(circuit.regionHalfZ).toBeGreaterThan(circuit.perimeter.halfZ);
+    },
+  );
+
+  it.each(REALM_RACERS_CIRCUIT_LIST.map((c) => [c.id, c] as const))(
+    '%s is drivable geometry by every measurement the editor draws against',
+    (_id, circuit) => {
+      // The same readout the circuit editor renders live, run here so a shipped
+      // circuit can never be one the tool would have rejected: the loop closes
+      // without crossing itself, it runs the way the apron and the basin are
+      // built for, no corner folds its own road, no two stretches run close
+      // enough to corrupt the projection, and the two shores never meet.
+      const metrics = realmRacersCircuitMetrics(circuit);
+      expect(realmRacersCircuitErrors(metrics), `${circuit.id} problems`).toEqual([]);
+      // Not vacuous: the checks really did run over a measured lap.
+      expect(metrics.sampleCount).toBeGreaterThan(100);
+      expect(metrics.turningDegrees).toBeCloseTo(360, 3);
     },
   );
 
@@ -170,6 +186,90 @@ describe('Realm Racers circuits: every record is well formed', () => {
       }
     },
   );
+});
+
+describe('Realm Racers recovery anchors: derived, never authored', () => {
+  it.each(REALM_RACERS_CIRCUIT_LIST.map((c) => [c.id, c] as const))(
+    '%s spaces its anchors by lap length rather than by a per-circuit count',
+    (_id, circuit) => {
+      const track = realmRacersTrack(circuit);
+      const gates = realmRacersGates(circuit);
+      expect(gates.length).toBeGreaterThanOrEqual(REALM_RACERS_MIN_GATES);
+      // The COUNT follows the lap, which is the whole reason the field went
+      // away: a longer circuit gets more anchors without anyone remembering to.
+      expect(gates).toHaveLength(
+        Math.max(REALM_RACERS_MIN_GATES, Math.round(track.length / REALM_RACERS_GATE_SPACING)),
+      );
+      // Ordered, the first ON the start line, and none of them past the lap.
+      expect(gates[0].s).toBe(0);
+      for (let i = 1; i < gates.length; i++) {
+        expect(gates[i].s, `anchor ${i} of ${circuit.id}`).toBeGreaterThan(gates[i - 1].s);
+        expect(gates[i].s).toBeLessThan(track.length);
+      }
+    },
+  );
+
+  it('never lets two anchors drift into each other, whatever the snapping does', () => {
+    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+      const track = realmRacersTrack(circuit);
+      const gates = realmRacersGates(circuit);
+      const spacing = track.length / gates.length;
+      // Each one may slide up to SNAP_FRACTION of the spacing, so the closest
+      // two can ever come is what is left of it. Under a half, or the snapping
+      // could reorder them.
+      const floor = spacing * (1 - 2 * REALM_RACERS_GATE_SNAP_FRACTION);
+      expect(REALM_RACERS_GATE_SNAP_FRACTION).toBeLessThan(0.5);
+      for (let i = 1; i < gates.length; i++) {
+        expect(
+          gates[i].s - gates[i - 1].s,
+          `${circuit.id} anchors ${i - 1} to ${i}`,
+        ).toBeGreaterThan(floor);
+      }
+    }
+  });
+
+  it('puts the anchors on STRAIGHTER road than plain even spacing would', () => {
+    // The reason the snapping exists. A reset restarts a racer at a standstill
+    // facing along the track, so an anchor in a corner restarts them stopped on
+    // an apex. On the garden circuit, plain even spacing put one anchor in the
+    // hairpin; this is what says the derivation actually improves on it.
+    const track = realmRacersTrack(GARDEN);
+    const gates = realmRacersGates(GARDEN);
+    const radiusAt = (s: number): number => Math.abs(track.pointAt(s).turnRadius);
+    let better = 0;
+    for (let i = 1; i < gates.length; i++) {
+      const even = (i / gates.length) * track.length;
+      expect(radiusAt(gates[i].s)).toBeGreaterThanOrEqual(radiusAt(even));
+      if (radiusAt(gates[i].s) > radiusAt(even) * 1.5) better++;
+    }
+    // Not vacuous: several anchors really moved somewhere much straighter.
+    expect(better).toBeGreaterThanOrEqual(3);
+    // And the tightest anchor is no longer sitting in a corner.
+    const tightest = Math.min(...gates.map((gate) => radiusAt(gate.s)));
+    expect(tightest).toBeGreaterThan(50);
+  });
+
+  it('is a pure function of the curve: same circuit, same anchors', async () => {
+    // Three hosts run this sim and a circuit is rebuilt on every boot, so a
+    // derivation that drifted would put two realms' resets in different places.
+    const before = realmRacersGates(GARDEN).map((gate) => gate.s);
+    vi.resetModules();
+    const rebuilt = (await import('../src/sim/realm_racers_spline')).realmRacersGates(GARDEN);
+    expect(rebuilt.map((gate) => gate.s)).toEqual(before);
+  });
+
+  it('follows the curve when the curve moves', () => {
+    // The anchors are geometry now, not data: reshaping the circuit has to
+    // reshape them, with nothing to edit by hand.
+    const stretched = {
+      ...GARDEN,
+      id: 'anchors_follow_the_curve',
+      controlPoints: GARDEN.controlPoints.map((p) => ({ x: p.x * 2, z: p.z * 2 })),
+    };
+    const longer = realmRacersTrack(stretched);
+    expect(longer.length).toBeGreaterThan(realmRacersTrack(GARDEN).length * 1.8);
+    expect(realmRacersGates(stretched).length).toBeGreaterThan(realmRacersGates(GARDEN).length);
+  });
 });
 
 describe('Realm Racers circuits: the pools', () => {
@@ -250,7 +350,7 @@ describe('Realm Racers lanes: where the circuits stand in the band', () => {
     // DERIVED from the records, not pinned: authoring a deeper circuit has to
     // fail here rather than quietly letting one lane see into the next.
     const deepest = Math.max(...REALM_RACERS_CIRCUIT_LIST.map((c) => c.regionHalfZ));
-    expect(REALM_RACERS_LANE_DZ).toBeGreaterThanOrEqual(2 * deepest + LANE_CLEARANCE);
+    expect(REALM_RACERS_LANE_DZ).toBeGreaterThanOrEqual(2 * deepest + REALM_RACERS_LANE_CLEARANCE);
   });
 
   it('keeps every practice lane private and out of the public one', () => {
@@ -309,6 +409,79 @@ describe('Realm Racers circuits: which one a race lands on', () => {
     const info = sim.realmRacersInfoFor(pids[0]).match;
     expect(info?.circuitId).toBe(sim.realmRacers.match?.circuitId);
     expect(realmRacersCircuitById(info?.circuitId ?? '')).toBeDefined();
+  });
+
+  it('drives on the curve the AUTHORED control points build, not a second one', () => {
+    // The whole record is one array of control points plus numbers derived from
+    // it, and everything the race reads (the grid, progress along the lap, the
+    // lap length, the recovery anchors) comes back through the ONE derivation in
+    // `realm_racers_spline.ts`. This walks that chain end to end on a LIVE race
+    // rather than trusting the call graph.
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.realmRacersPracticeStart('ace', human);
+    const match = realmRacersMatchOf(sim.ctx, human);
+    if (!match) throw new Error('no practice race');
+    const circuit = realmRacersCircuitOf(match);
+    const track = realmRacersTrack(circuit);
+
+    // 1) The curve really is built from the record's own points: every authored
+    // control point lies on the resampled centerline.
+    for (const point of circuit.controlPoints) {
+      const nearest = Math.min(
+        ...track.samples.map((sample) =>
+          Math.hypot(
+            sample.x - REALM_RACERS_ORIGIN.x - point.x,
+            sample.z - REALM_RACERS_ORIGIN.z - point.z,
+          ),
+        ),
+      );
+      expect(nearest, `control point ${point.x},${point.z}`).toBeLessThan(track.step);
+    }
+
+    // 2) The race SEATS the racer on the grid slot the spline derives from
+    // those points, offset onto this practice copy's own lane.
+    const racer = sim.entities.get(human);
+    if (!racer) throw new Error('no racer');
+    const slot = realmRacersStarts(circuit).find(
+      (candidate) =>
+        Math.hypot(
+          candidate.x + match.origin.x - racer.pos.x,
+          candidate.z + match.origin.z - racer.pos.z,
+        ) < 0.5,
+    );
+    expect(slot, 'the racer stands on a derived grid slot').toBeDefined();
+
+    // 3) Let the countdown run out and a machine drive most of a lap, then the
+    // race's own record of where it is has to be the arc length THIS curve
+    // gives for where it physically stands. Measured on the house pilot rather
+    // than the human: a test player has no throttle, and a racer sitting still
+    // on the grid would satisfy this without proving anything.
+    const bot = match.pids.find((pid) => pid !== human);
+    if (bot === undefined) throw new Error('no house pilot');
+    const agreement = (): { lastS: number; travelled: number } => {
+      const driver = sim.entities.get(bot);
+      const progress = match.progress.get(bot);
+      if (!driver || !progress) throw new Error('no progress');
+      const projected = track.project(
+        driver.pos.x - match.origin.x,
+        driver.pos.z - match.origin.z,
+        progress.trackIndex,
+      );
+      expect(progress.lastS).toBeCloseTo(projected.s, 6);
+      return { lastS: progress.lastS, travelled: progress.travelled };
+    };
+    for (let tick = 0; tick < 20 * 8; tick++) sim.tick();
+    const early = agreement();
+    for (let tick = 0; tick < 20 * 8; tick++) sim.tick();
+    const later = agreement();
+    // Not vacuous: the machine really drove a stretch of the derived lap
+    // between the two readings, and both agreed with the curve.
+    expect(later.travelled - early.travelled).toBeGreaterThan(50);
+
+    // 4) And the race is run over the DERIVED lap, never a constant.
+    expect(match.totalLaps).toBe(circuit.practiceLaps);
+    expect(realmRacersGates(circuit).length).toBeGreaterThanOrEqual(REALM_RACERS_MIN_GATES);
   });
 
   it('falls back to the practice circuit for a race on an unauthored id', () => {

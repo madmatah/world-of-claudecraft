@@ -40,7 +40,48 @@ export interface RallyGate extends RallyPoint {
  */
 export const REALM_RACERS_ORIGIN = { x: 113_700, z: 0 } as const;
 
+/**
+ * The x window every circuit's region has to fit inside, world coordinates.
+ * About 700 yards TOTAL for the whole pool, which is why circuits stack along z
+ * rather than beside each other: the west edge is where the Protect Yumi band
+ * ends (`YUMI_BAND_X_MIN` + its width) and the east edge is where the overflow
+ * dungeon band starts claiming x (`DUNGEON_OVERFLOW_X_BASE` less its guard).
+ *
+ * Authored here rather than imported from `data.ts`, which reaches the whole
+ * content tree while this file is a leaf the spline and the renderer both sit
+ * on. What holds the two numbers honest is `tests/realm_racers_layout.test.ts`,
+ * which re-derives them from the neighbouring bands and fails if one moves.
+ */
+export const REALM_RACERS_BAND_X_MIN = 113_400;
+export const REALM_RACERS_BAND_X_MAX = 114_100;
+
 export const REALM_RACERS_MAX_GATE_STEP = 4;
+
+/**
+ * Target distance between recovery anchors, yards. It is what decides how far a
+ * reset can throw a racer back, and 57 is the spacing the garden circuit was
+ * authored at (eight anchors over a 455 yard lap), kept because it read well.
+ *
+ * The anchor COUNT follows from it rather than being authored per circuit,
+ * which is the whole point: a 1100 yard lap gets nineteen anchors instead of a
+ * circuit-sized number somebody had to remember to raise.
+ */
+export const REALM_RACERS_GATE_SPACING = 57;
+
+/** Fewest anchors any circuit gets, however short its lap. */
+export const REALM_RACERS_MIN_GATES = 4;
+
+/**
+ * How far an anchor may slide off its evenly spaced slot to find straighter
+ * road, as a fraction of the spacing.
+ *
+ * A reset puts a racer back on the centerline at a standstill, facing along the
+ * track, so an anchor in a corner restarts them stopped on an apex. Evenly
+ * spaced anchors land wherever they land: on the garden circuit only one of the
+ * eight sat on a straight, and one sat in the hairpin. Kept under a half so two
+ * neighbouring anchors can never cross or bunch.
+ */
+export const REALM_RACERS_GATE_SNAP_FRACTION = 0.4;
 
 /** Narrowest road half-width any circuit may author. On the garden circuit it
  *  is the HAIRPIN's, which is where a circuit's tightest road belongs. */
@@ -173,6 +214,30 @@ export interface RealmRacersLane {
  * letting two lanes see each other.
  */
 export const REALM_RACERS_LANE_DZ = 500;
+
+/**
+ * Clear air between two neighbouring lanes' region envelopes, yards. The
+ * interest scan is about 120 yd, so anything past that keeps a private copy
+ * genuinely private rather than merely far away.
+ *
+ * Together with `REALM_RACERS_LANE_DZ` this is what BOUNDS how deep a circuit
+ * may be: `regionHalfZ` can never exceed `(LANE_DZ - LANE_CLEARANCE) / 2`. It
+ * lives here rather than inside the test that derives the floor, so the circuit
+ * editor can report the limit while a circuit is being drawn instead of the
+ * operator meeting it as a red test afterwards.
+ */
+export const REALM_RACERS_LANE_CLEARANCE = 200;
+
+/** How deep a circuit's region may be before two lanes could see each other. */
+export const REALM_RACERS_MAX_REGION_HALF_Z =
+  (REALM_RACERS_LANE_DZ - REALM_RACERS_LANE_CLEARANCE) / 2;
+
+/** How wide a circuit's region may be before it leaves the band. Asymmetric
+ *  window, so the tighter side is the one that binds. */
+export const REALM_RACERS_MAX_REGION_HALF_X = Math.min(
+  REALM_RACERS_ORIGIN.x - REALM_RACERS_BAND_X_MIN,
+  REALM_RACERS_BAND_X_MAX - REALM_RACERS_ORIGIN.x,
+);
 
 export const REALM_RACERS_LANES: readonly RealmRacersLane[] = (() => {
   const lanes: RealmRacersLane[] = [];

@@ -116,4 +116,62 @@ describe('Realm Racers spline', () => {
     expect(rebuilt.length).toBe(track.length);
     expect(rebuilt.samples).toEqual(track.samples);
   });
+
+  it('rebuilds when the record behind an id changes, so a draft is never stale', () => {
+    // The memo is what lets the game derive one track per circuit for the whole
+    // process. An editor holding an id still while redrawing what is under it
+    // has to get the geometry of the record it passed, or every readout it
+    // renders is of the first shape it ever drew.
+    const edited = {
+      ...GARDEN_CIRCUIT,
+      controlPoints: GARDEN_CIRCUIT.controlPoints.map((p) => ({ x: p.x * 1.5, z: p.z * 1.5 })),
+    };
+    const rebuilt = realmRacersTrack(edited);
+    expect(rebuilt.length).toBeGreaterThan(track.length * 1.4);
+    // ...and the shipped record still answers with its own geometry.
+    expect(realmRacersTrack(GARDEN_CIRCUIT).length).toBe(track.length);
+  });
+});
+
+describe('Realm Racers apron override', () => {
+  /** The shipped circuit, wearing an authored ceiling on its apron. A separate
+   *  id because the derived geometry is memoized per circuit. */
+  const withBands = (id: string, maxApron: number) => ({
+    ...GARDEN_CIRCUIT,
+    id,
+    apronBands: [
+      { s: 0, maxApron },
+      { s: 1, maxApron },
+    ],
+  });
+
+  it('narrows the apron where a band asks for less', () => {
+    const narrowed = realmRacersTrack(withBands('spline_apron_narrowed', 6));
+    expect(Math.max(...narrowed.samples.map((s) => s.apron))).toBeLessThanOrEqual(6 + 1e-9);
+    // Not vacuous: the unbanded circuit reaches its cap on the fast parts.
+    expect(Math.max(...track.samples.map((s) => s.apron))).toBeGreaterThan(6);
+  });
+
+  it('can only ever narrow, which is what keeps the anti-cut sweep valid', () => {
+    // A cut along the apron's edge has to cost more than it saves. The derived
+    // value is what makes that true, so a band is a further `min` and never a
+    // raise: asking for more than the derivation allows changes nothing at all.
+    const raised = realmRacersTrack(withBands('spline_apron_raised', 999));
+    expect(raised.samples.map((s) => s.apron)).toEqual(track.samples.map((s) => s.apron));
+  });
+
+  it('leaves every other derived quantity alone', () => {
+    const narrowed = realmRacersTrack(withBands('spline_apron_untouched', 6));
+    expect(narrowed.length).toBe(track.length);
+    expect(narrowed.samples.map((s) => s.halfWidth)).toEqual(track.samples.map((s) => s.halfWidth));
+    expect(narrowed.samples.map((s) => s.turnRadius)).toEqual(
+      track.samples.map((s) => s.turnRadius),
+    );
+  });
+
+  it('is inert on a circuit that authors none', () => {
+    expect(GARDEN_CIRCUIT.apronBands).toBeUndefined();
+    const same = realmRacersTrack({ ...GARDEN_CIRCUIT, id: 'spline_apron_absent' });
+    expect(same.samples.map((s) => s.apron)).toEqual(track.samples.map((s) => s.apron));
+  });
 });

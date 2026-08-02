@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
+  REALM_RACERS_CIRCUIT_LIST,
+} from '../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../src/sim/content/vehicles';
+import { DUNGEON_OVERFLOW_X_BASE, YUMI_BAND_X_MAX } from '../src/sim/data';
 import {
   isAtRealmRacers,
+  REALM_RACERS_BAND_X_MAX,
+  REALM_RACERS_BAND_X_MIN,
   REALM_RACERS_GATE_MARGIN,
   REALM_RACERS_GRID_SIZE,
+  REALM_RACERS_MIN_GATES,
+  REALM_RACERS_ORIGIN,
   rallyGateCrossingFraction,
 } from '../src/sim/realm_racers_layout';
 import {
@@ -46,7 +54,7 @@ describe('Realm Racers recovery gates', () => {
   });
 
   it('orders the recovery anchors by arc length, starting on the finish line', () => {
-    expect(gates).toHaveLength(GARDEN_CIRCUIT.gateFractions.length);
+    expect(gates.length).toBeGreaterThanOrEqual(REALM_RACERS_MIN_GATES);
     expect(gates.map((gate) => gate.index)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
     expect(gates[0].s).toBe(0);
     for (let i = 1; i < gates.length; i++) expect(gates[i].s).toBeGreaterThan(gates[i - 1].s);
@@ -139,5 +147,33 @@ describe('Realm Racers recovery gates', () => {
         gate,
       ),
     ).toBeNull();
+  });
+});
+
+describe('Realm Racers band window', () => {
+  it('matches the gap the neighbouring instance bands actually leave', () => {
+    // The two edges are authored in `realm_racers_layout.ts` rather than
+    // imported, because `data.ts` reaches the whole content tree and that file
+    // is a leaf the spline and the renderer both sit on. This is what keeps the
+    // authored pair honest: move a neighbouring band and it fails HERE rather
+    // than by letting a circuit's region overlap someone else's instances.
+    expect(REALM_RACERS_BAND_X_MIN).toBe(YUMI_BAND_X_MAX);
+    // The overflow dungeon band's own guard (`instanceAt` claims x from
+    // `DUNGEON_OVERFLOW_X_BASE - 300`).
+    expect(REALM_RACERS_BAND_X_MAX).toBe(DUNGEON_OVERFLOW_X_BASE - 300);
+    // And the band the circuits are authored around really is inside it.
+    expect(REALM_RACERS_ORIGIN.x).toBeGreaterThan(REALM_RACERS_BAND_X_MIN);
+    expect(REALM_RACERS_ORIGIN.x).toBeLessThan(REALM_RACERS_BAND_X_MAX);
+  });
+
+  it('leaves every shipped circuit region inside it', () => {
+    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+      expect(REALM_RACERS_ORIGIN.x - circuit.regionHalfX, circuit.id).toBeGreaterThanOrEqual(
+        REALM_RACERS_BAND_X_MIN,
+      );
+      expect(REALM_RACERS_ORIGIN.x + circuit.regionHalfX, circuit.id).toBeLessThanOrEqual(
+        REALM_RACERS_BAND_X_MAX,
+      );
+    }
   });
 });

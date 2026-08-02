@@ -22,7 +22,10 @@ import {
   REALM_RACERS_APRON_MAX,
   REALM_RACERS_APRON_RADIUS_FRACTION,
   REALM_RACERS_GATE_MARGIN,
+  REALM_RACERS_GATE_SNAP_FRACTION,
+  REALM_RACERS_GATE_SPACING,
   REALM_RACERS_GRID_SIZE,
+  REALM_RACERS_MIN_GATES,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_SAMPLE_STEP,
@@ -92,8 +95,16 @@ export interface RallyTrackModel {
   pointAt(s: number): RallySample;
 }
 
-/** How far off the road a projection may sit before the hint is distrusted. */
-const PROJECTION_ENVELOPE = 24;
+/**
+ * How far off the road a projection may sit before the hint is distrusted.
+ *
+ * Exported because it is also what bounds how close two far-apart stretches of
+ * one circuit may run: a racer between two stretches nearer than twice this is
+ * inside BOTH envelopes, so the hinted search can hand them the wrong one.
+ * `realm_racers_circuit_metrics.ts` measures that, and would otherwise have to
+ * remember the number.
+ */
+export const REALM_RACERS_PROJECTION_ENVELOPE = 24;
 /** Half-width of the hinted search window, in samples. */
 const PROJECTION_WINDOW = 40;
 /** Sub-samples per authored control-point span while measuring the curve. */
@@ -105,8 +116,16 @@ const APRON_SMOOTH_WINDOW = 10;
 /** Passes the wade clamp takes to settle (see resolveRealmRacersWade). */
 const WADE_CLAMP_PASSES = 4;
 
-function widthAtFraction(circuit: RealmRacersCircuit, fraction: number): number {
-  const bands = circuit.widthBands;
+/**
+ * Reads a piecewise-linear band table at a lap fraction, wrapping. The road
+ * width and the apron ceiling are the same shape authored twice, so they read
+ * through one function rather than two copies that can drift apart.
+ */
+function bandValueAtFraction<T extends { s: number }>(
+  bands: readonly T[],
+  value: (band: T) => number,
+  fraction: number,
+): number {
   const f = ((fraction % 1) + 1) % 1;
   for (let i = 1; i < bands.length; i++) {
     const a = bands[i - 1];
@@ -114,9 +133,27 @@ function widthAtFraction(circuit: RealmRacersCircuit, fraction: number): number 
     if (f > b.s) continue;
     const span = b.s - a.s;
     const t = span <= 0 ? 0 : (f - a.s) / span;
-    return a.halfWidth + (b.halfWidth - a.halfWidth) * t;
+    return value(a) + (value(b) - value(a)) * t;
   }
-  return bands[bands.length - 1].halfWidth;
+  return value(bands[bands.length - 1]);
+}
+
+function widthAtFraction(circuit: RealmRacersCircuit, fraction: number): number {
+  return bandValueAtFraction(circuit.widthBands, (band) => band.halfWidth, fraction);
+}
+
+/**
+ * The authored ceiling on the apron, or the shared cap where a circuit authors
+ * none. Only ever narrows the derived value (see `apronBands` on the record),
+ * so the anti-cut inequality the derivation exists for still holds.
+ */
+function maxApronAtFraction(circuit: RealmRacersCircuit, fraction: number): number {
+  const bands = circuit.apronBands;
+  if (!bands || bands.length === 0) return REALM_RACERS_APRON_MAX;
+  return Math.min(
+    REALM_RACERS_APRON_MAX,
+    bandValueAtFraction(bands, (band) => band.maxApron, fraction),
+  );
 }
 
 /**
@@ -220,11 +257,16 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
   // corner and reopens after it. Taking the minimum (never the average) keeps
   // every sample at or under its own limit, so the smoothing cannot reopen a
   // shortcut the raw profile had closed.
-  const rawApron = radii.map((r) =>
-    r > 0 && Number.isFinite(r)
-      ? Math.min(REALM_RACERS_APRON_MAX, REALM_RACERS_APRON_RADIUS_FRACTION * r)
-      : REALM_RACERS_APRON_MAX,
-  );
+  const rawApron = radii.map((r, i) => {
+    const derived =
+      r > 0 && Number.isFinite(r)
+        ? Math.min(REALM_RACERS_APRON_MAX, REALM_RACERS_APRON_RADIUS_FRACTION * r)
+        : REALM_RACERS_APRON_MAX;
+    // The authored ceiling lands BEFORE the running minimum below, so a pinch
+    // the operator narrows widens by the smoothing window rather than stepping
+    // at its edge, and the smoothing still cannot reopen anything.
+    return Math.min(derived, maxApronAtFraction(circuit, i / radii.length));
+  });
   const apron = rawApron.map((_, i) => {
     let best = Number.POSITIVE_INFINITY;
     for (let k = -APRON_SMOOTH_WINDOW; k <= APRON_SMOOTH_WINDOW; k++) {
@@ -311,7 +353,10 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
       if (hintIndex !== undefined && Number.isFinite(hintIndex)) {
         const from = Math.round(hintIndex) - PROJECTION_WINDOW;
         const local = scan(x, z, ((from % count) + count) % count, PROJECTION_WINDOW * 2 + 1);
-        if (!local.atEdge && Math.abs(local.projection.lateral) <= PROJECTION_ENVELOPE) {
+        if (
+          !local.atEdge &&
+          Math.abs(local.projection.lateral) <= REALM_RACERS_PROJECTION_ENVELOPE
+        ) {
           return local.projection;
         }
       }
@@ -354,17 +399,24 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
  * One memo per derivation, keyed by circuit id. Keyed rather than singular
  * because the band holds several circuits: a shared unkeyed cache would hand
  * the practice circuit's geometry to whoever asked second.
+ *
+ * An entry is kept only while the RECORD behind the id is the same object. The
+ * shipped records are module singletons, so every game and test caller hits the
+ * cache exactly as before; a caller holding an id still while editing what is
+ * under it (the circuit editor, redrawing a draft on every drag) gets the
+ * geometry of the record it actually passed, and the cache stays one entry wide
+ * instead of growing a track per revision.
  */
 function memoizePerCircuit<T>(
   build: (circuit: RealmRacersCircuit) => T,
 ): (circuit: RealmRacersCircuit) => T {
-  const cache = new Map<string, T>();
+  const cache = new Map<string, { circuit: RealmRacersCircuit; value: T }>();
   return (circuit) => {
     const cached = cache.get(circuit.id);
-    if (cached !== undefined) return cached;
-    const built = build(circuit);
-    cache.set(circuit.id, built);
-    return built;
+    if (cached && cached.circuit === circuit) return cached.value;
+    const value = build(circuit);
+    cache.set(circuit.id, { circuit, value });
+    return value;
   };
 }
 
@@ -395,12 +447,63 @@ export function rallyGardenEdgeOffsetAt(circuit: RealmRacersCircuit, s: number):
   );
 }
 
-/** Ordered reset anchors derived from spline fractions, never lap-validation checkpoints. */
+/**
+ * The reset anchors, DERIVED from the curve rather than authored.
+ *
+ * They were a hand-placed list of lap fractions on the record, and that was a
+ * mistake: an anchor is invisible, it is never a lap-validation checkpoint
+ * (continuous spline distance does that), and the only thing it decides is
+ * where a reset puts a racer back. There is no design in it, so there is
+ * nothing for a designer to author, and a per-circuit list is one more table to
+ * get wrong on every circuit the pool ever grows by.
+ *
+ * The rule, a pure function of the curve and therefore identical on all three
+ * hosts and at every load:
+ *
+ *   1. one anchor per `REALM_RACERS_GATE_SPACING` yards of lap, at least
+ *      `REALM_RACERS_MIN_GATES` of them;
+ *   2. spaced evenly to start with;
+ *   3. each one then slid to the STRAIGHTEST road within
+ *      `REALM_RACERS_GATE_SNAP_FRACTION` of the spacing, because a reset
+ *      restarts a racer at a standstill facing along the track and an anchor in
+ *      a corner restarts them stopped on an apex. Ties go to the sample nearest
+ *      the even slot, so the spacing stays as regular as the road allows;
+ *   4. the first anchor pinned ON the start/finish line.
+ */
 export const realmRacersGates: (circuit: RealmRacersCircuit) => readonly RallyGate[] =
   memoizePerCircuit((circuit) => {
     const track = realmRacersTrack(circuit);
-    return circuit.gateFractions.map((fraction, index) => {
-      const s = fraction * track.length;
+    const samples = track.samples;
+    const n = samples.length;
+    const count = Math.max(
+      REALM_RACERS_MIN_GATES,
+      Math.round(track.length / REALM_RACERS_GATE_SPACING),
+    );
+    const spacing = track.length / count;
+    const window = Math.floor((REALM_RACERS_GATE_SNAP_FRACTION * spacing) / track.step);
+
+    /** The straightest sample within the window, nearest slot on a tie. Kept
+     *  strictly under half the spacing, so two anchors can never cross. */
+    const straightestNear = (slot: number): number => {
+      let best = slot;
+      let bestRadius = Math.abs(samples[slot].turnRadius);
+      let bestOffset = 0;
+      for (let k = -window; k <= window; k++) {
+        const i = (((slot + k) % n) + n) % n;
+        const radius = Math.abs(samples[i].turnRadius);
+        const offset = Math.abs(k);
+        if (radius > bestRadius || (radius === bestRadius && offset < bestOffset)) {
+          best = i;
+          bestRadius = radius;
+          bestOffset = offset;
+        }
+      }
+      return best;
+    };
+
+    return Array.from({ length: count }, (_, index) => {
+      const slot = Math.round((index * spacing) / track.step) % n;
+      const s = index === 0 ? 0 : samples[straightestNear(slot)].s;
       const p = track.pointAt(s);
       return {
         x: p.x,

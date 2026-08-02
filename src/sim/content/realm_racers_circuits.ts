@@ -1,11 +1,12 @@
 // The Realm Racers circuits, AUTHORED data only: one record per circuit, each
 // holding the hand tuned numbers a designer edits (control points, width bands,
-// gate positions, the start grid, the perimeter, the water, the race length).
+// the start grid, the perimeter, the water, the race length).
 //
 // Everything geometric that FOLLOWS from these numbers (the resampled
-// centerline, arc lengths, the projection, the gates, the start slots, the
-// lateral boundaries) is derived per circuit in `../realm_racers_spline.ts`, and
-// the collision set in `../realm_racers_colliders.ts`. What stays in
+// centerline, arc lengths, the projection, the recovery anchors, the start
+// slots, the lateral boundaries) is derived per circuit in
+// `../realm_racers_spline.ts`, and the collision set in
+// `../realm_racers_colliders.ts`. What stays in
 // `../realm_racers_layout.ts` is what every circuit SHARES: the margins, the
 // apron rule, the grid size, the gate-crossing math and the lane table.
 //
@@ -74,8 +75,22 @@ export interface RealmRacersCircuit {
    *  linearly interpolated and wrapped. Never under
    *  `REALM_RACERS_MIN_HALF_WIDTH`. */
   widthBands: readonly { s: number; halfWidth: number }[];
-  /** Recovery anchors as lap fractions, the first ON the start/finish line. */
-  gateFractions: readonly number[];
+  /**
+   * Optional CEILING on the derived apron, as (lap fraction, yards),
+   * interpolated and wrapped exactly like `widthBands`. Applied as a further
+   * `min` on top of the derived value and never as a raise, which is what keeps
+   * it safe: the derivation
+   * (`min(REALM_RACERS_APRON_MAX, REALM_RACERS_APRON_RADIUS_FRACTION * R)`) is
+   * an ANTI-CUT ceiling, so narrowing it can only ever make a cut cost more.
+   *
+   * What it is for: on a STRAIGHT there is nothing to cut, so the apron reaches
+   * its cap there and the basin's shore sits `halfWidth + apron` off the
+   * centerline. Where two far-apart stretches of the lap run close to each
+   * other, those two shores meet and the water polygon self-crosses. Pulling
+   * the apron in over the pinch is the fix, and nothing else in the record can
+   * express it. Omit the field entirely on a circuit with no pinch.
+   */
+  apronBands?: readonly { s: number; maxApron: number }[];
   /**
    * Region envelope, half-extents from the circuit's origin. It must cover the
    * circuit, the drivable garden, the perimeter wall AND the dressing ring
@@ -182,14 +197,6 @@ const EVERGARDEN_GARDEN: RealmRacersCircuit = {
     { s: 0.95, halfWidth: 10.5 },
     { s: 1.0, halfWidth: 10.5 },
   ],
-  /**
-   * Eight gates evenly spaced around the lap, decoupled from the control
-   * points. They are INVISIBLE recovery anchors: nothing in the HUD reads them
-   * and nothing is built over them. Continuous spline distance validates laps
-   * and prevents shortcuts; these fractions only decide where a reset may
-   * return.
-   */
-  gateFractions: [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875],
   regionHalfX: 170,
   regionHalfZ: 140,
   perimeter: { halfX: 118, halfZ: 92, halfThickness: 0.4, height: 2.2 },
