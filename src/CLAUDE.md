@@ -18,6 +18,9 @@ their own CLAUDE.md: `sim/` (+ `sim/content/`, `sim/professions/`, `sim/pvp/`),
 - `guide.html` loads `src/guide/main.ts`; `editor.html` loads `src/editor/main.ts`;
   `admin.html` is the standalone Svelte admin SPA (`src/admin/`).
 - `music_editor.html` is a dev-only tool that writes `src/game/music_overrides.generated.ts`.
+- `circuit_editor.html` loads `src/editor/circuit/main.ts`: the dev-only Realm Racers
+  circuit editor. Like the music editor it is absent from `input` in `vite.config.ts`,
+  so no production build emits it; see `src/editor/circuit/CLAUDE.md`.
 
 ## Dependency direction: do not violate
 Read "->" as *"is allowed to import from."* Keeping these one-directional is what

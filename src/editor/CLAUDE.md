@@ -23,6 +23,12 @@ viewport, the 2D canvas/view/model trio).
   sessionStorage (`EDITOR_PLAYTEST_KEY` from `src/game/editor_playtest.ts`) and
   navigates; the game boots OFFLINE into it. Playtest never talks to the server.
 
+## A second, separate tool lives here
+`circuit/` is the Realm Racers **circuit editor** (`circuit_editor.html`), not part of
+the map editor: its own entry, its own cores, its own `CLAUDE.md`. It shares this
+directory because it is the same kind of thing (a dev authoring tool over real engine
+data), not because the two compose. Nothing in `app.ts` imports it.
+
 ## Where a new editor tool lands (module-first)
 Its own sibling module under `src/editor/`: a pure `*_core.ts` decision module
 (DOM-free, deterministic; exemplars: `undo_core.ts`, `stamp_core.ts`,

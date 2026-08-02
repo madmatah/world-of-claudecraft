@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<!-- World of ClaudeCraft Realm Racers circuit editor (dev tool, English-only
+     like the music editor and the perf overlay; never part of a production
+     build). Draws a circuit against the REAL spline (realmRacersTrack) and the
+     REAL readout (src/sim/realm_racers_circuit_metrics.ts), so every metric on
+     screen is the one a content test runs over shipped circuits.
+
+     Open under npm run dev: http://localhost:PORT/circuit_editor.html
+     Export copies a TypeScript literal to paste into
+     src/sim/content/realm_racers_circuits.ts; Save draft writes a scratch file
+     to tmp/circuit-drafts/ and never touches the curated module. -->
+<head>
+  <meta charset="utf-8" />
+  <title>WoC Circuit Editor</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #14161c; color: #d7dae2; font: 13px/1.4 ui-monospace, Menlo, monospace; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #1b1e27; border-bottom: 1px solid #2c3040; flex-wrap: wrap; }
+    header .grow { flex: 1; }
+    select, button, input[type="number"], input[type="text"] { background: #262b38; color: #d7dae2; border: 1px solid #3a4054; border-radius: 4px; padding: 4px 8px; font: inherit; }
+    button { cursor: pointer; }
+    button:hover { background: #323950; }
+    button.on { background: #2c5d8f; border-color: #3d7ab8; }
+    button.primary { background: #2c5d8f; border-color: #3d7ab8; }
+    button.primary:hover { background: #366fa9; }
+    #status { color: #9aa3b5; min-width: 200px; }
+    #status.ok { color: #7fd48a; }
+    #status.err { color: #e08a8a; }
+    main { flex: 1; display: flex; min-height: 0; }
+    #viewwrap { flex: 1; position: relative; min-width: 0; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    #panel { width: 340px; flex: none; overflow-y: auto; background: #191c24; border-left: 1px solid #2c3040; padding: 10px; }
+    #panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7f8798; margin: 14px 0 6px; }
+    #panel h2:first-child { margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 2px 0; vertical-align: top; }
+    td.k { color: #9aa3b5; }
+    td.v { text-align: right; font-variant-numeric: tabular-nums; }
+    td.v.bad { color: #e08a8a; }
+    td.v.warn { color: #e0c48a; }
+    td.v.good { color: #7fd48a; }
+    .problem { border-left: 3px solid #e08a8a; padding: 4px 8px; margin-bottom: 5px; background: #21242e; border-radius: 0 4px 4px 0; }
+    .problem.warning { border-left-color: #e0c48a; }
+    .problem .c { font-weight: 700; }
+    .problem .d { color: #9aa3b5; }
+    .clean { color: #7fd48a; }
+    .field { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
+    .field label { flex: 1; color: #9aa3b5; }
+    .field input { width: 110px; }
+    footer { padding: 6px 12px; background: #1b1e27; border-top: 1px solid #2c3040; color: #6f7890; }
+    kbd { background: #262b38; border: 1px solid #3a4054; border-radius: 3px; padding: 0 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>WoC Circuit Editor</strong>
+    <select id="loadSel" title="Start from a shipped circuit, or from a blank oval"></select>
+    <button type="button" id="modeDraw">Draw</button>
+    <button type="button" id="modeHandles">Handles</button>
+    <button type="button" id="modeWidth">Width</button>
+    <button type="button" id="modeApron">Apron</button>
+    <label>brush <input type="number" id="brush" min="0.5" max="30" step="0.5" value="10" style="width:70px" /></label>
+    <span class="grow"></span>
+    <button type="button" id="undoBtn">Undo</button>
+    <button type="button" id="fitBtn">Fit view</button>
+    <button type="button" id="fitBoxBtn" title="Size the perimeter wall and the collision region to the road">Fit enclosure</button>
+    <button type="button" id="fixCornersBtn" title="Narrow the road wherever a corner is tighter than it">Fix corners</button>
+    <button type="button" id="copyBtn" class="primary">Copy record</button>
+    <button type="button" id="saveBtn">Save draft</button>
+    <span id="status"></span>
+  </header>
+  <main>
+    <div id="viewwrap"><canvas id="view"></canvas></div>
+    <div id="panel">
+      <!-- The readout is rebuilt on every drag; the record form is built once
+           and only has its values written back, so an input keeps focus and a
+           half-typed number is never overwritten mid-keystroke. -->
+      <div id="readout"></div>
+      <div id="form"></div>
+    </div>
+  </main>
+  <footer>
+    <span id="hint"></span>
+    <kbd>wheel</kbd> zoom, <kbd>middle drag</kbd> pan, <kbd>ctrl+Z</kbd> undo, <kbd>del</kbd> delete selection
+  </footer>
+  <script type="module" src="/src/editor/circuit/main.ts"></script>
+</body>
+</html>

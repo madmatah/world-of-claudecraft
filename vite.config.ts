@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
@@ -10,6 +10,7 @@ import { loadBrowserslistFloors } from './scripts/browserslist_targets.mjs';
 // Untyped zero-dep build helper (same convention as the other scripts/*.mjs tools).
 // vite.config.ts is outside tsconfig `include`, so this import is never type-checked.
 import { templateModulepreload } from './scripts/i18n_modulepreload.mjs';
+import { draftFileContents, validateCircuitPayload } from './src/editor/circuit/export_core';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
@@ -297,6 +298,67 @@ function musicEditorSavePlugin() {
   };
 }
 
+// Dev-only save endpoint for the Realm Racers circuit editor
+// (circuit_editor.html): receives a drawn circuit record as JSON and writes a
+// SCRATCH draft to tmp/circuit-drafts/<id>.ts. It deliberately never rewrites
+// src/sim/content/realm_racers_circuits.ts the way the music editor rewrites its
+// generated module: that file is hand-curated and its comments carry the
+// reasoning behind every number, so the operator pastes the literal by hand.
+// configureServer only runs under the dev server, so this never ships.
+function circuitEditorSavePlugin() {
+  const draftDir = path.resolve(root, 'tmp/circuit-drafts');
+  return {
+    name: 'woc-circuit-editor-save',
+    configureServer(server: {
+      middlewares: {
+        use: (
+          route: string,
+          fn: (
+            req: { method?: string; on: (ev: string, cb: (chunk?: unknown) => void) => void },
+            res: { statusCode: number; end: (body?: string) => void },
+          ) => void,
+        ) => void;
+      };
+    }) {
+      server.middlewares.use('/__circuit_editor/save', (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('POST only');
+          return;
+        }
+        let body = '';
+        req.on('data', (chunk) => {
+          body += String(chunk);
+          if (body.length > 1_000_000) {
+            res.statusCode = 413;
+            res.end('too large');
+          }
+        });
+        req.on('end', () => {
+          try {
+            // Validated through the same core the editor exports with, on the
+            // music editor's precedent: the browser is not trusted to have kept
+            // its own rules, and the id is what names the file written below.
+            const circuit = validateCircuitPayload(JSON.parse(body));
+            if (!circuit) {
+              res.statusCode = 400;
+              res.end('invalid payload');
+              return;
+            }
+            mkdirSync(draftDir, { recursive: true });
+            writeFileSync(path.join(draftDir, `${circuit.id}.ts`), draftFileContents(circuit));
+            res.statusCode = 200;
+            res.end('ok');
+          } catch (err) {
+            res.statusCode = 400;
+            res.end(String(err));
+          }
+        });
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: '/',
   // The Svelte plugin only transforms the standalone admin entry. The testing
@@ -307,6 +369,7 @@ export default defineConfig({
     staticPageAliasPlugin(),
     i18nModulepreloadPlugin(),
     musicEditorSavePlugin(),
+    circuitEditorSavePlugin(),
   ],
   resolve: { alias: { '#bot-detector': botDetectorImpl } },
   define: {
