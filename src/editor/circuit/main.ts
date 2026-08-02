@@ -25,6 +25,8 @@ import {
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_MIN_HALF_WIDTH,
   REALM_RACERS_ORIGIN,
+  REALM_RACERS_RUNOFF_WIDTH,
+  REALM_RACERS_VERGE_MARGIN,
 } from '../../sim/realm_racers_layout';
 import {
   type RallyTrackModel,
@@ -257,7 +259,11 @@ function fractionAt(point: RallyPoint): number {
 }
 
 function fitView(): void {
-  const half = Math.max(metrics.roadHalfX, metrics.roadHalfZ, 20) * 1.15;
+  // A blank canvas frames the room a circuit HAS; the placeholder record's own
+  // extents would be framing a shape nobody drew.
+  const half = drawn
+    ? Math.max(metrics.roadHalfX, metrics.roadHalfZ, 20) * 1.15
+    : Math.max(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z) * 1.12;
   view.x = 0;
   view.z = 0;
   view.scale = Math.min(canvas.clientWidth, canvas.clientHeight) / (2 * half);
@@ -382,6 +388,45 @@ function drawHandles(): void {
   });
 }
 
+/**
+ * The room a circuit has, drawn on a blank canvas.
+ *
+ * On a blank canvas the panel is hidden, so the two ceilings a circuit lives
+ * under (`REALM_RACERS_MAX_REGION_HALF_X`, set by the instance band, and
+ * `REALM_RACERS_MAX_REGION_HALF_Z`, set by the gap between two lanes) are
+ * nowhere on screen at the exact moment they matter most: before the first
+ * stroke. The inner box is what an operator actually aims at, since the line
+ * they draw carries a road and a garden either side of it and only the
+ * CENTERLINE is under the pen.
+ */
+function drawLimits(): void {
+  const road = Math.max(...record.widthBands.map((band) => band.halfWidth));
+  const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
+  // The wall has to sit strictly inside the region, and the road inside the
+  // wall, so a yard comes off before the garden either side does.
+  const halfX = REALM_RACERS_MAX_REGION_HALF_X - 1;
+  const halfZ = REALM_RACERS_MAX_REGION_HALF_Z - 1;
+  strokeRect(halfX, halfZ, '#3a4054', [8, 6]);
+  strokeRect(halfX - gardenEdge, halfZ - gardenEdge, '#55607a', [3, 3]);
+
+  ctx.fillStyle = '#6f7890';
+  ctx.font = '12px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(
+    `widest a circuit may be: ${halfX * 2} x ${halfZ * 2} yd`,
+    screenX(0),
+    screenY(-halfZ) - 8,
+  );
+  // Inside its own box rather than under it: sat on the outer frame it read as
+  // a label for the wrong rectangle.
+  ctx.fillText(
+    `keep the line you draw inside ${Math.round((halfX - gardenEdge) * 2)} x ${Math.round((halfZ - gardenEdge) * 2)} yd`,
+    screenX(0),
+    screenY(halfZ - gardenEdge) - 8,
+  );
+  ctx.textAlign = 'left';
+}
+
 function drawStroke(): void {
   if (stroke.length < 2) return;
   ctx.save();
@@ -439,7 +484,9 @@ function draw(): void {
 
   if (!drawn) {
     // Nothing of the placeholder record is drawn, so a blank canvas really is
-    // blank: only the live stroke, so a gesture is visible as it happens.
+    // blank: the room a circuit has, and the live stroke so a gesture is
+    // visible as it happens.
+    drawLimits();
     drawStroke();
     return;
   }
