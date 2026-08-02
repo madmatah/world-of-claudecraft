@@ -20,6 +20,7 @@ import { GameServer, wireEntity } from '../server/game';
 import { otherRealmRacersParticipantIds } from '../server/realm_racers_interest';
 import { appendSnapshotEntity } from '../server/snapshot_entity_stream';
 import { VALE_CUP_BALL_TEMPLATE_ID } from '../src/sim/content/vale_cup';
+import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
 import type { Entity } from '../src/sim/types';
 import { STABLE_TIMER_WIRE_VERSION } from '../src/world_api';
@@ -588,14 +589,16 @@ describe('shared interest-candidate gathering', () => {
   });
 });
 
-function startRealmRacersPair(server: GameServer, idBase: number): [CrowdMember, CrowdMember] {
-  const a = joinAt(server, idBase, `Racer${idBase}`, 0, 0);
-  const b = joinAt(server, idBase + 1, `Racer${idBase + 1}`, 4, 0);
-  server.sim.realmRacersQueueJoin(a.pid);
-  server.sim.realmRacersQueueJoin(b.pid);
+/** A full four-pilot grid. Most cases below only lean on the first two, but the
+ *  whole field is seated because a race is four abreast or it does not start. */
+function startRealmRacersGrid(server: GameServer, idBase: number): CrowdMember[] {
+  const grid = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+    joinAt(server, idBase + i, `Racer${idBase + i}`, i * 4, 0),
+  );
+  for (const member of grid) server.sim.realmRacersQueueJoin(member.pid);
   server.sim.tick();
-  expect(server.sim.realmRacers.match?.pids).toEqual([a.pid, b.pid]);
-  return [a, b];
+  expect(server.sim.realmRacers.match?.pids).toEqual(grid.map((member) => member.pid));
+  return grid;
 }
 
 function moveMember(server: GameServer, member: CrowdMember, x: number, z: number): void {
@@ -613,7 +616,7 @@ function requiredEntity(server: GameServer, pid: number): Entity {
 describe('Realm Racers match-scoped interest', () => {
   it.each([150, 170])('directly pins both viewers across a %i yd gap', (gap) => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6000 + gap);
+    const [a, b] = startRealmRacersGrid(server, 6000 + gap);
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_700 + gap, 0);
     requiredEntity(server, a.pid).stealthed = true;
@@ -628,7 +631,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('does not add a hidden distance ceiling to an authoritative match pin', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6300);
+    const [a, b] = startRealmRacersGrid(server, 6300);
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 114_700, 0);
     refreshGrids(server);
@@ -640,7 +643,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('encodes a nearby targeted rival once across all inclusion paths', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6400);
+    const [a, b] = startRealmRacersGrid(server, 6400);
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_710, 0);
     requiredEntity(server, a.pid).targetId = b.pid;
@@ -655,12 +658,16 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('keeps the pin through voluntary-forfeit results and drops it after teardown', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6500);
+    const grid = startRealmRacersGrid(server, 6500);
+    const [a, b] = grid;
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_870, 0);
     refreshGrids(server);
 
-    server.sim.realmRacersForfeit(a.pid);
+    // The whole field pulls off, so the race really is decided: one quitter no
+    // longer ends it, and the pin has to survive the six-second tableau either
+    // way. The quitter's own six seconds run from the tick THEY quit.
+    for (const member of grid) server.sim.realmRacersForfeit(member.pid);
     (server as any).broadcastSnapshots();
     expect(server.sim.realmRacers.match?.phase).toBe('finished');
     expect(framePresentIds(a.lastFrame).has(b.pid)).toBe(true);
@@ -681,9 +688,27 @@ describe('Realm Racers match-scoped interest', () => {
     expect(framePresentIds(a.lastFrame).has(b.pid)).toBe(false);
   });
 
+  it('keeps three other people racing when one pilot forfeits', () => {
+    const server = new GameServer();
+    const grid = startRealmRacersGrid(server, 6520);
+    const [a, b] = grid;
+    moveMember(server, a, 113_700, 0);
+    moveMember(server, b, 113_870, 0);
+    refreshGrids(server);
+
+    server.sim.realmRacersForfeit(a.pid);
+    (server as any).broadcastSnapshots();
+    // The race is untouched, and the quitter is off it while the pins for the
+    // rest of the field stay exactly where they were.
+    expect(server.sim.realmRacers.match?.phase).toBe('countdown');
+    expect(server.sim.realmRacersInfoFor(a.pid).match?.result).toBe('forfeit');
+    expect(server.sim.realmRacersInfoFor(b.pid).match?.result).toBeNull();
+    expect(framePresentIds(a.lastFrame).has(b.pid)).toBe(true);
+  });
+
   it('pins the field during the racing phase', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6550);
+    const [a, b] = startRealmRacersGrid(server, 6550);
     const match = server.sim.realmRacers.match;
     if (!match) throw new Error('match missing');
     match.phase = 'racing';
@@ -698,9 +723,12 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('tears down the pin through the server leave path on disconnect', async () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6600);
+    const [a, b] = startRealmRacersGrid(server, 6600);
     await server.leave(b.session, 'test disconnect');
-    expect(server.sim.realmRacers.match).toBeNull();
+    // The race carries on for the other three; only the pin on the pilot who
+    // left comes down.
+    expect(server.sim.realmRacers.match?.pids).toContain(b.pid);
+    expect(server.sim.realmRacersInfoFor(b.pid).match).toBeNull();
     refreshGrids(server);
 
     (server as any).broadcastSnapshots();
@@ -710,7 +738,7 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('skips a temporarily missing roster entity without failing the broadcast', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6650);
+    const [a, b] = startRealmRacersGrid(server, 6650);
     const missing = requiredEntity(server, b.pid);
     server.sim.grid.remove(missing);
     server.sim.playerGrid.remove(missing);
@@ -750,8 +778,8 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('inherits the observed racer match without duplicating the observed body', () => {
     const server = new GameServer();
-    const [target, rival] = startRealmRacersPair(server, 6800);
-    const mod = joinAt(server, 6802, 'Moderator', 1000, 1000);
+    const [target, rival] = startRealmRacersGrid(server, 6800);
+    const mod = joinAt(server, 6820, 'Moderator', 1000, 1000);
     moveMember(server, target, 113_700, 0);
     moveMember(server, rival, 113_870, 0);
     mod.session.spectating = {
@@ -773,11 +801,16 @@ describe('Realm Racers match-scoped interest', () => {
 
   it('matches the shadow stream, updates moving pins every pass, and preserves bcVisits', () => {
     const server = new GameServer();
-    const [a, b] = startRealmRacersPair(server, 6900);
-    a.session.timerWireVersion = STABLE_TIMER_WIRE_VERSION;
-    b.session.timerWireVersion = STABLE_TIMER_WIRE_VERSION;
+    const grid = startRealmRacersGrid(server, 6900);
+    const [a, b] = grid;
+    for (const member of grid) member.session.timerWireVersion = STABLE_TIMER_WIRE_VERSION;
+    // The pair under test out on the instance plane, the rest of the field far
+    // enough away that only the match pins reach them.
     moveMember(server, a, 113_700, 0);
     moveMember(server, b, 113_870, 0);
+    for (let i = 2; i < grid.length; i++) {
+      moveMember(server, grid[i], 113_700, 400 + (i - 2) * 400);
+    }
     refreshGrids(server);
 
     for (let i = 0; i < 4; i++) {
@@ -791,7 +824,7 @@ describe('Realm Racers match-scoped interest', () => {
         a.shadow,
         server.sim.tickCount,
         INTEREST_QUERY_RADIUS,
-        [b.pid],
+        grid.slice(1).map((member) => member.pid),
       );
       (server as any).broadcastSnapshots();
       expectFrameMatches(a, ref);
@@ -818,7 +851,7 @@ describe('Realm Racers match-scoped interest', () => {
     expect(JSON.parse(a.lastFrame).keep ?? []).toContain(b.pid);
 
     let expectedVisits = 0;
-    for (const member of [a, b]) {
+    for (const member of grid) {
       const anchor = requiredEntity(server, member.pid);
       server.sim.grid.forEachInRadius(anchor.pos.x, anchor.pos.z, INTEREST_QUERY_RADIUS, () => {
         expectedVisits++;

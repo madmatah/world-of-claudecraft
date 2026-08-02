@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { REALM_RACERS_BOT_NAMES } from '../src/sim/content/realm_racers';
 import { RALLY_DRIVER_TIERS, type RallyDriverTier } from '../src/sim/realm_racers_driver';
 import {
+  REALM_RACERS_GRID_SIZE,
   REALM_RACERS_LAPS,
   REALM_RACERS_PRACTICE_LAPS,
   REALM_RACERS_PRACTICE_SLOTS,
@@ -44,11 +45,16 @@ function matchOf(sim: Sim, pid: number): RealmRacersMatch {
   return match;
 }
 
-/** The house pilot seated opposite `pid`. */
+/** Every house pilot on the grid with `pid`, in seat order. */
+function botsIn(sim: Sim, pid: number): number[] {
+  return matchOf(sim, pid).pids.filter((p) => sim.realmRacers.bots.has(p));
+}
+
+/** The first house pilot on the grid with `pid`. */
 function botIn(sim: Sim, pid: number): number {
-  const bot = matchOf(sim, pid).pids.find((p) => sim.realmRacers.bots.has(p));
-  if (bot === undefined) throw new Error('no house pilot in that race');
-  return bot;
+  const bots = botsIn(sim, pid);
+  if (bots.length === 0) throw new Error('no house pilot in that race');
+  return bots[0];
 }
 
 function practiceWorld(tier: RallyDriverTier = 'driver', cfg = {}) {
@@ -59,27 +65,39 @@ function practiceWorld(tier: RallyDriverTier = 'driver', cfg = {}) {
 }
 
 describe('Realm Racers practice: one press, one race', () => {
-  it('seats a lone player against a house pilot immediately, with no queue', () => {
+  it('seats a lone player against a full grid of house pilots, with no queue', () => {
     const { sim, human } = practiceWorld('rookie');
     const match = matchOf(sim, human);
     expect(sim.realmRacers.queue).toEqual([]);
     const bots = botPidsOf(sim);
-    expect(bots).toHaveLength(1);
-    expect(match.pids).toContain(bots[0]);
-    expect(sim.realmRacers.bots.get(bots[0])).toBe('rookie');
-    // The pilot races under the house name, spliced verbatim like any player
-    // name. One name on purpose: every player meets the same rival.
-    expect(REALM_RACERS_BOT_NAMES).toEqual(['Mat Driftwright']);
-    expect(sim.players.get(bots[0])?.name).toBe('Mat Driftwright');
+    expect(bots).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
+    expect(match.pids).toHaveLength(REALM_RACERS_GRID_SIZE);
+    expect(match.gridSize).toBe(REALM_RACERS_GRID_SIZE);
+    for (const bot of bots) {
+      expect(match.pids).toContain(bot);
+      expect(sim.realmRacers.bots.get(bot)).toBe('rookie');
+    }
+    // The pilots race under house names, spliced verbatim like any player name.
+    // One name per grid slot, so a four-row strip reads as a field of rivals
+    // rather than as one name with numbers after it.
+    expect(REALM_RACERS_BOT_NAMES.length).toBeGreaterThanOrEqual(REALM_RACERS_GRID_SIZE);
+    expect(REALM_RACERS_BOT_NAMES[0]).toBe('Mat Driftwright');
+    const names = bots.map((pid) => sim.players.get(pid)?.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(REALM_RACERS_BOT_NAMES).toContain(name);
     // And it is a PRIVATE race: the public circuit is untouched.
     expect(sim.realmRacers.match).toBeNull();
     expect(sim.realmRacers.practices).toEqual([match]);
   });
 
-  it('reports the opponent as a house pilot, and at which tier', () => {
+  it('reports every rival as a house pilot, and at which tier', () => {
     const { sim, human } = practiceWorld('ace');
     const info = sim.realmRacersInfoFor(human);
-    expect(info.match?.opponent.botTier).toBe('ace');
+    const standings = info.match?.standings ?? [];
+    expect(standings).toHaveLength(REALM_RACERS_GRID_SIZE);
+    expect(standings.filter((row) => row.botTier === 'ace')).toHaveLength(
+      REALM_RACERS_GRID_SIZE - 1,
+    );
     expect(info.match?.me.botTier).toBeNull();
     expect(info.match?.practice).toBe(true);
     // Already racing, so no second practice race is on offer to this viewer.
@@ -101,7 +119,7 @@ describe('Realm Racers practice: one press, one race', () => {
     const before = sim.players.size;
     sim.realmRacersPracticeStart('ace', human);
     expect(sim.players.size).toBe(before);
-    expect(botPidsOf(sim)).toHaveLength(1);
+    expect(botPidsOf(sim)).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
   });
 
   it('refuses a player who cannot race, and leaks no pilot doing it', () => {
@@ -122,19 +140,19 @@ describe('Realm Racers practice: nobody ever waits on anybody', () => {
     // The whole point of the copies: a queued race owns circuit 0 and a practice
     // lap is simply somewhere else, so neither can ever block the other.
     const sim = makeWorld();
-    const a = addAt(sim, 'warrior', 'Aster', -5, -40);
-    const b = addAt(sim, 'mage', 'Briar', 9, -40);
-    sim.realmRacersQueueJoin(a);
-    sim.realmRacersQueueJoin(b);
+    const grid = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+      addAt(sim, 'warrior', `Queued${i}`, -5 + i * 4, -40),
+    );
+    for (const pid of grid) sim.realmRacersQueueJoin(pid);
     sim.tick();
-    expect(sim.realmRacers.match?.pids).toEqual([a, b]);
+    expect(sim.realmRacers.match?.pids).toEqual(grid);
 
-    const solo = addAt(sim, 'rogue', 'Cass', 14, -40);
+    const solo = addAt(sim, 'rogue', 'Cass', 30, -40);
     expect(sim.realmRacersInfoFor(solo).practiceAvailable).toBe(true);
     sim.realmRacersPracticeStart('ace', solo);
     expect(matchOf(sim, solo).practice?.ownerPid).toBe(solo);
-    // The public race is untouched and still has both its racers.
-    expect(sim.realmRacers.match?.pids).toEqual([a, b]);
+    // The public race is untouched and still has its whole grid.
+    expect(sim.realmRacers.match?.pids).toEqual(grid);
   });
 
   it('gives concurrent pilots distinct names, so a whisper still resolves', () => {
@@ -143,6 +161,7 @@ describe('Realm Racers practice: nobody ever waits on anybody', () => {
     for (const pid of pids) sim.realmRacersPracticeStart('rookie', pid);
     const names = botPidsOf(sim).map((pid) => sim.players.get(pid)?.name);
     expect(names[0]).toBe('Mat Driftwright');
+    expect(names).toHaveLength(2 * (REALM_RACERS_GRID_SIZE - 1));
     expect(new Set(names).size).toBe(names.length);
   });
 
@@ -218,11 +237,13 @@ describe('Realm Racers house pilots: no entity ever leaks', () => {
     const players = sim.players.size;
     const entities = sim.entities.size;
     sim.realmRacersPracticeStart('driver', human);
-    expect(sim.players.size).toBe(players + 1);
+    expect(sim.players.size).toBe(players + REALM_RACERS_GRID_SIZE - 1);
     sim.realmRacersForfeit(human);
-    // The result tableau holds the race open for its return countdown; the pilot
-    // goes home only once the race itself is torn down.
-    for (let i = 0; i < 200 && realmRacersMatchOf(sim.ctx, human); i++) sim.tick();
+    // The result tableau holds the race open for its return countdown; the
+    // pilots go home only once the race itself is torn down. The human quitting
+    // leaves nothing but house pilots on the grid, which ends it: nobody is
+    // watching a practice race its owner walked out of.
+    for (let i = 0; i < 400 && sim.realmRacers.practices.length > 0; i++) sim.tick();
     assertReaped(sim, players, entities);
     expect(sim.realmRacers.practices).toEqual([]);
   });
@@ -234,6 +255,7 @@ describe('Realm Racers house pilots: no entity ever leaks', () => {
     const entities = sim.entities.size;
     sim.realmRacersPracticeStart('driver', human);
     sim.removePlayer(human);
+    for (let i = 0; i < 400 && sim.realmRacers.practices.length > 0; i++) sim.tick();
     expect(sim.realmRacers.practices).toEqual([]);
     // The human left too, so the roster settles one under where it started.
     assertReaped(sim, players - 1, entities - 1);
@@ -249,7 +271,7 @@ describe('Realm Racers house pilots: no entity ever leaks', () => {
     // Jump the clock to the deadline rather than ticking three minutes of world.
     match.deadlineTick = sim.tickCount + 1;
     match.phase = 'racing';
-    for (let i = 0; i < 200 && realmRacersMatchOf(sim.ctx, human); i++) sim.tick();
+    for (let i = 0; i < 400 && realmRacersMatchOf(sim.ctx, human); i++) sim.tick();
     assertReaped(sim, players, entities);
   });
 
@@ -259,11 +281,12 @@ describe('Realm Racers house pilots: no entity ever leaks', () => {
     const b = addAt(sim, 'mage', 'Briar', 9, -40);
     sim.realmRacersPracticeStart('rookie', a);
     sim.realmRacersPracticeStart('ace', b);
-    const survivor = botIn(sim, b);
+    const survivors = botsIn(sim, b);
+    expect(survivors).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
     sim.realmRacersForfeit(a);
-    for (let i = 0; i < 200 && realmRacersMatchOf(sim.ctx, a); i++) sim.tick();
-    expect(botPidsOf(sim)).toEqual([survivor]);
-    expect(matchOf(sim, b).pids).toContain(survivor);
+    for (let i = 0; i < 400 && realmRacersMatchOf(sim.ctx, a); i++) sim.tick();
+    expect(botPidsOf(sim).sort()).toEqual([...survivors].sort());
+    for (const survivor of survivors) expect(matchOf(sim, b).pids).toContain(survivor);
   });
 });
 
@@ -277,33 +300,60 @@ describe('Realm Racers online backfill', () => {
     expect(sim.realmRacers.match).toBeNull();
   });
 
-  it('sends a pilot out only after the wait, and only to a lone racer', () => {
+  it('never sends a pilot when four humans fill the grid themselves', () => {
     const sim = makeWorld({ realmRacersBackfill: true });
-    const a = addAt(sim, 'warrior', 'Aster', -5, -40);
-    const b = addAt(sim, 'mage', 'Briar', 9, -40);
-    sim.realmRacersQueueJoin(a);
-    sim.realmRacersQueueJoin(b);
-    // Two in the queue: they pair off with each other, no pilot is sent.
+    const grid = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+      addAt(sim, 'warrior', `Queued${i}`, -5 + i * 4, -40),
+    );
+    for (const pid of grid) sim.realmRacersQueueJoin(pid);
     sim.tick();
     expect(botPidsOf(sim)).toEqual([]);
-    expect(sim.realmRacers.match?.pids).toEqual([a, b]);
-    sim.realmRacersForfeit(a);
-    for (let i = 0; i < 200 && sim.realmRacers.match; i++) sim.tick();
+    expect(sim.realmRacers.match?.pids).toEqual(grid);
+    // And it stays that way past the wait: a full grid is never topped up.
+    for (let i = 0; i < REALM_RACERS_BACKFILL_TICKS + 40; i++) sim.tick();
+    expect(botPidsOf(sim)).toEqual([]);
+  });
 
+  it('sends pilots out only after the wait, and only for the empty seats', () => {
+    const sim = makeWorld({ realmRacersBackfill: true });
+    const a = addAt(sim, 'warrior', 'Aster', -5, -40);
     sim.realmRacersQueueJoin(a);
     const joinedAt = sim.tickCount;
     // Well short of the wait: still alone, still waiting.
     for (let i = 0; i < REALM_RACERS_BACKFILL_TICKS - 20; i++) sim.tick();
     expect(botPidsOf(sim), `at tick ${sim.tickCount - joinedAt}`).toEqual([]);
     for (let i = 0; i < 60; i++) sim.tick();
-    expect(botPidsOf(sim)).toHaveLength(1);
+    expect(botPidsOf(sim)).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
     expect(sim.realmRacers.match?.pids).toContain(a);
-    expect(sim.realmRacers.bots.get(botPidsOf(sim)[0])).toBe(REALM_RACERS_BACKFILL_TIER);
+    expect(sim.realmRacers.match?.pids).toHaveLength(REALM_RACERS_GRID_SIZE);
+    for (const bot of botPidsOf(sim)) {
+      expect(sim.realmRacers.bots.get(bot)).toBe(REALM_RACERS_BACKFILL_TIER);
+    }
     expect(sim.realmRacers.queue).toEqual([]);
     // A backfilled race is the PUBLIC race, not a practice copy: this player
     // queued for a real one and is getting one.
     expect(sim.realmRacers.match?.practice).toBeNull();
     expect(sim.realmRacers.practices).toEqual([]);
+  });
+
+  it('fills only the seats nobody claimed, and clocks the OLDEST waiter', () => {
+    const sim = makeWorld({ realmRacersBackfill: true });
+    const humans = Array.from({ length: REALM_RACERS_GRID_SIZE - 1 }, (_, i) =>
+      addAt(sim, 'warrior', `Waiter${i}`, -5 + i * 4, -40),
+    );
+    // The first waiter joins, then the other two arrive much later. A queue of
+    // three must not wait for a fourth human forever, and the pilot at the head
+    // of it must not be made to wait longer because the queue grew behind them.
+    sim.realmRacersQueueJoin(humans[0]);
+    for (let i = 0; i < REALM_RACERS_BACKFILL_TICKS - 10; i++) sim.tick();
+    for (const pid of humans.slice(1)) sim.realmRacersQueueJoin(pid);
+    expect(botPidsOf(sim)).toEqual([]);
+    for (let i = 0; i < 40; i++) sim.tick();
+    expect(botPidsOf(sim)).toHaveLength(1);
+    const seated = sim.realmRacers.match?.pids ?? [];
+    expect(seated).toHaveLength(REALM_RACERS_GRID_SIZE);
+    for (const pid of humans) expect(seated).toContain(pid);
+    expect(sim.realmRacers.queue).toEqual([]);
   });
 });
 
@@ -327,10 +377,39 @@ describe('Realm Racers house pilots: they can actually drive', () => {
       }
       expect(finishedAt, `${tier} never finished`).toBeGreaterThan(0);
       expect(progress.lap).toBe(REALM_RACERS_PRACTICE_LAPS);
-      // And it won, because the human never touched a control.
-      expect(match.winnerPid).toBe(bot);
+      // And it leads, because the human never touched a control. The race
+      // itself runs on: the other two pilots are still out there, and with four
+      // on the grid the fight behind the leader is the rest of the race.
+      const standings = sim.realmRacersInfoFor(human).match?.standings ?? [];
+      expect(standings[0].botTier).toBe(tier);
+      expect(sim.realmRacersInfoFor(human).match?.me.position).toBe(REALM_RACERS_GRID_SIZE);
     });
   }
+
+  it('seats three pilots at the chosen tier, and two identical races agree tick for tick', () => {
+    const run = (): { finish: number[]; tiers: (string | null)[] } => {
+      const { sim, human } = practiceWorld('ace');
+      const bots = botsIn(sim, human);
+      expect(bots).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
+      const progresses = bots.map((pid) => {
+        const p = matchOf(sim, human).progress.get(pid);
+        if (!p) throw new Error('no progress');
+        return p;
+      });
+      const done = () => progresses.every((p) => p.finishedTick !== null);
+      for (let i = 0; i < RACE_TICKS && !done(); i++) sim.tick();
+      expect(done()).toBe(true);
+      return {
+        finish: progresses.map((p) => p.finishedTick as number),
+        tiers: bots.map((pid) => sim.realmRacers.bots.get(pid) ?? null),
+      };
+    };
+    const first = run();
+    expect(first.tiers).toEqual(Array(REALM_RACERS_GRID_SIZE - 1).fill('ace'));
+    // The determinism pin 06 established, re-run at four: a private copy plus
+    // three brains is still a pure function of the tick clock.
+    expect(run()).toEqual(first);
+  });
 
   it('drives a practice copy exactly as it drives the public circuit', () => {
     // The frame shift is either exact or it is not, and an eye watching a lap
@@ -376,14 +455,25 @@ describe('Realm Racers house pilots: they can actually drive', () => {
   });
 
   it('runs a harder tier no slower than a gentler one over the same race', () => {
+    // The WINNING pilot of each race, not one arbitrary seat: three machines at
+    // the same tier trade paint and their individual times spread, so the fair
+    // comparison between tiers is how fast the tier's best lap is.
     const lapTicks = new Map<RallyDriverTier, number>();
     for (const tier of RALLY_DRIVER_TIERS) {
       const { sim, human } = practiceWorld(tier);
-      const progress = matchOf(sim, human).progress.get(botIn(sim, human));
-      if (!progress) throw new Error('no progress');
-      for (let i = 0; i < RACE_TICKS && progress.finishedTick === null; i++) sim.tick();
-      expect(progress.finishedTick, tier).not.toBeNull();
-      lapTicks.set(tier, progress.finishedTick as number);
+      const match = matchOf(sim, human);
+      const progresses = botsIn(sim, human).map((pid) => {
+        const p = match.progress.get(pid);
+        if (!p) throw new Error('no progress');
+        return p;
+      });
+      const anyFinished = () => progresses.some((p) => p.finishedTick !== null);
+      for (let i = 0; i < RACE_TICKS && !anyFinished(); i++) sim.tick();
+      expect(anyFinished(), tier).toBe(true);
+      lapTicks.set(
+        tier,
+        Math.min(...progresses.flatMap((p) => (p.finishedTick === null ? [] : [p.finishedTick]))),
+      );
     }
     expect(lapTicks.get('ace') as number).toBeLessThan(lapTicks.get('rookie') as number);
     expect(lapTicks.get('driver') as number).toBeLessThanOrEqual(lapTicks.get('rookie') as number);

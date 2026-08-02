@@ -12027,7 +12027,13 @@ export class Hud {
           break;
         case 'realmRacersFound':
           if (ev.pid === sim.playerId) {
-            this.showBanner(t('hudChrome.rally.bannerFound', { name: ev.opponentName }));
+            // The whole grid, the viewer included: the banner is about the size
+            // of the field, not about one named rival.
+            this.showBanner(
+              t('hudChrome.rally.bannerFound', {
+                count: formatNumber(ev.rivalNames.length + 1, { maximumFractionDigits: 0 }),
+              }),
+            );
             audio.realmRacersFound();
           }
           break;

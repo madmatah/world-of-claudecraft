@@ -65,28 +65,41 @@ export const REALM_RACERS_CONTROL_POINTS: readonly RallyPoint[] = [
 
 /**
  * Road half-width breakpoints as (lap fraction, half-width in yards), linearly
- * interpolated and wrapped by `halfWidthAt`. Two machines side by side plus a
- * passing gap need about 11 yards, so 6.0 (12 total) is the floor.
+ * interpolated and wrapped by `halfWidthAt`.
+ *
+ * The spread between the widest and the narrowest road is deliberately narrow,
+ * because a real circuit does not halve its width: what makes a chicane slow is
+ * its GEOMETRY, the S it asks a machine to thread, never a wall closing in. An
+ * earlier profile held the chicane at 6.0 against a 10.0 approach and read as a
+ * funnel rather than as a corner. At 8.5 it is still the place a four-abreast
+ * field has to become three (four machines at the grid's own spacing need about
+ * 18 yards and it offers 17), which was the whole point of keeping it tight.
+ *
+ * What bounds the widths is the OUTSIDE, not the lake: the garden between the
+ * road and the perimeter wall is what makes running wide legible. The basin is
+ * not the constraint at any width worth authoring, since its own shore is
+ * `halfWidth + apron` and moves outward with the road.
  */
 export const REALM_RACERS_WIDTH_BANDS: readonly { s: number; halfWidth: number }[] = [
-  { s: 0.0, halfWidth: 9.0 }, // start / finish straight
-  { s: 0.18, halfWidth: 9.0 },
-  { s: 0.24, halfWidth: 8.0 }, // fast sweeper
-  { s: 0.35, halfWidth: 8.0 },
-  { s: 0.41, halfWidth: 8.5 }, // north straight
-  { s: 0.53, halfWidth: 8.5 },
-  { s: 0.58, halfWidth: 6.0 }, // chicane
-  { s: 0.62, halfWidth: 6.0 },
-  { s: 0.68, halfWidth: 7.5 }, // parabolic
-  { s: 0.73, halfWidth: 7.5 },
-  { s: 0.8, halfWidth: 6.5 }, // hairpin
-  { s: 0.9, halfWidth: 6.5 },
-  { s: 0.95, halfWidth: 9.0 },
-  { s: 1.0, halfWidth: 9.0 },
+  { s: 0.0, halfWidth: 10.5 }, // start / finish straight
+  { s: 0.18, halfWidth: 10.5 },
+  { s: 0.24, halfWidth: 9.5 }, // fast sweeper
+  { s: 0.35, halfWidth: 9.5 },
+  { s: 0.41, halfWidth: 10.0 }, // north straight
+  { s: 0.53, halfWidth: 10.0 },
+  { s: 0.58, halfWidth: 8.5 }, // chicane, the narrowest STRAIGHT-ish stretch
+  { s: 0.62, halfWidth: 8.5 },
+  { s: 0.68, halfWidth: 9.0 }, // parabolic
+  { s: 0.73, halfWidth: 9.0 },
+  { s: 0.8, halfWidth: 8.0 }, // hairpin
+  { s: 0.9, halfWidth: 8.0 },
+  { s: 0.95, halfWidth: 10.5 },
+  { s: 1.0, halfWidth: 10.5 },
 ] as const;
 
-/** Narrowest authored road half-width; the width bands may never go under it. */
-export const REALM_RACERS_MIN_HALF_WIDTH = 6.0;
+/** Narrowest authored road half-width; the width bands may never go under it.
+ *  It is the HAIRPIN's, which is where a circuit's tightest road belongs. */
+export const REALM_RACERS_MIN_HALF_WIDTH = 8.0;
 
 /** Uniform arc-length spacing of the resampled centerline, yards. */
 export const REALM_RACERS_SAMPLE_STEP = 1.0;
@@ -192,14 +205,40 @@ export const REALM_RACERS_BORDER_OFFSET = 0.7;
  * stopping a racer on that side. Half-extents from the origin, inside the
  * region envelope so collision still belongs to the rally at the wall itself.
  */
-export const REALM_RACERS_PERIMETER_HALF_X = 104;
-export const REALM_RACERS_PERIMETER_HALF_Z = 78;
+export const REALM_RACERS_PERIMETER_HALF_X = 118;
+export const REALM_RACERS_PERIMETER_HALF_Z = 92;
 export const REALM_RACERS_PERIMETER_HALF_THICKNESS = 0.4;
 export const REALM_RACERS_PERIMETER_HEIGHT = 2.2;
 
-/** Start grid: how far behind the start line, and how far off the centerline. */
+/** Start grid: how far behind the start line the row of machines sits. */
 export const REALM_RACERS_START_BACK = 7.0;
-export const REALM_RACERS_START_SIDE = 3.2;
+
+/**
+ * How many machines line up. Every race is a four-pilot race, practice
+ * included; a race freezes this number at seat time so a pilot dropping out
+ * cannot retroactively renumber the grid under everyone else.
+ */
+export const REALM_RACERS_GRID_SIZE = 4;
+
+/**
+ * Centre-to-centre spacing of the grid slots, yards. The row is symmetric about
+ * the centerline, so the arithmetic that has to hold is:
+ *
+ *   road half-width on the start straight  10.5   (REALM_RACERS_WIDTH_BANDS, s = 0 to 0.18)
+ *   machine hull radius                     1.7   (VEHICLE_PROFILES.bodyRadius)
+ *   outermost slot centre                   7.5   ((n - 1) / 2 * spacing)
+ *   outermost hull edge                     9.2   -> 1.3 yd of road left outside it
+ *   gap between neighbouring hulls          1.6   (spacing - 2 * bodyRadius)
+ *
+ * The two clearances are deliberately close to each other: a row bunched in the
+ * middle of a wide road with empty tarmac either side reads as a mistake, so
+ * the spacing is sized to spread the field across the road it actually has.
+ *
+ * `tests/realm_racers_layout.ts` re-derives all of it rather than pinning the
+ * numbers, so an edit here fails the test instead of quietly parking a machine
+ * on the grass.
+ */
+export const REALM_RACERS_START_SPACING = 5.0;
 
 /**
  * Region envelope, half-extents from the origin. It must cover the circuit, the
@@ -210,8 +249,8 @@ export const REALM_RACERS_START_SIDE = 3.2;
  * which is where the dressing stands. Stays strictly between YUMI_BAND_X_MAX and
  * DUNGEON_OVERFLOW_X_BASE.
  */
-export const REALM_RACERS_REGION_HALF_X = 124;
-export const REALM_RACERS_REGION_HALF_Z = 98;
+export const REALM_RACERS_REGION_HALF_X = 170;
+export const REALM_RACERS_REGION_HALF_Z = 140;
 
 function cross(ax: number, az: number, bx: number, bz: number): number {
   return ax * bz - az * bx;
@@ -264,12 +303,12 @@ export function rallyGateCrossingFraction(
  */
 export const REALM_RACERS_PRACTICE_SLOTS = 6;
 /**
- * Spacing between copies, yards. The region is 2 * REGION_HALF_Z = 196 deep, so
- * this leaves 204 yards of empty plane between neighbours: comfortably past the
+ * Spacing between copies, yards. The region is 2 * REGION_HALF_Z = 280 deep, so
+ * this leaves 220 yards of empty plane between neighbours: comfortably past the
  * ~120 yd interest radius, which is what makes a practice lap genuinely private
  * rather than merely far away.
  */
-export const REALM_RACERS_SLOT_DZ = 400;
+export const REALM_RACERS_SLOT_DZ = 500;
 
 /** The offset added to every geometry read on circuit copy `slot`. Zero for the
  *  public circuit, so the public path is byte-identical to what it was. */

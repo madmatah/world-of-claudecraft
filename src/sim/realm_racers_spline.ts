@@ -22,11 +22,12 @@ import {
   REALM_RACERS_CONTROL_POINTS,
   REALM_RACERS_GATE_FRACTIONS,
   REALM_RACERS_GATE_MARGIN,
+  REALM_RACERS_GRID_SIZE,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_SAMPLE_STEP,
   REALM_RACERS_START_BACK,
-  REALM_RACERS_START_SIDE,
+  REALM_RACERS_START_SPACING,
   REALM_RACERS_VERGE_MARGIN,
   REALM_RACERS_WIDTH_BANDS,
 } from './realm_racers_layout';
@@ -406,9 +407,10 @@ export function realmRacersGates(): readonly RallyGate[] {
 let cachedStarts: readonly RallyStartSlot[] | null = null;
 
 /**
- * The start grid: two slots on the road behind the start line, both facing
- * along the racing direction. Indexed, not a hardcoded pair, so a wider grid
- * later is a data change rather than a rewrite.
+ * The start grid: `REALM_RACERS_GRID_SIZE` slots abreast on the road behind the
+ * start line, all facing along the racing direction. The row is derived from the
+ * spacing and centred on the centerline, so widening the grid is an edit to two
+ * numbers in the layout rather than a rewrite here.
  */
 export function realmRacersStarts(): readonly RallyStartSlot[] {
   if (cachedStarts) return cachedStarts;
@@ -417,11 +419,15 @@ export function realmRacersStarts(): readonly RallyStartSlot[] {
   const facing = Math.atan2(p.tx, p.tz);
   const normalX = -p.tz;
   const normalZ = p.tx;
-  cachedStarts = [1, -1].map((side) => ({
-    x: p.x + normalX * REALM_RACERS_START_SIDE * side,
-    z: p.z + normalZ * REALM_RACERS_START_SIDE * side,
-    facing,
-  }));
+  const n = REALM_RACERS_GRID_SIZE;
+  cachedStarts = Array.from({ length: n }, (_, i) => {
+    const offset = (i - (n - 1) / 2) * REALM_RACERS_START_SPACING;
+    return {
+      x: p.x + normalX * offset,
+      z: p.z + normalZ * offset,
+      facing,
+    };
+  });
   return cachedStarts;
 }
 

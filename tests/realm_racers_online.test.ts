@@ -36,6 +36,7 @@ vi.mock('../server/db', () => ({
 import { type ClientSession, GameServer } from '../server/game';
 import { ClientWorld } from '../src/net/online';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
+import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 setActiveWorldContent({
@@ -149,56 +150,75 @@ describe('Realm Racers online parity', () => {
     expect(match?.pids).toContain(session.pid);
     expect(match?.practice?.ownerPid).toBe(session.pid);
     expect(match?.totalLaps).toBe(4);
-    expect(server.sim.realmRacers.bots.size).toBe(1);
-    // The opponent's tier reaches the viewer through the same `rr` self key
-    // the rest of the rally state rides, so the HUD needs no second channel.
-    expect(selfFields(client, 'rr').at(-1)).toMatchObject({
+    expect(match?.pids).toHaveLength(REALM_RACERS_GRID_SIZE);
+    expect(server.sim.realmRacers.bots.size).toBe(REALM_RACERS_GRID_SIZE - 1);
+    // The whole standings list, tiers included, reaches the viewer through the
+    // same `rr` self key the rest of the rally state rides, so the HUD needs no
+    // second channel for the four-row strip.
+    const mirrored = selfFields(client, 'rr').at(-1) as {
       match: {
-        practice: true,
-        totalLaps: 4,
-        participantIds: match?.pids,
-        opponent: { botTier: 'rookie' },
-      },
+        practice: boolean;
+        totalLaps: number;
+        participantIds: number[];
+        gridSize: number;
+        standings: { pid: number; botTier: string | null; position: number }[];
+      };
+    };
+    expect(mirrored.match).toMatchObject({
+      practice: true,
+      totalLaps: 4,
+      participantIds: match?.pids,
+      gridSize: REALM_RACERS_GRID_SIZE,
     });
+    expect(mirrored.match.standings).toHaveLength(REALM_RACERS_GRID_SIZE);
+    expect(mirrored.match.standings.map((row) => row.position)).toEqual([1, 2, 3, 4]);
+    expect(mirrored.match.standings.filter((row) => row.botTier === 'rookie')).toHaveLength(
+      REALM_RACERS_GRID_SIZE - 1,
+    );
   });
 
-  it('forms a two-player match, routes personal events, and ships Rally kit/state deltas', () => {
+  it('forms a four-pilot match, routes personal events, and ships Rally kit/state deltas', () => {
     const server = new GameServer();
-    const aClient = fakeClient();
-    const bClient = fakeClient();
-    const a = join(server, aClient, 1, 'Aster');
-    const b = join(server, bClient, 2, 'Briar');
+    const names = ['Aster', 'Briar', 'Cass', 'Dell'];
+    const clients = names.map(() => fakeClient());
+    const sessions = names.map((name, i) => join(server, clients[i], i + 1, name));
 
-    command(server, a, 'realm_racers_join');
-    command(server, b, 'realm_racers_join');
+    for (const session of sessions) command(server, session, 'realm_racers_join');
     for (let i = 0; i < 12; i++) advance(server);
 
-    expect(server.sim.realmRacers.match?.pids).toEqual([a.pid, b.pid]);
+    expect(server.sim.realmRacers.match?.pids).toEqual(sessions.map((s) => s.pid));
     expect(server.sim.realmRacers.match?.totalLaps).toBe(3);
-    expect(events(aClient, 'realmRacersFound')).toHaveLength(1);
-    expect(events(bClient, 'realmRacersFound')).toHaveLength(1);
-    expect(selfFields(aClient, 'rr').at(-1)).toMatchObject({
-      match: { phase: 'countdown', totalLaps: 3, opponent: { name: 'Briar' } },
+    for (const client of clients) expect(events(client, 'realmRacersFound')).toHaveLength(1);
+    // The banner names the whole field, not one rival.
+    expect(events(clients[0], 'realmRacersFound')[0]).toMatchObject({
+      rivalNames: ['Briar', 'Cass', 'Dell'],
+    });
+    expect(selfFields(clients[0], 'rr').at(-1)).toMatchObject({
+      match: { phase: 'countdown', totalLaps: 3, gridSize: REALM_RACERS_GRID_SIZE },
     });
     // The kit flag names the weapon in the racer's SLOT plus its per-race
     // budget, so the mirror rebuilds the same kit the sim granted rather than a
     // hardcoded one. The live remaining count rides `achg`, not this.
-    expect(selfFields(aClient, 'rrkit').at(-1)).toEqual({
+    expect(selfFields(clients[0], 'rrkit').at(-1)).toEqual({
       active: true,
       w: 'rally_ground_blast',
       c: 3,
     });
 
-    command(server, a, 'realm_racers_forfeit');
+    command(server, sessions[0], 'realm_racers_forfeit');
     advance(server);
-    expect(events(aClient, 'realmRacersResult').at(-1)).toMatchObject({
+    // The quitter is told at once and placed last; nobody else's race ended, so
+    // nobody else has a result yet.
+    expect(events(clients[0], 'realmRacersResult').at(-1)).toMatchObject({
       forfeited: true,
-      winnerName: 'Briar',
+      won: false,
+      placing: REALM_RACERS_GRID_SIZE,
+      gridSize: REALM_RACERS_GRID_SIZE,
     });
-    expect(events(bClient, 'realmRacersResult').at(-1)).toMatchObject({
-      won: true,
-      winnerName: 'Briar',
-    });
+    for (const client of clients.slice(1)) {
+      expect(events(client, 'realmRacersResult')).toHaveLength(0);
+    }
+    expect(server.sim.realmRacers.match?.phase).toBe('countdown');
   });
 
   it('dispatches recovery, routes its silent snap event, and mirrors the movement lock', () => {
@@ -214,9 +234,23 @@ describe('Realm Racers online parity', () => {
     if (!racer) throw new Error('missing racer');
     const progress = match.progress.get(session.pid);
     if (!progress) throw new Error('missing racer progress');
-    const anchor = realmRacersTrack().pointAt(progress.resetS);
+    const track = realmRacersTrack();
+    const anchor = track.pointAt(progress.resetS);
     const anchorX = match.origin.x + anchor.x;
     const anchorZ = match.origin.z + anchor.z;
+    // Clear the house pilots off the racing line first: recovery drops the
+    // machine on it, and a rival parked there would legitimately be separated
+    // by the contact pass, which this test is not about.
+    match.pids
+      .filter((pid) => pid !== session.pid)
+      .forEach((pid, i) => {
+        const away = track.pointAt(track.length * (0.3 + i * 0.15));
+        const other = server.sim.entities.get(pid);
+        if (!other) throw new Error('missing house pilot');
+        other.pos.x = match.origin.x + away.x;
+        other.pos.z = match.origin.z + away.z;
+        other.prevPos = { ...other.pos };
+      });
     racer.pos.x += 4;
     racer.prevPos = { ...racer.pos };
     client.sent.length = 0;

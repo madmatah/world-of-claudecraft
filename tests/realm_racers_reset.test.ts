@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
@@ -19,16 +20,23 @@ function required<T>(value: T | null | undefined, label: string): T {
   return value;
 }
 
-function staged(): { sim: Sim; a: number; b: number; match: RealmRacersMatch; racer: Entity } {
+function staged(): {
+  sim: Sim;
+  a: number;
+  b: number;
+  pids: number[];
+  match: RealmRacersMatch;
+  racer: Entity;
+} {
   const sim = makeWorld();
-  const a = addAt(sim, 'warrior', 'Aster');
-  const b = addAt(sim, 'mage', 'Briar');
-  sim.realmRacersQueueJoin(a);
-  sim.realmRacersQueueJoin(b);
+  const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+    addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40),
+  );
+  for (const pid of pids) sim.realmRacersQueueJoin(pid);
   sim.tick();
   const match = required(sim.realmRacers.match, 'race');
-  const racer = required(sim.entities.get(a), 'racer');
-  return { sim, a, b, match, racer };
+  const racer = required(sim.entities.get(pids[0]), 'racer');
+  return { sim, a: pids[0], b: pids[1], pids, match, racer };
 }
 
 function racing() {
@@ -109,9 +117,15 @@ describe('Realm Racers recovery', () => {
   });
 
   it('holds movement for two seconds after a reset, then returns control', () => {
-    const { sim, a, b, racer } = racing();
-    const otherRoad = realmRacersTrack().pointAt(realmRacersTrack().length * 0.5);
-    teleport(sim, b, otherRoad.x, otherRoad.z);
+    const { sim, a, pids, racer } = racing();
+    // Clear the rest of the grid off the centerline: recovery drops a machine
+    // on the racing line, and a neighbour parked on it would legitimately be
+    // shoved aside by the contact pass, which is a different test.
+    const track = realmRacersTrack();
+    pids.slice(1).forEach((pid, i) => {
+      const away = track.pointAt(track.length * (0.3 + i * 0.15));
+      teleport(sim, pid, away.x, away.z);
+    });
     sim.realmRacersResetPosition(a);
     const startX = racer.pos.x;
     const startZ = racer.pos.z;

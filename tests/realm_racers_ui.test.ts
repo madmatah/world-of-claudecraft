@@ -5,28 +5,64 @@
 // forfeit control lived inside it, so closing it left no way out of a race.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The standings portrait is the party frames' class crest, whose procedural path
+// needs a real 2D canvas jsdom does not provide. The strip only ever needs a
+// string, so the same hoisted spy the party-frames suite uses stands in, and it
+// also lets a test assert that each pilot's OWN class reaches the crest call.
+const iconDataUrlSpy = vi.hoisted(() => vi.fn((_kind: string, key: string) => `data:${key}`));
+vi.mock('../src/ui/icons', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/ui/icons')>()),
+  iconDataUrl: iconDataUrlSpy,
+}));
+
 import { t } from '../src/ui/i18n';
 import { makeWriterFacet } from '../src/ui/painter_host';
 import { RealmRacersUi } from '../src/ui/realm_racers';
 import type { IWorld, RealmRacersInfo } from '../src/world_api';
 
 type RallyMatch = NonNullable<RealmRacersInfo['match']>;
+type RallyRacer = RallyMatch['standings'][number];
 
+function racer(over: Partial<RallyRacer> = {}): RallyRacer {
+  return {
+    pid: 1,
+    name: 'Aster',
+    cls: 'warrior',
+    lap: 1,
+    finished: false,
+    botTier: null,
+    position: 1,
+    finishSeconds: null,
+    retired: false,
+    ...over,
+  };
+}
+
+/** A four-pilot grid with the viewer leading it. */
 function match(over: Partial<RallyMatch> = {}): RallyMatch {
+  const me = racer();
   return {
     id: 7,
-    participantIds: [1, 2],
+    participantIds: [1, 2, 3, 4],
     phase: 'countdown',
     countdown: 3,
     countdownTicks: 60,
     elapsed: 0,
+    chaseIn: 0,
     speed: 0,
     wrongWay: false,
     resetLocked: false,
     returnIn: 0,
-    me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
-    opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
-    position: 1,
+    me,
+    standings: [
+      me,
+      racer({ pid: 2, name: 'Briar', cls: 'mage', position: 2, lap: 2 }),
+      racer({ pid: 3, name: 'Cass', cls: 'rogue', position: 3, lap: 2 }),
+      racer({ pid: 4, name: 'Dell', cls: 'priest', position: 4, lap: 1 }),
+    ],
+    gridSize: 4,
+    decided: false,
     practice: false,
     totalLaps: 3,
     result: null,
@@ -246,37 +282,350 @@ describe('Realm Racers practice setup screen', () => {
     expect(practiceButton(h.root)).not.toBeNull();
   });
 
-  it('names the opponent as a house pilot in the window and the race strip', () => {
+  it('reports the field, not one rival, and marks a practice race as one', () => {
     const h = harness();
-    h.info.match = match({
-      phase: 'racing',
-      opponent: {
-        pid: 2,
-        name: 'Briar',
-        lap: 1,
-        finished: false,
-        botTier: 'ace',
-      },
-    });
+    h.info.match = match({ phase: 'racing', me: racer({ position: 3 }) });
     h.ui.update();
     h.ui.toggle();
-    const expected = t('hudChrome.rally.racingAgainstBot', {
-      name: 'Briar',
-      tier: t('hudChrome.rally.tierAce'),
-    });
-    expect(h.root.textContent).toContain(expected);
-    expect(h.layer.textContent).toContain(
-      t('hudChrome.rally.versusBot', { name: 'Briar', tier: t('hudChrome.rally.tierAce') }),
+    expect(h.root.textContent).toContain(
+      t('hudChrome.rally.racingAgainst', { position: '3', total: '4' }),
+    );
+    h.info.match = match({ phase: 'racing', practice: true, me: racer({ position: 3 }) });
+    h.ui.update();
+    expect(h.root.textContent).toContain(
+      t('hudChrome.rally.racingAgainstBot', { position: '3', total: '4' }),
     );
   });
 
-  it('leaves a human opponent unmarked', () => {
+  it('paints a party-frame row per machine: placing, portrait, name, lap', () => {
     const h = harness();
     h.info.match = match({ phase: 'racing' });
     h.ui.update();
-    h.ui.toggle();
-    expect(h.root.textContent).toContain(t('hudChrome.rally.racingAgainst', { name: 'Briar' }));
-    expect(h.layer.textContent).toContain(t('hudChrome.rally.versus', { name: 'Briar' }));
+    const panel = h.layer.querySelector('#realm-racers-standings') as HTMLElement;
+    // Its OWN panel, not a block inside the centred strip: it lives in the
+    // top-left corner where the party frames do.
+    expect(panel).not.toBeNull();
+    expect(panel.parentElement).toBe(h.layer);
+    expect(h.layer.querySelector('#realm-racers-hud .rally-standing')).toBeNull();
+
+    const rows = [...panel.querySelectorAll('.rally-standing')];
+    expect(rows).toHaveLength(4);
+    expect(rows.map((row) => row.querySelector('.rally-standing-name')?.textContent)).toEqual([
+      'Aster',
+      'Briar',
+      'Cass',
+      'Dell',
+    ]);
+    expect(rows.map((row) => row.querySelector('.rally-standing-place')?.textContent)).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+    ]);
+    const crests = rows.map((row) => row.querySelector('.rally-standing-crest'));
+    expect(crests.every((crest) => crest !== null)).toBe(true);
+    // The right-hand column is the LAP, which is what says who is a lap down.
+    const laps = rows.map((row) => row.querySelector('.rally-standing-lap')?.textContent);
+    expect(laps[0]).toBe(t('hudChrome.rally.lap', { lap: '1', total: '3' }));
+    expect(laps[1]).toBe(t('hudChrome.rally.lap', { lap: '2', total: '3' }));
+    expect(rows[0].classList.contains('me')).toBe(true);
+    expect(rows[1].classList.contains('me')).toBe(false);
+    // No distance and no tier badge: both were noise a pilot had to decode.
+    expect(panel.querySelector('.rally-standing-gap')).toBeNull();
+    expect(panel.querySelector('.rally-standing-tier')).toBeNull();
+  });
+
+  it('keeps the viewer marker in its own cell, so a long name cannot eat it', () => {
+    const h = harness();
+    const me = racer({ pid: 1, name: 'A Very Long Pilot Name Indeed', position: 1 });
+    h.info.match = match({ phase: 'racing', me, standings: [me] });
+    h.ui.update();
+    const row = h.layer.querySelector('.rally-standing') as HTMLElement;
+    // The name and the marker are SEPARATE elements. Only the name truncates,
+    // so the marker survives however long the name is; when they shared one
+    // string the ellipsis ate the marker first.
+    expect(row.querySelector('.rally-standing-name')?.textContent).toBe(
+      'A Very Long Pilot Name Indeed',
+    );
+    expect(row.querySelector('.rally-standing-you')?.textContent).toBe(
+      t('hudChrome.rally.standingsYou'),
+    );
+    // And a rival's row carries the empty cell, which the stylesheet collapses.
+    const rival = racer({ pid: 2, name: 'Briar', position: 2 });
+    h.info.match = match({ phase: 'racing', me, standings: [me, rival] });
+    h.ui.update();
+    const rows = [...h.layer.querySelectorAll('.rally-standing')];
+    expect(rows[1].querySelector('.rally-standing-you')?.textContent).toBe('');
+  });
+
+  it('reuses one node per pilot and only re-parents the rows that moved', () => {
+    const h = harness();
+    const me = racer({ pid: 1, name: 'Aster', position: 1 });
+    const rival = racer({ pid: 2, name: 'Briar', cls: 'mage', position: 2 });
+    h.info.match = match({ phase: 'racing', me, standings: [me, rival] });
+    h.ui.update();
+    const before = [...h.layer.querySelectorAll('.rally-standing')];
+    const crestBefore = before[0].querySelector('.rally-standing-crest');
+
+    // Briar overtakes Aster. The nodes must be the SAME objects, swapped: a
+    // rebuild would destroy them, and a destroyed node cannot animate from
+    // where it used to be (nor keep its decoded portrait).
+    h.info.match = match({
+      phase: 'racing',
+      me: { ...me, position: 2 },
+      standings: [
+        { ...rival, position: 1 },
+        { ...me, position: 2 },
+      ],
+    });
+    h.ui.update();
+    const after = [...h.layer.querySelectorAll('.rally-standing')];
+    expect(after[0]).toBe(before[1]);
+    expect(after[1]).toBe(before[0]);
+    expect(after[1].querySelector('.rally-standing-crest')).toBe(crestBefore);
+    // The placing text followed the swap.
+    expect(after.map((row) => row.querySelector('.rally-standing-place')?.textContent)).toEqual([
+      '1',
+      '2',
+    ]);
+  });
+
+  it('marks the row that gained a place and the one that lost it', () => {
+    const h = harness();
+    const me = racer({ pid: 1, name: 'Aster', position: 1 });
+    const rival = racer({ pid: 2, name: 'Briar', position: 2 });
+    h.info.match = match({ phase: 'racing', me, standings: [me, rival] });
+    h.ui.update();
+    // First paint is not a movement: nobody has moved yet.
+    let rows = [...h.layer.querySelectorAll('.rally-standing')];
+    expect(rows.some((row) => row.classList.contains('gained'))).toBe(false);
+    expect(rows.some((row) => row.classList.contains('lost'))).toBe(false);
+
+    h.info.match = match({
+      phase: 'racing',
+      me: { ...me, position: 2 },
+      standings: [
+        { ...rival, position: 1 },
+        { ...me, position: 2 },
+      ],
+    });
+    h.ui.update();
+    rows = [...h.layer.querySelectorAll('.rally-standing')];
+    expect(rows[0].classList.contains('gained')).toBe(true);
+    expect(rows[0].classList.contains('lost')).toBe(false);
+    expect(rows[1].classList.contains('lost')).toBe(true);
+
+    // A later paint that moves nobody clears both, which is what lets the same
+    // keyframe run again on the next overtake.
+    h.info.match = match({
+      phase: 'racing',
+      me: { ...me, position: 2, lap: 2 },
+      standings: [
+        { ...rival, position: 1 },
+        { ...me, position: 2, lap: 2 },
+      ],
+    });
+    h.ui.update();
+    rows = [...h.layer.querySelectorAll('.rally-standing')];
+    expect(rows.some((row) => row.classList.contains('gained'))).toBe(false);
+    expect(rows.some((row) => row.classList.contains('lost'))).toBe(false);
+  });
+
+  it('draws each pilot their own class portrait, not one shared crest', () => {
+    const h = harness();
+    const me = racer({ pid: 1, cls: 'warrior', position: 1 });
+    h.info.match = match({
+      phase: 'racing',
+      me,
+      standings: [me, racer({ pid: 2, name: 'Briar', cls: 'mage', position: 2 })],
+    });
+    h.ui.update();
+    const crests = [...h.layer.querySelectorAll('.rally-standing-crest')] as HTMLImageElement[];
+    expect(crests).toHaveLength(2);
+    expect(crests[0].src).not.toBe(crests[1].src);
+    const keys = iconDataUrlSpy.mock.calls.map((call) => call[1]);
+    expect(keys).toContain('class_warrior');
+    expect(keys).toContain('class_mage');
+  });
+
+  it('redraws a portrait only when the pilot in the row changes class', () => {
+    const h = harness();
+    const me = racer({ pid: 1, cls: 'warrior', position: 1 });
+    h.info.match = match({ phase: 'racing', me, standings: [me] });
+    h.ui.update();
+    iconDataUrlSpy.mockClear();
+    // A lap ticks over: the row repaints, the portrait must not.
+    h.info.match = match({
+      phase: 'racing',
+      me: { ...me, lap: 2 },
+      standings: [{ ...me, lap: 2 }],
+    });
+    h.ui.update();
+    expect(iconDataUrlSpy).not.toHaveBeenCalled();
+  });
+
+  it('says where a pilot stopped once they are no longer driving', () => {
+    const h = harness();
+    const me = racer({ position: 2 });
+    h.info.match = match({
+      phase: 'racing',
+      me,
+      standings: [
+        racer({ pid: 2, name: 'Briar', botTier: 'ace', position: 1, finished: true }),
+        me,
+        racer({ pid: 4, name: 'Dell', position: 3, retired: true }),
+      ],
+    });
+    h.ui.update();
+    const rows = [...h.layer.querySelectorAll('.rally-standing')];
+    expect(rows[0].querySelector('.rally-standing-lap')?.textContent).toBe(
+      t('hudChrome.rally.standingsFinished'),
+    );
+    expect(rows[2].querySelector('.rally-standing-lap')?.textContent).toBe(
+      t('hudChrome.rally.standingsRetired'),
+    );
+    expect(rows[2].classList.contains('out')).toBe(true);
+  });
+
+  it('takes the panel down with the race, through the class the sheet animates', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'racing' });
+    h.ui.update();
+    const panel = h.layer.querySelector('#realm-racers-standings') as HTMLElement;
+    expect(panel.classList.contains('shown')).toBe(true);
+    h.info.match = null;
+    h.ui.update();
+    // A class, not `display`: the stylesheet fades and slides it out, which a
+    // display flip would cut off outright.
+    expect(panel.classList.contains('shown')).toBe(false);
+  });
+});
+
+describe('Realm Racers podium', () => {
+  const finished = (over: Partial<RallyMatch> = {}): RallyMatch => {
+    const field = [
+      racer({
+        pid: 2,
+        name: 'Briar',
+        cls: 'mage',
+        position: 1,
+        finished: true,
+        finishSeconds: 64.28,
+      }),
+      racer({
+        pid: 3,
+        name: 'Cass',
+        cls: 'rogue',
+        position: 2,
+        finished: true,
+        finishSeconds: 67.8,
+      }),
+      racer({
+        pid: 4,
+        name: 'Dell',
+        cls: 'priest',
+        position: 3,
+        finished: true,
+        finishSeconds: 71.4,
+      }),
+      racer({ pid: 1, name: 'Aster', position: 4, lap: 2 }),
+    ];
+    return match({
+      phase: 'finished',
+      decided: true,
+      result: 'lost',
+      returnIn: 6,
+      me: field[3],
+      standings: field,
+      ...over,
+    });
+  };
+
+  it('stays down until the race is decided, then rises', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'racing' });
+    h.ui.update();
+    const podium = h.layer.querySelector('#realm-racers-podium') as HTMLElement;
+    expect(podium).not.toBeNull();
+    expect(podium.classList.contains('shown')).toBe(false);
+    h.info.match = finished();
+    h.ui.update();
+    expect(podium.classList.contains('shown')).toBe(true);
+  });
+
+  it('stays down for a pilot who quit while the race runs on', () => {
+    const h = harness();
+    // Their own phase is finished and they are watching a return countdown, but
+    // there is no classification: they get their forfeit tableau, not a podium.
+    h.info.match = match({ phase: 'finished', decided: false, result: 'forfeit', returnIn: 4 });
+    h.ui.update();
+    const podium = h.layer.querySelector('#realm-racers-podium') as HTMLElement;
+    expect(podium.classList.contains('shown')).toBe(false);
+    // ...and the strip keeps saying it, because nothing else will.
+    expect(h.layer.querySelector('.rallyhud-phase')?.textContent).toBe(
+      t('hudChrome.rally.lostReturn', { seconds: '4' }),
+    );
+  });
+
+  it('builds three steps with second to the left of first, and lists the rest', () => {
+    const h = harness();
+    h.info.match = finished();
+    h.ui.update();
+    const steps = [...h.layer.querySelectorAll('.rally-podium-step')];
+    expect(steps.map((step) => step.querySelector('.rally-podium-name')?.textContent)).toEqual([
+      'Cass',
+      'Briar',
+      'Dell',
+    ]);
+    expect(steps.map((step) => step.querySelector('.rally-podium-place')?.textContent)).toEqual([
+      '2',
+      '1',
+      '3',
+    ]);
+    // The block heights are the podium, so the placing must reach the class.
+    expect(steps[1].classList.contains('p1')).toBe(true);
+    const rest = [...h.layer.querySelectorAll('.rally-podium-row')];
+    expect(rest).toHaveLength(1);
+    expect(rest[0].querySelector('.rally-podium-name')?.textContent).toBe('Aster');
+    expect(rest[0].classList.contains('me')).toBe(true);
+  });
+
+  it('shows a race time for a finisher and a lap for the pilot the flag caught', () => {
+    const h = harness();
+    h.info.match = finished();
+    h.ui.update();
+    const steps = [...h.layer.querySelectorAll('.rally-podium-step')];
+    // 64.28 s floors to 1:04.2, never rounds up: a time that rounds up can read
+    // as slower than the machine that actually finished behind it.
+    expect(steps[1].querySelector('.rally-podium-time')?.textContent).toBe(
+      t('hudChrome.rally.podiumTime', { minutes: '1', seconds: '04', tenths: '2' }),
+    );
+    const rest = h.layer.querySelector('.rally-podium-row');
+    expect(rest?.querySelector('.rally-podium-time')?.textContent).toBe(
+      t('hudChrome.rally.lap', { lap: '2', total: '3' }),
+    );
+  });
+
+  it('carries the headline and counts the return down without rebuilding', () => {
+    const h = harness();
+    h.info.match = finished();
+    h.ui.update();
+    const podium = h.layer.querySelector('#realm-racers-podium') as HTMLElement;
+    const stepsBefore = [...podium.querySelectorAll('.rally-podium-step')];
+    expect(podium.querySelector('.rally-podium-return')?.textContent).toBe(
+      t('hudChrome.rally.lostReturn', { seconds: '6' }),
+    );
+    // The strip's own phase line stands down, so the sentence lives in one place.
+    expect(h.layer.querySelector('.rallyhud-phase')?.textContent).toBe('');
+
+    h.info.match = finished({ returnIn: 3 });
+    h.ui.update();
+    expect(podium.querySelector('.rally-podium-return')?.textContent).toBe(
+      t('hudChrome.rally.lostReturn', { seconds: '3' }),
+    );
+    // The ceremony was NOT rebuilt: a countdown that restarts the entrance six
+    // times is not a ceremony.
+    expect([...podium.querySelectorAll('.rally-podium-step')]).toEqual(stepsBefore);
   });
 });
 
@@ -407,7 +756,7 @@ describe('Realm Racers strip forfeit control', () => {
       phase: 'finished',
       result: 'won',
       returnIn: 6,
-      me: { pid: 1, name: 'Aster', lap: 3, finished: true, botTier: null },
+      me: racer({ lap: 3, finished: true }),
     });
     h.ui.update();
     expect(h.forfeitButton()).toBeNull();

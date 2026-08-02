@@ -1,4 +1,4 @@
-// The Realm Racers: a deterministic two-player vehicle race. This module owns
+// The Realm Racers: a deterministic four-pilot vehicle race. This module owns
 // the FIFO queue, the single instanced match, arc-length lap progress, finish
 // arbitration (public and practice races may run different lap counts),
 // straight-line Ground Blast projectiles, and the complete gameplay parenthesis
@@ -36,6 +36,7 @@ import {
 } from '../realm_racers_ground_blast';
 import {
   type RallyPoint,
+  REALM_RACERS_GRID_SIZE,
   REALM_RACERS_LAPS,
   REALM_RACERS_PRACTICE_LAPS,
   REALM_RACERS_PRACTICE_SLOTS,
@@ -57,6 +58,11 @@ import {
   realmRacersStarts,
   realmRacersTrack,
 } from '../realm_racers_spline';
+import {
+  type RallyStandingEntry,
+  rallyClassification,
+  rallyLeadIsDeadHeat,
+} from '../realm_racers_standings';
 import type { ArenaReturnPools, PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
 import { type Entity, TICK_RATE, type VehicleDrive } from '../types';
@@ -75,6 +81,16 @@ export const REALM_RACERS_VEHICLE_KEY = 'rally_loaner';
 export const REALM_RACERS_MOUNT_KEY: string = vehicleProfile(REALM_RACERS_VEHICLE_KEY).key;
 export const REALM_RACERS_COUNTDOWN_TICKS = 9 * TICK_RATE;
 export const REALM_RACERS_TIME_LIMIT_TICKS = 180 * TICK_RATE;
+/**
+ * How long the rest of the field has to get home once the WINNER is home.
+ *
+ * Without it the race runs to the 180 s limit whenever one pilot stops driving,
+ * and three players who finished in forty seconds watch a result screen that
+ * will not arrive for another two minutes. Thirty seconds is about a lap of
+ * struggling off the racing line, so a real straggler still crosses the line
+ * and takes their placing; only a machine nobody is driving runs the clock out.
+ */
+export const REALM_RACERS_CHASE_TICKS = 30 * TICK_RATE;
 export const REALM_RACERS_RETURN_TICKS = 6 * TICK_RATE;
 export const REALM_RACERS_RESET_LOCK_TICKS = 2 * TICK_RATE;
 export const REALM_RACERS_STUCK_TICKS = 3 * TICK_RATE;
@@ -170,6 +186,24 @@ export interface RealmRacersWeaponSlot {
 export interface RealmRacersProgress {
   lap: number;
   finishedTick: number | null;
+  /**
+   * Where inside the crossing tick's segment this racer cut the line, 0 to 1.
+   * Only read against another racer finishing on the SAME tick; 1 until then.
+   */
+  finishFraction: number;
+  /**
+   * Tick this racer quit under its own steam, a forfeit or a disconnect, or
+   * null while they are still in the race. A quitter no longer hands anyone a
+   * win: they are classified LAST and the race goes on without them.
+   */
+  retiredTick: number | null;
+  /**
+   * True once the gameplay parenthesis has been closed for this racer and they
+   * stand back in the Evergarden. They stay on `match.pids`, because the grid a
+   * race started with is the grid it is classified on, but nothing per-racer
+   * resolves to this race for them any more.
+   */
+  returned: boolean;
   /** Last projected centerline sample: the search hint for the next tick. */
   trackIndex: number;
   lastS: number;
@@ -216,13 +250,27 @@ interface RealmRacersReturn {
 
 export interface RealmRacersMatch {
   id: number;
-  pids: [number, number];
+  /**
+   * Every pilot in frozen GRID order. Never mutated after seating: a pilot who
+   * quits is marked retired in `progress` instead, so a disconnect cannot
+   * renumber the grid and retroactively change what "Position 3/4" meant.
+   */
+  pids: number[];
+  /** `pids.length` at seat time, frozen for the same reason. */
+  gridSize: number;
   phase: RealmRacersPhase;
   goTick: number;
   deadlineTick: number;
   finishTick: number | null;
   winnerPid: number | null;
-  forfeiterPid: number | null;
+  /**
+   * When the chase window shuts, or null until the winner is home. Armed once,
+   * by the first racer to cross the line, so the rest of the field is racing a
+   * clock that starts the moment there is something left to race for.
+   */
+  chaseUntilTick: number | null;
+  /** Final classification, first to last. Empty until the race is decided. */
+  finishOrder: number[];
   returns: Map<number, RealmRacersReturn>;
   preMatchPools: Map<number, ArenaReturnPools>;
   progress: Map<number, RealmRacersProgress>;
@@ -281,8 +329,30 @@ export function createRealmRacersState(): RealmRacersState {
   };
 }
 
+/** Roster membership: is this pid on that race's frozen grid at all? */
 function matchHas(match: RealmRacersMatch | null, pid: number): boolean {
-  return !!match && (match.pids[0] === pid || match.pids[1] === pid);
+  return !!match && match.pids.includes(pid);
+}
+
+/**
+ * Roster membership AND still inside the gameplay parenthesis. A racer who has
+ * been returned to the Evergarden (they quit, or the race ended and their six
+ * seconds of tableau are up) is still on `pids` for classification but must not
+ * resolve to this race for anything per-racer: not the HUD readout, not the
+ * mount re-forcing, not their eligibility to queue again.
+ */
+function matchSeats(match: RealmRacersMatch | null, pid: number): boolean {
+  return matchHas(match, pid) && match?.progress.get(pid)?.returned === false;
+}
+
+/**
+ * Is this racer still driving: neither across the line nor pulled off it.
+ * Exported because the bot module asks it too, and a second copy of the rule in
+ * the brain is a rule the race does not share.
+ */
+export function realmRacersStillRunning(match: RealmRacersMatch, pid: number): boolean {
+  const progress = match.progress.get(pid);
+  return !!progress && progress.finishedTick === null && progress.retiredTick === null;
 }
 
 /** Every live race, public first. The order is the tick order and the search
@@ -300,8 +370,8 @@ export function realmRacersMatches(ctx: SimContext): RealmRacersMatch[] {
  */
 export function realmRacersMatchOf(ctx: SimContext, pid: number): RealmRacersMatch | null {
   const rally = ctx.realmRacers;
-  if (matchHas(rally.match, pid)) return rally.match;
-  return rally.practices.find((m) => matchHas(m, pid)) ?? null;
+  if (matchSeats(rally.match, pid)) return rally.match;
+  return rally.practices.find((m) => matchSeats(m, pid)) ?? null;
 }
 
 /** A free practice copy of the circuit, or -1 when every one is in use. Copy 0
@@ -494,10 +564,14 @@ export interface RealmRacersPracticeSeat {
 }
 
 /**
- * Seat two pilots and drop the flag. Exported because the bot module starts a
+ * Seat a full grid and drop the flag. Exported because the bot module starts a
  * match without going through the queue at all (the Practice button races you
- * immediately, and the online backfill pairs a lone waiter with a house pilot);
+ * immediately, and the online backfill fills a short queue with house pilots);
  * `tryMatch` below is the queue's own caller.
+ *
+ * `pids` is the grid, in slot order, and must be exactly
+ * `REALM_RACERS_GRID_SIZE` distinct eligible pilots: a race is four abreast or
+ * it does not start.
  *
  * With no `practice` seat this claims the ONE public circuit and refuses if it
  * is taken; with one it runs on that private copy and refuses nothing, which is
@@ -508,34 +582,33 @@ export interface RealmRacersPracticeSeat {
  */
 export function realmRacersStartMatch(
   ctx: SimContext,
-  aPid: number,
-  bPid: number,
+  pids: readonly number[],
   practice?: RealmRacersPracticeSeat,
 ): boolean {
-  return startMatch(ctx, aPid, bPid, practice);
+  return startMatch(ctx, pids, practice);
 }
 
 function startMatch(
   ctx: SimContext,
-  aPid: number,
-  bPid: number,
+  pids: readonly number[],
   practice?: RealmRacersPracticeSeat,
 ): boolean {
   // The public circuit is a single slot; a practice copy is claimed by its
   // caller and is nobody else's to take.
   if (!practice && ctx.realmRacers.match) return false;
-  if (!eligible(ctx, aPid) || !eligible(ctx, bPid)) return false;
-  const a = ctx.entities.get(aPid);
-  const b = ctx.entities.get(bPid);
-  const aMeta = ctx.players.get(aPid);
-  const bMeta = ctx.players.get(bPid);
-  if (!a || !b || !aMeta || !bMeta) return false;
+  if (pids.length !== REALM_RACERS_GRID_SIZE) return false;
+  if (new Set(pids).size !== pids.length) return false;
+  if (!pids.every((pid) => eligible(ctx, pid))) return false;
+  const grid = pids.map((pid) => ({
+    pid,
+    e: ctx.entities.get(pid) as Entity,
+    meta: ctx.players.get(pid) as PlayerMeta,
+  }));
   const profile = vehicleProfile(REALM_RACERS_VEHICLE_KEY);
   const id = ctx.realmRacers.nextMatchId++;
   const returns = new Map<number, RealmRacersReturn>();
   const pools = new Map<number, ArenaReturnPools>();
-  for (const pid of [aPid, bPid]) {
-    const e = ctx.entities.get(pid) as Entity;
+  for (const { pid, e } of grid) {
     returns.set(pid, {
       x: e.pos.x,
       z: e.pos.z,
@@ -546,21 +619,26 @@ function startMatch(
   }
   const match: RealmRacersMatch = {
     id,
-    pids: [aPid, bPid],
+    pids: pids.slice(),
+    gridSize: pids.length,
     phase: 'countdown',
     goTick: ctx.tickCount + REALM_RACERS_COUNTDOWN_TICKS,
     deadlineTick: ctx.tickCount + REALM_RACERS_COUNTDOWN_TICKS + REALM_RACERS_TIME_LIMIT_TICKS,
     finishTick: null,
     winnerPid: null,
-    forfeiterPid: null,
+    chaseUntilTick: null,
+    finishOrder: [],
     returns,
     preMatchPools: pools,
     progress: new Map(
-      [aPid, bPid].map((pid) => [
+      pids.map((pid) => [
         pid,
         {
           lap: 1,
           finishedTick: null,
+          finishFraction: 1,
+          retiredTick: null,
+          returned: false,
           trackIndex: 0,
           lastS: 0,
           distanceSinceWrap: 0,
@@ -589,22 +667,23 @@ function startMatch(
   };
   if (practice) ctx.realmRacers.practices.push(match);
   else ctx.realmRacers.match = match;
-  standardizeRacer(ctx, match, aMeta, a);
-  standardizeRacer(ctx, match, bMeta, b);
-  placeRacer(ctx, match, a, 0);
-  placeRacer(ctx, match, b, 1);
+  for (const { meta, e } of grid) standardizeRacer(ctx, match, meta, e);
+  // Slot order IS seat order, so the grid row reads left to right in `pids`.
+  for (let slot = 0; slot < grid.length; slot++) {
+    placeRacer(ctx, match, grid[slot].e, slot);
+  }
   // Seed the ranking key from the grid so the HUD reads the right order during
   // the countdown, before the first racing tick reprojects anyone.
-  seedProgress(match, aPid, a);
-  seedProgress(match, bPid, b);
-  for (const [pid, opponentPid] of [
-    [aPid, bPid],
-    [bPid, aPid],
-  ] as const) {
+  for (const { pid, e } of grid) seedProgress(match, pid, e);
+  for (const pid of pids) {
     ctx.emit({
       type: 'realmRacersFound',
       matchId: id,
-      opponentName: ctx.players.get(opponentPid)?.name ?? '',
+      // Everyone else on the grid, in slot order. The banner names the field a
+      // pilot is up against, which at four is a list rather than one rival.
+      rivalNames: pids
+        .filter((other) => other !== pid)
+        .map((other) => ctx.players.get(other)?.name ?? ''),
       countdownTicks: REALM_RACERS_COUNTDOWN_TICKS,
       pid,
     });
@@ -612,47 +691,157 @@ function startMatch(
   return true;
 }
 
-function endMatch(
+/** One racer's row for the shared comparator, live or final. */
+function standingEntry(match: RealmRacersMatch, pid: number, slot: number): RallyStandingEntry {
+  const p = match.progress.get(pid) as RealmRacersProgress;
+  return {
+    pid,
+    travelled: p.travelled,
+    finishedTick: p.finishedTick,
+    finishFraction: p.finishFraction,
+    retiredTick: p.retiredTick,
+    slot,
+  };
+}
+
+/** The whole grid, ordered first to last. The live standings strip and the
+ *  final classification are this same call at different moments. */
+function classify(match: RealmRacersMatch): RallyStandingEntry[] {
+  return rallyClassification(match.pids.map((pid, slot) => standingEntry(match, pid, slot)));
+}
+
+/**
+ * Is there still a race to run? Three ways there is not, and only the last one
+ * is a judgement call:
+ *
+ *  - nobody is still driving (they all finished, quit, or both);
+ *  - the only pilots still driving are house pilots, so the human who called
+ *    for the race has gone and nobody is watching;
+ *  - one lone survivor is left because everyone else QUIT. Three lonely laps is
+ *    not a race. A survivor left alone because the others FINISHED still gets to
+ *    cross the line for their placing, which is why the finished case is tested.
+ */
+function raceIsDecided(ctx: SimContext, match: RealmRacersMatch): boolean {
+  const running = match.pids.filter((pid) => realmRacersStillRunning(match, pid));
+  if (running.length === 0) return true;
+  if (!running.some((pid) => !ctx.realmRacers.bots.has(pid))) return true;
+  const anyFinished = match.pids.some((pid) => match.progress.get(pid)?.finishedTick !== null);
+  return running.length === 1 && !anyFinished;
+}
+
+/**
+ * The result tableau for ONE pilot: what they scored, and how long until the
+ * Society puts them back where it found them.
+ *
+ * The classification is passed in rather than read off the match, because a
+ * quitter is told their result while the race is still running and the match
+ * has no final order yet.
+ */
+function emitResult(
   ctx: SimContext,
   match: RealmRacersMatch,
+  pid: number,
+  ranked: readonly RallyStandingEntry[],
   winnerPid: number | null,
-  forfeiterPid: number | null,
 ): void {
+  const placing = Math.max(1, ranked.findIndex((entry) => entry.pid === pid) + 1);
+  const winnerName = winnerPid === null ? '' : (ctx.players.get(winnerPid)?.name ?? '');
+  ctx.emit({
+    type: 'realmRacersResult',
+    won: winnerPid === pid,
+    forfeited: match.progress.get(pid)?.retiredTick !== null,
+    winnerName,
+    placing,
+    gridSize: match.gridSize,
+    returnTicks: REALM_RACERS_RETURN_TICKS,
+    pid,
+  });
+}
+
+function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   if (match.phase === 'finished') return;
   match.phase = 'finished';
   match.finishTick = ctx.tickCount;
-  match.winnerPid = winnerPid;
-  match.forfeiterPid = forfeiterPid;
   match.groundBlasts.length = 0;
-  const winnerName = winnerPid === null ? '' : (ctx.players.get(winnerPid)?.name ?? '');
+  const ranked = classify(match);
+  match.finishOrder = ranked.map((entry) => entry.pid);
+  // A dead heat is only ever for the LEAD, and only between two machines that
+  // never crossed the line: the race ran out of time with them level. A tie for
+  // third is a placing, not a draw.
+  match.winnerPid = rallyLeadIsDeadHeat(ranked, REALM_RACERS_DEAD_HEAT_YARDS)
+    ? null
+    : (ranked[0]?.pid ?? null);
   for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    // A pilot already back in the Evergarden (they quit and their tableau ran
+    // out, or they disconnected) has had their result and is gone.
+    if (progress?.returned) continue;
     const drive = ctx.entities.get(pid)?.drive;
     if (drive) {
       resetVehicleDrive(drive);
       drive.controlsLocked = true;
     }
-    ctx.emit({
-      type: 'realmRacersResult',
-      won: winnerPid === pid,
-      forfeited: forfeiterPid === pid,
-      winnerName,
-      returnTicks: REALM_RACERS_RETURN_TICKS,
-      pid,
-    });
+    // A quitter already saw their own tableau the moment they pulled off; the
+    // race ending later does not owe them a second one.
+    if (progress?.retiredTick !== null) continue;
+    emitResult(ctx, match, pid, ranked, match.winnerPid);
   }
 }
 
+/** Close the gameplay parenthesis for ONE racer: kit, mount, pools, position.
+ *  They stay on the frozen grid so the classification still names them. */
+function returnRacer(ctx: SimContext, match: RealmRacersMatch, pid: number): void {
+  const progress = match.progress.get(pid);
+  if (!progress || progress.returned) return;
+  progress.returned = true;
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  if (meta && e) restoreRacer(ctx, match, meta, e);
+}
+
 function teardownMatch(ctx: SimContext, match: RealmRacersMatch): void {
-  for (const pid of match.pids) {
-    const meta = ctx.players.get(pid);
-    const e = ctx.entities.get(pid);
-    if (meta && e) restoreRacer(ctx, match, meta, e);
-  }
+  for (const pid of match.pids) returnRacer(ctx, match, pid);
   if (ctx.realmRacers.match === match) ctx.realmRacers.match = null;
-  // Free the practice copy for the next player. Its house pilot is reaped by
+  // Free the practice copy for the next player. Its house pilots are reaped by
   // the bot module on the same tick, by its own "not seated anywhere" rule.
   const practiceIndex = ctx.realmRacers.practices.indexOf(match);
   if (practiceIndex >= 0) ctx.realmRacers.practices.splice(practiceIndex, 1);
+}
+
+/**
+ * Pull one pilot off the circuit. A forfeit and a disconnect are the same act
+ * and take the same arm: the racer is classified LAST and the race carries on
+ * for everyone else. With four on the grid, one player quitting must not end
+ * three other people's race, which is the one place this module deliberately
+ * does more than generalize its two-pilot self.
+ */
+function retireRacer(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  pid: number,
+  restoreImmediately: boolean,
+): void {
+  const progress = match.progress.get(pid);
+  if (!progress || progress.returned || progress.retiredTick !== null) return;
+  progress.retiredTick = ctx.tickCount;
+  progress.finishedTick = null;
+  const drive = ctx.entities.get(pid)?.drive;
+  if (drive) {
+    resetVehicleDrive(drive);
+    drive.controlsLocked = true;
+  }
+  if (raceIsDecided(ctx, match)) {
+    endMatch(ctx, match);
+    emitResult(ctx, match, pid, classify(match), match.winnerPid);
+  } else {
+    // The race goes on. This pilot alone gets the tableau, off the
+    // classification as it stands right now: they are last, and nobody has won
+    // anything yet.
+    emitResult(ctx, match, pid, classify(match), null);
+  }
+  // A disconnect must restore the persisted character before the host saves it.
+  // A voluntary forfeit keeps the tableau up for the normal six seconds first.
+  if (restoreImmediately) returnRacer(ctx, match, pid);
 }
 
 export function realmRacersForfeit(
@@ -665,12 +854,7 @@ export function realmRacersForfeit(
   realmRacersQueueLeave(ctx, id);
   const match = realmRacersMatchOf(ctx, id);
   if (!match) return;
-  const winnerPid = match.pids[0] === id ? match.pids[1] : match.pids[0];
-  endMatch(ctx, match, ctx.players.has(winnerPid) ? winnerPid : null, id);
-  // A disconnect must restore the persisted character before the host saves
-  // it. A voluntary forfeit keeps the result tableau visible for the normal
-  // six-second victory lap before returning both pilots.
-  if (restoreImmediately) teardownMatch(ctx, match);
+  retireRacer(ctx, match, id, restoreImmediately);
 }
 
 /** Put a racer back on the last ordered recovery anchor. The progress snapshot
@@ -689,7 +873,7 @@ function resetRacerToRecoveryAnchor(
     match.phase !== 'racing' ||
     !racer?.drive ||
     !progress ||
-    progress.finishedTick !== null ||
+    !realmRacersStillRunning(match, pid) ||
     ctx.tickCount < progress.resetLockedUntilTick
   )
     return false;
@@ -758,7 +942,11 @@ export function realmRacersFireGroundBlast(ctx: SimContext, caster: Entity): voi
   const match = realmRacersMatchOf(ctx, caster.id);
   if (!match || match.phase !== 'racing' || caster.dead) return;
   const progress = match.progress.get(caster.id);
-  const held = progress?.heldWeapon;
+  // A pilot whose own race is over keeps their machine and can drive it off the
+  // circuit, but they are done shooting: shelling a field you have already
+  // beaten (or quit) is griefing, not racing.
+  if (!progress || !realmRacersStillRunning(match, caster.id)) return;
+  const held = progress.heldWeapon;
   if (!held || held.charges === 0) return;
   const aim = resolveGroundBlastAim(
     { x: caster.pos.x, z: caster.pos.z, facing: caster.facing },
@@ -804,6 +992,9 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
     let nearestImpact = 0;
     for (const pid of match.pids) {
       if (pid === shot.ownerPid) continue;
+      // A pilot whose race is over is not a target: they are parked, waiting to
+      // be returned, and cannot dodge what they cannot drive away from.
+      if (!realmRacersStillRunning(match, pid)) continue;
       const racer = ctx.entities.get(pid);
       if (!racer?.drive || racer.dead) continue;
       const blast = resolveGroundBlastImpact(
@@ -1029,21 +1220,15 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
   }
 }
 
-interface FinishCandidate {
-  pid: number;
-  fraction: number;
-  slot: number;
-}
-
 function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
   const lapLength = realmRacersTrack().length;
   const gates = realmRacersGates();
-  const finishers: FinishCandidate[] = [];
+  let anyFinished = false;
   for (let slot = 0; slot < match.pids.length; slot++) {
     const pid = match.pids[slot];
     const e = ctx.entities.get(pid);
     const progress = match.progress.get(pid);
-    if (!e || !progress || progress.finishedTick !== null) continue;
+    if (!e || !progress || !realmRacersStillRunning(match, pid)) continue;
     const previousLap = progress.lap;
     const previousLastS = progress.lastS;
     const previousDistanceSinceWrap = progress.distanceSinceWrap;
@@ -1084,7 +1269,11 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
     if (!step.wrapped) continue;
     if (step.finished) {
       progress.finishedTick = ctx.tickCount;
-      finishers.push({ pid, fraction: step.finishFraction ?? 1, slot });
+      progress.finishFraction = step.finishFraction ?? 1;
+      anyFinished = true;
+      // The winner starts everyone else's clock, and only the winner: a second
+      // crossing must not push the window back and let the field wait again.
+      match.chaseUntilTick ??= ctx.tickCount + REALM_RACERS_CHASE_TICKS;
     } else {
       ctx.emit({
         type: 'realmRacersLap',
@@ -1094,9 +1283,10 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
       });
     }
   }
-  if (finishers.length === 0) return;
-  finishers.sort((a, b) => a.fraction - b.fraction || a.slot - b.slot);
-  endMatch(ctx, match, finishers[0].pid, null);
+  // Crossing the line no longer ends the race: with four on the grid the fight
+  // for the last podium step is the race, for everyone not leading it. The
+  // classification closes when nobody is left driving (or on the deadline).
+  if (anyFinished && raceIsDecided(ctx, match)) endMatch(ctx, match);
 }
 
 function pruneQueue(ctx: SimContext): void {
@@ -1114,13 +1304,14 @@ function pruneQueue(ctx: SimContext): void {
 }
 
 function tryMatch(ctx: SimContext): void {
-  if (ctx.realmRacers.match || ctx.realmRacers.queue.length < 2) return;
-  const a = ctx.realmRacers.queue.shift() as number;
-  const b = ctx.realmRacers.queue.shift() as number;
-  if (!startMatch(ctx, a, b)) {
-    if (eligible(ctx, a)) ctx.realmRacers.queue.unshift(a);
-    if (eligible(ctx, b)) ctx.realmRacers.queue.unshift(b);
-  }
+  const rally = ctx.realmRacers;
+  if (rally.match || rally.queue.length < REALM_RACERS_GRID_SIZE) return;
+  const grid = rally.queue.splice(0, REALM_RACERS_GRID_SIZE);
+  if (startMatch(ctx, grid)) return;
+  // Put the eligible ones back at the FRONT in their original order. The old
+  // two-pilot code unshifted them one at a time, which reverses the pair; at
+  // four that silently reorders the head of the queue on every refusal.
+  rally.queue.unshift(...grid.filter((pid) => eligible(ctx, pid)));
 }
 
 export function updateRealmRacers(ctx: SimContext): void {
@@ -1133,14 +1324,25 @@ export function updateRealmRacers(ctx: SimContext): void {
 }
 
 function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
+  // Anyone who quit and has watched their six seconds of tableau goes home,
+  // while the race carries on for the rest. Before the roster loop, so a
+  // returned racer is not re-seated on the machine it just got out of.
   for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    if (!progress || progress.returned || progress.retiredTick === null) continue;
+    if (ctx.tickCount - progress.retiredTick >= REALM_RACERS_RETURN_TICKS) {
+      returnRacer(ctx, match, pid);
+    }
+  }
+  for (const pid of match.pids) {
+    if (!matchSeats(match, pid)) continue;
     const meta = ctx.players.get(pid);
     const e = ctx.entities.get(pid);
     if (!meta || !e || meta.leaving || e.dead || e.ghost) {
-      const winnerPid = match.pids[0] === pid ? match.pids[1] : match.pids[0];
-      endMatch(ctx, match, ctx.players.has(winnerPid) ? winnerPid : null, pid);
-      teardownMatch(ctx, match);
-      return;
+      // A disconnect is a forfeit: this pilot is classified last and returned
+      // at once, and three other people's race is not ended by it.
+      retireRacer(ctx, match, pid, true);
+      continue;
     }
     if (e.mountKey !== REALM_RACERS_MOUNT_KEY) {
       e.mountKey = REALM_RACERS_MOUNT_KEY;
@@ -1156,10 +1358,13 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
     // controls are the Society's, not the pilot's. Written every tick and read
     // by the CAST gate, so a trigger pull outside the race arms no cooldown and
     // the action bar can grey the slot rather than pretending it is ready.
-    const resetLocked =
-      ctx.tickCount <
-      ((match.progress.get(pid) as RealmRacersProgress | undefined)?.resetLockedUntilTick ?? 0);
-    e.drive.controlsLocked = match.phase !== 'racing' || resetLocked;
+    const progress = match.progress.get(pid) as RealmRacersProgress;
+    const resetLocked = ctx.tickCount < progress.resetLockedUntilTick;
+    // A pilot who quit is a passenger until the Society returns them; a pilot
+    // who FINISHED keeps the wheel and can drive off the circuit under their
+    // own steam, which is what every real race lets you do.
+    e.drive.controlsLocked =
+      match.phase !== 'racing' || resetLocked || progress.retiredTick !== null;
     if (resetLocked) resetVehicleDrive(e.drive);
   }
 
@@ -1186,17 +1391,13 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
     }
     return;
   }
-  if (ctx.tickCount >= match.deadlineTick) {
-    const ranked = [...match.pids].sort((a, b) => {
-      const pa = match.progress.get(a) as RealmRacersProgress;
-      const pb = match.progress.get(b) as RealmRacersProgress;
-      return pb.travelled - pa.travelled || match.pids.indexOf(a) - match.pids.indexOf(b);
-    });
-    const first = match.progress.get(ranked[0]) as RealmRacersProgress;
-    const second = match.progress.get(ranked[1]) as RealmRacersProgress;
-    const winner =
-      first.travelled - second.travelled < REALM_RACERS_DEAD_HEAT_YARDS ? null : ranked[0];
-    endMatch(ctx, match, winner, null);
+  // Two clocks close a race nobody is finishing: the 180 s limit, and the much
+  // shorter chase window the winner started. Whichever comes first.
+  if (
+    ctx.tickCount >= match.deadlineTick ||
+    (match.chaseUntilTick !== null && ctx.tickCount >= match.chaseUntilTick)
+  ) {
+    endMatch(ctx, match);
     return;
   }
   // Contact FIRST: the progress test reads the segment from where a racer was
@@ -1212,43 +1413,70 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
   }
 }
 
-function racerInfo(ctx: SimContext, match: RealmRacersMatch, pid: number): RealmRacersRacerInfo {
+function racerInfo(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  pid: number,
+  position: number,
+): RealmRacersRacerInfo {
   const p = match.progress.get(pid) as RealmRacersProgress;
+  const meta = ctx.players.get(pid);
   return {
     pid,
-    name: ctx.players.get(pid)?.name ?? '',
+    name: meta?.name ?? '',
+    // The class the standings row draws its portrait from, exactly as a party
+    // frame does. A racer's class has no effect on the machine: it is who is in
+    // the seat, which is the whole job of an avatar.
+    cls: meta?.cls ?? 'warrior',
     lap: Math.min(match.totalLaps, p.lap),
     finished: p.finishedTick !== null,
     // Null for a human. A racer is told which they are up against: a practice
-    // lap against a house pilot is not the same result as beating a player.
+    // lap against house pilots is not the same result as beating players.
     botTier: ctx.realmRacers.bots.get(pid) ?? null,
+    position,
+    // The crossing happened somewhere inside the tick that detected it: the
+    // segment it was judged on runs from the previous tick to this one, so the
+    // real moment is `finishedTick - 1 + fraction`. Folding it in is what makes
+    // two machines finishing on the same tick two different times.
+    finishSeconds:
+      p.finishedTick === null
+        ? null
+        : Math.max(0, (p.finishedTick - 1 + p.finishFraction - match.goTick) / TICK_RATE),
+    retired: p.retiredTick !== null,
   };
 }
 
 function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): RealmRacersMatchInfo {
-  const opponentPid = match.pids[0] === pid ? match.pids[1] : match.pids[0];
   const me = match.progress.get(pid) as RealmRacersProgress;
-  const opponent = match.progress.get(opponentPid) as RealmRacersProgress;
-  const position: 1 | 2 =
-    me.travelled > opponent.travelled ||
-    (me.travelled === opponent.travelled &&
-      match.pids.indexOf(pid) < match.pids.indexOf(opponentPid))
-      ? 1
-      : 2;
+  const ranked = classify(match);
+  const standings = ranked.map((entry, index) => racerInfo(ctx, match, entry.pid, index + 1));
+  const mine = standings.find((racer) => racer.pid === pid) as RealmRacersRacerInfo;
   const countdownTicks =
     match.phase === 'countdown' ? Math.max(0, match.goTick - ctx.tickCount) : 0;
   const countdown = countdownTicks > 3 * TICK_RATE ? 0 : Math.ceil(countdownTicks / TICK_RATE);
+  // A pilot who quit is finished as far as THEY are concerned, even while the
+  // rest of the field is still racing: their tableau and their return clock run
+  // off the tick they pulled off, not off the tick the race is decided.
+  const myEndTick = me.retiredTick ?? (match.phase === 'finished' ? match.finishTick : null);
   const returnIn =
-    match.phase === 'finished' && match.finishTick !== null
-      ? Math.max(
+    myEndTick === null
+      ? 0
+      : Math.max(
           0,
-          Math.ceil((REALM_RACERS_RETURN_TICKS - (ctx.tickCount - match.finishTick)) / TICK_RATE),
-        )
-      : 0;
+          Math.ceil((REALM_RACERS_RETURN_TICKS - (ctx.tickCount - myEndTick)) / TICK_RATE),
+        );
+  // Only shown to a pilot who is still driving: the racers already home are
+  // waiting on this clock, not racing it.
+  const chaseIn =
+    match.chaseUntilTick === null ||
+    match.phase !== 'racing' ||
+    !realmRacersStillRunning(match, pid)
+      ? 0
+      : Math.max(0, Math.ceil((match.chaseUntilTick - ctx.tickCount) / TICK_RATE));
   return {
     id: match.id,
     participantIds: [...match.pids],
-    phase: match.phase,
+    phase: myEndTick !== null ? 'finished' : match.phase,
     countdown,
     countdownTicks,
     elapsed:
@@ -1258,10 +1486,12 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
             0,
             Math.floor((Math.min(ctx.tickCount, match.deadlineTick) - match.goTick) / TICK_RATE),
           ),
+    chaseIn,
     returnIn,
-    me: racerInfo(ctx, match, pid),
-    opponent: racerInfo(ctx, match, opponentPid),
-    position,
+    me: mine,
+    standings,
+    gridSize: match.gridSize,
+    decided: match.phase === 'finished',
     speed: Math.abs(ctx.entities.get(pid)?.drive?.speed ?? 0),
     wrongWay: me.wrongWay,
     resetLocked: ctx.tickCount < me.resetLockedUntilTick,
@@ -1270,13 +1500,17 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     // readout says which it is rather than dressing one up as the other.
     practice: match.practice !== null,
     result:
-      match.phase !== 'finished'
-        ? null
-        : match.forfeiterPid === pid
-          ? 'forfeit'
+      me.retiredTick !== null
+        ? 'forfeit'
+        : match.phase !== 'finished'
+          ? null
           : match.winnerPid === pid
             ? 'won'
-            : match.winnerPid === null
+            : // A null winner is a dead heat for the LEAD, so it is a draw for
+              // the two machines that tied and a loss for everyone behind them.
+              // Reading it as a draw for the whole field would tell a pilot who
+              // came fourth that the stewards could not separate them.
+              match.winnerPid === null && mine.position <= 2
               ? 'draw'
               : 'lost',
   };
@@ -1307,5 +1541,9 @@ export function realmRacersMovementLocked(ctx: SimContext, pid: number): boolean
   const match = realmRacersMatchOf(ctx, pid);
   if (!match) return false;
   if (match.phase !== 'racing') return true;
-  return ctx.tickCount < (match.progress.get(pid)?.resetLockedUntilTick ?? 0);
+  const progress = match.progress.get(pid);
+  // A pilot who quit is held where they stopped until the Society returns them,
+  // even though the race around them is still live.
+  if (progress?.retiredTick !== null) return true;
+  return ctx.tickCount < (progress?.resetLockedUntilTick ?? 0);
 }

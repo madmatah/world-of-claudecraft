@@ -7,6 +7,13 @@ import { markDialogRoot } from './dialog_root';
 import { esc } from './esc';
 import { formatNumber, type TranslationKey, t } from './i18n';
 import type { PainterHostWriters } from './painter_host';
+import { RealmRacersPodium } from './realm_racers_podium';
+import { buildRealmRacersPodiumView } from './realm_racers_podium_view';
+import { RealmRacersStandingsPanel } from './realm_racers_standings_panel';
+import {
+  buildRealmRacersStandingsView,
+  type RealmRacersStandingsView,
+} from './realm_racers_standings_view';
 import {
   buildRealmRacersHudView,
   buildRealmRacersSetupView,
@@ -86,6 +93,8 @@ export class RealmRacersUi {
   private lastHudSig = '';
   private openerFocus: HTMLElement | null = null;
   private hudRoot: HTMLElement | null = null;
+  private readonly standings: RealmRacersStandingsPanel;
+  private readonly podium: RealmRacersPodium;
   private lapEl: HTMLElement | null = null;
   private positionEl: HTMLElement | null = null;
   private timeEl: HTMLElement | null = null;
@@ -106,7 +115,16 @@ export class RealmRacersUi {
   private setupOpen = false;
   private setupTier: RallyDriverTier = RALLY_DEFAULT_PRACTICE_TIER;
 
-  constructor(private readonly deps: RealmRacersDeps) {}
+  constructor(private readonly deps: RealmRacersDeps) {
+    this.standings = new RealmRacersStandingsPanel({
+      layer: () => deps.layer(),
+      writers: deps.writers,
+    });
+    this.podium = new RealmRacersPodium({
+      layer: () => deps.layer(),
+      writers: deps.writers,
+    });
+  }
 
   get isOpen(): boolean {
     return this.deps.root().style.display === 'block';
@@ -138,6 +156,11 @@ export class RealmRacersUi {
   relocalize(): void {
     this.lastWindowSig = '';
     this.lastHudSig = '';
+    // The standings rows carry localized text of their own (the lap, the viewer
+    // marker) behind a signature over the DATA, which a language flip cannot
+    // move on its own.
+    this.standings.relocalize();
+    this.podium.relocalize();
     if (this.isOpen) this.renderWindow();
   }
 
@@ -159,7 +182,8 @@ export class RealmRacersUi {
     if (countdown > 0 && countdown !== this.lastCountdown) this.deps.countdownTick();
     this.lastCountdown = countdown;
     if (this.isOpen) this.renderWindow();
-    this.renderHud(buildRealmRacersHudView(info));
+    this.renderHud(buildRealmRacersHudView(info), buildRealmRacersStandingsView(info.match));
+    this.podium.update(buildRealmRacersPodiumView(info.match));
   }
 
   private renderWindow(): void {
@@ -326,20 +350,17 @@ export class RealmRacersUi {
         `<button type="button" class="btn rally-cta leave" data-rally-leave>${esc(t('hudChrome.rally.leave'))}</button>` +
         this.practiceButtonHtml();
     } else {
-      const live =
-        view.opponentBotTier === null
-          ? t('hudChrome.rally.racingAgainst', { name: view.opponent })
-          : t('hudChrome.rally.racingAgainstBot', {
-              name: view.opponent,
-              tier: tierLabel(view.opponentBotTier),
-            });
+      const placing = { position: num(view.position), total: num(view.gridSize) };
+      const live = view.practice
+        ? t('hudChrome.rally.racingAgainstBot', placing)
+        : t('hudChrome.rally.racingAgainst', placing);
       const status =
         view.phase === 'finished'
           ? view.result === 'won'
             ? t('hudChrome.rally.won')
             : view.result === 'draw'
               ? t('hudChrome.rally.draw')
-              : t('hudChrome.rally.lost')
+              : t('hudChrome.rally.lost', placing)
           : live;
       action =
         `<div class="rally-status live">${esc(status)}</div>` +
@@ -350,10 +371,11 @@ export class RealmRacersUi {
     return `${header}<div class="rally-body">${rules}${action}</div>`;
   }
 
-  private renderHud(view: RealmRacersHudView): void {
+  private renderHud(view: RealmRacersHudView, standings: RealmRacersStandingsView): void {
     const w = this.deps.writers;
     if (!view.active) {
       if (this.hudRoot) w.setDisplay(this.hudRoot, 'none');
+      this.standings.update(standings);
       this.forfeitArmedUntil = 0;
       this.lastCountdown = 0;
       return;
@@ -364,16 +386,9 @@ export class RealmRacersUi {
     if (view.sig !== this.lastHudSig) {
       this.lastHudSig = view.sig;
       this.forfeitArmedUntil = 0;
-      const versus =
-        view.opponentBotTier === null
-          ? t('hudChrome.rally.versus', { name: view.opponent })
-          : t('hudChrome.rally.versusBot', {
-              name: view.opponent,
-              tier: tierLabel(view.opponentBotTier),
-            });
       root.innerHTML =
         `<div class="rallyhud-top"><span class="rallyhud-mark">G</span>` +
-        `<span class="rallyhud-opponent">${esc(versus)}</span></div>` +
+        `<span class="rallyhud-title">${esc(t('hudChrome.rally.title'))}</span></div>` +
         `<div class="rallyhud-stats"><span class="rallyhud-position"></span>` +
         `<span class="rallyhud-lap"></span><span class="rallyhud-time"></span>` +
         `<span class="rallyhud-speed"></span></div>` +
@@ -398,8 +413,15 @@ export class RealmRacersUi {
       this.resetEl?.addEventListener('click', () => this.deps.world().resetRealmRacersPosition());
       this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
     }
+    this.standings.update(standings);
     if (this.positionEl)
-      w.setText(this.positionEl, t('hudChrome.rally.position', { position: num(view.position) }));
+      w.setText(
+        this.positionEl,
+        t('hudChrome.rally.position', {
+          position: num(view.position),
+          total: num(view.gridSize),
+        }),
+      );
     if (this.lapEl)
       w.setText(
         this.lapEl,
@@ -434,14 +456,24 @@ export class RealmRacersUi {
             ? t('hudChrome.rally.countdown', { seconds: num(view.countdown) })
             : ''
           : view.phase === 'finished'
-            ? view.result === 'won'
-              ? t('hudChrome.rally.wonReturn', { seconds: num(view.returnIn) })
-              : view.result === 'draw'
-                ? t('hudChrome.rally.drawReturn', { seconds: num(view.returnIn) })
-                : t('hudChrome.rally.lostReturn', { seconds: num(view.returnIn) })
-            : view.lap === view.totalLaps
-              ? t('hudChrome.rally.finalLap')
-              : t('hudChrome.rally.go');
+            ? // The podium carries the result headline and the return
+              // countdown once the RACE is over, so this line stands down
+              // rather than saying the same thing twice. A pilot who merely
+              // quit still gets it here: there is no ceremony for them.
+              view.decided
+              ? ''
+              : view.result === 'won'
+                ? t('hudChrome.rally.wonReturn', { seconds: num(view.returnIn) })
+                : view.result === 'draw'
+                  ? t('hudChrome.rally.drawReturn', { seconds: num(view.returnIn) })
+                  : t('hudChrome.rally.lostReturn', { seconds: num(view.returnIn) })
+            : // The winner is home and this pilot is not: they are racing a
+              // clock now, and it says so rather than cutting them off unwarned.
+              view.chaseIn > 0
+              ? t('hudChrome.rally.chase', { seconds: num(view.chaseIn) })
+              : view.lap === view.totalLaps
+                ? t('hudChrome.rally.finalLap')
+                : t('hudChrome.rally.go');
       w.setText(this.phaseEl, phase);
     }
     if (this.forfeitEl) {

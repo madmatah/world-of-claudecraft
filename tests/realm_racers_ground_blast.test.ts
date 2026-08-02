@@ -33,6 +33,8 @@ import {
   resolveGroundBlastAim,
   resolveGroundBlastImpact,
 } from '../src/sim/realm_racers_ground_blast';
+import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_RETURN_TICKS,
@@ -58,20 +60,28 @@ function match(sim: Sim) {
   return required(sim.realmRacers.match, 'Realm Racers match');
 }
 
-/** A live public race with both pilots seated and the flag already dropped. */
-function racing(): { sim: Sim; a: number; b: number } {
+/** A live public race with the whole grid seated and the flag already dropped. */
+function racing(): { sim: Sim; a: number; b: number; pids: number[] } {
   const sim = makeWorld();
-  const a = addAt(sim, 'warrior', 'Aster', -5, -40);
-  const b = addAt(sim, 'mage', 'Briar', 7, -42);
-  sim.realmRacersQueueJoin(a);
-  sim.realmRacersQueueJoin(b);
+  const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
+    addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40 - i),
+  );
+  for (const pid of pids) sim.realmRacersQueueJoin(pid);
   sim.tick();
+  // The rest of the field is parked far around the lap. A blast catches EVERY
+  // racer inside it, which is the point of the weapon, so a shell aimed at one
+  // named rival has to be fired somewhere the others are not.
+  const track = realmRacersTrack();
+  pids.slice(2).forEach((pid, i) => {
+    const away = track.pointAt(track.length * (0.4 + i * 0.2));
+    teleport(sim, pid, away.x, away.z);
+  });
   match(sim).phase = 'racing';
   // The phase drives the CONTROL LOCK, which the match module writes onto each
   // machine every tick. Flipping the phase by hand and not letting the module
-  // run leaves both pilots still held on the grid, with every cast refused.
+  // run leaves every pilot still held on the grid, with every cast refused.
   updateRealmRacers(sim.ctx);
-  return { sim, a, b };
+  return { sim, a: pids[0], b: pids[1], pids };
 }
 
 /** Aim from the origin facing +z at a requested ground point. Facing 0 points
@@ -401,17 +411,18 @@ describe('Ground Blast: the weapon slot', () => {
   });
 
   it('starts the next race at a full budget and leaves no residue behind', () => {
-    const { sim, a, b } = racing();
+    const { sim, a, pids } = racing();
     realmRacersFireGroundBlast(sim.ctx, entity(sim, a));
     expect(match(sim).progress.get(a)?.heldWeapon?.charges).toBe(REALM_RACERS_WEAPON_CHARGES - 1);
-    sim.realmRacersForfeit(a);
+    // The whole grid pulls off, so the race is decided and torn down; one pilot
+    // quitting no longer ends anyone else's.
+    for (const pid of pids) sim.realmRacersForfeit(pid);
     for (let tick = 0; tick <= REALM_RACERS_RETURN_TICKS; tick++) sim.tick();
     // The gameplay parenthesis closed: the racer is back to their own kit with
     // no rally charge pool left on them.
     expect(sim.realmRacers.match).toBeNull();
     expect(entity(sim, a).abilityCharges?.[REALM_RACERS_ABILITY_ID]).toBeUndefined();
-    sim.realmRacersQueueJoin(a);
-    sim.realmRacersQueueJoin(b);
+    for (const pid of pids) sim.realmRacersQueueJoin(pid);
     sim.tick();
     expect(match(sim).progress.get(a)?.heldWeapon?.charges).toBe(REALM_RACERS_WEAPON_CHARGES);
   });

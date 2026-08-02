@@ -152,8 +152,18 @@ const KERB_MIN_LENGTH = 10;
 
 /** Arc spacing between dressing pieces, yards. */
 const DRESSING_SPACING = 16;
-/** Clear grass between the perimeter wall and the dressing ring, yards. */
-const DRESSING_MARGIN = 2.5;
+/**
+ * Clear grass between the perimeter wall and the dressing ring, yards.
+ *
+ * It is sized by the CAMERA, not by taste. A machine pinned against the wall
+ * with its nose to the infield puts the chase camera outside the wall, and the
+ * boom reaches `camDist` (clamped to 22 in src/game/input.ts) times the rally
+ * profile's 1.16 distance scale, so 25.5 yards. At the old 2.5 the camera sat
+ * inside a tree canopy every time. The ring's own `outward` adds each piece's
+ * radius on top of this, so 30 is the CLEAR grass and the nearest trunk stands
+ * further out still.
+ */
+const DRESSING_MARGIN = 30;
 /** Keep the authored opening orbit out of the south dressing ring. The tree
  * previously generated here sat directly on the camera path for both grid slots. */
 const START_PANORAMA_TREE_CLEARANCE = {
@@ -245,14 +255,14 @@ export function rallyDressingSpots(): RallyDressingSpot[] {
   for (let i = 0; i < steps; i++) {
     const spec = DRESSING_KINDS[i % DRESSING_KINDS.length];
     const roll = hash2(i, spec.radius, 0x9a11e);
-    // Walk the perimeter rectangle, then step outward by the piece's own
-    // footprint plus a jittered margin so the ring never reads as a fence line.
+    // Walk the perimeter rectangle, then step out along the face's own NORMAL
+    // by the piece's footprint plus a jittered margin, so the ring never reads
+    // as a fence line and every piece really is `DRESSING_MARGIN` clear.
     const along = ((i + 0.5) / steps) * ring;
-    const [ex, ez] = perimeterPoint(along, halfX, halfZ);
+    const [ex, ez, nx, nz] = perimeterPoint(along, halfX, halfZ);
     const outward = DRESSING_MARGIN + spec.radius + roll * 6;
-    const norm = Math.hypot(ex, ez) || 1;
-    const x = REALM_RACERS_ORIGIN.x + ex + (ex / norm) * outward;
-    const z = REALM_RACERS_ORIGIN.z + ez + (ez / norm) * outward;
+    const x = REALM_RACERS_ORIGIN.x + ex + nx * outward;
+    const z = REALM_RACERS_ORIGIN.z + ez + nz * outward;
     if (
       spec.kind === 'tree' &&
       Math.hypot(x - START_PANORAMA_TREE_CLEARANCE.x, z - START_PANORAMA_TREE_CLEARANCE.z) <
@@ -271,17 +281,29 @@ export function rallyDressingSpots(): RallyDressingSpot[] {
   return out.filter((spot) => insideRegion(spot.x, spot.z, spot.radius));
 }
 
-/** A point at `along` yards around the perimeter rectangle, region-local. */
-function perimeterPoint(along: number, halfX: number, halfZ: number): [number, number] {
+/**
+ * A point at `along` yards around the perimeter rectangle, region-local, plus
+ * the OUTWARD NORMAL of the face it sits on.
+ *
+ * The normal is what the caller steps along. Stepping radially from the centre
+ * instead looks equivalent and is not: on a long face the radial direction is
+ * oblique to the wall, so a piece placed 30 yards "out" ends up barely 18 clear
+ * of it, which is how the chase camera kept finding itself inside a tree.
+ */
+function perimeterPoint(
+  along: number,
+  halfX: number,
+  halfZ: number,
+): [number, number, number, number] {
   const w = halfX * 2;
   const h = halfZ * 2;
   let d = along % (2 * (w + h));
-  if (d < w) return [-halfX + d, -halfZ];
+  if (d < w) return [-halfX + d, -halfZ, 0, -1];
   d -= w;
-  if (d < h) return [halfX, -halfZ + d];
+  if (d < h) return [halfX, -halfZ + d, 1, 0];
   d -= h;
-  if (d < w) return [halfX - d, halfZ];
-  return [-halfX, halfZ - (d - w)];
+  if (d < w) return [halfX - d, halfZ, 0, 1];
+  return [-halfX, halfZ - (d - w), -1, 0];
 }
 
 /**

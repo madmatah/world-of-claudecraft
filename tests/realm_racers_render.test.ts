@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CAMERA_ZOOM_MAX } from '../src/game/input';
+import {
+  cameraBoomDistance,
+  REALM_RACERS_CAMERA_BOOM_PROFILE,
+} from '../src/render/camera_boom_core';
 import {
   RALLY_FLOWER_COLOURS,
   rallyBasinMesh,
@@ -60,7 +65,43 @@ function mockTextures(): void {
 
 const track = realmRacersTrack();
 
+/** One racer row, shared by the start-light fixtures below. The light gantry
+ *  reads the phase and the countdown, never the field, so one row is enough. */
+const RALLY_ME = {
+  pid: 1,
+  name: 'Aster',
+  cls: 'warrior',
+  lap: 1,
+  finished: false,
+  botTier: null,
+  position: 1,
+  finishSeconds: null,
+  retired: false,
+} as const;
+
 describe('Realm Racers procedural render', () => {
+  it("keeps every dressing piece outside the chase camera's furthest reach", () => {
+    // A machine pinned against the garden wall with its nose to the infield puts
+    // the camera OUTSIDE the wall, and the boom reaches the zoom clamp times the
+    // rally profile's distance scale. Anything nearer than that is something a
+    // player ends up looking from inside, which is what the ring used to do: it
+    // stepped outward RADIALLY from the circuit's centre, so a piece nominally
+    // 30 yards out sat barely 18 clear of a long face.
+    const reach = cameraBoomDistance(CAMERA_ZOOM_MAX, REALM_RACERS_CAMERA_BOOM_PROFILE);
+    const spots = rallyDressingSpots();
+    expect(spots.length).toBeGreaterThan(20);
+    for (const spot of spots) {
+      const outX = Math.abs(spot.x - REALM_RACERS_ORIGIN.x) - REALM_RACERS_PERIMETER_HALF_X;
+      const outZ = Math.abs(spot.z - REALM_RACERS_ORIGIN.z) - REALM_RACERS_PERIMETER_HALF_Z;
+      // The piece's own footprint counts: the camera meets the canopy, not the
+      // trunk. Clearance is to the NEAREST face, so the larger overhang wins.
+      const clear = Math.max(outX, outZ) - spot.radius;
+      expect(clear, `${spot.kind} at ${spot.x.toFixed(1)}, ${spot.z.toFixed(1)}`).toBeGreaterThan(
+        reach,
+      );
+    }
+  });
+
   beforeEach(() => {
     vi.resetModules();
     mockTextures();
@@ -120,10 +161,12 @@ describe('Realm Racers procedural render', () => {
       countdown: 1,
       countdownTicks: 20,
       elapsed: 0,
+      chaseIn: 0,
       returnIn: 0,
-      me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
-      opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
-      position: 1,
+      me: RALLY_ME,
+      standings: [RALLY_ME],
+      gridSize: 4,
+      decided: false,
       speed: 0,
       wrongWay: false,
       resetLocked: false,
@@ -149,10 +192,12 @@ describe('Realm Racers procedural render', () => {
         countdown: 0,
         countdownTicks: 0,
         elapsed: 0,
+        chaseIn: 0,
         returnIn: 0,
-        me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
-        opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
-        position: 1,
+        me: RALLY_ME,
+        standings: [RALLY_ME],
+        gridSize: 4,
+        decided: false,
         speed: 0,
         wrongWay: false,
         resetLocked: false,
@@ -166,21 +211,23 @@ describe('Realm Racers procedural render', () => {
     const racing = {
       id: 7,
       participantIds: [1, 2] as number[],
-      phase: 'racing',
+      phase: 'racing' as const,
       countdown: 0,
       countdownTicks: 0,
       elapsed: 1,
+      chaseIn: 0,
       returnIn: 0,
-      me: { pid: 1, name: 'Aster', lap: 1, finished: false, botTier: null },
-      opponent: { pid: 2, name: 'Briar', lap: 1, finished: false, botTier: null },
-      position: 1,
+      me: RALLY_ME,
+      standings: [RALLY_ME],
+      gridSize: 4,
+      decided: false,
       speed: 0,
       wrongWay: false,
       resetLocked: false,
       totalLaps: 3,
       practice: false,
       result: null,
-    } as const;
+    };
     rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 3, racing);
     expect(colours()).toEqual([0x241c12, 0x241c12, 0x241c12]);
   });

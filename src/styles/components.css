@@ -14260,12 +14260,176 @@
   font-family: var(--font-display, serif);
   font-weight: 900;
 }
-.rallyhud-opponent {
+.rallyhud-title {
   overflow: hidden;
   font-size: 12px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The live leaderboard, in the top-left corner where the party frames sit: a
+   race roster is a roster, and that is the corner the HUD already keeps for one.
+   On a four-pilot grid most of the field is outside both the server's interest
+   radius and the client's draw range for most of a lap, so these four rows are
+   the only evidence the other machines exist.
+
+   It is `pointer-events: none`, so a player who queued while grouped still
+   reaches their party frames underneath it. */
+#realm-racers-standings {
+  position: absolute;
+  z-index: 58;
+  left: 12px;
+  top: 12px;
+  padding: 4px 0;
+  width: 214px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid #dfc36c55;
+  border-radius: 7px;
+  background: #0d160fe8;
+  list-style: none;
+  pointer-events: none;
+  color: #fff8d8;
+  filter: drop-shadow(0 3px 6px #000c);
+  /* Slides in from the edge when the flag goes up and back out when the race
+     ends, rather than snapping. `visibility` rides the same transition with a
+     delay so the panel is really gone once it has faded, with no timer in the
+     painter and no display juggling. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-14px);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out,
+    visibility 0s linear 180ms;
+}
+#realm-racers-standings.shown {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 220ms ease-out,
+    transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1),
+    visibility 0s;
+}
+/* A row that just changed places slides in from where it used to be. Rows are
+   uniform, so 100% of a row's own height IS one place: the cue needs no
+   measurement, and a two-place jump reads as movement rather than as an exact
+   distance, which at a glance is the same thing. */
+@keyframes rally-standing-gained {
+  from {
+    transform: translateY(100%);
+    background: #dfc36c4d;
+  }
+}
+@keyframes rally-standing-lost {
+  from {
+    transform: translateY(-100%);
+  }
+}
+.rally-standing.gained {
+  animation: rally-standing-gained 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.rally-standing.lost {
+  animation: rally-standing-lost 260ms ease-out;
+}
+/* Both cues are pure decoration on top of an order that is already correct:
+   dropping them costs a player nothing they act on. */
+@media (prefers-reduced-motion: reduce) {
+  #realm-racers-standings,
+  #realm-racers-standings.shown {
+    transform: none;
+    transition:
+      opacity 120ms linear,
+      visibility 0s linear 120ms;
+  }
+  #realm-racers-standings.shown {
+    transition:
+      opacity 120ms linear,
+      visibility 0s;
+  }
+  .rally-standing.gained,
+  .rally-standing.lost {
+    animation: none;
+  }
+}
+/* Placing, portrait, name, lap: the party-frame row grammar, with the placing
+   taking the place of the leader crown. */
+.rally-standing {
+  display: grid;
+  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 10px;
+  color: #d8dfc9;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.rally-standing.me {
+  color: #fff3a8;
+  background: #dfc36c1f;
+  font-weight: 800;
+}
+.rally-standing.out {
+  color: #8d9686;
+}
+.rally-standing-place {
+  color: #dfc36c;
+  font-family: var(--font-display, serif);
+  font-weight: 900;
+  text-align: center;
+}
+.rally-standing.out .rally-standing-place {
+  color: #8d9686;
+}
+.rally-standing-crest {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #dfc36c66;
+  border-radius: 50%;
+  background: #0b120d;
+}
+.rally-standing.out .rally-standing-crest {
+  opacity: 0.45;
+}
+/* Name plus marker in one cell: only the NAME may shrink, so a pilot with a very
+   long name loses letters and keeps their YOU. A marker glued onto the end of
+   the name string is the first thing an ellipsis eats, which is the bug this
+   two-element cell exists to prevent. */
+.rally-standing-id {
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  min-width: 0;
+}
+/* The name is the row: it is what a player reads at speed, so it outsizes the
+   placing badge and the lap beside it. */
+.rally-standing-name {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rally-standing-you {
+  flex: 0 0 auto;
+  color: #e8d79a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.rally-standing-you:empty {
+  display: none;
+}
+.rally-standing-lap {
+  color: #9fb098;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.rally-standing.me .rally-standing-lap {
+  color: #e8d79a;
 }
 .rallyhud-stats {
   gap: 0;
@@ -14380,5 +14544,182 @@
 @media (prefers-reduced-motion: reduce) {
   .rallyhud-wrong-way {
     animation: none;
+  }
+}
+
+@layer components {
+  /* ---------- realm racers podium ---------- */
+
+  /* The end-of-race ceremony, centred over the viewport. A race used to end on
+     one line of text and a standings panel that quietly stopped moving; this is
+     the moment a four-pilot grid is actually raced for. It keys on the RACE
+     being decided, never on the viewer's own phase, so a pilot who merely quit
+     keeps their forfeit tableau instead of a classification that does not
+     exist yet. */
+  #realm-racers-podium {
+    position: absolute;
+    z-index: 60;
+    left: 50%;
+    top: 46%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 26px 16px;
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    border: 1px solid #dfc36c99;
+    border-radius: 12px;
+    background: #101c13f2;
+    color: #fff8d8;
+    pointer-events: none;
+    box-shadow:
+      0 10px 34px #000a,
+      inset 0 1px 0 #ffffff14;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, calc(-50% + 10px));
+    transition:
+      opacity 200ms ease-out,
+      transform 200ms ease-out,
+      visibility 0s linear 200ms;
+  }
+  #realm-racers-podium.shown {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, -50%);
+    transition:
+      opacity 240ms ease-out,
+      transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1),
+      visibility 0s;
+  }
+  /* Three steps, second to the LEFT of first: the core hands them over in
+     display order, so the row needs no re-ordering here. */
+  .rally-podium-steps {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rally-podium-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 122px;
+  }
+  .rally-podium-crest {
+    width: 44px;
+    height: 44px;
+    border: 2px solid #dfc36c88;
+    border-radius: 50%;
+    background: #0b120d;
+  }
+  .rally-podium-name {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: 14px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rally-podium-time {
+    color: #9fb098;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The block under each pilot. Its HEIGHT is the podium: first is tallest. */
+  .rally-podium-block {
+    display: grid;
+    place-items: center;
+    margin-top: 2px;
+    width: 100%;
+    border: 1px solid #dfc36c55;
+    border-radius: 5px 5px 0 0;
+    background: linear-gradient(#1d2b1fdd, #121c14dd);
+    font-family: var(--font-display, serif);
+    font-size: 26px;
+    font-weight: 900;
+  }
+  .rally-podium-step.p1 .rally-podium-block {
+    height: 74px;
+    border-color: #f0d377;
+    color: #f7e6a5;
+  }
+  .rally-podium-step.p2 .rally-podium-block {
+    height: 54px;
+    color: #d9dee2;
+  }
+  .rally-podium-step.p3 .rally-podium-block {
+    height: 40px;
+    color: #d7a678;
+  }
+  .rally-podium-step.me .rally-podium-crest,
+  .rally-podium-row.me .rally-podium-row-crest {
+    border-color: #fff3a8;
+  }
+  .rally-podium-step.me .rally-podium-name,
+  .rally-podium-row.me .rally-podium-name {
+    color: #fff3a8;
+  }
+  /* Everyone below the podium: the roster row grammar, at roster size. */
+  .rally-podium-rest {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    list-style: none;
+  }
+  .rally-podium-row {
+    display: grid;
+    grid-template-columns: 18px 20px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 6px;
+    border-radius: 5px;
+    color: #d8dfc9;
+    font-size: 13px;
+  }
+  .rally-podium-row.me {
+    background: #dfc36c1f;
+  }
+  .rally-podium-row-place {
+    color: #dfc36c;
+    font-family: var(--font-display, serif);
+    font-weight: 900;
+    text-align: center;
+  }
+  .rally-podium-row-crest {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #dfc36c66;
+    border-radius: 50%;
+    background: #0b120d;
+  }
+  .rally-podium-return {
+    color: #fff3a8;
+    font-family: var(--font-display, serif);
+    font-size: 18px;
+    letter-spacing: 0.02em;
+    text-align: center;
+  }
+  /* The rise is decoration on a classification that is already correct. */
+  @media (prefers-reduced-motion: reduce) {
+    #realm-racers-podium,
+    #realm-racers-podium.shown {
+      transform: translate(-50%, -50%);
+      transition:
+        opacity 120ms linear,
+        visibility 0s linear 120ms;
+    }
+    #realm-racers-podium.shown {
+      transition:
+        opacity 120ms linear,
+        visibility 0s;
+    }
   }
 }

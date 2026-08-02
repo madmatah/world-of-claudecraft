@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { vehicleProfile } from '../src/sim/content/vehicles';
 import {
   isAtRealmRacers,
   REALM_RACERS_GATE_FRACTIONS,
   REALM_RACERS_GATE_MARGIN,
+  REALM_RACERS_GRID_SIZE,
   REALM_RACERS_START_BACK,
-  REALM_RACERS_START_SIDE,
+  REALM_RACERS_START_SPACING,
   rallyGateCrossingFraction,
 } from '../src/sim/realm_racers_layout';
 import {
@@ -53,14 +55,19 @@ describe('Realm Racers recovery gates', () => {
     expect(gates[gates.length - 1].s).toBeLessThan(track.length);
   });
 
-  it('parks both start slots on the road, behind the line, along the tangent', () => {
-    expect(starts).toHaveLength(2);
+  it('parks every start slot on the road, behind the line, along the tangent', () => {
+    expect(starts).toHaveLength(REALM_RACERS_GRID_SIZE);
     const line = track.pointAt(0);
     const grid = track.pointAt(track.length - REALM_RACERS_START_BACK);
-    for (const slot of starts) {
+    starts.forEach((slot, i) => {
       expect(isAtRealmRacers(slot)).toBe(true);
       const projection = track.project(slot.x, slot.z);
-      expect(Math.abs(projection.lateral)).toBeCloseTo(REALM_RACERS_START_SIDE, 2);
+      // The row is symmetric about the centerline and evenly spaced, derived
+      // rather than pinned, so a spacing edit is caught here.
+      const expected = Math.abs(
+        (i - (REALM_RACERS_GRID_SIZE - 1) / 2) * REALM_RACERS_START_SPACING,
+      );
+      expect(Math.abs(projection.lateral)).toBeCloseTo(expected, 2);
       expect(Math.abs(projection.lateral)).toBeLessThan(track.halfWidthAt(projection.s));
       // Behind the line: the remaining arc up to s = 0 is the authored setback.
       expect(track.length - projection.s).toBeCloseTo(REALM_RACERS_START_BACK, 1);
@@ -68,12 +75,31 @@ describe('Realm Racers recovery gates', () => {
       // The grid sits on straight road, so it lines up with the finish line to
       // within a couple of degrees.
       expect(Math.abs(slot.facing - Math.atan2(line.tx, line.tz))).toBeLessThan(0.04);
+      expect(slot.facing).toBe(starts[0].facing);
+    });
+  });
+
+  // Derived from the spacing, the hull radius and the width bands rather than
+  // pinned as numbers, so tightening the grid fails the test instead of quietly
+  // parking the outer machine on the grass or inside its neighbour.
+  it('fits the whole row between the road edges with a real gap between hulls', () => {
+    const bodyRadius = vehicleProfile('rally_loaner').bodyRadius;
+    // No two hulls overlap, and none of them merely touches.
+    for (let i = 0; i < starts.length; i++) {
+      for (let j = i + 1; j < starts.length; j++) {
+        const apart = Math.hypot(starts[i].x - starts[j].x, starts[i].z - starts[j].z);
+        expect(apart).toBeGreaterThan(2 * bodyRadius);
+      }
     }
-    expect(starts[0].facing).toBe(starts[1].facing);
-    expect(Math.hypot(starts[0].x - starts[1].x, starts[0].z - starts[1].z)).toBeCloseTo(
-      REALM_RACERS_START_SIDE * 2,
-      3,
-    );
+    expect(REALM_RACERS_START_SPACING - 2 * bodyRadius).toBeGreaterThan(0.5);
+    // The outermost hull edge stays inside the LOCAL road half-width, which on
+    // the start straight is the widest the circuit ever gets.
+    for (const slot of starts) {
+      const projection = track.project(slot.x, slot.z);
+      expect(Math.abs(projection.lateral) + bodyRadius).toBeLessThan(
+        track.halfWidthAt(projection.s),
+      );
+    }
   });
 
   it('accepts a forward crossing but rejects reverse, outside-width, and teleport skips', () => {

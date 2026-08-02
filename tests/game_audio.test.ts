@@ -113,7 +113,16 @@ describe('sampled GameAudio facade', () => {
     expect(hud).toContain('audio.realmRacersLap()');
     const result = (won: boolean, forfeited: boolean, winnerName: string, pid = 7) =>
       realmRacersResultAudioOutcome(
-        { type: 'realmRacersResult', won, forfeited, winnerName, returnTicks: 80, pid },
+        {
+          type: 'realmRacersResult',
+          won,
+          forfeited,
+          winnerName,
+          placing: 1,
+          gridSize: 4,
+          returnTicks: 80,
+          pid,
+        },
         7,
       );
     expect(result(true, false, 'Me')).toBe('victory');
@@ -129,6 +138,8 @@ describe('sampled GameAudio facade', () => {
         won: true,
         forfeited: false,
         winnerName: 'Me',
+        placing: 1,
+        gridSize: 4,
         returnTicks: 80,
         pid: 7,
       },
@@ -137,6 +148,8 @@ describe('sampled GameAudio facade', () => {
         won: false,
         forfeited: true,
         winnerName: 'Rival',
+        placing: 4,
+        gridSize: 4,
         returnTicks: 80,
         pid: 7,
       },
@@ -145,6 +158,8 @@ describe('sampled GameAudio facade', () => {
         won: false,
         forfeited: false,
         winnerName: '',
+        placing: 2,
+        gridSize: 4,
         returnTicks: 80,
         pid: 7,
       },

@@ -87,8 +87,12 @@ describe('Realm Racers participant visibility', () => {
 
     expect(dx * dx + dz * dz).toBeGreaterThan(96 * 96);
     expect(isRealmRacersCoPilot(info.participantIds, human, bot)).toBe(true);
-    expect(created).toBe(2);
-    expect(renderer.createView.mock.calls.map(([entity]) => entity.id)).toEqual([human, bot]);
+    // The whole grid is required, human included: a practice race is a field of
+    // house pilots, and the one parked 170 yards away is drawn like the rest.
+    expect(created).toBe(info.participantIds.length);
+    expect(renderer.createView.mock.calls.map(([entity]) => entity.id)).toEqual(
+      info.participantIds,
+    );
   });
 
   it('retains and draws every far co-pilot while rejecting a stranger at the same range', () => {

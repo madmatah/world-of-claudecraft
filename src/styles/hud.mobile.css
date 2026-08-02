@@ -5700,6 +5700,31 @@
       min-width: 66px;
       padding-inline: 6px;
     }
+    /* All four standings rows survive on a phone: the placing, the name and the
+       lap are what a pilot reacts to, so nothing is shed, only tightened. The
+       panel clears the notch rather than sitting at the desktop inset. */
+    body.mobile-touch #realm-racers-standings {
+      top: max(12px, calc(env(safe-area-inset-top) + 8px));
+      width: 168px;
+    }
+    body.mobile-touch .rally-standing {
+      grid-template-columns: 13px 18px minmax(0, 1fr) auto;
+      gap: 6px;
+      padding-inline: 8px;
+    }
+    body.mobile-touch .rally-standing-id {
+      gap: 4px;
+    }
+    body.mobile-touch .rally-standing-name {
+      font-size: 12px;
+    }
+    body.mobile-touch .rally-standing-lap {
+      font-size: 10px;
+    }
+    body.mobile-touch .rally-standing-crest {
+      width: 18px;
+      height: 18px;
+    }
     body.mobile-touch .rallyhud-phase {
       font-size: 17px;
     }

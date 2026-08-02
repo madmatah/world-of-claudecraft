@@ -2,12 +2,12 @@
 // minigame playable alone. Two entry points, ONE body of code (the
 // vale_cup_bots.ts model, whose contract this follows literally):
 //
-//   - Practice: the player presses a tier button and races a house pilot
+//   - Practice: the player presses Play and races a full grid of house pilots
 //     immediately, with no queue and no wait. Works offline AND online, because
 //     the same sim runs on the server.
-//   - Backfill: online, a player left alone in the queue past
-//     REALM_RACERS_BACKFILL_TICKS is paired with a house pilot rather than
-//     waiting for a rival who may never come.
+//   - Backfill: online, a short queue whose oldest waiter has been there past
+//     REALM_RACERS_BACKFILL_TICKS is topped up to a full grid with house pilots
+//     rather than waiting for rivals who may never come.
 //
 // Both are driven INSIDE the sim tick (Sim.updateRealmRacers calls
 // updateRealmRacersBots right after the match module), so the offline button
@@ -39,6 +39,7 @@ import {
   type RallyDriverBlast,
   type RallyDriverTier,
 } from '../realm_racers_driver';
+import { REALM_RACERS_GRID_SIZE } from '../realm_racers_layout';
 import { realmRacersTrack } from '../realm_racers_spline';
 import type { Sim } from '../sim';
 import { emptyMoveInput, TICK_RATE } from '../types';
@@ -50,14 +51,17 @@ import {
   realmRacersMatchOf,
   realmRacersQueueRemove,
   realmRacersStartMatch,
+  realmRacersStillRunning,
   realmRacersToCanonical,
   realmRacersToWorld,
 } from './realm_racers';
 
 /**
- * How long a lone racer waits before the Society sends a house pilot out to
- * meet them. Long enough that two humans who both walked up still get a real
- * race, short enough that the minigame is never a dead end.
+ * How long the oldest waiter in the queue sits before the Society sends house
+ * pilots out to fill the grid. Long enough that four humans who all walked up
+ * still get a real race, short enough that the minigame is never a dead end:
+ * measured on the OLDEST waiter, so a lone queuer gets a race in 45 s and a
+ * queue of three never waits on a fourth human forever.
  */
 export const REALM_RACERS_BACKFILL_TICKS = 45 * TICK_RATE;
 
@@ -72,19 +76,27 @@ function nextBotName(sim: Sim): string {
   for (const name of REALM_RACERS_BOT_NAMES) {
     if (!taken.has(name.toLowerCase())) return name;
   }
-  // Every house name is in use (one bot races at a time, so only a clash with
-  // real players lands here): suffix deterministically.
+  // Every house name is in use (a full grid of them races at a time, so a
+  // clash with a real player is what lands here): suffix deterministically.
   for (let i = 2; ; i++) {
-    const name = `${REALM_RACERS_BOT_NAMES[0]} ${i}`;
-    if (!taken.has(name.toLowerCase())) return name;
+    for (const base of REALM_RACERS_BOT_NAMES) {
+      const name = `${base} ${i}`;
+      if (!taken.has(name.toLowerCase())) return name;
+    }
   }
 }
 
-/** Add a house pilot to the world and mark it as one. Class rotates on the
- *  match counter, so consecutive practice laps do not all face the same face. */
-function spawnRallyBot(sim: Sim, tier: RallyDriverTier): number {
+/**
+ * Add a house pilot to the world and mark it as one. The cosmetic class rotates
+ * on the match counter PLUS the pilot's own grid offset, so the three rivals in
+ * one practice race are three different faces rather than triplets, and
+ * consecutive races do not all field the same three.
+ */
+function spawnRallyBot(sim: Sim, tier: RallyDriverTier, offset: number): number {
   const cls =
-    REALM_RACERS_BOT_CLASSES[sim.realmRacers.nextMatchId % REALM_RACERS_BOT_CLASSES.length];
+    REALM_RACERS_BOT_CLASSES[
+      (sim.realmRacers.nextMatchId + offset) % REALM_RACERS_BOT_CLASSES.length
+    ];
   const pid = sim.addPlayer(cls, nextBotName(sim));
   sim.realmRacers.bots.set(pid, tier);
   return pid;
@@ -97,35 +109,42 @@ function despawnRallyBot(sim: Sim, pid: number): void {
 }
 
 /**
- * Put `humanPid` on the grid against a freshly spawned house pilot. Cleans the
- * bot back up if the match refuses to start, so a failed attempt can never leak
- * a stray player into the world.
+ * Fill the grid out to `REALM_RACERS_GRID_SIZE` with freshly spawned house
+ * pilots and drop the flag. Cleans every bot back up if the match refuses to
+ * start, so a failed attempt can never leak a stray player into the world.
  *
- * `practiceSlot` picks the copy of the circuit: -1 races on the one PUBLIC
- * circuit (the online backfill, which is finishing a queued race the ordinary
- * way), anything else is a private practice copy.
+ * `humanPids` take the leading grid slots in the order given; the house pilots
+ * take the rest. `practiceSlot` picks the copy of the circuit: -1 races on the
+ * one PUBLIC circuit (the online backfill, which is finishing a queued race the
+ * ordinary way), anything else is a private practice copy.
  */
-function seatAgainstBot(
+function seatWithBots(
   sim: Sim,
-  humanPid: number,
+  humanPids: readonly number[],
   tier: RallyDriverTier,
   practiceSlot: number,
 ): boolean {
-  const botPid = spawnRallyBot(sim, tier);
-  // Out of the queue first: startMatch does not dequeue (the queue's own caller
-  // shifts before it), so a seated racer left in the queue would be matched a
-  // second time the moment another player joined.
-  realmRacersQueueRemove(sim.ctx, humanPid);
-  const seat = practiceSlot > 0 ? { ownerPid: humanPid, slot: practiceSlot } : undefined;
-  if (realmRacersStartMatch(sim.ctx, humanPid, botPid, seat)) return true;
-  despawnRallyBot(sim, botPid);
-  return false;
+  const seats = REALM_RACERS_GRID_SIZE - humanPids.length;
+  if (seats < 0) return false;
+  const bots: number[] = [];
+  for (let i = 0; i < seats; i++) bots.push(spawnRallyBot(sim, tier, i));
+  const seat = practiceSlot > 0 ? { ownerPid: humanPids[0], slot: practiceSlot } : undefined;
+  if (!realmRacersStartMatch(sim.ctx, [...humanPids, ...bots], seat)) {
+    for (const pid of bots) despawnRallyBot(sim, pid);
+    return false;
+  }
+  // Out of the queue now that they are seated: startMatch does not dequeue (the
+  // queue's own caller splices before it), so a seated racer left in the queue
+  // would be matched a second time the moment the grid filled again.
+  for (const pid of humanPids) realmRacersQueueRemove(sim.ctx, pid);
+  return true;
 }
 
 /**
- * The Practice affordance: race a house pilot right now. No queue, no wait, no
- * second player, and no waiting on ANYONE else either: it takes a private copy
- * of the whole circuit, so a race already running (or five) is irrelevant to it.
+ * The Practice affordance: race a full grid of house pilots right now. No queue,
+ * no wait, no other players, and no waiting on ANYONE else either: it takes a
+ * private copy of the whole circuit, so a race already running (or five) is
+ * irrelevant to it.
  *
  * Refuses silently when it cannot, exactly as the queue join does: the window
  * already shows the player why (they are racing, or the realm has handed out
@@ -136,27 +155,38 @@ export function startRealmRacersPractice(sim: Sim, tier: RallyDriverTier, pid?: 
   if (!resolved) return false;
   const id = resolved.meta.entityId;
   // Already racing, here or on someone else's grid: one machine per pilot.
-  // Being QUEUED is not a refusal, though: pressing Practice is a clear "race
-  // now", and seatAgainstBot takes them out of the queue. Everything else a
+  // Being QUEUED is not a refusal, though: pressing Play is a clear "race
+  // now", and seatWithBots takes them out of the queue. Everything else a
   // racer can be doing (dead, in a duel, inside an instance) is re-checked by
   // the match module's own eligibility test, the one every entry point shares.
   if (realmRacersMatchOf(sim.ctx, id)) return false;
   const slot = realmRacersFreePracticeSlot(sim.ctx);
   if (slot < 0) return false;
-  return seatAgainstBot(sim, id, tier, slot);
+  return seatWithBots(sim, [id], tier, slot);
 }
 
-/** Online: a lone racer who has waited long enough gets a house pilot. */
+/** Online: a queue whose oldest waiter has been there long enough gets house
+ *  pilots in every seat no human turned up for. */
 function maybeBackfill(sim: Sim): void {
   if (!sim.cfg.realmRacersBackfill) return;
   const rally = sim.realmRacers;
-  if (rally.match || rally.queue.length !== 1) return;
-  const pid = rally.queue[0];
-  const joinedAt = rally.queuedAtTick.get(pid);
-  if (joinedAt === undefined || sim.tickCount - joinedAt < REALM_RACERS_BACKFILL_TICKS) return;
-  // The PUBLIC circuit: this player queued for a real race and is getting one,
-  // just with a house pilot in the other seat.
-  seatAgainstBot(sim, pid, REALM_RACERS_BACKFILL_TIER, -1);
+  if (rally.match) return;
+  const waiting = rally.queue.slice(0, REALM_RACERS_GRID_SIZE);
+  // An empty queue has nobody to race, and a full one is the match module's
+  // business: it seats four humans without any help from here.
+  if (waiting.length === 0 || waiting.length >= REALM_RACERS_GRID_SIZE) return;
+  // The clock is the OLDEST waiter's. Anyone who joined behind them is racing
+  // sooner than their own 45 s, which is the right way round: nobody at the head
+  // of the queue is ever made to wait longer because the queue grew.
+  let oldest = sim.tickCount;
+  for (const pid of waiting) {
+    const joinedAt = rally.queuedAtTick.get(pid);
+    if (joinedAt !== undefined && joinedAt < oldest) oldest = joinedAt;
+  }
+  if (sim.tickCount - oldest < REALM_RACERS_BACKFILL_TICKS) return;
+  // The PUBLIC circuit: these players queued for a real race and are getting
+  // one, just with house pilots in the seats nobody claimed.
+  seatWithBots(sim, waiting, REALM_RACERS_BACKFILL_TIER, -1);
 }
 
 /** The rival a bot shoots at and races: the nearest other racer still running,
@@ -172,6 +202,9 @@ function nearestRival(
   if (!self) return null;
   for (const other of match.pids) {
     if (other === pid) continue;
+    // A rival whose own race is over is not a rival: they are parked waiting to
+    // be returned, or already back in the Evergarden with a stale position.
+    if (!realmRacersStillRunning(match, other)) continue;
     const e = sim.entities.get(other);
     if (!e || e.dead) continue;
     const dx = e.pos.x - self.pos.x;
@@ -207,7 +240,7 @@ function driveRallyBot(
   if (match.phase !== 'racing' || e.dead) return;
   const drive = e.drive;
   const progress = match.progress.get(pid);
-  if (!drive || !progress || progress.finishedTick !== null) return;
+  if (!drive || !progress || !realmRacersStillRunning(match, pid)) return;
 
   // The brain reasons entirely in the CANONICAL frame the circuit is authored
   // in, so everything it is handed is shifted off this race's own copy first.

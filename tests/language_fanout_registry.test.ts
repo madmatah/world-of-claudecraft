@@ -248,7 +248,25 @@ const ANSWERED: readonly AnsweredSurface[] = [
     file: 'realm_racers.ts',
     memos: ['lastCountdown', 'lastHudSig', 'lastWindowSig'],
     answer: 'this.realmRacersUi.relocalize',
-    why: 'the queue state, opponent, race phase, lap and result that gate the localized Rally window and HUD rebuilds',
+    why: 'the queue state, race phase, lap and result that gate the localized Rally window and race-strip rebuilds',
+  },
+  {
+    file: 'realm_racers_standings_panel.ts',
+    memos: ['lastSig'],
+    // Same arm, one hop: RealmRacersUi owns this panel and its relocalize()
+    // forwards, exactly as LockpickController does for LockpickWindow. Handing
+    // Hud a second reference to a panel one of its painters owns would buy
+    // nothing but a way for the two arms to drift apart.
+    answer: 'this.realmRacersUi.relocalize',
+    why: 'the standings order, laps and viewer marker that gate the localized leaderboard rebuild, forwarded by the Rally painter that owns the panel',
+  },
+  {
+    file: 'realm_racers_podium.ts',
+    memos: ['lastSig'],
+    // Same arm, one hop, for the same reason the standings panel is: the Rally
+    // painter owns the ceremony and its relocalize() forwards to it.
+    answer: 'this.realmRacersUi.relocalize',
+    why: 'the classification that gates the localized end-of-race ceremony, forwarded by the Rally painter that owns it',
   },
   {
     file: 'hud/action_bar/mobile_action_ring_painter.ts',

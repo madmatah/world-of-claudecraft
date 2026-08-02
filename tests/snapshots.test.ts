@@ -99,24 +99,29 @@ function feedEventFrame(client: ClientWorld, frame: unknown): void {
 }
 
 describe('Realm Racers self-wire round-trip', () => {
-  it('preserves the frozen participant grid through rr into ClientWorld', () => {
+  it('preserves the frozen participant grid and the live standings through rr', () => {
     const server = new GameServer();
-    const aWire = fakeWs();
-    const bWire = fakeWs();
-    const a = joinServer(server, aWire, 91, 'GridA');
-    const b = joinServer(server, bWire, 92, 'GridB');
-    server.sim.realmRacersQueueJoin(a.pid);
-    server.sim.realmRacersQueueJoin(b.pid);
+    const wires = ['GridA', 'GridB', 'GridC', 'GridD'].map(() => fakeWs());
+    const sessions = ['GridA', 'GridB', 'GridC', 'GridD'].map((name, i) =>
+      joinServer(server, wires[i], 91 + i, name),
+    );
+    for (const session of sessions) server.sim.realmRacersQueueJoin(session.pid);
     server.sim.tick();
     broadcast(server);
 
-    const expected = server.sim.realmRacersInfoFor(a.pid);
-    expect(expected.match?.participantIds).toEqual([a.pid, b.pid]);
-    const client = bareClient(a.pid);
-    (client as unknown as SnapshotApplier).applySnapshot(lastSnap(aWire.sent));
+    const pids = sessions.map((session) => session.pid);
+    const expected = server.sim.realmRacersInfoFor(pids[0]);
+    expect(expected.match?.participantIds).toEqual(pids);
+    // Grid IDENTITY and live ORDER are separate fields, and both have to cross
+    // the wire: the renderer's match pins read the first, the strip the second.
+    expect(expected.match?.standings.map((row) => row.pid).sort()).toEqual([...pids].sort());
+    expect(expected.match?.gridSize).toBe(pids.length);
+    const client = bareClient(pids[0]);
+    (client as unknown as SnapshotApplier).applySnapshot(lastSnap(wires[0].sent));
 
     expect(client.realmRacersInfo).toEqual(expected);
-    expect(client.realmRacersInfo.match?.participantIds).toEqual([a.pid, b.pid]);
+    expect(client.realmRacersInfo.match?.participantIds).toEqual(pids);
+    expect(client.realmRacersInfo.match?.standings).toEqual(expected.match?.standings);
   });
 });
 

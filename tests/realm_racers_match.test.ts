@@ -6,12 +6,17 @@ import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { forceDismount } from '../src/sim/mounts';
 import { GROUND_BLAST_CONTROL_SPEED_MULT } from '../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_ORIGIN, REALM_RACERS_PERIMETER_HALF_X } from '../src/sim/realm_racers_layout';
+import {
+  REALM_RACERS_GRID_SIZE,
+  REALM_RACERS_ORIGIN,
+  REALM_RACERS_PERIMETER_HALF_X,
+} from '../src/sim/realm_racers_layout';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
   REALM_RACERS_BUMP_EVENT_TICKS,
+  REALM_RACERS_CHASE_TICKS,
   REALM_RACERS_GARDEN_BAND,
   REALM_RACERS_MOUNT_KEY,
   REALM_RACERS_OFF_TRACK_AURA,
@@ -21,12 +26,21 @@ import {
   REALM_RACERS_VERGE_BAND,
   REALM_RACERS_WATER_BAND,
   realmRacersFireGroundBlast,
+  realmRacersStartMatch,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import type { Entity, SimEvent } from '../src/sim/types';
 import { addAt, makeWorld, teleport } from './vale_cup_util';
 
 const LOANER = vehicleProfile('rally_loaner');
+
+/** Four pilots, in grid order, is what a race is. */
+const GRID = [
+  { cls: 'warrior', name: 'Aster', x: -5, z: -40 },
+  { cls: 'mage', name: 'Briar', x: 7, z: -42 },
+  { cls: 'rogue', name: 'Cass', x: -9, z: -38 },
+  { cls: 'priest', name: 'Dell', x: 11, z: -44 },
+] as const;
 
 function required<T>(value: T | null | undefined, label: string): T {
   if (value === null || value === undefined) throw new Error(`Missing ${label}`);
@@ -41,15 +55,19 @@ function match(sim: Sim): NonNullable<Sim['realmRacers']['match']> {
   return required(sim.realmRacers.match, 'Realm Racers match');
 }
 
-function startMatch(): { sim: Sim; a: number; b: number } {
+/** A world with four idle pilots standing outside the circuit. */
+function makeGrid(): { sim: Sim; pids: number[] } {
   const sim = makeWorld();
-  const a = addAt(sim, 'warrior', 'Aster', -5, -40);
-  const b = addAt(sim, 'mage', 'Briar', 7, -42);
-  sim.realmRacersQueueJoin(a);
-  sim.realmRacersQueueJoin(b);
+  const pids = GRID.map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
+  return { sim, pids };
+}
+
+function startMatch(): { sim: Sim; pids: number[]; a: number; b: number } {
+  const { sim, pids } = makeGrid();
+  for (const pid of pids) sim.realmRacersQueueJoin(pid);
   sim.tick();
   expect(sim.realmRacers.match).not.toBeNull();
-  return { sim, a, b };
+  return { sim, pids, a: pids[0], b: pids[1] };
 }
 
 function placeAtS(sim: Sim, pid: number, s: number, lateral = 0): void {
@@ -104,30 +122,31 @@ describe('The Realm Racers loaned machine', () => {
 });
 
 describe('The Realm Racers lifecycle', () => {
-  it('waits for exactly two racers, then runs a silent overview before the three-count', () => {
-    const sim = makeWorld();
-    const a = addAt(sim, 'warrior', 'Aster');
-    const b = addAt(sim, 'mage', 'Briar', 3, -40);
-    sim.realmRacersQueueJoin(a);
+  it('waits for a full grid, then runs a silent overview before the three-count', () => {
+    const { sim, pids } = makeGrid();
+    const [a, b] = pids;
+    // Three humans is not a race: the grid is four abreast or it does not start.
+    for (const pid of pids.slice(0, REALM_RACERS_GRID_SIZE - 1)) sim.realmRacersQueueJoin(pid);
     sim.tick();
+    expect(sim.realmRacers.match).toBeNull();
     expect(sim.realmRacersInfoFor(a)).toMatchObject({
       queued: true,
       queuePosition: 1,
-      queueSize: 1,
+      queueSize: REALM_RACERS_GRID_SIZE - 1,
       match: null,
     });
-    sim.realmRacersQueueJoin(b);
+    sim.realmRacersQueueJoin(pids[REALM_RACERS_GRID_SIZE - 1]);
     sim.tick();
     const liveMatch = match(sim);
     expect(liveMatch.goTick - sim.tickCount).toBe(180);
     expect(sim.realmRacersInfoFor(a).match).toMatchObject({
       countdown: 0,
       countdownTicks: 180,
-      participantIds: [a, b],
+      participantIds: pids,
+      gridSize: REALM_RACERS_GRID_SIZE,
     });
-    expect(sim.realmRacersInfoFor(b).match?.participantIds).toEqual([a, b]);
-    expect(entity(sim, a).mountKey).toBe('terrorspark_groundshaker');
-    expect(entity(sim, b).mountKey).toBe('terrorspark_groundshaker');
+    expect(sim.realmRacersInfoFor(b).match?.participantIds).toEqual(pids);
+    for (const pid of pids) expect(entity(sim, pid).mountKey).toBe('terrorspark_groundshaker');
     const aMeta = required(sim.players.get(a), `player ${a}`);
     expect(aMeta.known.map((known) => known.def.id)).toEqual(['rally_ground_blast']);
     const before = { ...entity(sim, a).pos };
@@ -144,8 +163,38 @@ describe('The Realm Racers lifecycle', () => {
     expect(liveMatch.phase).toBe('racing');
   });
 
-  it('requires real arc distance and awards the first clean third-lap finish', () => {
-    const { sim, a, b } = startMatch();
+  it('seats every pilot on its own grid slot with no two hulls overlapping', () => {
+    const { sim, pids } = startMatch();
+    const liveMatch = match(sim);
+    expect(liveMatch.pids).toEqual(pids);
+    expect(liveMatch.gridSize).toBe(REALM_RACERS_GRID_SIZE);
+    for (let i = 0; i < pids.length; i++) {
+      for (let j = i + 1; j < pids.length; j++) {
+        const p = entity(sim, pids[i]).pos;
+        const q = entity(sim, pids[j]).pos;
+        expect(Math.hypot(p.x - q.x, p.z - q.z)).toBeGreaterThan(2 * LOANER.bodyRadius);
+      }
+    }
+  });
+
+  it('refuses a grid that is not exactly four distinct eligible pilots', () => {
+    const { sim, pids } = makeGrid();
+    expect(realmRacersStartMatch(sim.ctx, pids.slice(0, 3))).toBe(false);
+    expect(sim.realmRacers.match).toBeNull();
+    const fifth = addAt(sim, 'shaman', 'Elm', 13, -46);
+    expect(realmRacersStartMatch(sim.ctx, [...pids, fifth])).toBe(false);
+    expect(sim.realmRacers.match).toBeNull();
+    // Four entries but only three pilots: a duplicate would seat one machine
+    // twice and hand it two rows in the standings.
+    expect(realmRacersStartMatch(sim.ctx, [pids[0], pids[1], pids[2], pids[0]])).toBe(false);
+    expect(sim.realmRacers.match).toBeNull();
+    expect(realmRacersStartMatch(sim.ctx, pids)).toBe(true);
+    expect(match(sim).pids).toEqual(pids);
+  });
+
+  it('keeps the race running until the last machine is home, then ranks the field', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
     const liveMatch = match(sim);
     liveMatch.phase = 'racing';
     crossStart(sim, a);
@@ -155,16 +204,126 @@ describe('The Realm Racers lifecycle', () => {
     completeLap(sim, a);
     expect(liveMatch.progress.get(a)).toMatchObject({ lap: 3 });
     completeLap(sim, a);
+    // The leader is home and the race is NOT over: three machines are still out
+    // there fighting over the rest of the podium.
+    expect(required(liveMatch.progress.get(a), `progress ${a}`).finishedTick).not.toBeNull();
+    expect(liveMatch.phase).toBe('racing');
+    expect(sim.realmRacersInfoFor(a).match?.me.position).toBe(1);
+
+    for (const pid of [b, c, d]) {
+      // A tick apart, so each crossing has its own finish tick rather than four
+      // machines cutting the line inside the same 50 ms.
+      sim.tickCount++;
+      crossStart(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+    }
     expect(liveMatch.phase).toBe('finished');
     expect(liveMatch.winnerPid).toBe(a);
+    expect(liveMatch.finishOrder).toEqual([a, b, c, d]);
     expect(sim.realmRacersInfoFor(a).match?.result).toBe('won');
-    expect(sim.realmRacersInfoFor(b).match?.result).toBe('lost');
+    expect(sim.realmRacersInfoFor(d).match?.result).toBe('lost');
+    expect(sim.realmRacersInfoFor(d).match?.me.position).toBe(4);
   });
 
-  it('reports a dead heat when the time limit expires at equal progress', () => {
-    const { sim, a, b } = startMatch();
+  it('closes the race a chase window after the winner, not at the time limit', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
     const liveMatch = match(sim);
     liveMatch.phase = 'racing';
+    // A wins. B, C and D are still out there, and D has stopped driving.
+    crossStart(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    const armed = required(liveMatch.chaseUntilTick, 'chase window');
+    expect(armed - sim.tickCount).toBe(REALM_RACERS_CHASE_TICKS);
+    expect(liveMatch.phase).toBe('racing');
+    // The window is a clock the pilots still out are told about, not a silent
+    // cut-off; the ones already home are waiting on it, not racing it.
+    expect(sim.realmRacersInfoFor(b).match?.chaseIn).toBe(REALM_RACERS_CHASE_TICKS / 20);
+    expect(sim.realmRacersInfoFor(a).match?.chaseIn).toBe(0);
+
+    // A second finisher does not push the window back: it is the WINNER's clock.
+    sim.tickCount++;
+    crossStart(sim, b);
+    completeLap(sim, b);
+    completeLap(sim, b);
+    completeLap(sim, b);
+    expect(liveMatch.chaseUntilTick).toBe(armed);
+    expect(liveMatch.phase).toBe('racing');
+
+    // C gets home inside the window; D never does and is ranked where it stands.
+    placeAtS(sim, c, 200);
+    updateRealmRacers(sim.ctx);
+    sim.tickCount = armed;
+    updateRealmRacers(sim.ctx);
+    expect(liveMatch.phase).toBe('finished');
+    // Well short of the 180 s limit, which is what the window exists to avoid.
+    expect(sim.tickCount).toBeLessThan(liveMatch.deadlineTick);
+    expect(liveMatch.winnerPid).toBe(a);
+    expect(liveMatch.finishOrder).toEqual([a, b, c, d]);
+  });
+
+  it('times each finisher from the flag, sub-tick, and marks the race decided', () => {
+    const { sim, pids } = startMatch();
+    const [a, b] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    // The flag fell two seconds ago. The helpers below drive progress by
+    // teleporting rather than by ticking the clock, so the start has to be put
+    // in the past deliberately or every finish time would clamp to zero.
+    liveMatch.goTick = sim.tickCount - 40;
+    // Nobody has crossed: no time, and the race is not decided, so the podium
+    // has nothing to stand on.
+    expect(sim.realmRacersInfoFor(a).match?.decided).toBe(false);
+    expect(sim.realmRacersInfoFor(a).match?.me.finishSeconds).toBeNull();
+
+    crossStart(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    const progress = required(liveMatch.progress.get(a), `progress ${a}`);
+    const seconds = required(sim.realmRacersInfoFor(a).match?.me.finishSeconds, 'finish time');
+    // Measured from the flag, and sub-tick: the crossing happened inside the
+    // tick that detected it, at the fraction of the segment the gate test
+    // returned, so the time is `finishedTick - 1 + fraction` past `goTick`.
+    expect(seconds).toBeCloseTo(
+      (required(progress.finishedTick, 'finish tick') -
+        1 +
+        progress.finishFraction -
+        liveMatch.goTick) /
+        20,
+      6,
+    );
+    expect(seconds).toBeGreaterThan(0);
+    // Two machines crossing on the SAME tick are still two different times,
+    // which is the whole reason the fraction is folded in.
+    const other = required(liveMatch.progress.get(b), `progress ${b}`);
+    other.finishedTick = progress.finishedTick;
+    other.finishFraction = progress.finishFraction / 2;
+    const both = required(sim.realmRacersInfoFor(a).match, 'match info').standings;
+    const times = both.flatMap((row) => (row.finishSeconds === null ? [] : [row.finishSeconds]));
+    expect(new Set(times).size).toBe(times.length);
+
+    // `decided` is the RACE's state, not the viewer's: it stays false while
+    // anyone is still driving and flips when the classification is final.
+    expect(sim.realmRacersInfoFor(a).match?.decided).toBe(false);
+    for (const pid of pids.slice(2)) sim.realmRacersForfeit(pid);
+    expect(liveMatch.phase).toBe('finished');
+    expect(sim.realmRacersInfoFor(a).match?.decided).toBe(true);
+  });
+
+  it('reports a dead heat for the LEAD, but a tie for third is a placing', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    // A and B level at the front; C and D level with each other, well behind.
+    for (const pid of [a, b]) {
+      required(liveMatch.progress.get(pid), `progress ${pid}`).travelled = 120;
+    }
     liveMatch.deadlineTick = sim.tickCount + REALM_RACERS_TIME_LIMIT_TICKS;
     sim.tickCount = liveMatch.deadlineTick;
     updateRealmRacers(sim.ctx);
@@ -172,6 +331,114 @@ describe('The Realm Racers lifecycle', () => {
     expect(liveMatch.winnerPid).toBeNull();
     expect(sim.realmRacersInfoFor(a).match?.result).toBe('draw');
     expect(sim.realmRacersInfoFor(b).match?.result).toBe('draw');
+    // The pair tied for third are still ranked third and fourth, and they lost.
+    expect(sim.realmRacersInfoFor(c).match?.result).toBe('lost');
+    expect(sim.realmRacersInfoFor(d).match?.result).toBe('lost');
+    expect(sim.realmRacersInfoFor(c).match?.me.position).toBe(3);
+    expect(sim.realmRacersInfoFor(d).match?.me.position).toBe(4);
+  });
+
+  it('ranks the whole field by yards down the circuit', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    // Deliberately out of grid order: B leads, then D, then A, then C.
+    for (const [pid, s] of [
+      [b, 90],
+      [d, 60],
+      [a, 30],
+      [c, 10],
+    ] as const) {
+      placeAtS(sim, pid, s);
+      updateRealmRacers(sim.ctx);
+    }
+    const info = required(sim.realmRacersInfoFor(a).match, 'match info');
+    expect(info.standings.map((row) => row.pid)).toEqual([b, d, a, c]);
+    expect(info.standings.map((row) => row.position)).toEqual([1, 2, 3, 4]);
+    expect(info.me.pid).toBe(a);
+    expect(info.me.position).toBe(3);
+    // The standings carry who each pilot IS, which is what the panel draws:
+    // their name and the class its portrait comes from.
+    expect(info.standings.map((row) => row.name)).toEqual(['Briar', 'Dell', 'Aster', 'Cass']);
+    expect(info.standings.map((row) => row.cls)).toEqual(['mage', 'priest', 'warrior', 'rogue']);
+    // The frozen grid order is untouched by the live sort: the renderer's
+    // membership pins read identity, not placing.
+    expect(info.participantIds).toEqual(pids);
+    // Every viewer sees the SAME order; only `me` moves.
+    expect(
+      required(sim.realmRacersInfoFor(c).match, 'match info c').standings.map((r) => r.pid),
+    ).toEqual([b, d, a, c]);
+  });
+
+  it('does not end anyone else’s race when one pilot forfeits', () => {
+    const { sim, pids } = startMatch();
+    const [a, b] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    sim.realmRacersForfeit(a);
+    // The race carries on for the other three, and nobody was handed a win.
+    expect(liveMatch.phase).toBe('racing');
+    expect(liveMatch.winnerPid).toBeNull();
+    expect(sim.realmRacersInfoFor(b).match?.result).toBeNull();
+    expect(sim.realmRacersInfoFor(b).match?.phase).toBe('racing');
+    // The quitter is classified last, and sees their own tableau at once.
+    const quitter = required(sim.realmRacersInfoFor(a).match, 'quitter info');
+    expect(quitter.result).toBe('forfeit');
+    expect(quitter.phase).toBe('finished');
+    expect(quitter.me.position).toBe(REALM_RACERS_GRID_SIZE);
+    expect(quitter.me.retired).toBe(true);
+    expect(quitter.returnIn).toBeGreaterThan(0);
+    // ...and is returned on their OWN clock, while the race is still live.
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 1; i++) sim.tick();
+    expect(sim.realmRacersInfoFor(a).match).toBeNull();
+    expect(entity(sim, a).drive).toBeNull();
+    expect(sim.realmRacers.match).not.toBeNull();
+    expect(match(sim).phase).toBe('racing');
+    expect(entity(sim, b).drive).not.toBeNull();
+  });
+
+  it('ends the race at once when three of four quit, with the survivor first', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    sim.realmRacersForfeit(b);
+    sim.tick();
+    sim.realmRacersForfeit(c);
+    sim.tick();
+    expect(liveMatch.phase).toBe('racing');
+    sim.realmRacersForfeit(d);
+    // Nobody drives three lonely laps: the last pilot standing takes the win.
+    expect(liveMatch.phase).toBe('finished');
+    expect(liveMatch.winnerPid).toBe(a);
+    expect(sim.realmRacersInfoFor(a).match?.result).toBe('won');
+    // The quitters are ranked behind the survivor, latest quitter first: a
+    // pilot who drove most of the race beat one who pulled off immediately.
+    expect(liveMatch.finishOrder).toEqual([a, d, c, b]);
+  });
+
+  it('treats a disconnect exactly like a forfeit, without ending the race', () => {
+    const { sim, pids } = startMatch();
+    const [a, b] = pids;
+    const liveMatch = match(sim);
+    liveMatch.phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    // A departing player is marked leaving before the persistence await; the
+    // match module's own roster pass is what has to notice.
+    required(sim.players.get(a), `player ${a}`).leaving = true;
+    updateRealmRacers(sim.ctx);
+    expect(liveMatch.phase).toBe('racing');
+    expect(required(liveMatch.progress.get(a), `progress ${a}`).retiredTick).not.toBeNull();
+    // Restored at ONCE, not after the tableau: the host saves the character
+    // straight after this and must not persist a seated racer.
+    expect(required(liveMatch.progress.get(a), `progress ${a}`).returned).toBe(true);
+    expect(entity(sim, a).drive).toBeNull();
+    expect(required(sim.players.get(a), `player ${a}`).realmRacersMatchId).toBeNull();
+    expect(sim.realmRacersInfoFor(a).match).toBeNull();
+    expect(sim.realmRacersInfoFor(b).match?.phase).toBe('racing');
   });
 
   it('keeps Ground Blast mounted and applies one short no-damage destabilization', () => {
@@ -205,9 +472,8 @@ describe('The Realm Racers lifecycle', () => {
   });
 
   it('shows the forfeit result, then restores position, facing, pools, kit, and prior mount', () => {
-    const sim = makeWorld();
-    const a = addAt(sim, 'warrior', 'Aster', -8, -41);
-    const b = addAt(sim, 'mage', 'Briar', 9, -39);
+    const { sim, pids } = makeGrid();
+    const [a, b] = pids;
     const aEntity = entity(sim, a);
     const bEntity = entity(sim, b);
     aEntity.facing = 1.25;
@@ -218,8 +484,7 @@ describe('The Realm Racers lifecycle', () => {
     aEntity.cooldowns.set('charge', 9);
     const expectedA = { x: aEntity.pos.x, z: aEntity.pos.z, facing: aEntity.facing };
     const expectedB = { x: bEntity.pos.x, z: bEntity.pos.z, facing: bEntity.facing };
-    sim.realmRacersQueueJoin(a);
-    sim.realmRacersQueueJoin(b);
+    for (const pid of pids) sim.realmRacersQueueJoin(pid);
     sim.tick();
     expect(aEntity.mountKey).toBe('terrorspark_groundshaker');
     sim.realmRacersForfeit(a);
@@ -227,20 +492,14 @@ describe('The Realm Racers lifecycle', () => {
       phase: 'finished',
       result: 'forfeit',
     });
-    expect(sim.realmRacersInfoFor(b).match).toMatchObject({
-      phase: 'finished',
-      result: 'won',
-    });
+    // The three that stayed are still racing: a quitter hands nobody a win.
+    expect(sim.realmRacersInfoFor(b).match).toMatchObject({ result: null });
     for (let i = 0; i < REALM_RACERS_RETURN_TICKS; i++) sim.tick();
-    expect(sim.realmRacers.match).toBeNull();
+    expect(sim.realmRacersInfoFor(a).match).toBeNull();
     expect(aEntity.pos.x).toBeCloseTo(expectedA.x, 6);
     expect(aEntity.pos.z).toBeCloseTo(expectedA.z, 6);
     expect(aEntity.facing).toBeCloseTo(expectedA.facing, 6);
-    expect(bEntity.pos.x).toBeCloseTo(expectedB.x, 6);
-    expect(bEntity.pos.z).toBeCloseTo(expectedB.z, 6);
-    expect(bEntity.facing).toBeCloseTo(expectedB.facing, 6);
     expect(aEntity.mountKey).toBe('valorsteed');
-    expect(bEntity.mountKey).toBe('');
     expect(aEntity.hp).toBe(31);
     expect(aEntity.resource).toBe(7);
     // Match formation happens at the tail of the next 20 Hz tick, after the
@@ -250,15 +509,29 @@ describe('The Realm Racers lifecycle', () => {
     const restoredMeta = required(sim.players.get(a), `player ${a}`);
     expect(restoredMeta.realmRacersMatchId).toBeNull();
     expect(restoredMeta.known.some((known) => known.def.id === 'rally_ground_blast')).toBe(false);
+
+    // And the rest of the field is returned exactly where it was found once the
+    // race itself is over.
+    for (const pid of pids.slice(1)) sim.realmRacersForfeit(pid);
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 1; i++) sim.tick();
+    expect(sim.realmRacers.match).toBeNull();
+    expect(bEntity.pos.x).toBeCloseTo(expectedB.x, 6);
+    expect(bEntity.pos.z).toBeCloseTo(expectedB.z, 6);
+    expect(bEntity.facing).toBeCloseTo(expectedB.facing, 6);
+    expect(bEntity.mountKey).toBe('');
   });
 
   it('restores temporary Rally state before a disconnect save', () => {
-    const { sim, a } = startMatch();
+    const { sim, a, b } = startMatch();
     const original = match(sim).returns.get(a);
     sim.preparePlayerLeave(a);
-    expect(sim.realmRacers.match).toBeNull();
     expect(entity(sim, a).pos).toMatchObject({ x: original?.x, z: original?.z });
     expect(required(sim.players.get(a), `player ${a}`).realmRacersMatchId).toBeNull();
+    expect(sim.realmRacersInfoFor(a).match).toBeNull();
+    // The other three are unaffected: one player closing their client is not
+    // three other people's race ending.
+    expect(sim.realmRacers.match).not.toBeNull();
+    expect(sim.realmRacersInfoFor(b).match).not.toBeNull();
   });
 
   it('slows shortcut attempts outside the authored road without damaging the racer', () => {
@@ -327,27 +600,13 @@ describe('The Realm Racers lifecycle', () => {
     expect(verge()).toMatchObject({ kind: 'slow' });
   });
 
-  it('ranks live position by yards down the circuit', () => {
-    const { sim, a, b } = startMatch();
-    const liveMatch = match(sim);
-    liveMatch.phase = 'racing';
-    placeAtS(sim, b, 60);
-    updateRealmRacers(sim.ctx);
-    placeAtS(sim, a, 10);
-    updateRealmRacers(sim.ctx);
-    expect(sim.realmRacersInfoFor(b).match?.position).toBe(1);
-    expect(sim.realmRacersInfoFor(a).match?.position).toBe(2);
-    const progressA = required(liveMatch.progress.get(a), `progress ${a}`);
-    const progressB = required(liveMatch.progress.get(b), `progress ${b}`);
-    expect(progressB.travelled - progressA.travelled).toBeCloseTo(50, 0);
-  });
-
   it('seats a pilot in a machine, holds it at zero through the countdown, and takes it back', () => {
-    const { sim, a, b } = startMatch();
+    const { sim, pids } = startMatch();
+    const [a, b] = pids;
     const racer = entity(sim, a);
     const drive = required(racer.drive, 'drive state');
     expect(drive.profileKey).toBe('rally_loaner');
-    expect(entity(sim, b).drive).not.toBeNull();
+    for (const pid of pids) expect(entity(sim, pid).drive).not.toBeNull();
 
     // The countdown is a real start lock: input during it banks nothing, and a
     // speed forced onto the machine is zeroed again before GO.
@@ -362,8 +621,8 @@ describe('The Realm Racers lifecycle', () => {
     sim.tick();
     expect(racer.drive).not.toBeNull();
 
-    sim.realmRacersForfeit(a);
-    for (let i = 0; i < REALM_RACERS_RETURN_TICKS; i++) sim.tick();
+    for (const pid of pids) sim.realmRacersForfeit(pid);
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 1; i++) sim.tick();
     expect(sim.realmRacers.match).toBeNull();
     // Off the machine outright: a leftover drive state would keep the restored
     // character on the vehicle movement model back in the overworld.
@@ -419,6 +678,62 @@ describe('The Realm Racers lifecycle', () => {
     const { sim, a } = startMatch();
     expect(sim.toggleMountFor(a)).toBe(false);
     expect(entity(sim, a).mountKey).toBe('terrorspark_groundshaker');
+  });
+
+  it('resolves every unordered pair, and throttles each duel on its own clock', () => {
+    const { sim, pids } = startMatch();
+    match(sim).phase = 'racing';
+    const track = realmRacersTrack();
+    const sample = track.samples[120];
+    const facing = Math.atan2(sample.tx, sample.tz);
+    // The whole field stacked into one heap: four machines is six unordered
+    // pairs, and the pass has to separate all of them, not just the first.
+    pids.forEach((pid, i) => {
+      teleport(sim, pid, sample.x - sample.tz * (i * 0.6), sample.z + sample.tx * (i * 0.6));
+      const racer = entity(sim, pid);
+      racer.facing = facing;
+      const drive = required(racer.drive, `drive ${pid}`);
+      drive.speed = 20;
+      drive.slip = i < 2 ? 12 : -12;
+    });
+    sim.tickCount++;
+    updateRealmRacers(sim.ctx);
+
+    // Every pair that hit hard enough announced itself, each on its OWN key: one
+    // duel going quiet under the throttle may not silence another.
+    const bumps = sim
+      .drainEvents()
+      .filter((event) => event.type === 'realmRacersBump')
+      .map((event) => event as Extract<SimEvent, { type: 'realmRacersBump' }>);
+    expect(bumps.length).toBeGreaterThan(1);
+    const keys = bumps.map(
+      (bump) => `${Math.min(bump.aId, bump.bId)}:${Math.max(bump.aId, bump.bId)}`,
+    );
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(match(sim).bumpTicks.size).toBe(bumps.length);
+
+    // The pass is one sweep of six pairs, not an iterative solver, so a four-way
+    // heap takes several of them to come apart: separating 0 from 2 can push 2
+    // back into 1. What matters is that it CONVERGES rather than settling with
+    // two hulls inside each other, so the worst overlap is measured over time.
+    const worstOverlap = (): number => {
+      let worst = 0;
+      for (let i = 0; i < pids.length; i++) {
+        for (let j = i + 1; j < pids.length; j++) {
+          const p = entity(sim, pids[i]).pos;
+          const q = entity(sim, pids[j]).pos;
+          worst = Math.max(worst, 2 * LOANER.bodyRadius - Math.hypot(p.x - q.x, p.z - q.z));
+        }
+      }
+      return worst;
+    };
+    const afterOne = worstOverlap();
+    for (let tick = 0; tick < 24; tick++) {
+      sim.tickCount++;
+      updateRealmRacers(sim.ctx);
+    }
+    expect(worstOverlap()).toBeLessThan(afterOne);
+    expect(worstOverlap()).toBeLessThan(0.01);
   });
 
   it('never lets two machines occupy the same space, and keeps them off the wall', () => {
@@ -573,6 +888,19 @@ describe('The Realm Racers lifecycle', () => {
     // under about half of the receiver's kick, so the machines are driveable
     // again.
     expect(Math.abs(required(racerB.drive, 'drive B').spin)).toBeLessThan(0.55 * Math.abs(kicked));
+  });
+
+  it('keeps the queue in its original order when a grid is refused', () => {
+    const { sim, pids } = makeGrid();
+    for (const pid of pids) sim.realmRacersQueueJoin(pid);
+    expect(sim.realmRacers.queue).toEqual(pids);
+    // Make the head of the grid ineligible without touching the queue itself:
+    // the seating attempt then refuses and has to put the rest back as it found
+    // them. Unshifting one at a time (the two-pilot code) would reverse them.
+    entity(sim, pids[0]).dead = true;
+    updateRealmRacers(sim.ctx);
+    expect(sim.realmRacers.match).toBeNull();
+    expect(sim.realmRacers.queue).toEqual(pids.slice(1));
   });
 
   it('fires no shell outside an active Rally match', () => {

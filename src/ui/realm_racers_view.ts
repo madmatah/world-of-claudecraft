@@ -58,14 +58,14 @@ export type RealmRacersWindowView =
     }
   | {
       kind: 'match';
-      opponent: string;
-      /** Set when the opponent is a house pilot: a practice lap is not a win
-       *  over a player, and the window says so rather than implying one. */
-      opponentBotTier: RallyDriverTier | null;
+      /** True when the whole field is house pilots: a practice lap is not a win
+       *  over players, and the window says so rather than implying one. */
       practice: boolean;
       phase: 'countdown' | 'racing' | 'finished';
       lap: number;
-      position: 1 | 2;
+      /** Live placing and the frozen grid size: "3 of 4", never "second". */
+      position: number;
+      gridSize: number;
       result: 'won' | 'lost' | 'draw' | 'forfeit' | null;
       sig: string;
     };
@@ -76,12 +76,15 @@ export interface RealmRacersHudView {
   countdown: number;
   lap: number;
   totalLaps: number;
-  position: 1 | 2;
+  position: number;
+  gridSize: number;
   elapsed: number;
   speed: number;
   wrongWay: boolean;
-  opponent: string;
-  opponentBotTier: RallyDriverTier | null;
+  /** Seconds left in the winner's chase window, 0 when it is not running. */
+  chaseIn: number;
+  /** Whether the RACE is over, which is when the podium takes the headline. */
+  decided: boolean;
   result: 'won' | 'lost' | 'draw' | 'forfeit' | null;
   returnIn: number;
   /**
@@ -104,11 +107,12 @@ const HUD_OFF: RealmRacersHudView = {
   lap: 1,
   totalLaps: 0,
   position: 1,
+  gridSize: 0,
   elapsed: 0,
   speed: 0,
   wrongWay: false,
-  opponent: '',
-  opponentBotTier: null,
+  chaseIn: 0,
+  decided: false,
   result: null,
   returnIn: 0,
   canForfeit: false,
@@ -122,14 +126,13 @@ export function buildRealmRacersWindowView(info: RealmRacersInfo): RealmRacersWi
   if (match) {
     return {
       kind: 'match',
-      opponent: match.opponent.name,
-      opponentBotTier: match.opponent.botTier,
       practice: match.practice,
       phase: match.phase,
       lap: match.me.lap,
-      position: match.position,
+      position: match.me.position,
+      gridSize: match.gridSize,
       result: match.result,
-      sig: `match|${match.id}|${match.phase}|${match.me.lap}|${match.position}|${match.result ?? '-'}|${match.opponent.botTier ?? '-'}|${match.practice ? 'p' : 'r'}`,
+      sig: `match|${match.id}|${match.phase}|${match.me.lap}|${match.me.position}|${match.gridSize}|${match.result ?? '-'}|${match.practice ? 'p' : 'r'}`,
     };
   }
   const open = info.practiceAvailable;
@@ -189,12 +192,13 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
     countdown: match.countdown,
     lap: match.me.lap,
     totalLaps: match.totalLaps,
-    position: match.position,
+    position: match.me.position,
+    gridSize: match.gridSize,
     elapsed: match.elapsed,
     speed: match.speed,
     wrongWay: match.wrongWay,
-    opponent: match.opponent.name,
-    opponentBotTier: match.opponent.botTier,
+    chaseIn: match.chaseIn,
+    decided: match.decided,
     result: match.result,
     returnIn: match.returnIn,
     canForfeit,
@@ -202,6 +206,9 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
     resetLocked: match.resetLocked,
     // Lock state is a live button property, not structure: keeping it out of
     // the signature preserves keyboard focus when the reset becomes disabled.
-    sig: `${match.id}|${match.opponent.pid}|${match.opponent.botTier ?? '-'}|${canForfeit ? 'quit' : 'done'}|${canReset ? 'reset' : 'no-reset'}`,
+    // The live placing is out for the same reason it is out of the standings
+    // signature: it moves under a close race and the readout row writes it
+    // through the elided writers anyway.
+    sig: `${match.id}|${match.gridSize}|${canForfeit ? 'quit' : 'done'}|${canReset ? 'reset' : 'no-reset'}`,
   };
 }

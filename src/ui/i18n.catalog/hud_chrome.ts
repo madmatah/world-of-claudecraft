@@ -1063,18 +1063,20 @@ export const hudChromeStrings = {
     // close to the idle label in length: the button reserves one fixed width for
     // both, so a centred stats row never shifts when the state flips.
     forfeitConfirm: 'Confirm forfeit',
-    waiting: '{count} pilots waiting for a rival.',
+    waiting: '{count} pilots waiting for a grid.',
     queued: 'Queue position {position} of {count}. Your machine is being readied.',
-    racingAgainst: 'Your race against {name} is underway.',
+    // Every race is a full grid, so the window reports where you sit in the
+    // field rather than naming one rival.
+    racingAgainst: 'Your race is underway. You are running {position} of {total}.',
     // Practice: one button on the front screen, then a setup screen that picks
     // the rival and teaches the controls, so the start countdown is never the
     // first time a player meets the machine. Every practice race runs on its own
     // private copy of the circuit, so it waits on nobody.
     practice: 'Practice',
     practiceIntro:
-      'A private circuit, all yours. Pick your rival, learn the controls, then drop the flag when you are ready.',
+      'A private circuit, all yours. Pick your rivals, learn the controls, then drop the flag when you are ready.',
     practiceUnavailable: 'Every practice circuit is in use right now. Try again in a few minutes.',
-    practiceTierLegend: 'Choose your rival',
+    practiceTierLegend: 'Choose your rivals',
     practiceControlsLegend: 'Your controls',
     practicePlay: 'Start the race',
     practiceBack: 'Back',
@@ -1094,13 +1096,23 @@ export const hudChromeStrings = {
     controlSteerHint: 'Point the nose into the corner. Turning is sharper at moderate speed.',
     controlHandbrake: 'Handbrake',
     controlHandbrakeHint: 'Break grip on purpose and slide the machine through a tight corner.',
-    racingAgainstBot: 'Your practice race against {name} ({tier}) is underway.',
-    versusBot: 'Racing {name} ({tier})',
+    racingAgainstBot: 'Your practice race is underway. You are running {position} of {total}.',
     won: 'Victory. The Evergarden has a new champion.',
-    lost: 'Second place today. The next starting grid awaits.',
+    lost: 'You finish {position} of {total}. The next starting grid awaits.',
     draw: 'Dead heat. The race stewards declare a draw.',
-    versus: 'Racing {name}',
-    position: 'Position {position}/2',
+    // The race's live leaderboard, a panel down the left edge where the party
+    // frames live: one row per machine, portrait plus name like a party frame,
+    // reordered as they trade places. The viewer's own row keeps their name and
+    // takes the marker in a cell of its own, so a long name truncates and the
+    // marker survives; the right-hand column is the lap, or where a pilot who is
+    // no longer driving stopped.
+    standingsYou: 'YOU',
+    standingsFinished: 'Finished',
+    standingsRetired: 'Out',
+    // The end-of-race podium: a race time on each step, to a tenth. The heading
+    // is deliberately absent until there is more than one circuit to name.
+    podiumTime: '{minutes}:{seconds}.{tenths}',
+    position: 'Position {position}/{total}',
     lap: 'Lap {lap}/{total}',
     time: '{minutes}:{seconds}',
     speed: 'SPD {speed}',
@@ -1109,12 +1121,15 @@ export const hudChromeStrings = {
     countdown: 'Engines locked. Start in {seconds}',
     go: 'GO!',
     finalLap: 'FINAL LAP',
+    // The winner is home; everyone still out has this long to cross the line
+    // before the stewards close the race and rank them where they stand.
+    chase: 'FLAG IN {seconds}',
     wonReturn: 'VICTORY. Returning in {seconds}',
     lostReturn: 'FINISH. Returning in {seconds}',
     drawReturn: 'DRAW. Returning in {seconds}',
     logQueued: 'Realm Racers queue position: {position}.',
     logUnqueued: 'You left the Realm Racers queue.',
-    bannerFound: 'Race found: {name}',
+    bannerFound: 'Race found. {count} machines on the grid.',
     bannerGo: 'GO!',
     bannerLap: 'Lap {lap} of {total}',
     bannerWin: 'You win the race!',

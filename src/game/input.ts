@@ -135,6 +135,15 @@ export interface InputDebugState {
   hoverActive: boolean;
 }
 
+/**
+ * How far in and out the chase camera may be pulled. Exported because the
+ * WORLD has to be built around the far end of it: anything a camera can reach
+ * through is something a player will end up looking from inside, which is what
+ * sizes the Realm Racers dressing ring (`realm_racers_track_core.ts`).
+ */
+export const CAMERA_ZOOM_MIN = 3;
+export const CAMERA_ZOOM_MAX = 22;
+
 export class Input {
   keys = new Set<string>();
   leftDown = false;
@@ -396,7 +405,7 @@ export class Input {
 
   /** Move the camera in/out, clamped to the zoom limits. */
   zoomBy(delta: number): void {
-    const next = Math.min(22, Math.max(3, this.camDist + delta));
+    const next = Math.min(CAMERA_ZOOM_MAX, Math.max(CAMERA_ZOOM_MIN, this.camDist + delta));
     if (next === this.camDist) return;
     this.camDist = next;
     this.onCameraDistChange?.(next);

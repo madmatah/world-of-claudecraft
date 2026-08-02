@@ -4613,7 +4613,8 @@ export type SimEvent = { pid?: number } & (
   | {
       type: 'realmRacersFound';
       matchId: number;
-      opponentName: string;
+      /** Everyone else on the grid, in slot order, excluding the recipient. */
+      rivalNames: string[];
       countdownTicks: number;
     }
   | { type: 'realmRacersGo' }
@@ -4626,6 +4627,10 @@ export type SimEvent = { pid?: number } & (
       won: boolean;
       forfeited: boolean;
       winnerName: string;
+      /** Where this pilot classified, 1-based, and out of how many. A four-car
+       *  grid has three losers and they did not all come second. */
+      placing: number;
+      gridSize: number;
       returnTicks: number;
     }
   // An Ground Blast left the barrel. It carries the IMPACT POINT, which is decided

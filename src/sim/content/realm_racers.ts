@@ -70,16 +70,22 @@ export function realmRacersWeaponCharges(abilityId: string): number | null {
 }
 
 /**
- * The Evergarden Racing Society's house pilot, the name a practice or backfill
- * bot races under. A proper noun: it splices verbatim on the client exactly
- * like a player name, and is never localized.
+ * The Evergarden Racing Society's house pilots, the names a practice or backfill
+ * bot races under. Proper nouns: they splice verbatim on the client exactly like
+ * a player name, and are never localized.
  *
- * ONE name on purpose, so every player meets the same rival. Concurrent
- * practice races each take a private copy of the circuit and never see each
- * other, but player names still resolve by name for whispers, so a second live
- * pilot takes a deterministic suffix (`nextBotName`) rather than a twin.
+ * ONE per grid slot, so a four-pilot practice race reads as a field of rivals
+ * rather than as one name with numbers after it. The suffix path in
+ * `nextBotName` survives for the case it was written for (a real player already
+ * carrying a house name, since names still resolve by name for whispers), but it
+ * is the edge case again rather than three rows of every standings strip.
  */
-export const REALM_RACERS_BOT_NAMES: readonly string[] = ['Mat Driftwright'] as const;
+export const REALM_RACERS_BOT_NAMES: readonly string[] = [
+  'Mat Driftwright',
+  'Nessa Thornwake',
+  'Corin Ashvale',
+  'Bryn Kettlespoke',
+] as const;
 
 /**
  * Cosmetic class variety for house pilots. The rally kit overrides `known` and

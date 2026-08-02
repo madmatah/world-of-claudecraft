@@ -19,35 +19,49 @@ function info(over: Partial<RealmRacersInfo> = {}): RealmRacersInfo {
   };
 }
 
-function live(
-  over: Partial<NonNullable<RealmRacersInfo['match']>> = {},
-): NonNullable<RealmRacersInfo['match']> {
+type Match = NonNullable<RealmRacersInfo['match']>;
+type Racer = Match['standings'][number];
+
+function racer(over: Partial<Racer> = {}): Racer {
+  return {
+    pid: 1,
+    name: 'Aster',
+    cls: 'warrior',
+    lap: 2,
+    finished: false,
+    botTier: null,
+    position: 1,
+    finishSeconds: null,
+    retired: false,
+    ...over,
+  };
+}
+
+/** A four-pilot grid with the viewer leading it. */
+function live(over: Partial<Match> = {}): Match {
+  const me = racer();
+  const field = [
+    me,
+    racer({ pid: 2, name: 'Briar', lap: 1, position: 2 }),
+    racer({ pid: 3, name: 'Cass', lap: 1, position: 3 }),
+    racer({ pid: 4, name: 'Dell', lap: 1, position: 4 }),
+  ];
   return {
     id: 7,
-    participantIds: [1, 2],
+    participantIds: [1, 2, 3, 4],
     phase: 'racing',
     countdown: 0,
     countdownTicks: 0,
     elapsed: 61,
+    chaseIn: 0,
     speed: 42,
     wrongWay: false,
     resetLocked: false,
     returnIn: 0,
-    me: {
-      pid: 1,
-      name: 'Aster',
-      lap: 2,
-      finished: false,
-      botTier: null,
-    },
-    opponent: {
-      pid: 2,
-      name: 'Briar',
-      lap: 1,
-      finished: false,
-      botTier: null,
-    },
-    position: 1,
+    me,
+    standings: field,
+    gridSize: 4,
+    decided: false,
     totalLaps: 3,
     practice: false,
     result: null,
@@ -104,29 +118,17 @@ describe('Realm Racers pure views: the practice setup screen', () => {
     expect(a.sig).not.toBe(b.sig);
   });
 
-  it('carries the opponent tier into both surfaces, and into their signatures', () => {
-    const bot = live({
-      opponent: {
-        pid: 2,
-        name: 'Briar',
-        lap: 1,
-        finished: false,
-        botTier: 'ace',
-      },
-    });
-    const human = live();
-    const botWindow = buildRealmRacersWindowView(info({ match: bot }));
-    const humanWindow = buildRealmRacersWindowView(info({ match: human }));
-    if (botWindow.kind !== 'match' || humanWindow.kind !== 'match') {
+  it('distinguishes a practice field from a queued one, in the window signature', () => {
+    const practice = live({ practice: true });
+    const queued = live();
+    const practiceWindow = buildRealmRacersWindowView(info({ match: practice }));
+    const queuedWindow = buildRealmRacersWindowView(info({ match: queued }));
+    if (practiceWindow.kind !== 'match' || queuedWindow.kind !== 'match') {
       throw new Error('expected match views');
     }
-    expect(botWindow.opponentBotTier).toBe('ace');
-    expect(humanWindow.opponentBotTier).toBeNull();
-    expect(botWindow.sig).not.toBe(humanWindow.sig);
-    expect(buildRealmRacersHudView(info({ match: bot })).opponentBotTier).toBe('ace');
-    expect(buildRealmRacersHudView(info({ match: bot })).sig).not.toBe(
-      buildRealmRacersHudView(info({ match: human })).sig,
-    );
+    expect(practiceWindow.practice).toBe(true);
+    expect(queuedWindow.practice).toBe(false);
+    expect(practiceWindow.sig).not.toBe(queuedWindow.sig);
   });
 });
 
@@ -151,7 +153,7 @@ describe('Realm Racers pure views', () => {
       lap: 2,
       totalLaps: 3,
       position: 1,
-      opponent: 'Briar',
+      gridSize: 4,
       elapsed: 61,
     });
     expect(
@@ -165,8 +167,7 @@ describe('Realm Racers pure views', () => {
       info({
         match: live({
           elapsed: 62,
-          position: 2,
-          me: { ...live().me, lap: 3 },
+          me: racer({ lap: 3, position: 2 }),
         }),
       }),
     );
@@ -179,7 +180,7 @@ describe('Realm Racers pure views', () => {
       phase: 'finished',
       returnIn: 6,
       result: 'won',
-      me: { ...live().me, lap: 3, finished: true },
+      me: racer({ lap: 3, finished: true }),
     });
     expect(buildRealmRacersWindowView(info({ match: finished }))).toMatchObject({
       kind: 'match',
@@ -229,7 +230,7 @@ describe('Realm Racers pure views', () => {
           phase: 'finished',
           result: 'lost',
           returnIn: 6,
-          me: { ...live().me, lap: 3, finished: true },
+          me: racer({ lap: 3, finished: true }),
         }),
       }),
     );
@@ -245,7 +246,7 @@ describe('Realm Racers pure views', () => {
       phase: 'finished',
       returnIn: 6,
       result: 'draw',
-      me: { ...live().me, lap: 3, finished: true },
+      me: racer({ lap: 3, finished: true }),
     });
     expect(buildRealmRacersWindowView(info({ match: finished }))).toMatchObject({
       kind: 'match',
