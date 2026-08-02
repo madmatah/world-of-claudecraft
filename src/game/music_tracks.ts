@@ -70,9 +70,11 @@ export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
  *  the other groups stay undownloaded, since reaching them means a loading
  *  screen or a long ride.
  *
- *  A Realm Racers circuit therefore gets its OWN group, never a shared "every
- *  circuit" one: you never cross from one circuit to another without a race
- *  start, so grouping them would download every circuit's music to play one. */
+ *  The unit is the TRACK, not the place that plays it: two Realm Racers circuits
+ *  of the same zone may share one track and therefore its group, but two
+ *  different circuit tracks must never share a group, or activating either would
+ *  download both. You never cross from one circuit to another without a race
+ *  start, so there is nothing to prewarm across them. */
 export const AREA_TRACK_GROUP: Record<AreaTrackId, string> = {
   sowfield_waiting: 'sowfield',
   sowfield_match: 'sowfield',

@@ -203,20 +203,22 @@ describe('Realm Racers music: the track comes off the circuit, not the band', ()
     }
   });
 
-  it('ships a url and a private group for every circuit track', () => {
-    // A circuit naming a track with no file would loop a 404; a circuit sharing
-    // a GROUP with another would download that other circuit's music too.
-    const groups = new Map<string, string>();
+  it('ships a url for every circuit track, and one group per TRACK', () => {
+    // Two circuits MAY share a track: circuits of the same zone wear the same
+    // music, and that is a feature, not a collision. What must not happen is two
+    // DIFFERENT tracks sharing a prewarm group, because activating either would
+    // download both, and you never cross from one circuit to another without a
+    // race start. So the rule is one group per track, not one per circuit.
+    const trackOfGroup = new Map<string, AreaTrackId>();
     for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
       expect(isAreaTrackId(circuit.musicTrack), `${circuit.id} track is shipped`).toBe(true);
       const track = circuit.musicTrack as AreaTrackId;
       expect(AREA_TRACK_URLS[track], `${circuit.id} url`).toBeTruthy();
       const group = AREA_TRACK_GROUP[track];
-      const owner = groups.get(group);
-      expect(owner ?? circuit.id, `${circuit.id} shares group ${group} with ${owner}`).toBe(
-        circuit.id,
-      );
-      groups.set(group, circuit.id);
+      expect(group, `${circuit.id} group`).toBeTruthy();
+      const owner = trackOfGroup.get(group);
+      expect(owner ?? track, `group ${group} carries both ${owner} and ${track}`).toBe(track);
+      trackOfGroup.set(group, track);
       expect(isRealmRacersAreaTrack(track)).toBe(true);
     }
     // The Sowfield is not a circuit, so a new race must never restart it.
