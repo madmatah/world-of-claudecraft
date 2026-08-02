@@ -49,6 +49,7 @@ import {
   realmRacersMatchOf,
   realmRacersStartMatch,
 } from '../src/sim/social/realm_racers';
+import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
 import { TICK_RATE } from '../src/sim/types';
 import { addAt, makeWorld } from './vale_cup_util';
 
@@ -495,5 +496,45 @@ describe('Realm Racers circuits: which one a race lands on', () => {
     match.circuitId = 'a_circuit_that_shipped_last_week';
     expect(realmRacersCircuitOf(match).id).toBe(REALM_RACERS_PRACTICE_CIRCUIT_ID);
     expect(() => sim.tick()).not.toThrow();
+  });
+});
+
+describe('Realm Racers dev race: reaching a circuit without queueing', () => {
+  it('seats the caller on the named circuit against a full grid of house pilots', () => {
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const target = realmRacersCompetitionCircuits()[0];
+    expect(startRealmRacersDevRace(sim, target.id, 'ace', human)).toBe(true);
+    const match = realmRacersMatchOf(sim.ctx, human);
+    if (!match) throw new Error('no race');
+    expect(match.circuitId).toBe(target.id);
+    expect(match.pids).toHaveLength(REALM_RACERS_GRID_SIZE);
+    // The PUBLIC lane, not a private copy: that is the lane a real race drives
+    // and therefore the one worth testing a circuit on.
+    expect(match.practice).toBeNull();
+    expect(match.origin).toEqual(realmRacersLaneOffset(realmRacersPublicLane(target)));
+  });
+
+  it('races the practice circuit too, which no queue can reach', () => {
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    expect(startRealmRacersDevRace(sim, REALM_RACERS_PRACTICE_CIRCUIT_ID, 'rookie', human)).toBe(
+      true,
+    );
+    expect(realmRacersMatchOf(sim.ctx, human)?.circuitId).toBe(REALM_RACERS_PRACTICE_CIRCUIT_ID);
+  });
+
+  it('refuses an unauthored circuit, and a pilot already racing', () => {
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    expect(startRealmRacersDevRace(sim, 'no_such_circuit', 'ace', human)).toBe(false);
+    expect(realmRacersMatchOf(sim.ctx, human)).toBeNull();
+    // And it leaks no house pilot when it refuses.
+    expect(sim.realmRacers.bots.size).toBe(0);
+
+    expect(startRealmRacersDevRace(sim, REALM_RACERS_PRACTICE_CIRCUIT_ID, 'ace', human)).toBe(true);
+    expect(startRealmRacersDevRace(sim, REALM_RACERS_PRACTICE_CIRCUIT_ID, 'ace', human)).toBe(
+      false,
+    );
   });
 });

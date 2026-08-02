@@ -152,6 +152,24 @@ export function handleDevChat(
     return null;
   }
 
+  // Race a named circuit right now, against a full grid of house pilots. The
+  // ordinary way onto a competition circuit is to queue and wait out the
+  // backfill, which is minutes per attempt while a circuit is being tuned.
+  const rallyMatch = /^\/(?:dev\s+rally|devrally)\s+(\S+)(?:\s+(\S+))?\s*$/i.exec(raw);
+  if (rallyMatch) {
+    const circuitId = rallyMatch[1];
+    const tier = rallyMatch[2] ?? 'ace';
+    const started = ctx.realmRacersDevRace(circuitId, tier, pid);
+    emitDevLog(
+      ctx,
+      pid,
+      started
+        ? `[dev] Racing ${circuitId} against a grid of ${tier} pilots.`
+        : `[dev] Could not start a race on ${circuitId} (unknown circuit, already racing, or the public lane is busy).`,
+    );
+    return null;
+  }
+
   const spawnMatch = /^\/(?:dev\s+spawn|devspawn)\s+(\S+)(?:\s+(\d+))?(?:\s+(\d+))?\s*$/i.exec(raw);
   if (spawnMatch) {
     const templateId = spawnMatch[1];

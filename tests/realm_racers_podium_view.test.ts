@@ -31,7 +31,7 @@ function match(over: Partial<Match> = {}, standings?: Racer[]): Match {
   const me = field.find((row) => row.pid === (over.me?.pid ?? 1)) as Racer;
   return {
     id: 7,
-    circuitId: 'evergarden_garden',
+    circuitId: 'evergarden_practice',
     participantIds: field.map((row) => row.pid),
     phase: 'finished',
     countdown: 0,

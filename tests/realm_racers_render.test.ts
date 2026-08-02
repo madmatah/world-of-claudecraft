@@ -603,7 +603,8 @@ describe('Realm Racers procedural render', () => {
     // The lone landmark stands on its island. Its four flanking statues stood on
     // the APRON instead, which is drivable and carries no collision, so racers
     // drove straight through them.
-    const spot = rallyFountainSpot();
+    const spot = rallyFountainSpot(GARDEN_CIRCUIT);
+    if (!spot) throw new Error('the practice circuit authors a landmark');
     const projection = track.project(spot.x, spot.z);
     expect(projection.lateral - spot.radius).toBeGreaterThan(
       rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, projection.s),

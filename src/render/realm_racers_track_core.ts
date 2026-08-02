@@ -646,7 +646,6 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
 }
 
 /** Where the infield landmark sits, relative to the region origin. */
-const FOUNTAIN_OFFSET = { x: -4, z: 4 };
 const FOUNTAIN_SCALE = 2.2;
 /** Authored basin radius of the tiered fountain at scale 1. */
 const FOUNTAIN_SOURCE_RADIUS = 3.3;
@@ -657,10 +656,12 @@ const FOUNTAIN_SOURCE_RADIUS = 3.3;
  * statues; those stood on the APRON, which is drivable, so racers drove through
  * them. The infield now carries the lake, the island, and nothing else.
  */
-export function rallyFountainSpot(): RallyFountainSpot {
+export function rallyFountainSpot(circuit: RealmRacersCircuit): RallyFountainSpot | null {
+  const at = circuit.landmark;
+  if (!at) return null;
   return {
-    x: REALM_RACERS_ORIGIN.x + FOUNTAIN_OFFSET.x,
-    z: REALM_RACERS_ORIGIN.z + FOUNTAIN_OFFSET.z,
+    x: REALM_RACERS_ORIGIN.x + at.x,
+    z: REALM_RACERS_ORIGIN.z + at.z,
     radius: FOUNTAIN_SOURCE_RADIUS * FOUNTAIN_SCALE,
     scale: FOUNTAIN_SCALE,
   };

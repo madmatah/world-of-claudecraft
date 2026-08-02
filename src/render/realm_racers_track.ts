@@ -604,11 +604,14 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   let lastStartLightSignal = '';
   buildFlowers(circuit, group);
 
-  // --- the infield landmark, on its island out in the water ---
-  const fountainSpot = rallyFountainSpot();
-  const fountainScale = fountainSpot.scale;
-  const fountain = buildTieredFountain(fountainSpot.x, fountainSpot.z, GRASS_Y, fountainScale);
-  group.add(fountain);
+  // --- the infield landmark, on its island out in the water, where the circuit
+  // authored one. A circuit with no room for it simply has none.
+  const fountainSpot = rallyFountainSpot(circuit);
+  const fountainScale = fountainSpot?.scale ?? 1;
+  const fountain = fountainSpot
+    ? buildTieredFountain(fountainSpot.x, fountainSpot.z, GRASS_Y, fountainScale)
+    : null;
+  if (fountain) group.add(fountain);
 
   // --- the dressing ring, every piece outside the perimeter by construction ---
   const dressing = rallyDressingSpots(circuit);
@@ -724,7 +727,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
           startLightLenses[i].material = i < signal.litCount ? on : startLightOff;
       }
       // The fountain's tiny breath is cosmetic and frame-time based.
-      fountain.scale.setScalar(fountainScale + Math.sin(time * 1.7) * 0.006);
+      fountain?.scale.setScalar(fountainScale + Math.sin(time * 1.7) * 0.006);
     },
   };
 }

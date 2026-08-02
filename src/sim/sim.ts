@@ -569,6 +569,7 @@ import {
   partyFrameIncomingHeals,
   partyFrameRole,
 } from './party_frame_info';
+import { isRallyDriverTier } from './realm_racers_driver';
 import { DungeonFinderMachine } from './social/dungeon_finder';
 import * as fiestaMod from './social/fiesta';
 // A3: Fiesta tuning consts moved to social/fiesta.ts; these five are read back here
@@ -5235,6 +5236,10 @@ export class Sim {
         valeCupMod.vcupSportShove(sim.ctx, caster, target, distance),
       realmRacersFireGroundBlast: (caster) =>
         realmRacersMod.realmRacersFireGroundBlast(sim.ctx, caster),
+      realmRacersDevRace: (circuitId, tier, pid) =>
+        isRallyDriverTier(tier)
+          ? realmRacersBotsMod.startRealmRacersDevRace(sim, circuitId, tier, pid)
+          : false,
     };
     return createSimContext(host);
   }

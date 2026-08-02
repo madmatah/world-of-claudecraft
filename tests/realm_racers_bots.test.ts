@@ -13,7 +13,10 @@ import { RALLY_DRIVER_TIERS, type RallyDriverTier } from '../src/sim/realm_racer
 import {
   REALM_RACERS_GRID_SIZE,
   REALM_RACERS_LANE_DZ,
+  REALM_RACERS_LANES,
   realmRacersLaneAt,
+  realmRacersLaneOffset,
+  realmRacersPracticeLanes,
 } from '../src/sim/realm_racers_layout';
 import type { Sim } from '../src/sim/sim';
 import {
@@ -169,7 +172,11 @@ describe('Realm Racers practice: nobody ever waits on anybody', () => {
     for (const pid of pids) sim.realmRacersPracticeStart('rookie', pid);
     const slots = pids.map((pid) => matchOf(sim, pid).practice?.slot);
     expect(new Set(slots).size).toBe(pids.length);
-    expect(slots.every((slot) => (slot ?? 0) > 0)).toBe(true);
+    // Every one is a private lane OF THE PRACTICE CIRCUIT. Lane 0 is one of
+    // them now that the practice circuit no longer serves competition, so the
+    // claim is membership, never "not zero".
+    const practiceLanes = realmRacersPracticeLanes().map((lane) => lane.index);
+    expect(slots.every((slot) => practiceLanes.includes(slot ?? -1))).toBe(true);
     // And each racer really stands on their own copy, far from the others.
     const where = pids.map((pid) => {
       const e = sim.entities.get(pid);
@@ -207,15 +214,14 @@ describe('Realm Racers practice: nobody ever waits on anybody', () => {
     // that or a practice lap would appear in a stranger's snapshot.
     expect(REALM_RACERS_LANE_DZ).toBeGreaterThan(300);
     // And the region test claims each copy, with clear plane between them.
-    for (let slot = 0; slot <= GARDEN_CIRCUIT.practiceCopies; slot++) {
-      const z = slot * REALM_RACERS_LANE_DZ;
-      expect(realmRacersLaneAt(RALLY_X, z)?.index, `centre of copy ${slot}`).toBe(slot);
+    for (const lane of realmRacersPracticeLanes()) {
+      const z = lane.index * REALM_RACERS_LANE_DZ;
+      expect(realmRacersLaneAt(RALLY_X, z)?.index, `centre of copy ${lane.index}`).toBe(lane.index);
       expect(realmRacersLaneAt(RALLY_X, z)?.circuit.id).toBe(GARDEN_CIRCUIT.id);
       expect(realmRacersLaneAt(RALLY_X, z + REALM_RACERS_LANE_DZ / 2)).toBeNull();
     }
-    expect(
-      realmRacersLaneAt(RALLY_X, (GARDEN_CIRCUIT.practiceCopies + 1) * REALM_RACERS_LANE_DZ),
-    ).toBeNull();
+    expect(realmRacersPracticeLanes()).toHaveLength(GARDEN_CIRCUIT.practiceCopies);
+    expect(realmRacersLaneAt(RALLY_X, REALM_RACERS_LANES.length * REALM_RACERS_LANE_DZ)).toBeNull();
   });
 });
 
@@ -410,47 +416,52 @@ describe('Realm Racers house pilots: they can actually drive', () => {
     expect(run()).toEqual(first);
   });
 
-  it('drives a practice copy exactly as it drives the public circuit', () => {
+  it('drives a relocated copy exactly as it drives the one at the origin', () => {
     // The frame shift is either exact or it is not, and an eye watching a lap
-    // could never tell. Both races are seated on the SAME sim tick with the same
-    // pids, so the only thing left that differs is the copy: any drift in the
-    // shift then shows up as a different lap time, down to the tick.
-    // Practice runs more laps than the public race, so the comparison stops at
-    // the public length: finish for a queued race, lap past that length for a
-    // practice copy.
-    const race = (kind: 'public' | 'practice'): { ticks: number; originZ: number } => {
-      const sim = makeWorld({ realmRacersBackfill: true });
+    // could never tell. Both races are the SAME race: same tick, same pids, same
+    // house pilots, same circuit. The only thing that differs is the lane the
+    // second one is moved onto before the flag drops, so any drift in the shift
+    // shows up as a different finishing tick.
+    //
+    // This used to compare a practice copy against the PUBLIC race. That premise
+    // died when the practice circuit stopped serving competition: the public
+    // race now runs on a different circuit, so the two are no longer comparable
+    // and only the lane can vary.
+    const race = (lane: number): { ticks: number; originZ: number } => {
+      const sim = makeWorld();
       const human = addAt(sim, 'warrior', 'Aster', -5, -40);
-      if (kind === 'public') {
-        // Backdate the wait so the backfill seats them inside the first tick,
-        // rather than ticking 45 seconds of world to reach the same place.
-        sim.realmRacersQueueJoin(human);
-        sim.realmRacers.queuedAtTick.set(human, -REALM_RACERS_BACKFILL_TICKS);
-        sim.tick();
-      } else {
-        sim.tick();
-        sim.realmRacersPracticeStart(REALM_RACERS_BACKFILL_TIER, human);
-      }
+      sim.tick();
+      sim.realmRacersPracticeStart(REALM_RACERS_BACKFILL_TIER, human);
       const match = matchOf(sim, human);
-      expect(match.practice === null, kind).toBe(kind === 'public');
-      expect(match.totalLaps).toBe(
-        kind === 'public' ? GARDEN_CIRCUIT.laps : GARDEN_CIRCUIT.practiceLaps,
-      );
+      if (lane !== match.practice?.slot) {
+        // Move the whole race onto another lane, before it has driven a yard:
+        // the origin AND every racer shift by the same vector, which is exactly
+        // what seating on that lane would have produced.
+        const delta = realmRacersLaneOffset(lane).z - match.origin.z;
+        match.origin = { x: match.origin.x, z: match.origin.z + delta };
+        if (match.practice) match.practice.slot = lane;
+        for (const pid of match.pids) {
+          const e = sim.entities.get(pid);
+          if (!e) throw new Error('no racer');
+          e.pos = { ...e.pos, z: e.pos.z + delta };
+          e.prevPos = { ...e.pos };
+          sim.rebucket(e);
+        }
+      }
       const progress = match.progress.get(botIn(sim, human));
       if (!progress) throw new Error('no progress');
       const started = sim.tickCount;
-      const reachedPublicLength = (): boolean =>
-        progress.finishedTick !== null || progress.lap > GARDEN_CIRCUIT.laps;
-      for (let i = 0; i < RACE_TICKS && !reachedPublicLength(); i++) sim.tick();
-      expect(reachedPublicLength(), kind).toBe(true);
+      for (let i = 0; i < RACE_TICKS && progress.finishedTick === null; i++) sim.tick();
+      expect(progress.finishedTick, `lane ${lane}`).not.toBeNull();
       return { ticks: sim.tickCount - started, originZ: match.origin.z };
     };
-    const onPublic = race('public');
-    const onCopy = race('practice');
-    expect(onPublic.originZ).toBe(0);
-    expect(onCopy.originZ).toBeGreaterThan(0);
-    expect(onPublic.ticks).toBeGreaterThan(0);
-    expect(onCopy.ticks).toBe(onPublic.ticks);
+    const lanes = realmRacersPracticeLanes().map((l) => l.index);
+    const atOrigin = race(lanes[0]);
+    const relocated = race(lanes[lanes.length - 1]);
+    expect(atOrigin.originZ).toBe(0);
+    expect(relocated.originZ).toBeGreaterThan(0);
+    expect(atOrigin.ticks).toBeGreaterThan(0);
+    expect(relocated.ticks).toBe(atOrigin.ticks);
   });
 
   it('runs a harder tier no slower than a gentler one over the same race', () => {

@@ -25,7 +25,7 @@ function match(standings: Racer[], mePid = 1): Match {
   const me = standings.find((row) => row.pid === mePid) as Racer;
   return {
     id: 7,
-    circuitId: 'evergarden_garden',
+    circuitId: 'evergarden_practice',
     participantIds: standings.map((row) => row.pid),
     phase: 'racing',
     countdown: 0,

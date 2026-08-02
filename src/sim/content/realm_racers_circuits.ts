@@ -104,6 +104,17 @@ export interface RealmRacersCircuit {
   regionHalfZ: number;
   perimeter: RealmRacersPerimeter;
   basin: RealmRacersBasin;
+  /**
+   * The infield landmark, in circuit-local coordinates, or absent for a circuit
+   * with nowhere to put one.
+   *
+   * Authored rather than derived, because it was derived and that was a bug: the
+   * fountain sat at a fixed offset from the BAND origin, which is the middle of
+   * the practice circuit's lake and the middle of another circuit's ROAD. A
+   * landmark belongs to the circuit that has room for it, and nothing about a
+   * circuit's spline can work out where that is.
+   */
+  landmark?: { x: number; z: number };
   /** How far behind the start line the row of machines sits. */
   startBack: number;
   /** Centre-to-centre spacing of the grid slots, yards. Per circuit, so a
@@ -136,17 +147,18 @@ export interface RealmRacersCircuit {
 }
 
 /**
- * The Evergarden garden circuit: a start/finish straight heading +x, a fast
+ * The Evergarden practice circuit: a start/finish straight heading +x, a fast
  * right sweeper, a north straight, a chicane, a long parabolic, and a hairpin
  * back onto the straight. The lap lands at roughly 455 yards. The first control
  * point is deliberately mid-straight so the start line and the grid behind it
  * both sit on straight road.
  *
- * It is the circuit a player learns on, and until a competition circuit is
- * authored it is also the one queued races run on.
+ * It is the circuit a player LEARNS on, which is what its id says: short, wide
+ * and forgiving next to a competition circuit. Until one of those is authored it
+ * is also the circuit queued races run on.
  */
-const EVERGARDEN_GARDEN: RealmRacersCircuit = {
-  id: 'evergarden_garden',
+const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
+  id: 'evergarden_practice',
   controlPoints: [
     { x: -2, z: -54 }, // start / finish line, heading +x
     { x: 38, z: -52 },
@@ -201,6 +213,8 @@ const EVERGARDEN_GARDEN: RealmRacersCircuit = {
   regionHalfZ: 140,
   perimeter: { halfX: 118, halfZ: 92, halfThickness: 0.4, height: 2.2 },
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4.0 },
+  /** Out in the lake, where this circuit's own infield has always put it. */
+  landmark: { x: -4, z: 4 },
   startBack: 7.0,
   /**
    * The row is symmetric about the centerline, so the arithmetic that has to
@@ -224,15 +238,170 @@ const EVERGARDEN_GARDEN: RealmRacersCircuit = {
   practiceLaps: 4,
   timeLimitSeconds: 180,
   musicTrack: 'realm_racers',
-  roles: ['practice', 'competition'],
+  roles: ['practice'],
   practiceCopies: 6,
+};
+
+/**
+ * The Evergarden Express Tour: the first COMPETITION circuit, and the first
+ * drawn in the circuit editor rather than typed by hand.
+ *
+ * Measured through the shared spline at authoring time: a 1469 yard lap over
+ * 1469 samples, turning +360 degrees (so it closes without crossing itself),
+ * winding counter-clockwise (so the infield is on the left normal, which is
+ * what the apron and the basin shore are built on), and a tightest corner of
+ * 15.2 yards against a 8 yard local half-width, a ratio of 1.90 that keeps the
+ * road ribbon's inner edge from folding through its own centre of curvature.
+ *
+ * Its `apronBands` are the reason the shore never self-crosses: where two
+ * stretches of the lap run close to each other the derived apron would push
+ * both shores into the same water, and pulling it in over those arcs is the
+ * only thing in the record that can say so.
+ *
+ * Known and deliberate, to revisit in the seat: the lap is a third longer than
+ * the 1100 yard target (about 37 s a lap at the `ace` pace, so a 3 lap race
+ * still finishes inside the 180 s limit), and it has NO shooting corridor yet:
+ * its closest opposed stretches sit 54 yards apart at a tangent dot of -0.66,
+ * which is 131 degrees rather than the head-on -0.8 a cross-gap shell needs.
+ */
+const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
+  id: 'evergarden_express_tour',
+  controlPoints: [
+    { x: -21.3, z: -87.5 },
+    { x: 24.1, z: -77.5 },
+    { x: 39, z: -73.7 },
+    { x: 56, z: -58.7 },
+    { x: 63.5, z: -45.3 },
+    { x: 61.5, z: -26.6 },
+    { x: 47.4, z: -5.8 },
+    { x: 45, z: 14.4 },
+    { x: 64, z: 42.7 },
+    { x: 58, z: 64.1 },
+    { x: 27.6, z: 84.9 },
+    { x: 8.7, z: 85 },
+    { x: -15.9, z: 70.2 },
+    { x: -18.9, z: 47 },
+    { x: -8.6, z: 19.4 },
+    { x: -7.2, z: 3.8 },
+    { x: -13.4, z: -9.9 },
+    { x: -26, z: -17.9 },
+    { x: -41.2, z: -21.3 },
+    { x: -63.1, z: -22.2 },
+    { x: -80.4, z: -15.1 },
+    { x: -100.7, z: 8.4 },
+    { x: -133.5, z: 20.2 },
+    { x: -184.6, z: 5.9 },
+    { x: -187.4, z: -29.7 },
+    { x: -169.8, z: -53.3 },
+    { x: -130.4, z: -53.5 },
+    { x: -114.9, z: -60.8 },
+    { x: -105.8, z: -83.3 },
+    { x: -93, z: -100.4 },
+  ],
+  widthBands: [
+    { s: 0, halfWidth: 10 },
+    { s: 0.045, halfWidth: 10 },
+    { s: 0.05, halfWidth: 10 },
+    { s: 0.06, halfWidth: 9.8 },
+    { s: 0.08, halfWidth: 9.06 },
+    { s: 0.145, halfWidth: 9.04 },
+    { s: 0.15, halfWidth: 8.92 },
+    { s: 0.155, halfWidth: 8.66 },
+    { s: 0.16, halfWidth: 8.27 },
+    { s: 0.17, halfWidth: 8.08 },
+    { s: 0.235, halfWidth: 8 },
+    { s: 0.41, halfWidth: 8 },
+    { s: 0.5, halfWidth: 8 },
+    { s: 0.705, halfWidth: 8 },
+    { s: 0.715, halfWidth: 8.2 },
+    { s: 0.735, halfWidth: 8.97 },
+    { s: 0.855, halfWidth: 9 },
+    { s: 0.865, halfWidth: 8.8 },
+    { s: 0.88, halfWidth: 8.18 },
+    { s: 0.89, halfWidth: 8 },
+    { s: 0.92, halfWidth: 8 },
+    { s: 0.925, halfWidth: 8.11 },
+    { s: 0.935, halfWidth: 8.79 },
+    { s: 0.945, halfWidth: 9.6 },
+    { s: 0.95, halfWidth: 9.89 },
+    { s: 0.955, halfWidth: 10 },
+    { s: 1, halfWidth: 10 },
+  ],
+  apronBands: [
+    { s: 0, maxApron: 15 },
+    { s: 0.175, maxApron: 15 },
+    { s: 0.18, maxApron: 14.58 },
+    { s: 0.185, maxApron: 13.51 },
+    { s: 0.19, maxApron: 12.05 },
+    { s: 0.195, maxApron: 10.45 },
+    { s: 0.2, maxApron: 8.99 },
+    { s: 0.205, maxApron: 7.92 },
+    { s: 0.21, maxApron: 7.5 },
+    { s: 0.22, maxApron: 7.5 },
+    { s: 0.225, maxApron: 7.92 },
+    { s: 0.23, maxApron: 8.83 },
+    { s: 0.235, maxApron: 9.31 },
+    { s: 0.24, maxApron: 8.91 },
+    { s: 0.245, maxApron: 8.14 },
+    { s: 0.25, maxApron: 7.64 },
+    { s: 0.255, maxApron: 7.51 },
+    { s: 0.3, maxApron: 7.5 },
+    { s: 0.41, maxApron: 7.5 },
+    { s: 0.415, maxApron: 7.92 },
+    { s: 0.42, maxApron: 8.99 },
+    { s: 0.425, maxApron: 10.45 },
+    { s: 0.43, maxApron: 12.05 },
+    { s: 0.435, maxApron: 13.51 },
+    { s: 0.44, maxApron: 14.58 },
+    { s: 0.445, maxApron: 15 },
+    { s: 0.575, maxApron: 15 },
+    { s: 0.58, maxApron: 14.67 },
+    { s: 0.585, maxApron: 13.81 },
+    { s: 0.59, maxApron: 12.64 },
+    { s: 0.595, maxApron: 11.36 },
+    { s: 0.6, maxApron: 10.19 },
+    { s: 0.605, maxApron: 9.33 },
+    { s: 0.61, maxApron: 9 },
+    { s: 0.77, maxApron: 9 },
+    { s: 0.775, maxApron: 9.31 },
+    { s: 0.78, maxApron: 10.19 },
+    { s: 0.785, maxApron: 11.36 },
+    { s: 0.79, maxApron: 12.25 },
+    { s: 0.795, maxApron: 12.09 },
+    { s: 0.8, maxApron: 10.97 },
+    { s: 0.805, maxApron: 9.75 },
+    { s: 0.81, maxApron: 9.15 },
+    { s: 0.815, maxApron: 9.01 },
+    { s: 0.87, maxApron: 9 },
+    { s: 0.875, maxApron: 9.13 },
+    { s: 0.88, maxApron: 9.72 },
+    { s: 0.885, maxApron: 10.89 },
+    { s: 0.89, maxApron: 12.44 },
+    { s: 0.895, maxApron: 13.81 },
+    { s: 0.9, maxApron: 14.67 },
+    { s: 0.905, maxApron: 15 },
+    { s: 1, maxApron: 15 },
+  ],
+  regionHalfX: 265,
+  regionHalfZ: 150,
+  perimeter: { halfX: 217, halfZ: 124, halfThickness: 0.4, height: 2.2 },
+  basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
+  startBack: 7,
+  startSpacing: 5,
+  laps: 3,
+  practiceLaps: 3,
+  timeLimitSeconds: 180,
+  musicTrack: 'realm_racers',
+  roles: ['competition'],
+  practiceCopies: 0,
 };
 
 /** Every circuit, in lane order: the lane table is built by walking this record
  *  in insertion order, so an entry's position here decides where in the band it
  *  sits. Appending is free; reordering MOVES existing circuits. */
 export const REALM_RACERS_CIRCUITS: Record<string, RealmRacersCircuit> = {
-  [EVERGARDEN_GARDEN.id]: EVERGARDEN_GARDEN,
+  [EVERGARDEN_PRACTICE.id]: EVERGARDEN_PRACTICE,
+  [EVERGARDEN_EXPRESS_TOUR.id]: EVERGARDEN_EXPRESS_TOUR,
 };
 
 /** Insertion-ordered list, which is the lane order. */

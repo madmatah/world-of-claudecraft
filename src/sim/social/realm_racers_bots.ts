@@ -33,6 +33,7 @@ import {
   REALM_RACERS_BOT_CLASSES,
   REALM_RACERS_BOT_NAMES,
 } from '../content/realm_racers';
+import { realmRacersCircuitById } from '../content/realm_racers_circuits';
 import { auraSpeedMult } from '../player_motion';
 import {
   driveRealmRacers,
@@ -115,22 +116,26 @@ function despawnRallyBot(sim: Sim, pid: number): void {
  * start, so a failed attempt can never leak a stray player into the world.
  *
  * `humanPids` take the leading grid slots in the order given; the house pilots
- * take the rest. `practiceSlot` picks the copy of the circuit: -1 races on the
- * one PUBLIC circuit (the online backfill, which is finishing a queued race the
- * ordinary way), anything else is a private practice copy.
+ * take the rest. `practiceSlot` picks the lane: **negative** races on the PUBLIC
+ * lane of a competition circuit (the online backfill, which is finishing a
+ * queued race the ordinary way), and any lane index at all, INCLUDING ZERO, is a
+ * private practice copy. Zero is a real practice lane the day the practice
+ * circuit stops serving competition and loses its public lane, so the sentinel
+ * has to be the sign, never falsiness.
  */
 function seatWithBots(
   sim: Sim,
   humanPids: readonly number[],
   tier: RallyDriverTier,
   practiceSlot: number,
+  circuitId?: string,
 ): boolean {
   const seats = REALM_RACERS_GRID_SIZE - humanPids.length;
   if (seats < 0) return false;
   const bots: number[] = [];
   for (let i = 0; i < seats; i++) bots.push(spawnRallyBot(sim, tier, i));
-  const seat = practiceSlot > 0 ? { ownerPid: humanPids[0], slot: practiceSlot } : undefined;
-  if (!realmRacersStartMatch(sim.ctx, [...humanPids, ...bots], seat)) {
+  const seat = practiceSlot >= 0 ? { ownerPid: humanPids[0], slot: practiceSlot } : undefined;
+  if (!realmRacersStartMatch(sim.ctx, [...humanPids, ...bots], seat, circuitId)) {
     for (const pid of bots) despawnRallyBot(sim, pid);
     return false;
   }
@@ -164,6 +169,30 @@ export function startRealmRacersPractice(sim: Sim, tier: RallyDriverTier, pid?: 
   const slot = realmRacersFreePracticeSlot(sim.ctx);
   if (slot < 0) return false;
   return seatWithBots(sim, [id], tier, slot);
+}
+
+/**
+ * Dev only: race a full grid of house pilots on a NAMED circuit, right now.
+ *
+ * It exists because the ordinary way onto a competition circuit is to queue and
+ * wait out the backfill, which is minutes per attempt while a circuit is being
+ * tuned. It takes the circuit's PUBLIC lane rather than a private copy, since
+ * that is the lane a real race drives and the one worth testing, so it refuses
+ * while a public race is already running. Gated by `ctx.devCommands` at its
+ * caller, never reachable in production.
+ */
+export function startRealmRacersDevRace(
+  sim: Sim,
+  circuitId: string,
+  tier: RallyDriverTier,
+  pid?: number,
+): boolean {
+  const resolved = sim.ctx.resolve(pid);
+  if (!resolved) return false;
+  const id = resolved.meta.entityId;
+  if (realmRacersMatchOf(sim.ctx, id)) return false;
+  if (!realmRacersCircuitById(circuitId)) return false;
+  return seatWithBots(sim, [id], tier, -1, circuitId);
 }
 
 /** Online: a queue whose oldest waiter has been there long enough gets house

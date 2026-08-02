@@ -978,6 +978,9 @@ export interface SimContextCallbacks {
   vcupSportDash(caster: Entity, distance: number, catchBall: boolean): void;
   vcupSportShove(caster: Entity, target: Entity, distance: number): void;
   realmRacersFireGroundBlast(caster: Entity): void;
+  /** Dev only, gated by `devCommands` at the call site: seat `pid` on a named
+   *  circuit against a full grid of house pilots, with no queue and no wait. */
+  realmRacersDevRace(circuitId: string, tier: string, pid: number): boolean;
 }
 
 // The seam consumed by extracted modules.
@@ -1482,5 +1485,6 @@ export function createSimContext(host: SimContextHost): SimContext {
     vcupSportDash: host.vcupSportDash,
     vcupSportShove: host.vcupSportShove,
     realmRacersFireGroundBlast: host.realmRacersFireGroundBlast,
+    realmRacersDevRace: host.realmRacersDevRace,
   };
 }

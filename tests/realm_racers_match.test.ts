@@ -3,12 +3,22 @@ import { mountVisualSpec } from '../src/render/mount_visuals';
 import { resolvePosition } from '../src/sim/colliders';
 import { MOUNTS, type MountKey } from '../src/sim/content/mounts';
 import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
+
+/** The circuit a QUEUED race runs on, which is what every case here seats.
+ *  Resolved from the pool rather than named, so these suites follow the
+ *  competition circuit instead of silently measuring the practice one. */
+const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
+
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { forceDismount } from '../src/sim/mounts';
 import { GROUND_BLAST_CONTROL_SPEED_MULT } from '../src/sim/realm_racers_ground_blast';
-import { REALM_RACERS_GRID_SIZE, REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import {
+  REALM_RACERS_GRID_SIZE,
+  REALM_RACERS_ORIGIN,
+  REALM_RACERS_VERGE_MARGIN,
+} from '../src/sim/realm_racers_layout';
+import { rallyBasinEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
@@ -69,13 +79,21 @@ function startMatch(): { sim: Sim; pids: number[]; a: number; b: number } {
 
 function placeAtS(sim: Sim, pid: number, s: number, lateral = 0): void {
   const liveMatch = match(sim);
-  const sample = realmRacersTrack(GARDEN_CIRCUIT).pointAt(s);
+  const sample = realmRacersTrack(RACE_CIRCUIT).pointAt(s);
   teleport(
     sim,
     pid,
     liveMatch.origin.x + sample.x - sample.tz * lateral,
     liveMatch.origin.z + sample.z + sample.tx * lateral,
   );
+}
+
+/** A canonical point on the race's OWN lane. A public race stopped standing on
+ *  lane 0 the day the practice circuit lost its public lane, so an absolute
+ *  placement has to add the match origin or it lands on somebody else's copy. */
+function onLane(sim: Sim, x: number, z: number): { x: number; z: number } {
+  const liveMatch = match(sim);
+  return { x: liveMatch.origin.x + x, z: liveMatch.origin.z + z };
 }
 
 function advanceArc(sim: Sim, pid: number, distance: number): void {
@@ -97,7 +115,7 @@ function crossStart(sim: Sim, pid: number): void {
 }
 
 function completeLap(sim: Sim, pid: number): void {
-  advanceArc(sim, pid, realmRacersTrack(GARDEN_CIRCUIT).length + 12);
+  advanceArc(sim, pid, realmRacersTrack(RACE_CIRCUIT).length + 12);
 }
 
 describe('The Realm Racers loaned machine', () => {
@@ -321,7 +339,7 @@ describe('The Realm Racers lifecycle', () => {
     for (const pid of [a, b]) {
       required(liveMatch.progress.get(pid), `progress ${pid}`).travelled = 120;
     }
-    liveMatch.deadlineTick = sim.tickCount + GARDEN_CIRCUIT.timeLimitSeconds * TICK_RATE;
+    liveMatch.deadlineTick = sim.tickCount + RACE_CIRCUIT.timeLimitSeconds * TICK_RATE;
     sim.tickCount = liveMatch.deadlineTick;
     updateRealmRacers(sim.ctx);
     expect(liveMatch.phase).toBe('finished');
@@ -536,9 +554,18 @@ describe('The Realm Racers lifecycle', () => {
     match(sim).phase = 'racing';
     const racer = entity(sim, a);
     const hp = racer.hp;
-    // The middle of the region is the middle of the BASIN, which is the cut a
-    // cheater actually wants, so it draws the harshest band of the three.
-    teleport(sim, a, REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z);
+    // Past the basin's own shore, on the infield side: that is the cut a cheater
+    // actually wants, and it draws the harshest band of the three. Derived from
+    // the shore rather than aimed at the middle of the region, which is only
+    // water on a circuit shaped like the practice one.
+    const sample = realmRacersTrack(RACE_CIRCUIT).samples[120];
+    const intoTheWater = rallyBasinEdgeOffsetAt(RACE_CIRCUIT, sample.s) + 1;
+    const spot = onLane(
+      sim,
+      sample.x - sample.tz * intoTheWater,
+      sample.z + sample.tx * intoTheWater,
+    );
+    teleport(sim, a, spot.x, spot.z);
     updateRealmRacers(sim.ctx);
     expect(racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA)).toMatchObject({
       kind: 'slow',
@@ -551,10 +578,11 @@ describe('The Realm Racers lifecycle', () => {
     const { sim, a } = startMatch();
     match(sim).phase = 'racing';
     const racer = entity(sim, a);
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
     const at = (offset: number) => {
-      teleport(sim, a, sample.x - sample.tz * offset, sample.z + sample.tx * offset);
+      const spot = onLane(sim, sample.x - sample.tz * offset, sample.z + sample.tx * offset);
+      teleport(sim, a, spot.x, spot.z);
       updateRealmRacers(sim.ctx);
       return racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
     };
@@ -564,7 +592,11 @@ describe('The Realm Racers lifecycle', () => {
     expect(at(sample.halfWidth + 1.5)).toMatchObject({
       value: REALM_RACERS_VERGE_BAND.speedMult,
     });
-    expect(at(sample.halfWidth + 9)).toMatchObject({
+    // OUTWARD, never infield: outward is garden all the way to the wall on every
+    // circuit, while the infield turns to water at a shore each circuit places
+    // for itself. A fixed infield offset reads garden on one circuit and water
+    // on the next.
+    expect(at(-(sample.halfWidth + 9))).toMatchObject({
       value: REALM_RACERS_GARDEN_BAND.speedMult,
     });
     // Coming back re-tunes the SAME aura rather than stacking a second slow.
@@ -579,20 +611,26 @@ describe('The Realm Racers lifecycle', () => {
     const { sim, a } = startMatch();
     match(sim).phase = 'racing';
     const racer = entity(sim, a);
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     // The chicane is the narrowest road on the lap, the start straight the
     // widest: the same lateral offset is on-track at one and off at the other.
     const narrow = track.samples.reduce((best, s) => (s.halfWidth < best.halfWidth ? s : best));
     const wide = track.samples.reduce((best, s) => (s.halfWidth > best.halfWidth ? s : best));
-    expect(narrow.halfWidth).toBeLessThan(wide.halfWidth - 2);
+    // Vacuity guard, derived from the constant that decides it: the midpoint
+    // offset is only off-track at the narrow end if half the spread clears the
+    // verge margin. A circuit with a flatter width profile fails HERE rather
+    // than passing an assertion that proves nothing.
+    expect(wide.halfWidth - narrow.halfWidth).toBeGreaterThan(2 * REALM_RACERS_VERGE_MARGIN);
     const offset = (narrow.halfWidth + wide.halfWidth) / 2;
     const verge = () => racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
 
-    teleport(sim, a, wide.x - wide.tz * offset, wide.z + wide.tx * offset);
+    const onWide = onLane(sim, wide.x - wide.tz * offset, wide.z + wide.tx * offset);
+    teleport(sim, a, onWide.x, onWide.z);
     updateRealmRacers(sim.ctx);
     expect(verge()).toBeUndefined();
 
-    teleport(sim, a, narrow.x - narrow.tz * offset, narrow.z + narrow.tx * offset);
+    const onNarrow = onLane(sim, narrow.x - narrow.tz * offset, narrow.z + narrow.tx * offset);
+    teleport(sim, a, onNarrow.x, onNarrow.z);
     updateRealmRacers(sim.ctx);
     expect(verge()).toMatchObject({ kind: 'slow' });
   });
@@ -642,10 +680,11 @@ describe('The Realm Racers lifecycle', () => {
     const { sim, a } = startMatch();
     match(sim).phase = 'racing';
     const racer = entity(sim, a);
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
     const surfaceAt = (offset: number) => {
-      teleport(sim, a, sample.x - sample.tz * offset, sample.z + sample.tx * offset);
+      const spot = onLane(sim, sample.x - sample.tz * offset, sample.z + sample.tx * offset);
+      teleport(sim, a, spot.x, spot.z);
       updateRealmRacers(sim.ctx);
       const drive = required(racer.drive, 'drive state');
       return { grip: drive.gripMult, drag: drive.dragMult, cap: drive.speedCap };
@@ -657,7 +696,8 @@ describe('The Realm Racers lifecycle', () => {
       drag: REALM_RACERS_VERGE_BAND.dragMult,
       cap: 1,
     });
-    expect(surfaceAt(sample.halfWidth + 9)).toEqual({
+    // Outward, for the reason the band test above spells out.
+    expect(surfaceAt(-(sample.halfWidth + 9))).toEqual({
       grip: REALM_RACERS_GARDEN_BAND.gripMult,
       drag: REALM_RACERS_GARDEN_BAND.dragMult,
       cap: 1,
@@ -680,7 +720,7 @@ describe('The Realm Racers lifecycle', () => {
   it('resolves every unordered pair, and throttles each duel on its own clock', () => {
     const { sim, pids } = startMatch();
     match(sim).phase = 'racing';
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
     const facing = Math.atan2(sample.tx, sample.tz);
     // The whole field stacked into one heap: four machines is six unordered
@@ -736,22 +776,28 @@ describe('The Realm Racers lifecycle', () => {
   it('never lets two machines occupy the same space, and keeps them off the wall', () => {
     const { sim, a, b } = startMatch();
     match(sim).phase = 'racing';
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
     const racerA = entity(sim, a);
     const racerB = entity(sim, b);
     // Side by side on the road, overlapping by more than half a body.
-    teleport(sim, a, sample.x, sample.z);
-    teleport(sim, b, sample.x - sample.tz * 1.1, sample.z + sample.tx * 1.1);
+    const onRoad = onLane(sim, sample.x, sample.z);
+    const beside = onLane(sim, sample.x - sample.tz * 1.1, sample.z + sample.tx * 1.1);
+    teleport(sim, a, onRoad.x, onRoad.z);
+    teleport(sim, b, beside.x, beside.z);
     updateRealmRacers(sim.ctx);
     const apart = Math.hypot(racerA.pos.x - racerB.pos.x, racerA.pos.z - racerB.pos.z);
     expect(apart).toBeCloseTo(2 * LOANER.bodyRadius, 6);
 
     // Against the garden wall the separation runs ALONG it: a shove may not
     // push anybody through the one hard stop on the circuit.
-    const wallX = REALM_RACERS_ORIGIN.x + GARDEN_CIRCUIT.perimeter.halfX - 0.4;
-    teleport(sim, a, wallX - LOANER.bodyRadius, REALM_RACERS_ORIGIN.z);
-    teleport(sim, b, wallX - LOANER.bodyRadius - 1, REALM_RACERS_ORIGIN.z);
+    const wall = onLane(
+      sim,
+      REALM_RACERS_ORIGIN.x + RACE_CIRCUIT.perimeter.halfX - 0.4,
+      REALM_RACERS_ORIGIN.z,
+    );
+    teleport(sim, a, wall.x - LOANER.bodyRadius, wall.z);
+    teleport(sim, b, wall.x - LOANER.bodyRadius - 1, wall.z);
     required(racerB.drive, 'drive B').slip = -20; // leaning hard into A
     updateRealmRacers(sim.ctx);
     for (const racer of [racerA, racerB]) {
@@ -764,12 +810,12 @@ describe('The Realm Racers lifecycle', () => {
       expect(legal.x).toBeCloseTo(racer.pos.x, 6);
       expect(legal.z).toBeCloseTo(racer.pos.z, 6);
     }
-    expect(racerA.pos.x).toBeLessThanOrEqual(wallX - LOANER.bodyRadius + 1e-6);
+    expect(racerA.pos.x).toBeLessThanOrEqual(wall.x - LOANER.bodyRadius + 1e-6);
   });
 
   it('makes no contact at all outside the racing phase', () => {
     const { sim, a, b } = startMatch();
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
     const racerA = entity(sim, a);
     const racerB = entity(sim, b);
@@ -793,7 +839,7 @@ describe('The Realm Racers lifecycle', () => {
   it('announces a real impact once per throttle window, and a rub not at all', () => {
     const { sim, a, b } = startMatch();
     match(sim).phase = 'racing';
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
     // Both machines pointed down the road, B one body-width off A's right
     // shoulder: their lateral (slip) axis IS the line between them, so the
@@ -847,7 +893,7 @@ describe('The Realm Racers lifecycle', () => {
   it('hands scrape yaw to the receiver when one scrapes past the other', () => {
     const { sim, a, b } = startMatch();
     match(sim).phase = 'racing';
-    const track = realmRacersTrack(GARDEN_CIRCUIT);
+    const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
     const facing = Math.atan2(sample.tx, sample.tz);
     const racerA = entity(sim, a);

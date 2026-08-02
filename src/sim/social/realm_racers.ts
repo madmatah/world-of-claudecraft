@@ -607,14 +607,22 @@ export function realmRacersStartMatch(
   ctx: SimContext,
   pids: readonly number[],
   practice?: RealmRacersPracticeSeat,
+  circuitId?: string,
 ): boolean {
-  return startMatch(ctx, pids, practice);
+  return startMatch(ctx, pids, practice, circuitId);
 }
 
+/**
+ * `circuitId` FORCES the circuit instead of resolving it from the seat, which is
+ * how a caller races a specific one: an unauthored id falls through to the
+ * ordinary resolution rather than refusing, so a stale id can never wedge a
+ * caller into starting nothing.
+ */
 function startMatch(
   ctx: SimContext,
   pids: readonly number[],
   practice?: RealmRacersPracticeSeat,
+  circuitId?: string,
 ): boolean {
   // The public circuit is a single slot; a practice copy is claimed by its
   // caller and is nobody else's to take.
@@ -632,7 +640,9 @@ function startMatch(
   // competition pool. The pool is drawn from POSITIONALLY while it holds one
   // circuit: a random draw is a new site in the shared rng stream, so it lands
   // with the second circuit, in its own commit, behind a parity regen.
-  const circuit = practice ? REALM_RACERS_PRACTICE_CIRCUIT : realmRacersCompetitionCircuits()[0];
+  const circuit =
+    (circuitId === undefined ? undefined : realmRacersCircuitById(circuitId)) ??
+    (practice ? REALM_RACERS_PRACTICE_CIRCUIT : realmRacersCompetitionCircuits()[0]);
   const id = ctx.realmRacers.nextMatchId++;
   const returns = new Map<number, RealmRacersReturn>();
   const pools = new Map<number, ArenaReturnPools>();
@@ -1567,7 +1577,9 @@ export function realmRacersInfoFor(ctx: SimContext, pid: number): RealmRacersInf
     // ever block it. The only thing that can is the realm running out of copies,
     // and the client needs to be able to say so without the sim emitting a
     // sentence for it to re-localize.
-    practiceAvailable: match === null && realmRacersFreePracticeSlot(ctx) > 0,
+    // `>= 0`, never truthiness: lane 0 is a real private copy the moment the
+    // practice circuit stops serving competition and loses its public lane.
+    practiceAvailable: match === null && realmRacersFreePracticeSlot(ctx) >= 0,
   };
 }
 
