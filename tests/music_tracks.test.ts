@@ -45,7 +45,7 @@ describe('remastered soundtrack catalog', () => {
       .update(readFileSync(assetPath(AREA_TRACK_URLS.realm_racers)))
       .digest('hex');
     expect(hash, 'realm racers race track bytes').toBe(
-      'ee8e8fc83501acbb260e843dd8d3c3fc44444c79c4983bb68915ffd102161ae3',
+      '068a25617a603686c973c7c39574597924478752b5466b3105c270412a5eef07',
     );
   });
 
