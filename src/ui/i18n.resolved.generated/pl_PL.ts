@@ -64,7 +64,9 @@ export const pl_PL: EnTranslations = {
       "dungeon": "Loch",
       "difficulty": "Poziom trudności",
       "name": "Nazwa",
-      "spec": "Specjalizacja"
+      "spec": "Specjalizacja",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normalny",
@@ -158,6 +160,10 @@ export const pl_PL: EnTranslations = {
       "raid": {
         "label": "Wejdź do rajdu",
         "description": "Wejdź bezpośrednio na arenę Nythraxis."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Zresetuj blokadę rajdu",

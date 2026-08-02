@@ -229,6 +229,17 @@ export const DEV_COMMAND_ACTIONS: readonly DevCommandAction[] = [
     command: (values) => `/dev raid ${values.raidDifficulty === 'normal' ? 'normal' : 'heroic'}`,
   },
   {
+    id: 'rally',
+    category: 'travel',
+    labelKey: 'devCommand.actions.rally.label',
+    descriptionKey: 'devCommand.actions.rally.description',
+    command: (values) => {
+      const circuit = token(values, 'rallyCircuit');
+      const tier = token(values, 'rallyTier') ?? 'ace';
+      return circuit ? `/dev rally ${circuit} ${tier}` : null;
+    },
+  },
+  {
     id: 'raidreset',
     category: 'travel',
     labelKey: 'devCommand.actions.raidreset.label',

@@ -64,7 +64,9 @@ export const ja_JP: EnTranslations = {
       "dungeon": "ダンジョン",
       "difficulty": "難易度",
       "name": "名前",
-      "spec": "スペック"
+      "spec": "スペック",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "ノーマル",
@@ -158,6 +160,10 @@ export const ja_JP: EnTranslations = {
       "raid": {
         "label": "レイドに入る",
         "description": "ナイスラクシスのレイドアリーナへ直接入ります。"
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "レイドロックアウトをリセット",

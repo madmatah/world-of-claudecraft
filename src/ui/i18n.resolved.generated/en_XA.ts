@@ -64,7 +64,9 @@ export const en_XA: EnTranslations = {
       "dungeon": "[Ðúñĝéóñ]",
       "difficulty": "[Ðíƒƒíçúļţý]",
       "name": "[Ñáɱé]",
-      "spec": "[Šþéç]"
+      "spec": "[Šþéç]",
+      "rallyCircuit": "[Çíŕçúíţ]",
+      "rallyTier": "[Ŕíʋáļ ţíéŕ]"
     },
     "difficulty": {
       "normal": "[Ñóŕɱáļ]",
@@ -158,6 +160,10 @@ export const en_XA: EnTranslations = {
       "raid": {
         "label": "[Éñţéŕ ŕáíð]",
         "description": "[Éñţéŕ ţĥé Ñýţĥŕáẋíš áŕéñá ðíŕéçţļý.]"
+      },
+      "rally": {
+        "label": "[Ŕáçé á çíŕçúíţ]",
+        "description": "[Šţáŕţ á Ŕéáļɱ Ŕáçéŕš ŕáçé óñ ţĥé çĥóšéñ çíŕçúíţ ŕíĝĥţ ñóŵ.]"
       },
       "raidreset": {
         "label": "[Ŕéšéţ ŕáíð ļóçķóúţ]",

@@ -13750,10 +13750,13 @@
     font-size: 11px;
     line-height: 1.35;
   }
+  /* auto-fit, not a fixed three: a card with two fields gave each of them a
+     third of the width and truncated whatever they held (a circuit id ran off
+     the end of its own select). Fields now share the row they actually need. */
   .dev-command-fields {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 8px;
   }
   .dev-command-run {

@@ -64,7 +64,9 @@ export const zh_TW: EnTranslations = {
       "dungeon": "地城",
       "difficulty": "難度",
       "name": "名稱",
-      "spec": "專精"
+      "spec": "專精",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "普通",
@@ -158,6 +160,10 @@ export const zh_TW: EnTranslations = {
       "raid": {
         "label": "進入團隊副本",
         "description": "直接進入尼思拉克西斯競技場。"
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "重設團隊副本鎖定",

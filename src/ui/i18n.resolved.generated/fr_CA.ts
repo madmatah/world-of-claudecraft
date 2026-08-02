@@ -64,7 +64,9 @@ export const fr_CA: EnTranslations = {
       "dungeon": "Donjon",
       "difficulty": "Difficulté",
       "name": "Nom",
-      "spec": "Spécialisation"
+      "spec": "Spécialisation",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const fr_CA: EnTranslations = {
       "raid": {
         "label": "Entrer dans le raid",
         "description": "Entre directement dans l’arène de Nythraxis."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Réinitialiser le verrouillage de raid",

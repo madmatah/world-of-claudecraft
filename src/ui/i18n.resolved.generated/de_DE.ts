@@ -64,7 +64,9 @@ export const de_DE: EnTranslations = {
       "dungeon": "Dungeon",
       "difficulty": "Schwierigkeitsgrad",
       "name": "Name",
-      "spec": "Spezialisierung"
+      "spec": "Spezialisierung",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const de_DE: EnTranslations = {
       "raid": {
         "label": "Schlachtzug betreten",
         "description": "Die Nythraxis-Arena direkt betreten."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Schlachtzugssperren zurücksetzen",

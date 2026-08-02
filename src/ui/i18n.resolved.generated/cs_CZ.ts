@@ -64,7 +64,9 @@ export const cs_CZ: EnTranslations = {
       "dungeon": "Dungeon",
       "difficulty": "Obtížnost",
       "name": "Jméno",
-      "spec": "Specializace"
+      "spec": "Specializace",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normální",
@@ -158,6 +160,10 @@ export const cs_CZ: EnTranslations = {
       "raid": {
         "label": "Vstoupit do raidu",
         "description": "Vstup přímo do arény Nythraxis."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Resetovat uzamčení raidu",

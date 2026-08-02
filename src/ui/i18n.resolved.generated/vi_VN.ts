@@ -64,7 +64,9 @@ export const vi_VN: EnTranslations = {
       "dungeon": "Hầm Ngục",
       "difficulty": "Độ Khó",
       "name": "Tên",
-      "spec": "Chuyên Môn"
+      "spec": "Chuyên Môn",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Thường",
@@ -158,6 +160,10 @@ export const vi_VN: EnTranslations = {
       "raid": {
         "label": "Vào raid",
         "description": "Vào thẳng đấu trường Nythraxis."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Đặt lại khóa raid",

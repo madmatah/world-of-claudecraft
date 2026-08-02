@@ -64,7 +64,9 @@ export const id_ID: EnTranslations = {
       "dungeon": "Dungeon",
       "difficulty": "Tingkat kesulitan",
       "name": "Nama",
-      "spec": "Spesialisasi"
+      "spec": "Spesialisasi",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const id_ID: EnTranslations = {
       "raid": {
         "label": "Masuk raid",
         "description": "Masuki arena Nythraxis secara langsung."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Atur ulang penguncian raid",

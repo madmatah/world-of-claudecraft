@@ -10,6 +10,10 @@
 
 export const pending: Record<string, readonly string[]> = {
   "es": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -89,6 +93,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "es_ES": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -168,6 +176,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "fr_FR": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -247,6 +259,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "fr_CA": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -327,6 +343,10 @@ export const pending: Record<string, readonly string[]> = {
   ],
   "en_CA": [],
   "it_IT": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -406,6 +426,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "de_DE": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -484,11 +508,35 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
   ],
-  "zh_CN": [],
-  "zh_TW": [],
-  "ko_KR": [],
-  "ja_JP": [],
+  "zh_CN": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier"
+  ],
+  "zh_TW": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier"
+  ],
+  "ko_KR": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier"
+  ],
+  "ja_JP": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier"
+  ],
   "pt_BR": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -567,8 +615,17 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wonReturn",
     "hudChrome.rally.wrongWay"
   ],
-  "ru_RU": [],
+  "ru_RU": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier"
+  ],
   "cs_CZ": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -648,6 +705,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "nl_NL": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -727,6 +788,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "pl_PL": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -806,6 +871,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "id_ID": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -885,6 +954,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "tr_TR": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -964,6 +1037,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "sv_SE": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -1043,6 +1120,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "vi_VN": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",
@@ -1122,6 +1203,10 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.rally.wrongWay"
   ],
   "da_DK": [
+    "devCommand.actions.rally.description",
+    "devCommand.actions.rally.label",
+    "devCommand.fields.rallyCircuit",
+    "devCommand.fields.rallyTier",
     "entities.abilities.rally_ground_blast.description",
     "entities.abilities.rally_ground_blast.name",
     "hud.errors.outOfCharges",

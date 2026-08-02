@@ -64,7 +64,9 @@ export const ru_RU: EnTranslations = {
       "dungeon": "Подземелье",
       "difficulty": "Сложность",
       "name": "Имя",
-      "spec": "Специализация"
+      "spec": "Специализация",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Обычная",
@@ -158,6 +160,10 @@ export const ru_RU: EnTranslations = {
       "raid": {
         "label": "Войти в рейд",
         "description": "Войти прямо на арену Нитраксиса."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Сбросить блокировку рейда",

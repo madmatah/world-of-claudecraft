@@ -64,7 +64,9 @@ export const pt_BR: EnTranslations = {
       "dungeon": "Masmorra",
       "difficulty": "Dificuldade",
       "name": "Nome",
-      "spec": "Especialização"
+      "spec": "Especialização",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const pt_BR: EnTranslations = {
       "raid": {
         "label": "Entrar na raide",
         "description": "Entra diretamente na arena de Nythraxis."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Redefinir bloqueio de raide",

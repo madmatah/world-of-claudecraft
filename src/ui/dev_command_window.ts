@@ -1,6 +1,8 @@
 import { DEV_KIT_ROLES } from '../sim/content/dev_kit_roles';
 import { GATHERING_PROFESSIONS } from '../sim/content/professions';
+import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
 import { DUNGEONS, ITEMS, MOBS, QUESTS } from '../sim/data';
+import { RALLY_DRIVER_TIERS } from '../sim/realm_racers_driver';
 import { ALL_CLASSES, MAX_LEVEL } from '../sim/types';
 import type { IWorld } from '../world_api';
 import {
@@ -66,16 +68,23 @@ export interface DevCommandWindowDeps {
   restoreFocus(target: HTMLElement | null): void;
 }
 
+/**
+ * `showId` appends the raw id in parentheses, which is what makes a localized
+ * name actionable in a tool whose commands are typed by id. Pass false when the
+ * display name IS the id: "evergarden_practice (evergarden_practice)" says the
+ * same thing twice and overflows the field doing it.
+ */
 function optionsHtml(
   values: readonly { id: string }[],
   displayName: (value: { id: string }) => string,
+  showId = true,
 ): string {
   return [...values]
     .sort((a, b) => displayName(a).localeCompare(displayName(b)) || a.id.localeCompare(b.id))
-    .map(
-      (value) =>
-        `<option value="${esc(value.id)}">${esc(displayName(value))} (${esc(value.id)})</option>`,
-    )
+    .map((value) => {
+      const label = showId ? `${displayName(value)} (${value.id})` : displayName(value);
+      return `<option value="${esc(value.id)}">${esc(label)}</option>`;
+    })
     .join('');
 }
 
@@ -171,6 +180,18 @@ function actionFields(actionId: string): string {
           tEntity({ kind: 'dungeon', id: dungeon.id, field: 'name' }),
         ),
       )}${selectField('devCommand.fields.difficulty', 'difficulty', `<option value="normal">${esc(t('devCommand.difficulty.normal'))}</option><option value="heroic">${esc(t('devCommand.difficulty.heroic'))}</option>`)}`;
+    case 'rally':
+      return `${selectField(
+        'devCommand.fields.rallyCircuit',
+        'rallyCircuit',
+        optionsHtml(REALM_RACERS_CIRCUIT_LIST, (circuit) => circuit.id, false),
+      )}${selectField(
+        'devCommand.fields.rallyTier',
+        'rallyTier',
+        RALLY_DRIVER_TIERS.map((tier) => `<option value="${esc(tier)}">${esc(tier)}</option>`).join(
+          '',
+        ),
+      )}`;
     case 'raid':
       return selectField(
         'devCommand.fields.difficulty',

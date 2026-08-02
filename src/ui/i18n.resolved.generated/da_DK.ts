@@ -64,7 +64,9 @@ export const da_DK: EnTranslations = {
       "dungeon": "Fangekælder",
       "difficulty": "Sværhedsgrad",
       "name": "Navn",
-      "spec": "Specialisering"
+      "spec": "Specialisering",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const da_DK: EnTranslations = {
       "raid": {
         "label": "Gå ind i raid",
         "description": "Gå direkte ind i Nythraxis-arenaen."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Nulstil raidlåsning",

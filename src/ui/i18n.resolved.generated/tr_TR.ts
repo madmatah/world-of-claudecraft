@@ -64,7 +64,9 @@ export const tr_TR: EnTranslations = {
       "dungeon": "Zindan",
       "difficulty": "Zorluk",
       "name": "Ad",
-      "spec": "Uzmanlık"
+      "spec": "Uzmanlık",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const tr_TR: EnTranslations = {
       "raid": {
         "label": "Akına gir",
         "description": "Doğrudan Nythraxis arenasına gir."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Akın kilidini sıfırla",

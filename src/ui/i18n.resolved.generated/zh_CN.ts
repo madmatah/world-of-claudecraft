@@ -64,7 +64,9 @@ export const zh_CN: EnTranslations = {
       "dungeon": "地下城",
       "difficulty": "难度",
       "name": "名称",
-      "spec": "专精"
+      "spec": "专精",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "普通",
@@ -158,6 +160,10 @@ export const zh_CN: EnTranslations = {
       "raid": {
         "label": "进入团队副本",
         "description": "直接进入尼思拉克西斯竞技场。"
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "重置团队副本锁定",

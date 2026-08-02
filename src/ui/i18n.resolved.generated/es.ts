@@ -64,7 +64,9 @@ export const es: EnTranslations = {
       "dungeon": "Mazmorra",
       "difficulty": "Dificultad",
       "name": "Nombre",
-      "spec": "Especialización"
+      "spec": "Especialización",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const es: EnTranslations = {
       "raid": {
         "label": "Entrar en banda",
         "description": "Entra directamente en la arena de Nythraxis."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Reiniciar bloqueo de banda",

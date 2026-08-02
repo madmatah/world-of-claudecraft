@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
 import { DevCommandWindow, type DevCommandWindowDeps } from '../src/ui/dev_command_window';
 
 function makeWindow(available = true) {
@@ -55,5 +56,25 @@ describe('developer command window', () => {
     expect(fresh?.getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).toBe(fresh);
     expect(document.querySelector('[data-dev-action="spawn"]')).not.toBeNull();
+  });
+});
+
+describe('developer command window: the circuit picker', () => {
+  it('lists every circuit by id ONCE, and sends the chosen one', () => {
+    const { chat, window } = makeWindow();
+    window.toggle();
+    document.querySelector<HTMLButtonElement>('[data-dev-category="travel"]')?.click();
+    const select = document.querySelector<HTMLSelectElement>('[data-dev-field="rallyCircuit"]');
+    expect(select).not.toBeNull();
+    const labels = [...(select?.options ?? [])].map((option) => option.textContent);
+    expect(labels).toEqual([...REALM_RACERS_CIRCUIT_LIST].map((c) => c.id).sort());
+    // The display name IS the id here, so it must not be repeated in parentheses:
+    // that says the same thing twice and overflows the field doing it.
+    for (const label of labels) expect(label).not.toMatch(/\(/);
+
+    const target = REALM_RACERS_CIRCUIT_LIST[REALM_RACERS_CIRCUIT_LIST.length - 1].id;
+    if (select) select.value = target;
+    document.querySelector<HTMLButtonElement>('[data-dev-run="rally"]')?.click();
+    expect(chat).toHaveBeenCalledWith(`/dev rally ${target} rookie`);
   });
 });

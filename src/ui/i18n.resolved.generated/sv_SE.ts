@@ -64,7 +64,9 @@ export const sv_SE: EnTranslations = {
       "dungeon": "Fängelsehåla",
       "difficulty": "Svårighetsgrad",
       "name": "Namn",
-      "spec": "Specialisering"
+      "spec": "Specialisering",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normal",
@@ -158,6 +160,10 @@ export const sv_SE: EnTranslations = {
       "raid": {
         "label": "Gå in i raid",
         "description": "Gå direkt in i Nythraxis arena."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Återställ raidlåsning",

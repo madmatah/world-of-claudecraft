@@ -64,7 +64,9 @@ export const ko_KR: EnTranslations = {
       "dungeon": "던전",
       "difficulty": "난이도",
       "name": "이름",
-      "spec": "전문화"
+      "spec": "전문화",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "일반",
@@ -158,6 +160,10 @@ export const ko_KR: EnTranslations = {
       "raid": {
         "label": "공격대 입장",
         "description": "니트락시스 투기장에 바로 입장합니다."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "공격대 잠금 초기화",

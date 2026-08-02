@@ -64,7 +64,9 @@ export const it_IT: EnTranslations = {
       "dungeon": "Dungeon",
       "difficulty": "Difficoltà",
       "name": "Nome",
-      "spec": "Specializzazione"
+      "spec": "Specializzazione",
+      "rallyCircuit": "Circuit",
+      "rallyTier": "Rival tier"
     },
     "difficulty": {
       "normal": "Normale",
@@ -158,6 +160,10 @@ export const it_IT: EnTranslations = {
       "raid": {
         "label": "Entra nell’incursione",
         "description": "Entra direttamente nell’arena di Nythraxis."
+      },
+      "rally": {
+        "label": "Race a circuit",
+        "description": "Start a Realm Racers race on the chosen circuit right now."
       },
       "raidreset": {
         "label": "Reimposta blocco incursione",
