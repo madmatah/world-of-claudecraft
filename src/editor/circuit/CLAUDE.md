@@ -84,6 +84,16 @@ to grow to one themed circuit per game zone.
   widening a corner is the operator's design, so corners under the road's own
   floor come back by name instead.
 
+## Starting a circuit
+`New blank` and `Load` are two buttons, never one dropdown: a `<select>` fires
+only on a CHANGE, so an operator who had drawn over the starter oval could not
+ask for a fresh one. A blank canvas is a STATE (`drawn`), not a shape: the page
+keeps a valid placeholder record underneath, because a circuit with no curve is
+not something the spline, the readout or the export can represent, and shows and
+offers none of it until the first stroke. Both buttons commit before moving the
+flag, so the undo stack snapshots the state being left and discarding a circuit
+is recoverable.
+
 ## Module split (the page holds no decisions)
 | Module | Owns |
 |---|---|

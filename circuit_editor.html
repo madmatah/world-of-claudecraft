@@ -22,6 +22,8 @@
     select, button, input[type="number"], input[type="text"] { background: #262b38; color: #d7dae2; border: 1px solid #3a4054; border-radius: 4px; padding: 4px 8px; font: inherit; }
     button { cursor: pointer; }
     button:hover { background: #323950; }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    button:disabled:hover { background: #262b38; }
     button.on { background: #2c5d8f; border-color: #3d7ab8; }
     button.primary { background: #2c5d8f; border-color: #3d7ab8; }
     button.primary:hover { background: #366fa9; }
@@ -53,12 +55,20 @@
     #brushLabel.off input { opacity: 0.4; }
     footer { padding: 6px 12px; background: #1b1e27; border-top: 1px solid #2c3040; color: #6f7890; }
     kbd { background: #262b38; border: 1px solid #3a4054; border-radius: 3px; padding: 0 4px; }
+    dialog { background: #1b1e27; color: #d7dae2; border: 1px solid #3a4054; border-radius: 8px; padding: 16px; font: inherit; min-width: 280px; }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+    dialog h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #7f8798; }
+    #loadList { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    #loadList button { text-align: left; }
+    #loadList .sub { color: #6f7890; }
+    #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #4b5268; pointer-events: none; }
   </style>
 </head>
 <body>
   <header>
     <strong>WoC Circuit Editor</strong>
-    <select id="loadSel" title="Start from a shipped circuit, or from a blank oval"></select>
+    <button type="button" id="newBtn" title="Clear the canvas and draw a circuit from nothing">New blank</button>
+    <button type="button" id="loadBtn" title="Start from a shipped circuit, or from a starter oval">Load</button>
     <button type="button" id="modeDraw">Draw</button>
     <button type="button" id="modeHandles">Handles</button>
     <button type="button" id="modeWidth">Width</button>
@@ -74,7 +84,7 @@
     <span id="status"></span>
   </header>
   <main>
-    <div id="viewwrap"><canvas id="view"></canvas></div>
+    <div id="viewwrap"><canvas id="view"></canvas><div id="empty" hidden>draw a closed loop to begin, or press Load</div></div>
     <div id="panel">
       <!-- The readout is rebuilt on every drag; the record form is built once
            and only has its values written back, so an input keeps focus and a
@@ -87,6 +97,11 @@
     <span id="hint"></span>
     <kbd>wheel</kbd> zoom, <kbd>middle drag</kbd> pan, <kbd>ctrl+Z</kbd> undo, <kbd>del</kbd> delete selection
   </footer>
+  <dialog id="loadDialog">
+    <h3>Load a circuit</h3>
+    <div id="loadList"></div>
+    <button type="button" id="loadCancel">Cancel</button>
+  </dialog>
   <script type="module" src="/src/editor/circuit/main.ts"></script>
 </body>
 </html>

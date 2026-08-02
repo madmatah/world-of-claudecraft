@@ -137,6 +137,18 @@ function blankCircuit(): RealmRacersCircuit {
 // ---- state ----
 
 let record: RealmRacersCircuit = blankCircuit();
+/**
+ * Whether the record above is the operator's circuit or the placeholder a blank
+ * canvas stands on.
+ *
+ * A circuit with no curve is not a thing the spline, the readout or the export
+ * can represent, so a blank canvas keeps a valid record underneath and simply
+ * shows and offers NOTHING of it: no road, no panel, no handles, no export. The
+ * first stroke makes it real. Everything else in the page reads a record that
+ * is always well formed, which is what keeps the empty state from being a null
+ * check in twenty places.
+ */
+let drawn = false;
 let track: RallyTrackModel = realmRacersTrack(record);
 let metrics: RealmRacersCircuitMetrics = realmRacersCircuitMetrics(record);
 let mode: Mode = 'draw';
@@ -158,7 +170,7 @@ let paintBefore: number[] | null = null;
 let paintOrigin: CircuitBand[] | null = null;
 let paintFractions: number[] = [];
 let panning: { x: number; z: number; clientX: number; clientY: number } | null = null;
-const undoStack: RealmRacersCircuit[] = [];
+const undoStack: { record: RealmRacersCircuit; drawn: boolean }[] = [];
 const view = { x: 0, z: 0, scale: 2.4 };
 let redrawQueued = false;
 
@@ -172,7 +184,14 @@ const statusEl = document.getElementById('status') as HTMLSpanElement;
 const hintEl = document.getElementById('hint') as HTMLSpanElement;
 const brushInput = document.getElementById('brush') as HTMLInputElement;
 const brushLabel = document.getElementById('brushLabel') as HTMLLabelElement;
-const loadSel = document.getElementById('loadSel') as HTMLSelectElement;
+const emptyEl = document.getElementById('empty') as HTMLDivElement;
+const loadDialog = document.getElementById('loadDialog') as HTMLDialogElement;
+const loadListEl = document.getElementById('loadList') as HTMLDivElement;
+const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
+const fitBoxBtn = document.getElementById('fitBoxBtn') as HTMLButtonElement;
+const fixCornersBtn = document.getElementById('fixCornersBtn') as HTMLButtonElement;
+const copyBtn = document.getElementById('copyBtn') as HTMLButtonElement;
+const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
 const modeButtons: Record<Mode, HTMLButtonElement> = {
   draw: document.getElementById('modeDraw') as HTMLButtonElement,
   handles: document.getElementById('modeHandles') as HTMLButtonElement,
@@ -191,7 +210,7 @@ function setStatus(text: string, cls = ''): void {
  *  geometry and the readout, and schedules a repaint. */
 function commit(next: RealmRacersCircuit, remember = true): void {
   if (remember) {
-    undoStack.push(record);
+    undoStack.push({ record, drawn });
     if (undoStack.length > 100) undoStack.shift();
   }
   record = roundCircuit(next);
@@ -204,8 +223,10 @@ function undo(): void {
   const previous = undoStack.pop();
   if (!previous) return;
   selection = null;
-  commit(previous, false);
+  drawn = previous.drawn;
+  commit(previous.record, false);
   syncForm();
+  refreshChrome();
 }
 
 // ---- view maths (screen only: nothing here is about the circuit) ----
@@ -416,6 +437,12 @@ function draw(): void {
   ctx.fillStyle = '#14161c';
   ctx.fillRect(0, 0, width, height);
 
+  if (!drawn) {
+    // Nothing of the placeholder record is drawn, so a blank canvas really is
+    // blank: only the live stroke, so a gesture is visible as it happens.
+    drawStroke();
+    return;
+  }
   strokeRect(record.regionHalfX, record.regionHalfZ, '#3a4054', [8, 6]);
   strokeRect(record.perimeter.halfX, record.perimeter.halfZ, '#55607a');
   drawSurfaces();
@@ -461,6 +488,7 @@ function problemLine(problem: RealmRacersCircuitProblem): HTMLDivElement {
 
 function paintPanel(): void {
   readoutEl.replaceChildren();
+  if (!drawn) return;
   const shape = document.createElement('table');
   row(shape, 'lap', `${metrics.lapLength.toFixed(1)} yd`);
   row(shape, 'samples', String(metrics.sampleCount));
@@ -798,6 +826,22 @@ function fixCorners(): void {
 
 // ---- pointer routing ----
 
+/** Everything whose availability depends on there being a circuit at all. */
+function refreshChrome(): void {
+  // A blank canvas has exactly one thing to do, so it says so rather than
+  // leaving whatever mode the last circuit was being edited in selected under a
+  // disabled button.
+  if (!drawn && mode !== 'draw') setMode('draw');
+  emptyEl.hidden = drawn;
+  formEl.hidden = !drawn;
+  for (const [key, button] of Object.entries(modeButtons)) {
+    button.disabled = !drawn && key !== 'draw';
+  }
+  for (const button of [fitBtn, fitBoxBtn, fixCornersBtn, copyBtn, saveBtn]) {
+    button.disabled = !drawn;
+  }
+}
+
 function setMode(next: Mode): void {
   mode = next;
   selection = null;
@@ -889,7 +933,7 @@ canvas.addEventListener('pointerdown', (ev) => {
     return;
   }
   if (mode === 'width' || mode === 'apron') {
-    undoStack.push(record);
+    undoStack.push({ record, drawn });
     painting = true;
     paintBefore = paintedQuantity();
     paintOrigin = paintedBands();
@@ -901,7 +945,7 @@ canvas.addEventListener('pointerdown', (ev) => {
   if (hit >= 0) {
     selection = { kind: 'point', index: hit };
     dragging = selection;
-    undoStack.push(record);
+    undoStack.push({ record, drawn });
     requestRedraw();
     return;
   }
@@ -950,6 +994,9 @@ function endGesture(): void {
     const fitted = fitStrokeToControlPoints(stroke);
     if (fitted.length >= MIN_CONTROL_POINTS) {
       commit({ ...record, controlPoints: fitted });
+      // The stroke that turns a blank canvas into a circuit.
+      drawn = true;
+      refreshChrome();
       setMode('handles');
       setStatus(`fitted ${fitted.length} control points from ${stroke.length} stroke points`, 'ok');
       // A freshly drawn loop is whatever size it is, and the enclosure it
@@ -1038,25 +1085,73 @@ for (const [key, button] of Object.entries(modeButtons)) {
   }
 };
 
-const BLANK_OPTION = 'blank oval';
-for (const label of [BLANK_OPTION, ...REALM_RACERS_CIRCUIT_LIST.map((c) => c.id)]) {
-  const option = document.createElement('option');
-  option.value = label;
-  option.textContent = label;
-  loadSel.append(option);
+/**
+ * Starting from nothing. A `<select>` used to do both jobs and did the second
+ * one badly: it only fires on a CHANGE, so an operator who had drawn over the
+ * starter oval and wanted a fresh one had no way to ask for it.
+ */
+function newBlank(): void {
+  stroke = [];
+  selection = null;
+  // Committed BEFORE the flag moves: `commit` snapshots the state it is
+  // leaving, and clearing the flag first made that snapshot say the canvas was
+  // already blank, so undoing a discard restored nothing.
+  commit(blankCircuit());
+  drawn = false;
+  setMode('draw');
+  refreshChrome();
+  fitView();
+  setStatus('blank canvas: draw a closed loop', '');
 }
-loadSel.onchange = () => {
-  const chosen = REALM_RACERS_CIRCUIT_LIST.find((c) => c.id === loadSel.value);
+
+/** Starting from something: the starter oval, or any circuit the game ships. */
+function loadCircuit(circuit: RealmRacersCircuit, label: string): void {
   stroke = [];
   selection = null;
   // A shipped record is loaded under a DRAFT id, so editing it can never hand
   // the memoized derivation of a live circuit a shape the game did not author.
-  commit(chosen ? { ...chosen, id: `draft_${chosen.id}` } : blankCircuit());
+  // Committed before the flag moves, for the same reason as `newBlank`.
+  commit(circuit);
+  drawn = true;
+  setMode('handles');
+  refreshChrome();
   syncForm();
   fitView();
-};
+  setStatus(`loaded ${label}`, 'ok');
+}
+
+const LOAD_CHOICES: { label: string; detail: string; build: () => RealmRacersCircuit }[] = [
+  {
+    label: 'starter oval',
+    detail: 'a plain loop to deform',
+    build: () => ({ ...blankCircuit(), id: 'draft_circuit' }),
+  },
+  ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => ({
+    label: circuit.id,
+    detail: `${circuit.roles.join(' and ')}, ${circuit.laps} laps`,
+    build: () => ({ ...circuit, id: `draft_${circuit.id}` }),
+  })),
+];
+
+for (const choice of LOAD_CHOICES) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  const name = document.createElement('div');
+  name.textContent = choice.label;
+  const detail = document.createElement('div');
+  detail.className = 'sub';
+  detail.textContent = choice.detail;
+  button.append(name, detail);
+  button.onclick = () => {
+    loadDialog.close();
+    loadCircuit(choice.build(), choice.label);
+  };
+  loadListEl.append(button);
+}
+
+(document.getElementById('newBtn') as HTMLButtonElement).onclick = newBlank;
+(document.getElementById('loadBtn') as HTMLButtonElement).onclick = () => loadDialog.showModal();
+(document.getElementById('loadCancel') as HTMLButtonElement).onclick = () => loadDialog.close();
 
 buildForm();
-setMode('draw');
-fitView();
-setStatus('draw a closed loop, then switch to handles');
+newBlank();
