@@ -59,6 +59,18 @@ to grow to one themed circuit per game zone.
   back, so there was nothing to decide: `realmRacersGates` derives them from the
   curve (one per `REALM_RACERS_GATE_SPACING` yards, each slid to the straightest
   road nearby). The editor DRAWS them and never edits them.
+- **A brush paints a STROKE, never a point.** A band table is read piecewise
+  linearly, so setting one breakpoint re-slopes the road all the way round the
+  lap: one click at 30 percent changed 452 of a 454 yard lap. `paintSpan` takes
+  every fraction the pointer visited plus the table as it stood BEFORE the
+  stroke, fills the cells a fast pointer skipped, and lays a plateau with a
+  one-cell shoulder each side, which is how the hand-authored profiles are
+  shaped. Cells the stroke never reached keep their original breakpoints.
+- **The one number in the header is a VALUE, not a brush size.** It means a
+  different quantity in each painting mode with a different legal range, so the
+  field is renamed and re-bounded per mode, and every stroke reports what it
+  changed. It reported nothing at all before, and a default equal to the blank
+  circuit's road made the first stroke a silent no-op that read as a dead tool.
 - **A repair that touches a clean circuit is a broken repair.** `suggestWidthBands`
   returns the authored bands untouched unless some corner genuinely asks for less
   road than the record already gives it, and it never moves a control point:
@@ -69,7 +81,7 @@ to grow to one themed circuit per game zone.
 | Module | Owns |
 |---|---|
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
-| `handles_core.ts` | hit testing, insert/move/delete for the control ring and the two band tables, plus the ordering and minimum-count invariants |
+| `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two band tables and the ordering and minimum-count invariants |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
 | `envelope_core.ts` | what perimeter wall and collision region fit a road of a given size, clamped to the band and the lane depth budget. A convenience, not a rule: the containment rules themselves are in the metrics core |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |

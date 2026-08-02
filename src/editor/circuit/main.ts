@@ -36,6 +36,7 @@ import {
 import { suggestEnvelope } from './envelope_core';
 import { circuitToTypeScript, roundCircuit, validateCircuitPayload } from './export_core';
 import {
+  type CircuitBand,
   deleteControlPoint,
   fromApronBands,
   fromWidthBands,
@@ -44,7 +45,7 @@ import {
   MIN_CONTROL_POINTS,
   moveControlPoint,
   nearestSegment,
-  paintBand,
+  paintSpan,
   toApronBands,
   toWidthBands,
 } from './handles_core';
@@ -58,12 +59,25 @@ type Selection = { kind: 'point'; index: number } | null;
  *  back. Every one of them still draws its marker on the canvas. */
 const MAX_LISTED_PROBLEMS = 10;
 
+/**
+ * What the one number in the header MEANS in each mode, and what it is allowed
+ * to be. It is not a brush SIZE, which is what "brush" says in every other
+ * tool: it is the value the stroke paints, in yards, and the two painting modes
+ * paint two different quantities with two different legal ranges.
+ */
+const BRUSH_FIELDS: Record<Mode, { label: string; min: number; max: number } | null> = {
+  draw: null,
+  handles: null,
+  width: { label: 'road half-width (yd)', min: REALM_RACERS_MIN_HALF_WIDTH, max: 40 },
+  apron: { label: 'apron cap (yd)', min: 0.5, max: REALM_RACERS_APRON_MAX },
+};
+
 const MODE_HINTS: Record<Mode, string> = {
   draw: 'drag anywhere to draw the centerline in one gesture; the fitted curve replaces the stroke on release',
   handles: 'drag a handle to move it, click the curve to insert one, del to delete',
-  width: 'drag along the circuit to paint the road half-width at the brush value',
+  width: 'drag along the circuit to set the road half-width there; the road is twice this wide',
   apron:
-    'drag along the circuit to cap the apron (the drivable garden out to the water); paint the cap wide to remove it',
+    'drag along the circuit to CAP the apron, the drivable garden between the road edge and the water; the cap can only narrow what the corner already allows, so painting it wide removes it',
 };
 
 const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
@@ -121,6 +135,16 @@ let stroke: RallyPoint[] = [];
 let drawing = false;
 let dragging: Selection = null;
 let painting = false;
+/** The painted quantity, sampled before the stroke started, so the stroke can
+ *  report what it actually changed. A paint that lands on a road already at the
+ *  painted value is silent otherwise, which reads as a broken tool. */
+let paintBefore: number[] | null = null;
+/** The band table as it stood when the stroke began, plus every lap fraction
+ *  the pointer has visited since. A stroke is re-applied to the ORIGINAL table
+ *  on every move, which is what keeps it from denting against its own earlier
+ *  points as it extends. */
+let paintOrigin: CircuitBand[] | null = null;
+let paintFractions: number[] = [];
 let panning: { x: number; z: number; clientX: number; clientY: number } | null = null;
 const undoStack: RealmRacersCircuit[] = [];
 const view = { x: 0, z: 0, scale: 2.4 };
@@ -135,6 +159,7 @@ const formEl = document.getElementById('form') as HTMLDivElement;
 const statusEl = document.getElementById('status') as HTMLSpanElement;
 const hintEl = document.getElementById('hint') as HTMLSpanElement;
 const brushInput = document.getElementById('brush') as HTMLInputElement;
+const brushLabel = document.getElementById('brushLabel') as HTMLLabelElement;
 const loadSel = document.getElementById('loadSel') as HTMLSelectElement;
 const modeButtons: Record<Mode, HTMLButtonElement> = {
   draw: document.getElementById('modeDraw') as HTMLButtonElement,
@@ -768,32 +793,74 @@ function setMode(next: Mode): void {
     button.classList.toggle('on', key === next);
   }
   hintEl.textContent = MODE_HINTS[next];
+  const brush = BRUSH_FIELDS[next];
+  brushLabel.classList.toggle('off', brush === null);
+  brushInput.disabled = brush === null;
+  brushLabel.firstChild?.replaceWith(`${brush?.label ?? 'brush'} `);
+  if (brush) {
+    brushInput.min = String(brush.min);
+    brushInput.max = String(brush.max);
+    brushInput.value = String(Math.min(brush.max, Math.max(brush.min, Number(brushInput.value))));
+  }
   requestRedraw();
 }
 
-function paintAt(point: RallyPoint): void {
+/** The quantity the current painting mode edits, per centerline sample. */
+function paintedQuantity(): number[] {
+  return track.samples.map((sample) => (mode === 'width' ? sample.halfWidth : sample.apron));
+}
+
+/** What the stroke that just ended did, in the operator's own units. */
+function reportStroke(): void {
+  const brush = BRUSH_FIELDS[mode];
+  if (!paintBefore || !brush) return;
+  const after = paintedQuantity();
+  let changed = 0;
+  for (let i = 0; i < after.length && i < paintBefore.length; i++) {
+    if (Math.abs(after[i] - paintBefore[i]) > 0.01) changed += track.step;
+  }
   const value = Number(brushInput.value);
-  if (!Number.isFinite(value)) return;
-  const s = fractionAt(point);
-  if (mode === 'width') {
-    const bands = paintBand(fromWidthBands(record.widthBands), s, value, {
-      min: REALM_RACERS_MIN_HALF_WIDTH,
-      max: 40,
-    });
-    commit({ ...record, widthBands: toWidthBands(bands) }, false);
+  if (changed > 0) {
+    setStatus(`${brush.label}: ${changed.toFixed(0)} yd of lap set to ${value}`, 'ok');
     return;
   }
-  const current =
-    record.apronBands ??
-    ([
+  // The case that made this whole readout necessary. Naming the reason is the
+  // difference between "the tool is broken" and "you painted what was there".
+  setStatus(
+    mode === 'width'
+      ? `nothing changed: the road is already ${value} yd there`
+      : `nothing changed: a ${value} yd cap is not below what those corners already allow`,
+    'err',
+  );
+}
+
+/** The table the current painting mode edits, as it stands on the record. */
+function paintedBands(): CircuitBand[] {
+  if (mode === 'width') return fromWidthBands(record.widthBands);
+  return fromApronBands(
+    record.apronBands ?? [
       { s: 0, maxApron: REALM_RACERS_APRON_MAX },
       { s: 1, maxApron: REALM_RACERS_APRON_MAX },
-    ] as const);
-  const bands = paintBand(fromApronBands(current), s, value, {
-    min: 0.5,
-    max: REALM_RACERS_APRON_MAX,
+    ],
+  );
+}
+
+/** Extends the live stroke to this point and re-applies the whole of it. */
+function paintAt(point: RallyPoint): void {
+  const brush = BRUSH_FIELDS[mode];
+  const value = Number(brushInput.value);
+  if (!brush || !paintOrigin || !Number.isFinite(value)) return;
+  paintFractions.push(fractionAt(point));
+  const bands = paintSpan(paintOrigin, paintFractions, value, {
+    min: brush.min,
+    max: brush.max,
   });
-  commit({ ...record, apronBands: toApronBands(bands) }, false);
+  commit(
+    mode === 'width'
+      ? { ...record, widthBands: toWidthBands(bands) }
+      : { ...record, apronBands: toApronBands(bands) },
+    false,
+  );
 }
 
 canvas.addEventListener('pointerdown', (ev) => {
@@ -811,6 +878,9 @@ canvas.addEventListener('pointerdown', (ev) => {
   if (mode === 'width' || mode === 'apron') {
     undoStack.push(record);
     painting = true;
+    paintBefore = paintedQuantity();
+    paintOrigin = paintedBands();
+    paintFractions = [];
     paintAt(point);
     return;
   }
@@ -877,8 +947,12 @@ function endGesture(): void {
       setStatus('stroke too short to fit a loop: draw a bigger one', 'err');
     }
   }
+  if (painting) reportStroke();
   panning = null;
   painting = false;
+  paintBefore = null;
+  paintOrigin = null;
+  paintFractions = [];
   dragging = null;
 }
 

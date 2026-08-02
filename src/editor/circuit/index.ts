@@ -27,7 +27,7 @@ export {
   moveControlPoint,
   nearestSegment,
   type PaintBandOptions,
-  paintBand,
+  paintSpan,
   type SegmentHit,
   toApronBands,
   toWidthBands,

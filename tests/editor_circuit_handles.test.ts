@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 import {
   type CircuitBand,
   deleteControlPoint,
-  FRACTION_SNAP,
   fromApronBands,
   fromWidthBands,
   hitTestControlPoint,
@@ -20,7 +19,7 @@ import {
   MIN_CONTROL_POINTS,
   moveControlPoint,
   nearestSegment,
-  paintBand,
+  paintSpan,
   toApronBands,
   toWidthBands,
 } from '../src/editor/circuit/handles_core';
@@ -95,51 +94,166 @@ describe('circuit editor: the control-point ring', () => {
   });
 });
 
-describe('circuit editor: the band tables', () => {
+describe('circuit editor: painting a band table', () => {
   const flat: CircuitBand[] = [
     { s: 0, value: 10 },
     { s: 1, value: 10 },
   ];
 
-  it('spans the whole lap after every paint', () => {
-    const painted = paintBand(flat, 0.42, 8.5, WIDTH_BRUSH);
-    expect(painted[0].s).toBe(0);
-    expect(painted[painted.length - 1].s).toBe(1);
-    expect(painted).toEqual([...painted].sort((a, b) => a.s - b.s));
-    expect(painted.find((band) => band.s > 0 && band.s < 1)?.value).toBeCloseTo(8.5, 6);
+  /** The table read the way the spline reads it, sampled all the way round. */
+  const profile = (bands: readonly CircuitBand[], steps = 400): number[] =>
+    Array.from({ length: steps }, (_, i) => {
+      const f = i / steps;
+      for (let k = 1; k < bands.length; k++) {
+        const a = bands[k - 1];
+        const b = bands[k];
+        if (f > b.s) continue;
+        const span = b.s - a.s;
+        const t = span <= 0 ? 0 : (f - a.s) / span;
+        return a.value + (b.value - a.value) * t;
+      }
+      return bands[bands.length - 1].value;
+    });
+
+  it('keeps a stroke LOCAL, which is the whole reason it takes a span', () => {
+    // The defect this replaces: a band table is read piecewise linearly, so
+    // setting one breakpoint at 30 percent of the lap re-sloped the road all
+    // the way round it. 452 of a 454 yard lap came back changed by one click.
+    const painted = paintSpan(flat, [0.3], 8, WIDTH_BRUSH);
+    const before = profile(flat);
+    const after = profile(painted);
+    const changed = after.filter((v, i) => Math.abs(v - before[i]) > 0.01).length;
+    // A one-cell stroke plus a cell of ramp each side: three cells of 0.005.
+    expect(changed / after.length).toBeLessThan(0.03);
+    // ...and it really did paint something.
+    expect(Math.min(...after)).toBeCloseTo(8, 6);
   });
 
-  it('keeps the two ends equal, because s=0 and s=1 are the same yard of road', () => {
-    const painted = paintBand(flat, 0, 12, WIDTH_BRUSH);
-    expect(painted[0].value).toBe(12);
-    expect(painted[painted.length - 1].value).toBe(12);
-    // ...and painting at the far end does the same thing.
-    const other = paintBand(flat, 1, 9, WIDTH_BRUSH);
-    expect(other[0].value).toBe(other[other.length - 1].value);
+  it('leaves the far side of the lap untouched to the last decimal', () => {
+    const painted = paintSpan(flat, [0.3], 8, WIDTH_BRUSH);
+    const after = profile(painted);
+    // Half a lap away from a stroke at 0.3, nothing moved at all.
+    for (let i = 0; i < after.length; i++) {
+      const f = i / after.length;
+      if (f > 0.28 && f < 0.32) continue;
+      expect(after[i], `lap fraction ${f}`).toBeCloseTo(10, 6);
+    }
+  });
+
+  it('paints a plateau with a shoulder each side, not a spike', () => {
+    const painted = paintSpan(flat, [0.3, 0.32, 0.34, 0.36], 8, WIDTH_BRUSH);
+    const after = profile(painted, 1000);
+    const at = (f: number) => after[Math.round(f * 1000)];
+    expect(at(0.31)).toBeCloseTo(8, 6);
+    expect(at(0.35)).toBeCloseTo(8, 6);
+    // The shoulders sit one cell outside and carry the ORIGINAL value.
+    expect(at(0.29)).toBeCloseTo(10, 6);
+    expect(at(0.37)).toBeCloseTo(10, 6);
+  });
+
+  it('does not dent against its own earlier points as a drag extends', () => {
+    // Applied to the PRE-STROKE table each time, so a drag is one plateau
+    // rather than a sawtooth of every point it passed through.
+    let bands = flat;
+    const visited: number[] = [];
+    for (let i = 0; i <= 20; i++) {
+      visited.push(0.3 + i * 0.002);
+      bands = paintSpan(flat, visited, 8, WIDTH_BRUSH);
+    }
+    const after = profile(bands, 1000);
+    const inside = after.filter((_, i) => i / 1000 > 0.302 && i / 1000 < 0.338);
+    expect(Math.max(...inside)).toBeCloseTo(8, 6);
+    expect(Math.min(...inside)).toBeCloseTo(8, 6);
+  });
+
+  it('preserves an authored profile the stroke never reached', () => {
+    // A stroke must not flatten a shape it did not paint over.
+    const shaped: CircuitBand[] = [
+      { s: 0, value: 10.5 },
+      { s: 0.18, value: 10.5 },
+      { s: 0.24, value: 9.5 },
+      { s: 0.35, value: 9.5 },
+      { s: 1, value: 10.5 },
+    ];
+    const painted = paintSpan(shaped, [0.7], 8, WIDTH_BRUSH);
+    const before = profile(shaped);
+    const after = profile(painted);
+    for (let i = 0; i < after.length; i++) {
+      const f = i / after.length;
+      if (f > 0.68 && f < 0.72) continue;
+      // To the precision the table is EXPORTED at. A stroke plants breakpoints
+      // carrying the original value rounded to two decimals, so landing one
+      // inside an authored ramp re-slopes it by up to half a centimetre of
+      // road. Asserting more than the record can carry would be asserting
+      // noise.
+      expect(after[i], `lap fraction ${f}`).toBeCloseTo(before[i], 2);
+    }
+    // Including the ramp between two authored breakpoints, not just the flats.
+    expect(after[Math.round(0.21 * after.length)]).toBeCloseTo(10, 1);
+  });
+
+  it('spans the whole lap and keeps its two ends equal', () => {
+    // s = 0 and s = 1 are the same yard of road: a table whose ends differ puts
+    // a step across the start/finish line.
+    for (const fractions of [[0.42], [0.0], [0.99, 0.0, 0.01], [0.5, 0.9]]) {
+      const painted = paintSpan(flat, fractions, 8.5, WIDTH_BRUSH);
+      expect(painted[0].s).toBe(0);
+      expect(painted[painted.length - 1].s).toBe(1);
+      expect(painted[0].value).toBe(painted[painted.length - 1].value);
+      expect(painted).toEqual([...painted].sort((a, b) => a.s - b.s));
+    }
+  });
+
+  it('walks a stroke across the start line as one plateau', () => {
+    const painted = paintSpan(flat, [0.985, 0.99, 0.995, 0.0, 0.005], 8, WIDTH_BRUSH);
+    const after = profile(painted, 1000);
+    expect(after[0]).toBeCloseTo(8, 6);
+    expect(after[990]).toBeCloseTo(8, 6);
+    // ...and the other side of the lap is untouched.
+    expect(after[500]).toBeCloseTo(10, 6);
   });
 
   it('holds the painted value inside the brush range', () => {
-    expect(paintBand(flat, 0.4, 2, WIDTH_BRUSH).find((b) => b.s > 0 && b.s < 1)?.value).toBe(8);
-    expect(paintBand(flat, 0.4, 999, WIDTH_BRUSH).find((b) => b.s > 0 && b.s < 1)?.value).toBe(40);
+    const low = paintSpan(flat, [0.4], 2, WIDTH_BRUSH);
+    expect(Math.min(...profile(low))).toBeCloseTo(8, 6);
+    const high = paintSpan(flat, [0.4], 999, WIDTH_BRUSH);
+    expect(Math.max(...profile(high))).toBeCloseTo(40, 6);
   });
 
-  it('replaces rather than piles up when a drag paints the same place twice', () => {
-    // A pointer drag emits dozens of events across one snapped fraction; without
-    // this the table would grow a breakpoint per event.
+  it('leaves a readable table behind, whatever the stroke did', () => {
     let bands = flat;
-    for (let i = 0; i < 40; i++) bands = paintBand(bands, 0.42 + i * 1e-4, 9, WIDTH_BRUSH);
-    expect(bands.length).toBeLessThanOrEqual(4);
+    const visited: number[] = [];
+    for (let i = 0; i < 300; i++) {
+      visited.push(0.2 + i * 0.001);
+      bands = paintSpan(flat, visited, 8, WIDTH_BRUSH);
+    }
+    expect(bands.length).toBeLessThan(12);
     expect(bands.every((band, i) => i === 0 || band.s > bands[i - 1].s)).toBe(true);
   });
 
-  it('snaps to the fraction grid', () => {
-    const painted = paintBand(flat, 0.4237, 9, WIDTH_BRUSH);
-    const inner = painted.find((band) => band.s > 0 && band.s < 1);
-    expect(inner).toBeDefined();
-    expect(Math.round((inner?.s ?? 0) / FRACTION_SNAP) * FRACTION_SNAP).toBeCloseTo(
-      inner?.s ?? 0,
-      9,
+  it('fills the cells a fast pointer skipped over', () => {
+    // A pointer emits samples, not a path. Four cells apart is an ordinary
+    // quick drag, and without the fill it painted a comb of plateaus with the
+    // dragged-over gaps left at their old width.
+    const sparse = paintSpan(flat, [0.3, 0.32, 0.34, 0.36], 8, WIDTH_BRUSH);
+    const dense = paintSpan(
+      flat,
+      Array.from({ length: 61 }, (_, i) => 0.3 + i * 0.001),
+      8,
+      WIDTH_BRUSH,
     );
+    expect(sparse).toEqual(dense);
+  });
+
+  it('is deterministic, and a drag walked backwards paints the same stretch', () => {
+    const forward = paintSpan(flat, [0.3, 0.31, 0.32], 8, WIDTH_BRUSH);
+    expect(paintSpan(flat, [0.3, 0.31, 0.32], 8, WIDTH_BRUSH)).toEqual(forward);
+    expect(paintSpan(flat, [0.32, 0.31, 0.3], 8, WIDTH_BRUSH)).toEqual(forward);
+  });
+
+  it('returns the table untouched when the stroke touched nothing', () => {
+    expect(paintSpan(flat, [], 8, WIDTH_BRUSH)).toEqual(flat);
+    expect(paintSpan(flat, [Number.NaN], 8, WIDTH_BRUSH)).toEqual(flat);
   });
 
   it('round-trips both record shapes through the neutral band', () => {
