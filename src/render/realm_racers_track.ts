@@ -347,9 +347,7 @@ function buildFlowers(circuit: RealmRacersCircuit, group: THREE.Group): void {
     ...rallyFlowerSpots(circuit, GFX.leanFoliage ? 0.45 : 1),
   ];
   if (spots.length === 0) return;
-  const card = new THREE.PlaneGeometry(FLOWER_WIDTH, FLOWER_HEIGHT);
-  card.translate(0, FLOWER_HEIGHT / 2, 0);
-  const geo = mergeCrossedCards(card);
+  const geo = rallyFlowerCardGeo();
   const map = flowerTuftTexture(RALLY_FLOWER_CARD);
   const mat = configureMaskedDoubleSidedVegetationMaterial(
     GFX.standardMaterials
@@ -376,6 +374,26 @@ function buildFlowers(circuit: RealmRacersCircuit, group: THREE.Group): void {
   mesh.receiveShadow = false;
   mesh.computeBoundingSphere();
   group.add(mesh);
+}
+
+/**
+ * The border flower's crossed card, built once.
+ *
+ * Every track build used to mint its own, which is invisible while circuits are
+ * built once at boot and a leak the moment one is REBUILT (the editor preview
+ * on every edit, a dev draft on every `/dev rallydraft`). It is also what makes
+ * the group's shared-vs-owned split true: `realm_racers_track_dispose_core.ts`
+ * frees a plain mesh's geometry and never an `InstancedMesh`'s, on the promise
+ * that every instanced geometry is a shared one.
+ */
+let flowerCardGeo: THREE.BufferGeometry | null = null;
+
+function rallyFlowerCardGeo(): THREE.BufferGeometry {
+  if (flowerCardGeo) return flowerCardGeo;
+  const card = new THREE.PlaneGeometry(FLOWER_WIDTH, FLOWER_HEIGHT);
+  card.translate(0, FLOWER_HEIGHT / 2, 0);
+  flowerCardGeo = mergeCrossedCards(card);
+  return flowerCardGeo;
 }
 
 /** Two copies of a card at right angles, so a tuft reads from any heading. */

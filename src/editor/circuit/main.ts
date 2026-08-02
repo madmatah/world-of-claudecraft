@@ -194,6 +194,14 @@ const fitBoxBtn = document.getElementById('fitBoxBtn') as HTMLButtonElement;
 const fixCornersBtn = document.getElementById('fixCornersBtn') as HTMLButtonElement;
 const copyBtn = document.getElementById('copyBtn') as HTMLButtonElement;
 const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
+const previewBtn = document.getElementById('previewBtn') as HTMLButtonElement;
+const previewEl = document.getElementById('preview') as HTMLDivElement;
+const previewCanvas = document.getElementById('preview3d') as HTMLCanvasElement;
+const flyBtn = document.getElementById('flyBtn') as HTMLButtonElement;
+const orbitBtn = document.getElementById('orbitBtn') as HTMLButtonElement;
+const flySpeedEl = document.getElementById('flySpeed') as HTMLSelectElement;
+const flyAtEl = document.getElementById('flyAt') as HTMLInputElement;
+const flyLabelEl = document.getElementById('flyLabel') as HTMLSpanElement;
 const modeButtons: Record<Mode, HTMLButtonElement> = {
   draw: document.getElementById('modeDraw') as HTMLButtonElement,
   handles: document.getElementById('modeHandles') as HTMLButtonElement,
@@ -208,6 +216,15 @@ function setStatus(text: string, cls = ''): void {
 
 // ---- the record ----
 
+/**
+ * The 3D preview, once the operator has asked for it.
+ *
+ * Loaded on demand: it drags in Three and a GL context, and the 2D tool is the
+ * one that has to open instantly. Null until the first toggle, and every edit
+ * simply skips it while it is.
+ */
+let preview: import('./preview3d').CircuitPreview | null = null;
+
 /** Every edit lands here: it rounds to what the export carries, re-derives the
  *  geometry and the readout, and schedules a repaint. */
 function commit(next: RealmRacersCircuit, remember = true): void {
@@ -219,6 +236,9 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   track = realmRacersTrack(record);
   metrics = realmRacersCircuitMetrics(record);
   requestRedraw();
+  // The preview debounces this itself: a drag lands one build on release, never
+  // one per pointermove.
+  if (drawn) preview?.show(record);
 }
 
 function undo(): void {
@@ -884,7 +904,7 @@ function refreshChrome(): void {
   for (const [key, button] of Object.entries(modeButtons)) {
     button.disabled = !drawn && key !== 'draw';
   }
-  for (const button of [fitBtn, fitBoxBtn, fixCornersBtn, copyBtn, saveBtn]) {
+  for (const button of [fitBtn, fitBoxBtn, fixCornersBtn, copyBtn, saveBtn, previewBtn]) {
     button.disabled = !drawn;
   }
 }
@@ -1195,6 +1215,94 @@ for (const choice of LOAD_CHOICES) {
   };
   loadListEl.append(button);
 }
+
+// ---- the 3D preview ----
+//
+// The panel is a toggle rather than a second window: the readout is what says
+// whether a circuit is legal, the 3D is what says whether it is any good, and
+// an operator switches between them constantly.
+
+function syncFlyChrome(): void {
+  const flying = preview?.cameraMode === 'fly';
+  flyBtn.classList.toggle('on', flying && (preview?.playing ?? false));
+  orbitBtn.classList.toggle('on', !flying);
+}
+
+async function togglePreview(): Promise<void> {
+  if (preview) {
+    const showing = Boolean(previewEl.hidden);
+    previewEl.hidden = !showing;
+    previewBtn.classList.toggle('on', showing);
+    // Told either way: a hidden preview STOPS rendering rather than drawing a
+    // whole circuit behind the panel, under the 2D drag path.
+    preview.setVisible(showing);
+    if (showing) {
+      preview.show(record);
+      preview.resize();
+    }
+    return;
+  }
+  previewBtn.disabled = true;
+  setStatus('preview: starting', '');
+  try {
+    const { CircuitPreview } = await import('./preview3d');
+    previewEl.hidden = false;
+    previewBtn.classList.add('on');
+    const created = new CircuitPreview({
+      canvas: previewCanvas,
+      onStatus: (text) => setStatus(text, ''),
+    });
+    created.onFlyProgress = (fraction) => {
+      flyAtEl.value = String(Math.round(fraction * 1000));
+      flyLabelEl.textContent = `${Math.round(fraction * 100)}%`;
+    };
+    preview = created;
+    created.frame(metrics.roadHalfX, metrics.roadHalfZ);
+    created.show(record);
+    await created.start();
+    syncFlyChrome();
+  } catch (err) {
+    // A dev page with no WebGL still has a working 2D tool, and saying so beats
+    // a blank half-screen.
+    previewEl.hidden = true;
+    previewBtn.classList.remove('on');
+    setStatus(`preview unavailable: ${err}`, 'err');
+  } finally {
+    previewBtn.disabled = !drawn;
+  }
+}
+
+previewBtn.onclick = () => void togglePreview();
+flyBtn.onclick = () => {
+  if (!preview) return;
+  preview.setFlyPlaying(!(preview.cameraMode === 'fly' && preview.playing));
+  syncFlyChrome();
+};
+orbitBtn.onclick = () => {
+  if (!preview) return;
+  preview.setFlyPlaying(false);
+  preview.setMode('orbit');
+  preview.frame(metrics.roadHalfX, metrics.roadHalfZ);
+  syncFlyChrome();
+};
+flySpeedEl.onchange = () => {
+  preview?.setFlySpeed(flySpeedEl.value === 'scenic' ? 'scenic' : 'race');
+};
+flyAtEl.oninput = () => {
+  const fraction = Number(flyAtEl.value) / 1000;
+  flyLabelEl.textContent = `${Math.round(fraction * 100)}%`;
+  preview?.setFlyFraction(fraction);
+  syncFlyChrome();
+};
+
+window.addEventListener('resize', () => preview?.resize());
+// The page's one teardown. A dev tool is left open for hours and reloaded often;
+// giving the GL context and the built circuit back on the way out is what keeps
+// a reload from stacking contexts until the browser starts dropping the oldest.
+window.addEventListener('pagehide', () => {
+  preview?.dispose();
+  preview = null;
+});
 
 (document.getElementById('newBtn') as HTMLButtonElement).onclick = newBlank;
 (document.getElementById('loadBtn') as HTMLButtonElement).onclick = () => loadDialog.showModal();

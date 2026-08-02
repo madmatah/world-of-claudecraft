@@ -276,10 +276,26 @@ const DEFAULT_FLOWER_KINDS: FlowerKind[] = [
   { p: [245, 195, 60], c: [150, 90, 20] }, // buttercup
 ];
 
+/**
+ * One entry per palette, because this is drawn ONCE per palette and used
+ * forever after.
+ *
+ * It used to mint a fresh 128px DataTexture on every call, which was invisible
+ * while every caller ran at boot and became a leak the moment one of them
+ * started rebuilding: the circuit editor's 3D preview rebuilds its whole track
+ * on every edit, and the dev draft arm rebuilds one per `/dev rallydraft`. It
+ * is also what makes the track group's shared-vs-owned split TRUE rather than
+ * merely intended (see `realm_racers_track_dispose_core.ts`).
+ */
+const flowerTuftCache = new Map<string, THREE.Texture>();
+
 export function flowerTuftTexture(
   kinds: FlowerKind[] = DEFAULT_FLOWER_KINDS,
   balanced = false,
 ): THREE.Texture {
+  const cacheKey = `${balanced ? 'b' : 'p'}:${JSON.stringify(kinds)}`;
+  const cachedTuft = flowerTuftCache.get(cacheKey);
+  if (cachedTuft) return cachedTuft;
   // Ground-cover flowers on a card: green stems with leaf pairs topped by
   // layered petal heads (white daisies, pink cosmos, golden buttercups),
   // drawn realistically enough to read as flowers at tuft scale. Same
@@ -411,6 +427,7 @@ export function flowerTuftTexture(
   tex.magFilter = THREE.LinearFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
+  flowerTuftCache.set(cacheKey, tex);
   return tex;
 }
 
@@ -1447,8 +1464,13 @@ export function sparkleTexture(): THREE.CanvasTexture {
 
 // Kerb stripes: one red block plus one white block per repeat, so the arc
 // length UV lays a classic alternating kerb down the outside of a corner.
+/** Built once. Freshly minted per call it took a new material with it every
+ *  time (`surfaceMat` keys on the map), so a rebuilt track leaked both. */
+let rallyKerb: THREE.CanvasTexture | null = null;
+
 export function rallyKerbTexture(): THREE.CanvasTexture {
-  return makeCanvas(64, (ctx, s) => {
+  if (rallyKerb) return rallyKerb;
+  rallyKerb = makeCanvas(64, (ctx, s) => {
     ctx.fillStyle = '#e8e2d4';
     ctx.fillRect(0, 0, s, s);
     ctx.fillStyle = '#b8402f';
@@ -1457,6 +1479,7 @@ export function rallyKerbTexture(): THREE.CanvasTexture {
     ctx.fillRect(0, 0, s, 3);
     ctx.fillRect(0, s - 3, s, 3);
   });
+  return rallyKerb;
 }
 
 /**
@@ -1513,8 +1536,12 @@ export function rallyGroundBlastMarkerTexture(): THREE.CanvasTexture {
 }
 
 // The start/finish chequer, four blocks across the road per repeat.
+/** Built once, same reason as the kerb above. */
+let rallyStartGrid: THREE.CanvasTexture | null = null;
+
 export function rallyStartGridTexture(): THREE.CanvasTexture {
-  return makeCanvas(64, (ctx, s) => {
+  if (rallyStartGrid) return rallyStartGrid;
+  rallyStartGrid = makeCanvas(64, (ctx, s) => {
     const cell = s / 4;
     for (let row = 0; row < 4; row++) {
       for (let col = 0; col < 4; col++) {
@@ -1523,4 +1550,5 @@ export function rallyStartGridTexture(): THREE.CanvasTexture {
       }
     }
   });
+  return rallyStartGrid;
 }

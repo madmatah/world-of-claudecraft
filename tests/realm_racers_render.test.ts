@@ -356,6 +356,43 @@ describe('Realm Racers procedural render', () => {
     expect(flatSurfaces).toBeGreaterThan(10);
   });
 
+  it('mints its plain-mesh geometry per build and BORROWS every instanced one', async () => {
+    // The premise `realm_racers_track_dispose_core.ts` rests on, proven against
+    // the real builder rather than assumed: it frees a plain mesh's geometry
+    // (minted here) and never an InstancedMesh's (owned by a shared cache), so
+    // a preview rebuild or a re-registered draft would otherwise either leak or
+    // take the authored circuits down with it.
+    const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+    const geometriesOf = (group: THREE.Group, instanced: boolean): THREE.BufferGeometry[] =>
+      group.children
+        .filter(
+          (child): child is THREE.Mesh =>
+            child instanceof THREE.Mesh && child instanceof THREE.InstancedMesh === instanced,
+        )
+        .map((mesh) => mesh.geometry);
+
+    const first = buildRealmRacersTrack(GARDEN_CIRCUIT);
+    const second = buildRealmRacersTrack(GARDEN_CIRCUIT);
+
+    const instancedA = geometriesOf(first.group, true);
+    const instancedB = geometriesOf(second.group, true);
+    expect(instancedA.length).toBeGreaterThan(0);
+    expect(instancedB).toHaveLength(instancedA.length);
+    // Referentially identical, every one: the flower card and the statue used
+    // to be minted per build, which is the leak this pins shut.
+    for (let i = 0; i < instancedA.length; i++) {
+      expect(instancedA[i], `instanced geometry ${i}`).toBe(instancedB[i]);
+    }
+
+    const plainA = geometriesOf(first.group, false);
+    const plainB = geometriesOf(second.group, false);
+    expect(plainA.length).toBeGreaterThan(0);
+    expect(plainB).toHaveLength(plainA.length);
+    // And every plain one is fresh, which is what makes disposing it correct.
+    const owned = new Set<THREE.BufferGeometry>(plainA);
+    for (const geometry of plainB) expect(owned.has(geometry)).toBe(false);
+  });
+
   it('sweeps the road as one continuous ribbon over every centerline sample', async () => {
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
     const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);

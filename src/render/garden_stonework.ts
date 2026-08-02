@@ -31,9 +31,15 @@ function mergeGeos(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
+/** Built once. Both callers hand it straight to an `InstancedMesh` and neither
+ *  mutates it, so one merged geometry serves every statue in the world; minting
+ *  a fresh one per call leaked one per rebuilt Realm Racers track. */
+let statueGeo: THREE.BufferGeometry | null = null;
+
 // A weathered garden statue: a plinth, a robed figure, a bowed head. Kept
 // abstract on purpose: at game distance it reads as statuary, not a person.
 export function gardenStatueGeo(): THREE.BufferGeometry {
+  if (statueGeo) return statueGeo;
   const parts: THREE.BufferGeometry[] = [];
   const plinth = new THREE.BoxGeometry(1.5, 0.9, 1.5);
   plinth.translate(0, 0.45, 0);
@@ -48,7 +54,8 @@ export function gardenStatueGeo(): THREE.BufferGeometry {
   const head = new THREE.SphereGeometry(0.2, 6, 5);
   head.translate(0.05, 3.32, 0.08); // bowed, a little forward
   parts.push(head.toNonIndexed());
-  return mergeGeos(parts);
+  statueGeo = mergeGeos(parts);
+  return statueGeo;
 }
 
 export function gardenStatueMaterial(): THREE.Material {

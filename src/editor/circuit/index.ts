@@ -33,6 +33,27 @@ export {
   toWidthBands,
 } from './handles_core';
 export {
+  advanceFlyThrough,
+  circuitLocalSample,
+  createPreviewOrbit,
+  flySpeedYardsPerSecond,
+  flyThroughPose,
+  flyThroughPoseAt,
+  orbitDrag,
+  orbitFrame,
+  orbitPose,
+  orbitZoom,
+  PREVIEW_CHASE_PROFILE,
+  PREVIEW_FLY_SPEED_FRACTIONS,
+  PREVIEW_ORBIT_LIMITS,
+  PREVIEW_REBUILD_DEBOUNCE_MS,
+  type PreviewChaseProfile,
+  type PreviewFlySpeed,
+  type PreviewOrbitState,
+  type PreviewPose,
+  type PreviewTrackSampler,
+} from './preview_camera_core';
+export {
   fitStrokeToControlPoints,
   perpendicularDistance,
   resampleClosed,

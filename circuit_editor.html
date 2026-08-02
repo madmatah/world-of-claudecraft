@@ -33,6 +33,16 @@
     main { flex: 1; display: flex; min-height: 0; }
     #viewwrap { flex: 1; position: relative; min-width: 0; }
     canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    /* The 3D preview takes half the drawing area rather than a floating pane:
+       the two views answer different questions about the same circuit and are
+       read side by side. */
+    #preview { flex: 1; position: relative; min-width: 0; border-left: 1px solid #2c3040; display: flex; flex-direction: column; }
+    #preview[hidden] { display: none; }
+    #preview canvas { cursor: grab; flex: 1; min-height: 0; }
+    #preview canvas:active { cursor: grabbing; }
+    #previewBar { display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: #1b1e27; border-bottom: 1px solid #2c3040; flex-wrap: wrap; }
+    #previewBar label { color: #9aa3b5; }
+    #flyAt { flex: 1; min-width: 90px; }
     #panel { width: 340px; flex: none; overflow-y: auto; background: #191c24; border-left: 1px solid #2c3040; padding: 10px; }
     #panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7f8798; margin: 14px 0 6px; }
     #panel h2:first-child { margin-top: 0; }
@@ -62,6 +72,9 @@
     #loadList button { text-align: left; }
     #loadList .sub { color: #6f7890; }
     #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #4b5268; pointer-events: none; }
+    /* An id rule with a display outranks the UA's [hidden] { display: none }, so
+       the hint kept showing over a loaded circuit. Same trap #preview handles. */
+    #empty[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -79,12 +92,29 @@
     <button type="button" id="fitBtn">Fit view</button>
     <button type="button" id="fitBoxBtn" title="Size the perimeter wall and the collision region to the road">Fit enclosure</button>
     <button type="button" id="fixCornersBtn" title="Narrow the road wherever a corner is tighter than it">Fix corners</button>
+    <button type="button" id="previewBtn" title="Show the circuit in 3D, through the game's own track builder">3D</button>
     <button type="button" id="copyBtn" class="primary">Copy record</button>
     <button type="button" id="saveBtn">Save draft</button>
     <span id="status"></span>
   </header>
   <main>
     <div id="viewwrap"><canvas id="view"></canvas><div id="empty" hidden>draw a closed loop to begin, or press Load</div></div>
+    <!-- The 3D preview. It renders the draft through buildRealmRacersTrack, the
+         same builder the game runs, so a later dressing or theme pass shows up
+         here for free. -->
+    <div id="preview" hidden>
+      <div id="previewBar">
+        <button type="button" id="flyBtn" title="Ride the racing line at pace">Fly</button>
+        <button type="button" id="orbitBtn" title="Orbit the whole circuit from above">Orbit</button>
+        <select id="flySpeed" title="Fly-through pace">
+          <option value="race">race pace</option>
+          <option value="scenic">scenic</option>
+        </select>
+        <input type="range" id="flyAt" min="0" max="1000" value="0" title="Where on the lap the fly-through sits" />
+        <span id="flyLabel">0%</span>
+      </div>
+      <canvas id="preview3d"></canvas>
+    </div>
     <div id="panel">
       <!-- The readout is rebuilt on every drag; the record form is built once
            and only has its values written back, so an input keeps focus and a
