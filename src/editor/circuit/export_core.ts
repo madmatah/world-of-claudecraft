@@ -16,9 +16,11 @@
 //
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
-import type {
-  RealmRacersCircuit,
-  RealmRacersCircuitRole,
+import {
+  RALLY_BARRIER_KINDS,
+  type RallyBarrierKind,
+  type RealmRacersCircuit,
+  type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
 
@@ -52,6 +54,14 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
       s: round(band.s, FRACTION_PLACES),
       halfWidth: round(band.halfWidth, BAND_PLACES),
     })),
+    ...(circuit.barrierBands
+      ? {
+          barrierBands: circuit.barrierBands.map((band) => ({
+            s: round(band.s, FRACTION_PLACES),
+            kind: band.kind,
+          })),
+        }
+      : {}),
     ...(circuit.apronBands
       ? {
           apronBands: circuit.apronBands.map((band) => ({
@@ -99,12 +109,26 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
     }
     lines.push('  ],');
   }
+  if (c.barrierBands) {
+    lines.push('  barrierBands: [');
+    for (const band of c.barrierBands) {
+      lines.push(`    { s: ${band.s}, kind: '${band.kind}' },`);
+    }
+    lines.push('  ],');
+  }
   lines.push(
     `  regionHalfX: ${c.regionHalfX},`,
     `  regionHalfZ: ${c.regionHalfZ},`,
     `  perimeter: { halfX: ${c.perimeter.halfX}, halfZ: ${c.perimeter.halfZ}, halfThickness: ${c.perimeter.halfThickness}, height: ${c.perimeter.height} },`,
-    `  basin: { waterY: ${c.basin.waterY}, bankSlope: ${c.basin.bankSlope}, depthMax: ${c.basin.depthMax}, wadeYards: ${c.basin.wadeYards} },`,
   );
+  // Emitted only when the circuit HAS water, which is exactly when a shore span
+  // exists: a dry circuit that carried a basin literal would be authoring a
+  // lake nothing draws.
+  if (c.basin) {
+    lines.push(
+      `  basin: { waterY: ${c.basin.waterY}, bankSlope: ${c.basin.bankSlope}, depthMax: ${c.basin.depthMax}, wadeYards: ${c.basin.wadeYards} },`,
+    );
+  }
   // Optional, and emitted in the record's own field order so a paste reads like
   // the module it is being pasted into.
   if (c.landmark) lines.push(`  landmark: { x: ${c.landmark.x}, z: ${c.landmark.z} },`);
@@ -190,6 +214,27 @@ function readBands(raw: unknown, key: string, min: number, max: number): { s: nu
 }
 
 /**
+ * The stepwise barrier table off the wire: sorted, first entry at 0, every
+ * entry in [0, 1), and every kind one the spline knows how to stand on the
+ * line.
+ */
+function readBarrierBands(raw: unknown): { s: number; kind: RallyBarrierKind }[] | null {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 512) return null;
+  const out: { s: number; kind: RallyBarrierKind }[] = [];
+  let previous = -1;
+  for (const item of raw) {
+    const band = item as { s?: unknown; kind?: unknown };
+    if (!isNumber(band.s) || band.s < 0 || band.s >= 1) return null;
+    if (band.s <= previous) return null;
+    if (!RALLY_BARRIER_KINDS.includes(band.kind as RallyBarrierKind)) return null;
+    previous = band.s;
+    out.push({ s: band.s, kind: band.kind as RallyBarrierKind });
+  }
+  if (out[0].s !== 0) return null;
+  return out;
+}
+
+/**
  * Whether a payload is a circuit at all, and the normalized record if it is.
  *
  * Run by the dev-server save endpoint BEFORE it writes anything, on the
@@ -217,9 +262,35 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
           | null);
   if (c.apronBands !== undefined && !apronBands) return null;
 
+  /**
+   * The barrier table: STEPWISE, so unlike the two band tables above it is
+   * sorted over [0, 1) with its first entry at 0 and no closing entry at 1 (one
+   * there would open a span of zero length). Read by its own reader for that
+   * reason rather than by loosening `readBands` until it takes both.
+   */
+  const barrierBands = c.barrierBands === undefined ? undefined : readBarrierBands(c.barrierBands);
+  if (c.barrierBands !== undefined && !barrierBands) return null;
+
   const perimeter = c.perimeter as Record<string, unknown> | undefined;
+  if (!perimeter) return null;
+  // Water is optional now, and required exactly where a shore span exists: the
+  // record's rule is an IFF, and both halves are refused here. Without a shore
+  // the payload is a lake circuit that forgot its lake (the absent table means a
+  // whole lap of shore); with one it authors a basin nothing is made of, which
+  // re-exports as a literal the next reader takes for a lake.
   const basin = c.basin as Record<string, unknown> | undefined;
-  if (!perimeter || !basin) return null;
+  const anyShore = !barrierBands || barrierBands.some((band) => band.kind === 'shore');
+  if (anyShore !== Boolean(basin)) return null;
+  if (basin) {
+    if (
+      !inRange(basin.waterY, -20, 20) ||
+      !inRange(basin.bankSlope, 0.01, 10) ||
+      !inRange(basin.depthMax, 0.1, 50) ||
+      !inRange(basin.wadeYards, 0, 50)
+    ) {
+      return null;
+    }
+  }
 
   /**
    * The infield landmark, optional and carried THROUGH rather than dropped.
@@ -244,10 +315,6 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     !inRange(perimeter.halfZ, 5, 2000) ||
     !inRange(perimeter.halfThickness, 0.05, 10) ||
     !inRange(perimeter.height, 0.5, 20) ||
-    !inRange(basin.waterY, -20, 20) ||
-    !inRange(basin.bankSlope, 0.01, 10) ||
-    !inRange(basin.depthMax, 0.1, 50) ||
-    !inRange(basin.wadeYards, 0, 50) ||
     !inRange(c.startBack, 0, 200) ||
     !inRange(c.startSpacing, 1, 50) ||
     !isInteger(c.laps, 1, 20) ||
@@ -271,6 +338,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     controlPoints,
     widthBands,
     ...(apronBands ? { apronBands } : {}),
+    ...(barrierBands ? { barrierBands } : {}),
     ...(landmark ? { landmark } : {}),
     regionHalfX: c.regionHalfX,
     regionHalfZ: c.regionHalfZ,
@@ -280,12 +348,16 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
       halfThickness: perimeter.halfThickness as number,
       height: perimeter.height as number,
     },
-    basin: {
-      waterY: basin.waterY as number,
-      bankSlope: basin.bankSlope as number,
-      depthMax: basin.depthMax as number,
-      wadeYards: basin.wadeYards as number,
-    },
+    ...(basin
+      ? {
+          basin: {
+            waterY: basin.waterY as number,
+            bankSlope: basin.bankSlope as number,
+            depthMax: basin.depthMax as number,
+            wadeYards: basin.wadeYards as number,
+          },
+        }
+      : {}),
     startBack: c.startBack,
     startSpacing: c.startSpacing,
     laps: c.laps,

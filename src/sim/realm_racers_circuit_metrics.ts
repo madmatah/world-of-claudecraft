@@ -14,7 +14,11 @@
 //
 // Pure leaf: no SimContext, no rng, no clock, no DOM, no three.
 
-import type { RealmRacersCircuit } from './content/realm_racers_circuits';
+import {
+  isSolidBarrierKind,
+  RALLY_BARRIER_KINDS,
+  type RealmRacersCircuit,
+} from './content/realm_racers_circuits';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_MAX_RANGE,
@@ -27,7 +31,11 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from './realm_racers_layout';
-import { REALM_RACERS_PROJECTION_ENVELOPE, realmRacersTrack } from './realm_racers_spline';
+import {
+  REALM_RACERS_PROJECTION_ENVELOPE,
+  rallyBarrierKindAt,
+  realmRacersTrack,
+} from './realm_racers_spline';
 
 /**
  * How far apart along the LAP two samples have to be before the distance
@@ -136,6 +144,11 @@ export type RealmRacersCircuitProblemCode =
   | 'corner_near_road_width'
   | 'stretches_too_close'
   | 'shore_overlap'
+  /** A `shore` span on a record that authors no water for it to be made of. */
+  | 'shore_requires_basin'
+  /** `barrierBands` is not a table the stepwise reader can use: unsorted, not
+   *  starting at 0, out of [0, 1), or naming a kind that does not exist. */
+  | 'barrier_bands_malformed'
   | 'road_outside_perimeter'
   | 'perimeter_outside_region'
   | 'region_outside_band'
@@ -187,8 +200,18 @@ export interface RealmRacersCircuitMetrics {
   /** Yards of lap that can be shot at across the infield. Information, not a
    *  fault: an opposed stretch in Ground Blast range is a circuit FEATURE. */
   shootingCorridorYards: number;
-  /** Yards of lap where the two basin shores intersect, which is where the
-   *  water polygon self-crosses. What `apronBands` exists to clear. */
+  /**
+   * Yards of lap whose containment line carries a SOLID barrier while the
+   * nearest far-apart stretch carries one too, near enough to shoot across.
+   *
+   * Information, never a fault, and the reason `shore_overlap` is scoped to
+   * water: two solid lines running close bound an unreachable strip, which is
+   * the shape a corridor between two facing hedges takes. Two SHORES running
+   * that close would instead be one lake drawn twice, which is a defect.
+   */
+  sharedBarrierYards: number;
+  /** Yards of lap where two stretches' WATER meets, which is where the basin
+   *  polygon self-crosses. What `apronBands` exists to clear. */
   shoreOverlapYards: number;
   /** Half-extents of the ROAD's whole footprint (out to the garden edge, both
    *  sides) from the circuit's origin, yards. */
@@ -237,6 +260,9 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
   // running alongside each other" questions at once: how close they get, how
   // much lap is shootable across the gap, and where the shores meet.
   const shoreOffset = samples.map((sample) => sample.halfWidth + sample.apron);
+  // What stands on the line, per sample: it decides whether two lines meeting
+  // is a broken water polygon or an authored corridor.
+  const solid = samples.map((sample) => isSolidBarrierKind(rallyBarrierKindAt(circuit, sample.s)));
   const nearestDistance = new Float64Array(count).fill(Number.POSITIVE_INFINITY);
   const nearestIndex = new Int32Array(count).fill(-1);
   const overlapDepth = new Float64Array(count);
@@ -259,6 +285,10 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
         nearestDistance[j] = distance;
         nearestIndex[j] = i;
       }
+      // Water only exists over a SHORE span, so only two shores can draw one
+      // lake twice. Over a solid span the same closeness is the authored
+      // corridor, counted as information further down.
+      if (solid[i] || solid[j]) continue;
       // The basin sits on the INFIELD (the left normal) side only, so two
       // stretches' shores can only meet where each one lies on the other's
       // infield side. Both offsets measured along the respective left normal.
@@ -272,6 +302,7 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
   }
 
   let shootingCorridorYards = 0;
+  let sharedBarrierYards = 0;
   let shoreOverlapYards = 0;
   const nearestApproach: RealmRacersNearestApproach = {
     distance: Number.POSITIVE_INFINITY,
@@ -292,6 +323,9 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     }
     if (nearestDistance[i] <= SHOOTING_REACH && dot <= OPPOSED_TANGENT_DOT) {
       shootingCorridorYards += step;
+    }
+    if (nearestDistance[i] <= SHOOTING_REACH && solid[i] && solid[other]) {
+      sharedBarrierYards += step;
     }
   }
 
@@ -385,6 +419,25 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     problem('shore_overlap', 'error', shoreOverlapYards, 0);
   }
 
+  // The barrier table, checked here as well as in the record test because this
+  // readout is what a DRAFT is admitted by: a hand-edited scratch file reaches
+  // the game through it and never through the record test.
+  const bands = circuit.barrierBands;
+  if (bands) {
+    let malformed = bands.length === 0 || bands[0].s !== 0;
+    for (let i = 0; i < bands.length; i++) {
+      if (!(bands[i].s >= 0) || bands[i].s >= 1) malformed = true;
+      if (i > 0 && bands[i].s <= bands[i - 1].s) malformed = true;
+      if (!RALLY_BARRIER_KINDS.includes(bands[i].kind)) malformed = true;
+    }
+    if (malformed) problem('barrier_bands_malformed', 'error', bands.length, 0);
+  }
+  if (!circuit.basin && solid.some((isSolid) => !isSolid)) {
+    // A shore is made of water, so a circuit that authors one and no basin has
+    // a stretch of containment line made of nothing at all.
+    problem('shore_requires_basin', 'error', solid.filter((isSolid) => !isSolid).length, 0);
+  }
+
   if (roadHalfX > circuit.perimeter.halfX) {
     problem('road_outside_perimeter', 'error', roadHalfX, circuit.perimeter.halfX, -1, 'x');
   }
@@ -434,6 +487,7 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     minRadiusOverWidthAtS,
     nearestApproach,
     shootingCorridorYards,
+    sharedBarrierYards,
     shoreOverlapYards,
     roadHalfX,
     roadHalfZ,

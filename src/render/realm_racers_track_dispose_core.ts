@@ -28,6 +28,14 @@
 // true, the answer is for the builder to report what it owns, not for this file
 // to guess harder.
 //
+// What that rests on is MULTIPLICITY: one minted material per build, never one
+// per piece of the thing it draws. A circuit's water is now several lobes
+// rather than one lake, and the builder deliberately mints ONE water
+// ShaderMaterial for the build and shares it across them; a per-lobe material
+// would multiply the one class of object this file knowingly leaks by however
+// many spans a circuit authors, on exactly the two paths (preview rebuild, draft
+// re-registration) it exists for.
+//
 // Pure core: structurally typed against the Three shapes it touches, so a
 // Vitest drives it with a counting fake and no renderer.
 

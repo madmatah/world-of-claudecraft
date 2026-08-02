@@ -77,6 +77,12 @@ outright without `ctx.devCommands`.
   back, so there was nothing to decide: `realmRacersGates` derives them from the
   curve (one per `REALM_RACERS_GATE_SPACING` yards, each slid to the straightest
   road nearby). The editor DRAWS them and never edits them.
+- **What stands on the containment line is authored; the line is not.** The
+  anti-cut line is `halfWidth + apron`, derived, and the Barrier mode paints
+  only what sits ON it: water, a low or tall hedge, a kneewall. Only water lets
+  a racer past the line at all, so painting a span solid can only ever make
+  cutting cost more, and painting the last shore away leaves a circuit with no
+  lake, which is a shape the tool now has to be able to reach.
 - **A brush paints a STROKE, never a point.** A band table is read piecewise
   linearly, so setting one breakpoint re-slopes the road all the way round the
   lap: one click at 30 percent changed 452 of a 454 yard lap. `paintSpan` takes
@@ -137,7 +143,8 @@ is recoverable.
 | Module | Owns |
 |---|---|
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
-| `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two band tables and the ordering and minimum-count invariants |
+| `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
+| `barrier_paint_core.ts` | the STEPWISE barrier table: painting a kind over a span of lap, collapsing the result to the fewest breakpoints, and the one rule that rides with it (a circuit authors a basin if and only if some span of its line is a shore, so the water follows the paint instead of being a second thing to keep in step) |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
 | `envelope_core.ts` | what perimeter wall and collision region fit a road of a given size, clamped to the band and the lane depth budget. A convenience, not a rule: the containment rules themselves are in the metrics core |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |

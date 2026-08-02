@@ -23,13 +23,18 @@ import {
 } from '../sim/realm_racers_layout';
 import {
   type RallySample,
-  realmRacersBasinOutline,
   realmRacersTrack,
+  realmRacersWaterOutlines,
 } from '../sim/realm_racers_spline';
 import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
-import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
+import {
+  buildTieredFountain,
+  GARDEN_MARBLE,
+  gardenStatueGeo,
+  gardenStatueMaterial,
+} from './garden_stonework';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
 import {
   biomeGroundTint,
@@ -40,8 +45,10 @@ import {
 } from './instance_surface';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
 import {
+  RALLY_BARRIER_VISUALS,
   RALLY_FLOWER_COLOURS,
-  rallyBasinMesh,
+  rallyBarrierPieces,
+  rallyBasinMeshes,
   rallyBorderFlowerSpots,
   rallyDressingSpots,
   rallyFlowerSpots,
@@ -109,6 +116,23 @@ const BED_URLS: Record<string, string> = {
   bedSquareB: '/models/props/flower_bed_square_b.glb',
 };
 const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
+/**
+ * The Great Maze's own clipped hedge, which is what makes it the Evergarden's
+ * hedge rather than a lookalike: `garden_features.ts` stands this exact model
+ * on the maze walls, scaled to a nine yard cell. Here it is scaled DOWN to a
+ * barrier's height, which is the only difference between a maze wall and the
+ * knee-high line flanking a circuit's corridor.
+ *
+ * It is not in `PROP_ASSET_DEFS`, so this module registers its own preload, the
+ * same move it already makes for the arch and the banners. `loadGltf` caches
+ * per URL, so the second registration costs one promise and not one parse.
+ */
+const HEDGE_URL = '/models/props/maze_hedge_wall.glb';
+/** Authored bounds of maze_hedge_wall.glb at scale 1: its LONG axis is x, it
+ *  stands from y = 0, and its depth along z is the wall's thickness. */
+const HEDGE_SOURCE_LENGTH = 0.979;
+const HEDGE_SOURCE_HEIGHT = 0.568;
+const HEDGE_SOURCE_DEPTH = 0.381;
 const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
 const REED_URL = '/models/props/reeds.glb';
 /** Authored half-extent of the flower-bed models (see EVERGARDEN_PROPS scales). */
@@ -130,6 +154,7 @@ const ASSET_URLS = [
   TREE_URL,
   ARCH_URL,
   BANNER_URL,
+  HEDGE_URL,
   IRON_FENCE_URL,
   IRON_PILLAR_URL,
   REED_URL,
@@ -137,8 +162,23 @@ const ASSET_URLS = [
 ];
 for (const url of ASSET_URLS) preload(url);
 
-/** Test-only window onto the asset set (see tests/render_glb_replacement_assets). */
-export const realmRacersPreloadInternalsForTest = { assetUrls: ASSET_URLS };
+/**
+ * Test-only window onto the asset set and onto the ONE model whose authored
+ * bounds this module hard-codes (see tests/render_glb_replacement_assets).
+ *
+ * The hedge is scaled from those bounds to a height the design depends on being
+ * see-over-able, so a re-export of the GLB that changed its extents would
+ * silently rescale every barrier on every circuit with a green suite.
+ */
+export const realmRacersPreloadInternalsForTest = {
+  assetUrls: ASSET_URLS,
+  hedgeSource: {
+    url: HEDGE_URL,
+    length: HEDGE_SOURCE_LENGTH,
+    height: HEDGE_SOURCE_HEIGHT,
+    depth: HEDGE_SOURCE_DEPTH,
+  },
+};
 
 interface ModelSpot {
   x: number;
@@ -427,17 +467,22 @@ function mergeCrossedCards(card: THREE.BufferGeometry): THREE.BufferGeometry {
 }
 
 /**
- * The basin's water outline as a flat shape, region-local. A ShapeGeometry
- * rotated -PI/2 about X maps the shape's y to world -z, so the points go in
- * with z negated; the lawn is cut with the SAME shape as a hole, which is what
- * makes the water read as a sunken basin rather than a puddle on the grass.
+ * The water outlines as flat shapes, region-local, one per shore span. A
+ * ShapeGeometry rotated -PI/2 about X maps the shape's y to world -z, so the
+ * points go in with z negated; the lawn is cut with the SAME shapes as holes,
+ * which is what makes the water read as a sunken basin rather than a puddle on
+ * the grass. A circuit with no shore span punches no hole at all, and its whole
+ * infield is lawn.
  */
-function basinShape(circuit: RealmRacersCircuit): THREE.Shape {
-  return new THREE.Shape(
-    realmRacersBasinOutline(circuit).map(
-      (point) =>
-        new THREE.Vector2(point.x - REALM_RACERS_ORIGIN.x, -(point.z - REALM_RACERS_ORIGIN.z)),
-    ),
+function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
+  return realmRacersWaterOutlines(circuit).map(
+    (outline) =>
+      new THREE.Shape(
+        outline.map(
+          (point) =>
+            new THREE.Vector2(point.x - REALM_RACERS_ORIGIN.x, -(point.z - REALM_RACERS_ORIGIN.z)),
+        ),
+      ),
   );
 }
 
@@ -453,40 +498,49 @@ function basinShape(circuit: RealmRacersCircuit): THREE.Shape {
  * surface.
  */
 function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
-  const mesh = rallyBasinMesh(circuit);
-  const count = mesh.depths.length;
-  const positions = new Float32Array(count * 3);
-  const shoreDepth = new Float32Array(count);
-  const shoreSlope = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    positions[i * 3] = mesh.positions[i * 2];
-    positions[i * 3 + 1] = 0;
-    positions[i * 3 + 2] = mesh.positions[i * 2 + 1];
-    shoreDepth[i] = mesh.depths[i];
-    // Foam is depth over slope, i.e. distance to the waterline. The basin's
-    // bank has ONE authored slope, so hand the shader that rather than a
-    // finite difference of a profile we already know in closed form.
-    shoreSlope[i] = circuit.basin.bankSlope;
+  const basin = circuit.basin;
+  if (!basin) return;
+  const meshes = rallyBasinMeshes(circuit);
+  if (meshes.length === 0) return;
+  // ONE material for every lobe of this build. It is a ShaderMaterial with its
+  // own uniform block and its own compiled program, and the two callers that
+  // rebuild a circuit over and over (the editor preview per edit, a dev draft
+  // per re-registration) are exactly the ones a per-lobe material multiplies
+  // against. The lobes differ by geometry alone; nothing about the water's
+  // surface is per lobe.
+  const material = buildWaterSurfaceMaterial({
+    wave: zeroWaveUniforms(),
+    surfaceOrigin: REALM_RACERS_ORIGIN,
+  });
+  for (const mesh of meshes) {
+    const count = mesh.depths.length;
+    const positions = new Float32Array(count * 3);
+    const shoreDepth = new Float32Array(count);
+    const shoreSlope = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = mesh.positions[i * 2];
+      positions[i * 3 + 1] = 0;
+      positions[i * 3 + 2] = mesh.positions[i * 2 + 1];
+      shoreDepth[i] = mesh.depths[i];
+      // Foam is depth over slope, i.e. distance to the waterline. The basin's
+      // bank has ONE authored slope, so hand the shader that rather than a
+      // finite difference of a profile we already know in closed form.
+      shoreSlope[i] = basin.bankSlope;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('aShoreDepth', new THREE.BufferAttribute(shoreDepth, 1));
+    geo.setAttribute('aShoreSlope', new THREE.BufferAttribute(shoreSlope, 1));
+    geo.setIndex(mesh.index);
+    // The shader derives its own normal from the ripple maps and never reads
+    // this one. It is here so the surface is COVERED by the face-down guard: a
+    // water sheet wound the wrong way is culled exactly as silently as a kerb.
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    const water = new THREE.Mesh(geo, material);
+    water.position.y = basin.waterY;
+    group.add(water);
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('aShoreDepth', new THREE.BufferAttribute(shoreDepth, 1));
-  geo.setAttribute('aShoreSlope', new THREE.BufferAttribute(shoreSlope, 1));
-  geo.setIndex(mesh.index);
-  // The shader derives its own normal from the ripple maps and never reads
-  // this one. It is here so the surface is COVERED by the face-down guard: a
-  // water sheet wound the wrong way is culled exactly as silently as a kerb.
-  geo.computeVertexNormals();
-  geo.computeBoundingSphere();
-  const water = new THREE.Mesh(
-    geo,
-    buildWaterSurfaceMaterial({
-      wave: zeroWaveUniforms(),
-      surfaceOrigin: REALM_RACERS_ORIGIN,
-    }),
-  );
-  water.position.y = circuit.basin.waterY;
-  group.add(water);
 
   // Reeds around the shore, so the water's edge is planted rather than kerbed.
   instanceModel(
@@ -494,7 +548,7 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
     REED_URL,
     rallyReedSpots(circuit).map((spot) => ({
       x: spot.x,
-      y: circuit.basin.waterY,
+      y: basin.waterY,
       z: spot.z,
       yaw: spot.rot,
       sx: spot.scale,
@@ -502,6 +556,83 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
       sz: spot.scale,
     })),
   );
+}
+
+/**
+ * The one shared kneewall block, minted once.
+ *
+ * Instanced, so it MUST be shared: `realm_racers_track_dispose_core.ts` frees a
+ * plain mesh's geometry and never an `InstancedMesh`'s, on the promise that
+ * every instanced geometry belongs to a cache rather than to one build.
+ */
+let kneewallGeo: THREE.BufferGeometry | null = null;
+
+function rallyKneewallGeo(): THREE.BufferGeometry {
+  if (kneewallGeo) return kneewallGeo;
+  // A unit block standing ON the ground, its LONG axis x, so a per-instance
+  // scale reads (length, height, depth) exactly like the hedge model's does.
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  box.translate(0, 0.5, 0);
+  kneewallGeo = box;
+  return kneewallGeo;
+}
+
+let kneewallMaterial: THREE.Material | null = null;
+
+/**
+ * The barriers standing on the containment line: a run of modules along every
+ * solid span, scaled to the kind's own height.
+ *
+ * Both hedge kinds are the Great Maze's own clipped hedge, scaled down. Using
+ * the model the Evergarden already wears is the point: a knee-high line beside
+ * a circuit in that zone should be the same hedge as the one in the maze, and
+ * the parterre's clipped BUSH line (the other candidate) is spaced planting
+ * with daylight between the bushes, which reads as a place to aim at on a
+ * boundary the clamp has no gaps in.
+ */
+function buildBarriers(circuit: RealmRacersCircuit, group: THREE.Group): void {
+  const pieces = rallyBarrierPieces(circuit);
+  if (pieces.length === 0) return;
+  for (const kind of ['hedge_low', 'hedge_tall'] as const) {
+    const visual = RALLY_BARRIER_VISUALS[kind];
+    instanceModel(
+      group,
+      HEDGE_URL,
+      pieces
+        .filter((piece) => piece.kind === kind)
+        .map((piece) => ({
+          x: piece.x,
+          y: GRASS_Y,
+          z: piece.z,
+          yaw: piece.yaw,
+          sx: piece.length / HEDGE_SOURCE_LENGTH,
+          sy: visual.height / HEDGE_SOURCE_HEIGHT,
+          sz: visual.depth / HEDGE_SOURCE_DEPTH,
+        })),
+    );
+  }
+
+  const walls = pieces.filter((piece) => piece.kind === 'wall_low');
+  if (walls.length === 0) return;
+  const visual = RALLY_BARRIER_VISUALS.wall_low;
+  kneewallMaterial ??= surfaceMat({ color: GARDEN_MARBLE, roughness: 0.8 });
+  const mesh = new THREE.InstancedMesh(rallyKneewallGeo(), kneewallMaterial, walls.length);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const v = new THREE.Vector3();
+  const sc = new THREE.Vector3();
+  walls.forEach((piece, i) => {
+    q.setFromAxisAngle(up, piece.yaw);
+    v.set(piece.x, GRASS_Y, piece.z);
+    sc.set(piece.length, visual.height, visual.depth);
+    mesh.setMatrixAt(i, m.compose(v, q, sc));
+  });
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.computeBoundingSphere();
+  group.add(mesh);
 }
 
 export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersTrackView {
@@ -532,7 +663,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
     new THREE.Vector2(lawnX / 2, lawnZ / 2),
     new THREE.Vector2(-lawnX / 2, lawnZ / 2),
   ]);
-  lawnShape.holes.push(basinShape(circuit));
+  for (const hole of basinShapes(circuit)) lawnShape.holes.push(hole);
   const lawnGeo = new THREE.ShapeGeometry(lawnShape)
     .rotateX(-Math.PI / 2)
     .translate(REALM_RACERS_ORIGIN.x, GRASS_Y, REALM_RACERS_ORIGIN.z);
@@ -621,6 +752,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   );
 
   buildBasin(circuit, group);
+  buildBarriers(circuit, group);
   buildStartArch(circuit, group);
   const startLightLenses = buildStartLights(circuit, group);
   const startLightOff = startLightLenses[0]?.material as THREE.Material;

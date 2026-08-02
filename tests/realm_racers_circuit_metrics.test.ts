@@ -309,6 +309,154 @@ describe('Realm Racers circuit metrics: the basin shores', () => {
   });
 });
 
+describe('Realm Racers circuit metrics: what stands on the containment line', () => {
+  it('scopes the shore overlap to WATER, and reports two solid lines as a corridor', () => {
+    // The distinction the whole packet turns on. Two shores meeting is one lake
+    // drawn twice, which is a defect; two hedges facing each other across the
+    // same gap is the corridor a circuit is authored FOR, so it is reported and
+    // never faulted.
+    const water = draft('metrics_barrier_water_pinch', PINCHED_CONTROL_POINTS, 10);
+    expect(realmRacersCircuitMetrics(water).shoreOverlapYards).toBeCloseTo(160, 0);
+    expect(realmRacersCircuitMetrics(water).sharedBarrierYards).toBe(0);
+
+    // The same shape with both pinched stretches flipped to a solid kind. The
+    // fractions come off the water case: its overlap runs over the two long
+    // stretches that face each other.
+    const hedged = draft('metrics_barrier_hedged_pinch', PINCHED_CONTROL_POINTS, 10, {
+      barrierBands: [
+        { s: 0, kind: 'shore' },
+        { s: 0.08, kind: 'hedge_low' },
+        { s: 0.26, kind: 'shore' },
+        { s: 0.55, kind: 'hedge_low' },
+        { s: 0.72, kind: 'shore' },
+      ],
+    });
+    const metrics = realmRacersCircuitMetrics(hedged);
+    expect(metrics.shoreOverlapYards).toBe(0);
+    expect(codesOf(hedged)).not.toContain('shore_overlap');
+    // ...and the corridor is measured instead: real yardage, and less than the
+    // whole flipped span, so it is the FACING part rather than a span count.
+    expect(metrics.sharedBarrierYards).toBeGreaterThan(100);
+    expect(metrics.sharedBarrierYards).toBeLessThan(metrics.lapLength / 2);
+    // The circuit still faces itself: flipping the barrier closed the water,
+    // not the racing.
+    expect(metrics.shootingCorridorYards).toBeGreaterThan(150);
+  });
+
+  it('scopes each measurement by BOTH sides of the pair, not either', () => {
+    // The two operators that decide which pair counts where. `shore_overlap`
+    // skips a pair where EITHER side is solid (only two waters can draw one
+    // lake twice); `sharedBarrierYards` counts a pair where BOTH are solid
+    // (one hedge facing open water bounds nothing). A fixture hedged on both
+    // sides satisfies either operator, so the deciding case is a pair hedged on
+    // ONE side, which must report zero for both.
+    const oneSided = draft('metrics_barrier_one_sided', PINCHED_CONTROL_POINTS, 10, {
+      barrierBands: [
+        { s: 0, kind: 'shore' },
+        { s: 0.08, kind: 'hedge_low' },
+        { s: 0.26, kind: 'shore' },
+      ],
+    });
+    const metrics = realmRacersCircuitMetrics(oneSided);
+    // Water on one side of the pinch, hedge on the other: no two waters meet,
+    // so nothing self-crosses...
+    expect(metrics.shoreOverlapYards).toBe(0);
+    expect(codesOf(oneSided)).not.toContain('shore_overlap');
+    // ...and no two barriers flank one strip, so there is no corridor either.
+    expect(metrics.sharedBarrierYards).toBe(0);
+    // Not vacuous: the same shape unhedged really does overlap, and hedged on
+    // BOTH sides really does report a corridor.
+    expect(
+      realmRacersCircuitMetrics(draft('metrics_one_sided_control', PINCHED_CONTROL_POINTS, 10))
+        .shoreOverlapYards,
+    ).toBeGreaterThan(100);
+    expect(
+      realmRacersCircuitMetrics(
+        draft('metrics_one_sided_both', PINCHED_CONTROL_POINTS, 10, {
+          barrierBands: [
+            { s: 0, kind: 'shore' },
+            { s: 0.08, kind: 'hedge_low' },
+            { s: 0.26, kind: 'shore' },
+            { s: 0.55, kind: 'hedge_low' },
+            { s: 0.72, kind: 'shore' },
+          ],
+        }),
+      ).sharedBarrierYards,
+    ).toBeGreaterThan(100);
+  });
+
+  it('refuses a shore span on a circuit that authors no water', () => {
+    const dry = draft('metrics_barrier_dry_ok', ring(60, 16), 10, {
+      barrierBands: [{ s: 0, kind: 'hedge_tall' }],
+      basin: undefined,
+    });
+    expect(codesOf(dry)).not.toContain('shore_requires_basin');
+    expect(realmRacersCircuitErrors(realmRacersCircuitMetrics(dry))).toEqual([]);
+
+    const thirsty = draft('metrics_barrier_dry_shore', ring(60, 16), 10, {
+      barrierBands: [
+        { s: 0, kind: 'hedge_tall' },
+        { s: 0.5, kind: 'shore' },
+      ],
+      basin: undefined,
+    });
+    expect(codesOf(thirsty)).toContain('shore_requires_basin');
+    // The default (no table at all) is a whole lap of shore, so a basinless
+    // record with no bands is refused too rather than read as dry.
+    const bandless = draft('metrics_barrier_bandless_dry', ring(60, 16), 10, { basin: undefined });
+    expect(codesOf(bandless)).toContain('shore_requires_basin');
+  });
+
+  it.each([
+    ['not starting at zero', [{ s: 0.2, kind: 'hedge_low' }]],
+    [
+      'unsorted',
+      [
+        { s: 0, kind: 'shore' },
+        { s: 0.6, kind: 'hedge_low' },
+        { s: 0.3, kind: 'shore' },
+      ],
+    ],
+    [
+      'an entry at the end of the lap',
+      [
+        { s: 0, kind: 'shore' },
+        { s: 1, kind: 'hedge_low' },
+      ],
+    ],
+    [
+      'a kind the spline cannot stand on the line',
+      [
+        { s: 0, kind: 'shore' },
+        { s: 0.4, kind: 'moat' },
+      ],
+    ],
+    ['empty', []],
+    ['a negative fraction', [{ s: -0.1, kind: 'hedge_low' }]],
+    [
+      'a fraction that is not a number',
+      [
+        { s: 0, kind: 'shore' },
+        { s: Number.NaN, kind: 'hedge_low' },
+      ],
+    ],
+  ])('reports a barrier table %s', (label, bands) => {
+    const broken = draft(`metrics_barrier_bad_${label.replace(/\W+/g, '_')}`, ring(60, 16), 10, {
+      barrierBands: bands as RealmRacersCircuit['barrierBands'],
+    });
+    expect(codesOf(broken)).toContain('barrier_bands_malformed');
+    // ...and a well formed table of the same shape is not reported.
+    const fine = draft('metrics_barrier_good_table', ring(60, 16), 10, {
+      barrierBands: [
+        { s: 0, kind: 'shore' },
+        { s: 0.4, kind: 'hedge_low' },
+        { s: 0.5, kind: 'shore' },
+      ],
+    });
+    expect(codesOf(fine)).not.toContain('barrier_bands_malformed');
+  });
+});
+
 describe('Realm Racers circuit metrics: what has to contain what', () => {
   it('reports a road that runs outside its own perimeter wall, per axis', () => {
     const spilling = draft('metrics_spilling', ring(60, 16), 10, {

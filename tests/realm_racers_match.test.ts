@@ -18,7 +18,7 @@ import {
   REALM_RACERS_ORIGIN,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
-import { rallyBasinEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { rallyContainmentLineAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
@@ -559,7 +559,7 @@ describe('The Realm Racers lifecycle', () => {
     // the shore rather than aimed at the middle of the region, which is only
     // water on a circuit shaped like the practice one.
     const sample = realmRacersTrack(RACE_CIRCUIT).samples[120];
-    const intoTheWater = rallyBasinEdgeOffsetAt(RACE_CIRCUIT, sample.s) + 1;
+    const intoTheWater = rallyContainmentLineAt(RACE_CIRCUIT, sample.s) + 1;
     const spot = onLane(
       sim,
       sample.x - sample.tz * intoTheWater,

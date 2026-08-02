@@ -57,7 +57,8 @@ import {
 } from '../realm_racers_progress';
 import {
   type RallyProjection,
-  rallyBasinEdgeOffsetAt,
+  rallyBarrierKindAt,
+  rallyContainmentLineAt,
   rallyForwardDot,
   realmRacersGates,
   realmRacersStarts,
@@ -1166,9 +1167,9 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
  *
  * Water is the exception in degree, not in kind: it is another band, just the
  * harshest one, and the racer cannot get more than a wading margin into it
- * because `resolveRealmRacersWade` holds them out of the rest.
+ * because `resolveRealmRacersContainment` holds them out of the rest.
  */
-function offTrackBand(
+export function realmRacersOffTrackBand(
   circuit: RealmRacersCircuit,
   projection: RallyProjection,
 ): RealmRacersSlowBand | null {
@@ -1180,8 +1181,23 @@ function offTrackBand(
   if (over <= REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH) {
     return REALM_RACERS_VERGE_BAND;
   }
-  // Only the infield side has water; outward is garden all the way to the wall.
-  return projection.lateral > rallyBasinEdgeOffsetAt(circuit, projection.s)
+  // Outward is garden all the way to the wall on every circuit. Inward it is
+  // garden up to the containment line, and past the line only where the circuit
+  // authored WATER there: a solid barrier gives no grace at all, so the clamp
+  // has already held the racer on the line and the water arm is unreachable
+  // rather than merely unlikely (pinned by tests/realm_racers_containment).
+  if (projection.lateral <= rallyContainmentLineAt(circuit, projection.s)) {
+    return REALM_RACERS_GARDEN_BAND;
+  }
+  // The solid arm is unreachable rather than merely unlikely, and it is left as
+  // a branch rather than an assertion on purpose: this runs per racer per tick
+  // inside the authoritative tick, where a throw ends the race for everyone, and
+  // float noise can legitimately leave a clamped racer a hair past the line.
+  // What holds the claim is a test, not a crash: see "charges the garden band,
+  // never Wading, on the infield side of a barrier" and the Express Tour's
+  // "leaves an unreachable strip" in tests/realm_racers_containment and
+  // tests/realm_racers_circuits.
+  return rallyBarrierKindAt(circuit, projection.s) === 'shore'
     ? REALM_RACERS_WATER_BAND
     : REALM_RACERS_GARDEN_BAND;
 }
@@ -1218,7 +1234,7 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
     const progress = match.progress.get(pid);
     if (!racer || !progress) continue;
     const projection = reproject(match, pid, racer);
-    const band = offTrackBand(circuit, projection);
+    const band = realmRacersOffTrackBand(circuit, projection);
     const forwardDot = rallyForwardDot(projection, Math.sin(racer.facing), Math.cos(racer.facing));
     if (forwardDot < -0.2) {
       progress.wrongWayTicks++;

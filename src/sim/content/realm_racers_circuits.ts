@@ -24,6 +24,38 @@ import type { RallyPoint } from '../realm_racers_layout';
  */
 export type RealmRacersCircuitRole = 'practice' | 'competition';
 
+/**
+ * What stands ON the containment line, the derived offset curve
+ * (`halfWidth + apron`) that stops a racer cutting the infield.
+ *
+ * The LINE is geometry and is never authored; this is the only thing about it
+ * a designer picks. `shore` is water: the racer may wade `basin.wadeYards`
+ * past the line and pays the Wading band's price for it. Every other kind is
+ * solid: the clamp lands ON the line with no grace at all, which is strictly
+ * stronger than water, so a span flipped to one can only ever make cutting
+ * cost more.
+ *
+ * `hedge_low` is knee high on purpose: a pilot sees a rival over it, which is
+ * what a shooting corridor between two opposed stretches needs. `hedge_tall`
+ * exists for the corner where a solid green wall reads better than a knee-high
+ * one, and `wall_low` for the stretch that wants stone rather than green.
+ * Neither ever blocks sight or the camera: nothing does inside the region.
+ */
+export type RallyBarrierKind = 'shore' | 'hedge_low' | 'hedge_tall' | 'wall_low';
+
+/** Every kind, for the validators that have to enumerate them. */
+export const RALLY_BARRIER_KINDS: readonly RallyBarrierKind[] = [
+  'shore',
+  'hedge_low',
+  'hedge_tall',
+  'wall_low',
+];
+
+/** True for every kind a racer cannot get past at all. */
+export function isSolidBarrierKind(kind: RallyBarrierKind): boolean {
+  return kind !== 'shore';
+}
+
 /** The water hazard's bank, read by BOTH the renderer (per-vertex shore depth,
  *  which drives the colour ramp and the foam band) and the sim (how deep a
  *  racer is standing). Two profiles would mean a racer swimming where the water
@@ -93,6 +125,17 @@ export interface RealmRacersCircuit {
    */
   apronBands?: readonly { s: number; maxApron: number }[];
   /**
+   * What stands on the containment line, as a STEPWISE table: entry `i`'s kind
+   * applies from its lap fraction to entry `i + 1`'s, wrapping, so the last
+   * entry runs back round to the first. Sorted, first entry at `s = 0`, every
+   * entry in [0, 1). Never interpolated, unlike `widthBands` and `apronBands`:
+   * a barrier is a kind, and half a hedge is not a thing.
+   *
+   * Omitting the field means `[{ s: 0, kind: 'shore' }]`, which is the shape
+   * every circuit had before the field existed and derives byte-identically.
+   */
+  barrierBands?: readonly { s: number; kind: RallyBarrierKind }[];
+  /**
    * Region envelope, half-extents from the circuit's origin. It must cover the
    * circuit, the drivable garden, the perimeter wall AND the dressing ring
    * beyond it, because every collision short-circuit in `colliders.ts` keys on
@@ -104,7 +147,17 @@ export interface RealmRacersCircuit {
   regionHalfX: number;
   regionHalfZ: number;
   perimeter: RealmRacersPerimeter;
-  basin: RealmRacersBasin;
+  /**
+   * The infield water, REQUIRED if and only if some span of the containment
+   * line is a `shore` (which is the default when `barrierBands` is absent).
+   *
+   * Optional because the water used to be the mechanic: the only thing keeping
+   * a racer out of the infield was how deep it got, so every circuit in every
+   * future zone theme was forced to be a lake circuit. The anti-cut line does
+   * that job now whatever stands on it, so a circuit may author no water at
+   * all, and its infield is dry ground for the dressing to use.
+   */
+  basin?: RealmRacersBasin;
   /**
    * The infield landmark, in circuit-local coordinates, or absent for a circuit
    * with nowhere to put one.

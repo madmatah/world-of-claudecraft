@@ -11,8 +11,10 @@ import {
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
 import {
-  rallyBasinEdgeOffsetAt,
-  rallyBasinWadeLimitAt,
+  rallyBarrierKindAt,
+  rallyContainmentGraceAt,
+  rallyContainmentLimitAt,
+  rallyContainmentLineAt,
   realmRacersTrack,
 } from '../src/sim/realm_racers_spline';
 import {
@@ -59,6 +61,7 @@ describe('Realm Racers boundaries', () => {
     const vergeDepth = REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
     let worst = Number.POSITIVE_INFINITY;
     let constrained = 0;
+    let waded = 0;
     for (const sample of track.samples) {
       if (!(sample.turnRadius > 0) || !Number.isFinite(sample.turnRadius)) continue;
       const roadTime = sample.turnRadius;
@@ -68,23 +71,103 @@ describe('Realm Racers boundaries', () => {
       expect(
         (sample.turnRadius - Math.min(vergeDepth, sample.apron)) / (1 - vergeLoss),
       ).toBeGreaterThan(roadTime);
-      // DEEPEST cut: on through the apron and into the water as far as the
-      // wading margin allows, paying the water's price for the whole arc. The
-      // margin buys a racer four more yards of shortcut, so it has to be
-      // covered or "the water replaces the wall" is only half true.
-      expect(
-        (sample.turnRadius - sample.apron - GARDEN_CIRCUIT.basin.wadeYards) / (1 - waterLoss),
-      ).toBeGreaterThan(roadTime);
+      // DEEPEST cut: on through the apron and as far past the containment line
+      // as the barrier standing there allows, paying that band's price for the
+      // whole arc. Over water the margin buys a racer four more yards of
+      // shortcut, so it has to be covered or "the water replaces the wall" is
+      // only half true; over anything SOLID the reachable depth is the apron
+      // alone, which is the arm above and strictly stronger.
+      const grace = rallyContainmentGraceAt(GARDEN_CIRCUIT, sample.s);
+      const price = grace > 0 ? waterLoss : gardenLoss;
+      expect((sample.turnRadius - sample.apron - grace) / (1 - price)).toBeGreaterThan(roadTime);
+      if (rallyBarrierKindAt(GARDEN_CIRCUIT, sample.s) === 'shore') {
+        expect(grace, `grace at ${sample.s.toFixed(1)}`).toBeGreaterThan(0);
+        waded++;
+      } else {
+        expect(grace, `grace at ${sample.s.toFixed(1)}`).toBe(0);
+      }
       worst = Math.min(worst, sample.turnRadius * gardenLoss - sample.apron);
       if (sample.apron < REALM_RACERS_APRON_MAX - 1e-6) constrained++;
     }
     expect(worst).toBeGreaterThan(0);
     // ...and the cap is not doing all the work: real corners pull the apron in.
     expect(constrained).toBeGreaterThan(20);
+    // The practice circuit is all shore, so the wading arm really was the one
+    // under test here rather than the cheaper solid one.
+    expect(waded).toBeGreaterThan(100);
     expect(REALM_RACERS_APRON_RADIUS_FRACTION).toBeLessThan(gardenLoss);
     // The bands are ordered: running further out always costs more.
     expect(vergeLoss).toBeLessThan(gardenLoss);
     expect(gardenLoss).toBeLessThan(waterLoss);
+  });
+
+  it('runs both per-kind arms of the sweep, on a circuit that HAS a barrier', () => {
+    // On the all-shore practice circuit above, the solid arm of the sweep is
+    // dead code: every sample takes the wading branch. This is the same
+    // inequality over a flipped fixture, where both branches are live.
+    const gardenLoss = realmRacersSpeedLoss(REALM_RACERS_GARDEN_BAND);
+    const waterLoss = realmRacersSpeedLoss(REALM_RACERS_WATER_BAND);
+    const flipped = {
+      ...GARDEN_CIRCUIT,
+      id: 'colliders_sweep_flipped',
+      barrierBands: [
+        { s: 0, kind: 'shore' },
+        { s: 0.05, kind: 'hedge_low' },
+        { s: 0.12, kind: 'shore' },
+        { s: 0.6, kind: 'wall_low' },
+        { s: 0.7, kind: 'shore' },
+      ],
+    } as const;
+    let solidArm = 0;
+    let waterArm = 0;
+    for (const sample of realmRacersTrack(flipped).samples) {
+      if (!(sample.turnRadius > 0) || !Number.isFinite(sample.turnRadius)) continue;
+      const grace = rallyContainmentGraceAt(flipped, sample.s);
+      const price = grace > 0 ? waterLoss : gardenLoss;
+      expect(
+        (sample.turnRadius - sample.apron - grace) / (1 - price),
+        `at ${sample.s.toFixed(1)}`,
+      ).toBeGreaterThan(sample.turnRadius);
+      if (rallyBarrierKindAt(flipped, sample.s) === 'shore') waterArm++;
+      else {
+        // Over a barrier the reachable cut is the apron ALONE, which is the
+        // cheaper arm 1 above and strictly stronger than the wading one.
+        expect(grace, `grace at ${sample.s.toFixed(1)}`).toBe(0);
+        solidArm++;
+      }
+    }
+    // Both arms really ran, which is the whole reason this case exists.
+    expect(solidArm).toBeGreaterThan(50);
+    expect(waterArm).toBeGreaterThan(200);
+  });
+
+  it('only ever TIGHTENS the cut when a span is flipped from water to a barrier', () => {
+    // What makes flipping a span safe without re-proving the sweep on the
+    // circuit it is flipped on: a solid kind removes grace and never adds any,
+    // so every reachable cut depth on the flipped record is at most what the
+    // same sample allowed as open shore, and strictly less where it was flipped.
+    const flipped = {
+      ...GARDEN_CIRCUIT,
+      id: 'colliders_flip_tightens',
+      barrierBands: [
+        { s: 0, kind: 'shore' },
+        { s: 0.3, kind: 'hedge_low' },
+        { s: 0.45, kind: 'shore' },
+      ],
+    } as const;
+    let tightened = 0;
+    for (const sample of track.samples) {
+      const before = rallyContainmentLimitAt(GARDEN_CIRCUIT, sample.s);
+      const after = rallyContainmentLimitAt(flipped, sample.s);
+      expect(after, `limit at ${sample.s.toFixed(1)}`).toBeLessThanOrEqual(before + 1e-12);
+      // The LINE itself never moves: the apron rule and every proof written
+      // against it are untouched by what stands on it.
+      expect(rallyContainmentLineAt(flipped, sample.s)).toBe(
+        rallyContainmentLineAt(GARDEN_CIRCUIT, sample.s),
+      );
+      if (after < before - 1e-9) tightened++;
+    }
+    expect(tightened).toBeGreaterThan(60);
   });
 
   it('holds a racer out of the basin past the wading margin', () => {
@@ -93,9 +176,9 @@ describe('Realm Racers boundaries', () => {
     // line into the water costs time instead of ending the moment.
     for (let i = 0; i < track.samples.length; i += 13) {
       const sample = track.samples[i];
-      const limit = rallyBasinWadeLimitAt(GARDEN_CIRCUIT, sample.s);
+      const limit = rallyContainmentLimitAt(GARDEN_CIRCUIT, sample.s);
       // Wading is allowed, right up to the margin.
-      for (const offset of [rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, sample.s) + 0.5, limit - 0.2]) {
+      for (const offset of [rallyContainmentLineAt(GARDEN_CIRCUIT, sample.s) + 0.5, limit - 0.2]) {
         const x = sample.x - sample.tz * offset;
         const z = sample.z + sample.tx * offset;
         const resolved = resolvePosition(SEED, x, z, 0.5);
@@ -112,7 +195,7 @@ describe('Realm Racers boundaries', () => {
         // normal, so the arc position is preserved and the limit it lands on
         // is the limit it was measured against.
         expect(projection.lateral).toBeLessThanOrEqual(
-          rallyBasinWadeLimitAt(GARDEN_CIRCUIT, projection.s) + 1e-3,
+          rallyContainmentLimitAt(GARDEN_CIRCUIT, projection.s) + 1e-3,
         );
         // ...and pushed straight out, not shoved down the circuit: the arc
         // position is what a shortcut would be stealing.
@@ -160,7 +243,7 @@ describe('Realm Racers boundaries', () => {
       const sample = track.samples[i];
       for (const [offset, side] of [
         [track.halfWidthAt(sample.s) + 6, -1],
-        [rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, sample.s) - 0.5, 1],
+        [rallyContainmentLineAt(GARDEN_CIRCUIT, sample.s) - 0.5, 1],
       ] as const) {
         const x = sample.x - sample.tz * offset * side;
         const z = sample.z + sample.tx * offset * side;

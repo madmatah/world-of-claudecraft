@@ -7,8 +7,10 @@ import {
   REALM_RACERS_CAMERA_BOOM_PROFILE,
 } from '../src/render/camera_boom_core';
 import {
+  RALLY_BARRIER_VISUALS,
   RALLY_FLOWER_COLOURS,
-  rallyBasinMesh,
+  rallyBarrierPieces,
+  rallyBasinMeshes,
   rallyBorderFlowerSpots,
   rallyDressingSpots,
   rallyFlowerSpots,
@@ -20,17 +22,22 @@ import {
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
 } from '../src/render/realm_racers_track_core';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
+  type RealmRacersCircuit,
+} from '../src/sim/content/realm_racers_circuits';
 import {
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
 import {
+  rallyBarrierKindAt,
   rallyBasinDepthAt,
-  rallyBasinEdgeOffsetAt,
+  rallyContainmentLineAt,
   rallyGardenEdgeOffsetAt,
   realmRacersTrack,
+  realmRacersWaterOutlines,
 } from '../src/sim/realm_racers_spline';
 
 // The circuit builder mints procedural canvas textures, so it needs the same
@@ -60,6 +67,10 @@ function mockTextures(): void {
 }
 
 const track = realmRacersTrack(GARDEN_CIRCUIT);
+/** The practice circuit's own basin, which every water case below reads. Its
+ *  record carries one: the circuit is a lake circuit and stays one. */
+const GARDEN_BASIN = GARDEN_CIRCUIT.basin;
+if (!GARDEN_BASIN) throw new Error('the practice circuit authors a basin');
 
 /** One racer row, shared by the start-light fixtures below. The light gantry
  *  reads the phase and the countdown, never the field, so one row is enough. */
@@ -514,27 +525,30 @@ describe('Realm Racers procedural render', () => {
     // per-vertex shore depth the water shader reads would be zero everywhere:
     // the whole basin would render as the shallowest possible water with the
     // foam band covering all of it. Rings put vertices where the depth is.
-    const mesh = rallyBasinMesh(GARDEN_CIRCUIT);
+    const meshes = rallyBasinMeshes(GARDEN_CIRCUIT);
+    // One shore span (the whole lap), so one water surface.
+    expect(meshes).toHaveLength(1);
+    const mesh = meshes[0];
     const count = mesh.depths.length;
     expect(count).toBe(mesh.columns * (mesh.rings + 1) + 1);
     // The shore ring reads exactly 0...
     for (let col = 0; col < mesh.columns; col++) expect(mesh.depths[col]).toBe(0);
     // ...and the middle is at the basin floor, which is the whole point.
-    expect(mesh.depths[count - 1]).toBeCloseTo(GARDEN_CIRCUIT.basin.depthMax, 6);
+    expect(mesh.depths[count - 1]).toBeCloseTo(GARDEN_BASIN.depthMax, 6);
     // The rings crowd the shore, because everything the shader varies (the
     // ramp to the basin floor, the surf band) is within a few yards of the
     // waterline. Evenly spaced rings across a basin this wide put the first one
     // past all of it, and the bank renders as one hard step.
     const firstRing = mesh.depths.slice(mesh.columns, mesh.columns * 2);
-    expect(Math.max(...firstRing)).toBeLessThan(GARDEN_CIRCUIT.basin.depthMax);
+    expect(Math.max(...firstRing)).toBeLessThan(GARDEN_BASIN.depthMax);
     // ...and it really is a ramp: shallow, mid and floor all present.
-    const all = Array.from(mesh.depths);
+    const all: number[] = Array.from(mesh.depths);
     expect(all.some((d) => d > 0 && d < 1)).toBe(true);
-    expect(all.some((d) => d >= 1 && d < GARDEN_CIRCUIT.basin.depthMax)).toBe(true);
-    expect(all.some((d) => d >= GARDEN_CIRCUIT.basin.depthMax - 1e-6)).toBe(true);
+    expect(all.some((d) => d >= 1 && d < GARDEN_BASIN.depthMax)).toBe(true);
+    expect(all.some((d) => d >= GARDEN_BASIN.depthMax - 1e-6)).toBe(true);
     for (const depth of all) {
       expect(depth).toBeGreaterThanOrEqual(0);
-      expect(depth).toBeLessThanOrEqual(GARDEN_CIRCUIT.basin.depthMax);
+      expect(depth).toBeLessThanOrEqual(GARDEN_BASIN.depthMax);
     }
     // Every vertex is on the infield side, and the depth is the SIM's, so the
     // water a racer sees is the water the sim decides they are wading in.
@@ -583,7 +597,7 @@ describe('Realm Racers procedural render', () => {
       // resampled POLYLINE, which reads a sagitta short of the true curve.
       expect(projection.lateral).toBeGreaterThan(0);
       expect(projection.lateral).toBeCloseTo(
-        rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, projection.s),
+        rallyContainmentLineAt(GARDEN_CIRCUIT, projection.s),
         1,
       );
     }
@@ -644,8 +658,438 @@ describe('Realm Racers procedural render', () => {
     if (!spot) throw new Error('the practice circuit authors a landmark');
     const projection = track.project(spot.x, spot.z);
     expect(projection.lateral - spot.radius).toBeGreaterThan(
-      rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, projection.s),
+      rallyContainmentLineAt(GARDEN_CIRCUIT, projection.s),
     );
+  });
+
+  describe('the barriers standing on the containment line', () => {
+    /** The practice circuit's curve with two solid spans painted on it: a low
+     *  hedge over the start straight and a kneewall round the parabolic. */
+    const FLIPPED: RealmRacersCircuit = {
+      ...GARDEN_CIRCUIT,
+      id: 'render_barrier_fixture',
+      barrierBands: [
+        { s: 0, kind: 'shore' },
+        { s: 0.05, kind: 'hedge_low' },
+        { s: 0.12, kind: 'shore' },
+        { s: 0.63, kind: 'wall_low' },
+        { s: 0.7, kind: 'shore' },
+      ],
+    };
+
+    /** The same curve with every span solid and no water authored at all: the
+     *  shape that was not expressible before this packet. */
+    const DRY: RealmRacersCircuit = {
+      ...GARDEN_CIRCUIT,
+      id: 'render_barrier_dry',
+      barrierBands: [{ s: 0, kind: 'hedge_tall' }],
+      basin: undefined,
+    };
+
+    /** The water sheets of a build. The shore-depth attribute is the one thing
+     *  only the basin writes, so counting them counts the lobes. */
+    const waterMeshes = (group: THREE.Group): THREE.Mesh[] =>
+      group.children.filter(
+        (child): child is THREE.Mesh =>
+          child instanceof THREE.Mesh && child.geometry.getAttribute('aShoreDepth') !== undefined,
+      );
+
+    /** The lawn: the ground surface that covers the whole region, so the widest
+     *  of them. Identified by extent rather than by child order, which the
+     *  builder is free to change. */
+    const lawnMesh = (group: THREE.Group): THREE.Mesh => {
+      const ground = group.children.filter(
+        (child): child is THREE.Mesh =>
+          child instanceof THREE.Mesh && child.geometry.getAttribute('aSplat') !== undefined,
+      );
+      let widest = ground[0];
+      for (const mesh of ground) {
+        mesh.geometry.computeBoundingBox();
+        widest.geometry.computeBoundingBox();
+        const box = mesh.geometry.boundingBox;
+        const best = widest.geometry.boundingBox;
+        if (box && best && box.max.x - box.min.x > best.max.x - best.min.x) widest = mesh;
+      }
+      if (!widest) throw new Error('the build has no ground surface');
+      return widest;
+    };
+
+    /** Even-odd ray cast, the same rule a ShapeGeometry hole is punched by. */
+    const pointInPolygon = (
+      x: number,
+      z: number,
+      polygon: readonly (readonly [number, number])[],
+    ): boolean => {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const [xi, zi] = polygon[i];
+        const [xj, zj] = polygon[j];
+        if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+      }
+      return inside;
+    };
+
+    it('builds none at all on a circuit whose whole line is shore', () => {
+      // The shipped practice circuit is a lake circuit and stays one: nothing
+      // about this packet puts a hedge on it.
+      expect(rallyBarrierPieces(GARDEN_CIRCUIT)).toEqual([]);
+      expect(realmRacersWaterOutlines(GARDEN_CIRCUIT)).toHaveLength(1);
+    });
+
+    it('lands every piece NEAR FACE on the containment line, over its own span only', () => {
+      const pieces = rallyBarrierPieces(FLIPPED);
+      expect(pieces.length).toBeGreaterThan(15);
+      for (const piece of pieces) {
+        const projection = track.project(piece.x, piece.z);
+        const line = rallyContainmentLineAt(FLIPPED, projection.s);
+        const half = RALLY_BARRIER_VISUALS[piece.kind].depth / 2;
+        // The near face is what a pilot meets, and it sits ON the line the sim
+        // clamps against, within half a yard. Centred on the line instead, half
+        // the hedge would stand on the drivable side and a racer held by the
+        // clamp would be buried in it.
+        expect(
+          Math.abs(projection.lateral - half - line),
+          `${piece.kind} at ${piece.x.toFixed(1)}, ${piece.z.toFixed(1)}`,
+        ).toBeLessThan(0.5);
+        // ...so the whole piece stands INFIELD of the line, never over it.
+        expect(projection.lateral).toBeGreaterThan(line);
+        // ...on the infield side of the road, and only where that span is solid.
+        expect(projection.lateral).toBeGreaterThan(0);
+        expect(rallyBarrierKindAt(FLIPPED, projection.s)).toBe(piece.kind);
+        // Nothing solid stands in the drivable garden: the same rule the
+        // dressing ring keeps, against the boundary a barrier actually stands on
+        // (further out than the border line the flowers mark).
+        expect(projection.lateral).toBeGreaterThan(rallyGardenEdgeOffsetAt(FLIPPED, projection.s));
+      }
+      // Both authored kinds really were placed.
+      expect(new Set(pieces.map((piece) => piece.kind))).toEqual(
+        new Set(['hedge_low', 'wall_low']),
+      );
+    });
+
+    it('lays each run end to end, with no daylight between two pieces', () => {
+      // A barrier the clamp has no gaps in must not LOOK like it has one: a gap
+      // is somewhere a pilot aims and then meets an invisible wall.
+      const pieces = rallyBarrierPieces(FLIPPED);
+      for (const kind of ['hedge_low', 'wall_low'] as const) {
+        const run = pieces.filter((piece) => piece.kind === kind);
+        expect(run.length).toBeGreaterThan(6);
+        let overlapped = 0;
+        for (let i = 1; i < run.length; i++) {
+          const apart = Math.hypot(run[i].x - run[i - 1].x, run[i].z - run[i - 1].z);
+          // Consecutive pieces of ONE run: the two runs are far apart, so a
+          // jump between them is the run boundary and not a gap.
+          if (apart > RALLY_BARRIER_VISUALS[kind].pieceLength * 4) continue;
+          expect(apart, `${kind} piece ${i}`).toBeLessThan(run[i].length);
+          overlapped++;
+        }
+        expect(overlapped).toBeGreaterThan(5);
+        // Every piece spans its own slot with a little to spare, which is what
+        // closes the joint where the line curves.
+        for (const piece of run) {
+          expect(piece.length).toBeGreaterThan(RALLY_BARRIER_VISUALS[kind].pieceLength * 0.5);
+          expect(piece.length).toBeLessThan(RALLY_BARRIER_VISUALS[kind].pieceLength * 2);
+        }
+      }
+    });
+
+    it('turns each piece ALONG the line rather than across it', () => {
+      // The mistake the start arch shipped with, in the other direction: these
+      // models are long on x, so a quarter turn out reads as a picket fence of
+      // planks standing across the boundary. Measured against the CONTAINMENT
+      // line's own direction (piece to piece), never the road's: the two part
+      // company wherever the apron ramps, and the line is what the barrier
+      // stands on.
+      const pieces = rallyBarrierPieces(FLIPPED);
+      let compared = 0;
+      for (const kind of ['hedge_low', 'wall_low'] as const) {
+        const run = pieces.filter((piece) => piece.kind === kind);
+        for (let i = 1; i < run.length; i++) {
+          const dx = run[i].x - run[i - 1].x;
+          const dz = run[i].z - run[i - 1].z;
+          const apart = Math.hypot(dx, dz);
+          if (apart > RALLY_BARRIER_VISUALS[kind].pieceLength * 4) continue;
+          const axisX = Math.cos(run[i - 1].yaw);
+          const axisZ = -Math.sin(run[i - 1].yaw);
+          expect((axisX * dx + axisZ * dz) / apart, `${kind} piece ${i}`).toBeGreaterThan(0.9);
+          compared++;
+        }
+      }
+      expect(compared).toBeGreaterThan(15);
+    });
+
+    it('keeps each kind at its own authored height, low enough to see over', () => {
+      // `hedge_low` exists to be seen over: a pilot has to spot a rival across
+      // the strip, which is the whole point of the corridor it flanks.
+      expect(RALLY_BARRIER_VISUALS.hedge_low.height).toBeLessThan(1.5);
+      expect(RALLY_BARRIER_VISUALS.wall_low.height).toBeLessThan(1.5);
+      expect(RALLY_BARRIER_VISUALS.hedge_tall.height).toBeGreaterThan(
+        RALLY_BARRIER_VISUALS.hedge_low.height,
+      );
+      for (const visual of Object.values(RALLY_BARRIER_VISUALS)) {
+        expect(visual.pieceLength).toBeGreaterThan(0);
+        expect(visual.depth).toBeGreaterThan(0);
+      }
+    });
+
+    it('cuts the water into one lobe per shore span and leaves the strip dry', () => {
+      const outlines = realmRacersWaterOutlines(FLIPPED);
+      expect(outlines).toHaveLength(2);
+      // No reed grows at the foot of a barrier: reeds mark a waterline.
+      for (const spot of rallyReedSpots(FLIPPED)) {
+        expect(rallyBarrierKindAt(FLIPPED, track.project(spot.x, spot.z).s)).toBe('shore');
+      }
+      expect(rallyReedSpots(FLIPPED).length).toBeLessThan(rallyReedSpots(GARDEN_CIRCUIT).length);
+      // Each lobe still has real depth to shade rather than a rim of zeroes.
+      const meshes = rallyBasinMeshes(FLIPPED);
+      expect(meshes).toHaveLength(2);
+      for (const mesh of meshes) {
+        expect(mesh.columns).toBeGreaterThan(8);
+        expect(Math.max(...Array.from(mesh.depths))).toBeGreaterThan(1);
+      }
+    });
+
+    it('draws the kneewall from one shared geometry, per build', async () => {
+      // The instanced-vs-plain promise `realm_racers_track_dispose_core.ts`
+      // rests on, extended to the barrier the builder mints itself rather than
+      // loading: a per-build block would be freed as if it were shared.
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      const first = buildRealmRacersTrack(FLIPPED);
+      const second = buildRealmRacersTrack(FLIPPED);
+      const wallsOf = (group: THREE.Group): THREE.InstancedMesh[] =>
+        group.children.filter(
+          (child): child is THREE.InstancedMesh =>
+            child instanceof THREE.InstancedMesh &&
+            child.geometry.getAttribute('position')?.count === 24,
+        );
+      const a = wallsOf(first.group);
+      expect(a.length).toBe(1);
+      expect(a[0].count).toBe(
+        rallyBarrierPieces(FLIPPED).filter((p) => p.kind === 'wall_low').length,
+      );
+      expect(wallsOf(second.group)[0].geometry).toBe(a[0].geometry);
+      expect(wallsOf(second.group)[0].material).toBe(a[0].material);
+
+      // ...and every instance really is built to the authored HEIGHT. The
+      // kneewall's geometry is a unit block, so its per-instance y scale IS the
+      // number, and nothing else in the suite reads the matrices the painter
+      // composes.
+      const matrix = new THREE.Matrix4();
+      const position = new THREE.Vector3();
+      const quaternion = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      for (let i = 0; i < a[0].count; i++) {
+        a[0].getMatrixAt(i, matrix);
+        matrix.decompose(position, quaternion, scale);
+        expect(scale.y, `kneewall ${i} height`).toBeCloseTo(
+          RALLY_BARRIER_VISUALS.wall_low.height,
+          6,
+        );
+        expect(scale.z, `kneewall ${i} depth`).toBeCloseTo(RALLY_BARRIER_VISUALS.wall_low.depth, 6);
+      }
+    });
+
+    it('builds one water surface per lobe, and none on a dry circuit', async () => {
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      expect(waterMeshes(buildRealmRacersTrack(DRY).group)).toHaveLength(0);
+      expect(waterMeshes(buildRealmRacersTrack(FLIPPED).group)).toHaveLength(2);
+      expect(waterMeshes(buildRealmRacersTrack(GARDEN_CIRCUIT).group)).toHaveLength(1);
+      // ONE material across a build's lobes, never one per lobe: it is a
+      // ShaderMaterial with its own compiled program, and the two callers that
+      // rebuild a circuit over and over are exactly the ones a per-lobe
+      // material multiplies against (see realm_racers_track_dispose_core).
+      const lobes = waterMeshes(buildRealmRacersTrack(FLIPPED).group);
+      expect(new Set(lobes.map((mesh) => mesh.material)).size).toBe(1);
+    });
+
+    it('punches the lawn open under every lobe, and nowhere else', async () => {
+      // The hole is what makes the water read as a sunken basin instead of a
+      // sheet laid on the grass, and nothing else in this suite can see it:
+      // counting water meshes passes just as well with one hole, or none.
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      // Earcut triangulates a polygon of n vertices with h holes into
+      // n + 2h - 2 triangles, the two bridge vertices per hole included. So the
+      // lawn's own index count states BOTH how many holes it carries and how
+      // many points each one has: neither can move without this moving.
+      for (const circuit of [DRY, GARDEN_CIRCUIT, FLIPPED]) {
+        const outlines = realmRacersWaterOutlines(circuit);
+        const holes = outlines.length;
+        const corners = 4;
+        const points = outlines.reduce((sum, outline) => sum + outline.length, corners);
+        const geo = lawnMesh(buildRealmRacersTrack(circuit).group).geometry;
+        expect(geo.getIndex()?.count, `${circuit.id} lawn triangles`).toBe(
+          3 * (points + 2 * holes - 2),
+        );
+      }
+      // ...and the three cases really are none, one and two holes, so the
+      // identity above is not being satisfied three times by the same shape.
+      expect(realmRacersWaterOutlines(DRY)).toHaveLength(0);
+      expect(realmRacersWaterOutlines(GARDEN_CIRCUIT)).toHaveLength(1);
+      expect(realmRacersWaterOutlines(FLIPPED)).toHaveLength(2);
+
+      // ...and the holes are in the right PLACES: no lawn triangle survives
+      // inside a water outline. A hole punched with the wrong polygon would
+      // still change the count.
+      for (const circuit of [GARDEN_CIRCUIT, FLIPPED]) {
+        const outlines = realmRacersWaterOutlines(circuit).map((outline) =>
+          outline.map((point) => [point.x, point.z] as const),
+        );
+        const geo = lawnMesh(buildRealmRacersTrack(circuit).group).geometry;
+        const position = geo.getAttribute('position');
+        const index = geo.getIndex();
+        if (!index) throw new Error('the lawn is an indexed ShapeGeometry');
+        let over = 0;
+        for (let t = 0; t < index.count; t += 3) {
+          let cx = 0;
+          let cz = 0;
+          for (let k = 0; k < 3; k++) {
+            cx += position.getX(index.getX(t + k)) / 3;
+            cz += position.getZ(index.getX(t + k)) / 3;
+          }
+          if (outlines.some((outline) => pointInPolygon(cx, cz, outline))) over++;
+        }
+        expect(over, `${circuit.id} lawn triangles over water`).toBe(0);
+      }
+    });
+
+    it('sinks the water below the lawn, which is what masks the shore seam', async () => {
+      // The lobes are triangulated rings, so a ring edge can sit a hair outside
+      // the hole it fills. That is invisible only while the water sheet is
+      // BELOW the lawn: level with it, every ring would show a lip of surface
+      // lying on the grass. Both heights read off the real build rather than
+      // off a copy of the builder's constants.
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      for (const circuit of [GARDEN_CIRCUIT, FLIPPED]) {
+        const group = buildRealmRacersTrack(circuit).group;
+        const lawnY = lawnMesh(group).geometry.getAttribute('position').getY(0);
+        const lobes = waterMeshes(group);
+        expect(lobes.length).toBeGreaterThan(0);
+        for (const lobe of lobes) {
+          expect(lobe.position.y, `${circuit.id} water under lawn`).toBeLessThan(lawnY);
+        }
+      }
+    });
+
+    it('never builds a degenerate lobe out of a two-yard shore span', () => {
+      // A one-cell shore span is paintable in the editor (the brush snaps to
+      // 0.005 of a lap), and it reaches the mesh builder as an outline of two
+      // or three points: neither a ring to lerp toward a middle, nor something
+      // the authored one-in-four stride can thin any further.
+      const sliver: RealmRacersCircuit = {
+        ...GARDEN_CIRCUIT,
+        id: 'render_barrier_sliver',
+        barrierBands: [
+          { s: 0, kind: 'hedge_tall' },
+          { s: 0.5, kind: 'shore' },
+          { s: 0.505, kind: 'hedge_tall' },
+        ],
+      };
+      const outlines = realmRacersWaterOutlines(sliver);
+      expect(outlines).toHaveLength(1);
+      expect(outlines[0].length).toBeLessThan(4);
+      // Either it is skipped or it is a real ring: never a mesh with fewer
+      // columns than a triangle, which indexes cleanly and renders as a shard.
+      for (const mesh of rallyBasinMeshes(sliver)) {
+        expect(mesh.columns).toBeGreaterThanOrEqual(3);
+        expect(mesh.depths.length).toBe(mesh.columns * (mesh.rings + 1) + 1);
+      }
+      // ...and a slightly longer span really does build one, so the guard above
+      // is a floor rather than a way of skipping every short span.
+      const short: RealmRacersCircuit = {
+        ...sliver,
+        id: 'render_barrier_short_span',
+        barrierBands: [
+          { s: 0, kind: 'hedge_tall' },
+          { s: 0.5, kind: 'shore' },
+          { s: 0.53, kind: 'hedge_tall' },
+        ],
+      };
+      const built = rallyBasinMeshes(short);
+      expect(built).toHaveLength(1);
+      expect(built[0].columns).toBeGreaterThanOrEqual(3);
+    });
+
+    it('rings the whole line on a circuit with no water at all', () => {
+      // The all-solid arm: a dry circuit's barrier is ONE closed run, and
+      // returning nothing there would satisfy every other case in this block.
+      const pieces = rallyBarrierPieces(DRY);
+      expect(pieces.length).toBeGreaterThan(20);
+      expect(new Set(pieces.map((piece) => piece.kind))).toEqual(new Set(['hedge_tall']));
+      // Closed: every piece overlaps its neighbour INCLUDING across the start
+      // line, so the ring has no seam where the sample array happens to end.
+      for (let i = 0; i < pieces.length; i++) {
+        const next = pieces[(i + 1) % pieces.length];
+        const apart = Math.hypot(pieces[i].x - next.x, pieces[i].z - next.z);
+        expect(apart, `dry ring piece ${i}`).toBeLessThan(pieces[i].length);
+      }
+    });
+
+    it('splits a run where two SOLID kinds meet, never drawing one at the other height', () => {
+      // Two solid kinds are two heights. A run that only ended at water drew
+      // the whole stretch at the FIRST kind's height, which makes a tall hedge
+      // knee-high, or opens a sight line the design says stays blocked.
+      const adjacent: RealmRacersCircuit = {
+        ...GARDEN_CIRCUIT,
+        id: 'render_barrier_adjacent_kinds',
+        barrierBands: [
+          { s: 0, kind: 'shore' },
+          { s: 0.05, kind: 'hedge_low' },
+          { s: 0.12, kind: 'hedge_tall' },
+          { s: 0.2, kind: 'shore' },
+        ],
+      };
+      const adjacentPieces = rallyBarrierPieces(adjacent);
+      for (const piece of adjacentPieces) {
+        expect(rallyBarrierKindAt(adjacent, track.project(piece.x, piece.z).s)).toBe(piece.kind);
+      }
+      expect(new Set(adjacentPieces.map((piece) => piece.kind))).toEqual(
+        new Set(['hedge_low', 'hedge_tall']),
+      );
+
+      // ...and with NO shore span anywhere, which is the other branch: the ring
+      // walk has to start at a change of kind rather than at water.
+      const ring: RealmRacersCircuit = {
+        ...GARDEN_CIRCUIT,
+        id: 'render_barrier_ring_two_kinds',
+        barrierBands: [
+          { s: 0, kind: 'wall_low' },
+          { s: 0.5, kind: 'hedge_tall' },
+        ],
+        basin: undefined,
+      };
+      const ringPieces = rallyBarrierPieces(ring);
+      expect(new Set(ringPieces.map((piece) => piece.kind))).toEqual(
+        new Set(['wall_low', 'hedge_tall']),
+      );
+      for (const piece of ringPieces) {
+        expect(rallyBarrierKindAt(ring, track.project(piece.x, piece.z).s)).toBe(piece.kind);
+      }
+    });
+
+    it('mints its water per build and shares the kneewall, on a FLIPPED circuit too', async () => {
+      // The packet-19 sweep runs on the all-shore practice circuit, where there
+      // is one lobe and no barrier at all: the per-lobe water and the minted
+      // kneewall are both outside what it covers.
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      const first = buildRealmRacersTrack(FLIPPED);
+      const second = buildRealmRacersTrack(FLIPPED);
+      const waterA = waterMeshes(first.group).map((mesh) => mesh.geometry);
+      const waterB = waterMeshes(second.group).map((mesh) => mesh.geometry);
+      expect(waterA).toHaveLength(2);
+      // Every lobe's sheet is FRESH, which is what makes disposing it correct.
+      const owned = new Set(waterA);
+      for (const geometry of waterB) expect(owned.has(geometry)).toBe(false);
+      // ...and every instanced geometry is still BORROWED, barriers included.
+      const instancedOf = (group: THREE.Group): THREE.BufferGeometry[] =>
+        group.children
+          .filter((child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh)
+          .map((mesh) => mesh.geometry);
+      const instancedA = instancedOf(first.group);
+      expect(instancedA.length).toBeGreaterThan(0);
+      instancedOf(second.group).forEach((geometry, i) => {
+        expect(geometry, `instanced geometry ${i}`).toBe(instancedA[i]);
+      });
+    });
   });
 
   it('runs the perimeter around the garden wall', () => {

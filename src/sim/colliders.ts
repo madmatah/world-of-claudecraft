@@ -96,7 +96,7 @@ import {
   realmRacersLaneAt,
   realmRacersLaneOffset,
 } from './realm_racers_layout';
-import { resolveRealmRacersWade } from './realm_racers_spline';
+import { resolveRealmRacersContainment } from './realm_racers_spline';
 import { townPropPlacements } from './town_props';
 import type { WorldContent } from './types';
 import { valeCupColliders } from './vale_cup_layout';
@@ -1687,10 +1687,11 @@ export function resolvePosition(
       z - off.z - o.z,
       r,
     );
-    // The garden wall is the only BUILT thing here; the infield is held by the
-    // water itself, which is deep enough to stop a racer past a wading margin.
-    const waded = resolveRealmRacersWade(circuit, local.x + o.x, local.z + o.z);
-    return { x: waded.x + off.x, z: waded.z + off.z };
+    // The garden wall is the only BUILT thing here; the infield is held by its
+    // own containment line, which a racer may wade a margin past where the
+    // circuit authors water and not at all where it authors a barrier.
+    const held = resolveRealmRacersContainment(circuit, local.x + o.x, local.z + o.z);
+    return { x: held.x + off.x, z: held.z + off.z };
   }
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);

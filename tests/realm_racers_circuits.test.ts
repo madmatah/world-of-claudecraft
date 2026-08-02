@@ -11,6 +11,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+  isSolidBarrierKind,
+  RALLY_BARRIER_KINDS,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_CIRCUITS,
   REALM_RACERS_PRACTICE_CIRCUIT,
@@ -39,9 +41,14 @@ import {
   realmRacersPublicLane,
 } from '../src/sim/realm_racers_layout';
 import {
+  rallyBarrierKindAt,
+  rallyContainmentGraceAt,
+  rallyContainmentLineAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
+  realmRacersWaterOutlines,
+  resolveRealmRacersContainment,
 } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
@@ -141,6 +148,27 @@ describe('Realm Racers circuits: every record is well formed', () => {
           expect(band.maxApron, `apron band at s=${band.s}`).toBeGreaterThan(0);
         }
       }
+
+      // The barrier table, where a circuit authors one, is STEPWISE rather than
+      // interpolated: sorted, first entry at 0, every entry in [0, 1) because
+      // an entry at 1 would open a span of zero length, and every kind one the
+      // spline knows how to stand on the line.
+      const barrierBands = circuit.barrierBands;
+      if (barrierBands) {
+        expect(barrierBands.length).toBeGreaterThan(0);
+        expect(barrierBands[0].s).toBe(0);
+        for (let i = 0; i < barrierBands.length; i++) {
+          const band = barrierBands[i];
+          expect(band.s, `barrier band ${i} of ${circuit.id}`).toBeGreaterThanOrEqual(0);
+          expect(band.s, `barrier band ${i} of ${circuit.id}`).toBeLessThan(1);
+          if (i > 0) expect(band.s).toBeGreaterThan(barrierBands[i - 1].s);
+          expect(RALLY_BARRIER_KINDS, `barrier band ${i} of ${circuit.id}`).toContain(band.kind);
+        }
+      }
+      // Water is what a shore is MADE of, so a circuit authoring one has to
+      // author a basin; a circuit whose whole line is solid may author none.
+      const anyShore = !barrierBands || barrierBands.some((band) => !isSolidBarrierKind(band.kind));
+      if (anyShore) expect(circuit.basin, `${circuit.id} basin`).toBeDefined();
 
       // The race has to be finishable, and the region has to contain the wall.
       expect(circuit.laps).toBeGreaterThan(0);
