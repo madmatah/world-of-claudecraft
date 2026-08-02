@@ -501,6 +501,54 @@ describe('Realm Racers containment: a circuit with no water at all', () => {
 });
 
 describe('Realm Racers containment: the collision entry point drives it', () => {
+  it('holds a racer on the line of a SOLID span, through resolvePosition', () => {
+    // `resolvePosition` is the one caller that matters, and every case it has
+    // ever been driven on is a shore: the arm that gives no grace at all had
+    // never been exercised through the real entry point.
+    //
+    // Run on the SHIPPED flipped circuit rather than a fixture, because it has
+    // to be: the entry point resolves which circuit it is clamping against off
+    // the LANE table, so a record the band does not carry is silently held to
+    // whichever circuit stands on lane 0.
+    const express = realmRacersCompetitionCircuits().find(
+      (circuit) => circuit.barrierBands !== undefined,
+    );
+    if (!express) throw new Error('a competition circuit authors barrier bands');
+    const track = realmRacersTrack(express);
+    const lane = realmRacersLaneOffset(realmRacersPublicLane(express));
+    let held = 0;
+    let moved = 0;
+    for (let i = 0; i < track.samples.length; i++) {
+      const sample = track.samples[i];
+      if (rallyBarrierKindAt(express, sample.s) === 'shore') continue;
+      const line = rallyContainmentLineAt(express, sample.s);
+      for (const depth of [0.5, 3]) {
+        const x = sample.x - sample.tz * (line + depth);
+        const z = sample.z + sample.tx * (line + depth);
+        const resolved = resolvePosition(SEED, x + lane.x, z + lane.z, 0.5);
+        const projection = track.project(resolved.x - lane.x, resolved.z - lane.z);
+        // Held inside the limit of wherever it settled, always...
+        expect(projection.lateral, `sample ${i} at ${depth}`).toBeLessThanOrEqual(
+          rallyContainmentLimitAt(express, projection.s) + 1e-3,
+        );
+        // ...and ON the bare line whenever that is a solid span, which is the
+        // arm with no grace at all. A probe at a span's first sample can settle
+        // one sample back into the shore beside it, where the taper still gives
+        // a few inches; that is the same joint the last hedge piece stands on.
+        if (rallyBarrierKindAt(express, projection.s) !== 'shore') {
+          expect(projection.lateral, `sample ${i} at ${depth}`).toBeLessThanOrEqual(
+            rallyContainmentLineAt(express, projection.s) + 1e-3,
+          );
+          held++;
+        }
+        // ...and it really was MOVED: nothing here is passing by standing still.
+        if (Math.hypot(resolved.x - lane.x - x, resolved.z - lane.z - z) > 0.1) moved++;
+      }
+    }
+    expect(held).toBeGreaterThan(100);
+    expect(moved).toBeGreaterThan(100);
+  });
+
   it('holds a racer out of the practice circuit exactly as it always did', () => {
     // `resolvePosition` is the one caller that matters, and the practice
     // circuit is unflipped: this is the shipped path, unchanged.

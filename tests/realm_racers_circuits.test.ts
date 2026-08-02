@@ -301,6 +301,96 @@ describe('Realm Racers recovery anchors: derived, never authored', () => {
   });
 });
 
+describe('Realm Racers circuits: the Express Tour pinch strip', () => {
+  const EXPRESS = realmRacersCompetitionCircuits().find(
+    (circuit) => circuit.id === 'evergarden_express_tour',
+  );
+  if (!EXPRESS) throw new Error('the Express Tour is the competition circuit this pins');
+  const track = realmRacersTrack(EXPRESS);
+
+  it('stands a low hedge on BOTH sides of the strip its two stretches flank', () => {
+    // The design outcome, not the table: the two facing stretches carry the
+    // same solid kind, so the strip between them is enclosed rather than half
+    // hedged and half open water.
+    const metrics = realmRacersCircuitMetrics(EXPRESS);
+    // The measured strip, not a floor: shortening either span, or moving one
+    // off the stretch it faces, moves this.
+    expect(metrics.sharedBarrierYards).toBeCloseTo(42, 0);
+    // Every yard the two stretches can shoot across is a yard both of them
+    // carry a barrier on: the corridor and the barrier are the same strip.
+    expect(metrics.sharedBarrierYards).toBe(metrics.shootingCorridorYards);
+    expect(metrics.shootingCorridorYards).toBeGreaterThan(30);
+    // Low, so a pilot sees the rival they are shooting at.
+    const hedged = track.samples.filter(
+      (sample) => rallyBarrierKindAt(EXPRESS, sample.s) === 'hedge_low',
+    );
+    expect(hedged.length).toBeGreaterThan(80);
+    expect(new Set(track.samples.map((sample) => rallyBarrierKindAt(EXPRESS, sample.s)))).toEqual(
+      new Set(['shore', 'hedge_low']),
+    );
+  });
+
+  it('leaves an unreachable strip: two water lobes, and dry ground between them', () => {
+    // Two solid spans cut the ring in two, so the lake is two lobes closed off
+    // across the two mouths of the strip. That IS the strip becoming dry.
+    const outlines = realmRacersWaterOutlines(EXPRESS);
+    expect(outlines).toHaveLength(2);
+    for (const outline of outlines) expect(outline.length).toBeGreaterThan(100);
+    // Nowhere in either hedged span may a racer get past the line at all.
+    let held = 0;
+    for (const sample of track.samples) {
+      if (rallyBarrierKindAt(EXPRESS, sample.s) !== 'hedge_low') continue;
+      expect(rallyContainmentGraceAt(EXPRESS, sample.s)).toBe(0);
+      const line = rallyContainmentLineAt(EXPRESS, sample.s);
+      const point = resolveRealmRacersContainment(
+        EXPRESS,
+        sample.x - sample.tz * (line + 6),
+        sample.z + sample.tx * (line + 6),
+      );
+      const projection = track.project(point.x, point.z);
+      expect(projection.lateral).toBeLessThanOrEqual(
+        rallyContainmentLineAt(EXPRESS, projection.s) + 1e-3,
+      );
+      held++;
+    }
+    expect(held).toBeGreaterThan(80);
+  });
+
+  it('closed the strip without reshaping the circuit', () => {
+    // The barrier is what changed, and only that: the containment line is
+    // derived from the control points and the apron rule, both untouched, so
+    // the two stretches faced each other at this distance before the hedge too.
+    const before = { ...EXPRESS, id: 'express_before_the_flip', barrierBands: undefined };
+    const beforeMetrics = realmRacersCircuitMetrics(before);
+    const afterMetrics = realmRacersCircuitMetrics(EXPRESS);
+    expect(afterMetrics.lapLength).toBe(beforeMetrics.lapLength);
+    expect(afterMetrics.nearestApproach).toEqual(beforeMetrics.nearestApproach);
+    expect(afterMetrics.shootingCorridorYards).toBe(beforeMetrics.shootingCorridorYards);
+    for (const sample of realmRacersTrack(before).samples) {
+      expect(rallyContainmentLineAt(EXPRESS, sample.s)).toBe(
+        rallyContainmentLineAt(before, sample.s),
+      );
+    }
+    // ...and the flip only ever TIGHTENED what a racer can reach.
+    let tightened = 0;
+    for (const sample of track.samples) {
+      const grace = rallyContainmentGraceAt(EXPRESS, sample.s);
+      expect(grace).toBeLessThanOrEqual(rallyContainmentGraceAt(before, sample.s));
+      if (grace < rallyContainmentGraceAt(before, sample.s)) tightened++;
+    }
+    expect(tightened).toBeGreaterThan(100);
+    expect(realmRacersCircuitErrors(afterMetrics)).toEqual([]);
+  });
+
+  it('leaves the practice circuit a lake circuit, untouched', () => {
+    // The other half of the acceptance: one content flip, one circuit.
+    expect(GARDEN.barrierBands).toBeUndefined();
+    expect(GARDEN.basin).toBeDefined();
+    expect(realmRacersWaterOutlines(GARDEN)).toHaveLength(1);
+    expect(realmRacersCircuitMetrics(GARDEN).sharedBarrierYards).toBe(0);
+  });
+});
+
 describe('Realm Racers circuits: the pools', () => {
   it('has exactly one practice circuit, and it is the one practice resolves to', () => {
     const practice = REALM_RACERS_CIRCUIT_LIST.filter((c) => c.roles.includes('practice'));

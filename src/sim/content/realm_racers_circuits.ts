@@ -300,23 +300,24 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
  * The Evergarden Express Tour: the first COMPETITION circuit, and the first
  * drawn in the circuit editor rather than typed by hand.
  *
- * Measured through the shared spline at authoring time: a 1469 yard lap over
- * 1469 samples, turning +360 degrees (so it closes without crossing itself),
- * winding counter-clockwise (so the infield is on the left normal, which is
- * what the apron and the basin shore are built on), and a tightest corner of
- * 15.2 yards against a 8 yard local half-width, a ratio of 1.90 that keeps the
- * road ribbon's inner edge from folding through its own centre of curvature.
+ * Measured through the shared spline: an 829 yard lap over 829 samples, turning
+ * +360 degrees (so it closes without crossing itself), winding counter-clockwise
+ * (so the infield is on the left normal, which is what the apron and the
+ * containment line are built on), and a tightest corner of 13.3 yards.
  *
- * Its `apronBands` are the reason the shore never self-crosses: where two
- * stretches of the lap run close to each other the derived apron would push
- * both shores into the same water, and pulling it in over those arcs is the
- * only thing in the record that can say so.
+ * Its `apronBands` are the reason the containment line never self-crosses:
+ * where two stretches of the lap run close to each other the derived apron
+ * would push both lines into the same yards of infield, and pulling it in over
+ * those arcs is the only thing in the record that can say so.
  *
- * Known and deliberate, to revisit in the seat: the lap is a third longer than
- * the 1100 yard target (about 37 s a lap at the `ace` pace, so a 3 lap race
- * still finishes inside the 180 s limit), and it has NO shooting corridor yet:
- * its closest opposed stretches sit 54 yards apart at a tangent dot of -0.66,
- * which is 131 degrees rather than the head-on -0.8 a cross-gap shell needs.
+ * The pinch those bands hold open is the circuit's one real FEATURE: its two
+ * long stretches run 51 yards apart, dead head on (tangent dot -1.0), for 42
+ * yards of lap, which is inside a Ground Blast's cone-limited reach. Both sides
+ * of that strip carry a `hedge_low` rather than a shore, so the strip between
+ * them is unreachable garden flanked by two clipped hedges a pilot can see a
+ * rival over, which is the shooting corridor the design asked for. It is the
+ * BARRIER that closed the strip, not the geometry: the two stretches faced each
+ * other at this distance before, with open water between them.
  */
 const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
   id: 'evergarden_express_tour',
@@ -435,6 +436,26 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
     { s: 0.9, maxApron: 14.67 },
     { s: 0.905, maxApron: 15 },
     { s: 1, maxApron: 15 },
+  ],
+  /**
+   * The pinch strip, closed on both sides. The two fractions come off the
+   * measured shape rather than off the eye: samples 133 to 178 face samples 356
+   * to 400 across a gap that closes to 11 yards between the two containment
+   * lines, and these two spans cover both sides of it, running a handful of
+   * samples past the facing stretch at each end so the hedge starts before the
+   * strip does.
+   *
+   * The lake is unchanged everywhere else, so the water is now two lobes: one
+   * each side of the strip, each closed off across the mouth of it. That is
+   * what makes the strip dry, and it is the only thing on this circuit that
+   * moved.
+   */
+  barrierBands: [
+    { s: 0, kind: 'shore' },
+    { s: 0.155, kind: 'hedge_low' },
+    { s: 0.225, kind: 'shore' },
+    { s: 0.425, kind: 'hedge_low' },
+    { s: 0.49, kind: 'shore' },
   ],
   regionHalfX: 265,
   regionHalfZ: 150,
