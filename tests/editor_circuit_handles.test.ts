@@ -213,6 +213,46 @@ describe('circuit editor: painting a band table', () => {
     expect(after[500]).toBeCloseTo(10, 6);
   });
 
+  it('runs the transition over the ramp it is given, not over one cell', () => {
+    // What "less brutal" means, measured: the steepest step in the road edge.
+    // A one-cell ramp is 0.5 percent of the lap, so a two yard change over it
+    // is a wall; the hand-authored profiles transition over 5 to 7 percent.
+    const steepest = (bands: readonly CircuitBand[]): number => {
+      const p = profile(bands, 2000);
+      let worst = 0;
+      for (let i = 0; i < p.length; i++)
+        worst = Math.max(worst, Math.abs(p[(i + 1) % p.length] - p[i]));
+      return worst;
+    };
+    const stroke = [0.3, 0.302, 0.304, 0.306];
+    const oneCell = paintSpan(flat, stroke, 8, WIDTH_BRUSH);
+    const gentle = paintSpan(flat, stroke, 8, { ...WIDTH_BRUSH, ramp: 0.055 });
+    expect(steepest(gentle)).toBeLessThan(steepest(oneCell) / 3);
+    // Both really did paint the same value; only the approach changed.
+    expect(Math.min(...profile(gentle))).toBeCloseTo(8, 1);
+  });
+
+  it('ends the transition ON the original profile, however long the ramp', () => {
+    // A longer ramp must not be a longer LEAK. The outermost breakpoint of each
+    // ramp carries the original value and is never thinned away, so the road
+    // beyond it is untouched rather than leaning toward the stroke.
+    const painted = paintSpan(flat, [0.3], 8, { ...WIDTH_BRUSH, ramp: 0.055 });
+    const after = profile(painted, 1000);
+    for (let i = 0; i < after.length; i++) {
+      const f = i / after.length;
+      if (f > 0.23 && f < 0.37) continue;
+      expect(after[i], `lap fraction ${f}`).toBeCloseTo(10, 6);
+    }
+  });
+
+  it('describes a smooth transition in a table a human can still edit', () => {
+    // Emitted per cell and then thinned to what the shape actually needs, so a
+    // gentle ramp does not cost one row per cell of it.
+    const painted = paintSpan(flat, [0.3, 0.31, 0.32], 8, { ...WIDTH_BRUSH, ramp: 0.055 });
+    expect(painted.length).toBeLessThan(16);
+    expect(painted.length).toBeGreaterThan(4);
+  });
+
   it('holds the painted value inside the brush range', () => {
     const low = paintSpan(flat, [0.4], 2, WIDTH_BRUSH);
     expect(Math.min(...profile(low))).toBeCloseTo(8, 6);

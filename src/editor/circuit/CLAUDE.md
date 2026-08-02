@@ -64,8 +64,15 @@ to grow to one themed circuit per game zone.
   lap: one click at 30 percent changed 452 of a 454 yard lap. `paintSpan` takes
   every fraction the pointer visited plus the table as it stood BEFORE the
   stroke, fills the cells a fast pointer skipped, and lays a plateau with a
-  one-cell shoulder each side, which is how the hand-authored profiles are
+  smoothstep transition each side, which is how the hand-authored profiles are
   shaped. Cells the stroke never reached keep their original breakpoints.
+- **A transition is a length in YARDS, not in lap fractions.** The garden
+  circuit ramps its width over 23 to 32 yards, so the page hands `paintSpan` a
+  ramp of `PAINT_RAMP_YARDS / lapLength` and a transition reads the same on a
+  454 yard circuit and an 1100 yard one. Each ramp is emitted per cell and then
+  thinned to the rows the shape needs, EXCEPT its outermost breakpoint: that is
+  where the transition meets the profile it interrupted, and dropping it lets
+  the road lean toward the stroke from arbitrarily far away.
 - **The one number in the header is a VALUE, not a brush size.** It means a
   different quantity in each painting mode with a different legal range, so the
   field is renamed and re-bounded per mode, and every stroke reports what it

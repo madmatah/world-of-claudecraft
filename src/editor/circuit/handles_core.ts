@@ -24,6 +24,14 @@ export const MIN_CONTROL_POINTS = 8;
  *  leaving a hundred breakpoints a yard apart behind it. */
 export const FRACTION_SNAP = 0.005;
 
+/**
+ * How far a dropped breakpoint may move the profile, yards. Five centimetres of
+ * road half-width, which is well under a percent of the narrowest road the
+ * record may carry and invisible at any zoom: it buys a transition described in
+ * ten rows instead of twenty-six, at no shape anyone can see.
+ */
+const THINNING_TOLERANCE = 0.05;
+
 export interface CircuitBand {
   s: number;
   value: number;
@@ -115,6 +123,20 @@ export interface PaintBandOptions {
   min: number;
   max: number;
   snap?: number;
+  /**
+   * How much lap the transition into and out of the painted stretch runs over,
+   * as a fraction of the lap. The caller owns it because the length that reads
+   * well is a length in YARDS, and only the caller knows how long the lap is.
+   * Defaults to one snap cell, which is a step rather than a transition.
+   */
+  ramp?: number;
+}
+
+/** Smooth Hermite step: flat at both ends, so a transition has no kink where it
+ *  meets the road either side of it. */
+function smoothstep(t: number): number {
+  const x = clamp(t, 0, 1);
+  return x * x * (3 - 2 * x);
 }
 
 /** Reads a band table the way the spline reads it: piecewise linear, wrapping.
@@ -192,50 +214,94 @@ export function paintSpan(
     touched.add(cell);
     touched.add(wrap(cell + 1));
   }
-  const boundaryTouched = (k: number): boolean => touched.has(wrap(k - 1)) || touched.has(wrap(k));
-  const boundaryValue = (k: number): number =>
-    painted.has(wrap(k - 1)) || painted.has(wrap(k)) ? held : valueAt(bands, k / cells);
+  // How far each boundary sits from the painted stretch, in cells, measured the
+  // short way round the lap. The ramp is a distance, so the transition runs the
+  // same length whichever side of the stroke it is on and however the stroke
+  // wandered.
+  const distance = new Array<number>(cells).fill(Number.POSITIVE_INFINITY);
+  for (let k = 0; k < cells; k++) {
+    if (painted.has(wrap(k - 1)) || painted.has(k)) distance[k] = 0;
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    for (let k = 0; k < cells; k++) {
+      distance[k] = Math.min(distance[k], distance[wrap(k - 1)] + 1);
+    }
+    for (let k = cells - 1; k >= 0; k--) {
+      distance[k] = Math.min(distance[k], distance[wrap(k + 1)] + 1);
+    }
+  }
 
-  const out: CircuitBand[] = [];
+  const rampCells = Math.max(1, Math.round((options.ramp ?? snap) * cells));
+  // Out to rampCells + 1, where the blend is exactly zero: the transition has
+  // to END on the original value, or the profile leans back toward it over
+  // whatever distance separates it from the next authored breakpoint and the
+  // stroke stops being local again.
+  const boundaryTouched = (k: number): boolean => distance[wrap(k)] <= rampCells + 1;
+  const boundaryValue = (k: number): number => {
+    const blend = smoothstep(1 - distance[wrap(k)] / (rampCells + 1));
+    const original = valueAt(bands, k / cells);
+    return original + (held - original) * blend;
+  };
+
+  const out: { band: CircuitBand; emitted: boolean }[] = [];
   for (const band of bands) {
+    // A breakpoint inside the stroke or its ramps is part of the transition
+    // now, so the stroke replaces it rather than fighting it.
     const cell = Math.min(cells - 1, Math.floor(band.s * cells));
-    // A breakpoint sitting exactly on a boundary the stroke rewrites is
-    // replaced by it, never kept beside it.
     const onEdge = Math.abs(band.s * cells - Math.round(band.s * cells)) < 1e-9;
-    const boundary = Math.round(band.s * cells);
-    if (onEdge ? boundaryTouched(boundary) : touched.has(cell)) continue;
-    out.push({ ...band });
+    if (onEdge ? boundaryTouched(Math.round(band.s * cells)) : distance[cell] <= rampCells + 1) {
+      continue;
+    }
+    out.push({ band: { ...band }, emitted: false });
   }
   for (let k = 0; k <= cells; k++) {
     if (!boundaryTouched(k)) continue;
-    out.push({ s: Number((k / cells).toFixed(6)), value: round2(boundaryValue(k)) });
+    // The outermost boundary of each ramp is where the transition MEETS the
+    // profile it interrupted, so it is never thinned away: dropping it lets the
+    // road lean toward the stroke from arbitrarily far off, which is the
+    // globality this whole function exists to remove.
+    const anchor = distance[wrap(k)] === rampCells + 1;
+    out.push({
+      band: { s: Number((k / cells).toFixed(6)), value: round2(boundaryValue(k)) },
+      emitted: !anchor,
+    });
   }
-  out.sort((a, b) => a.s - b.s);
+  out.sort((a, b) => a.band.s - b.band.s);
 
   // The table always spans the whole lap, and its two ends are the same yard of
   // road, so they carry the same value.
-  if (out.length === 0 || out[0].s !== 0) out.unshift({ s: 0, value: round2(boundaryValue(0)) });
-  if (out[out.length - 1].s !== 1) out.push({ s: 1, value: out[0].value });
-  else out[out.length - 1] = { s: 1, value: out[0].value };
-  return dropRedundant(out);
+  if (out.length === 0 || out[0].band.s !== 0) {
+    out.unshift({ band: { s: 0, value: round2(boundaryValue(0)) }, emitted: true });
+  }
+  const last = out[out.length - 1];
+  if (last.band.s !== 1) out.push({ band: { s: 1, value: out[0].band.value }, emitted: true });
+  else last.band = { s: 1, value: out[0].band.value };
+  return thin(out);
 }
 
-/** Drops a breakpoint the straight line between its neighbours already
- *  explains, so a stroke does not leave a hundred collinear rows behind. */
-function dropRedundant(bands: readonly CircuitBand[]): CircuitBand[] {
-  const out: CircuitBand[] = [];
-  for (let i = 0; i < bands.length; i++) {
+/**
+ * Drops a breakpoint the straight line between its neighbours already explains
+ * to within a fraction of a yard, so a smooth transition costs a handful of
+ * rows rather than one per cell.
+ *
+ * Only ever drops rows this stroke EMITTED. An authored breakpoint the stroke
+ * never reached is kept whatever the arithmetic says about it: thinning
+ * somebody's profile is not a stroke's business.
+ */
+function thin(rows: readonly { band: CircuitBand; emitted: boolean }[]): CircuitBand[] {
+  const out: { band: CircuitBand; emitted: boolean }[] = [];
+  for (let i = 0; i < rows.length; i++) {
     const previous = out[out.length - 1];
-    const next = bands[i + 1];
-    if (previous && next) {
-      const span = next.s - previous.s;
-      const t = span <= 0 ? 0 : (bands[i].s - previous.s) / span;
-      const straight = previous.value + (next.value - previous.value) * t;
-      if (Math.abs(bands[i].value - straight) < 1e-6) continue;
+    const next = rows[i + 1];
+    if (rows[i].emitted && previous && next) {
+      const span = next.band.s - previous.band.s;
+      const t = span <= 0 ? 0 : (rows[i].band.s - previous.band.s) / span;
+      const straight = previous.band.value + (next.band.value - previous.band.value) * t;
+      if (Math.abs(rows[i].band.value - straight) < THINNING_TOLERANCE) continue;
     }
-    out.push({ ...bands[i] });
+    out.push(rows[i]);
   }
-  return out;
+  return out.map((row) => row.band);
 }
 
 function round2(value: number): number {

@@ -60,6 +60,18 @@ type Selection = { kind: 'point'; index: number } | null;
 const MAX_LISTED_PROBLEMS = 10;
 
 /**
+ * How much lap a painted transition runs over, YARDS. In yards rather than in
+ * lap fractions so a transition reads the same on a 454 yard circuit and on an
+ * 1100 yard one.
+ *
+ * The number comes from the hand-authored profile: the garden circuit ramps its
+ * width over 23 to 32 yards, so 25 sits in that band and reads as a road
+ * changing width rather than a step in it. A one-cell ramp, which is what this
+ * replaces, is 2.3 yards, and a two yard change over that is a wall.
+ */
+const PAINT_RAMP_YARDS = 25;
+
+/**
  * What the one number in the header MEANS in each mode, and what it is allowed
  * to be. It is not a brush SIZE, which is what "brush" says in every other
  * tool: it is the value the stroke paints, in yards, and the two painting modes
@@ -854,6 +866,7 @@ function paintAt(point: RallyPoint): void {
   const bands = paintSpan(paintOrigin, paintFractions, value, {
     min: brush.min,
     max: brush.max,
+    ramp: PAINT_RAMP_YARDS / track.length,
   });
   commit(
     mode === 'width'
