@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import {
   REALM_RACERS_MIN_HALF_WIDTH,
   REALM_RACERS_SAMPLE_STEP,
-  REALM_RACERS_WIDTH_BANDS,
 } from '../src/sim/realm_racers_layout';
 import { rallyForwardDot, realmRacersTrack } from '../src/sim/realm_racers_spline';
 
-const track = realmRacersTrack();
+const track = realmRacersTrack(GARDEN_CIRCUIT);
 
 /**
  * A projection as the two quantities the sim consumes (arc position and signed
@@ -53,7 +53,7 @@ describe('Realm Racers spline', () => {
     for (const sample of track.samples) {
       expect(sample.halfWidth).toBeGreaterThanOrEqual(REALM_RACERS_MIN_HALF_WIDTH);
     }
-    for (const band of REALM_RACERS_WIDTH_BANDS) {
+    for (const band of GARDEN_CIRCUIT.widthBands) {
       expect(track.halfWidthAt(band.s * track.length)).toBeCloseTo(band.halfWidth, 6);
     }
     // The floor is real, not vacuous: the chicane actually reaches it.
@@ -110,7 +110,9 @@ describe('Realm Racers spline', () => {
 
   it('builds byte-identical samples on a fresh module instance (deterministic)', async () => {
     vi.resetModules();
-    const rebuilt = (await import('../src/sim/realm_racers_spline')).realmRacersTrack();
+    const rebuilt = (await import('../src/sim/realm_racers_spline')).realmRacersTrack(
+      GARDEN_CIRCUIT,
+    );
     expect(rebuilt.length).toBe(track.length);
     expect(rebuilt.samples).toEqual(track.samples);
   });

@@ -22,6 +22,12 @@ import type {
   RealmRacersRacerInfo,
 } from '../../world_api/realm_racers';
 import { realmRacersWeaponCharges, resolveRealmRacersKit } from '../content/realm_racers';
+import {
+  REALM_RACERS_PRACTICE_CIRCUIT,
+  type RealmRacersCircuit,
+  realmRacersCircuitById,
+  realmRacersCompetitionCircuits,
+} from '../content/realm_racers_circuits';
 import { vehicleProfile } from '../content/vehicles';
 import { abilitiesKnownAt, DUNGEON_X_THRESHOLD } from '../data';
 import { restorePetFromDelveStash, stowPetForDelve } from '../pet/pet_commands';
@@ -37,13 +43,12 @@ import {
 import {
   type RallyPoint,
   REALM_RACERS_GRID_SIZE,
-  REALM_RACERS_LAPS,
-  REALM_RACERS_PRACTICE_LAPS,
-  REALM_RACERS_PRACTICE_SLOTS,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
   rallyGateCrossingFraction,
-  realmRacersSlotOffset,
+  realmRacersLaneOffset,
+  realmRacersPracticeLanes,
+  realmRacersPublicLane,
 } from '../realm_racers_layout';
 import {
   forwardArcDelta,
@@ -80,7 +85,6 @@ export const REALM_RACERS_VEHICLE_KEY = 'rally_loaner';
  *  fail to compile, it would just render a pilot with no machine under them. */
 export const REALM_RACERS_MOUNT_KEY: string = vehicleProfile(REALM_RACERS_VEHICLE_KEY).key;
 export const REALM_RACERS_COUNTDOWN_TICKS = 9 * TICK_RATE;
-export const REALM_RACERS_TIME_LIMIT_TICKS = 180 * TICK_RATE;
 /**
  * How long the rest of the field has to get home once the WINNER is home.
  *
@@ -280,14 +284,20 @@ export interface RealmRacersMatch {
    *  duel from silencing another. */
   bumpTicks: Map<number, number>;
   /**
-   * Which COPY of the circuit this race runs on, as the offset every geometry
-   * read adds: {0, 0} for the one public circuit, a far z offset for a private
-   * practice copy (see `realmRacersSlotOffset`). Carrying it on the match
-   * rather than reading a module constant is what lets practice laps run in
-   * parallel with the public race and with each other.
+   * WHICH circuit this race is on, as a `REALM_RACERS_CIRCUITS` id. Every
+   * geometry read resolves through it, so two races on different circuits can
+   * run side by side in the same realm.
+   */
+  circuitId: string;
+  /**
+   * WHERE that circuit's copy sits, as the offset every geometry read adds:
+   * {0, 0} for lane 0, a far z offset for any other lane (see
+   * `realmRacersLaneOffset`). Carrying it on the match rather than reading a
+   * module constant is what lets practice laps run in parallel with the public
+   * race and with each other.
    */
   origin: RallyPoint;
-  /** Set for a private practice race: whose it is, and which copy it holds. */
+  /** Set for a private practice race: whose it is, and which lane it holds. */
   practice: { ownerPid: number; slot: number } | null;
   /** How many laps this race runs. Practice is longer than the public race. */
   totalLaps: number;
@@ -374,12 +384,21 @@ export function realmRacersMatchOf(ctx: SimContext, pid: number): RealmRacersMat
   return rally.practices.find((m) => matchSeats(m, pid)) ?? null;
 }
 
-/** A free practice copy of the circuit, or -1 when every one is in use. Copy 0
- *  is the public circuit and is never handed out. */
+/**
+ * The circuit a race is on. Falls back to the practice circuit for an id no
+ * longer authored, which is a shape a live realm can hit exactly once: a race
+ * seated before a deploy that dropped its circuit.
+ */
+export function realmRacersCircuitOf(match: RealmRacersMatch): RealmRacersCircuit {
+  return realmRacersCircuitById(match.circuitId) ?? REALM_RACERS_PRACTICE_CIRCUIT;
+}
+
+/** A free private lane of the practice circuit, or -1 when every one is in use.
+ *  The public lane is never handed out. */
 export function realmRacersFreePracticeSlot(ctx: SimContext): number {
   const used = new Set(ctx.realmRacers.practices.map((m) => m.practice?.slot));
-  for (let slot = 1; slot <= REALM_RACERS_PRACTICE_SLOTS; slot++) {
-    if (!used.has(slot)) return slot;
+  for (const lane of realmRacersPracticeLanes()) {
+    if (!used.has(lane.index)) return lane.index;
   }
   return -1;
 }
@@ -458,7 +477,11 @@ export function realmRacersToWorld(match: RealmRacersMatch, x: number, z: number
 function reproject(match: RealmRacersMatch, pid: number, e: Entity) {
   const progress = match.progress.get(pid) as RealmRacersProgress;
   const local = realmRacersToCanonical(match, e.pos.x, e.pos.z);
-  const projection = realmRacersTrack().project(local.x, local.z, progress.trackIndex);
+  const projection = realmRacersTrack(realmRacersCircuitOf(match)).project(
+    local.x,
+    local.z,
+    progress.trackIndex,
+  );
   progress.trackIndex = projection.index;
   return projection;
 }
@@ -466,7 +489,7 @@ function reproject(match: RealmRacersMatch, pid: number, e: Entity) {
 function seedProgress(match: RealmRacersMatch, pid: number, e: Entity): void {
   const progress = match.progress.get(pid) as RealmRacersProgress;
   const projection = reproject(match, pid, e);
-  const lapLength = realmRacersTrack().length;
+  const lapLength = realmRacersTrack(realmRacersCircuitOf(match)).length;
   progress.lastS = projection.s;
   progress.travelled = travelledFromArc(progress.lap, projection.s, lapLength);
   progress.resetS = projection.s;
@@ -475,7 +498,7 @@ function seedProgress(match: RealmRacersMatch, pid: number, e: Entity): void {
 }
 
 function placeRacer(ctx: SimContext, match: RealmRacersMatch, e: Entity, slot: number): void {
-  const start = realmRacersStarts()[slot];
+  const start = realmRacersStarts(realmRacersCircuitOf(match))[slot];
   const grid = realmRacersToWorld(match, start.x, start.z);
   e.pos = ctx.groundPos(grid.x, grid.z);
   e.prevPos = { ...e.pos };
@@ -605,6 +628,11 @@ function startMatch(
     meta: ctx.players.get(pid) as PlayerMeta,
   }));
   const profile = vehicleProfile(REALM_RACERS_VEHICLE_KEY);
+  // Practice always takes the practice circuit; a queued race takes the
+  // competition pool. The pool is drawn from POSITIONALLY while it holds one
+  // circuit: a random draw is a new site in the shared rng stream, so it lands
+  // with the second circuit, in its own commit, behind a parity regen.
+  const circuit = practice ? REALM_RACERS_PRACTICE_CIRCUIT : realmRacersCompetitionCircuits()[0];
   const id = ctx.realmRacers.nextMatchId++;
   const returns = new Map<number, RealmRacersReturn>();
   const pools = new Map<number, ArenaReturnPools>();
@@ -623,7 +651,8 @@ function startMatch(
     gridSize: pids.length,
     phase: 'countdown',
     goTick: ctx.tickCount + REALM_RACERS_COUNTDOWN_TICKS,
-    deadlineTick: ctx.tickCount + REALM_RACERS_COUNTDOWN_TICKS + REALM_RACERS_TIME_LIMIT_TICKS,
+    deadlineTick:
+      ctx.tickCount + REALM_RACERS_COUNTDOWN_TICKS + circuit.timeLimitSeconds * TICK_RATE,
     finishTick: null,
     winnerPid: null,
     chaseUntilTick: null,
@@ -661,9 +690,13 @@ function startMatch(
     ),
     groundBlasts: [],
     bumpTicks: new Map(),
-    origin: practice ? realmRacersSlotOffset(practice.slot) : { x: 0, z: 0 },
+    circuitId: circuit.id,
+    // A practice race holds the private lane its caller claimed; a queued race
+    // stands on its circuit's PUBLIC lane, which is lane 0 only while the
+    // garden circuit is the one being raced.
+    origin: realmRacersLaneOffset(practice ? practice.slot : realmRacersPublicLane(circuit)),
     practice: practice ? { ownerPid: practice.ownerPid, slot: practice.slot } : null,
-    totalLaps: practice ? REALM_RACERS_PRACTICE_LAPS : REALM_RACERS_LAPS,
+    totalLaps: practice ? circuit.practiceLaps : circuit.laps,
   };
   if (practice) ctx.realmRacers.practices.push(match);
   else ctx.realmRacers.match = match;
@@ -878,7 +911,7 @@ function resetRacerToRecoveryAnchor(
   )
     return false;
 
-  const track = realmRacersTrack();
+  const track = realmRacersTrack(realmRacersCircuitOf(match));
   const anchor = track.pointAt(progress.resetS);
   const world = realmRacersToWorld(match, anchor.x, anchor.z);
   racer.pos = ctx.groundPos(world.x, world.z);
@@ -1125,8 +1158,11 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
  * harshest one, and the racer cannot get more than a wading margin into it
  * because `resolveRealmRacersWade` holds them out of the rest.
  */
-function offTrackBand(projection: RallyProjection): RealmRacersSlowBand | null {
-  const track = realmRacersTrack();
+function offTrackBand(
+  circuit: RealmRacersCircuit,
+  projection: RallyProjection,
+): RealmRacersSlowBand | null {
+  const track = realmRacersTrack(circuit);
   // The road narrows and widens around the lap, so track limits follow the
   // LOCAL half-width rather than one fixed distance.
   const over = Math.abs(projection.lateral) - track.halfWidthAt(projection.s);
@@ -1135,7 +1171,7 @@ function offTrackBand(projection: RallyProjection): RealmRacersSlowBand | null {
     return REALM_RACERS_VERGE_BAND;
   }
   // Only the infield side has water; outward is garden all the way to the wall.
-  return projection.lateral > rallyBasinEdgeOffsetAt(projection.s)
+  return projection.lateral > rallyBasinEdgeOffsetAt(circuit, projection.s)
     ? REALM_RACERS_WATER_BAND
     : REALM_RACERS_GARDEN_BAND;
 }
@@ -1166,12 +1202,13 @@ function applyVehicleSurface(
 }
 
 function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
+  const circuit = realmRacersCircuitOf(match);
   for (const pid of match.pids) {
     const racer = ctx.entities.get(pid);
     const progress = match.progress.get(pid);
     if (!racer || !progress) continue;
     const projection = reproject(match, pid, racer);
-    const band = offTrackBand(projection);
+    const band = offTrackBand(circuit, projection);
     const forwardDot = rallyForwardDot(projection, Math.sin(racer.facing), Math.cos(racer.facing));
     if (forwardDot < -0.2) {
       progress.wrongWayTicks++;
@@ -1221,8 +1258,9 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
 }
 
 function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
-  const lapLength = realmRacersTrack().length;
-  const gates = realmRacersGates();
+  const circuit = realmRacersCircuitOf(match);
+  const lapLength = realmRacersTrack(circuit).length;
+  const gates = realmRacersGates(circuit);
   let anyFinished = false;
   for (let slot = 0; slot < match.pids.length; slot++) {
     const pid = match.pids[slot];
@@ -1475,6 +1513,7 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
       : Math.max(0, Math.ceil((match.chaseUntilTick - ctx.tickCount) / TICK_RATE));
   return {
     id: match.id,
+    circuitId: match.circuitId,
     participantIds: [...match.pids],
     phase: myEndTick !== null ? 'finished' : match.phase,
     countdown,

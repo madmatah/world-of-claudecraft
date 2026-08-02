@@ -14,6 +14,7 @@ import {
   REALM_RACERS_WEAPON_CHARGES,
   resolveRealmRacersKit,
 } from '../src/sim/content/realm_racers';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { GRAVITY } from '../src/sim/player_motion';
 import {
@@ -71,7 +72,7 @@ function racing(): { sim: Sim; a: number; b: number; pids: number[] } {
   // The rest of the field is parked far around the lap. A blast catches EVERY
   // racer inside it, which is the point of the weapon, so a shell aimed at one
   // named rival has to be fired somewhere the others are not.
-  const track = realmRacersTrack();
+  const track = realmRacersTrack(GARDEN_CIRCUIT);
   pids.slice(2).forEach((pid, i) => {
     const away = track.pointAt(track.length * (0.4 + i * 0.2));
     teleport(sim, pid, away.x, away.z);

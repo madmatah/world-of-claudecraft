@@ -46,6 +46,7 @@ import { emptyMoveInput, TICK_RATE } from '../types';
 import { vehicleTopSpeedFor, vehicleVelocityX, vehicleVelocityZ } from '../vehicle_motion';
 import {
   type RealmRacersMatch,
+  realmRacersCircuitOf,
   realmRacersFreePracticeSlot,
   realmRacersMatches,
   realmRacersMatchOf,
@@ -247,9 +248,10 @@ function driveRallyBot(
   // Headings and speeds are frame-invariant (the shift is a pure translation),
   // which is why only positions are converted.
   const here = realmRacersToCanonical(match, e.pos.x, e.pos.z);
+  const track = realmRacersTrack(realmRacersCircuitOf(match));
   // The match module reprojected this racer earlier in the same tick, so its
   // search hint is current and this costs a local window scan, not a lap scan.
-  const projection = realmRacersTrack().project(here.x, here.z, progress.trackIndex);
+  const projection = track.project(here.x, here.z, progress.trackIndex);
   const incoming: RallyDriverBlast[] = [];
   for (const blast of match.groundBlasts) {
     if (blast.ownerPid === pid) continue;
@@ -267,6 +269,7 @@ function driveRallyBot(
     facing: e.facing,
     speed: drive.speed,
     slip: drive.slip,
+    track,
     projection,
     topSpeed: vehicleTopSpeedFor(drive, auraSpeedMult(e)),
     // Positions shift into the canonical frame; velocities are frame-invariant

@@ -93,8 +93,8 @@ import { realmRacersColliders } from './realm_racers_colliders';
 import {
   isAtRealmRacersXZ,
   REALM_RACERS_ORIGIN,
-  realmRacersSlotAtXZ,
-  realmRacersSlotOffset,
+  realmRacersLaneAt,
+  realmRacersLaneOffset,
 } from './realm_racers_layout';
 import { resolveRealmRacersWade } from './realm_racers_spline';
 import { townPropPlacements } from './town_props';
@@ -1672,18 +1672,24 @@ export function resolvePosition(
   mover?: MoverHeight,
   riftToken = 0,
 ): { x: number; z: number } {
-  const rallySlot = realmRacersSlotAtXZ(x, z);
-  if (rallySlot !== null) {
-    // Every practice copy of the circuit is the SAME geometry at its own
-    // origin, so the whole story is: shift into the CANONICAL frame (which is
-    // the one the spline and the collider set are authored in), solve there,
-    // shift back. The public circuit's offset is zero, so its path is unchanged.
-    const off = realmRacersSlotOffset(rallySlot);
+  const rallyLane = realmRacersLaneAt(x, z);
+  if (rallyLane !== null) {
+    // Every lane holds ONE circuit's geometry at its own origin, so the whole
+    // story is: shift into that circuit's CANONICAL frame (which is the one its
+    // spline and collider set are authored in), solve there, shift back. Lane
+    // 0's offset is zero, so its path is unchanged.
+    const off = realmRacersLaneOffset(rallyLane.index);
     const o = REALM_RACERS_ORIGIN;
-    const local = resolveAgainst(realmRacersColliders(), x - off.x - o.x, z - off.z - o.z, r);
+    const circuit = rallyLane.circuit;
+    const local = resolveAgainst(
+      realmRacersColliders(circuit),
+      x - off.x - o.x,
+      z - off.z - o.z,
+      r,
+    );
     // The garden wall is the only BUILT thing here; the infield is held by the
     // water itself, which is deep enough to stop a racer past a wading margin.
-    const waded = resolveRealmRacersWade(local.x + o.x, local.z + o.z);
+    const waded = resolveRealmRacersWade(circuit, local.x + o.x, local.z + o.z);
     return { x: waded.x + off.x, z: waded.z + off.z };
   }
   if (isYumiMazePos(x)) {
@@ -2164,11 +2170,16 @@ function sightBlockedAt(
     }
     return false;
   };
-  const rallyOverlapSlot = realmRacersSlotAtXZ(x, z);
-  if (rallyOverlapSlot !== null) {
-    const off = realmRacersSlotOffset(rallyOverlapSlot);
+  const rallyOverlapLane = realmRacersLaneAt(x, z);
+  if (rallyOverlapLane !== null) {
+    const off = realmRacersLaneOffset(rallyOverlapLane.index);
     const o = REALM_RACERS_ORIGIN;
-    return overlapsAny(realmRacersColliders(), x - off.x - o.x, z - off.z - o.z, false);
+    return overlapsAny(
+      realmRacersColliders(rallyOverlapLane.circuit),
+      x - off.x - o.x,
+      z - off.z - o.z,
+      false,
+    );
   }
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);

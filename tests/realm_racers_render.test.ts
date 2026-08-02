@@ -20,13 +20,9 @@ import {
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
 } from '../src/render/realm_racers_track_core';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import {
-  REALM_RACERS_BASIN_DEPTH_MAX,
   REALM_RACERS_ORIGIN,
-  REALM_RACERS_PERIMETER_HALF_X,
-  REALM_RACERS_PERIMETER_HALF_Z,
-  REALM_RACERS_REGION_HALF_X,
-  REALM_RACERS_REGION_HALF_Z,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
@@ -63,7 +59,7 @@ function mockTextures(): void {
   }));
 }
 
-const track = realmRacersTrack();
+const track = realmRacersTrack(GARDEN_CIRCUIT);
 
 /** One racer row, shared by the start-light fixtures below. The light gantry
  *  reads the phase and the countdown, never the field, so one row is enough. */
@@ -88,11 +84,11 @@ describe('Realm Racers procedural render', () => {
     // stepped outward RADIALLY from the circuit's centre, so a piece nominally
     // 30 yards out sat barely 18 clear of a long face.
     const reach = cameraBoomDistance(CAMERA_ZOOM_MAX, REALM_RACERS_CAMERA_BOOM_PROFILE);
-    const spots = rallyDressingSpots();
+    const spots = rallyDressingSpots(GARDEN_CIRCUIT);
     expect(spots.length).toBeGreaterThan(20);
     for (const spot of spots) {
-      const outX = Math.abs(spot.x - REALM_RACERS_ORIGIN.x) - REALM_RACERS_PERIMETER_HALF_X;
-      const outZ = Math.abs(spot.z - REALM_RACERS_ORIGIN.z) - REALM_RACERS_PERIMETER_HALF_Z;
+      const outX = Math.abs(spot.x - REALM_RACERS_ORIGIN.x) - GARDEN_CIRCUIT.perimeter.halfX;
+      const outZ = Math.abs(spot.z - REALM_RACERS_ORIGIN.z) - GARDEN_CIRCUIT.perimeter.halfZ;
       // The piece's own footprint counts: the camera meets the canopy, not the
       // trunk. Clearance is to the NEAREST face, so the larger overhang wins.
       const clear = Math.max(outX, outZ) - spot.radius;
@@ -112,7 +108,7 @@ describe('Realm Racers procedural render', () => {
 
   it('builds a hidden circuit once and gates it by local-player proximity', async () => {
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-    const rally = buildRealmRacersTrack();
+    const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
     expect(rally.group.name).toBe('realm-racers-track');
     expect(rally.group.visible).toBe(false);
     // Lawn, two runoff ribbons, the road, the kerb runs, the start band, the
@@ -126,7 +122,7 @@ describe('Realm Racers procedural render', () => {
   });
 
   it('shows three red countdown lamps, turns them green at GO, then extinguishes them', async () => {
-    expect(rallyStartLightPlacements()).toHaveLength(3);
+    expect(rallyStartLightPlacements(GARDEN_CIRCUIT)).toHaveLength(3);
     expect(realmRacersStartLightSignal('countdown', 61, 0)).toEqual({
       colour: 'off',
       litCount: 0,
@@ -153,8 +149,9 @@ describe('Realm Racers procedural render', () => {
     });
 
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-    const rally = buildRealmRacersTrack();
+    const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
     rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 1, {
+      circuitId: GARDEN_CIRCUIT.id,
       id: 7,
       participantIds: [1, 2] as number[],
       phase: 'countdown',
@@ -186,6 +183,7 @@ describe('Realm Racers procedural render', () => {
 
     rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 2, {
       ...({
+        circuitId: GARDEN_CIRCUIT.id,
         id: 7,
         participantIds: [1, 2],
         phase: 'racing',
@@ -209,6 +207,7 @@ describe('Realm Racers procedural render', () => {
     expect(colours()).toEqual([0x45e06f, 0x45e06f, 0x45e06f]);
 
     const racing = {
+      circuitId: GARDEN_CIRCUIT.id,
       id: 7,
       participantIds: [1, 2] as number[],
       phase: 'racing' as const,
@@ -234,7 +233,7 @@ describe('Realm Racers procedural render', () => {
 
   it('dresses every ground surface in the world material, already world-placed', async () => {
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-    const rally = buildRealmRacersTrack();
+    const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
     const ground = rally.group.children.filter(
       (child) => child instanceof THREE.Mesh && child.geometry.getAttribute('aSplat'),
     ) as THREE.Mesh[];
@@ -270,7 +269,7 @@ describe('Realm Racers procedural render', () => {
     // pass). Two single-layer surfaces meeting on a geometric edge is what
     // made the circuit's verge read as a decal instead of as ground.
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-    const rally = buildRealmRacersTrack();
+    const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
     const ground = rally.group.children.filter(
       (child) => child instanceof THREE.Mesh && child.geometry.getAttribute('aSplat'),
     ) as THREE.Mesh[];
@@ -302,7 +301,7 @@ describe('Realm Racers procedural render', () => {
     // safe to tune: it cannot bleed into the one thing that must stay crisp.
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
     const { rallyKerbRuns } = await import('../src/render/realm_racers_track_core');
-    const rally = buildRealmRacersTrack();
+    const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
     const meshes = rally.group.children.filter(
       (child) => child instanceof THREE.Mesh,
     ) as THREE.Mesh[];
@@ -320,7 +319,7 @@ describe('Realm Racers procedural render', () => {
       (mesh) => mesh.material !== groundMaterial && !mesh.geometry.getAttribute('aSplat'),
     );
     const kerbMaterials = new Set(kerbs.map((mesh) => mesh.material));
-    const expectedKerbs = rallyKerbRuns().length * 2;
+    const expectedKerbs = rallyKerbRuns(GARDEN_CIRCUIT).length * 2;
     const kerbMaterial = [...kerbMaterials].find(
       (material) => kerbs.filter((mesh) => mesh.material === material).length === expectedKerbs,
     );
@@ -338,7 +337,7 @@ describe('Realm Racers procedural render', () => {
     // Nobody saw it because the runoff hid behind the lawn (same grass), and a
     // missing kerb only reads as a circuit with one painted edge.
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-    const rally = buildRealmRacersTrack();
+    const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
     const worldNormal = new THREE.Vector3();
     let flatSurfaces = 0;
     for (const child of rally.group.children) {
@@ -359,7 +358,7 @@ describe('Realm Racers procedural render', () => {
 
   it('sweeps the road as one continuous ribbon over every centerline sample', async () => {
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-    const rally = buildRealmRacersTrack();
+    const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
     const sections = track.samples.length + 1;
     const road = rally.group.children.find(
       (child) =>
@@ -373,7 +372,7 @@ describe('Realm Racers procedural render', () => {
 
   it('paints kerbs on the corners and leaves the straights bare', async () => {
     const count = track.samples.length;
-    const runs = rallyKerbRuns();
+    const runs = rallyKerbRuns(GARDEN_CIRCUIT);
     const kerbed = (index: number): boolean =>
       runs.some((run) => {
         for (let i = run.from; i < run.to; i++) if (i % count === index) return true;
@@ -402,7 +401,7 @@ describe('Realm Racers procedural render', () => {
     // is exactly how the arch first shipped straddling the racing line instead
     // of framing it. Pinned by what each yaw DOES to the model's own axes
     // rather than by its number.
-    const place = rallyStartArchPlacement();
+    const place = rallyStartArchPlacement(GARDEN_CIRCUIT);
     const line = track.pointAt(0);
     // A three.js yaw maps local +z to (sin, cos).
     const archAxisX = Math.sin(place.yaw);
@@ -428,7 +427,7 @@ describe('Realm Racers procedural render', () => {
     // renders NOTHING from the approach while still showing from behind. That
     // is precisely how it shipped, and it is why this is asserted rather than
     // eyeballed.
-    const place = rallyStartArchPlacement();
+    const place = rallyStartArchPlacement(GARDEN_CIRCUIT);
     const line = track.pointAt(0);
     expect(place.banners).toHaveLength(2);
     const laterals: number[] = [];
@@ -462,14 +461,14 @@ describe('Realm Racers procedural render', () => {
     // it is either an obstacle a racer hits without warning or a thing they
     // drive through. The dressing therefore lives OUTSIDE the perimeter.
     const outsidePerimeter = (x: number, z: number, radius: number): boolean =>
-      Math.abs(x - REALM_RACERS_ORIGIN.x) - radius > REALM_RACERS_PERIMETER_HALF_X ||
-      Math.abs(z - REALM_RACERS_ORIGIN.z) - radius > REALM_RACERS_PERIMETER_HALF_Z;
-    const dressing = rallyDressingSpots();
+      Math.abs(x - REALM_RACERS_ORIGIN.x) - radius > GARDEN_CIRCUIT.perimeter.halfX ||
+      Math.abs(z - REALM_RACERS_ORIGIN.z) - radius > GARDEN_CIRCUIT.perimeter.halfZ;
+    const dressing = rallyDressingSpots(GARDEN_CIRCUIT);
     expect(dressing.length).toBeGreaterThan(8);
     for (const spot of dressing) {
       expect(outsidePerimeter(spot.x, spot.z, spot.radius)).toBe(true);
-      expect(Math.abs(spot.x - REALM_RACERS_ORIGIN.x)).toBeLessThan(REALM_RACERS_REGION_HALF_X);
-      expect(Math.abs(spot.z - REALM_RACERS_ORIGIN.z)).toBeLessThan(REALM_RACERS_REGION_HALF_Z);
+      expect(Math.abs(spot.x - REALM_RACERS_ORIGIN.x)).toBeLessThan(GARDEN_CIRCUIT.regionHalfX);
+      expect(Math.abs(spot.z - REALM_RACERS_ORIGIN.z)).toBeLessThan(GARDEN_CIRCUIT.regionHalfZ);
     }
   });
 
@@ -478,27 +477,27 @@ describe('Realm Racers procedural render', () => {
     // per-vertex shore depth the water shader reads would be zero everywhere:
     // the whole basin would render as the shallowest possible water with the
     // foam band covering all of it. Rings put vertices where the depth is.
-    const mesh = rallyBasinMesh();
+    const mesh = rallyBasinMesh(GARDEN_CIRCUIT);
     const count = mesh.depths.length;
     expect(count).toBe(mesh.columns * (mesh.rings + 1) + 1);
     // The shore ring reads exactly 0...
     for (let col = 0; col < mesh.columns; col++) expect(mesh.depths[col]).toBe(0);
     // ...and the middle is at the basin floor, which is the whole point.
-    expect(mesh.depths[count - 1]).toBeCloseTo(REALM_RACERS_BASIN_DEPTH_MAX, 6);
+    expect(mesh.depths[count - 1]).toBeCloseTo(GARDEN_CIRCUIT.basin.depthMax, 6);
     // The rings crowd the shore, because everything the shader varies (the
     // ramp to the basin floor, the surf band) is within a few yards of the
     // waterline. Evenly spaced rings across a basin this wide put the first one
     // past all of it, and the bank renders as one hard step.
     const firstRing = mesh.depths.slice(mesh.columns, mesh.columns * 2);
-    expect(Math.max(...firstRing)).toBeLessThan(REALM_RACERS_BASIN_DEPTH_MAX);
+    expect(Math.max(...firstRing)).toBeLessThan(GARDEN_CIRCUIT.basin.depthMax);
     // ...and it really is a ramp: shallow, mid and floor all present.
     const all = Array.from(mesh.depths);
     expect(all.some((d) => d > 0 && d < 1)).toBe(true);
-    expect(all.some((d) => d >= 1 && d < REALM_RACERS_BASIN_DEPTH_MAX)).toBe(true);
-    expect(all.some((d) => d >= REALM_RACERS_BASIN_DEPTH_MAX - 1e-6)).toBe(true);
+    expect(all.some((d) => d >= 1 && d < GARDEN_CIRCUIT.basin.depthMax)).toBe(true);
+    expect(all.some((d) => d >= GARDEN_CIRCUIT.basin.depthMax - 1e-6)).toBe(true);
     for (const depth of all) {
       expect(depth).toBeGreaterThanOrEqual(0);
-      expect(depth).toBeLessThanOrEqual(REALM_RACERS_BASIN_DEPTH_MAX);
+      expect(depth).toBeLessThanOrEqual(GARDEN_CIRCUIT.basin.depthMax);
     }
     // Every vertex is on the infield side, and the depth is the SIM's, so the
     // water a racer sees is the water the sim decides they are wading in.
@@ -510,14 +509,18 @@ describe('Realm Racers procedural render', () => {
     for (let i = mesh.columns; i < count; i++) {
       const x = mesh.positions[i * 2];
       const z = mesh.positions[i * 2 + 1];
-      expect(mesh.depths[i]).toBeCloseTo(Math.max(0, rallyBasinDepthAt(x, z)), 9);
+      expect(mesh.depths[i]).toBeCloseTo(Math.max(0, rallyBasinDepthAt(GARDEN_CIRCUIT, x, z)), 9);
     }
     // The shore ring is PINNED to zero instead, because the projection measures
     // against a polyline that reads a sagitta short of the true curve. Bound
     // what that pin is allowed to paper over, so it can never hide a real
     // disagreement between the drawn shore and the sim's.
     for (let col = 0; col < mesh.columns; col++) {
-      const depth = rallyBasinDepthAt(mesh.positions[col * 2], mesh.positions[col * 2 + 1]);
+      const depth = rallyBasinDepthAt(
+        GARDEN_CIRCUIT,
+        mesh.positions[col * 2],
+        mesh.positions[col * 2 + 1],
+      );
       expect(Math.abs(depth)).toBeLessThan(0.05);
     }
     // Every triangle is a real one: a ring that folded through itself would
@@ -534,7 +537,7 @@ describe('Realm Racers procedural render', () => {
     // The water's edge is planted, not kerbed. It carried a ring of stone that
     // was also the circuit's inner collision, and from the circuit that read as
     // blocks standing in the lake.
-    const reeds = rallyReedSpots();
+    const reeds = rallyReedSpots(GARDEN_CIRCUIT);
     expect(reeds.length).toBeGreaterThan(50);
     for (const spot of reeds) {
       const projection = track.project(spot.x, spot.z);
@@ -542,12 +545,15 @@ describe('Realm Racers procedural render', () => {
       // placed off the interpolated centerline and measured back against the
       // resampled POLYLINE, which reads a sagitta short of the true curve.
       expect(projection.lateral).toBeGreaterThan(0);
-      expect(projection.lateral).toBeCloseTo(rallyBasinEdgeOffsetAt(projection.s), 1);
+      expect(projection.lateral).toBeCloseTo(
+        rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, projection.s),
+        1,
+      );
     }
 
     // The road edge is sown, not built: flowers on BOTH sides, on the boundary
     // between the two off-track bands.
-    const flowers = rallyBorderFlowerSpots();
+    const flowers = rallyBorderFlowerSpots(GARDEN_CIRCUIT);
     expect(flowers.length).toBeGreaterThan(400);
     for (const spot of flowers) {
       const over = edge(spot.x, spot.z);
@@ -561,7 +567,7 @@ describe('Realm Racers procedural render', () => {
   });
 
   it('sows flower beds in the outer garden only, in single-colour patches', () => {
-    const spots = rallyFlowerSpots();
+    const spots = rallyFlowerSpots(GARDEN_CIRCUIT);
     expect(spots.length).toBeGreaterThan(400);
     for (const spot of spots) {
       const projection = track.project(spot.x, spot.z);
@@ -570,7 +576,9 @@ describe('Realm Racers procedural render', () => {
       // start past the border line. Keeping them merely off the ROAD, which is
       // what shipped, left strays over both the verge and the apron.
       expect(projection.lateral).toBeLessThan(0);
-      expect(-projection.lateral).toBeGreaterThan(rallyGardenEdgeOffsetAt(projection.s));
+      expect(-projection.lateral).toBeGreaterThan(
+        rallyGardenEdgeOffsetAt(GARDEN_CIRCUIT, projection.s),
+      );
       expect(spot.colour).toBeGreaterThanOrEqual(0);
       expect(spot.colour).toBeLessThan(RALLY_FLOWER_COLOURS.length);
     }
@@ -584,7 +592,7 @@ describe('Realm Racers procedural render', () => {
     expect(new Set(spots.map((spot) => spot.colour)).size).toBeGreaterThan(1);
 
     // The tier knob only ever thins the same patches (cosmetic, never a reshuffle).
-    const thin = rallyFlowerSpots(0.45);
+    const thin = rallyFlowerSpots(GARDEN_CIRCUIT, 0.45);
     expect(thin.length).toBeLessThan(spots.length);
     const full = new Set(spots.map((spot) => `${spot.x.toFixed(4)},${spot.z.toFixed(4)}`));
     for (const spot of thin)
@@ -597,18 +605,20 @@ describe('Realm Racers procedural render', () => {
     // drove straight through them.
     const spot = rallyFountainSpot();
     const projection = track.project(spot.x, spot.z);
-    expect(projection.lateral - spot.radius).toBeGreaterThan(rallyBasinEdgeOffsetAt(projection.s));
+    expect(projection.lateral - spot.radius).toBeGreaterThan(
+      rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, projection.s),
+    );
   });
 
   it('runs the perimeter around the garden wall', () => {
-    const pieces = rallyPerimeterPieces(3.5);
+    const pieces = rallyPerimeterPieces(GARDEN_CIRCUIT, 3.5);
     expect(pieces.length).toBeGreaterThan(50);
     expect(pieces.filter((piece) => piece.pillar)).toHaveLength(4);
     for (const piece of pieces) {
       const onX =
-        Math.abs(Math.abs(piece.x - REALM_RACERS_ORIGIN.x) - REALM_RACERS_PERIMETER_HALF_X) < 1e-6;
+        Math.abs(Math.abs(piece.x - REALM_RACERS_ORIGIN.x) - GARDEN_CIRCUIT.perimeter.halfX) < 1e-6;
       const onZ =
-        Math.abs(Math.abs(piece.z - REALM_RACERS_ORIGIN.z) - REALM_RACERS_PERIMETER_HALF_Z) < 1e-6;
+        Math.abs(Math.abs(piece.z - REALM_RACERS_ORIGIN.z) - GARDEN_CIRCUIT.perimeter.halfZ) < 1e-6;
       expect(onX || onZ).toBe(true);
     }
   });

@@ -1,5 +1,6 @@
+import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
 import { delveAt, dungeonAt, isDelvePos, type ZoneDef } from '../sim/data';
-import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
+import { realmRacersLaneAt } from '../sim/realm_racers_layout';
 import { isAtSowfield } from '../sim/vale_cup_layout';
 import {
   type MusicZone,
@@ -7,7 +8,29 @@ import {
   riftMusicZoneForTheme,
   shouldResetMusicForDungeonEntry,
 } from './music';
-import type { AreaTrackId } from './music_tracks';
+import { type AreaTrackId, isAreaTrackId } from './music_tracks';
+
+/**
+ * The area track of whichever circuit stands on this point's lane, or null off
+ * the band entirely. A circuit naming a track this build does not ship is
+ * treated as no track rather than as a missing file: silence beats a 404 loop,
+ * and `tests/instance_music.test.ts` pins that no shipped circuit does it.
+ */
+export function realmRacersAreaTrackAt(x: number, z: number): AreaTrackId | null {
+  const track = realmRacersLaneAt(x, z)?.circuit.musicTrack;
+  return track !== undefined && isAreaTrackId(track) ? track : null;
+}
+
+/** Whether an area track belongs to a rally circuit, which is what decides
+ *  whether a new race RESTARTS it. Derived from the circuit records, so a new
+ *  circuit joins it by existing. */
+export function isRealmRacersAreaTrack(track: AreaTrackId | null): boolean {
+  return track !== null && REALM_RACERS_CIRCUIT_TRACKS.has(track);
+}
+
+const REALM_RACERS_CIRCUIT_TRACKS: ReadonlySet<string> = new Set(
+  REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.musicTrack),
+);
 
 export interface InstanceMusicEntity {
   kind: string;
@@ -100,11 +123,13 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
     ? (delveAt(input.playerPos.x)?.id ?? FALLBACK_DELVE_ID)
     : (dungeon?.id ?? null);
   const atSowfield = !input.inDungeon && isAtSowfield(input.playerPos.x, input.playerPos.z);
-  // The rally circuit sits on the flat instance plane, so inDungeon is true
-  // there and the zone cue would otherwise fall back to the dungeon crawl
-  // theme. Its own race track owns the mix instead, for the whole visit:
-  // players only ever stand there for a race (grid, countdown, laps, results).
-  const atRealmRacers = isAtRealmRacersXZ(input.playerPos.x, input.playerPos.z);
+  // A rally circuit sits on the flat instance plane, so inDungeon is true there
+  // and the zone cue would otherwise fall back to the dungeon crawl theme. The
+  // circuit's own race track owns the mix instead, for the whole visit: players
+  // only ever stand there for a race (grid, countdown, laps, results). The
+  // track comes off the CIRCUIT standing on that lane, so a themed circuit
+  // brings its zone's music with it.
+  const realmRacersTrack = realmRacersAreaTrackAt(input.playerPos.x, input.playerPos.z);
   const riftFloor = input.riftFloor;
   const zone = atSowfield
     ? 'vale_cup'
@@ -143,9 +168,7 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
         ? cupKickedOff
           ? 'sowfield_match'
           : 'sowfield_waiting'
-        : atRealmRacers
-          ? 'realm_racers'
-          : null,
+        : realmRacersTrack,
   };
 }
 
@@ -158,7 +181,7 @@ export class InstanceMusicController {
   update(input: InstanceMusicInput): InstanceMusicDecision {
     const decision = instanceMusicDecision(input);
     const restartRealmRacers =
-      decision.areaTrack === 'realm_racers' &&
+      isRealmRacersAreaTrack(decision.areaTrack) &&
       input.realmRacersMatchId !== null &&
       input.realmRacersMatchId !== this.lastRealmRacersMatchId;
     if (shouldResetMusicForDungeonEntry(this.lastInstanceId, decision.instanceId)) {

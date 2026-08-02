@@ -1,35 +1,32 @@
-// Everything DERIVED from the authored Realm Racers layout: the resampled
-// centerline, the arc-length table, nearest-point projection, the recovery
-// gates, the start grid, and the two lateral boundaries (the garden's edge and
-// the basin's shore). One source of truth, shared by the sim (progress,
-// recovery, track limits) and the renderer (the road ribbon, kerbs, borders,
-// the water), so what a racer sees and what a racer drives on cannot drift.
+// Everything DERIVED from an authored Realm Racers circuit record: the
+// resampled centerline, the arc-length table, nearest-point projection, the
+// recovery gates, the start grid, and the two lateral boundaries (the garden's
+// edge and the basin's shore). One source of truth, shared by the sim
+// (progress, recovery, track limits) and the renderer (the road ribbon, kerbs,
+// borders, the water), so what a racer sees and what a racer drives on cannot
+// drift.
+//
+// Every entry point takes the CIRCUIT it is deriving, and each derivation is
+// memoized under that circuit's id: the geometry is static content, so one
+// build per circuit serves every Sim in the process.
 //
 // Pure leaf: no SimContext, no rng, no DOM, no three. The curve is a closed
 // CENTRIPETAL Catmull-Rom, the same curve class src/render/race_line.ts draws
 // with THREE.CatmullRomCurve3, re-implemented in plain numbers because src/sim
-// cannot import three. The model is built lazily and module-cached: it is
-// static content, so a single build serves every Sim in the process.
+// cannot import three.
 
+import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import {
   type RallyGate,
   type RallyPoint,
   REALM_RACERS_APRON_MAX,
   REALM_RACERS_APRON_RADIUS_FRACTION,
-  REALM_RACERS_BASIN_BANK_SLOPE,
-  REALM_RACERS_BASIN_DEPTH_MAX,
-  REALM_RACERS_BASIN_WADE_YARDS,
-  REALM_RACERS_CONTROL_POINTS,
-  REALM_RACERS_GATE_FRACTIONS,
   REALM_RACERS_GATE_MARGIN,
   REALM_RACERS_GRID_SIZE,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_SAMPLE_STEP,
-  REALM_RACERS_START_BACK,
-  REALM_RACERS_START_SPACING,
   REALM_RACERS_VERGE_MARGIN,
-  REALM_RACERS_WIDTH_BANDS,
 } from './realm_racers_layout';
 
 export interface RallySample {
@@ -108,8 +105,8 @@ const APRON_SMOOTH_WINDOW = 10;
 /** Passes the wade clamp takes to settle (see resolveRealmRacersWade). */
 const WADE_CLAMP_PASSES = 4;
 
-function widthAtFraction(fraction: number): number {
-  const bands = REALM_RACERS_WIDTH_BANDS;
+function widthAtFraction(circuit: RealmRacersCircuit, fraction: number): number {
+  const bands = circuit.widthBands;
   const f = ((fraction % 1) + 1) % 1;
   for (let i = 1; i < bands.length; i++) {
     const a = bands[i - 1];
@@ -160,8 +157,8 @@ function catmullRom(
   return lerp(b1, b2, t1, t2);
 }
 
-function buildModel(): RallyTrackModel {
-  const cps = REALM_RACERS_CONTROL_POINTS;
+function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
+  const cps = circuit.controlPoints;
   const n = cps.length;
   const pt = (i: number): [number, number] => {
     const p = cps[((i % n) + n) % n];
@@ -248,7 +245,7 @@ function buildModel(): RallyTrackModel {
       tx: dx / d,
       tz: dz / d,
       s: i * step,
-      halfWidth: widthAtFraction(i / count),
+      halfWidth: widthAtFraction(circuit, i / count),
       turnRadius: radii[i],
       apron: apron[i],
     };
@@ -321,7 +318,7 @@ function buildModel(): RallyTrackModel {
       return scan(x, z, 0, count).projection;
     },
     halfWidthAt(s) {
-      return widthAtFraction(s / length);
+      return widthAtFraction(circuit, s / length);
     },
     apronAt(s) {
       const wrapped = ((s % length) + length) % length;
@@ -345,7 +342,7 @@ function buildModel(): RallyTrackModel {
         tx: tx / d,
         tz: tz / d,
         s: wrapped,
-        halfWidth: widthAtFraction(wrapped / length),
+        halfWidth: widthAtFraction(circuit, wrapped / length),
         turnRadius: t < 0.5 ? a.turnRadius : b.turnRadius,
         apron: Math.min(a.apron, b.apron),
       };
@@ -353,21 +350,35 @@ function buildModel(): RallyTrackModel {
   };
 }
 
-let cachedModel: RallyTrackModel | null = null;
-
-/** The memoized circuit model. */
-export function realmRacersTrack(): RallyTrackModel {
-  if (!cachedModel) cachedModel = buildModel();
-  return cachedModel;
+/**
+ * One memo per derivation, keyed by circuit id. Keyed rather than singular
+ * because the band holds several circuits: a shared unkeyed cache would hand
+ * the practice circuit's geometry to whoever asked second.
+ */
+function memoizePerCircuit<T>(
+  build: (circuit: RealmRacersCircuit) => T,
+): (circuit: RealmRacersCircuit) => T {
+  const cache = new Map<string, T>();
+  return (circuit) => {
+    const cached = cache.get(circuit.id);
+    if (cached !== undefined) return cached;
+    const built = build(circuit);
+    cache.set(circuit.id, built);
+    return built;
+  };
 }
+
+/** The memoized model of one circuit. */
+export const realmRacersTrack: (circuit: RealmRacersCircuit) => RallyTrackModel =
+  memoizePerCircuit(buildModel);
 
 /**
  * Distance from the centerline to the BASIN's shore: the road plus its whole
  * drivable apron. Nothing is built here; it is simply where the infield stops
  * being lawn and starts being water.
  */
-export function rallyBasinEdgeOffsetAt(s: number): number {
-  const track = realmRacersTrack();
+export function rallyBasinEdgeOffsetAt(circuit: RealmRacersCircuit, s: number): number {
+  const track = realmRacersTrack(circuit);
   return track.halfWidthAt(s) + track.apronAt(s);
 }
 
@@ -378,58 +389,54 @@ export function rallyBasinEdgeOffsetAt(s: number): number {
  * built here either: the renderer sows the border flowers along it, so the line
  * a racer reads is the line the penalty actually steps at.
  */
-export function rallyGardenEdgeOffsetAt(s: number): number {
-  return realmRacersTrack().halfWidthAt(s) + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
+export function rallyGardenEdgeOffsetAt(circuit: RealmRacersCircuit, s: number): number {
+  return (
+    realmRacersTrack(circuit).halfWidthAt(s) + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH
+  );
 }
-
-let cachedGates: readonly RallyGate[] | null = null;
 
 /** Ordered reset anchors derived from spline fractions, never lap-validation checkpoints. */
-export function realmRacersGates(): readonly RallyGate[] {
-  if (cachedGates) return cachedGates;
-  const track = realmRacersTrack();
-  cachedGates = REALM_RACERS_GATE_FRACTIONS.map((fraction, index) => {
-    const s = fraction * track.length;
-    const p = track.pointAt(s);
-    return {
-      x: p.x,
-      z: p.z,
-      index,
-      dirX: p.tx,
-      dirZ: p.tz,
-      halfWidth: p.halfWidth + REALM_RACERS_GATE_MARGIN,
-      s,
-    };
+export const realmRacersGates: (circuit: RealmRacersCircuit) => readonly RallyGate[] =
+  memoizePerCircuit((circuit) => {
+    const track = realmRacersTrack(circuit);
+    return circuit.gateFractions.map((fraction, index) => {
+      const s = fraction * track.length;
+      const p = track.pointAt(s);
+      return {
+        x: p.x,
+        z: p.z,
+        index,
+        dirX: p.tx,
+        dirZ: p.tz,
+        halfWidth: p.halfWidth + REALM_RACERS_GATE_MARGIN,
+        s,
+      };
+    });
   });
-  return cachedGates;
-}
-
-let cachedStarts: readonly RallyStartSlot[] | null = null;
 
 /**
  * The start grid: `REALM_RACERS_GRID_SIZE` slots abreast on the road behind the
  * start line, all facing along the racing direction. The row is derived from the
- * spacing and centred on the centerline, so widening the grid is an edit to two
- * numbers in the layout rather than a rewrite here.
+ * circuit's own spacing and centred on the centerline, so widening the grid is
+ * an edit to two numbers rather than a rewrite here.
  */
-export function realmRacersStarts(): readonly RallyStartSlot[] {
-  if (cachedStarts) return cachedStarts;
-  const track = realmRacersTrack();
-  const p = track.pointAt(track.length - REALM_RACERS_START_BACK);
-  const facing = Math.atan2(p.tx, p.tz);
-  const normalX = -p.tz;
-  const normalZ = p.tx;
-  const n = REALM_RACERS_GRID_SIZE;
-  cachedStarts = Array.from({ length: n }, (_, i) => {
-    const offset = (i - (n - 1) / 2) * REALM_RACERS_START_SPACING;
-    return {
-      x: p.x + normalX * offset,
-      z: p.z + normalZ * offset,
-      facing,
-    };
+export const realmRacersStarts: (circuit: RealmRacersCircuit) => readonly RallyStartSlot[] =
+  memoizePerCircuit((circuit) => {
+    const track = realmRacersTrack(circuit);
+    const p = track.pointAt(track.length - circuit.startBack);
+    const facing = Math.atan2(p.tx, p.tz);
+    const normalX = -p.tz;
+    const normalZ = p.tx;
+    const n = REALM_RACERS_GRID_SIZE;
+    return Array.from({ length: n }, (_, i) => {
+      const offset = (i - (n - 1) / 2) * circuit.startSpacing;
+      return {
+        x: p.x + normalX * offset,
+        z: p.z + normalZ * offset,
+        facing,
+      };
+    });
   });
-  return cachedStarts;
-}
 
 /**
  * Yards of water under (x, z): 0 at the shore, deepening at the authored bank
@@ -441,20 +448,25 @@ export function realmRacersStarts(): readonly RallyStartSlot[] {
  * IS an offset of the centerline, so the normal distance is the exact distance
  * to it, and it costs one projection instead of a walk over 450 segments.
  */
-export function rallyBasinDepthAt(x: number, z: number, hintIndex?: number): number {
-  const track = realmRacersTrack();
+export function rallyBasinDepthAt(
+  circuit: RealmRacersCircuit,
+  x: number,
+  z: number,
+  hintIndex?: number,
+): number {
+  const track = realmRacersTrack(circuit);
   const projection = track.project(x, z, hintIndex);
-  const inward = projection.lateral - rallyBasinEdgeOffsetAt(projection.s);
+  const inward = projection.lateral - rallyBasinEdgeOffsetAt(circuit, projection.s);
   if (inward <= 0) return inward;
-  return Math.min(REALM_RACERS_BASIN_DEPTH_MAX, REALM_RACERS_BASIN_BANK_SLOPE * inward);
+  return Math.min(circuit.basin.depthMax, circuit.basin.bankSlope * inward);
 }
 
 /**
  * How far from the centerline a racer may still get, on the infield side: the
  * shore plus the wading margin. Past it the water is simply too deep to drive.
  */
-export function rallyBasinWadeLimitAt(s: number): number {
-  return rallyBasinEdgeOffsetAt(s) + REALM_RACERS_BASIN_WADE_YARDS;
+export function rallyBasinWadeLimitAt(circuit: RealmRacersCircuit, s: number): number {
+  return rallyBasinEdgeOffsetAt(circuit, s) + circuit.basin.wadeYards;
 }
 
 /**
@@ -467,8 +479,12 @@ export function rallyBasinWadeLimitAt(s: number): number {
  * the water does it with the water, which is what the Lily Basin does in the
  * open world (a navigable margin, then a line no mount will cross).
  */
-export function resolveRealmRacersWade(x: number, z: number): RallyPoint {
-  const track = realmRacersTrack();
+export function resolveRealmRacersWade(
+  circuit: RealmRacersCircuit,
+  x: number,
+  z: number,
+): RallyPoint {
+  const track = realmRacersTrack(circuit);
   let px = x;
   let pz = z;
   let hint: number | undefined;
@@ -479,7 +495,7 @@ export function resolveRealmRacersWade(x: number, z: number): RallyPoint {
   for (let pass = 0; pass < WADE_CLAMP_PASSES; pass++) {
     const projection = track.project(px, pz, hint);
     hint = projection.index;
-    const back = projection.lateral - rallyBasinWadeLimitAt(projection.s);
+    const back = projection.lateral - rallyBasinWadeLimitAt(circuit, projection.s);
     if (back <= 0) break;
     // Walked back along the PROJECTION's own normal, not `pointAt`'s: that
     // interpolates and renormalizes the tangent between samples, so the result
@@ -489,8 +505,6 @@ export function resolveRealmRacersWade(x: number, z: number): RallyPoint {
   }
   return { x: px, z: pz };
 }
-
-let cachedBasinOutline: readonly RallyPoint[] | null = null;
 
 /**
  * The water's edge as a closed polygon, one point per centerline sample. The
@@ -503,16 +517,13 @@ let cachedBasinOutline: readonly RallyPoint[] | null = null;
  * rim; nothing collides on the infield any more, so the shore can simply be the
  * curve.
  */
-export function realmRacersBasinOutline(): readonly RallyPoint[] {
-  if (!cachedBasinOutline) {
-    const track = realmRacersTrack();
-    cachedBasinOutline = track.samples.map((sample) => {
-      const offset = rallyBasinEdgeOffsetAt(sample.s);
+export const realmRacersBasinOutline: (circuit: RealmRacersCircuit) => readonly RallyPoint[] =
+  memoizePerCircuit((circuit) =>
+    realmRacersTrack(circuit).samples.map((sample) => {
+      const offset = rallyBasinEdgeOffsetAt(circuit, sample.s);
       return { x: sample.x - sample.tz * offset, z: sample.z + sample.tx * offset };
-    });
-  }
-  return cachedBasinOutline;
-}
+    }),
+  );
 
 /** Positive when a heading points along the racing direction, negative when it
  *  points back up the circuit (the wrong-way test). */

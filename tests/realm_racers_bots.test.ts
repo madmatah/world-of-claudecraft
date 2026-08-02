@@ -8,14 +8,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { REALM_RACERS_BOT_NAMES } from '../src/sim/content/realm_racers';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { RALLY_DRIVER_TIERS, type RallyDriverTier } from '../src/sim/realm_racers_driver';
 import {
   REALM_RACERS_GRID_SIZE,
-  REALM_RACERS_LAPS,
-  REALM_RACERS_PRACTICE_LAPS,
-  REALM_RACERS_PRACTICE_SLOTS,
-  REALM_RACERS_SLOT_DZ,
-  realmRacersSlotAtXZ,
+  REALM_RACERS_LANE_DZ,
+  realmRacersLaneAt,
 } from '../src/sim/realm_racers_layout';
 import type { Sim } from '../src/sim/sim';
 import {
@@ -176,18 +174,18 @@ describe('Realm Racers practice: nobody ever waits on anybody', () => {
     const where = pids.map((pid) => {
       const e = sim.entities.get(pid);
       if (!e) throw new Error('no racer');
-      return realmRacersSlotAtXZ(e.pos.x, e.pos.z);
+      return realmRacersLaneAt(e.pos.x, e.pos.z)?.index ?? null;
     });
     expect(where).toEqual(slots);
   });
 
   it('hands a copy back when a practice race ends, and refuses once none are left', () => {
     const sim = makeWorld();
-    const pids = Array.from({ length: REALM_RACERS_PRACTICE_SLOTS }, (_, i) =>
+    const pids = Array.from({ length: GARDEN_CIRCUIT.practiceCopies }, (_, i) =>
       addAt(sim, 'warrior', `Racer${i}`, -5 + i * 4, -40),
     );
     for (const pid of pids) sim.realmRacersPracticeStart('rookie', pid);
-    expect(sim.realmRacers.practices).toHaveLength(REALM_RACERS_PRACTICE_SLOTS);
+    expect(sim.realmRacers.practices).toHaveLength(GARDEN_CIRCUIT.practiceCopies);
 
     // Every copy is out: the next player is told so rather than silently failing.
     const late = addAt(sim, 'mage', 'Late', 30, -40);
@@ -207,15 +205,16 @@ describe('Realm Racers practice: nobody ever waits on anybody', () => {
   it('keeps every copy far enough apart to stay private', () => {
     // Interest scoping is ~120 yd, so the copies have to be further apart than
     // that or a practice lap would appear in a stranger's snapshot.
-    expect(REALM_RACERS_SLOT_DZ).toBeGreaterThan(300);
+    expect(REALM_RACERS_LANE_DZ).toBeGreaterThan(300);
     // And the region test claims each copy, with clear plane between them.
-    for (let slot = 0; slot <= REALM_RACERS_PRACTICE_SLOTS; slot++) {
-      const z = slot * REALM_RACERS_SLOT_DZ;
-      expect(realmRacersSlotAtXZ(RALLY_X, z), `centre of copy ${slot}`).toBe(slot);
-      expect(realmRacersSlotAtXZ(RALLY_X, z + REALM_RACERS_SLOT_DZ / 2)).toBeNull();
+    for (let slot = 0; slot <= GARDEN_CIRCUIT.practiceCopies; slot++) {
+      const z = slot * REALM_RACERS_LANE_DZ;
+      expect(realmRacersLaneAt(RALLY_X, z)?.index, `centre of copy ${slot}`).toBe(slot);
+      expect(realmRacersLaneAt(RALLY_X, z)?.circuit.id).toBe(GARDEN_CIRCUIT.id);
+      expect(realmRacersLaneAt(RALLY_X, z + REALM_RACERS_LANE_DZ / 2)).toBeNull();
     }
     expect(
-      realmRacersSlotAtXZ(RALLY_X, (REALM_RACERS_PRACTICE_SLOTS + 1) * REALM_RACERS_SLOT_DZ),
+      realmRacersLaneAt(RALLY_X, (GARDEN_CIRCUIT.practiceCopies + 1) * REALM_RACERS_LANE_DZ),
     ).toBeNull();
   });
 });
@@ -363,10 +362,10 @@ describe('Realm Racers house pilots: they can actually drive', () => {
   // ON A PRACTICE COPY, which also proves the whole frame shift is right.
   // Nothing here is mocked, and the pilot holds the same controls a human does.
   for (const tier of RALLY_DRIVER_TIERS) {
-    it(`completes ${REALM_RACERS_PRACTICE_LAPS} practice laps at the ${tier} tier inside the time limit`, () => {
+    it(`completes ${GARDEN_CIRCUIT.practiceLaps} practice laps at the ${tier} tier inside the time limit`, () => {
       const { sim, human } = practiceWorld(tier);
       const match = matchOf(sim, human);
-      expect(match.totalLaps).toBe(REALM_RACERS_PRACTICE_LAPS);
+      expect(match.totalLaps).toBe(GARDEN_CIRCUIT.practiceLaps);
       const bot = botIn(sim, human);
       const progress = match.progress.get(bot);
       if (!progress) throw new Error('no progress');
@@ -376,7 +375,7 @@ describe('Realm Racers house pilots: they can actually drive', () => {
         if (progress.finishedTick !== null) finishedAt = sim.tickCount;
       }
       expect(finishedAt, `${tier} never finished`).toBeGreaterThan(0);
-      expect(progress.lap).toBe(REALM_RACERS_PRACTICE_LAPS);
+      expect(progress.lap).toBe(GARDEN_CIRCUIT.practiceLaps);
       // And it leads, because the human never touched a control. The race
       // itself runs on: the other two pilots are still out there, and with four
       // on the grid the fight behind the leader is the rest of the race.
@@ -435,13 +434,13 @@ describe('Realm Racers house pilots: they can actually drive', () => {
       const match = matchOf(sim, human);
       expect(match.practice === null, kind).toBe(kind === 'public');
       expect(match.totalLaps).toBe(
-        kind === 'public' ? REALM_RACERS_LAPS : REALM_RACERS_PRACTICE_LAPS,
+        kind === 'public' ? GARDEN_CIRCUIT.laps : GARDEN_CIRCUIT.practiceLaps,
       );
       const progress = match.progress.get(botIn(sim, human));
       if (!progress) throw new Error('no progress');
       const started = sim.tickCount;
       const reachedPublicLength = (): boolean =>
-        progress.finishedTick !== null || progress.lap > REALM_RACERS_LAPS;
+        progress.finishedTick !== null || progress.lap > GARDEN_CIRCUIT.laps;
       for (let i = 0; i < RACE_TICKS && !reachedPublicLength(); i++) sim.tick();
       expect(reachedPublicLength(), kind).toBe(true);
       return { ticks: sim.tickCount - started, originZ: match.origin.z };

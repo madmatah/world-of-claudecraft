@@ -4,9 +4,22 @@ import {
   type InstanceMusicEntity,
   type InstanceMusicInput,
   instanceMusicDecision,
+  isRealmRacersAreaTrack,
+  realmRacersAreaTrackAt,
 } from '../src/game/instance_music';
+import {
+  AREA_TRACK_GROUP,
+  AREA_TRACK_URLS,
+  type AreaTrackId,
+  isAreaTrackId,
+} from '../src/game/music_tracks';
+import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
 import { DELVE_X_MIN, ZONES } from '../src/sim/data';
-import { REALM_RACERS_ORIGIN, realmRacersSlotOrigin } from '../src/sim/realm_racers_layout';
+import {
+  REALM_RACERS_LANES,
+  REALM_RACERS_ORIGIN,
+  realmRacersLaneOrigin,
+} from '../src/sim/realm_racers_layout';
 import { SOWFIELD_CENTER } from '../src/sim/vale_cup_layout';
 
 const eastbrookFixture = ZONES.find((zone) => zone.id === 'eastbrook_vale');
@@ -143,7 +156,7 @@ describe('instance music policy', () => {
 
   it('covers the private practice copies and drops the track back in the world', () => {
     const practiceSlot = instanceMusicDecision(
-      input({ playerPos: realmRacersSlotOrigin(3), inDungeon: true }),
+      input({ playerPos: realmRacersLaneOrigin(3), inDungeon: true }),
     );
     expect(practiceSlot.areaTrack).toBe('realm_racers');
 
@@ -172,5 +185,52 @@ describe('instance music policy', () => {
     expect(port.setAreaTrack).toHaveBeenNthCalledWith(1, 'realm_racers', true);
     expect(port.setAreaTrack).toHaveBeenNthCalledWith(2, 'realm_racers');
     expect(port.setAreaTrack).toHaveBeenNthCalledWith(3, 'realm_racers', true);
+  });
+});
+
+describe('Realm Racers music: the track comes off the circuit, not the band', () => {
+  it('plays each circuit its own authored track, on every lane it stands on', () => {
+    // The point of the per-circuit field: a themed circuit brings its zone's
+    // music with it, so this reads the RECORD rather than expecting one id.
+    for (const lane of REALM_RACERS_LANES) {
+      const decision = instanceMusicDecision(
+        input({ playerPos: realmRacersLaneOrigin(lane.index), inDungeon: true }),
+      );
+      expect(decision.areaTrack, `lane ${lane.index}`).toBe(lane.circuit.musicTrack);
+      expect(
+        realmRacersAreaTrackAt(REALM_RACERS_ORIGIN.x, realmRacersLaneOrigin(lane.index).z),
+      ).toBe(lane.circuit.musicTrack);
+    }
+  });
+
+  it('ships a url and a private group for every circuit track', () => {
+    // A circuit naming a track with no file would loop a 404; a circuit sharing
+    // a GROUP with another would download that other circuit's music too.
+    const groups = new Map<string, string>();
+    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+      expect(isAreaTrackId(circuit.musicTrack), `${circuit.id} track is shipped`).toBe(true);
+      const track = circuit.musicTrack as AreaTrackId;
+      expect(AREA_TRACK_URLS[track], `${circuit.id} url`).toBeTruthy();
+      const group = AREA_TRACK_GROUP[track];
+      const owner = groups.get(group);
+      expect(owner ?? circuit.id, `${circuit.id} shares group ${group} with ${owner}`).toBe(
+        circuit.id,
+      );
+      groups.set(group, circuit.id);
+      expect(isRealmRacersAreaTrack(track)).toBe(true);
+    }
+    // The Sowfield is not a circuit, so a new race must never restart it.
+    expect(isRealmRacersAreaTrack('sowfield_match')).toBe(false);
+    expect(isRealmRacersAreaTrack(null)).toBe(false);
+  });
+
+  it('answers nothing off the band', () => {
+    expect(realmRacersAreaTrackAt(0, 0)).toBeNull();
+    expect(
+      realmRacersAreaTrackAt(
+        REALM_RACERS_ORIGIN.x,
+        realmRacersLaneOrigin(REALM_RACERS_LANES.length).z,
+      ),
+    ).toBeNull();
   });
 });

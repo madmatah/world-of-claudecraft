@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import {
   isAtRealmRacers,
-  REALM_RACERS_GATE_FRACTIONS,
   REALM_RACERS_GATE_MARGIN,
   REALM_RACERS_GRID_SIZE,
-  REALM_RACERS_START_BACK,
-  REALM_RACERS_START_SPACING,
   rallyGateCrossingFraction,
 } from '../src/sim/realm_racers_layout';
 import {
@@ -16,9 +14,9 @@ import {
   realmRacersTrack,
 } from '../src/sim/realm_racers_spline';
 
-const track = realmRacersTrack();
-const gates = realmRacersGates();
-const starts = realmRacersStarts();
+const track = realmRacersTrack(GARDEN_CIRCUIT);
+const gates = realmRacersGates(GARDEN_CIRCUIT);
+const starts = realmRacersStarts(GARDEN_CIRCUIT);
 
 describe('Realm Racers recovery gates', () => {
   it('over-covers the road at every gate (the 4.8-vs-5.5 recovery bug)', () => {
@@ -43,12 +41,12 @@ describe('Realm Racers recovery gates', () => {
       );
       // The crossing band stays well inside the water's edge, so a gate is
       // always something a racer crosses on drivable ground.
-      expect(gate.halfWidth).toBeLessThan(rallyBasinEdgeOffsetAt(gate.s));
+      expect(gate.halfWidth).toBeLessThan(rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, gate.s));
     }
   });
 
   it('orders the recovery anchors by arc length, starting on the finish line', () => {
-    expect(gates).toHaveLength(REALM_RACERS_GATE_FRACTIONS.length);
+    expect(gates).toHaveLength(GARDEN_CIRCUIT.gateFractions.length);
     expect(gates.map((gate) => gate.index)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
     expect(gates[0].s).toBe(0);
     for (let i = 1; i < gates.length; i++) expect(gates[i].s).toBeGreaterThan(gates[i - 1].s);
@@ -58,19 +56,19 @@ describe('Realm Racers recovery gates', () => {
   it('parks every start slot on the road, behind the line, along the tangent', () => {
     expect(starts).toHaveLength(REALM_RACERS_GRID_SIZE);
     const line = track.pointAt(0);
-    const grid = track.pointAt(track.length - REALM_RACERS_START_BACK);
+    const grid = track.pointAt(track.length - GARDEN_CIRCUIT.startBack);
     starts.forEach((slot, i) => {
       expect(isAtRealmRacers(slot)).toBe(true);
       const projection = track.project(slot.x, slot.z);
       // The row is symmetric about the centerline and evenly spaced, derived
       // rather than pinned, so a spacing edit is caught here.
       const expected = Math.abs(
-        (i - (REALM_RACERS_GRID_SIZE - 1) / 2) * REALM_RACERS_START_SPACING,
+        (i - (REALM_RACERS_GRID_SIZE - 1) / 2) * GARDEN_CIRCUIT.startSpacing,
       );
       expect(Math.abs(projection.lateral)).toBeCloseTo(expected, 2);
       expect(Math.abs(projection.lateral)).toBeLessThan(track.halfWidthAt(projection.s));
       // Behind the line: the remaining arc up to s = 0 is the authored setback.
-      expect(track.length - projection.s).toBeCloseTo(REALM_RACERS_START_BACK, 1);
+      expect(track.length - projection.s).toBeCloseTo(GARDEN_CIRCUIT.startBack, 1);
       expect(slot.facing).toBeCloseTo(Math.atan2(grid.tx, grid.tz), 6);
       // The grid sits on straight road, so it lines up with the finish line to
       // within a couple of degrees.
@@ -91,7 +89,7 @@ describe('Realm Racers recovery gates', () => {
         expect(apart).toBeGreaterThan(2 * bodyRadius);
       }
     }
-    expect(REALM_RACERS_START_SPACING - 2 * bodyRadius).toBeGreaterThan(0.5);
+    expect(GARDEN_CIRCUIT.startSpacing - 2 * bodyRadius).toBeGreaterThan(0.5);
     // The outermost hull edge stays inside the LOCAL road half-width, which on
     // the start straight is the widest the circuit ever gets.
     for (const slot of starts) {

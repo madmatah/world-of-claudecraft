@@ -1,17 +1,21 @@
-// The Realm Racers circuit, AUTHORED data only. This module holds the hand
-// tuned numbers a designer edits (control points, width bands, gate positions,
-// the start grid, the region envelope) plus the two pieces of math that read
-// nothing derived: gate crossing and the region test. Everything geometric that
-// follows from these numbers (the resampled centerline, arc lengths, the
-// projection, the gates, the start slots, the lateral boundaries) is derived in
-// the sibling leaf `realm_racers_spline.ts`, and the collision set (the
-// garden wall, and only that) in `realm_racers_colliders.ts`. Keeping the
-// split means the derived geometry can get as dense as it likes without
-// bloating what is authored.
+// What every Realm Racers circuit SHARES: the margins and the apron rule the
+// spline derives its boundaries from, the grid size, the two pieces of math
+// that read nothing derived (gate crossing and the region test), and the LANE
+// table that says which circuit sits where in the instance band.
 //
-// Coordinates below are LOCAL to REALM_RACERS_ORIGIN, which sits in the
-// reserved instance band between the Yumi maze and dungeon overflow, so the
-// garden circuit cannot collide with overworld content or another activity.
+// The circuits themselves are authored data, one record each in
+// `content/realm_racers_circuits.ts`. Everything geometric that follows from a
+// record (the resampled centerline, arc lengths, the projection, the gates, the
+// start slots, the lateral boundaries) is derived per circuit in the sibling
+// leaf `realm_racers_spline.ts`, and the collision set in
+// `realm_racers_colliders.ts`. Keeping the split means the derived geometry can
+// get as dense as it likes without bloating what is authored.
+
+import {
+  REALM_RACERS_CIRCUIT_LIST,
+  REALM_RACERS_PRACTICE_CIRCUIT,
+  type RealmRacersCircuit,
+} from './content/realm_racers_circuits';
 
 export interface RallyPoint {
   x: number;
@@ -28,93 +32,22 @@ export interface RallyGate extends RallyPoint {
   s: number;
 }
 
+/**
+ * The band's anchor: lane 0's origin, and the frame every circuit's control
+ * points are authored around. It sits in the reserved instance band between the
+ * Yumi maze and dungeon overflow, so no circuit can collide with overworld
+ * content or another activity.
+ */
 export const REALM_RACERS_ORIGIN = { x: 113_700, z: 0 } as const;
-/** Laps for a queued / backfilled race on the public circuit. */
-export const REALM_RACERS_LAPS = 3;
-/** Laps for a private practice race. Longer than the public race so a solo
- *  session has room to learn the line without changing competitive length. */
-export const REALM_RACERS_PRACTICE_LAPS = 4;
+
 export const REALM_RACERS_MAX_GATE_STEP = 4;
 
-/**
- * The circuit: a start/finish straight heading +x, a fast right sweeper, a
- * north straight, a chicane, a long parabolic, and a hairpin back onto the
- * straight. Read as a CLOSED centripetal Catmull-Rom loop, which lands the lap
- * at roughly 455 yards. The first point is deliberately mid-straight so the
- * start line and the grid behind it both sit on straight road.
- */
-export const REALM_RACERS_CONTROL_POINTS: readonly RallyPoint[] = [
-  { x: -2, z: -54 }, // start / finish line, heading +x
-  { x: 38, z: -52 },
-  { x: 64, z: -44 }, // T1 entry, fast sweeper
-  { x: 80, z: -24 },
-  { x: 84, z: 2 },
-  { x: 76, z: 26 },
-  { x: 56, z: 42 }, // T2 exit onto the north straight
-  { x: 28, z: 46 },
-  { x: 8, z: 40 }, // chicane, first apex (narrowest road)
-  { x: -14, z: 46 }, // chicane, second apex
-  { x: -36, z: 50 },
-  { x: -60, z: 42 }, // the long parabolic
-  { x: -78, z: 22 },
-  { x: -86, z: 0 }, // hairpin apex (tightest)
-  { x: -78, z: -22 },
-  { x: -62, z: -40 }, // back onto the start straight
-  { x: -42, z: -52 },
-] as const;
-
-/**
- * Road half-width breakpoints as (lap fraction, half-width in yards), linearly
- * interpolated and wrapped by `halfWidthAt`.
- *
- * The spread between the widest and the narrowest road is deliberately narrow,
- * because a real circuit does not halve its width: what makes a chicane slow is
- * its GEOMETRY, the S it asks a machine to thread, never a wall closing in. An
- * earlier profile held the chicane at 6.0 against a 10.0 approach and read as a
- * funnel rather than as a corner. At 8.5 it is still the place a four-abreast
- * field has to become three (four machines at the grid's own spacing need about
- * 18 yards and it offers 17), which was the whole point of keeping it tight.
- *
- * What bounds the widths is the OUTSIDE, not the lake: the garden between the
- * road and the perimeter wall is what makes running wide legible. The basin is
- * not the constraint at any width worth authoring, since its own shore is
- * `halfWidth + apron` and moves outward with the road.
- */
-export const REALM_RACERS_WIDTH_BANDS: readonly { s: number; halfWidth: number }[] = [
-  { s: 0.0, halfWidth: 10.5 }, // start / finish straight
-  { s: 0.18, halfWidth: 10.5 },
-  { s: 0.24, halfWidth: 9.5 }, // fast sweeper
-  { s: 0.35, halfWidth: 9.5 },
-  { s: 0.41, halfWidth: 10.0 }, // north straight
-  { s: 0.53, halfWidth: 10.0 },
-  { s: 0.58, halfWidth: 8.5 }, // chicane, the narrowest STRAIGHT-ish stretch
-  { s: 0.62, halfWidth: 8.5 },
-  { s: 0.68, halfWidth: 9.0 }, // parabolic
-  { s: 0.73, halfWidth: 9.0 },
-  { s: 0.8, halfWidth: 8.0 }, // hairpin
-  { s: 0.9, halfWidth: 8.0 },
-  { s: 0.95, halfWidth: 10.5 },
-  { s: 1.0, halfWidth: 10.5 },
-] as const;
-
-/** Narrowest authored road half-width; the width bands may never go under it.
- *  It is the HAIRPIN's, which is where a circuit's tightest road belongs. */
+/** Narrowest road half-width any circuit may author. On the garden circuit it
+ *  is the HAIRPIN's, which is where a circuit's tightest road belongs. */
 export const REALM_RACERS_MIN_HALF_WIDTH = 8.0;
 
 /** Uniform arc-length spacing of the resampled centerline, yards. */
 export const REALM_RACERS_SAMPLE_STEP = 1.0;
-
-/**
- * Recovery anchors as lap fractions, decoupled from the control points: eight gates
- * evenly spaced around the lap, the first ON the start/finish line.
- *
- * They are INVISIBLE recovery anchors: nothing in the HUD reads them and
- * nothing is built over them. Continuous spline distance validates laps and
- * prevents shortcuts; these fractions only decide where a reset may return.
- */
-export const REALM_RACERS_GATE_FRACTIONS: readonly number[] = [
-  0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875,
-] as const;
 
 /**
  * How far a gate's crossing band reaches PAST the local road edge. The band
@@ -159,40 +92,6 @@ export const REALM_RACERS_APRON_MAX = 15.0;
 export const REALM_RACERS_APRON_RADIUS_FRACTION = 0.35;
 
 /**
- * Water surface height inside the basin, a touch below the lawn so the shore
- * reads as a bank rather than a decal. The basin had a stone rim around it, and
- * that rim was the circuit's inner collision; it read as a wall of blocks
- * standing in the lake, so the whole thing is gone and the water itself is the
- * hazard instead.
- */
-export const REALM_RACERS_BASIN_WATER_Y = -0.55;
-
-/**
- * The basin's bank: yards of depth gained per yard in from the shore, and the
- * depth it levels off at.
- *
- * This is ONE profile with two readers. The renderer bakes it into the water
- * surface's per-vertex shore depth (which is what drives the colour ramp and
- * the foam band), and the sim reads it to decide how deep a racer is standing.
- * Two profiles would mean a racer swimming where the water is drawn ankle deep.
- *
- * The cap matches the renderer's own seabed clamp (`WATER_SEABED_CLAMP_YARDS`
- * in `src/render/water_core.ts`), which is where its colour ramp tops out;
- * authoring deeper than that would buy nothing visible.
- */
-export const REALM_RACERS_BASIN_BANK_SLOPE = 0.8;
-export const REALM_RACERS_BASIN_DEPTH_MAX = 6;
-
-/**
- * How far in from the shore a racer may still drive. The Lily Basin's shape,
- * which is the one the operator pointed at: a navigable margin, then water no
- * mount will enter. Inside the margin the racer is wading and paying for it;
- * past it the circuit simply will not let them through, so cutting the infield
- * is off the table without a wall standing in the lake to say so.
- */
-export const REALM_RACERS_BASIN_WADE_YARDS = 4.0;
-
-/**
  * The road edge is marked the way an Evergarden walk is: a sown line of flowers
  * and low shrubs, not a built border. Nothing here collides; a racer drives
  * straight through it into the garden.
@@ -201,56 +100,11 @@ export const REALM_RACERS_BORDER_SPACING = 1.15;
 export const REALM_RACERS_BORDER_OFFSET = 0.7;
 
 /**
- * The wrought-iron garden wall: the circuit's OUTER bound, and the only thing
- * stopping a racer on that side. Half-extents from the origin, inside the
- * region envelope so collision still belongs to the rally at the wall itself.
- */
-export const REALM_RACERS_PERIMETER_HALF_X = 118;
-export const REALM_RACERS_PERIMETER_HALF_Z = 92;
-export const REALM_RACERS_PERIMETER_HALF_THICKNESS = 0.4;
-export const REALM_RACERS_PERIMETER_HEIGHT = 2.2;
-
-/** Start grid: how far behind the start line the row of machines sits. */
-export const REALM_RACERS_START_BACK = 7.0;
-
-/**
  * How many machines line up. Every race is a four-pilot race, practice
  * included; a race freezes this number at seat time so a pilot dropping out
  * cannot retroactively renumber the grid under everyone else.
  */
 export const REALM_RACERS_GRID_SIZE = 4;
-
-/**
- * Centre-to-centre spacing of the grid slots, yards. The row is symmetric about
- * the centerline, so the arithmetic that has to hold is:
- *
- *   road half-width on the start straight  10.5   (REALM_RACERS_WIDTH_BANDS, s = 0 to 0.18)
- *   machine hull radius                     1.7   (VEHICLE_PROFILES.bodyRadius)
- *   outermost slot centre                   7.5   ((n - 1) / 2 * spacing)
- *   outermost hull edge                     9.2   -> 1.3 yd of road left outside it
- *   gap between neighbouring hulls          1.6   (spacing - 2 * bodyRadius)
- *
- * The two clearances are deliberately close to each other: a row bunched in the
- * middle of a wide road with empty tarmac either side reads as a mistake, so
- * the spacing is sized to spread the field across the road it actually has.
- *
- * `tests/realm_racers_layout.ts` re-derives all of it rather than pinning the
- * numbers, so an edit here fails the test instead of quietly parking a machine
- * on the grass.
- */
-export const REALM_RACERS_START_SPACING = 5.0;
-
-/**
- * Region envelope, half-extents from the origin. It must cover the circuit, the
- * drivable garden, the perimeter wall AND the dressing ring beyond it, because
- * every collision short-circuit in `colliders.ts` keys on it: anything inside is
- * the rally, anything outside past the dungeon threshold falls through to
- * interior collision. It therefore sits a good margin outside the perimeter,
- * which is where the dressing stands. Stays strictly between YUMI_BAND_X_MAX and
- * DUNGEON_OVERFLOW_X_BASE.
- */
-export const REALM_RACERS_REGION_HALF_X = 170;
-export const REALM_RACERS_REGION_HALF_Z = 140;
 
 function cross(ax: number, az: number, bx: number, bz: number): number {
   return ax * bz - az * bx;
@@ -289,54 +143,98 @@ export function rallyGateCrossingFraction(
 }
 
 /**
- * Private practice copies of the circuit. A practice lap must never wait on, or
- * be waited on by, someone else's race, so each one runs on its OWN copy of the
- * whole circuit (the Vale Cup's practice-pitch model): the same geometry shifted
- * by an ORIGIN offset, which every geometry read adds. Slot 0 is the one PUBLIC
- * circuit, where queued races run; slots 1 and up are the private copies.
+ * Lanes: where the circuits live in the band.
  *
- * The copies stack along z at the SAME x, because x is what separates the
- * instance plane's bands from each other and the rally owns its whole band
- * (`REALM_RACERS_ORIGIN.x` sits in the reserved gap between
- * `YUMI_BAND_X_MAX` and `DUNGEON_OVERFLOW_X_BASE`, and no real overflow dungeon
- * can land on it). Nothing else in the world keys on z at this x.
+ * The instance band is tight on x (the usable window between `YUMI_BAND_X_MAX`
+ * and the overflow-dungeon guard is about 700 yards, and one circuit's region is
+ * already 340 of it) and free on z, so everything stacks along z at the SAME x.
+ * x is what separates the instance plane's bands from each other and the rally
+ * owns its whole band, so nothing else in the world keys on z out here.
+ *
+ * A lane holds one COPY of one circuit. A circuit that serves competition takes
+ * its public lane first, then its private practice copies: a practice lap must
+ * never wait on, or be waited on by, someone else's race.
  */
-export const REALM_RACERS_PRACTICE_SLOTS = 6;
-/**
- * Spacing between copies, yards. The region is 2 * REGION_HALF_Z = 280 deep, so
- * this leaves 220 yards of empty plane between neighbours: comfortably past the
- * ~120 yd interest radius, which is what makes a practice lap genuinely private
- * rather than merely far away.
- */
-export const REALM_RACERS_SLOT_DZ = 500;
-
-/** The offset added to every geometry read on circuit copy `slot`. Zero for the
- *  public circuit, so the public path is byte-identical to what it was. */
-export function realmRacersSlotOffset(slot: number): RallyPoint {
-  return { x: 0, z: slot * REALM_RACERS_SLOT_DZ };
+export interface RealmRacersLane {
+  /** Index into `REALM_RACERS_LANES`, and the multiplier on `LANE_DZ`. */
+  index: number;
+  circuit: RealmRacersCircuit;
+  /** True for a private practice copy, false for the one public lane. */
+  practice: boolean;
 }
 
-/** World origin of circuit copy `slot`. */
-export function realmRacersSlotOrigin(slot: number): RallyPoint {
+/**
+ * Spacing between lanes, yards. Authored rather than derived, so adding a
+ * circuit cannot silently relocate the lanes that already exist; what holds it
+ * honest is `tests/realm_racers_layout.test.ts`, which derives the floor
+ * (`2 * max regionHalfZ + 200`, the 200 being clear air past the ~120 yd
+ * interest radius) from the circuit records and fails if this drops under it.
+ * That is what makes authoring a deeper circuit fail loudly instead of quietly
+ * letting two lanes see each other.
+ */
+export const REALM_RACERS_LANE_DZ = 500;
+
+export const REALM_RACERS_LANES: readonly RealmRacersLane[] = (() => {
+  const lanes: RealmRacersLane[] = [];
+  for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+    if (circuit.roles.includes('competition')) {
+      lanes.push({ index: lanes.length, circuit, practice: false });
+    }
+    for (let copy = 0; copy < circuit.practiceCopies; copy++) {
+      lanes.push({ index: lanes.length, circuit, practice: true });
+    }
+  }
+  return lanes;
+})();
+
+/** The public lane of a circuit, or -1 when it serves practice only. Circuits
+ *  are compared by ID everywhere, never by record identity: a suite that
+ *  re-imports a module gets a second copy of the records. */
+export function realmRacersPublicLane(circuit: RealmRacersCircuit): number {
+  return (
+    REALM_RACERS_LANES.find((lane) => lane.circuit.id === circuit.id && !lane.practice)?.index ?? -1
+  );
+}
+
+/** Every private copy of the practice circuit, in lane order. */
+export function realmRacersPracticeLanes(): readonly RealmRacersLane[] {
+  return REALM_RACERS_LANES.filter(
+    (lane) => lane.practice && lane.circuit.id === REALM_RACERS_PRACTICE_CIRCUIT.id,
+  );
+}
+
+/** The offset added to every geometry read on lane `lane`. Zero for lane 0, so
+ *  that path is byte-identical to a single-circuit world. */
+export function realmRacersLaneOffset(lane: number): RallyPoint {
+  return { x: 0, z: lane * REALM_RACERS_LANE_DZ };
+}
+
+/** World origin of lane `lane`. */
+export function realmRacersLaneOrigin(lane: number): RallyPoint {
   return {
     x: REALM_RACERS_ORIGIN.x,
-    z: REALM_RACERS_ORIGIN.z + slot * REALM_RACERS_SLOT_DZ,
+    z: REALM_RACERS_ORIGIN.z + lane * REALM_RACERS_LANE_DZ,
   };
 }
 
-/** Which circuit copy a world point sits on, or null for none. */
-export function realmRacersSlotAtXZ(x: number, z: number): number | null {
-  if (Math.abs(x - REALM_RACERS_ORIGIN.x) > REALM_RACERS_REGION_HALF_X) return null;
+/**
+ * Which lane a world point sits on, with the circuit standing there, or null
+ * for none. A pure function of position: two circuits never share a lane, so
+ * the answer can never depend on live match state.
+ */
+export function realmRacersLaneAt(x: number, z: number): RealmRacersLane | null {
   const alongBand = z - REALM_RACERS_ORIGIN.z;
-  const slot = Math.round(alongBand / REALM_RACERS_SLOT_DZ);
-  if (slot < 0 || slot > REALM_RACERS_PRACTICE_SLOTS) return null;
-  return Math.abs(alongBand - slot * REALM_RACERS_SLOT_DZ) <= REALM_RACERS_REGION_HALF_Z
-    ? slot
+  const index = Math.round(alongBand / REALM_RACERS_LANE_DZ);
+  const lane = index >= 0 ? REALM_RACERS_LANES[index] : undefined;
+  if (!lane) return null;
+  if (Math.abs(x - REALM_RACERS_ORIGIN.x) > lane.circuit.regionHalfX) return null;
+  return Math.abs(alongBand - index * REALM_RACERS_LANE_DZ) <= lane.circuit.regionHalfZ
+    ? lane
     : null;
 }
 
 export function isAtRealmRacersXZ(x: number, z: number): boolean {
-  return realmRacersSlotAtXZ(x, z) !== null;
+  return realmRacersLaneAt(x, z) !== null;
 }
 
 export function isAtRealmRacers(point: RallyPoint): boolean {

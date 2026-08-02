@@ -15,6 +15,7 @@ import {
   REALM_RACERS_CAMERA_BOOM_PROFILE,
 } from '../src/render/camera_boom_core';
 import { rallyDressingSpots } from '../src/render/realm_racers_track_core';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { REALM_RACERS_COUNTDOWN_TICKS } from '../src/sim/social/realm_racers';
 
@@ -80,8 +81,8 @@ describe('Realm Racers start camera', () => {
   });
 
   it('keeps the complete panorama clear of every circuit tree from both grid slots', () => {
-    const trees = rallyDressingSpots().filter((spot) => spot.kind === 'tree');
-    for (const start of realmRacersStarts()) {
+    const trees = rallyDressingSpots(GARDEN_CIRCUIT).filter((spot) => spot.kind === 'tree');
+    for (const start of realmRacersStarts(GARDEN_CIRCUIT)) {
       const state = createRealmRacersStartCamera();
       let nearestTree = Number.POSITIVE_INFINITY;
       for (let elapsed = 0; elapsed <= REALM_RACERS_PANORAMA_TICKS; elapsed++) {

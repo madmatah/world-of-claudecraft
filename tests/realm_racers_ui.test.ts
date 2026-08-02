@@ -44,6 +44,7 @@ function match(over: Partial<RallyMatch> = {}): RallyMatch {
   const me = racer();
   return {
     id: 7,
+    circuitId: 'evergarden_garden',
     participantIds: [1, 2, 3, 4],
     phase: 'countdown',
     countdown: 3,

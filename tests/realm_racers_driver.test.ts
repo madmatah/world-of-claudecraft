@@ -7,6 +7,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import {
   driveRealmRacers,
   RALLY_DRIVER_TIERS,
@@ -42,7 +43,7 @@ interface Placement {
 
 /** Put a machine on the circuit at arc position `s` and build the brain's input. */
 function at(s: number, place: Placement = {}): RallyDriverInput {
-  const track = realmRacersTrack();
+  const track = realmRacersTrack(GARDEN_CIRCUIT);
   const p = track.pointAt(s);
   const lateral = place.lateral ?? 0;
   const x = p.x - p.tz * lateral;
@@ -54,6 +55,7 @@ function at(s: number, place: Placement = {}): RallyDriverInput {
     facing: Math.atan2(p.tx, p.tz) + (place.heading ?? 0),
     speed: place.speed ?? 0,
     slip: place.slip ?? 0,
+    track,
     projection: track.project(x, z),
     topSpeed: TOP_SPEED,
     rival: place.rival
@@ -68,7 +70,7 @@ function at(s: number, place: Placement = {}): RallyDriverInput {
 
 /** A point `ahead` yards down the circuit from `s`, offset laterally. */
 function pointOnTrack(s: number, lateral = 0): { x: number; z: number } {
-  const p = realmRacersTrack().pointAt(s);
+  const p = realmRacersTrack(GARDEN_CIRCUIT).pointAt(s);
   return { x: p.x - p.tz * lateral, z: p.z + p.tx * lateral };
 }
 
@@ -106,12 +108,12 @@ describe('Realm Racers driver: holding the line', () => {
     // The circuit's turnRadius is positive where it bends toward the infield,
     // and `lateral` is positive on that same side, so an inside apex carries the
     // radius's sign. Getting this backwards apexes every corner on its outside.
-    const track = realmRacersTrack();
+    const track = realmRacersTrack(GARDEN_CIRCUIT);
     let checked = 0;
     for (let s = 0; s < track.length; s += 5) {
       const radius = track.pointAt(s).turnRadius;
       if (!Number.isFinite(radius) || Math.abs(radius) > 50) continue;
-      const offset = rallyRacingLineOffset(s);
+      const offset = rallyRacingLineOffset(track, s);
       expect(Math.sign(offset), `apex side at s=${s.toFixed(0)}`).toBe(Math.sign(radius));
       expect(Math.abs(offset), `apex depth at s=${s.toFixed(0)}`).toBeLessThan(
         track.halfWidthAt(s),
@@ -125,7 +127,7 @@ describe('Realm Racers driver: holding the line', () => {
     // The start/finish "straight" reads about 480 yards of radius, not infinity,
     // so an unramped apex-seek would still pull the aim half the road off centre
     // and the bot would weave the length of every straight.
-    expect(rallyRacingLineOffset(START_STRAIGHT_S)).toBe(0);
+    expect(rallyRacingLineOffset(realmRacersTrack(GARDEN_CIRCUIT), START_STRAIGHT_S)).toBe(0);
   });
 });
 
@@ -155,7 +157,7 @@ describe('Realm Racers driver: speed', () => {
   });
 
   it('never lets a gentler tier out-drive a harder one, anywhere on the lap', () => {
-    const track = realmRacersTrack();
+    const track = realmRacersTrack(GARDEN_CIRCUIT);
     let strictlySlower = 0;
     for (let s = 0; s < track.length; s += 5) {
       const targets = RALLY_DRIVER_TIERS.map(
@@ -256,7 +258,7 @@ describe('Realm Racers driver: the dodge', () => {
 
   function markedAhead(offset = 0): RallyDriverBlast {
     const flight = DODGE_TICKS / 20;
-    const here = realmRacersTrack().pointAt(START_STRAIGHT_S);
+    const here = realmRacersTrack(GARDEN_CIRCUIT).pointAt(START_STRAIGHT_S);
     return {
       x: here.x + here.tx * DODGE_SPEED * flight - here.tz * offset,
       z: here.z + here.tz * DODGE_SPEED * flight + here.tx * offset,

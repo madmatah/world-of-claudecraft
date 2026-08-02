@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 
 vi.mock('../server/db', () => ({
   pool: { query: vi.fn(async () => ({ rows: [] })) },
@@ -234,7 +235,7 @@ describe('Realm Racers online parity', () => {
     if (!racer) throw new Error('missing racer');
     const progress = match.progress.get(session.pid);
     if (!progress) throw new Error('missing racer progress');
-    const track = realmRacersTrack();
+    const track = realmRacersTrack(GARDEN_CIRCUIT);
     const anchor = track.pointAt(progress.resetS);
     const anchorX = match.origin.x + anchor.x;
     const anchorZ = match.origin.z + anchor.z;

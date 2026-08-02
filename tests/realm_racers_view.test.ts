@@ -48,6 +48,7 @@ function live(over: Partial<Match> = {}): Match {
   ];
   return {
     id: 7,
+    circuitId: 'evergarden_garden',
     participantIds: [1, 2, 3, 4],
     phase: 'racing',
     countdown: 0,

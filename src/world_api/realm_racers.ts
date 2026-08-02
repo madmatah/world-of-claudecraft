@@ -35,6 +35,12 @@ export interface RealmRacersRacerInfo {
 export interface RealmRacersMatchInfo {
   id: number;
   /**
+   * Which circuit this race is on, as a `REALM_RACERS_CIRCUITS` id. Presentation
+   * reads it to name the circuit and to anchor anything built on its geometry;
+   * it is the id rather than the record because this seam stays data-only.
+   */
+  circuitId: string;
+  /**
    * Every seated pilot in frozen grid order, including the local player. Grid
    * IDENTITY, which is what the renderer's match-visibility pins read; live
    * order is `standings` below and reorders around it every tick.

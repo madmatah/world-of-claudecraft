@@ -1,16 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePosition } from '../src/sim/colliders';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { DUNGEON_OVERFLOW_X_BASE, YUMI_BAND_X_MAX } from '../src/sim/data';
 import { realmRacersColliders } from '../src/sim/realm_racers_colliders';
 import {
   REALM_RACERS_APRON_MAX,
   REALM_RACERS_APRON_RADIUS_FRACTION,
-  REALM_RACERS_BASIN_WADE_YARDS,
   REALM_RACERS_ORIGIN,
-  REALM_RACERS_PERIMETER_HALF_X,
-  REALM_RACERS_PERIMETER_HALF_Z,
-  REALM_RACERS_REGION_HALF_X,
-  REALM_RACERS_REGION_HALF_Z,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
@@ -27,8 +23,8 @@ import {
 } from '../src/sim/social/realm_racers';
 
 const SEED = 42;
-const track = realmRacersTrack();
-const colliders = realmRacersColliders();
+const track = realmRacersTrack(GARDEN_CIRCUIT);
+const colliders = realmRacersColliders(GARDEN_CIRCUIT);
 
 /** Samples a collider box's outline in world coordinates. */
 function outline(collider: (typeof colliders)[number]): { x: number; z: number }[] {
@@ -77,7 +73,7 @@ describe('Realm Racers boundaries', () => {
       // margin buys a racer four more yards of shortcut, so it has to be
       // covered or "the water replaces the wall" is only half true.
       expect(
-        (sample.turnRadius - sample.apron - REALM_RACERS_BASIN_WADE_YARDS) / (1 - waterLoss),
+        (sample.turnRadius - sample.apron - GARDEN_CIRCUIT.basin.wadeYards) / (1 - waterLoss),
       ).toBeGreaterThan(roadTime);
       worst = Math.min(worst, sample.turnRadius * gardenLoss - sample.apron);
       if (sample.apron < REALM_RACERS_APRON_MAX - 1e-6) constrained++;
@@ -97,9 +93,9 @@ describe('Realm Racers boundaries', () => {
     // line into the water costs time instead of ending the moment.
     for (let i = 0; i < track.samples.length; i += 13) {
       const sample = track.samples[i];
-      const limit = rallyBasinWadeLimitAt(sample.s);
+      const limit = rallyBasinWadeLimitAt(GARDEN_CIRCUIT, sample.s);
       // Wading is allowed, right up to the margin.
-      for (const offset of [rallyBasinEdgeOffsetAt(sample.s) + 0.5, limit - 0.2]) {
+      for (const offset of [rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, sample.s) + 0.5, limit - 0.2]) {
         const x = sample.x - sample.tz * offset;
         const z = sample.z + sample.tx * offset;
         const resolved = resolvePosition(SEED, x, z, 0.5);
@@ -115,7 +111,9 @@ describe('Realm Racers boundaries', () => {
         // To the millimetre. The clamp walks back along the PROJECTION's own
         // normal, so the arc position is preserved and the limit it lands on
         // is the limit it was measured against.
-        expect(projection.lateral).toBeLessThanOrEqual(rallyBasinWadeLimitAt(projection.s) + 1e-3);
+        expect(projection.lateral).toBeLessThanOrEqual(
+          rallyBasinWadeLimitAt(GARDEN_CIRCUIT, projection.s) + 1e-3,
+        );
         // ...and pushed straight out, not shoved down the circuit: the arc
         // position is what a shortcut would be stealing.
         expect(Math.abs(projection.s - sample.s)).toBeLessThan(track.length / 2);
@@ -162,7 +160,7 @@ describe('Realm Racers boundaries', () => {
       const sample = track.samples[i];
       for (const [offset, side] of [
         [track.halfWidthAt(sample.s) + 6, -1],
-        [rallyBasinEdgeOffsetAt(sample.s) - 0.5, 1],
+        [rallyBasinEdgeOffsetAt(GARDEN_CIRCUIT, sample.s) - 0.5, 1],
       ] as const) {
         const x = sample.x - sample.tz * offset * side;
         const z = sample.z + sample.tx * offset * side;
@@ -176,14 +174,14 @@ describe('Realm Racers boundaries', () => {
     // Vacuity guard for the test above: something in this region must still
     // push, or "nothing stopped the racer" would prove nothing (the region used
     // to short-circuit to `return { x, z }` and collide with nothing at all).
-    const probe = REALM_RACERS_PERIMETER_HALF_X - 0.2;
+    const probe = GARDEN_CIRCUIT.perimeter.halfX - 0.2;
     const pushed = resolvePosition(SEED, REALM_RACERS_ORIGIN.x + probe, REALM_RACERS_ORIGIN.z, 0.5);
     expect(pushed.x - REALM_RACERS_ORIGIN.x).toBeLessThan(probe);
     for (const [x, z] of [
-      [REALM_RACERS_PERIMETER_HALF_X + 4, 0],
-      [-REALM_RACERS_PERIMETER_HALF_X - 4, 0],
-      [0, REALM_RACERS_PERIMETER_HALF_Z + 4],
-      [0, -REALM_RACERS_PERIMETER_HALF_Z - 4],
+      [GARDEN_CIRCUIT.perimeter.halfX + 4, 0],
+      [-GARDEN_CIRCUIT.perimeter.halfX - 4, 0],
+      [0, GARDEN_CIRCUIT.perimeter.halfZ + 4],
+      [0, -GARDEN_CIRCUIT.perimeter.halfZ - 4],
     ]) {
       const resolved = resolvePosition(
         SEED,
@@ -192,31 +190,31 @@ describe('Realm Racers boundaries', () => {
         0.5,
       );
       expect(Math.abs(resolved.x - REALM_RACERS_ORIGIN.x)).toBeLessThanOrEqual(
-        REALM_RACERS_PERIMETER_HALF_X + 4,
+        GARDEN_CIRCUIT.perimeter.halfX + 4,
       );
       expect(Math.abs(resolved.z - REALM_RACERS_ORIGIN.z)).toBeLessThanOrEqual(
-        REALM_RACERS_PERIMETER_HALF_Z + 4,
+        GARDEN_CIRCUIT.perimeter.halfZ + 4,
       );
     }
   });
 
   it('caches the built set (one build serves every Sim in the process)', () => {
-    expect(realmRacersColliders()).toBe(colliders);
+    expect(realmRacersColliders(GARDEN_CIRCUIT)).toBe(colliders);
     // The four perimeter slabs and nothing else: no rim, no hedge, no gantry.
     expect(colliders).toHaveLength(4);
   });
 
   it('keeps the region envelope strictly inside its reserved instance band', () => {
-    expect(REALM_RACERS_ORIGIN.x - REALM_RACERS_REGION_HALF_X).toBeGreaterThan(YUMI_BAND_X_MAX);
-    expect(REALM_RACERS_ORIGIN.x + REALM_RACERS_REGION_HALF_X).toBeLessThan(
+    expect(REALM_RACERS_ORIGIN.x - GARDEN_CIRCUIT.regionHalfX).toBeGreaterThan(YUMI_BAND_X_MAX);
+    expect(REALM_RACERS_ORIGIN.x + GARDEN_CIRCUIT.regionHalfX).toBeLessThan(
       DUNGEON_OVERFLOW_X_BASE - 300,
     );
     // ...and the envelope really does cover every collider, or a racer could be
     // stopped by geometry that collision has already stopped owning.
     for (const collider of colliders) {
       for (const point of outline(collider)) {
-        expect(Math.abs(point.x - REALM_RACERS_ORIGIN.x)).toBeLessThan(REALM_RACERS_REGION_HALF_X);
-        expect(Math.abs(point.z - REALM_RACERS_ORIGIN.z)).toBeLessThan(REALM_RACERS_REGION_HALF_Z);
+        expect(Math.abs(point.x - REALM_RACERS_ORIGIN.x)).toBeLessThan(GARDEN_CIRCUIT.regionHalfX);
+        expect(Math.abs(point.z - REALM_RACERS_ORIGIN.z)).toBeLessThan(GARDEN_CIRCUIT.regionHalfZ);
       }
     }
   });

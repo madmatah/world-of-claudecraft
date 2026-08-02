@@ -8,6 +8,7 @@ import {
   SelfMotionPredictor,
   updateSelfRenderFallback,
 } from '../src/render/self_motion';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
 import { type Entity, type MoveInput, RUN_SPEED } from '../src/sim/types';
@@ -693,7 +694,7 @@ describe('SelfMotionPredictor', () => {
     expect(maxRise).toBeGreaterThan(0.3);
   });
   it('predicts a driving machine: its own drive state, its own steered heading', () => {
-    const start = realmRacersStarts()[0];
+    const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
     const lab = new Lab(150, FRAME_MS, {
       start: { x: start.x, z: start.z },
       facing: start.facing,
@@ -834,7 +835,7 @@ describe('SelfMotionPredictor', () => {
     // the position correction glides it in, but the momentum has to be adopted
     // or the scratch machine keeps driving the pre-bump line under it.
     const race = (announce: boolean) => {
-      const start = realmRacersStarts()[0];
+      const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
       const lab = new Lab(150, FRAME_MS, {
         start: { x: start.x, z: start.z },
         facing: start.facing,

@@ -309,7 +309,7 @@ import {
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
-import { buildRealmRacersTrack, type RealmRacersTrackView } from './realm_racers_track';
+import { buildRealmRacersTracks, type RealmRacersTrackView } from './realm_racers_track';
 import {
   isOutsideRealmRacersDrawRange,
   isOutsideRealmRacersRetainRange,
@@ -2292,7 +2292,7 @@ export class Renderer {
     this.valeCupTeamRings = buildValeCupTeamRings();
     setRenderCategory(this.valeCupTeamRings.group, 'ui3d');
     this.scene.add(this.valeCupTeamRings.group);
-    this.realmRacersTrack = buildRealmRacersTrack();
+    this.realmRacersTrack = buildRealmRacersTracks();
     setRenderCategory(this.realmRacersTrack.group, 'props');
     this.scene.add(this.realmRacersTrack.group);
     setRenderCategory(this.realmRacersGroundBlasts.group, 'vfx');

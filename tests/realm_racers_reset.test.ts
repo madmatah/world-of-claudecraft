@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
@@ -55,7 +56,7 @@ describe('Realm Racers recovery', () => {
   it('advances the silent recovery anchor after crossing the next ordered spline gate', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const gate = required(realmRacersGates()[1], 'recovery gate');
+    const gate = required(realmRacersGates(GARDEN_CIRCUIT)[1], 'recovery gate');
     progress.nextResetGate = gate.index;
     const before = realmRacersToWorld(match, gate.x - gate.dirX * 1.5, gate.z - gate.dirZ * 1.5);
     const after = realmRacersToWorld(match, gate.x + gate.dirX * 1.5, gate.z + gate.dirZ * 1.5);
@@ -75,7 +76,7 @@ describe('Realm Racers recovery', () => {
   it('resets to the recovery-anchor pose and restores its progress snapshot', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const track = realmRacersTrack();
+    const track = realmRacersTrack(GARDEN_CIRCUIT);
     const anchor = track.pointAt(track.length * 0.25);
     progress.resetS = anchor.s;
     progress.resetLap = 2;
@@ -121,7 +122,7 @@ describe('Realm Racers recovery', () => {
     // Clear the rest of the grid off the centerline: recovery drops a machine
     // on the racing line, and a neighbour parked on it would legitimately be
     // shoved aside by the contact pass, which is a different test.
-    const track = realmRacersTrack();
+    const track = realmRacersTrack(GARDEN_CIRCUIT);
     pids.slice(1).forEach((pid, i) => {
       const away = track.pointAt(track.length * (0.3 + i * 0.15));
       teleport(sim, pid, away.x, away.z);
@@ -144,7 +145,7 @@ describe('Realm Racers recovery', () => {
   it('automatically recovers after three seconds stopped off track without another lock', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const track = realmRacersTrack();
+    const track = realmRacersTrack(GARDEN_CIRCUIT);
     const road = track.pointAt(track.length * 0.4);
     progress.resetS = road.s;
     const lateral = road.halfWidth + 8;
@@ -165,7 +166,9 @@ describe('Realm Racers recovery', () => {
   it('never auto-recovers a machine parked on the road', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const road = realmRacersTrack().pointAt(realmRacersTrack().length * 0.4);
+    const road = realmRacersTrack(GARDEN_CIRCUIT).pointAt(
+      realmRacersTrack(GARDEN_CIRCUIT).length * 0.4,
+    );
     teleport(sim, a, road.x, road.z);
 
     for (let i = 0; i < REALM_RACERS_STUCK_TICKS + 5; i++) sim.tick();
@@ -178,7 +181,9 @@ describe('Realm Racers recovery', () => {
   it('never auto-recovers an off-road machine that is still moving', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const road = realmRacersTrack().pointAt(realmRacersTrack().length * 0.4);
+    const road = realmRacersTrack(GARDEN_CIRCUIT).pointAt(
+      realmRacersTrack(GARDEN_CIRCUIT).length * 0.4,
+    );
     const lateral = road.halfWidth + 8;
     teleport(sim, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
     const offRoadX = racer.pos.x;
@@ -197,7 +202,7 @@ describe('Realm Racers recovery', () => {
   it('never advances the recovery anchor past the next UNCROSSED gate, so reset never gains ground', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const gates = realmRacersGates();
+    const gates = realmRacersGates(GARDEN_CIRCUIT);
     const gate2 = required(gates[2], 'gate 2');
     const gate3 = required(gates[3], 'gate 3');
 
@@ -229,7 +234,7 @@ describe('Realm Racers recovery', () => {
 
     sim.drainEvents();
     sim.realmRacersResetPosition(a);
-    const anchor = realmRacersTrack().pointAt(anchorAfterGate2.resetS);
+    const anchor = realmRacersTrack(GARDEN_CIRCUIT).pointAt(anchorAfterGate2.resetS);
     expect(racer.pos.x).toBeCloseTo(anchor.x, 6);
     expect(racer.pos.z).toBeCloseTo(anchor.z, 6);
   });
@@ -237,7 +242,9 @@ describe('Realm Racers recovery', () => {
   it('requires the full stuck window WITHOUT interruption, not an accumulated total', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const road = realmRacersTrack().pointAt(realmRacersTrack().length * 0.4);
+    const road = realmRacersTrack(GARDEN_CIRCUIT).pointAt(
+      realmRacersTrack(GARDEN_CIRCUIT).length * 0.4,
+    );
     progress.resetS = road.s;
     const lateral = road.halfWidth + 8;
     const offRoadX = road.x - road.tz * lateral;
@@ -268,7 +275,9 @@ describe('Realm Racers recovery', () => {
   it('never counts an off-road stopped machine while its manual reset lock is active', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
-    const road = realmRacersTrack().pointAt(realmRacersTrack().length * 0.4);
+    const road = realmRacersTrack(GARDEN_CIRCUIT).pointAt(
+      realmRacersTrack(GARDEN_CIRCUIT).length * 0.4,
+    );
     const lateral = road.halfWidth + 8;
     teleport(sim, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
     const lockedX = racer.pos.x;
@@ -286,7 +295,9 @@ describe('Realm Racers recovery', () => {
 describe('Realm Racers wrong-way state', () => {
   it('requires sustained reverse heading and clears on a forward heading', () => {
     const { sim, a, racer } = racing();
-    const road = realmRacersTrack().pointAt(realmRacersTrack().length * 0.3);
+    const road = realmRacersTrack(GARDEN_CIRCUIT).pointAt(
+      realmRacersTrack(GARDEN_CIRCUIT).length * 0.3,
+    );
     teleport(sim, a, road.x, road.z);
     racer.facing = Math.atan2(-road.tx, -road.tz);
 
@@ -302,7 +313,9 @@ describe('Realm Racers wrong-way state', () => {
 
   it('never raises on an isolated blip followed by neutral driving', () => {
     const { sim, a, racer } = racing();
-    const road = realmRacersTrack().pointAt(realmRacersTrack().length * 0.3);
+    const road = realmRacersTrack(GARDEN_CIRCUIT).pointAt(
+      realmRacersTrack(GARDEN_CIRCUIT).length * 0.3,
+    );
     teleport(sim, a, road.x, road.z);
 
     // One tick pointed backward: far short of the debounce window.

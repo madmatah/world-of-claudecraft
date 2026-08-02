@@ -6,19 +6,20 @@
 // garden is sown) live in the Three-free core beside this file; this module
 // only builds meshes from them.
 //
-// The whole subtree is built once and visibility gated by local-player
-// proximity, exactly as before.
+// One view per authored circuit, each built once and visibility gated by which
+// LANE the local player stands on: a circuit draws only on its own lanes, and
+// moves to whichever copy of itself the viewer is standing on.
 
 import * as THREE from 'three';
 import {
-  REALM_RACERS_BASIN_BANK_SLOPE,
-  REALM_RACERS_BASIN_WATER_Y,
+  REALM_RACERS_CIRCUIT_LIST,
+  type RealmRacersCircuit,
+} from '../sim/content/realm_racers_circuits';
+import {
   REALM_RACERS_ORIGIN,
-  REALM_RACERS_REGION_HALF_X,
-  REALM_RACERS_REGION_HALF_Z,
   REALM_RACERS_RUNOFF_WIDTH,
-  realmRacersSlotAtXZ,
-  realmRacersSlotOffset,
+  realmRacersLaneAt,
+  realmRacersLaneOffset,
 } from '../sim/realm_racers_layout';
 import {
   type RallySample,
@@ -180,6 +181,7 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
  * callers leave `repeatPerYard` alone.
  */
 function ribbon(
+  circuit: RealmRacersCircuit,
   samples: readonly RallySample[],
   from: number,
   sections: number,
@@ -189,7 +191,7 @@ function ribbon(
   repeatPerYard = 1,
 ): THREE.BufferGeometry {
   const count = samples.length;
-  const step = realmRacersTrack().step;
+  const step = realmRacersTrack(circuit).step;
   const positions = new Float32Array((sections + 1) * 2 * 3);
   const uvs = new Float32Array((sections + 1) * 2 * 2);
   const index: number[] = [];
@@ -272,8 +274,8 @@ function runoffGrassWeight(vertexIndex: number): number {
  * from the core, because each one of them has shipped wrong at least once and
  * an eye cannot check them; `tests/realm_racers_render.test.ts` can.
  */
-function buildStartArch(group: THREE.Group): void {
-  const place = rallyStartArchPlacement();
+function buildStartArch(circuit: RealmRacersCircuit, group: THREE.Group): void {
+  const place = rallyStartArchPlacement(circuit);
   instanceModel(group, ARCH_URL, [
     {
       x: place.x,
@@ -300,7 +302,7 @@ function buildStartArch(group: THREE.Group): void {
   );
 }
 
-function buildStartLights(group: THREE.Group): THREE.Mesh[] {
+function buildStartLights(circuit: RealmRacersCircuit, group: THREE.Group): THREE.Mesh[] {
   const fixture = new THREE.Group();
   fixture.name = 'realm-racers-start-lights';
   const housingGeo = new THREE.BoxGeometry(0.72, 0.68, 0.48);
@@ -308,7 +310,7 @@ function buildStartLights(group: THREE.Group): THREE.Mesh[] {
   const housingMat = surfaceMat({ color: 0x171816, roughness: 0.72 });
   const offMat = new THREE.MeshBasicMaterial({ color: 0x241c12 });
   const lenses: THREE.Mesh[] = [];
-  for (const [index, place] of rallyStartLightPlacements().entries()) {
+  for (const [index, place] of rallyStartLightPlacements(circuit).entries()) {
     const housing = new THREE.Mesh(housingGeo, housingMat);
     housing.position.set(place.x, GRASS_Y + place.lift, place.z);
     housing.rotation.y = place.yaw;
@@ -339,8 +341,11 @@ function buildStartLights(group: THREE.Group): THREE.Mesh[] {
  * own meadow uses it: a vertical card lit only by a zenith sun through Lambert
  * comes out nearly black, which is exactly how these first shipped.
  */
-function buildFlowers(group: THREE.Group): void {
-  const spots = [...rallyBorderFlowerSpots(), ...rallyFlowerSpots(GFX.leanFoliage ? 0.45 : 1)];
+function buildFlowers(circuit: RealmRacersCircuit, group: THREE.Group): void {
+  const spots = [
+    ...rallyBorderFlowerSpots(circuit),
+    ...rallyFlowerSpots(circuit, GFX.leanFoliage ? 0.45 : 1),
+  ];
   if (spots.length === 0) return;
   const card = new THREE.PlaneGeometry(FLOWER_WIDTH, FLOWER_HEIGHT);
   card.translate(0, FLOWER_HEIGHT / 2, 0);
@@ -402,9 +407,9 @@ function mergeCrossedCards(card: THREE.BufferGeometry): THREE.BufferGeometry {
  * with z negated; the lawn is cut with the SAME shape as a hole, which is what
  * makes the water read as a sunken basin rather than a puddle on the grass.
  */
-function basinShape(): THREE.Shape {
+function basinShape(circuit: RealmRacersCircuit): THREE.Shape {
   return new THREE.Shape(
-    realmRacersBasinOutline().map(
+    realmRacersBasinOutline(circuit).map(
       (point) =>
         new THREE.Vector2(point.x - REALM_RACERS_ORIGIN.x, -(point.z - REALM_RACERS_ORIGIN.z)),
     ),
@@ -422,8 +427,8 @@ function basinShape(): THREE.Shape {
  * `uWaveEnabled` branch costs a comparison and the broad swell still moves the
  * surface.
  */
-function buildBasin(group: THREE.Group): void {
-  const mesh = rallyBasinMesh();
+function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
+  const mesh = rallyBasinMesh(circuit);
   const count = mesh.depths.length;
   const positions = new Float32Array(count * 3);
   const shoreDepth = new Float32Array(count);
@@ -436,7 +441,7 @@ function buildBasin(group: THREE.Group): void {
     // Foam is depth over slope, i.e. distance to the waterline. The basin's
     // bank has ONE authored slope, so hand the shader that rather than a
     // finite difference of a profile we already know in closed form.
-    shoreSlope[i] = REALM_RACERS_BASIN_BANK_SLOPE;
+    shoreSlope[i] = circuit.basin.bankSlope;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -455,16 +460,16 @@ function buildBasin(group: THREE.Group): void {
       surfaceOrigin: REALM_RACERS_ORIGIN,
     }),
   );
-  water.position.y = REALM_RACERS_BASIN_WATER_Y;
+  water.position.y = circuit.basin.waterY;
   group.add(water);
 
   // Reeds around the shore, so the water's edge is planted rather than kerbed.
   instanceModel(
     group,
     REED_URL,
-    rallyReedSpots().map((spot) => ({
+    rallyReedSpots(circuit).map((spot) => ({
       x: spot.x,
-      y: REALM_RACERS_BASIN_WATER_Y,
+      y: circuit.basin.waterY,
       z: spot.z,
       yaw: spot.rot,
       sx: spot.scale,
@@ -474,18 +479,18 @@ function buildBasin(group: THREE.Group): void {
   );
 }
 
-export function buildRealmRacersTrack(): RealmRacersTrackView {
+export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersTrackView {
   const group = new THREE.Group();
   group.name = 'realm-racers-track';
-  const track = realmRacersTrack();
+  const track = realmRacersTrack(circuit);
   const samples = track.samples;
   const count = samples.length;
 
   // --- the lawn the whole circuit sits on. It runs well past the region so the
   // horizon beyond the perimeter fence stays lawn instead of the empty instance
   // band's void; nothing else is drawn out there, so there is nothing to fight.
-  const lawnX = (REALM_RACERS_REGION_HALF_X + LAWN_OVERSHOOT) * 2;
-  const lawnZ = (REALM_RACERS_REGION_HALF_Z + LAWN_OVERSHOOT) * 2;
+  const lawnX = (circuit.regionHalfX + LAWN_OVERSHOOT) * 2;
+  const lawnZ = (circuit.regionHalfZ + LAWN_OVERSHOOT) * 2;
   // The world's OWN ground material, not a lookalike: six-layer PBR splat,
   // detail normals, macro breakup, the lot. One material serves every ground
   // surface here, because which layer a surface is made of is a per-vertex
@@ -502,7 +507,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
     new THREE.Vector2(lawnX / 2, lawnZ / 2),
     new THREE.Vector2(-lawnX / 2, lawnZ / 2),
   ]);
-  lawnShape.holes.push(basinShape());
+  lawnShape.holes.push(basinShape(circuit));
   const lawnGeo = new THREE.ShapeGeometry(lawnShape)
     .rotateX(-Math.PI / 2)
     .translate(REALM_RACERS_ORIGIN.x, GRASS_Y, REALM_RACERS_ORIGIN.z);
@@ -515,6 +520,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
       surface(
         paintGround(
           ribbon(
+            circuit,
             samples,
             0,
             count,
@@ -534,6 +540,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
     surface(
       paintGround(
         ribbon(
+          circuit,
           samples,
           0,
           count,
@@ -550,11 +557,12 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
   );
 
   const kerbMat = surfaceMat({ map: rallyKerbTexture(), roughness: 0.7 });
-  for (const run of rallyKerbRuns()) {
+  for (const run of rallyKerbRuns(circuit)) {
     for (const side of [1, -1]) {
       group.add(
         surface(
           ribbon(
+            circuit,
             samples,
             run.from,
             run.to - run.from,
@@ -574,6 +582,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
   group.add(
     surface(
       ribbon(
+        circuit,
         samples,
         count - Math.round(START_LINE_LENGTH / 2),
         START_LINE_LENGTH,
@@ -586,14 +595,14 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
     ),
   );
 
-  buildBasin(group);
-  buildStartArch(group);
-  const startLightLenses = buildStartLights(group);
+  buildBasin(circuit, group);
+  buildStartArch(circuit, group);
+  const startLightLenses = buildStartLights(circuit, group);
   const startLightOff = startLightLenses[0]?.material as THREE.Material;
   const startLightRed = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
   const startLightGreen = new THREE.MeshBasicMaterial({ color: 0x45e06f });
   let lastStartLightSignal = '';
-  buildFlowers(group);
+  buildFlowers(circuit, group);
 
   // --- the infield landmark, on its island out in the water ---
   const fountainSpot = rallyFountainSpot();
@@ -602,7 +611,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
   group.add(fountain);
 
   // --- the dressing ring, every piece outside the perimeter by construction ---
-  const dressing = rallyDressingSpots();
+  const dressing = rallyDressingSpots(circuit);
   for (const [kind, url] of Object.entries(BED_URLS)) {
     instanceModel(
       group,
@@ -666,7 +675,7 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
   }
 
   // --- the wrought-iron perimeter, so the circuit sits in a walled garden ---
-  const perimeter = rallyPerimeterPieces(IRON_PANEL);
+  const perimeter = rallyPerimeterPieces(circuit, IRON_PANEL);
   const ironSpot = (piece: (typeof perimeter)[number]): ModelSpot => ({
     x: piece.x,
     y: GRASS_Y,
@@ -684,16 +693,23 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
   return {
     group,
     update(px, pz, time, match) {
-      // The circuit exists in several identical COPIES stacked along the band
-      // (the public one plus the private practice copies), and a viewer can only
-      // ever be on one of them. Rather than build the same half-megabyte of
-      // geometry per copy, the one group is MOVED to whichever copy the viewer
-      // is standing on. A rigid translation is all it takes: the copies differ
-      // by nothing else.
-      const slot = realmRacersSlotAtXZ(px, pz);
-      group.visible = slot !== null;
-      if (slot === null) return;
-      const offset = realmRacersSlotOffset(slot);
+      // This circuit exists in several identical COPIES stacked along the band
+      // (the public lane plus the private practice copies), and a viewer can
+      // only ever be on one of them. Rather than build the same half-megabyte
+      // of geometry per copy, the one group is MOVED to whichever lane the
+      // viewer is standing on. A rigid translation is all it takes: the copies
+      // differ by nothing else.
+      //
+      // A lane belonging to a DIFFERENT circuit hides this one: its own view
+      // owns that lane, and the two must never be drawn on top of each other.
+      // Compared by ID, never by record identity: a suite that re-imports this
+      // module (the texture mocks do) gets a second copy of the circuit records,
+      // and an identity test would silently hide every circuit.
+      const lane = realmRacersLaneAt(px, pz);
+      const mine = lane?.circuit.id === circuit.id;
+      group.visible = mine;
+      if (!lane || !mine) return;
+      const offset = realmRacersLaneOffset(lane.index);
       if (group.position.z !== offset.z) group.position.set(offset.x, 0, offset.z);
       const signal = realmRacersStartLightSignal(
         match?.phase ?? null,
@@ -709,6 +725,30 @@ export function buildRealmRacersTrack(): RealmRacersTrackView {
       }
       // The fountain's tiny breath is cosmetic and frame-time based.
       fountain.scale.setScalar(fountainScale + Math.sin(time * 1.7) * 0.006);
+    },
+  };
+}
+
+/**
+ * Every authored circuit, drawn: one view per circuit under one parent group,
+ * each hiding itself unless the viewer stands on a lane of its own circuit.
+ *
+ * Built EAGERLY, all of them, which is what the single-circuit band did before
+ * lanes existed. Lazy building trades a boot cost for a mid-frame one, and the
+ * frame it would land on is the one where a viewer arrives at a circuit, which
+ * is the countdown: paying half a megabyte of geometry there is a hitch exactly
+ * where a race is about to start. Once the pool is big enough for the boot cost
+ * to matter, the answer is a lazy build with an eviction policy, and that wants
+ * a second circuit to test it against.
+ */
+export function buildRealmRacersTracks(): RealmRacersTrackView {
+  const group = new THREE.Group();
+  const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) => buildRealmRacersTrack(circuit));
+  for (const view of views) group.add(view.group);
+  return {
+    group,
+    update(px, pz, time, match) {
+      for (const view of views) view.update(px, pz, time, match);
     },
   };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import {
   forwardArcDelta,
   REALM_RACERS_MIN_LAP_FRACTION,
@@ -116,7 +117,7 @@ describe('Realm Racers arc progress', () => {
   });
 
   it('advances a shell-thrown racer projected outside the old gate band', () => {
-    const track = realmRacersTrack();
+    const track = realmRacersTrack(GARDEN_CIRCUIT);
     const before = track.pointAt(track.length - 8);
     const after = track.pointAt(6);
     const lateral = before.halfWidth + 6;

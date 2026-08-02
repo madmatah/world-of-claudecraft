@@ -16,7 +16,7 @@
 // function of the tier, the bot's pid and the tick count.
 
 import { GROUND_BLAST_AIM_CONE_RAD, groundBlastFlightSeconds } from './realm_racers_ground_blast';
-import { type RallyProjection, rallyForwardDot, realmRacersTrack } from './realm_racers_spline';
+import { type RallyProjection, type RallyTrackModel, rallyForwardDot } from './realm_racers_spline';
 import { normAngle, TICK_RATE } from './types';
 
 export type RallyDriverTier = 'rookie' | 'driver' | 'ace';
@@ -50,7 +50,11 @@ export interface RallyDriverInput {
   speed: number;
   /** Lateral component, yd/s: how far sideways the machine is travelling. */
   slip: number;
-  /** Where the machine sits on the circuit, from the shared track model. */
+  /** The circuit this race is on, as the derived model every geometric read
+   *  goes through. Handed in rather than resolved here, so the brain stays a
+   *  leaf that knows the shape of a circuit and nothing about which ones exist. */
+  track: RallyTrackModel;
+  /** Where the machine sits on the circuit, from that same track model. */
   projection: RallyProjection;
   /** Top speed available right now (profile maximum, surface, auras). */
   topSpeed: number;
@@ -233,8 +237,8 @@ function demandTo(facing: number, fromX: number, fromZ: number, toX: number, toZ
  * +90 degree rotation in (x, z), which in the facing convention is the pilot's
  * right-hand side.)
  */
-export function rallyRacingLineOffset(s: number): number {
-  const sample = realmRacersTrack().pointAt(s);
+export function rallyRacingLineOffset(track: RallyTrackModel, s: number): number {
+  const sample = track.pointAt(s);
   const radius = sample.turnRadius;
   if (!Number.isFinite(radius)) return 0;
   const strength = clamp01(
@@ -244,9 +248,9 @@ export function rallyRacingLineOffset(s: number): number {
 }
 
 /** Where the brain wants to be `lookahead` yards up the circuit. */
-function aimPoint(s: number, lookahead: number): { x: number; z: number } {
-  const sample = realmRacersTrack().pointAt(s + lookahead);
-  const offset = rallyRacingLineOffset(sample.s);
+function aimPoint(track: RallyTrackModel, s: number, lookahead: number): { x: number; z: number } {
+  const sample = track.pointAt(s + lookahead);
+  const offset = rallyRacingLineOffset(track, sample.s);
   return { x: sample.x - sample.tz * offset, z: sample.z + sample.tx * offset };
 }
 
@@ -258,12 +262,12 @@ function aimPoint(s: number, lookahead: number): { x: number; z: number } {
  * is what makes the bot brake BEFORE a corner rather than in it.
  */
 function speedTargetAt(
+  track: RallyTrackModel,
   s: number,
   groundSpeed: number,
   profile: RallyDriverProfile,
   ceiling: number,
 ) {
-  const track = realmRacersTrack();
   const horizon = BRAKE_HORIZON_BASE + groundSpeed * BRAKE_HORIZON_PER_SPEED;
   let target = ceiling;
   for (let d = 0; d <= horizon; d += BRAKE_HORIZON_STEP) {
@@ -371,7 +375,7 @@ const IDLE: Omit<RallyDriverOutput, 'speedTarget' | 'mode'> = {
  */
 export function driveRealmRacers(input: RallyDriverInput): RallyDriverOutput {
   const profile = DRIVER_PROFILES[input.tier];
-  const track = realmRacersTrack();
+  const track = input.track;
   const s = input.projection.s;
   const groundSpeed = Math.hypot(input.speed, input.slip);
   const forwardDot = rallyForwardDot(
@@ -427,13 +431,13 @@ export function driveRealmRacers(input: RallyDriverInput): RallyDriverOutput {
     LOOKAHEAD_MAX,
     LOOKAHEAD_BASE + Math.max(0, groundSpeed) * LOOKAHEAD_PER_SPEED,
   );
-  const aim = aimPoint(s, lookahead);
+  const aim = aimPoint(track, s, lookahead);
   const racingDemand = demandTo(input.facing, input.x, input.z, aim.x, aim.z);
   const dodge = dodgeDemand(input, profile);
   const demand = dodge ?? racingDemand;
 
   const ceiling = Math.max(0, input.topSpeed) * profile.speedFraction;
-  const speedTarget = speedTargetAt(s, groundSpeed, profile, ceiling);
+  const speedTarget = speedTargetAt(track, s, groundSpeed, profile, ceiling);
   const fireAt = fireAim(input, profile);
 
   return {

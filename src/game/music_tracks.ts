@@ -68,12 +68,23 @@ export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
  *  its group, because the next crossfade inside a place is abrupt and must not
  *  wait on a first-byte fetch (the Sowfield flips waiting to match on kickoff);
  *  the other groups stay undownloaded, since reaching them means a loading
- *  screen or a long ride. */
+ *  screen or a long ride.
+ *
+ *  A Realm Racers circuit therefore gets its OWN group, never a shared "every
+ *  circuit" one: you never cross from one circuit to another without a race
+ *  start, so grouping them would download every circuit's music to play one. */
 export const AREA_TRACK_GROUP: Record<AreaTrackId, string> = {
   sowfield_waiting: 'sowfield',
   sowfield_match: 'sowfield',
   realm_racers: 'realm_racers',
 };
+
+/** Whether a plain string names an area track. The Realm Racers circuit records
+ *  carry their track as a string, because `src/sim/` may not import this union;
+ *  this is where that string is proved to be one of these. */
+export function isAreaTrackId(value: string): value is AreaTrackId {
+  return Object.hasOwn(AREA_TRACK_URLS, value);
+}
 
 /** The remastered battle themes; each fight opens on one chosen at random. */
 export const COMBAT_STREAM_URLS: string[] = [

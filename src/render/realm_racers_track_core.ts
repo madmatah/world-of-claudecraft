@@ -13,15 +13,11 @@
 // All positions are WORLD coordinates, straight off the shared sim spline, so
 // the drawn circuit and the driven circuit come from one source.
 
+import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import {
   REALM_RACERS_BORDER_OFFSET,
   REALM_RACERS_BORDER_SPACING,
   REALM_RACERS_ORIGIN,
-  REALM_RACERS_PERIMETER_HALF_THICKNESS,
-  REALM_RACERS_PERIMETER_HALF_X,
-  REALM_RACERS_PERIMETER_HALF_Z,
-  REALM_RACERS_REGION_HALF_X,
-  REALM_RACERS_REGION_HALF_Z,
 } from '../sim/realm_racers_layout';
 import {
   rallyBasinDepthAt,
@@ -187,8 +183,8 @@ const DRESSING_KINDS: readonly { kind: RallyDressingKind; radius: number }[] = [
  * curvature test with a feather, a gap merge and a minimum length, never a
  * per-sample flicker.
  */
-export function rallyKerbRuns(): RallyKerbRun[] {
-  const track = realmRacersTrack();
+export function rallyKerbRuns(circuit: RealmRacersCircuit): RallyKerbRun[] {
+  const track = realmRacersTrack(circuit);
   const samples = track.samples;
   const count = samples.length;
   const span = track.step * 2;
@@ -233,10 +229,10 @@ export function rallyKerbRuns(): RallyKerbRun[] {
     }));
 }
 
-function insideRegion(x: number, z: number, pad: number): boolean {
+function insideRegion(circuit: RealmRacersCircuit, x: number, z: number, pad: number): boolean {
   return (
-    Math.abs(x - REALM_RACERS_ORIGIN.x) + pad <= REALM_RACERS_REGION_HALF_X &&
-    Math.abs(z - REALM_RACERS_ORIGIN.z) + pad <= REALM_RACERS_REGION_HALF_Z
+    Math.abs(x - REALM_RACERS_ORIGIN.x) + pad <= circuit.regionHalfX &&
+    Math.abs(z - REALM_RACERS_ORIGIN.z) + pad <= circuit.regionHalfZ
   );
 }
 
@@ -246,10 +242,10 @@ function insideRegion(x: number, z: number, pad: number): boolean {
  * a statue in there would be an obstacle a racer hits without being told, or
  * worse, drives through. The garden a racer can reach carries only the lawn.
  */
-export function rallyDressingSpots(): RallyDressingSpot[] {
+export function rallyDressingSpots(circuit: RealmRacersCircuit): RallyDressingSpot[] {
   const out: RallyDressingSpot[] = [];
-  const halfX = REALM_RACERS_PERIMETER_HALF_X + REALM_RACERS_PERIMETER_HALF_THICKNESS;
-  const halfZ = REALM_RACERS_PERIMETER_HALF_Z + REALM_RACERS_PERIMETER_HALF_THICKNESS;
+  const halfX = circuit.perimeter.halfX + circuit.perimeter.halfThickness;
+  const halfZ = circuit.perimeter.halfZ + circuit.perimeter.halfThickness;
   const ring = 2 * (halfX + halfZ) * 2;
   const steps = Math.floor(ring / DRESSING_SPACING);
   for (let i = 0; i < steps; i++) {
@@ -278,7 +274,7 @@ export function rallyDressingSpots(): RallyDressingSpot[] {
       radius: spec.radius,
     });
   }
-  return out.filter((spot) => insideRegion(spot.x, spot.z, spot.radius));
+  return out.filter((spot) => insideRegion(circuit, spot.x, spot.z, spot.radius));
 }
 
 /**
@@ -356,8 +352,8 @@ const BANNER_BEAM_DROP = 0.9;
  * drives straight through them into the garden, and they only say where the
  * racing surface stops.
  */
-export function rallyBorderFlowerSpots(): RallyFlowerSpot[] {
-  const track = realmRacersTrack();
+export function rallyBorderFlowerSpots(circuit: RealmRacersCircuit): RallyFlowerSpot[] {
+  const track = realmRacersTrack(circuit);
   const out: RallyFlowerSpot[] = [];
   const steps = Math.round(track.length / REALM_RACERS_BORDER_SPACING);
   for (let i = 0; i < steps; i++) {
@@ -374,7 +370,8 @@ export function rallyBorderFlowerSpots(): RallyFlowerSpot[] {
       // Sown on the VERGE/GARDEN boundary, not at the road edge: at the edge
       // they overhang the racing surface, and the line reads better marking
       // where the gentle band ends than where the road does.
-      const offset = rallyGardenEdgeOffsetAt(point.s) + REALM_RACERS_BORDER_OFFSET + roll * 1.1;
+      const offset =
+        rallyGardenEdgeOffsetAt(circuit, point.s) + REALM_RACERS_BORDER_OFFSET + roll * 1.1;
       out.push({
         x: point.x - point.tz * offset * side,
         z: point.z + point.tx * offset * side,
@@ -390,8 +387,8 @@ export function rallyBorderFlowerSpots(): RallyFlowerSpot[] {
 /** Border flowers per single-colour run. */
 const BORDER_RUN_LENGTH = 14;
 
-export function rallyStartArchPlacement(): RallyStartArchPlacement {
-  const line = realmRacersTrack().pointAt(0);
+export function rallyStartArchPlacement(circuit: RealmRacersCircuit): RallyStartArchPlacement {
+  const line = realmRacersTrack(circuit).pointAt(0);
   const span = (line.halfWidth + ARCH_SPAN_MARGIN) * 2;
   const spanScale = span / ARCH_SOURCE_SPAN;
   const uprightScale = Math.min(spanScale, ARCH_MAX_HEIGHT / ARCH_SOURCE_HEIGHT);
@@ -427,9 +424,9 @@ export function rallyStartArchPlacement(): RallyStartArchPlacement {
 }
 
 /** Three physical lamps tucked under the start arch's beam. */
-export function rallyStartLightPlacements(): RallyStartLightPlacement[] {
-  const place = rallyStartArchPlacement();
-  const line = realmRacersTrack().pointAt(0);
+export function rallyStartLightPlacements(circuit: RealmRacersCircuit): RallyStartLightPlacement[] {
+  const place = rallyStartArchPlacement(circuit);
+  const line = realmRacersTrack(circuit).pointAt(0);
   const lift = ARCH_SOURCE_HEIGHT * place.uprightScale - 0.8;
   return Array.from({ length: 3 }, (_, index) => {
     const across = ((index - 1) / 3) * place.span * 0.55;
@@ -500,8 +497,8 @@ export interface RallyBasinMesh {
  * Depth comes from the sim's own bank profile, so the water a racer sees is
  * exactly the water the sim decides they are wading in.
  */
-export function rallyBasinMesh(): RallyBasinMesh {
-  const outline = realmRacersBasinOutline();
+export function rallyBasinMesh(circuit: RealmRacersCircuit): RallyBasinMesh {
+  const outline = realmRacersBasinOutline(circuit);
   const shore: { x: number; z: number }[] = [];
   for (let i = 0; i < outline.length; i += BASIN_RING_STRIDE) shore.push(outline[i]);
   const columns = shore.length;
@@ -532,13 +529,13 @@ export function rallyBasinMesh(): RallyBasinMesh {
       // Unhinted on purpose: this is a one-time build, and a hinted projection
       // answers a sagitta apart from a full scan, which would put the drawn
       // water a few millimetres off the depth the sim reads at the same point.
-      depths[v] = ring === 0 ? 0 : Math.max(0, rallyBasinDepthAt(x, z));
+      depths[v] = ring === 0 ? 0 : Math.max(0, rallyBasinDepthAt(circuit, x, z));
     }
   }
   const middle = count - 1;
   positions[middle * 2] = cx;
   positions[middle * 2 + 1] = cz;
-  depths[middle] = Math.max(0, rallyBasinDepthAt(cx, cz));
+  depths[middle] = Math.max(0, rallyBasinDepthAt(circuit, cx, cz));
 
   const index: number[] = [];
   for (let ring = 0; ring < BASIN_RINGS; ring++) {
@@ -563,14 +560,16 @@ export function rallyBasinMesh(): RallyBasinMesh {
  * grew along its pieces; with the rim gone they are the only thing marking
  * where the lawn stops, so they follow the shore itself.
  */
-export function rallyReedSpots(): { x: number; z: number; rot: number; scale: number }[] {
-  const track = realmRacersTrack();
+export function rallyReedSpots(
+  circuit: RealmRacersCircuit,
+): { x: number; z: number; rot: number; scale: number }[] {
+  const track = realmRacersTrack(circuit);
   const out: { x: number; z: number; rot: number; scale: number }[] = [];
   const steps = Math.round(track.length / REED_SPACING);
   for (let i = 0; i < steps; i++) {
     const s = (i / steps) * track.length;
     const point = track.pointAt(s);
-    const offset = rallyBasinEdgeOffsetAt(s);
+    const offset = rallyBasinEdgeOffsetAt(circuit, s);
     const roll = hash2(i, 0, 0x2ee6);
     out.push({
       x: point.x - point.tz * offset,
@@ -598,11 +597,11 @@ export function rallyReedSpots(): { x: number; z: number; rot: number; scale: nu
  * even, the result is deterministic, and `density` (a cosmetic tier knob) only
  * ever thins the SAME patches rather than reshuffling them.
  */
-export function rallyFlowerSpots(density = 1): RallyFlowerSpot[] {
-  const track = realmRacersTrack();
+export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): RallyFlowerSpot[] {
+  const track = realmRacersTrack(circuit);
   const out: RallyFlowerSpot[] = [];
-  const halfX = REALM_RACERS_PERIMETER_HALF_X;
-  const halfZ = REALM_RACERS_PERIMETER_HALF_Z;
+  const halfX = circuit.perimeter.halfX;
+  const halfZ = circuit.perimeter.halfZ;
   const cols = Math.floor((halfX * 2) / PATCH_PITCH);
   const rows = Math.floor((halfZ * 2) / PATCH_PITCH);
   const keep = Math.max(0, Math.min(1, density));
@@ -627,7 +626,10 @@ export function rallyFlowerSpots(density = 1): RallyFlowerSpot[] {
         // The infield is apron all the way to the water, so nothing is sown on
         // that side at all; outward, the outer garden starts past the border.
         if (projection.lateral > 0) continue;
-        if (-projection.lateral < rallyGardenEdgeOffsetAt(projection.s) + FLOWER_BORDER_CLEARANCE) {
+        if (
+          -projection.lateral <
+          rallyGardenEdgeOffsetAt(circuit, projection.s) + FLOWER_BORDER_CLEARANCE
+        ) {
           continue;
         }
         out.push({
@@ -669,10 +671,13 @@ export function rallyFountainSpot(): RallyFountainSpot {
  * every corner. This is the circuit's OUTER bound, so what is drawn here is
  * exactly what `realm_racers_colliders.ts` stops a racer against.
  */
-export function rallyPerimeterPieces(panel: number): RallyPerimeterPiece[] {
+export function rallyPerimeterPieces(
+  circuit: RealmRacersCircuit,
+  panel: number,
+): RallyPerimeterPiece[] {
   const out: RallyPerimeterPiece[] = [];
-  const halfX = REALM_RACERS_PERIMETER_HALF_X;
-  const halfZ = REALM_RACERS_PERIMETER_HALF_Z;
+  const halfX = circuit.perimeter.halfX;
+  const halfZ = circuit.perimeter.halfZ;
   const corners: [number, number][] = [
     [-halfX, -halfZ],
     [halfX, -halfZ],
