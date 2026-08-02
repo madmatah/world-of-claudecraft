@@ -60,6 +60,14 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
           })),
         }
       : {}),
+    ...(circuit.landmark
+      ? {
+          landmark: {
+            x: round(circuit.landmark.x, POINT_PLACES),
+            z: round(circuit.landmark.z, POINT_PLACES),
+          },
+        }
+      : {}),
   };
 }
 
@@ -96,6 +104,11 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
     `  regionHalfZ: ${c.regionHalfZ},`,
     `  perimeter: { halfX: ${c.perimeter.halfX}, halfZ: ${c.perimeter.halfZ}, halfThickness: ${c.perimeter.halfThickness}, height: ${c.perimeter.height} },`,
     `  basin: { waterY: ${c.basin.waterY}, bankSlope: ${c.basin.bankSlope}, depthMax: ${c.basin.depthMax}, wadeYards: ${c.basin.wadeYards} },`,
+  );
+  // Optional, and emitted in the record's own field order so a paste reads like
+  // the module it is being pasted into.
+  if (c.landmark) lines.push(`  landmark: { x: ${c.landmark.x}, z: ${c.landmark.z} },`);
+  lines.push(
     `  startBack: ${c.startBack},`,
     `  startSpacing: ${c.startSpacing},`,
     `  laps: ${c.laps},`,
@@ -207,6 +220,23 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   const perimeter = c.perimeter as Record<string, unknown> | undefined;
   const basin = c.basin as Record<string, unknown> | undefined;
   if (!perimeter || !basin) return null;
+
+  /**
+   * The infield landmark, optional and carried THROUGH rather than dropped.
+   *
+   * It was dropped, and that was a live divergence rather than a missing
+   * niceness: the editor's 3D preview builds the record it holds (fountain and
+   * all) while a draft raced in game arrives through this validator, so the two
+   * views of one circuit disagreed about whether there was an island out in the
+   * lake. Bounded by the same window the control points use, since it is a
+   * circuit-local point exactly like them.
+   */
+  const rawLandmark = c.landmark as { x?: unknown; z?: unknown } | undefined | null;
+  let landmark: RallyPoint | undefined;
+  if (rawLandmark !== undefined && rawLandmark !== null) {
+    if (!inRange(rawLandmark.x, -5000, 5000) || !inRange(rawLandmark.z, -5000, 5000)) return null;
+    landmark = { x: rawLandmark.x, z: rawLandmark.z };
+  }
   if (
     !inRange(c.regionHalfX, 10, 2000) ||
     !inRange(c.regionHalfZ, 10, 2000) ||
@@ -241,6 +271,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     controlPoints,
     widthBands,
     ...(apronBands ? { apronBands } : {}),
+    ...(landmark ? { landmark } : {}),
     regionHalfX: c.regionHalfX,
     regionHalfZ: c.regionHalfZ,
     perimeter: {
