@@ -19,7 +19,20 @@ import type { Collider } from './colliders';
 import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import { DUNGEON_FLOOR_Y } from './data';
 
-const cached = new Map<string, Collider[]>();
+/**
+ * Keyed by circuit id AND held only while the RECORD behind that id is the same
+ * object, the discipline `memoizePerCircuit` in `realm_racers_spline.ts` already
+ * runs on. The shipped records are module singletons, so every game and test
+ * caller hits the cache exactly as before.
+ *
+ * The identity half is what makes a redrawn draft safe. A dev session
+ * re-registers a circuit under the same id with a new record
+ * (`realm_racers_drafts.ts`); the spline and the rendered view both rebuild off
+ * record identity, and an id-only cache here would keep serving the PREVIOUS
+ * perimeter: an invisible wall standing where the new one is wider, and a
+ * drive-through gap where it is narrower.
+ */
+const cached = new Map<string, { circuit: RealmRacersCircuit; value: Collider[] }>();
 
 /**
  * One circuit's instance-local collision set: four slabs closing its garden
@@ -30,7 +43,7 @@ const cached = new Map<string, Collider[]>();
  */
 export function realmRacersColliders(circuit: RealmRacersCircuit): Collider[] {
   const hit = cached.get(circuit.id);
-  if (hit) return hit;
+  if (hit && hit.circuit === circuit) return hit.value;
   const { halfX: px, halfZ: pz, halfThickness: t, height } = circuit.perimeter;
   const top = DUNGEON_FLOOR_Y + height;
   const built: Collider[] = [
@@ -39,6 +52,6 @@ export function realmRacersColliders(circuit: RealmRacersCircuit): Collider[] {
     { type: 'obb', x: -px, z: 0, hw: t, hd: pz + t, rot: 0, cameraTopY: top },
     { type: 'obb', x: px, z: 0, hw: t, hd: pz + t, rot: 0, cameraTopY: top },
   ];
-  cached.set(circuit.id, built);
+  cached.set(circuit.id, { circuit, value: built });
   return built;
 }

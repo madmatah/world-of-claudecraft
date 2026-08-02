@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
@@ -10,6 +10,12 @@ import { loadBrowserslistFloors } from './scripts/browserslist_targets.mjs';
 // Untyped zero-dep build helper (same convention as the other scripts/*.mjs tools).
 // vite.config.ts is outside tsconfig `include`, so this import is never type-checked.
 import { templateModulepreload } from './scripts/i18n_modulepreload.mjs';
+import {
+  type DraftEndpointResponse,
+  type DraftReader,
+  draftListResponse,
+  draftResponse,
+} from './src/editor/circuit/draft_endpoints_core';
 import { draftFileContents, validateCircuitPayload } from './src/editor/circuit/export_core';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -298,15 +304,42 @@ function musicEditorSavePlugin() {
   };
 }
 
-// Dev-only save endpoint for the Realm Racers circuit editor
-// (circuit_editor.html): receives a drawn circuit record as JSON and writes a
-// SCRATCH draft to tmp/circuit-drafts/<id>.ts. It deliberately never rewrites
-// src/sim/content/realm_racers_circuits.ts the way the music editor rewrites its
-// generated module: that file is hand-curated and its comments carry the
-// reasoning behind every number, so the operator pastes the literal by hand.
-// configureServer only runs under the dev server, so this never ships.
+// Dev-only endpoints for the Realm Racers circuit editor
+// (circuit_editor.html). configureServer only runs under the dev server, so
+// none of this ships, and the page that drives it is absent from `input`.
+//
+//  - POST /__circuit_editor/save         a drawn record in, a SCRATCH draft at
+//                                        tmp/circuit-drafts/<id>.ts out. It
+//                                        deliberately never rewrites
+//                                        src/sim/content/realm_racers_circuits.ts
+//                                        the way the music editor rewrites its
+//                                        generated module: that file is
+//                                        hand-curated and its comments carry the
+//                                        reasoning behind every number, so the
+//                                        operator pastes the literal by hand.
+//  - GET  /__circuit_editor/drafts       the saved draft ids. No consumer yet:
+//                                        its planned one is the draft manager
+//                                        in packet 20, which offers the saved
+//                                        drafts instead of making the operator
+//                                        remember an id.
+//  - GET  /__circuit_editor/draft/<id>   one draft, PARSED back into a record,
+//                                        which is what lets a running game race
+//                                        a draft with no source edit
+//                                        (`/dev rallydraft`).
+//
+// The two GETs decide nothing here: `draft_endpoints_core.ts` answers them from
+// a READER, so path-traversal handling and the parse are unit-tested and this
+// file stays the fs adapter. That core has no writer at all, which is what
+// makes "a GET never writes" structural rather than a promise.
 function circuitEditorSavePlugin() {
   const draftDir = path.resolve(root, 'tmp/circuit-drafts');
+  const reader: DraftReader = {
+    list: () => (existsSync(draftDir) ? readdirSync(draftDir) : []),
+    read: (id) => {
+      const file = path.join(draftDir, `${id}.ts`);
+      return existsSync(file) ? readFileSync(file, 'utf8') : null;
+    },
+  };
   return {
     name: 'woc-circuit-editor-save',
     configureServer(server: {
@@ -314,12 +347,41 @@ function circuitEditorSavePlugin() {
         use: (
           route: string,
           fn: (
-            req: { method?: string; on: (ev: string, cb: (chunk?: unknown) => void) => void },
-            res: { statusCode: number; end: (body?: string) => void },
+            req: {
+              method?: string;
+              url?: string;
+              on: (ev: string, cb: (chunk?: unknown) => void) => void;
+            },
+            res: {
+              statusCode: number;
+              setHeader?: (name: string, value: string) => void;
+              end: (body?: string) => void;
+            },
           ) => void,
         ) => void;
       };
     }) {
+      const answer = (
+        res: {
+          statusCode: number;
+          setHeader?: (name: string, value: string) => void;
+          end: (body?: string) => void;
+        },
+        response: DraftEndpointResponse,
+      ): void => {
+        if (response.contentType) res.setHeader?.('content-type', response.contentType);
+        res.statusCode = response.status;
+        res.end(response.body);
+      };
+
+      server.middlewares.use('/__circuit_editor/drafts', (req, res) => {
+        answer(res, draftListResponse(req.method, reader));
+      });
+
+      server.middlewares.use('/__circuit_editor/draft', (req, res) => {
+        answer(res, draftResponse(req.method, req.url, reader));
+      });
+
       server.middlewares.use('/__circuit_editor/save', (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405;

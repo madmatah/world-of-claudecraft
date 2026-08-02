@@ -7,6 +7,13 @@
 // content test runs over every shipped circuit and a copy of it in a dev tool
 // would be a rule the game does not share.
 
+export {
+  DRAFT_ID_RE,
+  type DraftEndpointResponse,
+  type DraftReader,
+  draftListResponse,
+  draftResponse,
+} from './draft_endpoints_core';
 export { type EnvelopeSuggestion, suggestEnvelope } from './envelope_core';
 export {
   circuitFromTypeScript,

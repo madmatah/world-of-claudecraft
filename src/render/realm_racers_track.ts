@@ -38,6 +38,7 @@ import {
   type GroundLayer,
   paintInstanceGround,
 } from './instance_surface';
+import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
 import {
   RALLY_FLOWER_COLOURS,
   rallyBasinMesh,
@@ -63,6 +64,12 @@ import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_mat
 export interface RealmRacersTrackView {
   group: THREE.Group;
   update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
+}
+
+/** The whole pool under one group, plus the dev arm that puts a circuit drawn
+ *  in the editor into the band beside the authored ones. */
+export interface RealmRacersTracksView extends RealmRacersTrackView {
+  registerDraft(circuit: RealmRacersCircuit): void;
 }
 
 // Surface heights, all relative to the instance band's flat floor (y = 0, the
@@ -762,14 +769,20 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
  * to matter, the answer is a lazy build with an eviction policy, and that wants
  * a second circuit to test it against.
  */
-export function buildRealmRacersTracks(): RealmRacersTrackView {
+export function buildRealmRacersTracks(): RealmRacersTracksView {
   const group = new THREE.Group();
   const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) => buildRealmRacersTrack(circuit));
   for (const view of views) group.add(view.group);
+  // Dev drafts get their own lifecycle beside the authored ones (built on
+  // registration, replaced on re-registration); the map stays empty in every
+  // session where no dev command filled it.
+  const drafts = buildRealmRacersDraftTracks(group, buildRealmRacersTrack);
   return {
     group,
+    registerDraft: (circuit) => drafts.register(circuit),
     update(px, pz, time, match) {
       for (const view of views) view.update(px, pz, time, match);
+      drafts.update(px, pz, time, match);
     },
   };
 }

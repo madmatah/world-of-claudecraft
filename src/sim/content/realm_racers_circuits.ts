@@ -14,6 +14,7 @@
 // instance band between the Yumi maze and dungeon overflow, so a circuit cannot
 // collide with overworld content or another activity.
 
+import { realmRacersDraftCircuit } from '../realm_racers_draft_registry';
 import type { RallyPoint } from '../realm_racers_layout';
 
 /**
@@ -424,8 +425,16 @@ export function realmRacersCompetitionCircuits(): readonly RealmRacersCircuit[] 
   return REALM_RACERS_CIRCUIT_LIST.filter((c) => c.roles.includes('competition'));
 }
 
-/** The record for an id, or undefined for an id no longer authored (a match
- *  restored from an older shape, which the caller falls back on). */
+/**
+ * The record for an id, or undefined for an id no longer authored (a match
+ * restored from an older shape, which the caller falls back on).
+ *
+ * The DRAFT overlay is consulted after the authored table and never before it:
+ * a dev session registering a draft can add circuits the game can race, but it
+ * can never shadow one the game ships. The overlay is empty unless a dev
+ * command filled it (`realm_racers_drafts.ts`), so every other host resolves
+ * exactly the authored table.
+ */
 export function realmRacersCircuitById(id: string): RealmRacersCircuit | undefined {
-  return REALM_RACERS_CIRCUITS[id];
+  return REALM_RACERS_CIRCUITS[id] ?? realmRacersDraftCircuit(id);
 }

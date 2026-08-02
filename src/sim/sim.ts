@@ -112,6 +112,7 @@ import { DEFAULT_MOUNT, type MountKey } from './content/mounts';
 import { GATHERING_PROFESSION_IDS, type GatheringProfessionId } from './content/professions';
 import { PTR_DEV_VENDOR_DEF } from './content/ptr_dev_vendor';
 import { FURY_ENTITY_ID, FURY_NPC_ID } from './content/pvp_honor';
+import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import {
   classHasSkin,
   EVENT_SKIN_TOKEN_ID,
@@ -437,6 +438,7 @@ import { prestige as prestigeImpl, updateRested } from './progression/xp';
 import { advancePendingProjectiles, type PendingProjectile } from './projectile_travel';
 import * as honorMod from './pvp';
 import { sanitizeCreditedObjects } from './quests/interact_object_credit';
+import * as realmRacersDraftsMod from './realm_racers_drafts';
 import type { RallyDriverTier } from './realm_racers_driver';
 import { sanitizeRemovedZone1Content } from './removed_zone1_content';
 import { rideSteepnessAt, shoreStepOut, stepWaterLevel } from './ride_height';
@@ -9696,6 +9698,19 @@ export class Sim {
 
   startRealmRacersPractice(tier: RallyDriverTier): void {
     this.realmRacersPracticeStart(tier, this.primaryId);
+  }
+
+  /**
+   * Dev only: make a circuit drawn in the editor raceable for this session.
+   *
+   * A thin delegate because the caller is FOREIGN (the client's dev command
+   * glue holds a `Sim`, not a `SimContext`); the rules, the dev gate and the
+   * "is this drivable geometry" check all live in the owning module.
+   */
+  realmRacersRegisterDraftCircuit(
+    circuit: RealmRacersCircuit,
+  ): realmRacersDraftsMod.RealmRacersDraftRegistration {
+    return realmRacersDraftsMod.realmRacersRegisterDraftCircuit(this.ctx, circuit);
   }
 
   vcupQueueJoin(

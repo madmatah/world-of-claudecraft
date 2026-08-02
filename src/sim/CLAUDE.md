@@ -111,6 +111,7 @@ Each module owns the FUNCTIONS for one system; the backing STATE stays on `Sim` 
 | `instances/card_master.ts` | the Card Master NPC proximity gate (`cardMasterInRange`) `social/card_duel.ts` queues against |
 | `social/trade.ts` + `social/chat.ts` | player trade; the `chat()` router, emotes, whispers, channel membership (readout formatters in `social/chat_readouts.ts`). `Sim` keeps only a thin `chat()` delegate for the `IWorld` facade; new slash commands land in `social/chat.ts`, never on `Sim` |
 | `dev_commands.ts` | the `ctx.devCommands` gated `/dev` cheat surface: `handleDevChat` (re-exported by `social/chat.ts` for the chat router), `spawnMobsForDev`/`despawnMobsForDev` (dev-spawned mobs are torn down in `removePlayer`), `resetCombatForDev`; pinned by `tests/dev_commands.test.ts` |
+| `realm_racers_drafts.ts` | `ctx.devCommands` gated: makes a circuit DRAWN in the circuit editor raceable for one session. Validates it through `realm_racers_circuit_metrics.ts` (a broken drawing is refused by name, never seated) and puts it in the `realm_racers_draft_registry.ts` overlay, which `realmRacersCircuitById` and the lane table consult. The sim never fetches: the client hands it a plain record (`src/game/realm_racers_draft_dev.ts`). Pinned by `tests/realm_racers_drafts.test.ts` |
 | `targeting.ts` | player target selection + raid markers |
 | `market.ts` | the World Market (`Market` class) |
 | `mail/post_office.ts` | player mail (send/take/read/delete, the mailbox anchor gate) |
@@ -162,7 +163,19 @@ leaves `spell_resist.ts`/`ranged_shot.ts`/`aura_stacking.ts`/`aura_cancel.ts`/
 teleport, visitor spot; the jail SYSTEM logic stays on `Sim`),
 `vehicle_motion.ts` (the arcade driving model behind the `p.drive` branch of
 `player_motion.ts`: throttle/brake, steering authority, grip and drift, every number
-read from a `content/vehicles.ts` profile), and
+read from a `content/vehicles.ts` profile),
+`realm_racers_draft_registry.ts` (the session-only DRAFT circuit overlay: a table
+with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
+`realm_racers_layout.ts` consult it and either importing something that imported it
+back would be a cycle through a module that builds its table at import time. Empty
+unless a dev command filled it, so nothing deterministic observes it. It is
+CONTENT, so it is process-wide rather than per-`Sim`, and OFFLINE HOSTS ONLY in
+practice: the server never runs a dev command. Two derived caches key off a
+circuit id and both hold their entry only while the RECORD is the same object
+(`memoizePerCircuit` in `realm_racers_spline.ts`, the cache in
+`realm_racers_colliders.ts`); a THIRD such cache is the signal to stop adding
+identity guards one at a time and give this table a generation counter instead),
+and
 `professions/proficiency_display_heal.ts` (the one-time gathering-proficiency
 display-band heal applied at character load). A leaf is any `src/sim`
 file with no `sim_context` import.

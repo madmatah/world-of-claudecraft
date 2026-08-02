@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { NumberSampleRing } from '../game/sample_ring';
 import { coerceFxTier, nameplateIntervalSec } from '../game/ui_tier_knobs';
 import { supportHeightAt } from '../sim/colliders';
+import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../sim/content/vehicles';
 import {
   ABILITIES,
@@ -309,7 +310,7 @@ import {
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
-import { buildRealmRacersTracks, type RealmRacersTrackView } from './realm_racers_track';
+import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
 import {
   isOutsideRealmRacersDrawRange,
   isOutsideRealmRacersRetainRange,
@@ -1697,7 +1698,7 @@ export class Renderer {
   // per bout, camera-centred, only shown while the local player is practicing).
   private valeCupSky = new ValeCupPracticeSky();
   private valeCupTeamRings: ValeCupTeamRingsView;
-  private realmRacersTrack: RealmRacersTrackView;
+  private realmRacersTrack: RealmRacersTracksView;
   private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
   private vcupFireworks: {
     at: number;
@@ -10419,6 +10420,18 @@ export class Renderer {
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const pt = new THREE.Vector3();
     return this.raycaster.ray.intersectPlane(plane, pt) ? pt : null;
+  }
+
+  /**
+   * Dev only: draw a circuit that was drawn in the editor rather than authored
+   * in the records module, so `/dev rallydraft` has something to look at.
+   *
+   * A one-line delegate on purpose: the lifecycle (build on registration, swap
+   * and dispose on re-registration) lives in the sibling the tracks view
+   * composes, not here.
+   */
+  registerRealmRacersDraftCircuit(circuit: RealmRacersCircuit): void {
+    this.realmRacersTrack.registerDraft(circuit);
   }
 
   /**

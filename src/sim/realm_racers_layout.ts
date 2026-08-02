@@ -16,6 +16,7 @@ import {
   REALM_RACERS_PRACTICE_CIRCUIT,
   type RealmRacersCircuit,
 } from './content/realm_racers_circuits';
+import { realmRacersDraftAtSlot, realmRacersDraftSlot } from './realm_racers_draft_registry';
 
 export interface RallyPoint {
   x: number;
@@ -252,13 +253,43 @@ export const REALM_RACERS_LANES: readonly RealmRacersLane[] = (() => {
   return lanes;
 })();
 
+/**
+ * DEV lanes: where a registered draft circuit stands.
+ *
+ * They append after every authored lane (`REALM_RACERS_LANES.length + slot`),
+ * which is the whole discipline: an authored lane's index is decided by the
+ * records module and a dev session must never be able to move one, or a
+ * practice copy would relocate under a player standing on it.
+ *
+ * The lane OBJECT is memoized per slot against the record behind it, exactly
+ * the way the spline memoizes its model: `realmRacersLaneAt` is on the movement
+ * path, and a fresh object per call there would allocate per tick per racer.
+ */
+const draftLanes = new Map<number, RealmRacersLane>();
+
+function draftLaneAtSlot(slot: number): RealmRacersLane | null {
+  const circuit = realmRacersDraftAtSlot(slot);
+  if (!circuit) return null;
+  const index = REALM_RACERS_LANES.length + slot;
+  const cached = draftLanes.get(index);
+  if (cached && cached.circuit === circuit) return cached;
+  const lane: RealmRacersLane = { index, circuit, practice: false };
+  draftLanes.set(index, lane);
+  return lane;
+}
+
 /** The public lane of a circuit, or -1 when it serves practice only. Circuits
  *  are compared by ID everywhere, never by record identity: a suite that
  *  re-imports a module gets a second copy of the records. */
 export function realmRacersPublicLane(circuit: RealmRacersCircuit): number {
-  return (
-    REALM_RACERS_LANES.find((lane) => lane.circuit.id === circuit.id && !lane.practice)?.index ?? -1
+  const authored = REALM_RACERS_LANES.find(
+    (lane) => lane.circuit.id === circuit.id && !lane.practice,
   );
+  if (authored) return authored.index;
+  // A registered draft has one lane and it is public: practice copies are not
+  // extended to drafts, since one lane per draft is all the dev loop needs.
+  const slot = realmRacersDraftSlot(circuit.id);
+  return slot < 0 ? -1 : REALM_RACERS_LANES.length + slot;
 }
 
 /** Every private copy of the practice circuit, in lane order. */
@@ -290,7 +321,13 @@ export function realmRacersLaneOrigin(lane: number): RallyPoint {
 export function realmRacersLaneAt(x: number, z: number): RealmRacersLane | null {
   const alongBand = z - REALM_RACERS_ORIGIN.z;
   const index = Math.round(alongBand / REALM_RACERS_LANE_DZ);
-  const lane = index >= 0 ? REALM_RACERS_LANES[index] : undefined;
+  if (index < 0) return null;
+  // Past the authored lanes the band is empty unless a dev session registered a
+  // draft there, so this reads exactly as before on every other host.
+  const lane =
+    index < REALM_RACERS_LANES.length
+      ? REALM_RACERS_LANES[index]
+      : draftLaneAtSlot(index - REALM_RACERS_LANES.length);
   if (!lane) return null;
   if (Math.abs(x - REALM_RACERS_ORIGIN.x) > lane.circuit.regionHalfX) return null;
   return Math.abs(alongBand - index * REALM_RACERS_LANE_DZ) <= lane.circuit.regionHalfZ

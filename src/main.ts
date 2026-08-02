@@ -118,6 +118,11 @@ import { createPerfMonitor } from './game/perf';
 import { initPerfNudge } from './game/perf_nudge';
 import { startPerfReporter } from './game/perf_reporter';
 import {
+  fetchRealmRacersDraft,
+  parseRealmRacersDraftCommand,
+  runRealmRacersDraftCommand,
+} from './game/realm_racers_draft_dev';
+import {
   applyRealmRacersStartCameraFromWorld,
   createRealmRacersStartCamera,
 } from './game/realm_racers_start_camera';
@@ -1604,6 +1609,36 @@ async function startGame(
     hud.refreshDayNightDial();
     return true;
   };
+  /**
+   * Dev-only chat command to race a circuit drawn in the circuit editor:
+   *   /dev rallydraft <id> [rookie|driver|ace]
+   *
+   * Intercepted HERE rather than in the sim because the sim never fetches: the
+   * client reads the draft off the dev server, hands the sim a plain record,
+   * and the sim's own `/dev rally` takes it from there. Offline only, for the
+   * same reason every dev command is: the server is authoritative and never
+   * registers a draft.
+   */
+  const tryRealmRacersDraftCommand = (raw: string): boolean => {
+    const command = parseRealmRacersDraftCommand(raw);
+    if (!command) return false;
+    const sim = offlineSim;
+    // CLAIMED even when it cannot run it, like the sibling interceptors above:
+    // falling through would send "/dev rallydraft ..." to the world as a public
+    // chat line, which is the worst of both outcomes.
+    if (!sim || online) {
+      hud.log('[dev] Circuit drafts are offline only: the server never registers one.', '#ffcf6a');
+      return true;
+    }
+    void runRealmRacersDraftCommand(command, {
+      fetchDraft: fetchRealmRacersDraft,
+      register: (circuit) => sim.realmRacersRegisterDraftCircuit(circuit),
+      draw: (circuit) => renderer.registerRealmRacersDraftCircuit(circuit),
+      race: (chatCommand) => world.chat(chatCommand),
+      log: (text) => hud.log(text, '#8fd0ff'),
+    });
+    return true;
+  };
   chatInput.addEventListener('keydown', (e) => {
     e.stopPropagation();
     // While the "!" command dropdown is open it owns Arrows/Enter/Tab/Escape.
@@ -1620,6 +1655,12 @@ async function startGame(
       const raw = chatInput.value;
       // dev-only day/night scrub command, intercepted before the chat send path
       if (import.meta.env.DEV && tryDayNightDevCommand(raw)) {
+        chatInput.value = '';
+        closeChat();
+        return;
+      }
+      // dev-only circuit-draft race, intercepted for the same reason
+      if (import.meta.env.DEV && tryRealmRacersDraftCommand(raw)) {
         chatInput.value = '';
         closeChat();
         return;
