@@ -73,14 +73,116 @@ export interface RealmRacersBasin {
 }
 
 /** The wrought-iron garden wall: the circuit's OUTER bound, and the only thing
- *  on the whole circuit that stops a racer at all. Half-extents from the
- *  circuit's origin, inside the region envelope so collision still belongs to
- *  the rally at the wall. */
+ *  on the whole circuit that stops a racer unless the dressing authors
+ *  something solid. Half-extents from the circuit's origin, inside the region
+ *  envelope so collision still belongs to the rally at the wall. */
 export interface RealmRacersPerimeter {
   halfX: number;
   halfZ: number;
   halfThickness: number;
   height: number;
+}
+
+/**
+ * Where a piece of scenery stands, in one of TWO frames, and the record keeps
+ * whichever one the author chose.
+ *
+ * TRACK-SPACE (`{ s, offset }`) is a lap fraction plus a signed offset along the
+ * left normal, in yards. Trackside furniture belongs here: a bench at the
+ * hairpin stays at the hairpin when the centerline moves, where an absolute
+ * point would be left standing in the new road.
+ *
+ * ABSOLUTE (`{ x, z }`) is circuit-local, the same frame as `controlPoints`.
+ * Infield landmarks belong here: a fountain out in the middle has no lap
+ * fraction worth speaking of, and projecting one onto the nearest stretch would
+ * make it slide about every time that stretch is redrawn.
+ *
+ * NEVER world coordinates and never anything measured off `REALM_RACERS_ORIGIN`:
+ * a placement expressed against the band is a placement that belongs to the
+ * band rather than to the circuit, which is exactly how the tiered fountain came
+ * to stand in the middle of the Express Tour's road.
+ */
+export type RallyPropAt = { s: number; offset: number } | { x: number; z: number };
+
+/**
+ * How a piece of scenery collides, or does not.
+ *
+ * `'default'` (and an absent field) takes the catalog's own answer for that
+ * kind; `'none'` forces a normally solid piece to be pure decoration. A
+ * footprint literal overrides both shape and size, in yards, at the placed
+ * position (an `obb`'s `rot` is a circuit-local yaw, not an offset from the
+ * prop's own).
+ *
+ * Nothing here is a track-limits device. The referee
+ * (`../realm_racers_track_limits.ts`) decides what a cut is, so a gap in the
+ * dressing is a view rather than a shortcut and a solid prop is only ever
+ * furniture a racer can hit.
+ */
+export type RallyPropCollide =
+  | 'default'
+  | 'none'
+  | { kind: 'circle'; r: number }
+  | { kind: 'obb'; hw: number; hd: number; rot: number };
+
+/** One hand-placed piece of scenery. */
+export interface RallyProp {
+  /** Catalog key: `REALM_RACERS_PROPS` sim side, `REALM_RACERS_PROP_VISUALS`
+   *  render side. A key neither knows is a metrics error, never a silent skip. */
+  asset: string;
+  at: RallyPropAt;
+  /** Radians, or `'tangent'` to face the racing direction where it stands. */
+  yaw?: number | 'tangent';
+  /** Multiplies the catalog's authored size. Defaults to 1. */
+  scale?: number;
+  collide?: RallyPropCollide;
+}
+
+/**
+ * A seeded fill of one side of the circuit, so dressing a whole infield is a
+ * record entry rather than three hundred clicks.
+ *
+ * Deterministic by construction: the points come out of `hash2` over a fixed
+ * grid, never `ctx.rng` and never `Math.random`. Content derivation runs
+ * outside the tick, at import time on three different hosts, so a draw here
+ * would fork the world.
+ */
+export interface RallyScatter {
+  asset: string;
+  /** Which side of the road to fill: `infield` is the left-normal side (the
+   *  side the shore and the ponds are on), `outfield` the other. */
+  zone: 'infield' | 'outfield';
+  /** Lap window, as fractions. Absent means the whole loop. */
+  span?: { s0: number; s1: number };
+  /** Target yards between pieces. */
+  spacing: number;
+  /** Hash input. Two scatters with the same seed and spacing fill alike. */
+  seed: number;
+}
+
+/**
+ * A decorative pond: an ellipse with a deterministic radial wobble, so five
+ * numbers give a natural blob rather than a drawn polygon.
+ *
+ * Placed, not derived. The water used to be a ribbon offset from the road
+ * (`waterBands` over the shore line), which puts a canal down the middle of
+ * every circuit whatever its shape; a pond stands where the author put it.
+ *
+ * Purely visual: no depth band, no slow, no mechanic. A machine drives through
+ * one exactly as it drives over lawn.
+ */
+export interface RallyPond {
+  /** Circuit-local centre. */
+  x: number;
+  z: number;
+  /** Radii, yards. */
+  rx: number;
+  rz: number;
+  /** Radians. */
+  rot?: number;
+  /** Fraction of the radius the outline wanders by, 0 to 0.35. */
+  wobble?: number;
+  /** Hash input for the wobble. */
+  seed?: number;
 }
 
 export interface RealmRacersCircuit {
@@ -130,8 +232,9 @@ export interface RealmRacersCircuit {
   regionHalfZ: number;
   perimeter: RealmRacersPerimeter;
   /**
-   * The infield water, REQUIRED if and only if some span of the shore line is
-   * `water` (which is the default when `waterBands` is absent).
+   * The water's bank profile, REQUIRED if and only if the circuit carries water
+   * at all: some span of the shore line is `water` (the default when
+   * `waterBands` is absent), or it authors a `ponds` entry.
    *
    * Optional because the water used to be the mechanic: the only thing keeping
    * a racer out of the infield was how deep it got, so every circuit in every
@@ -141,16 +244,21 @@ export interface RealmRacersCircuit {
    */
   basin?: RealmRacersBasin;
   /**
-   * The infield landmark, in circuit-local coordinates, or absent for a circuit
-   * with nowhere to put one.
+   * The hand-placed scenery, in authored order.
    *
-   * Authored rather than derived, because it was derived and that was a bug: the
-   * fountain sat at a fixed offset from the BAND origin, which is the middle of
-   * the practice circuit's lake and the middle of another circuit's ROAD. A
-   * landmark belongs to the circuit that has room for it, and nothing about a
-   * circuit's spline can work out where that is.
+   * This is the only placement on a circuit that carries a DESIGN. Everything
+   * else the dressing draws is derived (the perimeter ring walks the wall, the
+   * flowers grid off the perimeter box, the reeds follow the shore), and a rule
+   * tuned on one circuit's shape is a bug on the next one: the one authorable
+   * thing there used to be was a single `landmark` point, and the tiered
+   * fountain it placed stood in the middle of the Express Tour's road because
+   * its position was an offset from the BAND origin.
    */
-  landmark?: { x: number; z: number };
+  props?: readonly RallyProp[];
+  /** Seeded fills, applied on top of the props. */
+  scatters?: readonly RallyScatter[];
+  /** Decorative water, placed. */
+  ponds?: readonly RallyPond[];
   /** How far behind the start line the row of machines sits. */
   startBack: number;
   /** Centre-to-centre spacing of the grid slots, yards. Per circuit, so a
@@ -249,8 +357,19 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
   regionHalfZ: 140,
   perimeter: { halfX: 118, halfZ: 92, halfThickness: 0.4, height: 2.2 },
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4.0 },
-  /** Out in the lake, where this circuit's own infield has always put it. */
-  landmark: { x: -4, z: 4 },
+  /**
+   * The tiered fountain on its island, out in the lake where this circuit's own
+   * infield has always put it. It was the `landmark` field, the one authorable
+   * placement a circuit had; the point and the scale are the same numbers that
+   * field and the painter carried between them, so the fountain has not moved.
+   *
+   * `collide: 'none'` preserves what it has always been: nothing on this
+   * circuit stopped a racer except the perimeter, and a fountain that starts
+   * blocking machines is a sim behavior change, not a migration. Whether the
+   * catalog's own solid default should apply here is a seat call for a later
+   * pass, and it is one line when it is taken.
+   */
+  props: [{ asset: 'fountain', at: { x: -4, z: 4 }, scale: 2.2, collide: 'none' }],
   startBack: 7.0,
   /**
    * The row is symmetric about the centerline, so the arithmetic that has to

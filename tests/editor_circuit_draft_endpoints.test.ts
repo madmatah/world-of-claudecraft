@@ -76,15 +76,16 @@ describe('the one-draft endpoint', () => {
     expect(response.status).toBe(200);
     expect(response.contentType).toBe('application/json');
     // The WHOLE record, not a handful of fields: a subset check is what let the
-    // validator quietly drop `landmark`, so the raced draft lost the island out
-    // in its lake while the editor's own preview still drew it.
+    // validator quietly drop the one authorable placement a circuit had, so the
+    // raced draft lost the island out in its lake while the editor's own
+    // preview still drew it. The authored DRESSING is that field now.
     const parsed = JSON.parse(response.body) as RealmRacersCircuit;
     expect(parsed).toEqual(roundCircuit(record()));
-    expect(parsed.landmark).toEqual(GARDEN.landmark);
+    expect(parsed.props).toEqual(GARDEN.props);
   });
 
-  it('carries a circuit that authors no landmark without inventing one', () => {
-    const plain = { ...record(), landmark: undefined };
+  it('carries a circuit that authors no dressing without inventing any', () => {
+    const plain = { ...record(), props: undefined };
     const response = draftResponse(
       'GET',
       '/draft_one',
@@ -92,7 +93,7 @@ describe('the one-draft endpoint', () => {
     );
     const parsed = JSON.parse(response.body) as RealmRacersCircuit;
     expect(parsed).toEqual(roundCircuit(plain));
-    expect('landmark' in parsed).toBe(false);
+    expect('props' in parsed).toBe(false);
   });
 
   it('ignores a query string hung off the id', () => {

@@ -83,19 +83,66 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(validateCircuitPayload(payload(DRY))).toEqual(roundCircuit(DRY));
   });
 
-  it('carries the infield landmark through both directions', () => {
-    // It was dropped by the validator once, and that was a live divergence
-    // rather than a missing niceness: the editor's 3D preview builds the record
-    // it holds while a draft raced in game arrives through the validator, so
-    // the two views of one circuit disagreed about the island in the lake.
-    expect(GARDEN.landmark).toBeDefined();
-    expect(circuitToTypeScript(DRAFT)).toContain('landmark:');
-    expect(circuitFromTypeScript(circuitToTypeScript(DRAFT))?.landmark).toEqual(GARDEN.landmark);
-    expect(validateCircuitPayload(payload(DRAFT))?.landmark).toEqual(GARDEN.landmark);
-    // A circuit with nowhere to put one carries none, and gains none.
-    const bare = { ...DRAFT, id: 'draft_no_landmark', landmark: undefined };
-    expect(circuitToTypeScript(bare)).not.toContain('landmark:');
-    expect(validateCircuitPayload(payload(bare))?.landmark).toBeUndefined();
+  it('carries the authored dressing through both directions', () => {
+    // The one authorable placement a circuit used to have was dropped by the
+    // validator once, and that was a live divergence rather than a missing
+    // niceness: the editor's 3D preview builds the record it holds while a
+    // draft raced in game arrives through the validator, so the two views of
+    // one circuit disagreed about the island in the lake. The dressing is a
+    // whole document of such placements now, so all three fields ride together.
+    const dressed: RealmRacersCircuit = {
+      ...DRAFT,
+      id: 'draft_dressed_fixture',
+      props: [
+        { asset: 'fountain', at: { x: -4, z: 4 }, scale: 2.2, collide: 'none' },
+        { asset: 'bench', at: { s: 0.25, offset: 28.5 }, yaw: 'tangent' },
+        {
+          asset: 'gardenIronFence',
+          at: { s: 0.8, offset: -30 },
+          yaw: 1.25,
+          collide: { kind: 'obb', hw: 2, hd: 0.25, rot: 1.25 },
+        },
+      ],
+      scatters: [
+        { asset: 'shrub', zone: 'outfield', spacing: 9, seed: 41 },
+        { asset: 'bedRound', zone: 'infield', span: { s0: 0.9, s1: 0.1 }, spacing: 12, seed: 7 },
+      ],
+      ponds: [{ x: 20, z: -10, rx: 18, rz: 11, rot: 0.4, wobble: 0.2, seed: 3 }],
+    };
+    const text = circuitToTypeScript(dressed);
+    expect(text).toContain("asset: 'fountain'");
+    expect(text).toContain("yaw: 'tangent'");
+    expect(text).toContain("kind: 'obb'");
+    expect(text).toContain('ponds: [');
+    expect(circuitFromTypeScript(text)).toEqual(roundCircuit(dressed));
+    expect(validateCircuitPayload(payload(dressed))).toEqual(roundCircuit(dressed));
+
+    // A circuit that dresses nothing carries nothing, and gains nothing.
+    const bare = { ...DRAFT, id: 'draft_bare_fixture', props: undefined };
+    expect(circuitToTypeScript(bare)).not.toContain('props: [');
+    expect(validateCircuitPayload(payload(bare))?.props).toBeUndefined();
+  });
+
+  it('refuses a prop the game could not place, and a pond with no bank to shade it', () => {
+    // The tool cannot bless a key the sim has no footprint for: the collision
+    // default has to come from the catalog the GAME reads, or the two disagree
+    // about what is standing on the circuit.
+    const unknown = {
+      ...DRAFT,
+      id: 'draft_unknown_asset',
+      props: [{ asset: 'not_a_prop', at: { x: 0, z: 0 } }],
+    };
+    expect(validateCircuitPayload(payload(unknown))).toBeNull();
+
+    // A placed pond is water, so the basin IFF covers it exactly as it covers a
+    // water span: a pond with no bank profile is water made of nothing.
+    const pondNoBasin = {
+      ...DRY,
+      id: 'draft_pond_no_basin',
+      ponds: [{ x: 0, z: 0, rx: 10, rz: 8 }],
+    };
+    expect(validateCircuitPayload(payload(pondNoBasin))).toBeNull();
+    expect(validateCircuitPayload(payload({ ...pondNoBasin, basin: GARDEN.basin }))).not.toBeNull();
   });
 
   it('round-trips a circuit that authors no apron ceiling', () => {

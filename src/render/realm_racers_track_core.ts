@@ -20,6 +20,7 @@ import {
   REALM_RACERS_BORDER_SPACING,
   REALM_RACERS_ORIGIN,
 } from '../sim/realm_racers_layout';
+import { realmRacersPlacedPonds } from '../sim/realm_racers_props_resolve';
 import {
   rallyBankDepthAt,
   rallyGardenEdgeOffsetAt,
@@ -127,14 +128,6 @@ export interface RallyFlowerSpot {
   /** Index into RALLY_FLOWER_COLOURS. Constant across a patch, which is what
    *  makes the garden read as sown beds rather than confetti. */
   colour: number;
-}
-
-export interface RallyFountainSpot {
-  x: number;
-  z: number;
-  /** Footprint radius, yards, at the scale the painter draws it. */
-  radius: number;
-  scale: number;
 }
 
 /** Corners tighter than this radius get a kerb; anything straighter does not.
@@ -514,15 +507,79 @@ export function rallyBasinMeshes(circuit: RealmRacersCircuit): RallyBasinMesh[] 
     // the stride tightens for it. The full-lap outline every all-shore circuit
     // derives is hundreds of points long and keeps the authored stride exactly.
     const stride = Math.min(BASIN_RING_STRIDE, Math.max(1, Math.floor(outline.length / 8)));
-    out.push(basinMeshOf(outline, circuit, stride));
+    // The shore line's own bank profile, which is what the sim measures at the
+    // same point, so the drawn water and the measured water are one ramp. The
+    // shore ring reads exactly 0 by construction, so it is pinned rather than
+    // let the projection's polyline sagitta hand back a hair either way.
+    out.push(
+      basinMeshOf(outline, stride, (x, z, inward) =>
+        inward <= 0 ? 0 : Math.max(0, rallyBankDepthAt(circuit, x, z)),
+      ),
+    );
+  }
+  return out;
+}
+
+/**
+ * The PLACED ponds' water surfaces, one per pond, through the same ring
+ * machinery the shore lobes use.
+ *
+ * Their depth is the only thing that differs, and it has to: a pond stands
+ * wherever the author put it, so the shore line's bank profile (an offset of
+ * the ROAD) says nothing about how deep it is. It ramps in from its own outline
+ * at the basin's authored slope instead, to the same floor.
+ */
+export function rallyPondMeshes(circuit: RealmRacersCircuit): RallyBasinMesh[] {
+  const basin = circuit.basin;
+  if (!basin) return [];
+  return realmRacersPlacedPonds(circuit).map((pond) => {
+    const outline = pond.outline.map((point) => ({
+      x: point.x + REALM_RACERS_ORIGIN.x,
+      z: point.z + REALM_RACERS_ORIGIN.z,
+    }));
+    const stride = Math.min(BASIN_RING_STRIDE, Math.max(1, Math.floor(outline.length / 8)));
+    return basinMeshOf(outline, stride, (_x, _z, inward) =>
+      Math.min(basin.depthMax, basin.bankSlope * Math.max(0, inward)),
+    );
+  });
+}
+
+/**
+ * Reed clumps around every placed pond's edge, on the same footing as the
+ * shore's: they are what says there is water behind them, and a pond with a
+ * bare rim reads as a painted puddle next to a lake that has one.
+ */
+export function rallyPondReedSpots(
+  circuit: RealmRacersCircuit,
+): { x: number; z: number; rot: number; scale: number }[] {
+  const out: { x: number; z: number; rot: number; scale: number }[] = [];
+  if (!circuit.basin) return out;
+  for (const [index, pond] of realmRacersPlacedPonds(circuit).entries()) {
+    const points = pond.outline;
+    let walked = 0;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      walked += Math.hypot(b.x - a.x, b.z - a.z);
+      if (walked < REED_SPACING) continue;
+      walked = 0;
+      const roll = hash2(i, index, 0x2ee6);
+      out.push({
+        x: a.x + REALM_RACERS_ORIGIN.x,
+        z: a.z + REALM_RACERS_ORIGIN.z,
+        // Along the bank, so a clump reads as an edge rather than a bristle.
+        rot: Math.atan2(b.x - a.x, b.z - a.z),
+        scale: 0.8 + roll * 0.5,
+      });
+    }
   }
   return out;
 }
 
 function basinMeshOf(
   outline: readonly { x: number; z: number }[],
-  circuit: RealmRacersCircuit,
   stride: number,
+  depthAt: (x: number, z: number, inward: number) => number,
 ): RallyBasinMesh {
   const shore: { x: number; z: number }[] = [];
   for (let i = 0; i < outline.length; i += stride) shore.push(outline[i]);
@@ -549,18 +606,20 @@ function basinMeshOf(
       const v = ring * columns + col;
       positions[v * 2] = x;
       positions[v * 2 + 1] = z;
-      // The shore ring reads exactly 0 by construction, so pin it rather than
-      // letting the projection's polyline sagitta hand back a hair either way.
-      // Unhinted on purpose: this is a one-time build, and a hinted projection
-      // answers a sagitta apart from a full scan, which would put the drawn
-      // water a few millimetres off the depth the sim reads at the same point.
-      depths[v] = ring === 0 ? 0 : Math.max(0, rallyBankDepthAt(circuit, x, z));
+      // How far in from the shore this vertex sits, along its own ray: the one
+      // thing a free-form pond can answer about its depth, and enough for the
+      // shore profile too, which pins its own ring at zero.
+      // The shore reader is UNHINTED on purpose: this is a one-time build, and
+      // a hinted projection answers a sagitta apart from a full scan, which
+      // would put the drawn water a few millimetres off the depth the sim reads
+      // at the same point.
+      depths[v] = depthAt(x, z, t * Math.hypot(cx - point.x, cz - point.z));
     }
   }
   const middle = count - 1;
   positions[middle * 2] = cx;
   positions[middle * 2 + 1] = cz;
-  depths[middle] = Math.max(0, rallyBankDepthAt(circuit, cx, cz));
+  depths[middle] = depthAt(cx, cz, Number.POSITIVE_INFINITY);
 
   const index: number[] = [];
   for (let ring = 0; ring < BASIN_RINGS; ring++) {
@@ -674,28 +733,6 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
     }
   }
   return out;
-}
-
-/** Where the infield landmark sits, relative to the region origin. */
-const FOUNTAIN_SCALE = 2.2;
-/** Authored basin radius of the tiered fountain at scale 1. */
-const FOUNTAIN_SOURCE_RADIUS = 3.3;
-
-/**
- * The infield's one landmark: a tiered fountain on its own island, out in the
- * middle of the water where nothing can reach it. It used to be flanked by four
- * statues; those stood on the APRON, which is drivable, so racers drove through
- * them. The infield now carries the lake, the island, and nothing else.
- */
-export function rallyFountainSpot(circuit: RealmRacersCircuit): RallyFountainSpot | null {
-  const at = circuit.landmark;
-  if (!at) return null;
-  return {
-    x: REALM_RACERS_ORIGIN.x + at.x,
-    z: REALM_RACERS_ORIGIN.z + at.z,
-    radius: FOUNTAIN_SOURCE_RADIUS * FOUNTAIN_SCALE,
-    scale: FOUNTAIN_SCALE,
-  };
 }
 
 /**

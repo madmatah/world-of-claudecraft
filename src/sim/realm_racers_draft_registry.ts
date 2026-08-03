@@ -28,9 +28,13 @@
 // dev client) and is pinned by `tests/realm_racers_drafts.test.ts` so it is a
 // stated property rather than a surprise.
 //
-// If a THIRD derived cache ever keys off a circuit id (the spline memo and the
-// collider cache are the two today), stop adding identity guards one at a time
-// and give this table a generation counter the caches bump against.
+// Every derived cache keyed off a circuit id holds its entry only while the
+// RECORD behind that id is the same object, which is what makes a redrawn draft
+// safe. Two of them go through one shared helper (`memoizePerCircuit` in
+// `realm_racers_spline.ts`, which the spline derivations and the dressing
+// resolver both use) and one is hand-rolled beside it (the collider cache). If
+// a SECOND hand-rolled one ever appears, stop writing identity guards one at a
+// time and give this table a generation counter the caches bump against.
 
 import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 

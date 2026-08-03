@@ -18,10 +18,15 @@
 
 import {
   RALLY_WATER_KINDS,
+  type RallyPond,
+  type RallyProp,
+  type RallyPropCollide,
+  type RallyScatter,
   type RallyWaterKind,
   type RealmRacersCircuit,
   type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
+import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
 
 /** Yards, to a tenth: finer than an operator can aim and finer than the
@@ -31,6 +36,9 @@ const POINT_PLACES = 1;
 const FRACTION_PLACES = 4;
 /** Band values (road half-width, apron ceiling), yards to two places. */
 const BAND_PLACES = 2;
+/** Prop yaw and scale, to two places: a hundredth of a radian is under a
+ *  degree, and a hundredth of a scale is invisible on anything a garden holds. */
+const PROP_PLACES = 2;
 
 const ID_RE = /^[a-z][a-z0-9_]{2,40}$/;
 const MUSIC_TRACK_RE = /^[a-z0-9_]{1,40}$/;
@@ -70,18 +78,108 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
           })),
         }
       : {}),
-    ...(circuit.landmark
+    ...(circuit.props ? { props: circuit.props.map(roundProp) } : {}),
+    ...(circuit.scatters ? { scatters: circuit.scatters.map(roundScatter) } : {}),
+    ...(circuit.ponds ? { ponds: circuit.ponds.map(roundPond) } : {}),
+  };
+}
+
+function roundCollide(collide: RallyPropCollide): RallyPropCollide {
+  if (collide === 'default' || collide === 'none') return collide;
+  // Footprints keep two places where a POSITION keeps one: a fence rail is a
+  // quarter of a yard thick, and rounding its half-depth to a tenth would move
+  // the collider a fifth of its own size.
+  return collide.kind === 'circle'
+    ? { kind: 'circle', r: round(collide.r, PROP_PLACES) }
+    : {
+        kind: 'obb',
+        hw: round(collide.hw, PROP_PLACES),
+        hd: round(collide.hd, PROP_PLACES),
+        rot: round(collide.rot, PROP_PLACES),
+      };
+}
+
+function roundProp(prop: RallyProp): RallyProp {
+  return {
+    asset: prop.asset,
+    at:
+      's' in prop.at
+        ? { s: round(prop.at.s, FRACTION_PLACES), offset: round(prop.at.offset, POINT_PLACES) }
+        : { x: round(prop.at.x, POINT_PLACES), z: round(prop.at.z, POINT_PLACES) },
+    ...(prop.yaw === undefined
+      ? {}
+      : { yaw: prop.yaw === 'tangent' ? 'tangent' : round(prop.yaw, PROP_PLACES) }),
+    ...(prop.scale === undefined ? {} : { scale: round(prop.scale, PROP_PLACES) }),
+    ...(prop.collide === undefined ? {} : { collide: roundCollide(prop.collide) }),
+  };
+}
+
+function roundScatter(scatter: RallyScatter): RallyScatter {
+  return {
+    asset: scatter.asset,
+    zone: scatter.zone,
+    ...(scatter.span
       ? {
-          landmark: {
-            x: round(circuit.landmark.x, POINT_PLACES),
-            z: round(circuit.landmark.z, POINT_PLACES),
+          span: {
+            s0: round(scatter.span.s0, FRACTION_PLACES),
+            s1: round(scatter.span.s1, FRACTION_PLACES),
           },
         }
       : {}),
+    spacing: round(scatter.spacing, POINT_PLACES),
+    seed: scatter.seed,
+  };
+}
+
+function roundPond(pond: RallyPond): RallyPond {
+  return {
+    x: round(pond.x, POINT_PLACES),
+    z: round(pond.z, POINT_PLACES),
+    rx: round(pond.rx, POINT_PLACES),
+    rz: round(pond.rz, POINT_PLACES),
+    ...(pond.rot === undefined ? {} : { rot: round(pond.rot, PROP_PLACES) }),
+    ...(pond.wobble === undefined ? {} : { wobble: round(pond.wobble, PROP_PLACES) }),
+    ...(pond.seed === undefined ? {} : { seed: pond.seed }),
   };
 }
 
 const pointLiteral = (point: RallyPoint): string => `{ x: ${point.x}, z: ${point.z} }`;
+
+function collideLiteral(collide: RallyPropCollide): string {
+  if (collide === 'default' || collide === 'none') return `'${collide}'`;
+  return collide.kind === 'circle'
+    ? `{ kind: 'circle', r: ${collide.r} }`
+    : `{ kind: 'obb', hw: ${collide.hw}, hd: ${collide.hd}, rot: ${collide.rot} }`;
+}
+
+function propLiteral(prop: RallyProp): string {
+  const at =
+    's' in prop.at
+      ? `{ s: ${prop.at.s}, offset: ${prop.at.offset} }`
+      : `{ x: ${prop.at.x}, z: ${prop.at.z} }`;
+  const parts = [`asset: '${prop.asset}'`, `at: ${at}`];
+  if (prop.yaw !== undefined) {
+    parts.push(`yaw: ${prop.yaw === 'tangent' ? "'tangent'" : prop.yaw}`);
+  }
+  if (prop.scale !== undefined) parts.push(`scale: ${prop.scale}`);
+  if (prop.collide !== undefined) parts.push(`collide: ${collideLiteral(prop.collide)}`);
+  return `{ ${parts.join(', ')} }`;
+}
+
+function scatterLiteral(scatter: RallyScatter): string {
+  const parts = [`asset: '${scatter.asset}'`, `zone: '${scatter.zone}'`];
+  if (scatter.span) parts.push(`span: { s0: ${scatter.span.s0}, s1: ${scatter.span.s1} }`);
+  parts.push(`spacing: ${scatter.spacing}`, `seed: ${scatter.seed}`);
+  return `{ ${parts.join(', ')} }`;
+}
+
+function pondLiteral(pond: RallyPond): string {
+  const parts = [`x: ${pond.x}`, `z: ${pond.z}`, `rx: ${pond.rx}`, `rz: ${pond.rz}`];
+  if (pond.rot !== undefined) parts.push(`rot: ${pond.rot}`);
+  if (pond.wobble !== undefined) parts.push(`wobble: ${pond.wobble}`);
+  if (pond.seed !== undefined) parts.push(`seed: ${pond.seed}`);
+  return `{ ${parts.join(', ')} }`;
+}
 
 /**
  * The record as a TypeScript literal, ready to paste into the curated records
@@ -129,9 +227,24 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
       `  basin: { waterY: ${c.basin.waterY}, bankSlope: ${c.basin.bankSlope}, depthMax: ${c.basin.depthMax}, wadeYards: ${c.basin.wadeYards} },`,
     );
   }
-  // Optional, and emitted in the record's own field order so a paste reads like
-  // the module it is being pasted into.
-  if (c.landmark) lines.push(`  landmark: { x: ${c.landmark.x}, z: ${c.landmark.z} },`);
+  // The dressing, in AUTHORED order: it is the one part of a circuit a designer
+  // composed piece by piece, so re-sorting it would throw away the order they
+  // are read back in and make a diff of two exports meaningless.
+  if (c.ponds) {
+    lines.push('  ponds: [');
+    for (const pond of c.ponds) lines.push(`    ${pondLiteral(pond)},`);
+    lines.push('  ],');
+  }
+  if (c.props) {
+    lines.push('  props: [');
+    for (const prop of c.props) lines.push(`    ${propLiteral(prop)},`);
+    lines.push('  ],');
+  }
+  if (c.scatters) {
+    lines.push('  scatters: [');
+    for (const scatter of c.scatters) lines.push(`    ${scatterLiteral(scatter)},`);
+    lines.push('  ],');
+  }
   lines.push(
     `  startBack: ${c.startBack},`,
     `  startSpacing: ${c.startSpacing},`,
@@ -234,6 +347,110 @@ function readWaterBands(raw: unknown): { s: number; kind: RallyWaterKind }[] | n
 }
 
 /**
+ * The dressing off the wire.
+ *
+ * Carried THROUGH rather than dropped, and the reason is a live divergence the
+ * one authorable placement a circuit used to have already caused once: the
+ * editor's 3D preview builds the record it holds while a draft raced in game
+ * arrives through this validator, so a field the validator silently discards
+ * makes the two views of one circuit disagree about what is standing on it.
+ *
+ * The catalog key is checked against the SIM catalog, which is what the game
+ * itself resolves footprints from, so the tool cannot bless a key the game
+ * cannot place.
+ */
+function readCollide(raw: unknown): RallyPropCollide | null {
+  if (raw === 'default' || raw === 'none') return raw;
+  if (!raw || typeof raw !== 'object') return null;
+  const c = raw as Record<string, unknown>;
+  if (c.kind === 'circle') {
+    return inRange(c.r, 0.05, 200) ? { kind: 'circle', r: c.r } : null;
+  }
+  if (c.kind === 'obb') {
+    return inRange(c.hw, 0.05, 200) && inRange(c.hd, 0.05, 200) && inRange(c.rot, -100, 100)
+      ? { kind: 'obb', hw: c.hw, hd: c.hd, rot: c.rot }
+      : null;
+  }
+  return null;
+}
+
+function readProps(raw: unknown): RallyProp[] | null {
+  if (!Array.isArray(raw) || raw.length > 4096) return null;
+  const out: RallyProp[] = [];
+  for (const item of raw) {
+    const prop = item as Record<string, unknown>;
+    if (typeof prop.asset !== 'string' || !(prop.asset in REALM_RACERS_PROPS)) return null;
+    const at = prop.at as Record<string, unknown> | undefined;
+    if (!at || typeof at !== 'object') return null;
+    let placement: RallyProp['at'];
+    if (at.s !== undefined) {
+      if (!inRange(at.s, 0, 1) || !inRange(at.offset, -5000, 5000)) return null;
+      placement = { s: at.s, offset: at.offset };
+    } else {
+      if (!inRange(at.x, -5000, 5000) || !inRange(at.z, -5000, 5000)) return null;
+      placement = { x: at.x, z: at.z };
+    }
+    if (prop.yaw !== undefined && prop.yaw !== 'tangent' && !inRange(prop.yaw, -100, 100))
+      return null;
+    if (prop.scale !== undefined && !inRange(prop.scale, 0.05, 50)) return null;
+    const collide = prop.collide === undefined ? undefined : readCollide(prop.collide);
+    if (prop.collide !== undefined && !collide) return null;
+    out.push({
+      asset: prop.asset,
+      at: placement,
+      ...(prop.yaw === undefined ? {} : { yaw: prop.yaw as number | 'tangent' }),
+      ...(prop.scale === undefined ? {} : { scale: prop.scale as number }),
+      ...(collide ? { collide } : {}),
+    });
+  }
+  return out;
+}
+
+function readScatters(raw: unknown): RallyScatter[] | null {
+  if (!Array.isArray(raw) || raw.length > 64) return null;
+  const out: RallyScatter[] = [];
+  for (const item of raw) {
+    const scatter = item as Record<string, unknown>;
+    if (typeof scatter.asset !== 'string' || !(scatter.asset in REALM_RACERS_PROPS)) return null;
+    if (scatter.zone !== 'infield' && scatter.zone !== 'outfield') return null;
+    if (!inRange(scatter.spacing, 1, 200) || !isInteger(scatter.seed, -1e9, 1e9)) return null;
+    const span = scatter.span as Record<string, unknown> | undefined;
+    if (span !== undefined && !(inRange(span.s0, 0, 1) && inRange(span.s1, 0, 1))) return null;
+    out.push({
+      asset: scatter.asset,
+      zone: scatter.zone,
+      ...(span === undefined ? {} : { span: { s0: span.s0 as number, s1: span.s1 as number } }),
+      spacing: scatter.spacing,
+      seed: scatter.seed,
+    });
+  }
+  return out;
+}
+
+function readPonds(raw: unknown): RallyPond[] | null {
+  if (!Array.isArray(raw) || raw.length > 256) return null;
+  const out: RallyPond[] = [];
+  for (const item of raw) {
+    const pond = item as Record<string, unknown>;
+    if (!inRange(pond.x, -5000, 5000) || !inRange(pond.z, -5000, 5000)) return null;
+    if (!inRange(pond.rx, 0.5, 2000) || !inRange(pond.rz, 0.5, 2000)) return null;
+    if (pond.rot !== undefined && !inRange(pond.rot, -100, 100)) return null;
+    if (pond.wobble !== undefined && !inRange(pond.wobble, 0, 0.35)) return null;
+    if (pond.seed !== undefined && !isInteger(pond.seed, -1e9, 1e9)) return null;
+    out.push({
+      x: pond.x,
+      z: pond.z,
+      rx: pond.rx,
+      rz: pond.rz,
+      ...(pond.rot === undefined ? {} : { rot: pond.rot as number }),
+      ...(pond.wobble === undefined ? {} : { wobble: pond.wobble as number }),
+      ...(pond.seed === undefined ? {} : { seed: pond.seed as number }),
+    });
+  }
+  return out;
+}
+
+/**
  * Whether a payload is a circuit at all, and the normalized record if it is.
  *
  * Run by the dev-server save endpoint BEFORE it writes anything, on the
@@ -277,8 +494,19 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   // the payload is a lake circuit that forgot its lake (the absent table means a
   // whole lap of water); with one and no water span it authors a basin nothing
   // is made of, which re-exports as a literal the next reader takes for a lake.
+  const props = c.props === undefined ? undefined : readProps(c.props);
+  if (c.props !== undefined && !props) return null;
+  const scatters = c.scatters === undefined ? undefined : readScatters(c.scatters);
+  if (c.scatters !== undefined && !scatters) return null;
+  const ponds = c.ponds === undefined ? undefined : readPonds(c.ponds);
+  if (c.ponds !== undefined && !ponds) return null;
+
   const basin = c.basin as Record<string, unknown> | undefined;
-  const anyWater = !waterBands || waterBands.some((band) => band.kind === 'water');
+  // A PLACED pond is water too, so it needs the same bank profile a shore span
+  // does: the IFF is over every kind of water the circuit carries, not just the
+  // one cut along the shore line.
+  const anyWater =
+    !waterBands || waterBands.some((band) => band.kind === 'water') || (ponds?.length ?? 0) > 0;
   if (anyWater !== Boolean(basin)) return null;
   if (basin) {
     if (
@@ -291,22 +519,6 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     }
   }
 
-  /**
-   * The infield landmark, optional and carried THROUGH rather than dropped.
-   *
-   * It was dropped, and that was a live divergence rather than a missing
-   * niceness: the editor's 3D preview builds the record it holds (fountain and
-   * all) while a draft raced in game arrives through this validator, so the two
-   * views of one circuit disagreed about whether there was an island out in the
-   * lake. Bounded by the same window the control points use, since it is a
-   * circuit-local point exactly like them.
-   */
-  const rawLandmark = c.landmark as { x?: unknown; z?: unknown } | undefined | null;
-  let landmark: RallyPoint | undefined;
-  if (rawLandmark !== undefined && rawLandmark !== null) {
-    if (!inRange(rawLandmark.x, -5000, 5000) || !inRange(rawLandmark.z, -5000, 5000)) return null;
-    landmark = { x: rawLandmark.x, z: rawLandmark.z };
-  }
   if (
     !inRange(c.regionHalfX, 10, 2000) ||
     !inRange(c.regionHalfZ, 10, 2000) ||
@@ -338,7 +550,9 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     widthBands,
     ...(apronBands ? { apronBands } : {}),
     ...(waterBands ? { waterBands } : {}),
-    ...(landmark ? { landmark } : {}),
+    ...(props ? { props } : {}),
+    ...(scatters ? { scatters } : {}),
+    ...(ponds ? { ponds } : {}),
     regionHalfX: c.regionHalfX,
     regionHalfZ: c.regionHalfZ,
     perimeter: {

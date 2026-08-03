@@ -144,7 +144,7 @@ describe('running the command', () => {
   it('hands the sim and the renderer the record it fetched, field for field', () => {
     // The whole record, not its id: a field lost between the endpoint and the
     // sim is a circuit that drives differently from the one the editor drew,
-    // and `landmark` was exactly that field.
+    // and the authored dressing is exactly that kind of field.
     const payload = draftPayload();
     return runRealmRacersDraftCommand(
       { id: 'draft_one', tier: 'ace' },
@@ -153,7 +153,7 @@ describe('running the command', () => {
         fetchDraft: async () => payload,
         register: (circuit) => {
           expect(circuit).toEqual(payload);
-          expect(circuit.landmark).toEqual(GARDEN.landmark);
+          expect(circuit.props).toEqual(GARDEN.props);
           return { lane: 7, problems: [] };
         },
         draw: (circuit) => {

@@ -12,9 +12,10 @@ import {
   rallyBorderFlowerSpots,
   rallyDressingSpots,
   rallyFlowerSpots,
-  rallyFountainSpot,
   rallyKerbRuns,
   rallyPerimeterPieces,
+  rallyPondMeshes,
+  rallyPondReedSpots,
   rallyReedSpots,
   rallyStartArchPlacement,
   rallyStartLightPlacements,
@@ -29,6 +30,10 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
+import {
+  realmRacersPlacedPonds,
+  realmRacersPlacedProps,
+} from '../src/sim/realm_racers_props_resolve';
 import {
   rallyBasinDepthAt,
   rallyGardenEdgeOffsetAt,
@@ -113,6 +118,30 @@ describe('Realm Racers procedural render', () => {
   });
   afterEach(() => {
     vi.doUnmock('../src/render/textures');
+  });
+
+  it('stands the authored dressing where the resolver put it, in all three axes', async () => {
+    // The fountain migrated off a bespoke `landmark` field onto the general
+    // prop seam, and the two builders it now passes through take their
+    // arguments in different orders: the garden's stonework is (x, z, y), the
+    // placement seam is (x, y, z). Both compile, and only a position read off
+    // the built scene can tell them apart. This is that read.
+    const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+    const placed = realmRacersPlacedProps(GARDEN_CIRCUIT).find((prop) => prop.asset === 'fountain');
+    if (!placed) throw new Error('the practice circuit dresses its infield with a fountain');
+    const group = buildRealmRacersTrack(GARDEN_CIRCUIT).group;
+    // The one scaled group in the build: every other piece is a mesh or an
+    // instanced mesh, and the fountain is the only prop built as its own group.
+    const fountain = group.children.find(
+      (child): child is THREE.Group => child instanceof THREE.Group && child.scale.x !== 1,
+    );
+    if (!fountain) throw new Error('the fountain should be built as a scaled group');
+    expect(fountain.position.x).toBeCloseTo(placed.x + REALM_RACERS_ORIGIN.x, 6);
+    expect(fountain.position.z).toBeCloseTo(placed.z + REALM_RACERS_ORIGIN.z, 6);
+    // Seated ON the lawn, not floating at the z it was handed by mistake.
+    expect(fountain.position.y).toBeLessThan(0);
+    expect(fountain.position.y).toBeGreaterThan(-1);
+    expect(fountain.scale.x).toBeCloseTo(placed.scale, 6);
   });
 
   it('builds a hidden circuit once and gates it by local-player proximity', async () => {
@@ -654,18 +683,6 @@ describe('Realm Racers procedural render', () => {
       expect(full.has(`${spot.x.toFixed(4)},${spot.z.toFixed(4)}`)).toBe(true);
   });
 
-  it('parks the infield landmark out in the water, clear of the drivable apron', () => {
-    // The lone landmark stands on its island. Its four flanking statues stood on
-    // the APRON instead, which is drivable and carries no collision, so racers
-    // drove straight through them.
-    const spot = rallyFountainSpot(GARDEN_CIRCUIT);
-    if (!spot) throw new Error('the practice circuit authors a landmark');
-    const projection = track.project(spot.x, spot.z);
-    expect(projection.lateral - spot.radius).toBeGreaterThan(
-      rallyShoreOffsetAt(GARDEN_CIRCUIT, projection.s),
-    );
-  });
-
   describe('the ponds cut along the shore line', () => {
     /** The practice circuit's curve with two spans painted dry: one over the
      *  start straight and one round the parabolic. */
@@ -810,6 +827,62 @@ describe('Realm Racers procedural render', () => {
         }
         expect(over, `${circuit.id} lawn triangles over water`).toBe(0);
       }
+    });
+
+    it('draws a PLACED pond through the same machinery, hole, reeds and all', async () => {
+      // A pond is water the author put somewhere, not water derived from the
+      // road's own offset curve, and that is the whole point: the shape of the
+      // authoring is what was wrong, never the water. So it goes through the
+      // shore's own ring builder, its own material and its own lawn hole, and
+      // the only thing it answers differently is how deep it is, because the
+      // road's bank profile says nothing about a pond fifty yards away.
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      const PONDS: RealmRacersCircuit = {
+        ...DRY,
+        id: 'render_ponds',
+        basin: GARDEN_CIRCUIT.basin,
+        ponds: [
+          { x: -4, z: 4, rx: 22, rz: 13, wobble: 0.2, seed: 1 },
+          { x: 46, z: -6, rx: 9, rz: 7, seed: 2 },
+        ],
+      };
+      const group = buildRealmRacersTrack(PONDS).group;
+      // Two sheets, no shore lobe at all: this circuit's shore is entirely dry.
+      const sheets = waterMeshes(group);
+      expect(sheets).toHaveLength(2);
+      expect(new Set(sheets.map((mesh) => mesh.material)).size).toBe(1);
+      // Real depth in the middle of each, ramping from a zero shore.
+      for (const mesh of rallyPondMeshes(PONDS)) {
+        expect(Math.max(...Array.from(mesh.depths))).toBeGreaterThan(1);
+        expect(Math.min(...Array.from(mesh.depths))).toBe(0);
+      }
+      // The lawn opens under both, and only under both.
+      const outlines = realmRacersPlacedPonds(PONDS).map((pond) =>
+        pond.outline.map(
+          (point) => [point.x + REALM_RACERS_ORIGIN.x, point.z + REALM_RACERS_ORIGIN.z] as const,
+        ),
+      );
+      const points = outlines.reduce((sum, outline) => sum + outline.length, 4);
+      const geo = lawnMesh(group).geometry;
+      expect(geo.getIndex()?.count).toBe(3 * (points + 2 * outlines.length - 2));
+      const position = geo.getAttribute('position');
+      const index = geo.getIndex();
+      if (!index) throw new Error('the lawn is an indexed ShapeGeometry');
+      let over = 0;
+      for (let t = 0; t < index.count; t += 3) {
+        let cx = 0;
+        let cz = 0;
+        for (let k = 0; k < 3; k++) {
+          cx += position.getX(index.getX(t + k)) / 3;
+          cz += position.getZ(index.getX(t + k)) / 3;
+        }
+        if (outlines.some((outline) => pointInPolygon(cx, cz, outline))) over++;
+      }
+      expect(over, 'lawn triangles over a pond').toBe(0);
+      // ...and the banks are planted, so a pond does not read as a painted
+      // puddle beside a lake that has reeds.
+      expect(rallyPondReedSpots(PONDS).length).toBeGreaterThan(10);
+      expect(rallyPondReedSpots(DRY)).toEqual([]);
     });
 
     it('sinks the water below the lawn, which is what masks the shore seam', async () => {

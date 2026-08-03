@@ -252,6 +252,12 @@ export const PROP_ASSET_DEFS: Record<string, PropAssetDef> = {
   // a placeable oak (the foliage kit's biggest crown) for authored shade
   // spots like the Garden Gate lawns; decor entries set scale, r is trunk
   oakTree: { url: '/models/foliage/oak_4.glb', kit: 'kfol' },
+  // the fen's lily raft, registered HERE rather than in a second catalog so the
+  // Realm Racers dressing can place it on a pond through the same registry the
+  // manifest and preload guards already sweep (water_flora.ts scatters the same
+  // file over the world's own lakes; loadGltf caches per url, so the two cost
+  // one parse between them)
+  fenLilies: { url: '/models/props/fen_lilies.glb', kit: 'kfen' },
   gardenIronFence: { url: '/models/props/garden_iron_fence.glb', kit: 'kiron' },
   gardenIronPillar: { url: '/models/props/garden_iron_pillar.glb', kit: 'kiron' },
   gardenIronGate: { url: '/models/props/garden_iron_gate.glb', kit: 'kiron' },

@@ -22,6 +22,11 @@ import {
   realmRacersLaneOffset,
 } from '../sim/realm_racers_layout';
 import {
+  type RallyPlacedProp,
+  realmRacersPlacedPonds,
+  realmRacersPlacedProps,
+} from '../sim/realm_racers_props_resolve';
+import {
   type RallySample,
   realmRacersTrack,
   realmRacersWaterOutlines,
@@ -29,7 +34,7 @@ import {
 import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
-import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
+import { gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
 import {
   biomeGroundTint,
@@ -39,15 +44,17 @@ import {
   paintInstanceGround,
 } from './instance_surface';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
+import { REALM_RACERS_PROP_URLS, REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import {
   RALLY_FLOWER_COLOURS,
   rallyBasinMeshes,
   rallyBorderFlowerSpots,
   rallyDressingSpots,
   rallyFlowerSpots,
-  rallyFountainSpot,
   rallyKerbRuns,
   rallyPerimeterPieces,
+  rallyPondMeshes,
+  rallyPondReedSpots,
   rallyReedSpots,
   rallyStartArchPlacement,
   rallyStartLightPlacements,
@@ -126,14 +133,21 @@ function preload(url: string): void {
   );
 }
 
+// The authored dressing's whole catalog rides in the same lane. A prop is
+// placed by hand on one circuit and drawn from nothing on a cold client if its
+// url is not preloaded, which is a failure no test that does not check the
+// lane can see; `tests/realm_racers_props.test.ts` checks it.
 const ASSET_URLS = [
-  TREE_URL,
-  ARCH_URL,
-  BANNER_URL,
-  IRON_FENCE_URL,
-  IRON_PILLAR_URL,
-  REED_URL,
-  ...Object.values(BED_URLS),
+  ...new Set([
+    TREE_URL,
+    ARCH_URL,
+    BANNER_URL,
+    IRON_FENCE_URL,
+    IRON_PILLAR_URL,
+    REED_URL,
+    ...Object.values(BED_URLS),
+    ...REALM_RACERS_PROP_URLS,
+  ]),
 ];
 for (const url of ASSET_URLS) preload(url);
 
@@ -437,7 +451,19 @@ function mergeCrossedCards(card: THREE.BufferGeometry): THREE.BufferGeometry {
  * infield is lawn.
  */
 function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
-  return realmRacersWaterOutlines(circuit).map(
+  if (!circuit.basin) return [];
+  // Both kinds of water punch the same hole: the spans cut along the shore
+  // line, and the ponds placed wherever the author put them.
+  const outlines = [
+    ...realmRacersWaterOutlines(circuit),
+    ...realmRacersPlacedPonds(circuit).map((pond) =>
+      pond.outline.map((point) => ({
+        x: point.x + REALM_RACERS_ORIGIN.x,
+        z: point.z + REALM_RACERS_ORIGIN.z,
+      })),
+    ),
+  ];
+  return outlines.map(
     (outline) =>
       new THREE.Shape(
         outline.map(
@@ -462,7 +488,9 @@ function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
 function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
   const basin = circuit.basin;
   if (!basin) return;
-  const meshes = rallyBasinMeshes(circuit);
+  // The shore's lobes and the placed ponds are the same surface built from two
+  // different outlines, so they share the material, the reeds and this code.
+  const meshes = [...rallyBasinMeshes(circuit), ...rallyPondMeshes(circuit)];
   if (meshes.length === 0) return;
   // ONE material for every lobe of this build. It is a ShaderMaterial with its
   // own uniform block and its own compiled program, and the two callers that
@@ -508,7 +536,7 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
   instanceModel(
     group,
     REED_URL,
-    rallyReedSpots(circuit).map((spot) => ({
+    [...rallyReedSpots(circuit), ...rallyPondReedSpots(circuit)].map((spot) => ({
       x: spot.x,
       y: basin.waterY,
       z: spot.z,
@@ -518,6 +546,96 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
       sz: spot.scale,
     })),
   );
+}
+
+/** A prop under gentle motion: the tiered fountain's breath, the one animated
+ *  piece the dressing has. Held with the scale it was built at, so the sine is
+ *  a wobble around a size rather than a size of its own. */
+interface BreathingProp {
+  group: THREE.Group;
+  scale: number;
+}
+
+/**
+ * The circuit's HAND-PLACED dressing, drawn from the one resolver both the
+ * collision set and the readout measure. Nothing here works out a position: a
+ * renderer deriving its own placement is exactly how the tiered fountain came
+ * to stand in the middle of a road nothing collided with.
+ *
+ * Grouped by catalog key so a key with fifty pieces on it is one instanced
+ * draw. A key no visual knows draws nothing at all, deliberately: the readout
+ * calls it an error by name, and a missing model is not worth a crash inside a
+ * world build.
+ */
+function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): BreathingProp[] {
+  const byAsset = new Map<string, RallyPlacedProp[]>();
+  for (const prop of realmRacersPlacedProps(circuit)) {
+    const list = byAsset.get(prop.asset);
+    if (list) list.push(prop);
+    else byAsset.set(prop.asset, [prop]);
+  }
+  const breathing: BreathingProp[] = [];
+  for (const [asset, props] of byAsset) {
+    const visual = REALM_RACERS_PROP_VISUALS[asset];
+    if (!visual) continue;
+    if (visual.kind === 'gltf') {
+      instanceModel(
+        group,
+        visual.url,
+        props.map((prop) => ({
+          x: prop.x + REALM_RACERS_ORIGIN.x,
+          y: GRASS_Y,
+          z: prop.z + REALM_RACERS_ORIGIN.z,
+          yaw: prop.yaw,
+          sx: prop.scale,
+          sy: prop.scale,
+          sz: prop.scale,
+        })),
+      );
+      continue;
+    }
+    if (visual.kind === 'instanced') {
+      // A SHARED geometry, so it may only ever be drawn instanced: the dispose
+      // core frees a plain mesh's geometry, and freeing this one would take
+      // every other circuit's statues down with a rebuilt draft.
+      const mesh = new THREE.InstancedMesh(visual.geometry(), visual.material(), props.length);
+      const m = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      const up = new THREE.Vector3(0, 1, 0);
+      const v = new THREE.Vector3();
+      const sc = new THREE.Vector3();
+      props.forEach((prop, i) => {
+        q.setFromAxisAngle(up, prop.yaw);
+        v.set(prop.x + REALM_RACERS_ORIGIN.x, GRASS_Y, prop.z + REALM_RACERS_ORIGIN.z);
+        sc.setScalar(prop.scale);
+        mesh.setMatrixAt(i, m.compose(v, q, sc));
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.computeBoundingSphere();
+      group.add(mesh);
+      continue;
+    }
+    for (const prop of props) {
+      // A `group` visual seats itself at the world point it is handed and mints
+      // its own geometry there, so the yaw has nowhere to go: the one piece
+      // built this way is radially symmetric, and a kind that is not belongs in
+      // one of the two arms above.
+      const built = visual.build(
+        prop.x + REALM_RACERS_ORIGIN.x,
+        GRASS_Y,
+        prop.z + REALM_RACERS_ORIGIN.z,
+        prop.scale,
+      );
+      group.add(built);
+      // Only a piece the builder actually SCALED carries its own transform; one
+      // at scale 1 holds its position in its children, where touching the
+      // group's scale would swing it about the world origin.
+      if (prop.scale !== 1) breathing.push({ group: built, scale: prop.scale });
+    }
+  }
+  return breathing;
 }
 
 export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersTrackView {
@@ -645,16 +763,13 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   let lastStartLightSignal = '';
   buildFlowers(circuit, group);
 
-  // --- the infield landmark, on its island out in the water, where the circuit
-  // authored one. A circuit with no room for it simply has none.
-  const fountainSpot = rallyFountainSpot(circuit);
-  const fountainScale = fountainSpot?.scale ?? 1;
-  const fountain = fountainSpot
-    ? buildTieredFountain(fountainSpot.x, fountainSpot.z, GRASS_Y, fountainScale)
-    : null;
-  if (fountain) group.add(fountain);
+  // --- the AUTHORED dressing: every piece a designer placed by hand, plus the
+  // seeded fills, from the one resolver the collision set reads too ---
+  const breathingProps = buildDressingProps(circuit, group);
 
-  // --- the dressing ring, every piece outside the perimeter by construction ---
+  // --- the DERIVED dressing ring, every piece outside the perimeter by
+  // construction. It follows the perimeter rather than the design, so the
+  // authored props layer on top of it rather than replacing it ---
   const dressing = rallyDressingSpots(circuit);
   for (const [kind, url] of Object.entries(BED_URLS)) {
     instanceModel(
@@ -768,7 +883,8 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
           startLightLenses[i].material = i < signal.litCount ? on : startLightOff;
       }
       // The fountain's tiny breath is cosmetic and frame-time based.
-      fountain?.scale.setScalar(fountainScale + Math.sin(time * 1.7) * 0.006);
+      const breath = Math.sin(time * 1.7) * 0.006;
+      for (const prop of breathingProps) prop.group.scale.setScalar(prop.scale + breath);
     },
   };
 }

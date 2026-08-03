@@ -114,7 +114,15 @@ describe('Realm Racers circuit metrics: the loop is a loop', () => {
     const metrics = realmRacersCircuitMetrics(GARDEN);
     expect(metrics.turningDegrees).toBeCloseTo(360, 6);
     expect(metrics.winding).toBe(1);
-    expect(metrics.problems).toEqual([]);
+    // Nothing on the shipped practice circuit is unshippable, and it carries
+    // exactly ONE warning: the tiered fountain out in its lake stands about 30
+    // yards clear of the centerline, inside the roughly 35 the chase camera can
+    // swing to at full zoom. That is the dressing check earning its keep on the
+    // first content it ever looked at rather than a fault, and it is a warning
+    // precisely so the call stays the operator's: the piece has stood exactly
+    // there since the circuit shipped.
+    expect(realmRacersCircuitErrors(metrics)).toEqual([]);
+    expect(codesOf(GARDEN)).toEqual(['prop_in_camera_reach']);
   });
 
   it('reports a self-crossing loop, which measures no turn at all', () => {

@@ -138,6 +138,43 @@ export const REALM_RACERS_BORDER_SPACING = 1.15;
 export const REALM_RACERS_BORDER_OFFSET = 0.7;
 
 /**
+ * How far from the road the chase camera can end up, yards: the zoom ceiling
+ * (`CAMERA_ZOOM_MAX`, 22) times the rally boom's own distance scale (1.16).
+ *
+ * A number rather than the derivation, because `src/sim/` may import neither
+ * `src/game/input.ts` nor `src/render/camera_boom_core.ts`. It is NOT pinned by
+ * hand: `tests/realm_racers_props.test.ts` re-derives it from those two modules
+ * and fails here if either moves, which is the same treatment the render side's
+ * own `DRESSING_MARGIN` gets.
+ *
+ * The reason it exists at all: at a 2.5 yard dressing margin the chase camera
+ * sat inside a tree canopy every time a machine ran wide, so anything TALL
+ * standing this close to the road is worth a word before it ships.
+ */
+export const REALM_RACERS_CAMERA_REACH = 22 * 1.16;
+
+/**
+ * How tall a prop has to be before the camera can end up INSIDE it rather than
+ * merely beside it, yards. Roughly a machine's own eye height plus the boom's
+ * rise: a bench cannot swallow a camera, a canopy can.
+ */
+export const REALM_RACERS_CAMERA_CANOPY_HEIGHT = 3.0;
+
+/**
+ * How tall a SOLID prop has to be to be seen coming, yards. Under this a piece
+ * is a bollard: a racer meets it without ever having been told it was there,
+ * which is exactly the surprise the open-garden design outlawed.
+ */
+export const REALM_RACERS_SOLID_LEGIBILITY_HEIGHT = 1.0;
+
+/**
+ * How close two solid props have to stand to read as one RUN, yards. A
+ * continuous line of hedging or ironwork is a boundary a racer can see and
+ * follow; a single solid piece alone on open lawn is a rock in a field.
+ */
+export const REALM_RACERS_SOLID_RUN_GAP = 8.0;
+
+/**
  * How many machines line up. Every race is a four-pilot race, practice
  * included; a race freezes this number at seat time so a pilot dropping out
  * cannot retroactively renumber the grid under everyone else.

@@ -413,7 +413,7 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
  * geometry of the record it actually passed, and the cache stays one entry wide
  * instead of growing a track per revision.
  */
-function memoizePerCircuit<T>(
+export function memoizePerCircuit<T>(
   build: (circuit: RealmRacersCircuit) => T,
 ): (circuit: RealmRacersCircuit) => T {
   const cache = new Map<string, { circuit: RealmRacersCircuit; value: T }>();
@@ -525,6 +525,31 @@ export function rallyGardenEdgeOffsetAt(circuit: RealmRacersCircuit, s: number):
   return (
     realmRacersTrack(circuit).halfWidthAt(s) + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH
   );
+}
+
+/**
+ * How far off the centerline the RACING SURFACE reaches on one side: the
+ * envelope nothing may be built on, and the envelope the seeded dressing keeps
+ * clear of.
+ *
+ * `side` is +1 for the infield (the left normal, the side the shore and the
+ * ponds are on) and -1 for the outfield. The two are not symmetric: inward the
+ * surface runs road plus verge plus run-off plus the whole drivable apron out
+ * to the shore, while outward there is no apron at all and the racing surface
+ * stops at the garden edge, with open lawn from there to the perimeter.
+ *
+ * One function rather than the same `max` written at three call sites: the
+ * seeded scatter rejects against it, the readout errors on it
+ * (`prop_blocks_racing_surface`), and the two disagreeing is precisely the bug
+ * class the whole packet exists for.
+ */
+export function rallyRacingSurfaceOffsetAt(
+  circuit: RealmRacersCircuit,
+  s: number,
+  side: 1 | -1,
+): number {
+  const edge = rallyGardenEdgeOffsetAt(circuit, s);
+  return side > 0 ? Math.max(edge, rallyShoreOffsetAt(circuit, s)) : edge;
 }
 
 /**

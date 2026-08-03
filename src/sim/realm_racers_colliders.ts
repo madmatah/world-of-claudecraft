@@ -11,7 +11,14 @@
 // derived from the racing line wearing water or a hedge. All four were the same
 // idea, and the operator's verdict on the last one retired the whole family:
 // track limits are a RULE now (`realm_racers_track_limits.ts`), so the garden
-// is open on both sides and nothing inside the perimeter stops anyone.
+// is open on both sides and nothing DERIVED inside the perimeter stops anyone.
+//
+// What can stop someone in there is a piece of scenery a designer placed by
+// hand and marked solid: a statue at the end of a straight, a run of ironwork
+// along a corner. That is furniture, not containment. It carries no track-limits
+// duty of any kind (a gap in it is a view, never a shortcut), the readout warns
+// on every one of them so it is always a deliberate call, and the racing surface
+// itself stays inviolate by a metrics ERROR.
 //
 // Pure leaf: the geometry is static content, so one module-level build per
 // CIRCUIT serves every Sim in the process (the yumiMazeColliders /
@@ -20,6 +27,7 @@
 import type { Collider } from './colliders';
 import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import { DUNGEON_FLOOR_Y } from './data';
+import { realmRacersPlacedProps } from './realm_racers_props_resolve';
 
 /**
  * Keyed by circuit id AND held only while the RECORD behind that id is the same
@@ -39,9 +47,15 @@ const cached = new Map<string, { circuit: RealmRacersCircuit; value: Collider[] 
 /**
  * One circuit's instance-local collision set: four slabs closing its garden
  * wall, each reaching a half thickness past the corner so the rectangle has no
- * gap to squeeze through. Every collider carries its visual top as `cameraTopY`
- * so the chase camera rides over the wall instead of being pulled inside it, and
- * none is `standable`: a racer cannot mantle out of the garden.
+ * gap to squeeze through, plus whatever the circuit's authored DRESSING marks
+ * solid. Every collider carries its visual top as `cameraTopY` so the chase
+ * camera rides over it instead of being pulled inside it, and none is
+ * `standable`: a racer cannot mantle out of the garden or onto a statue.
+ *
+ * The prop colliders come out of `realm_racers_props_resolve.ts` and are never
+ * derived here, so what the renderer draws and what a machine hits are one set
+ * of positions. Nothing seeded by a SCATTER is ever solid, so this set stays as
+ * short as the authored list.
  */
 export function realmRacersColliders(circuit: RealmRacersCircuit): Collider[] {
   const hit = cached.get(circuit.id);
@@ -54,6 +68,23 @@ export function realmRacersColliders(circuit: RealmRacersCircuit): Collider[] {
     { type: 'obb', x: -px, z: 0, hw: t, hd: pz + t, rot: 0, cameraTopY: top },
     { type: 'obb', x: px, z: 0, hw: t, hd: pz + t, rot: 0, cameraTopY: top },
   ];
+  for (const prop of realmRacersPlacedProps(circuit)) {
+    if (!prop.solid) continue;
+    const propTop = DUNGEON_FLOOR_Y + prop.height;
+    built.push(
+      prop.footprint.kind === 'circle'
+        ? { type: 'circle', x: prop.x, z: prop.z, r: prop.footprint.r, cameraTopY: propTop }
+        : {
+            type: 'obb',
+            x: prop.x,
+            z: prop.z,
+            hw: prop.footprint.hw,
+            hd: prop.footprint.hd,
+            rot: prop.footprint.rot,
+            cameraTopY: propTop,
+          },
+    );
+  }
   cached.set(circuit.id, { circuit, value: built });
   return built;
 }

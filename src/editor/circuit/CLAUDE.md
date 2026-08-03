@@ -77,6 +77,17 @@ outright without `ctx.devCommands`.
   back, so there was nothing to decide: `realmRacersGates` derives them from the
   curve (one per `REALM_RACERS_GATE_SPACING` yards, each slid to the straightest
   road nearby). The editor DRAWS them and never edits them.
+- **The dressing is a DOCUMENT on the record, and the tool carries it whole.**
+  `props` (each in track-space `{s, offset}` or circuit-local `{x, z}`),
+  `scatters` (seeded fills) and `ponds` (placed decorative water) all round-trip
+  through `export_core.ts`, and the catalog key is checked against the SIM
+  catalog (`src/sim/content/realm_racers_props.ts`), so the tool cannot bless a
+  piece the game has no footprint for. The reason it is checked at all is the
+  field this one replaced: the single `landmark` point was silently DROPPED by
+  the validator, so the editor's preview drew an island the raced draft did not
+  have. Positions themselves are never computed here:
+  `src/sim/realm_racers_props_resolve.ts` is the one resolver, and the readout
+  reports what it placed.
 - **Where the water goes is authored; the shore line is not.** The shore is
   `halfWidth + apron`, derived. It used to be a CONTAINMENT line and the mode
   painted what stood on it (water, two hedges, a kneewall); track limits are a

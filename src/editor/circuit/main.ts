@@ -132,6 +132,14 @@ const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   region_deeper_than_lane_budget: 'the region is deeper than the gap between two lanes',
   shore_requires_basin: 'a stretch of pond on a circuit with no water authored',
   water_bands_malformed: 'the water table is not sorted from the start line',
+  unknown_prop_asset: 'a prop names a catalog key nothing draws',
+  prop_blocks_racing_surface: 'a prop stands on the racing surface',
+  prop_outside_region: 'a prop stands outside the collision region',
+  prop_in_drivable_garden: 'a solid prop stands where racers drive',
+  prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
+  solid_prop_illegible: 'a solid prop is too low or too alone to be read',
+  pond_on_racing_surface: 'a pond reaches onto the racing surface',
+  pond_in_drivable_garden: 'a pond covers ground racers drive on',
 };
 
 /**
@@ -159,6 +167,14 @@ function blankCircuit(): RealmRacersCircuit {
     ],
     apronBands: undefined,
     waterBands: undefined,
+    // A blank canvas is UNDRESSED. The template's dressing belongs to the
+    // template's shape: inheriting it is how the practice circuit's infield
+    // fountain used to land on every new circuit, and on one whose road runs
+    // through that point it is now a metrics error the operator did not author
+    // and cannot see the source of.
+    props: undefined,
+    scatters: undefined,
+    ponds: undefined,
     roles: ['competition'],
     practiceCopies: 0,
   };

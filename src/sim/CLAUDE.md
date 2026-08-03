@@ -170,6 +170,14 @@ re-entrant shape are the same call and neither needs a barrier. It replaced a wh
 family of derived containment devices, which is why the Realm Racers garden is open
 and drivable to the perimeter on both sides; `social/realm_racers.ts` owns the
 consequences, this owns the verdict),
+`realm_racers_props_resolve.ts` (the ONE place a circuit's hand-placed scenery turns
+into positions: authored `props` in either track-space or circuit-local coordinates,
+seeded `scatters`, and the free-form `ponds` outline. The renderer instances what it
+returns and `realm_racers_colliders.ts` appends what it marks solid, so neither
+re-derives a placement, which is the defect class the whole seam exists for. Every
+point comes out of `hash2`, never `ctx.rng`: content resolves at import time on three
+hosts. Footprints and heights come from `content/realm_racers_props.ts`, the sim-side
+catalog whose keys `src/render/realm_racers_prop_visuals.ts` mirrors),
 `realm_racers_draft_registry.ts` (the session-only DRAFT circuit overlay: a table
 with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
 `realm_racers_layout.ts` consult it and either importing something that imported it

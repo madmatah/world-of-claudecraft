@@ -21,14 +21,25 @@ import {
   GROUND_BLAST_RADIUS,
 } from './realm_racers_ground_blast';
 import {
+  REALM_RACERS_CAMERA_CANOPY_HEIGHT,
+  REALM_RACERS_CAMERA_REACH,
   REALM_RACERS_MAX_REGION_HALF_X,
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
+  REALM_RACERS_SOLID_LEGIBILITY_HEIGHT,
+  REALM_RACERS_SOLID_RUN_GAP,
   REALM_RACERS_VERGE_MARGIN,
 } from './realm_racers_layout';
 import {
+  type RallyPlacedProp,
+  rallyFootprintRadius,
+  realmRacersPlacedPonds,
+  realmRacersPlacements,
+} from './realm_racers_props_resolve';
+import {
   REALM_RACERS_PROJECTION_ENVELOPE,
+  rallyRacingSurfaceOffsetAt,
   rallyWaterKindAt,
   realmRacersTrack,
 } from './realm_racers_spline';
@@ -150,7 +161,33 @@ export type RealmRacersCircuitProblemCode =
   | 'region_outside_band'
   /** The region is deeper than half the gap between two lanes, so a racer on
    *  one copy of the circuit would come inside interest range of the next. */
-  | 'region_deeper_than_lane_budget';
+  | 'region_deeper_than_lane_budget'
+  /** A prop or scatter names a catalog key nothing authors, so nothing draws
+   *  it and nothing knows how big it is. */
+  | 'unknown_prop_asset'
+  /**
+   * A prop's footprint, SOLID or decorative, reaches into the racing surface
+   * (road, verge, run-off and the whole drivable apron). The check the
+   * fountain-in-the-road defect would have failed: that piece collided with
+   * nothing and was still standing where the race goes.
+   */
+  | 'prop_blocks_racing_surface'
+  /** A prop's footprint leaves the collision region, where the rally's own
+   *  short-circuits stop applying at all. */
+  | 'prop_outside_region'
+  /** A SOLID prop stands in the drivable garden. Allowed, and what makes
+   *  running wide interesting, but never by accident. */
+  | 'prop_in_drivable_garden'
+  /** A tall prop stands inside the chase camera's reach of the road. */
+  | 'prop_in_camera_reach'
+  /** A solid prop a racer cannot read: too low to see coming, or standing
+   *  alone rather than as part of a run. */
+  | 'solid_prop_illegible'
+  /** A pond's outline reaches into the racing surface. */
+  | 'pond_on_racing_surface'
+  /** A pond covers drivable garden. Legal decor (machines drive through it with
+   *  no splash and no slow in v1), and a deliberate call. */
+  | 'pond_in_drivable_garden';
 
 export interface RealmRacersCircuitProblem {
   code: RealmRacersCircuitProblemCode;
@@ -214,7 +251,29 @@ export interface RealmRacersCircuitMetrics {
    *  sides) from the circuit's origin, yards. */
   roadHalfX: number;
   roadHalfZ: number;
+  /** Hand-placed props, seeded scatter pieces, solid pieces among both, and
+   *  ponds: what the editor's dressing readout counts. */
+  propCount: number;
+  scatterCount: number;
+  solidPropCount: number;
+  pondCount: number;
   problems: readonly RealmRacersCircuitProblem[];
+}
+
+/** Whether a point lies inside a closed polygon (ray casting). Used on pond
+ *  outlines, which are closed by construction and never self-crossing. */
+function insidePolygon(
+  polygon: readonly { x: number; z: number }[],
+  x: number,
+  z: number,
+): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i];
+    const b = polygon[j];
+    if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
 }
 
 /** The whole readout for one circuit, measured through the real spline. */
@@ -429,10 +488,12 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     }
     if (malformed) problem('water_bands_malformed', 'error', bands.length, 0);
   }
-  if (!circuit.basin && dry.some((isDry) => !isDry)) {
-    // A shore is made of water, so a circuit that authors a water span and no
-    // basin has a stretch of shore line made of nothing at all.
-    problem('shore_requires_basin', 'error', dry.filter((isDry) => !isDry).length, 0);
+  const waterSamples = dry.filter((isDry) => !isDry).length;
+  if (!circuit.basin && (waterSamples > 0 || (circuit.ponds?.length ?? 0) > 0)) {
+    // The basin carries the bank profile every piece of water on the circuit is
+    // shaded with, so a circuit that authors water of EITHER kind (a shore span
+    // or a placed pond) and no basin has water made of nothing at all.
+    problem('shore_requires_basin', 'error', waterSamples + (circuit.ponds?.length ?? 0), 0);
   }
 
   if (roadHalfX > circuit.perimeter.halfX) {
@@ -473,6 +534,136 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     );
   }
 
+  // --- the dressing: what is placed on the circuit, and where it may stand ---
+  //
+  // Only the AUTHORED props are measured piece by piece. A seeded scatter
+  // rejects against `rallyRacingSurfaceOffsetAt` and the perimeter box as it
+  // resolves, and nothing it places is ever solid, so its pieces can fail none
+  // of the checks below; measuring thousands of them would cost a full spline
+  // projection each to prove what the resolver already guaranteed.
+  const placements = realmRacersPlacements(circuit);
+  // One problem per unrecognised key. The KEY itself cannot ride on a numeric
+  // problem, so the editor reads the names off `realmRacersPlacements`; what
+  // belongs here is how many there are and that the circuit is not shippable.
+  for (let i = 0; i < placements.unknownAssets.length; i++) {
+    problem('unknown_prop_asset', 'error', placements.unknownAssets.length, 0);
+  }
+
+  const solids = placements.props.filter((prop) => prop.solid);
+  /** Whether another solid piece stands near enough to read as one run with
+   *  this one. A line of hedging is a boundary a racer can see and follow; a
+   *  lone bollard on open lawn is the surprise the open garden outlawed. */
+  const inSolidRun = (prop: RallyPlacedProp): boolean =>
+    solids.some(
+      (other) =>
+        other !== prop &&
+        Math.hypot(other.x - prop.x, other.z - prop.z) <= REALM_RACERS_SOLID_RUN_GAP,
+    );
+
+  for (const prop of placements.props) {
+    const radius = rallyFootprintRadius(prop.footprint);
+    const projection = track.project(
+      prop.x + REALM_RACERS_ORIGIN.x,
+      prop.z + REALM_RACERS_ORIGIN.z,
+    );
+    const side: 1 | -1 = projection.lateral >= 0 ? 1 : -1;
+    const clear = Math.abs(projection.lateral) - radius;
+    const surface = rallyRacingSurfaceOffsetAt(circuit, projection.s, side);
+    if (clear < surface) {
+      problem('prop_blocks_racing_surface', 'error', clear, surface, projection.s);
+    }
+    if (Math.abs(prop.x) + radius > circuit.regionHalfX) {
+      problem(
+        'prop_outside_region',
+        'error',
+        Math.abs(prop.x) + radius,
+        circuit.regionHalfX,
+        -1,
+        'x',
+      );
+    }
+    if (Math.abs(prop.z) + radius > circuit.regionHalfZ) {
+      problem(
+        'prop_outside_region',
+        'error',
+        Math.abs(prop.z) + radius,
+        circuit.regionHalfZ,
+        -1,
+        'z',
+      );
+    }
+    // Everything inside the perimeter is drivable garden since track limits
+    // became a rule, so a solid piece in there is something a racer can hit.
+    // Legal, and what makes running wide interesting; never accidental.
+    const insidePerimeter =
+      Math.abs(prop.x) - radius < circuit.perimeter.halfX &&
+      Math.abs(prop.z) - radius < circuit.perimeter.halfZ;
+    if (prop.solid && insidePerimeter) {
+      problem('prop_in_drivable_garden', 'warning', clear, surface, projection.s);
+    }
+    if (prop.solid && (prop.height < REALM_RACERS_SOLID_LEGIBILITY_HEIGHT || !inSolidRun(prop))) {
+      problem(
+        'solid_prop_illegible',
+        'warning',
+        prop.height,
+        REALM_RACERS_SOLID_LEGIBILITY_HEIGHT,
+        projection.s,
+      );
+    }
+    // Only a piece tall enough to swallow the boom: a bench beside the road is
+    // scenery, a canopy over it is the frame going green.
+    if (prop.height > REALM_RACERS_CAMERA_CANOPY_HEIGHT) {
+      const reach = track.halfWidthAt(projection.s) + REALM_RACERS_CAMERA_REACH;
+      if (clear < reach) problem('prop_in_camera_reach', 'warning', clear, reach, projection.s);
+    }
+  }
+
+  for (const pond of realmRacersPlacedPonds(circuit)) {
+    // Two arms, because either one alone misses a real case: an outline point
+    // inside the racing surface is a pond lapping onto the track, and a
+    // centerline point inside the outline is a pond the road runs THROUGH with
+    // its banks well clear either side.
+    let onSurface = false;
+    for (const point of pond.outline) {
+      const projection = track.project(
+        point.x + REALM_RACERS_ORIGIN.x,
+        point.z + REALM_RACERS_ORIGIN.z,
+      );
+      const side: 1 | -1 = projection.lateral >= 0 ? 1 : -1;
+      if (Math.abs(projection.lateral) < rallyRacingSurfaceOffsetAt(circuit, projection.s, side)) {
+        onSurface = true;
+        break;
+      }
+    }
+    for (let i = 0; !onSurface && i < count; i++) {
+      const sample = samples[i];
+      const localX = sample.x - REALM_RACERS_ORIGIN.x;
+      const localZ = sample.z - REALM_RACERS_ORIGIN.z;
+      const inward = rallyRacingSurfaceOffsetAt(circuit, sample.s, 1);
+      const outward = rallyRacingSurfaceOffsetAt(circuit, sample.s, -1);
+      const span = Math.max(inward, outward);
+      if (Math.hypot(localX - pond.x, localZ - pond.z) > pond.radius + span) continue;
+      const probes: [number, number][] = [
+        [localX, localZ],
+        [localX - sample.tz * inward, localZ + sample.tx * inward],
+        [localX + sample.tz * outward, localZ - sample.tx * outward],
+      ];
+      for (const [x, z] of probes) {
+        if (insidePolygon(pond.outline, x, z)) {
+          onSurface = true;
+          break;
+        }
+      }
+    }
+    if (onSurface) problem('pond_on_racing_surface', 'error', 0, 0);
+    if (
+      Math.abs(pond.x) - pond.radius < circuit.perimeter.halfX &&
+      Math.abs(pond.z) - pond.radius < circuit.perimeter.halfZ
+    ) {
+      problem('pond_in_drivable_garden', 'warning', pond.radius, 0);
+    }
+  }
+
   return {
     lapLength: track.length,
     sampleCount: count,
@@ -488,6 +679,10 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     shoreOverlapYards,
     roadHalfX,
     roadHalfZ,
+    propCount: placements.props.length,
+    scatterCount: placements.scattered.length,
+    solidPropCount: placements.props.filter((prop) => prop.solid).length,
+    pondCount: placements.ponds.length,
     problems,
   };
 }
