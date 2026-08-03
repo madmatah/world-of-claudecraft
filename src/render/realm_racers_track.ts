@@ -894,12 +894,34 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
  * each hiding itself unless the viewer stands on a lane of its own circuit.
  *
  * Built EAGERLY, all of them, which is what the single-circuit band did before
- * lanes existed. Lazy building trades a boot cost for a mid-frame one, and the
- * frame it would land on is the one where a viewer arrives at a circuit, which
- * is the countdown: paying half a megabyte of geometry there is a hitch exactly
- * where a race is about to start. Once the pool is big enough for the boot cost
- * to matter, the answer is a lazy build with an eviction policy, and that wants
- * a second circuit to test it against.
+ * lanes existed. The lazy build plus LRU eviction the multi-circuit plan
+ * reserved for the second circuit was MEASURED here rather than assumed, and
+ * eager wins on the pool as it stands. Per circuit, three builds each, in Node
+ * with the procedural textures stubbed (so the numbers are the CPU cost of
+ * generating and packing geometry, not of uploading it):
+ *
+ *   evergarden_practice      29 to 47 ms    28 geometries    6 166 vertices    369 KiB
+ *   evergarden_express_tour  109 to 110 ms  27 geometries   10 421 vertices    642 KiB
+ *
+ * So the whole pool is about 140 ms and 1.0 MiB of attribute data, paid once
+ * during world build, behind the loading screen. Three things decided it:
+ *
+ *  - Lazy moves the LARGER of those two (110 ms) onto the frame a viewer
+ *    arrives at a circuit, and that frame is the countdown. A tenth of a second
+ *    of hitch as the lights come on is the one place this cost must not land.
+ *  - Eviction has nothing to evict. The policy worth having is "keep at most
+ *    two", and the pool IS two, so the whole mechanism would be inert code with
+ *    no reachable path, which is exactly what 13a-1 declined to write blind.
+ *  - 1.0 MiB resident is not a budget anyone is fighting over out here.
+ *
+ * Where the time goes, so the next circuit can be judged before it is drawn:
+ * the road ribbons are cheap and the cost tracks the SCATTER, which follows the
+ * area inside the perimeter rather than the lap. On the Express Tour,
+ * `rallyFlowerSpots` is 72 ms for 4 984 tufts and `rallyBasinMeshes` 29 ms for
+ * its two water lobes; everything else together is under 4 ms. That is
+ * superlinear in circuit size (1.8x the lap, 3.7x the build), so revisit this
+ * decision when the pool reaches roughly four circuits of this size, where the
+ * eager cost approaches half a second and lazy starts paying for itself.
  */
 export function buildRealmRacersTracks(): RealmRacersTracksView {
   const group = new THREE.Group();
