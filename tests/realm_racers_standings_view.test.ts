@@ -31,6 +31,7 @@ function match(standings: Racer[], mePid = 1): Match {
     countdown: 0,
     countdownTicks: 0,
     elapsed: 0,
+    elapsedTicks: 0,
     chaseIn: 0,
     returnIn: 0,
     me,

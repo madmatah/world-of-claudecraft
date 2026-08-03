@@ -37,6 +37,7 @@ function match(over: Partial<Match> = {}, standings?: Racer[]): Match {
     countdown: 0,
     countdownTicks: 0,
     elapsed: 71,
+    elapsedTicks: 0,
     chaseIn: 0,
     returnIn: 6,
     me,

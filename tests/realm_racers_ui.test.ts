@@ -52,6 +52,7 @@ function match(over: Partial<RallyMatch> = {}): RallyMatch {
     countdown: 3,
     countdownTicks: 60,
     elapsed: 0,
+    elapsedTicks: 0,
     chaseIn: 0,
     speed: 0,
     wrongWay: false,

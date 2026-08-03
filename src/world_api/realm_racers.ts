@@ -50,7 +50,15 @@ export interface RealmRacersMatchInfo {
   countdown: number;
   /** Authoritative sub-second remainder used by the physical start lights. */
   countdownTicks: number;
+  /** Seconds since the flag, floored to whole seconds for the readout. */
   elapsed: number;
+  /**
+   * Ticks since the flag: the sub-second twin of `elapsed`, 0 during the
+   * countdown. `elapsed` is floored for the readout, so anything that has to
+   * MOVE with the race (the start camera's handoff back to the chase pose)
+   * reads this instead, the same way the start lights read `countdownTicks`.
+   */
+  elapsedTicks: number;
   /**
    * Seconds left to get home before the winner's chase window shuts, or 0 while
    * nobody has finished. A pilot still driving is told, so the flag falling on

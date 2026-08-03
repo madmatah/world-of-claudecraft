@@ -1819,6 +1819,10 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     !realmRacersStillRunning(match, pid)
       ? 0
       : Math.max(0, Math.ceil((match.chaseUntilTick - ctx.tickCount) / TICK_RATE));
+  const elapsedTicks =
+    match.phase === 'countdown'
+      ? 0
+      : Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick);
   return {
     id: match.id,
     circuitId: match.circuitId,
@@ -1826,13 +1830,8 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     phase: myEndTick !== null ? 'finished' : match.phase,
     countdown,
     countdownTicks,
-    elapsed:
-      match.phase === 'countdown'
-        ? 0
-        : Math.max(
-            0,
-            Math.floor((Math.min(ctx.tickCount, match.deadlineTick) - match.goTick) / TICK_RATE),
-          ),
+    elapsed: Math.floor(elapsedTicks / TICK_RATE),
+    elapsedTicks,
     chaseIn,
     returnIn,
     me: mine,

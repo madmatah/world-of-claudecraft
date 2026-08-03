@@ -58,6 +58,7 @@ function live(over: Partial<Match> = {}): Match {
     countdown: 0,
     countdownTicks: 0,
     elapsed: 61,
+    elapsedTicks: 0,
     chaseIn: 0,
     speed: 42,
     wrongWay: false,
