@@ -514,33 +514,6 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
     expect(binary).not.toContain('KHR_draco_mesh_compression');
   });
 
-  it('keeps the hedge GLB at the extents the Realm Racers barriers scale from', async () => {
-    // `realm_racers_track.ts` hard-codes this model's authored bounds and scales
-    // every barrier off them, including `hedge_low`'s height, which the design
-    // depends on being low enough to see a rival over. A re-export that changed
-    // the extents would silently rescale every hedge on every circuit with a
-    // green suite, so the literals are pinned against the file itself.
-    await MeshoptDecoder.ready;
-    const io = new NodeIO()
-      .registerExtensions(ALL_EXTENSIONS)
-      .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
-    const hedge = realmRacersPreloadInternalsForTest.hedgeSource;
-    const document = await io.read(path.join(publicDir, hedge.url.replace(/^\//, '')));
-    const scene = document.getRoot().listScenes()[0];
-    if (!scene) throw new Error('the maze hedge GLB has no scene');
-    const bounds = getBounds(scene);
-    expect(bounds.max[0] - bounds.min[0]).toBeCloseTo(hedge.length, 3);
-    expect(bounds.max[1] - bounds.min[1]).toBeCloseTo(hedge.height, 3);
-    expect(bounds.max[2] - bounds.min[2]).toBeCloseTo(hedge.depth, 3);
-    // ...and it stands ON the ground, which is what lets a barrier be placed at
-    // the lawn height with no lift of its own.
-    expect(bounds.min[1]).toBeCloseTo(0, 3);
-    // Its LONG axis is x, which is the axis the barrier yaw turns along the
-    // containment line; a re-export that swapped x and z would lay every hedge
-    // across the boundary instead of down it.
-    expect(bounds.max[0] - bounds.min[0]).toBeGreaterThan(bounds.max[2] - bounds.min[2]);
-  });
-
   it('keeps the banker chest GLB within its authored geometry contract', async () => {
     await MeshoptDecoder.ready;
     const io = new NodeIO()

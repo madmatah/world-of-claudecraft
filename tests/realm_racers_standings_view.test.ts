@@ -39,6 +39,8 @@ function match(standings: Racer[], mePid = 1): Match {
     decided: false,
     speed: 0,
     wrongWay: false,
+    offTrackIn: 0,
+    cutReturned: false,
     resetLocked: false,
     totalLaps: 3,
     practice: false,

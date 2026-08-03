@@ -33,7 +33,11 @@ Subdirectories (plus one shared fixture):
 - `helpers/` + `util/`: shared cross-suite utilities (`bare_client.ts`, the shared
   `bareClient()`/`fakeWs()`/`lastSnap()`/`joinServer()`/`broadcast()` family, see
   "Server tests" below; `fake_dom.ts`, the reusable hand-rolled fake DOM for controller
-  suites, `i18n_determinism.ts`, `ts_files_under.ts`
+  suites, `i18n_determinism.ts`, `realm_racers_cut_lab.ts` (the Realm Racers cut lab: what a
+  straight line across a circuit is WORTH, measured by driving it through the real kernel
+  and timing it against the ace bot's road pace, shared with
+  `scripts/realm_racers_limits_probe.ts` so the gate and the sweep cannot disagree),
+  `ts_files_under.ts`
   and `css_tree_under.ts`, the two source walks, `scan_guard_self_audit.ts`, the pin that
   keeps a guard from re-growing its own directory read, `method_call_sites.ts`, the
   `ts.createSourceFile` walk that reports the calls a class method evaluates, each with the

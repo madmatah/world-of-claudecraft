@@ -96,7 +96,6 @@ import {
   realmRacersLaneAt,
   realmRacersLaneOffset,
 } from './realm_racers_layout';
-import { resolveRealmRacersContainment } from './realm_racers_spline';
 import { townPropPlacements } from './town_props';
 import type { WorldContent } from './types';
 import { valeCupColliders } from './vale_cup_layout';
@@ -1680,18 +1679,19 @@ export function resolvePosition(
     // 0's offset is zero, so its path is unchanged.
     const off = realmRacersLaneOffset(rallyLane.index);
     const o = REALM_RACERS_ORIGIN;
-    const circuit = rallyLane.circuit;
+    // The garden wall is the ONLY thing on a circuit that stops anyone. The
+    // infield used to be clamped too (a containment line derived from the
+    // racing line, wearing water or a hedge), and that whole family is retired:
+    // leaving the road is refereed by a rule now
+    // (`realm_racers_track_limits.ts`), so the garden is open and drivable all
+    // the way to the perimeter on both sides.
     const local = resolveAgainst(
-      realmRacersColliders(circuit),
+      realmRacersColliders(rallyLane.circuit),
       x - off.x - o.x,
       z - off.z - o.z,
       r,
     );
-    // The garden wall is the only BUILT thing here; the infield is held by its
-    // own containment line, which a racer may wade a margin past where the
-    // circuit authors water and not at all where it authors a barrier.
-    const held = resolveRealmRacersContainment(circuit, local.x + o.x, local.z + o.z);
-    return { x: held.x + off.x, z: held.z + off.z };
+    return { x: local.x + off.x + o.x, z: local.z + off.z + o.z };
   }
   if (isYumiMazePos(x)) {
     const o = yumiMazeOriginAt(z);

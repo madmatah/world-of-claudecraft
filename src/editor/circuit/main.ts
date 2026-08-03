@@ -9,7 +9,7 @@
 // Dev tool: English-only, absent from every production build. See CLAUDE.md.
 
 import {
-  type RallyBarrierKind,
+  type RallyWaterKind,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_PRACTICE_CIRCUIT,
   type RealmRacersBasin,
@@ -33,21 +33,14 @@ import {
 } from '../../sim/realm_racers_layout';
 import {
   type RallyTrackModel,
-  rallyBarrierKindAt,
-  rallyContainmentLineAt,
   rallyGardenEdgeOffsetAt,
+  rallyShoreOffsetAt,
+  rallyWaterKindAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
   realmRacersWaterOutlines,
 } from '../../sim/realm_racers_spline';
-import {
-  applyBarrierBands,
-  type BarrierBand,
-  barrierSpanYards,
-  DEFAULT_BARRIER_BANDS,
-  paintBarrierSpan,
-} from './barrier_paint_core';
 import { suggestEnvelope } from './envelope_core';
 import { circuitToTypeScript, roundCircuit, validateCircuitPayload } from './export_core';
 import {
@@ -65,9 +58,16 @@ import {
   toWidthBands,
 } from './handles_core';
 import { fitStrokeToControlPoints } from './stroke_fit_core';
+import {
+  applyWaterBands,
+  DEFAULT_WATER_BANDS,
+  paintWaterSpan,
+  type WaterBand,
+  waterSpanYards,
+} from './water_paint_core';
 import { suggestWidthBands } from './width_fix_core';
 
-type Mode = 'draw' | 'handles' | 'width' | 'apron' | 'barrier';
+type Mode = 'draw' | 'handles' | 'width' | 'apron' | 'water';
 type Selection = { kind: 'point'; index: number } | null;
 
 /** How many problems the panel lists before it says how many it is holding
@@ -97,18 +97,16 @@ const BRUSH_FIELDS: Record<Mode, { label: string; min: number; max: number } | n
   handles: null,
   width: { label: 'road half-width (yd)', min: REALM_RACERS_MIN_HALF_WIDTH, max: 40 },
   apron: { label: 'apron cap (yd)', min: 0.5, max: REALM_RACERS_APRON_MAX },
-  // The barrier brush paints a KIND, so it takes the picker beside this field
+  // The water brush paints a KIND, so it takes the picker beside this field
   // rather than a number with a legend.
-  barrier: null,
+  water: null,
 };
 
-/** What each barrier kind is drawn in on the canvas. Blue is water, the two
- *  greens are the two hedges, and grey is stone. */
-const BARRIER_COLOURS: Record<RallyBarrierKind, string> = {
-  shore: '#4a7fae',
-  hedge_low: '#63a86f',
-  hedge_tall: '#2f7a44',
-  wall_low: '#9a9689',
+/** What each shore kind is drawn in on the canvas: blue where the line carries
+ *  a pond, green where it is open lawn. */
+const WATER_COLOURS: Record<RallyWaterKind, string> = {
+  water: '#4a7fae',
+  dry: '#63a86f',
 };
 
 const MODE_HINTS: Record<Mode, string> = {
@@ -117,8 +115,8 @@ const MODE_HINTS: Record<Mode, string> = {
   width: 'drag along the circuit to set the road half-width there; the road is twice this wide',
   apron:
     'drag along the circuit to CAP the apron, the drivable garden between the road edge and the water; the cap can only narrow what the corner already allows, so painting it wide removes it',
-  barrier:
-    'drag along the circuit to set what stands on the containment line there; only water lets a racer past it, and painting the last of it away leaves a circuit with no lake at all',
+  water:
+    'drag along the circuit to say whether the shore line carries a pond there or open lawn; nothing here stops a racer either way, and painting the last pond away leaves a circuit with no water at all',
 };
 
 const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
@@ -132,8 +130,8 @@ const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   perimeter_outside_region: 'the perimeter wall is outside the collision region',
   region_outside_band: 'the region is wider than the instance band',
   region_deeper_than_lane_budget: 'the region is deeper than the gap between two lanes',
-  shore_requires_basin: 'a stretch of shore on a circuit with no water authored',
-  barrier_bands_malformed: 'the barrier table is not sorted from the start line',
+  shore_requires_basin: 'a stretch of pond on a circuit with no water authored',
+  water_bands_malformed: 'the water table is not sorted from the start line',
 };
 
 /**
@@ -160,7 +158,7 @@ function blankCircuit(): RealmRacersCircuit {
       { s: 1, halfWidth: 10 },
     ],
     apronBands: undefined,
-    barrierBands: undefined,
+    waterBands: undefined,
     roles: ['competition'],
     practiceCopies: 0,
   };
@@ -200,11 +198,11 @@ let paintBefore: number[] | null = null;
  *  on every move, which is what keeps it from denting against its own earlier
  *  points as it extends. */
 let paintOrigin: CircuitBand[] | null = null;
-/** The barrier table as it stood when the stroke began, and the kind under
+/** The water table as it stood when the stroke began, and the kind under
  *  every centerline sample then. Separate from the two numeric brushes because
  *  a kind is not a value on a scale: nothing about it ramps or thins. */
-let paintBarrierOrigin: BarrierBand[] | null = null;
-let paintKindsBefore: RallyBarrierKind[] | null = null;
+let paintWaterOrigin: WaterBand[] | null = null;
+let paintKindsBefore: RallyWaterKind[] | null = null;
 let paintFractions: number[] = [];
 let panning: { x: number; z: number; clientX: number; clientY: number } | null = null;
 const undoStack: { record: RealmRacersCircuit; drawn: boolean }[] = [];
@@ -242,10 +240,10 @@ const modeButtons: Record<Mode, HTMLButtonElement> = {
   handles: document.getElementById('modeHandles') as HTMLButtonElement,
   width: document.getElementById('modeWidth') as HTMLButtonElement,
   apron: document.getElementById('modeApron') as HTMLButtonElement,
-  barrier: document.getElementById('modeBarrier') as HTMLButtonElement,
+  water: document.getElementById('modeWater') as HTMLButtonElement,
 };
-const barrierLabel = document.getElementById('barrierLabel') as HTMLLabelElement;
-const barrierKindEl = document.getElementById('barrierKind') as HTMLSelectElement;
+const waterLabel = document.getElementById('waterLabel') as HTMLLabelElement;
+const waterKindEl = document.getElementById('waterKind') as HTMLSelectElement;
 
 /**
  * The last basin the record carried, so painting the final shore span away and
@@ -389,25 +387,25 @@ function drawSurfaces(): void {
       return { x: p.x - sample.tz * distance, z: p.z + sample.tx * distance };
     });
 
-  // The water: one polygon per SHORE span, straight off the sim, so a strip the
-  // operator has just hedged off stops being drawn as lake here too.
+  // The water: one polygon per WATER span, straight off the sim, so a strip the
+  // operator has just painted dry stops being drawn as lake here too.
   ctx.fillStyle = '#1d3448';
   for (const outline of realmRacersWaterOutlines(record)) {
     tracePolygon(outline.map((point) => local(point)));
     ctx.fill();
   }
 
-  // The containment line itself, coloured by what stands on it: the line never
+  // The shore line itself, coloured by whether it carries water: the line never
   // moves, and this is the only thing about it the operator authors.
   ctx.save();
   ctx.lineWidth = 2;
   let runStart = 0;
-  const kindAt = (index: number): RallyBarrierKind =>
-    rallyBarrierKindAt(record, samples[index % samples.length].s);
-  const containment = offsetRing((i) => rallyContainmentLineAt(record, samples[i].s), 1);
+  const kindAt = (index: number): RallyWaterKind =>
+    rallyWaterKindAt(record, samples[index % samples.length].s);
+  const containment = offsetRing((i) => rallyShoreOffsetAt(record, samples[i].s), 1);
   for (let i = 1; i <= samples.length; i++) {
     if (i < samples.length && kindAt(i) === kindAt(runStart)) continue;
-    ctx.strokeStyle = BARRIER_COLOURS[kindAt(runStart)];
+    ctx.strokeStyle = WATER_COLOURS[kindAt(runStart)];
     ctx.beginPath();
     for (let k = runStart; k <= i; k++) {
       const point = containment[k % containment.length];
@@ -679,10 +677,10 @@ function paintPanel(): void {
   row(gaps, 'tangent dot', nearest.tangentDot.toFixed(2));
   row(gaps, 'between', `${nearest.s.toFixed(0)} and ${nearest.otherS.toFixed(0)} yd`);
   row(gaps, 'shooting corridor', `${metrics.shootingCorridorYards.toFixed(0)} yd`);
-  // Two solid lines flanking the same strip: the corridor's own barrier, which
-  // is information rather than a fault (two SHORES that close would be one lake
+  // Two DRY lines flanking the same strip: an authored open corridor, which is
+  // information rather than a fault (two PONDS that close would be one lake
   // drawn twice, and that is the error below).
-  row(gaps, 'shared barrier', `${metrics.sharedBarrierYards.toFixed(0)} yd`);
+  row(gaps, 'shared dry line', `${metrics.sharedDryYards.toFixed(0)} yd`);
   row(
     gaps,
     'shore overlap',
@@ -709,14 +707,12 @@ function paintPanel(): void {
   );
   row(surface, 'width bands', String(record.widthBands.length));
   row(surface, 'apron bands', record.apronBands ? String(record.apronBands.length) : 'none');
-  // What stands on the containment line, in yards of lap rather than in rows:
-  // the table is breakpoints and the operator paints stretches.
-  const spans = barrierSpanYards(record.barrierBands ?? DEFAULT_BARRIER_BANDS, track.length);
+  // What the shore line carries, in yards of lap rather than in rows: the table
+  // is breakpoints and the operator paints stretches.
+  const spans = waterSpanYards(record.waterBands ?? DEFAULT_WATER_BANDS, track.length);
   for (const [kind, label] of [
-    ['shore', 'water'],
-    ['hedge_low', 'low hedge'],
-    ['hedge_tall', 'tall hedge'],
-    ['wall_low', 'kneewall'],
+    ['water', 'pond'],
+    ['dry', 'dry shore'],
   ] as const) {
     if (spans[kind] <= 0) continue;
     row(surface, label, `${spans[kind].toFixed(0)} yd`);
@@ -1016,9 +1012,9 @@ function setMode(next: Mode): void {
     button.classList.toggle('on', key === next);
   }
   hintEl.textContent = MODE_HINTS[next];
-  barrierLabel.hidden = next !== 'barrier';
+  waterLabel.hidden = next !== 'water';
   const brush = BRUSH_FIELDS[next];
-  brushLabel.hidden = next === 'barrier';
+  brushLabel.hidden = next === 'water';
   brushLabel.classList.toggle('off', brush === null);
   brushInput.disabled = brush === null;
   brushLabel.firstChild?.replaceWith(`${brush?.label ?? 'brush'} `);
@@ -1035,39 +1031,39 @@ function paintedQuantity(): number[] {
   return track.samples.map((sample) => (mode === 'width' ? sample.halfWidth : sample.apron));
 }
 
-/** What stands on the containment line at every centerline sample, read back
+/** What the shore line carries at every centerline sample, read back
  *  through the SPLINE rather than off the table: the table is breakpoints and
  *  the road is samples, and only the second one is what a racer meets. */
-function paintedKinds(): RallyBarrierKind[] {
-  return track.samples.map((sample) => rallyBarrierKindAt(record, sample.s));
+function paintedKinds(): RallyWaterKind[] {
+  return track.samples.map((sample) => rallyWaterKindAt(record, sample.s));
 }
 
 /** The kind the picker is set to. */
-function brushKind(): RallyBarrierKind {
-  return barrierKindEl.value as RallyBarrierKind;
+function brushKind(): RallyWaterKind {
+  return waterKindEl.value as RallyWaterKind;
 }
 
 /** What the stroke that just ended did, in the operator's own units. */
 function reportStroke(): void {
-  if (mode === 'barrier') {
+  if (mode === 'water') {
     if (!paintKindsBefore) return;
     const after = paintedKinds();
     let changed = 0;
     for (let i = 0; i < after.length && i < paintKindsBefore.length; i++) {
       if (after[i] !== paintKindsBefore[i]) changed += track.step;
     }
-    const spans = barrierSpanYards(record.barrierBands ?? DEFAULT_BARRIER_BANDS, track.length);
-    const water = spans.shore.toFixed(0);
+    const spans = waterSpanYards(record.waterBands ?? DEFAULT_WATER_BANDS, track.length);
+    const water = spans.water.toFixed(0);
     if (changed > 0) {
       setStatus(
-        `${changed.toFixed(0)} yd of line set to ${brushKind()}; ${water} yd of shore left${
+        `${changed.toFixed(0)} yd of shore set to ${brushKind()}; ${water} yd of pond left${
           record.basin ? '' : ', and no water on this circuit at all now'
         }`,
         'ok',
       );
       return;
     }
-    setStatus(`nothing changed: that stretch already stands on ${brushKind()}`, 'err');
+    setStatus(`nothing changed: that stretch of shore is already ${brushKind()}`, 'err');
     return;
   }
   const brush = BRUSH_FIELDS[mode];
@@ -1105,11 +1101,11 @@ function paintedBands(): CircuitBand[] {
 
 /** Extends the live stroke to this point and re-applies the whole of it. */
 function paintAt(point: RallyPoint): void {
-  if (mode === 'barrier') {
-    if (!paintBarrierOrigin) return;
+  if (mode === 'water') {
+    if (!paintWaterOrigin) return;
     paintFractions.push(fractionAt(point));
-    const bands = paintBarrierSpan(paintBarrierOrigin, paintFractions, brushKind());
-    commit(applyBarrierBands(record, bands, rememberedBasin), false);
+    const bands = paintWaterSpan(paintWaterOrigin, paintFractions, brushKind());
+    commit(applyWaterBands(record, bands, rememberedBasin), false);
     return;
   }
   const brush = BRUSH_FIELDS[mode];
@@ -1141,15 +1137,15 @@ canvas.addEventListener('pointerdown', (ev) => {
     stroke = [point];
     return;
   }
-  if (mode === 'width' || mode === 'apron' || mode === 'barrier') {
+  if (mode === 'width' || mode === 'apron' || mode === 'water') {
     undoStack.push({ record, drawn });
     painting = true;
-    paintBefore = mode === 'barrier' ? null : paintedQuantity();
-    paintKindsBefore = mode === 'barrier' ? paintedKinds() : null;
-    paintOrigin = mode === 'barrier' ? null : paintedBands();
-    paintBarrierOrigin =
-      mode === 'barrier'
-        ? [...(record.barrierBands ?? DEFAULT_BARRIER_BANDS)].map((band) => ({ ...band }))
+    paintBefore = mode === 'water' ? null : paintedQuantity();
+    paintKindsBefore = mode === 'water' ? paintedKinds() : null;
+    paintOrigin = mode === 'water' ? null : paintedBands();
+    paintWaterOrigin =
+      mode === 'water'
+        ? [...(record.waterBands ?? DEFAULT_WATER_BANDS)].map((band) => ({ ...band }))
         : null;
     paintFractions = [];
     paintAt(point);
@@ -1227,7 +1223,7 @@ function endGesture(): void {
   paintBefore = null;
   paintKindsBefore = null;
   paintOrigin = null;
-  paintBarrierOrigin = null;
+  paintWaterOrigin = null;
   paintFractions = [];
   dragging = null;
 }

@@ -25,48 +25,32 @@ import type { RallyPoint } from '../realm_racers_layout';
 export type RealmRacersCircuitRole = 'practice' | 'competition';
 
 /**
- * What stands ON the containment line, the derived offset curve
- * (`halfWidth + apron`) that stops a racer cutting the infield.
+ * Whether the SHORE line, the derived offset curve (`halfWidth + apron`), carries
+ * water over a span of the lap.
  *
- * The LINE is geometry and is never authored; this is the only thing about it
- * a designer picks. `shore` is water: the racer may wade `basin.wadeYards`
- * past the line and pays the Wading band's price for it. Every other kind is
- * solid: the clamp lands ON the line with no grace at all, which is strictly
- * stronger than water, so a span flipped to one can only ever make cutting
- * cost more.
+ * The LINE is geometry and is never authored; this is the only thing about it a
+ * designer picks. It used to be a palette of CONTAINMENT devices (water, two
+ * hedges, a kneewall), and that whole family is gone: nothing on this curve
+ * stops a racer any more, because track limits are a RULE now
+ * (`realm_racers_track_limits.ts`) rather than a fence hugging the road.
  *
- * `hedge_low` is knee high on purpose: a pilot sees a rival over it, which is
- * what a shooting corridor between two opposed stretches needs. `hedge_tall`
- * exists for the corner where a solid green wall reads better than a knee-high
- * one, and `wall_low` for the stretch that wants stone rather than green.
- * Neither ever blocks sight or the camera: nothing does inside the region.
+ * What is left is a decorating decision. `water` cuts a pond out of the lawn
+ * along that span (it still costs speed to drive through, which is feel, not
+ * fairness); `dry` leaves lawn the dressing can put anything it likes on.
  */
-export type RallyBarrierKind = 'shore' | 'hedge_low' | 'hedge_tall' | 'wall_low';
+export type RallyWaterKind = 'water' | 'dry';
 
 /** Every kind, for the validators that have to enumerate them. */
-export const RALLY_BARRIER_KINDS: readonly RallyBarrierKind[] = [
-  'shore',
-  'hedge_low',
-  'hedge_tall',
-  'wall_low',
-];
+export const RALLY_WATER_KINDS: readonly RallyWaterKind[] = ['water', 'dry'];
 
-/** True for every kind a racer cannot get past at all. */
-export function isSolidBarrierKind(kind: RallyBarrierKind): boolean {
-  return kind !== 'shore';
-}
-
-/** The water hazard's bank, read by BOTH the renderer (per-vertex shore depth,
+/** The water's bank, read by BOTH the renderer (per-vertex shore depth,
  *  which drives the colour ramp and the foam band) and the sim (how deep a
  *  racer is standing). Two profiles would mean a racer swimming where the water
  *  is drawn ankle deep. */
 export interface RealmRacersBasin {
   /**
    * Water surface height inside the basin, a touch below the lawn so the shore
-   * reads as a bank rather than a decal. The basin had a stone rim around it,
-   * and that rim was the circuit's inner collision; it read as a wall of blocks
-   * standing in the lake, so the whole thing is gone and the water itself is
-   * the hazard instead.
+   * reads as a bank rather than a decal.
    */
   waterY: number;
   /** Yards of depth gained per yard in from the shore. */
@@ -79,18 +63,19 @@ export interface RealmRacersBasin {
    */
   depthMax: number;
   /**
-   * How far in from the shore a racer may still drive. The Lily Basin's shape:
-   * a navigable margin, then water no mount will enter. Inside the margin the
-   * racer is wading and paying for it; past it the circuit simply will not let
-   * them through, so cutting the infield is off the table without a wall
-   * standing in the lake to say so.
+   * How far in from the shore the water still reads as wadeable rather than as
+   * open lake, yards. Purely a LOOK now: it used to be the containment margin
+   * (a navigable strip, then a line no mount would cross, which is what held a
+   * racer out of the infield), and nothing holds anyone out of anything any
+   * more. The dressing and the shore band read it; nothing gameplay does.
    */
   wadeYards: number;
 }
 
 /** The wrought-iron garden wall: the circuit's OUTER bound, and the only thing
- *  stopping a racer on that side. Half-extents from the circuit's origin, inside
- *  the region envelope so collision still belongs to the rally at the wall. */
+ *  on the whole circuit that stops a racer at all. Half-extents from the
+ *  circuit's origin, inside the region envelope so collision still belongs to
+ *  the rally at the wall. */
 export interface RealmRacersPerimeter {
   halfX: number;
   halfZ: number;
@@ -111,30 +96,27 @@ export interface RealmRacersCircuit {
   /**
    * Optional CEILING on the derived apron, as (lap fraction, yards),
    * interpolated and wrapped exactly like `widthBands`. Applied as a further
-   * `min` on top of the derived value and never as a raise, which is what keeps
-   * it safe: the derivation
-   * (`min(REALM_RACERS_APRON_MAX, REALM_RACERS_APRON_RADIUS_FRACTION * R)`) is
-   * an ANTI-CUT ceiling, so narrowing it can only ever make a cut cost more.
+   * `min` on top of the derived value and never as a raise.
    *
-   * What it is for: on a STRAIGHT there is nothing to cut, so the apron reaches
-   * its cap there and the basin's shore sits `halfWidth + apron` off the
-   * centerline. Where two far-apart stretches of the lap run close to each
-   * other, those two shores meet and the water polygon self-crosses. Pulling
-   * the apron in over the pinch is the fix, and nothing else in the record can
-   * express it. Omit the field entirely on a circuit with no pinch.
+   * What it is for: on a STRAIGHT the apron reaches its cap, and the shore the
+   * ponds are cut along sits `halfWidth + apron` off the centerline. Where two
+   * far-apart stretches of the lap run close to each other, those two shores
+   * meet and the water polygon self-crosses. Pulling the apron in over the
+   * pinch is the fix, and nothing else in the record can express it. Omit the
+   * field entirely on a circuit with no pinch.
    */
   apronBands?: readonly { s: number; maxApron: number }[];
   /**
-   * What stands on the containment line, as a STEPWISE table: entry `i`'s kind
-   * applies from its lap fraction to entry `i + 1`'s, wrapping, so the last
-   * entry runs back round to the first. Sorted, first entry at `s = 0`, every
-   * entry in [0, 1). Never interpolated, unlike `widthBands` and `apronBands`:
-   * a barrier is a kind, and half a hedge is not a thing.
+   * Which spans of the shore line carry WATER, as a STEPWISE table: entry `i`'s
+   * kind applies from its lap fraction to entry `i + 1`'s, wrapping, so the
+   * last entry runs back round to the first. Sorted, first entry at `s = 0`,
+   * every entry in [0, 1). Never interpolated, unlike `widthBands` and
+   * `apronBands`: a shore either has water behind it or it does not.
    *
-   * Omitting the field means `[{ s: 0, kind: 'shore' }]`, which is the shape
+   * Omitting the field means `[{ s: 0, kind: 'water' }]`, which is the shape
    * every circuit had before the field existed and derives byte-identically.
    */
-  barrierBands?: readonly { s: number; kind: RallyBarrierKind }[];
+  waterBands?: readonly { s: number; kind: RallyWaterKind }[];
   /**
    * Region envelope, half-extents from the circuit's origin. It must cover the
    * circuit, the drivable garden, the perimeter wall AND the dressing ring
@@ -148,14 +130,14 @@ export interface RealmRacersCircuit {
   regionHalfZ: number;
   perimeter: RealmRacersPerimeter;
   /**
-   * The infield water, REQUIRED if and only if some span of the containment
-   * line is a `shore` (which is the default when `barrierBands` is absent).
+   * The infield water, REQUIRED if and only if some span of the shore line is
+   * `water` (which is the default when `waterBands` is absent).
    *
    * Optional because the water used to be the mechanic: the only thing keeping
    * a racer out of the infield was how deep it got, so every circuit in every
-   * future zone theme was forced to be a lake circuit. The anti-cut line does
-   * that job now whatever stands on it, so a circuit may author no water at
-   * all, and its infield is dry ground for the dressing to use.
+   * future zone theme was forced to be a lake circuit. The referee does that
+   * job now, so a circuit may author no water at all and its infield is dry
+   * ground for the dressing to use.
    */
   basin?: RealmRacersBasin;
   /**
@@ -305,19 +287,18 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
  * (so the infield is on the left normal, which is what the apron and the
  * containment line are built on), and a tightest corner of 13.3 yards.
  *
- * Its `apronBands` are the reason the containment line never self-crosses:
- * where two stretches of the lap run close to each other the derived apron
- * would push both lines into the same yards of infield, and pulling it in over
- * those arcs is the only thing in the record that can say so.
+ * Its `apronBands` are the reason the shore line never self-crosses: where two
+ * stretches of the lap run close to each other the derived apron would push
+ * both lines into the same yards of infield, and pulling it in over those arcs
+ * is the only thing in the record that can say so.
  *
  * The pinch those bands hold open is the circuit's one real FEATURE: its two
  * long stretches run 51 yards apart, dead head on (tangent dot -1.0), for 42
  * yards of lap, which is inside a Ground Blast's cone-limited reach. Both sides
- * of that strip carry a `hedge_low` rather than a shore, so the strip between
- * them is unreachable garden flanked by two clipped hedges a pilot can see a
- * rival over, which is the shooting corridor the design asked for. It is the
- * BARRIER that closed the strip, not the geometry: the two stretches faced each
- * other at this distance before, with open water between them.
+ * of that strip are authored DRY, so the corridor is open lawn rather than a
+ * canal, and a pilot can see (and shell) a rival across it. Nothing closes the
+ * strip physically: a machine that drives across it is a cut, and the referee
+ * in `realm_racers_track_limits.ts` is what returns it.
  */
 const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
   id: 'evergarden_express_tour',
@@ -438,24 +419,28 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
     { s: 1, maxApron: 15 },
   ],
   /**
-   * The pinch strip, closed on both sides. The two fractions come off the
+   * The pinch strip, kept DRY on both sides. The two fractions come off the
    * measured shape rather than off the eye: samples 133 to 178 face samples 356
-   * to 400 across a gap that closes to 11 yards between the two containment
-   * lines, and these two spans cover both sides of it, running a handful of
-   * samples past the facing stretch at each end so the hedge starts before the
-   * strip does.
+   * to 400 across a gap that closes to 11 yards between the two shore lines,
+   * and these two spans cover both sides of it, running a handful of samples
+   * past the facing stretch at each end so the lawn starts before the strip
+   * does.
    *
-   * The lake is unchanged everywhere else, so the water is now two lobes: one
-   * each side of the strip, each closed off across the mouth of it. That is
-   * what makes the strip dry, and it is the only thing on this circuit that
-   * moved.
+   * These fractions carried two knee-high hedges for exactly one shipped
+   * revision. That was the containment answer to the shooting corridor (a
+   * SOLID line either side of the strip, so nobody could wander across it), and
+   * the whole family is gone: the referee handles a machine that crosses the
+   * strip, so the strip can be open lawn and pretty. What the spans buy now is
+   * the LOOK: eleven yards of water between two shores would be an ugly canal,
+   * so the lake is two ponds instead, one each side of the corridor, each
+   * closed off across its mouth.
    */
-  barrierBands: [
-    { s: 0, kind: 'shore' },
-    { s: 0.155, kind: 'hedge_low' },
-    { s: 0.225, kind: 'shore' },
-    { s: 0.425, kind: 'hedge_low' },
-    { s: 0.49, kind: 'shore' },
+  waterBands: [
+    { s: 0, kind: 'water' },
+    { s: 0.155, kind: 'dry' },
+    { s: 0.225, kind: 'water' },
+    { s: 0.425, kind: 'dry' },
+    { s: 0.49, kind: 'water' },
   ],
   regionHalfX: 265,
   regionHalfZ: 150,

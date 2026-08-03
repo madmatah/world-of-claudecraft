@@ -73,6 +73,16 @@ export interface RealmRacersMatchInfo {
   /** Absolute forward speed, yd/s, for the compact rally readout. */
   speed: number;
   wrongWay: boolean;
+  /**
+   * Seconds this pilot has left off the racing surface before the track-limits
+   * referee returns them to the last recovery anchor, or 0 while the warning
+   * has not armed. A clock the pilot watches, never a teleport that happens to
+   * them.
+   */
+  offTrackIn: number;
+  /** True for a few seconds after the referee returned this pilot to the point
+   *  they left the road, because their excursion gained arc on the field. */
+  cutReturned: boolean;
   resetLocked: boolean;
   /** How many laps this race runs (practice may differ from a queued race). */
   totalLaps: number;

@@ -1,10 +1,9 @@
 // Placement decisions for the Realm Racers circuit: which stretches of road
 // get kerbs, where the start arch and its banners stand, where the garden is
-// sown, where the perimeter fence runs, and what stands on the containment line
-// (water, and the barrier modules along every solid span of it). Everything
-// here is geometry the painter then turns into meshes, so it stays Three-free,
-// DOM-free and deterministic and a plain Vitest can assert the load-bearing
-// properties.
+// sown, where the perimeter fence runs, and where the water sits along the
+// shore line. Everything here is geometry the painter then turns into meshes,
+// so it stays Three-free, DOM-free and deterministic and a plain Vitest can
+// assert the load-bearing properties.
 //
 // There are two of those, and both are about a racer who has left the road.
 // Everything inside the perimeter is drivable, so nothing solid may stand
@@ -15,7 +14,7 @@
 // All positions are WORLD coordinates, straight off the shared sim spline, so
 // the drawn circuit and the driven circuit come from one source.
 
-import type { RallyBarrierKind, RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
+import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import {
   REALM_RACERS_BORDER_OFFSET,
   REALM_RACERS_BORDER_SPACING,
@@ -23,9 +22,9 @@ import {
 } from '../sim/realm_racers_layout';
 import {
   rallyBankDepthAt,
-  rallyBarrierKindAt,
-  rallyContainmentLineAt,
   rallyGardenEdgeOffsetAt,
+  rallyShoreOffsetAt,
+  rallyWaterKindAt,
   realmRacersTrack,
   realmRacersWaterOutlines,
 } from '../sim/realm_racers_spline';
@@ -490,7 +489,7 @@ export interface RallyBasinMesh {
 /**
  * The basin's water surfaces, one per contiguous SHORE span, as concentric
  * rings lerped from that span's shore toward the middle of the lobe it closes.
- * A circuit whose containment line carries no shore at all gets none.
+ * A circuit whose shore line carries no water at all gets none.
  *
  * A triangulated outline polygon would be simpler and is not usable: every one
  * of its vertices sits ON the shore, so the per-vertex shore depth the water
@@ -501,7 +500,7 @@ export interface RallyBasinMesh {
  * Depth comes from the sim's own BANK PROFILE, so the water a racer sees is
  * exactly the ramp the sim measures. The profile rather than
  * `rallyBasinDepthAt`: every vertex here is inside a lobe by construction, and
- * one out in the middle of one can be nearest to the hedged stretch across the
+ * one out in the middle of one can be nearest to the DRY stretch across the
  * strip, where the water question answers zero and the ramp still runs.
  */
 export function rallyBasinMeshes(circuit: RealmRacersCircuit): RallyBasinMesh[] {
@@ -584,8 +583,8 @@ function basinMeshOf(
 /**
  * Reeds around the water's edge. The shore used to be a stone rim and the reeds
  * grew along its pieces; with the rim gone they are the only thing marking
- * where the lawn stops, so they follow the shore itself: the SHORE spans of the
- * containment line, and nothing else.
+ * where the lawn stops, so they follow the shore itself: the WATER spans of it,
+ * and nothing else.
  */
 export function rallyReedSpots(
   circuit: RealmRacersCircuit,
@@ -596,12 +595,12 @@ export function rallyReedSpots(
   const steps = Math.round(track.length / REED_SPACING);
   for (let i = 0; i < steps; i++) {
     const s = (i / steps) * track.length;
-    // Reeds mark a WATERLINE, so they follow the shore spans and stop where a
-    // barrier takes the line over: a reed bed at the foot of a hedge would be
-    // saying there is water behind it.
-    if (rallyBarrierKindAt(circuit, s) !== 'shore') continue;
+    // Reeds mark a WATERLINE, so they follow the water spans and stop where the
+    // shore runs dry: a reed bed on open lawn would be saying there is water
+    // behind it.
+    if (rallyWaterKindAt(circuit, s) !== 'water') continue;
     const point = track.pointAt(s);
-    const offset = rallyContainmentLineAt(circuit, s);
+    const offset = rallyShoreOffsetAt(circuit, s);
     const roll = hash2(i, 0, 0x2ee6);
     out.push({
       x: point.x - point.tz * offset,
@@ -612,212 +611,6 @@ export function rallyReedSpots(
     });
   }
   return out;
-}
-
-/** What a solid barrier kind LOOKS like, the one table packet 17's theme
- *  registry lifts when a kind stops meaning one fixed piece of scenery. */
-export interface RallyBarrierVisual {
-  /** How far the barrier stands above the lawn, yards. */
-  height: number;
-  /** How much containment line one piece covers, yards. */
-  pieceLength: number;
-  /** How thick the barrier is across the line, yards. */
-  depth: number;
-}
-
-/** The one kind-to-look mapping. `shore` is absent on purpose: water is drawn
- *  by the basin surface, not by a run of modules. */
-export const RALLY_BARRIER_VISUALS: Record<
-  Exclude<RallyBarrierKind, 'shore'>,
-  RallyBarrierVisual
-> = {
-  // Knee high, because a pilot has to see a rival over it: that is the whole
-  // point of a low barrier between two opposed stretches.
-  hedge_low: { height: 1.2, pieceLength: 2.1, depth: 0.85 },
-  // Chest high, for the corner where a solid green wall reads better.
-  hedge_tall: { height: 2.2, pieceLength: 3.8, depth: 1.5 },
-  wall_low: { height: 1.05, pieceLength: 2.4, depth: 0.55 },
-};
-
-/** How much longer than its slot a piece is built, so a run of them overlaps
- *  rather than showing daylight wherever the line curves. */
-const BARRIER_PIECE_OVERLAP = 1.06;
-
-export interface RallyBarrierPiece {
-  kind: Exclude<RallyBarrierKind, 'shore'>;
-  x: number;
-  z: number;
-  /** Yaw putting the piece's LONG axis along the containment line. */
-  yaw: number;
-  /** Yards of line this piece spans, which is what the painter scales it to. */
-  length: number;
-}
-
-/**
- * Where a barrier module stands: one run of pieces along every SOLID span of
- * the containment line.
- *
- * Walked by true arc length along the offset polyline rather than by centerline
- * sample, because the two are not the same length: on the outside of a bend the
- * infield line runs half again as long as the road beside it, and pieces spaced
- * by sample index would show gaps there and pile up on the inside of the next
- * corner.
- */
-export function rallyBarrierPieces(circuit: RealmRacersCircuit): RallyBarrierPiece[] {
-  const track = realmRacersTrack(circuit);
-  const samples = track.samples;
-  const count = samples.length;
-  const kinds = samples.map((sample) => rallyBarrierKindAt(circuit, sample.s));
-  const out: RallyBarrierPiece[] = [];
-  const at = (index: number): { x: number; z: number } => {
-    const sample = samples[index];
-    const offset = rallyContainmentLineAt(circuit, sample.s);
-    return { x: sample.x - sample.tz * offset, z: sample.z + sample.tx * offset };
-  };
-  if (kinds.every((kind) => kind === 'shore')) return out;
-
-  /** Places the run of samples [from, to] inclusive, in walk order. */
-  const emit = (from: number, to: number, origin: number, kind: RallyBarrierKind): void => {
-    const points: { x: number; z: number }[] = [];
-    for (let step = from; step <= to; step++) points.push(at((origin + step) % count));
-    placeBarrierRun(points, kind as Exclude<RallyBarrierKind, 'shore'>, out);
-  };
-
-  // Where to start walking, so no run is split by the end of the array: a SHORE
-  // sample if the circuit has one, otherwise the first change of kind.
-  let origin = kinds.indexOf('shore');
-  if (origin < 0) {
-    origin = kinds.findIndex((kind, index) => kind !== kinds[(index + count - 1) % count]);
-  }
-  if (origin < 0) {
-    // One solid kind the whole way round: a closed ring with no ends at all.
-    const ring = samples.map((_, index) => at(index));
-    ring.push(ring[0]);
-    placeBarrierRun(ring, kinds[0] as Exclude<RallyBarrierKind, 'shore'>, out);
-    return out;
-  }
-
-  let open = -1;
-  let openKind: RallyBarrierKind = 'shore';
-  for (let k = 0; k <= count; k++) {
-    const kind = k < count ? kinds[(origin + k) % count] : 'shore';
-    const on = kind !== 'shore';
-    // A run ends at a shore sample OR at a change of kind: two solid kinds are
-    // two different heights, and one run drawn at the first kind's height would
-    // silently make a tall hedge knee-high (or the reverse, blocking a sight
-    // line the design says stays open).
-    if (open >= 0 && (!on || kind !== openKind)) {
-      // The run reaches one sample PAST its own last, so a hedge meets the
-      // waterline (or the next hedge) instead of stopping a yard short of it.
-      //
-      // Accepted with the overrun: on that last sample the span is already
-      // shore, and the wading taper still gives a few inches of grace there
-      // (`BARRIER_EASE_YARDS`), so a racer can wade a fraction of a yard into
-      // the near face of the final piece. Trimming the run instead would put a
-      // yard of daylight at the joint on every barrier on every circuit, which
-      // is the boundary reading LOOSER than it is rather than tighter.
-      emit(open, k, origin, openKind);
-      open = -1;
-    }
-    if (on && open < 0) {
-      open = k;
-      openKind = kind;
-    }
-  }
-  return out;
-}
-
-function placeBarrierRun(
-  points: readonly { x: number; z: number }[],
-  kind: Exclude<RallyBarrierKind, 'shore'>,
-  out: RallyBarrierPiece[],
-): void {
-  if (points.length < 2) return;
-  const lengths: number[] = [];
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    const run = Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z);
-    lengths.push(run);
-    total += run;
-  }
-  if (total <= 0) return;
-
-  /** The point `at` yards along the polyline, clamped to its two ends. */
-  const walkTo = (at: number): { x: number; z: number } => {
-    let left = Math.min(Math.max(at, 0), total);
-    for (let i = 0; i < lengths.length; i++) {
-      if (left > lengths[i] && i < lengths.length - 1) {
-        left -= lengths[i];
-        continue;
-      }
-      const t = lengths[i] <= 0 ? 0 : Math.min(1, left / lengths[i]);
-      const a = points[i];
-      const b = points[i + 1];
-      return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
-    }
-    return points[points.length - 1];
-  };
-
-  const visual = RALLY_BARRIER_VISUALS[kind];
-  const pieces = Math.max(1, Math.round(total / visual.pieceLength));
-  const slot = total / pieces;
-  // A run whose two ends are the same point is a closed ring, so its first and
-  // last pieces are neighbours and the gap between THEM has to be covered too.
-  const last = points[points.length - 1];
-  const closed = Math.hypot(points[0].x - last.x, points[0].z - last.z) < 1e-9;
-
-  const placed: RallyBarrierPiece[] = [];
-  for (let i = 0; i < pieces; i++) {
-    const at = (i + 0.5) * slot;
-    const centre = walkTo(at);
-    // Turned along the stretch the piece COVERS rather than along the one yard
-    // of polyline under its centre. The containment line kinks wherever the
-    // apron ramps (it swings inward with it), and a per-chord yaw there leaves
-    // a run of pieces fanned out like a dropped hand of cards.
-    const back = walkTo(at - slot / 2);
-    const ahead = walkTo(at + slot / 2);
-    const dx = ahead.x - back.x;
-    const dz = ahead.z - back.z;
-    const span = Math.hypot(dx, dz) || 1e-6;
-    // Stepped INFIELD by half its own depth, so the piece's near face lands on
-    // the containment line rather than its centre. Centred on the line, half the
-    // hedge stands on the drivable side: a racer pressed against the clamp is
-    // buried in it to the windscreen, and the boundary a pilot steers by reads
-    // tighter than the one that actually stops them.
-    //
-    // A yaw maps local +z to (sin, cos), which for this yaw is (-dz, dx)/span:
-    // the run's own left normal, and the infield side by construction (the
-    // containment line is offset along the centerline's left normal).
-    const inward = visual.depth / 2;
-    placed.push({
-      kind,
-      x: centre.x - (dz / span) * inward,
-      z: centre.z + (dx / span) * inward,
-      // A three.js yaw maps local +x to (cos, -sin), which is the same
-      // convention `rallyPerimeterPieces` turns its fence panels with.
-      yaw: Math.atan2(-dz / span, dx / span),
-      length: slot,
-    });
-  }
-
-  // Each piece is finally sized to the widest gap it has to close, measured
-  // between the placed CENTRES rather than along the line they came off.
-  // Stepping every piece along its OWN normal spreads them on the outside of a
-  // bend (each moves onto a slightly longer arc), so a length taken from the
-  // line's own slot leaves daylight exactly where the line curves away from the
-  // infield. Plus a little, because a piece is a straight block and the arc
-  // between two centres is longer than the block spanning them.
-  const gapAt = (i: number, j: number): number =>
-    Math.hypot(placed[i].x - placed[j].x, placed[i].z - placed[j].z);
-  for (let i = 0; i < placed.length; i++) {
-    const before = i > 0 ? i - 1 : closed ? placed.length - 1 : -1;
-    const after = i < placed.length - 1 ? i + 1 : closed ? 0 : -1;
-    let widest = slot;
-    if (before >= 0 && before !== i) widest = Math.max(widest, gapAt(i, before));
-    if (after >= 0 && after !== i) widest = Math.max(widest, gapAt(i, after));
-    placed[i].length = widest * BARRIER_PIECE_OVERLAP;
-    out.push(placed[i]);
-  }
 }
 
 /**

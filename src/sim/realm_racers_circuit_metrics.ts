@@ -14,11 +14,7 @@
 //
 // Pure leaf: no SimContext, no rng, no clock, no DOM, no three.
 
-import {
-  isSolidBarrierKind,
-  RALLY_BARRIER_KINDS,
-  type RealmRacersCircuit,
-} from './content/realm_racers_circuits';
+import { RALLY_WATER_KINDS, type RealmRacersCircuit } from './content/realm_racers_circuits';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_MAX_RANGE,
@@ -33,7 +29,7 @@ import {
 } from './realm_racers_layout';
 import {
   REALM_RACERS_PROJECTION_ENVELOPE,
-  rallyBarrierKindAt,
+  rallyWaterKindAt,
   realmRacersTrack,
 } from './realm_racers_spline';
 
@@ -144,11 +140,11 @@ export type RealmRacersCircuitProblemCode =
   | 'corner_near_road_width'
   | 'stretches_too_close'
   | 'shore_overlap'
-  /** A `shore` span on a record that authors no water for it to be made of. */
+  /** A `water` span on a record that authors no basin for it to be made of. */
   | 'shore_requires_basin'
-  /** `barrierBands` is not a table the stepwise reader can use: unsorted, not
+  /** `waterBands` is not a table the stepwise reader can use: unsorted, not
    *  starting at 0, out of [0, 1), or naming a kind that does not exist. */
-  | 'barrier_bands_malformed'
+  | 'water_bands_malformed'
   | 'road_outside_perimeter'
   | 'perimeter_outside_region'
   | 'region_outside_band'
@@ -169,7 +165,7 @@ export interface RealmRacersCircuitProblem {
   /** Where on the lap, yards from the start line, or -1 for the whole loop. */
   s: number;
   /** Which axis failed, for the checks that measure two. Absent on the rest.
-   *  Without it the two containment failures render as the same sentence twice
+   *  Without it the two enclosure failures render as the same sentence twice
    *  and the operator cannot tell which box to widen. */
   axis?: 'x' | 'z';
 }
@@ -201,15 +197,16 @@ export interface RealmRacersCircuitMetrics {
    *  fault: an opposed stretch in Ground Blast range is a circuit FEATURE. */
   shootingCorridorYards: number;
   /**
-   * Yards of lap whose containment line carries a SOLID barrier while the
-   * nearest far-apart stretch carries one too, near enough to shoot across.
+   * Yards of lap whose shore line is DRY while the nearest far-apart stretch is
+   * dry too, near enough to shoot across: the shooting corridor as a piece of
+   * open lawn rather than as a canal.
    *
    * Information, never a fault, and the reason `shore_overlap` is scoped to
-   * water: two solid lines running close bound an unreachable strip, which is
-   * the shape a corridor between two facing hedges takes. Two SHORES running
-   * that close would instead be one lake drawn twice, which is a defect.
+   * water: two dry lines running close bound a strip a designer meant to keep
+   * open, where two PONDS that close would be one lake drawn twice, which is a
+   * defect that self-crosses the polygon.
    */
-  sharedBarrierYards: number;
+  sharedDryYards: number;
   /** Yards of lap where two stretches' WATER meets, which is where the basin
    *  polygon self-crosses. What `apronBands` exists to clear. */
   shoreOverlapYards: number;
@@ -260,9 +257,9 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
   // running alongside each other" questions at once: how close they get, how
   // much lap is shootable across the gap, and where the shores meet.
   const shoreOffset = samples.map((sample) => sample.halfWidth + sample.apron);
-  // What stands on the line, per sample: it decides whether two lines meeting
-  // is a broken water polygon or an authored corridor.
-  const solid = samples.map((sample) => isSolidBarrierKind(rallyBarrierKindAt(circuit, sample.s)));
+  // Whether the line carries water at each sample: it decides whether two lines
+  // meeting is a broken water polygon or an authored dry corridor.
+  const dry = samples.map((sample) => rallyWaterKindAt(circuit, sample.s) === 'dry');
   const nearestDistance = new Float64Array(count).fill(Number.POSITIVE_INFINITY);
   const nearestIndex = new Int32Array(count).fill(-1);
   const overlapDepth = new Float64Array(count);
@@ -285,10 +282,10 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
         nearestDistance[j] = distance;
         nearestIndex[j] = i;
       }
-      // Water only exists over a SHORE span, so only two shores can draw one
-      // lake twice. Over a solid span the same closeness is the authored
+      // Water only exists over a WATER span, so only two ponds can draw one
+      // lake twice. Where either side is dry the same closeness is the authored
       // corridor, counted as information further down.
-      if (solid[i] || solid[j]) continue;
+      if (dry[i] || dry[j]) continue;
       // The basin sits on the INFIELD (the left normal) side only, so two
       // stretches' shores can only meet where each one lies on the other's
       // infield side. Both offsets measured along the respective left normal.
@@ -302,7 +299,7 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
   }
 
   let shootingCorridorYards = 0;
-  let sharedBarrierYards = 0;
+  let sharedDryYards = 0;
   let shoreOverlapYards = 0;
   const nearestApproach: RealmRacersNearestApproach = {
     distance: Number.POSITIVE_INFINITY,
@@ -324,8 +321,8 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     if (nearestDistance[i] <= SHOOTING_REACH && dot <= OPPOSED_TANGENT_DOT) {
       shootingCorridorYards += step;
     }
-    if (nearestDistance[i] <= SHOOTING_REACH && solid[i] && solid[other]) {
-      sharedBarrierYards += step;
+    if (nearestDistance[i] <= SHOOTING_REACH && dry[i] && dry[other]) {
+      sharedDryYards += step;
     }
   }
 
@@ -419,23 +416,23 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     problem('shore_overlap', 'error', shoreOverlapYards, 0);
   }
 
-  // The barrier table, checked here as well as in the record test because this
+  // The water table, checked here as well as in the record test because this
   // readout is what a DRAFT is admitted by: a hand-edited scratch file reaches
   // the game through it and never through the record test.
-  const bands = circuit.barrierBands;
+  const bands = circuit.waterBands;
   if (bands) {
     let malformed = bands.length === 0 || bands[0].s !== 0;
     for (let i = 0; i < bands.length; i++) {
       if (!(bands[i].s >= 0) || bands[i].s >= 1) malformed = true;
       if (i > 0 && bands[i].s <= bands[i - 1].s) malformed = true;
-      if (!RALLY_BARRIER_KINDS.includes(bands[i].kind)) malformed = true;
+      if (!RALLY_WATER_KINDS.includes(bands[i].kind)) malformed = true;
     }
-    if (malformed) problem('barrier_bands_malformed', 'error', bands.length, 0);
+    if (malformed) problem('water_bands_malformed', 'error', bands.length, 0);
   }
-  if (!circuit.basin && solid.some((isSolid) => !isSolid)) {
-    // A shore is made of water, so a circuit that authors one and no basin has
-    // a stretch of containment line made of nothing at all.
-    problem('shore_requires_basin', 'error', solid.filter((isSolid) => !isSolid).length, 0);
+  if (!circuit.basin && dry.some((isDry) => !isDry)) {
+    // A shore is made of water, so a circuit that authors a water span and no
+    // basin has a stretch of shore line made of nothing at all.
+    problem('shore_requires_basin', 'error', dry.filter((isDry) => !isDry).length, 0);
   }
 
   if (roadHalfX > circuit.perimeter.halfX) {
@@ -487,7 +484,7 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     minRadiusOverWidthAtS,
     nearestApproach,
     shootingCorridorYards,
-    sharedBarrierYards,
+    sharedDryYards,
     shoreOverlapYards,
     roadHalfX,
     roadHalfZ,

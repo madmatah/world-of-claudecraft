@@ -96,6 +96,15 @@ export interface RealmRacersHudView {
   elapsed: number;
   speed: number;
   wrongWay: boolean;
+  /**
+   * The track-limits banner, resolved to ONE line here rather than in the
+   * painter: two alarms cannot both be the loudest thing on screen, and a pilot
+   * who has just been returned for cutting is on the road again, so a loiter
+   * countdown and a cut notice can never legitimately co-occur.
+   */
+  trackLimit: 'none' | 'offTrack' | 'cutReturned';
+  /** Seconds left before the off-track reset; only read for `offTrack`. */
+  offTrackIn: number;
   /** Seconds left in the winner's chase window, 0 when it is not running. */
   chaseIn: number;
   /** Whether the RACE is over, which is when the podium takes the headline. */
@@ -127,6 +136,8 @@ const HUD_OFF: RealmRacersHudView = {
   elapsed: 0,
   speed: 0,
   wrongWay: false,
+  trackLimit: 'none',
+  offTrackIn: 0,
   chaseIn: 0,
   decided: false,
   result: null,
@@ -217,6 +228,10 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
     elapsed: match.elapsed,
     speed: match.speed,
     wrongWay: match.wrongWay,
+    // The countdown wins over the notice: one is about to happen TO the pilot,
+    // the other has already happened and is only being explained.
+    trackLimit: match.offTrackIn > 0 ? 'offTrack' : match.cutReturned ? 'cutReturned' : 'none',
+    offTrackIn: match.offTrackIn,
     chaseIn: match.chaseIn,
     decided: match.decided,
     result: match.result,

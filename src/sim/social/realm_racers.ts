@@ -58,9 +58,9 @@ import {
 } from '../realm_racers_progress';
 import {
   type RallyProjection,
-  rallyBarrierKindAt,
-  rallyContainmentLineAt,
   rallyForwardDot,
+  rallyShoreOffsetAt,
+  rallyWaterKindAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
@@ -70,6 +70,14 @@ import {
   rallyClassification,
   rallyLeadIsDeadHeat,
 } from '../realm_racers_standings';
+import {
+  noRallyExcursion,
+  type RallyExcursion,
+  REALM_RACERS_CUT_LOCK_TICKS,
+  REALM_RACERS_CUT_NOTICE_TICKS,
+  rallyLoiterCountdownTicks,
+  stepRealmRacersTrackLimits,
+} from '../realm_racers_track_limits';
 import type { ArenaReturnPools, PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
 import { type Entity, TICK_RATE, type VehicleDrive } from '../types';
@@ -224,6 +232,19 @@ export interface RealmRacersProgress {
   /** Automatic recovery counter and manual post-teleport control lock. */
   stuckTicks: number;
   resetLockedUntilTick: number;
+  /**
+   * The live TRACK-LIMITS excursion (see `realm_racers_track_limits.ts`): where
+   * this racer left the racing surface, how long ago, and how much ground they
+   * have driven since. `exitS` null for the whole race until they leave it.
+   */
+  excursion: RallyExcursion;
+  /** The lap bookkeeping AT that exit, restored verbatim when the referee sends
+   *  a cutter back: a return must undo the gain, not bank it. */
+  excursionLap: number;
+  excursionDistanceSinceWrap: number;
+  /** Tick the "you rejoin where you left" banner stands until; 0 when there is
+   *  nothing to say. */
+  cutReturnUntilTick: number;
   /** Sustained direction state exposed to the HUD. */
   wrongWayTicks: number;
   wrongWay: boolean;
@@ -726,6 +747,10 @@ function startMatch(
           resetDistanceSinceWrap: 0,
           stuckTicks: 0,
           resetLockedUntilTick: 0,
+          excursion: noRallyExcursion(),
+          excursionLap: 1,
+          excursionDistanceSinceWrap: 0,
+          cutReturnUntilTick: 0,
           wrongWayTicks: 0,
           wrongWay: false,
           heldWeapon: {
@@ -978,15 +1003,31 @@ export function realmRacersForfeit(
   retireRacer(ctx, match, id, restoreImmediately);
 }
 
-/** Put a racer back on the last ordered recovery anchor. The progress snapshot
- * travels with it, so recovery can never be used to bank distance. Manual
- * recovery adds a settle lock; automatic recovery has already charged its
- * three-second stop and returns control immediately. */
-function resetRacerToRecoveryAnchor(
+/** Where a reset puts a racer, and what it hands back to them. */
+interface RallyResetTarget {
+  /** Arc position on the centerline, yards. */
+  s: number;
+  /** The lap bookkeeping to restore with it, so no reset can bank distance. */
+  lap: number;
+  distanceSinceWrap: number;
+  /** Ticks of settle lock after the teleport; 0 hands control straight back. */
+  lockTicks: number;
+}
+
+/**
+ * Put a racer back on the centerline at `target.s`, at a standstill facing
+ * along the track, with their lap bookkeeping rewound to what it was there.
+ *
+ * ONE body for all three resets on the circuit, because the difference between
+ * them is only WHERE and how long the lock is: manual recovery and the stuck
+ * arm go back to the last ordered anchor, and the referee's cut return goes
+ * back to the point the racer left the road.
+ */
+function resetRacerTo(
   ctx: SimContext,
   match: RealmRacersMatch,
   pid: number,
-  manual: boolean,
+  target: RallyResetTarget,
 ): boolean {
   const racer = ctx.entities.get(pid);
   const progress = match.progress.get(pid);
@@ -1000,28 +1041,32 @@ function resetRacerToRecoveryAnchor(
     return false;
 
   const track = realmRacersTrack(realmRacersCircuitOf(match));
-  const anchor = track.pointAt(progress.resetS);
+  const anchor = track.pointAt(target.s);
   const world = realmRacersToWorld(match, anchor.x, anchor.z);
   racer.pos = ctx.groundPos(world.x, world.z);
   racer.prevPos = { ...racer.pos };
   racer.facing = Math.atan2(anchor.tx, anchor.tz);
   resetVehicleDrive(racer.drive);
-  racer.drive.controlsLocked = manual;
+  racer.drive.controlsLocked = target.lockTicks > 0;
   racer.drive.gripMult = 1;
   racer.drive.dragMult = 1;
   racer.drive.speedCap = 1;
 
-  progress.lap = progress.resetLap;
-  progress.lastS = progress.resetS;
-  progress.distanceSinceWrap = progress.resetDistanceSinceWrap;
-  progress.travelled = travelledFromArc(progress.resetLap, progress.resetS, track.length);
+  progress.lap = target.lap;
+  progress.lastS = anchor.s;
+  progress.distanceSinceWrap = target.distanceSinceWrap;
+  progress.travelled = travelledFromArc(target.lap, anchor.s, track.length);
   progress.trackIndex = track.project(anchor.x, anchor.z, progress.trackIndex).index;
   progress.stuckTicks = 0;
   progress.wrongWayTicks = 0;
   progress.wrongWay = false;
+  // A racer put back on the racing line is on it: whatever excursion carried
+  // them here is over, and the odometer starts again from the next one.
+  progress.excursion = noRallyExcursion();
   // Commands land between fixed ticks. The first movement pass observes N+1,
-  // so an exclusive bound needs the extra tick to hold exactly 40 passes.
-  progress.resetLockedUntilTick = manual ? ctx.tickCount + REALM_RACERS_RESET_LOCK_TICKS + 1 : 0;
+  // so an exclusive bound needs the extra tick to hold exactly `lockTicks`
+  // passes.
+  progress.resetLockedUntilTick = target.lockTicks > 0 ? ctx.tickCount + target.lockTicks + 1 : 0;
   racer.auras = racer.auras.filter((aura) => aura.id !== REALM_RACERS_OFF_TRACK_AURA);
   ctx.rebucket(racer);
   // Recovery is a position discontinuity for the online predictor, but it is
@@ -1029,6 +1074,25 @@ function resetRacerToRecoveryAnchor(
   // message while still making a short rewind snap on the owning client.
   ctx.emit({ type: 'realmRacersReset', pid });
   return true;
+}
+
+/** Put a racer back on the last ordered recovery anchor. Manual recovery adds a
+ * settle lock; automatic recovery has already charged its three-second stop and
+ * returns control immediately. */
+function resetRacerToRecoveryAnchor(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  pid: number,
+  manual: boolean,
+): boolean {
+  const progress = match.progress.get(pid);
+  if (!progress) return false;
+  return resetRacerTo(ctx, match, pid, {
+    s: progress.resetS,
+    lap: progress.resetLap,
+    distanceSinceWrap: progress.resetDistanceSinceWrap,
+    lockTicks: manual ? REALM_RACERS_RESET_LOCK_TICKS : 0,
+  });
 }
 
 /** Authoritative manual recovery entry point, shared by offline and online worlds. */
@@ -1255,9 +1319,12 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
  * stop on the whole circuit, and everything inside it is drivable at a price.
  * Returns null while the racer is still on the road.
  *
- * Water is the exception in degree, not in kind: it is another band, just the
- * harshest one, and the racer cannot get more than a wading margin into it
- * because `resolveRealmRacersContainment` holds them out of the rest.
+ * Water is a band like the others, just the harshest, and a racer may now drive
+ * as far into a pond as they like: the wading margin used to be the last thing
+ * between the circuit and a shortcut across the middle, and the referee
+ * (`realm_racers_track_limits.ts`) is what does that job now. The three bands
+ * are therefore pure FEEL: no fairness argument rests on their values any more,
+ * only the ordering (further out is slower) that makes running wide legible.
  */
 export function realmRacersOffTrackBand(
   circuit: RealmRacersCircuit,
@@ -1272,24 +1339,27 @@ export function realmRacersOffTrackBand(
     return REALM_RACERS_VERGE_BAND;
   }
   // Outward is garden all the way to the wall on every circuit. Inward it is
-  // garden up to the containment line, and past the line only where the circuit
-  // authored WATER there: a solid barrier gives no grace at all, so the clamp
-  // has already held the racer on the line and the water arm is unreachable
-  // rather than merely unlikely (pinned by tests/realm_racers_containment).
-  if (projection.lateral <= rallyContainmentLineAt(circuit, projection.s)) {
-    return REALM_RACERS_GARDEN_BAND;
+  // garden as far as the shore line, and water past it wherever the circuit
+  // authored a pond there.
+  if (
+    projection.lateral > rallyShoreOffsetAt(circuit, projection.s) &&
+    rallyWaterKindAt(circuit, projection.s) === 'water'
+  ) {
+    return REALM_RACERS_WATER_BAND;
   }
-  // The solid arm is unreachable rather than merely unlikely, and it is left as
-  // a branch rather than an assertion on purpose: this runs per racer per tick
-  // inside the authoritative tick, where a throw ends the race for everyone, and
-  // float noise can legitimately leave a clamped racer a hair past the line.
-  // What holds the claim is a test, not a crash: see "charges the garden band,
-  // never Wading, on the infield side of a barrier" and the Express Tour's
-  // "leaves an unreachable strip" in tests/realm_racers_containment and
-  // tests/realm_racers_circuits.
-  return rallyBarrierKindAt(circuit, projection.s) === 'shore'
-    ? REALM_RACERS_WATER_BAND
-    : REALM_RACERS_GARDEN_BAND;
+  return REALM_RACERS_GARDEN_BAND;
+}
+
+/**
+ * Is a machine on the RACING SURFACE, which is the road plus its verge?
+ *
+ * The referee's on/off test, and the verge counts because every apex clips it:
+ * an excursion that armed on the ordinary racing line would arm on every corner
+ * of every lap. Exported because the bot brain and the tests ask the same
+ * question, and a second copy of the rule is a rule the race does not share.
+ */
+export function realmRacersOnTrack(band: RealmRacersSlowBand | null): boolean {
+  return band === null || band === REALM_RACERS_VERGE_BAND;
 }
 
 /**
@@ -1315,6 +1385,55 @@ function applyVehicleSurface(
   // twice. The knob exists for a surface that should cap speed WITHOUT a
   // visible debuff.
   racer.drive.speedCap = 1;
+}
+
+/**
+ * The track-limits REFEREE, applied to one racer.
+ *
+ * Runs only for a racer still in the race: a pilot who has crossed the line or
+ * pulled off keeps their machine and may drive it wherever they like.
+ */
+function refereeTrackLimits(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  pid: number,
+  racer: Entity,
+  progress: RealmRacersProgress,
+  projection: RallyProjection,
+  onTrack: boolean,
+): boolean {
+  if (!realmRacersStillRunning(match, pid)) return false;
+  if (ctx.tickCount < progress.resetLockedUntilTick) return false;
+  const started = progress.excursion.exitS === null;
+  const step = stepRealmRacersTrackLimits(progress.excursion, {
+    onTrack,
+    s: projection.s,
+    // Where the machine stood at the end of the LAST tick, which is the last
+    // place it held on the road and the position `lap` / `distanceSinceWrap`
+    // are in step with (the referee runs before `tickProgress` advances them).
+    previousS: progress.lastS,
+    moved: Math.hypot(racer.pos.x - racer.prevPos.x, racer.pos.z - racer.prevPos.z),
+    lapLength: realmRacersTrack(realmRacersCircuitOf(match)).length,
+  });
+  if (started && step.excursion.exitS !== null) {
+    progress.excursionLap = progress.lap;
+    progress.excursionDistanceSinceWrap = progress.distanceSinceWrap;
+  }
+  progress.excursion = step.excursion;
+  if (step.verdict === 'cutReturn' && step.returnS !== null) {
+    const returned = resetRacerTo(ctx, match, pid, {
+      s: step.returnS,
+      lap: progress.excursionLap,
+      distanceSinceWrap: progress.excursionDistanceSinceWrap,
+      lockTicks: REALM_RACERS_CUT_LOCK_TICKS,
+    });
+    if (returned) progress.cutReturnUntilTick = ctx.tickCount + REALM_RACERS_CUT_NOTICE_TICKS;
+    return returned;
+  }
+  // Loitering off the road, moving or not: back to the last ordered anchor,
+  // which is the same recovery the stuck arm and the manual control use.
+  if (step.verdict === 'loiter') return resetRacerToRecoveryAnchor(ctx, match, pid, false);
+  return false;
 }
 
 function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
@@ -1354,6 +1473,15 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
       }
     } else {
       progress.stuckTicks = 0;
+    }
+
+    // The referee, AFTER the wedged arm above: a machine that has been sitting
+    // still off the road for three seconds is stuck, not cutting, and the
+    // shorter recovery is the better answer for it.
+    if (
+      refereeTrackLimits(ctx, match, pid, racer, progress, projection, realmRacersOnTrack(band))
+    ) {
+      continue;
     }
 
     const shockUntil = progress.groundBlastShockUntilTick;
@@ -1613,11 +1741,22 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // (Only the racing phase reaches here: the countdown and finished arms return
   // above, which is also what keeps a nudge on the grid from doing anything.)
   tickContacts(ctx, match);
+  // Track limits BEFORE progress, which is what makes the referee's guarantee
+  // structural rather than nearly true. A cut is a position the racer must not
+  // be credited for, and `tickProgress` is what credits it: judged afterwards,
+  // a machine that cut across the infield and crossed the line would already
+  // have FINISHED by the time the referee had anything to say, and the return
+  // would have to unpick a classification. Judged first, the racer is back at
+  // the point they left the road (at a standstill, with `prevPos` collapsed
+  // onto `pos`) before progress reads the tick at all, so the tick it cheated
+  // on is worth exactly zero arc and no gate.
+  //
+  // Neither pass draws rng, so the shared stream is unmoved by the order.
+  tickTrackLimits(ctx, match);
   tickProgress(ctx, match);
-  if (match.phase === 'racing') {
-    tickTrackLimits(ctx, match);
-    tickGroundBlasts(ctx, match);
-  }
+  // `tickProgress` can END the race (the last racer home), and a shell must not
+  // land into a classification that is already closed.
+  if (match.phase === 'racing') tickGroundBlasts(ctx, match);
 }
 
 function racerInfo(
@@ -1702,6 +1841,12 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     decided: match.phase === 'finished',
     speed: Math.abs(ctx.entities.get(pid)?.drive?.speed ?? 0),
     wrongWay: me.wrongWay,
+    // The referee's two banners, both derived rather than stored: how long this
+    // pilot has left off the road before they are put back, and whether they
+    // were JUST put back for cutting. Neither needs a wire field of its own,
+    // because the whole info object already rides `rr`.
+    offTrackIn: Math.ceil(rallyLoiterCountdownTicks(me.excursion) / TICK_RATE),
+    cutReturned: ctx.tickCount < me.cutReturnUntilTick,
     resetLocked: ctx.tickCount < me.resetLockedUntilTick,
     totalLaps: match.totalLaps,
     // A practice lap is a real race on a private copy of the circuit, and the

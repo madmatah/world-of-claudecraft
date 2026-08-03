@@ -8420,6 +8420,8 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
     '在世界任何地方，都可以从王国竞速赛窗口排队参赛。凑满四人的整场比赛后，所有人会一同就位在发车线上，倒计时随即开始。',
   'guide.realmRacersPage.howRaceBody':
     '用你惯用的移动键转向、加速和刹车，按住跳跃键可拉手刹，滑过狭窄的弯道。每位车手都携带震地爆破，这是一记向前发射的冲击，会让被击中者失去平衡，因此挡在你前面的对手绝不安全。冲过最后一圈终点线的第一人获胜，全场车手则按比赛决出胜负时各自所处的位置排定名次。',
+  'guide.realmRacersPage.howLimitsBody':
+    '赛道两侧的花园是开放且可以驾驶的，所以跑宽、被撞出去、或者从花圃里滑过都是比赛的一部分：代价只是速度。但它不能让你占到便宜。一旦离开赛道并走出比赛道本身更短的路线，赛会就会把你送回你离开的位置；停在花园里不动的车手，几秒后也会被送回赛道。',
   'guide.realmRacersPage.howPracticeBody':
     '还没准备好和陌生人较量？练习赛会让你在同一台机器、同样的操控手感下，于专属的赛道副本中挑战自选的对手，好让你先摸清路线，再去排队参加正式比赛。',
   'guide.realmRacersPage.machineHeading': '借用的赛车',
@@ -10586,6 +10588,8 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.time': '{minutes}:{seconds}',
   'hudChrome.rally.speed': '速度 {speed}',
   'hudChrome.rally.wrongWay': '方向错误',
+  'hudChrome.rally.offTrack': '返回赛道：{seconds}',
+  'hudChrome.rally.cutReturned': '抄近道。已把你送回离开赛道的位置。',
   'hudChrome.rally.reset': '返回赛道',
   'hudChrome.rally.countdown': '引擎锁定。{seconds} 秒后出发',
   'hudChrome.rally.go': '出发！',

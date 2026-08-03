@@ -11,8 +11,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
-  isSolidBarrierKind,
-  RALLY_BARRIER_KINDS,
+  RALLY_WATER_KINDS,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_CIRCUITS,
   REALM_RACERS_PRACTICE_CIRCUIT,
@@ -41,14 +40,13 @@ import {
   realmRacersPublicLane,
 } from '../src/sim/realm_racers_layout';
 import {
-  rallyBarrierKindAt,
-  rallyContainmentGraceAt,
-  rallyContainmentLineAt,
+  rallyBasinDepthAt,
+  rallyShoreOffsetAt,
+  rallyWaterKindAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
   realmRacersWaterOutlines,
-  resolveRealmRacersContainment,
 } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
@@ -152,26 +150,26 @@ describe('Realm Racers circuits: every record is well formed', () => {
         }
       }
 
-      // The barrier table, where a circuit authors one, is STEPWISE rather than
+      // The water table, where a circuit authors one, is STEPWISE rather than
       // interpolated: sorted, first entry at 0, every entry in [0, 1) because
       // an entry at 1 would open a span of zero length, and every kind one the
       // spline knows how to stand on the line.
-      const barrierBands = circuit.barrierBands;
-      if (barrierBands) {
-        expect(barrierBands.length).toBeGreaterThan(0);
-        expect(barrierBands[0].s).toBe(0);
-        for (let i = 0; i < barrierBands.length; i++) {
-          const band = barrierBands[i];
-          expect(band.s, `barrier band ${i} of ${circuit.id}`).toBeGreaterThanOrEqual(0);
-          expect(band.s, `barrier band ${i} of ${circuit.id}`).toBeLessThan(1);
-          if (i > 0) expect(band.s).toBeGreaterThan(barrierBands[i - 1].s);
-          expect(RALLY_BARRIER_KINDS, `barrier band ${i} of ${circuit.id}`).toContain(band.kind);
+      const waterBands = circuit.waterBands;
+      if (waterBands) {
+        expect(waterBands.length).toBeGreaterThan(0);
+        expect(waterBands[0].s).toBe(0);
+        for (let i = 0; i < waterBands.length; i++) {
+          const band = waterBands[i];
+          expect(band.s, `water band ${i} of ${circuit.id}`).toBeGreaterThanOrEqual(0);
+          expect(band.s, `water band ${i} of ${circuit.id}`).toBeLessThan(1);
+          if (i > 0) expect(band.s).toBeGreaterThan(waterBands[i - 1].s);
+          expect(RALLY_WATER_KINDS, `water band ${i} of ${circuit.id}`).toContain(band.kind);
         }
       }
-      // Water is what a shore is MADE of, so a circuit authoring one has to
-      // author a basin; a circuit whose whole line is solid may author none.
-      const anyShore = !barrierBands || barrierBands.some((band) => !isSolidBarrierKind(band.kind));
-      if (anyShore) expect(circuit.basin, `${circuit.id} basin`).toBeDefined();
+      // A pond is MADE of water, so a circuit authoring one has to author a
+      // basin; a circuit whose whole shore is dry may author none.
+      const anyWater = !waterBands || waterBands.some((band) => band.kind === 'water');
+      if (anyWater) expect(circuit.basin, `${circuit.id} basin`).toBeDefined();
 
       // The race has to be finishable, and the region has to contain the wall.
       expect(circuit.laps).toBeGreaterThan(0);
@@ -311,86 +309,72 @@ describe('Realm Racers circuits: the Express Tour pinch strip', () => {
   if (!EXPRESS) throw new Error('the Express Tour is the competition circuit this pins');
   const track = realmRacersTrack(EXPRESS);
 
-  it('stands a low hedge on BOTH sides of the strip its two stretches flank', () => {
-    // The design outcome, not the table: the two facing stretches carry the
-    // same solid kind, so the strip between them is enclosed rather than half
-    // hedged and half open water.
+  it('keeps the strip its two stretches flank as open LAWN on both sides', () => {
+    // The design outcome, not the table: the two facing stretches are both dry,
+    // so the corridor between them is one piece of lawn rather than a canal
+    // eleven yards wide. It carried two knee-high hedges for one shipped
+    // revision, when a solid line either side was what stopped anyone crossing;
+    // the referee does that now, so nothing stands there.
     const metrics = realmRacersCircuitMetrics(EXPRESS);
-    // The measured strip, not a floor: shortening either span, or moving one
-    // off the stretch it faces, moves this.
-    expect(metrics.sharedBarrierYards).toBeCloseTo(42, 0);
-    // Every yard the two stretches can shoot across is a yard both of them
-    // carry a barrier on: the corridor and the barrier are the same strip.
-    expect(metrics.sharedBarrierYards).toBe(metrics.shootingCorridorYards);
+    // The measured strip, not a floor: shortening either span, or moving one off
+    // the stretch it faces, moves this.
+    expect(metrics.sharedDryYards).toBeCloseTo(42, 0);
+    // Every yard the two stretches can shoot across is a yard both of them keep
+    // dry: the corridor and the lawn are the same strip.
+    expect(metrics.sharedDryYards).toBe(metrics.shootingCorridorYards);
     expect(metrics.shootingCorridorYards).toBeGreaterThan(30);
-    // Low, so a pilot sees the rival they are shooting at.
-    const hedged = track.samples.filter(
-      (sample) => rallyBarrierKindAt(EXPRESS, sample.s) === 'hedge_low',
-    );
-    expect(hedged.length).toBeGreaterThan(80);
-    expect(new Set(track.samples.map((sample) => rallyBarrierKindAt(EXPRESS, sample.s)))).toEqual(
-      new Set(['shore', 'hedge_low']),
+    const dry = track.samples.filter((sample) => rallyWaterKindAt(EXPRESS, sample.s) === 'dry');
+    expect(dry.length).toBeGreaterThan(80);
+    expect(new Set(track.samples.map((sample) => rallyWaterKindAt(EXPRESS, sample.s)))).toEqual(
+      new Set(['water', 'dry']),
     );
   });
 
-  it('leaves an unreachable strip: two water lobes, and dry ground between them', () => {
-    // Two solid spans cut the ring in two, so the lake is two lobes closed off
-    // across the two mouths of the strip. That IS the strip becoming dry.
+  it('draws two water lobes with dry ground between them', () => {
+    // Two dry spans cut the ring in two, so the lake is two ponds closed off
+    // across the two mouths of the strip. That IS the corridor staying lawn.
     const outlines = realmRacersWaterOutlines(EXPRESS);
     expect(outlines).toHaveLength(2);
     for (const outline of outlines) expect(outline.length).toBeGreaterThan(100);
-    // Nowhere in either hedged span may a racer get past the line at all.
-    let held = 0;
+    // ...and the strip really is DRIVABLE, which is the whole point of 16b: a
+    // machine crossing it meets nothing, and the referee is what returns it.
+    let probed = 0;
     for (const sample of track.samples) {
-      if (rallyBarrierKindAt(EXPRESS, sample.s) !== 'hedge_low') continue;
-      expect(rallyContainmentGraceAt(EXPRESS, sample.s)).toBe(0);
-      const line = rallyContainmentLineAt(EXPRESS, sample.s);
-      const point = resolveRealmRacersContainment(
-        EXPRESS,
-        sample.x - sample.tz * (line + 6),
-        sample.z + sample.tx * (line + 6),
-      );
-      const projection = track.project(point.x, point.z);
-      expect(projection.lateral).toBeLessThanOrEqual(
-        rallyContainmentLineAt(EXPRESS, projection.s) + 1e-3,
-      );
-      held++;
+      if (rallyWaterKindAt(EXPRESS, sample.s) !== 'dry') continue;
+      const offset = rallyShoreOffsetAt(EXPRESS, sample.s) + 4;
+      const x = sample.x - sample.tz * offset;
+      const z = sample.z + sample.tx * offset;
+      expect(rallyBasinDepthAt(EXPRESS, x, z)).toBe(0);
+      probed++;
     }
-    expect(held).toBeGreaterThan(80);
+    expect(probed).toBeGreaterThan(80);
   });
 
-  it('closed the strip without reshaping the circuit', () => {
-    // The barrier is what changed, and only that: the containment line is
-    // derived from the control points and the apron rule, both untouched, so
-    // the two stretches faced each other at this distance before the hedge too.
-    const before = { ...EXPRESS, id: 'express_before_the_flip', barrierBands: undefined };
+  it('kept the strip without reshaping the circuit', () => {
+    // The water table is what changed, and only that: the shore line is derived
+    // from the control points and the apron rule, both untouched, so the two
+    // stretches faced each other at this distance before the ponds were split.
+    const before = { ...EXPRESS, id: 'express_before_the_split', waterBands: undefined };
     const beforeMetrics = realmRacersCircuitMetrics(before);
     const afterMetrics = realmRacersCircuitMetrics(EXPRESS);
     expect(afterMetrics.lapLength).toBe(beforeMetrics.lapLength);
     expect(afterMetrics.nearestApproach).toEqual(beforeMetrics.nearestApproach);
     expect(afterMetrics.shootingCorridorYards).toBe(beforeMetrics.shootingCorridorYards);
     for (const sample of realmRacersTrack(before).samples) {
-      expect(rallyContainmentLineAt(EXPRESS, sample.s)).toBe(
-        rallyContainmentLineAt(before, sample.s),
-      );
+      expect(rallyShoreOffsetAt(EXPRESS, sample.s)).toBe(rallyShoreOffsetAt(before, sample.s));
     }
-    // ...and the flip only ever TIGHTENED what a racer can reach.
-    let tightened = 0;
-    for (const sample of track.samples) {
-      const grace = rallyContainmentGraceAt(EXPRESS, sample.s);
-      expect(grace).toBeLessThanOrEqual(rallyContainmentGraceAt(before, sample.s));
-      if (grace < rallyContainmentGraceAt(before, sample.s)) tightened++;
-    }
-    expect(tightened).toBeGreaterThan(100);
     expect(realmRacersCircuitErrors(afterMetrics)).toEqual([]);
+    // ...and the split is the only thing that moved: without it this circuit
+    // draws ONE lake, over the corridor as well.
+    expect(realmRacersWaterOutlines(before)).toHaveLength(1);
   });
 
   it('leaves the practice circuit a lake circuit, untouched', () => {
-    // The other half of the acceptance: one content flip, one circuit.
-    expect(GARDEN.barrierBands).toBeUndefined();
+    // The other half of the acceptance: one content edit, one circuit.
+    expect(GARDEN.waterBands).toBeUndefined();
     expect(GARDEN.basin).toBeDefined();
     expect(realmRacersWaterOutlines(GARDEN)).toHaveLength(1);
-    expect(realmRacersCircuitMetrics(GARDEN).sharedBarrierYards).toBe(0);
+    expect(realmRacersCircuitMetrics(GARDEN).sharedDryYards).toBe(0);
   });
 });
 

@@ -30,6 +30,7 @@ export const realmRacers: GuidePage = {
           'guide.realmRacersPage.howHeading',
           `<p>${esc(t('guide.realmRacersPage.howQueueBody'))}</p>` +
             `<p>${esc(t('guide.realmRacersPage.howRaceBody'))}</p>` +
+            `<p>${esc(t('guide.realmRacersPage.howLimitsBody'))}</p>` +
             `<p>${esc(t('guide.realmRacersPage.howPracticeBody'))}</p>`,
         )}
         ${sectionPair('guide.realmRacersPage.machineHeading', 'guide.realmRacersPage.machineBody')}

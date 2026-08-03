@@ -1,15 +1,17 @@
 // The Realm Racers's static collision. There is exactly ONE wall, the
 // garden's own iron perimeter, and everything inside it is drivable:
 //
-//   [ basin ] ..apron.. |road| ..verge.. ..garden.. ##PERIMETER##
+//   [ pond ] ..apron.. |road| ..verge.. ..garden.. ##PERIMETER##
 //
-// Verge and garden alike cost time rather than stopping you (see the slow bands
-// in social/realm_racers.ts), and the basin is open water a racer currently
-// drives straight over. The circuit has now had three shapes: no collision at
-// all (racers drove through every hedge), a wall hugging both road edges (no
-// room to make a mistake in), and a stone rim around the basin, which read as a
-// line of blocks standing in the lake. Making the WATER itself the hazard is
-// the pass after this one; until then the infield is scenery.
+// Verge, garden and water alike cost time rather than stopping you (see the
+// slow bands in social/realm_racers.ts). The circuit has now had four shapes:
+// no collision at all (racers drove through every hedge), a wall hugging both
+// road edges (no room to make a mistake in), a stone rim around the basin
+// (which read as a line of blocks standing in the lake), and a containment line
+// derived from the racing line wearing water or a hedge. All four were the same
+// idea, and the operator's verdict on the last one retired the whole family:
+// track limits are a RULE now (`realm_racers_track_limits.ts`), so the garden
+// is open on both sides and nothing inside the perimeter stops anyone.
 //
 // Pure leaf: the geometry is static content, so one module-level build per
 // CIRCUIT serves every Sim in the process (the yumiMazeColliders /

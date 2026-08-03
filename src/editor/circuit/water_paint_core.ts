@@ -1,13 +1,19 @@
-// Painting what stands ON the containment line: the stepwise `barrierBands`
-// table, and the one rule that has to hold with it (a circuit authors water if
-// and only if some span of its line is a shore).
+// Painting where the WATER goes: the stepwise `waterBands` table, and the one
+// rule that has to hold with it (a circuit authors a basin if and only if some
+// span of its shore line carries water).
+//
+// It painted BARRIERS for one shipped revision, when what stood on the derived
+// containment line (water, two hedges, a kneewall) was what stopped a racer
+// cutting the infield. Track limits are a referee now
+// (`src/sim/realm_racers_track_limits.ts`), so nothing on that curve stops
+// anyone and the only decision left on it is decorative: pond, or lawn.
 //
 // It is not `paintSpan` with a different value type. That one paints a NUMBER
 // into a piecewise-linear table and its whole difficulty is the transition: a
 // plateau with smoothstep shoulders, because a band table read linearly has no
 // local edit without them. A kind is not interpolable, so there is no shoulder
-// to shape and no ramp to size: the edit is exactly "these cells of lap are
-// hedge now", and the only work is collapsing the result back into the fewest
+// to shape and no ramp to size: the edit is exactly "these cells of lap are dry
+// now", and the only work is collapsing the result back into the fewest
 // breakpoints that say so.
 //
 // Pure core: DOM-free, deterministic, no clock, no rng. Every function returns
@@ -15,19 +21,19 @@
 // stack is just the previous value.
 
 import type {
-  RallyBarrierKind,
+  RallyWaterKind,
   RealmRacersBasin,
   RealmRacersCircuit,
 } from '../../sim/content/realm_racers_circuits';
 import { FRACTION_SNAP } from './handles_core';
 
-export interface BarrierBand {
+export interface WaterBand {
   s: number;
-  kind: RallyBarrierKind;
+  kind: RallyWaterKind;
 }
 
-/** The table a circuit with no `barrierBands` behaves as, spelled out. */
-export const DEFAULT_BARRIER_BANDS: readonly BarrierBand[] = [{ s: 0, kind: 'shore' }];
+/** The table a circuit with no `waterBands` behaves as, spelled out. */
+export const DEFAULT_WATER_BANDS: readonly WaterBand[] = [{ s: 0, kind: 'water' }];
 
 /**
  * Paints a kind over the stretch of lap a STROKE touched, leaving the rest of
@@ -40,12 +46,12 @@ export const DEFAULT_BARRIER_BANDS: readonly BarrierBand[] = [{ s: 0, kind: 'sho
  * points. The cells BETWEEN two consecutive samples were dragged over, so they
  * are painted too, the short way round the lap.
  */
-export function paintBarrierSpan(
-  bands: readonly BarrierBand[],
+export function paintWaterSpan(
+  bands: readonly WaterBand[],
   fractions: readonly number[],
-  kind: RallyBarrierKind,
+  kind: RallyWaterKind,
   snap = FRACTION_SNAP,
-): BarrierBand[] {
+): WaterBand[] {
   const cells = Math.max(4, Math.round(1 / snap));
   const wrap = (cell: number): number => ((cell % cells) + cells) % cells;
   const visited = fractions
@@ -61,16 +67,16 @@ export function paintBarrierSpan(
   }
   if (painted.size === 0) return bands.map((band) => ({ ...band }));
 
-  const before = readBarrierCells(bands, cells);
+  const before = readWaterCells(bands, cells);
   const after = before.map((was, cell) => (painted.has(cell) ? kind : was));
   return bandsFromCells(after);
 }
 
 /** The kind in force in each snapped cell of lap, read the way the spline reads
  *  the table: the LAST entry at or before the cell owns it, wrapping. */
-function readBarrierCells(bands: readonly BarrierBand[], cells: number): RallyBarrierKind[] {
-  const table = bands.length > 0 ? bands : DEFAULT_BARRIER_BANDS;
-  const out: RallyBarrierKind[] = [];
+function readWaterCells(bands: readonly WaterBand[], cells: number): RallyWaterKind[] {
+  const table = bands.length > 0 ? bands : DEFAULT_WATER_BANDS;
+  const out: RallyWaterKind[] = [];
   for (let cell = 0; cell < cells; cell++) {
     const fraction = cell / cells;
     let kind = table[table.length - 1].kind;
@@ -90,9 +96,9 @@ function readBarrierCells(bands: readonly BarrierBand[], cells: number): RallyBa
  * one at s = 0 whatever happens there, because that is the record's own rule
  * (the first entry opens the table and the last one wraps back round to it).
  */
-function bandsFromCells(kinds: readonly RallyBarrierKind[]): BarrierBand[] {
+function bandsFromCells(kinds: readonly RallyWaterKind[]): WaterBand[] {
   const cells = kinds.length;
-  const out: BarrierBand[] = [{ s: 0, kind: kinds[0] }];
+  const out: WaterBand[] = [{ s: 0, kind: kinds[0] }];
   for (let cell = 1; cell < cells; cell++) {
     if (kinds[cell] === kinds[cell - 1]) continue;
     out.push({ s: Number((cell / cells).toFixed(6)), kind: kinds[cell] });
@@ -101,47 +107,42 @@ function bandsFromCells(kinds: readonly RallyBarrierKind[]): BarrierBand[] {
 }
 
 /**
- * The record a painted table implies, water and all.
+ * The record a painted table implies, basin and all.
  *
  * The basin is not a second thing to keep in step by hand: it is REQUIRED by a
- * shore span and meaningless without one, so painting the last shore away drops
+ * water span and meaningless without one, so painting the last pond away drops
  * it and painting one back restores it. `fallbackBasin` is what a circuit that
  * has never had one gets; a circuit that had one keeps its own numbers, which
  * is why the page hands back the last basin it saw rather than a constant.
  *
- * A table that came back to all-shore is dropped entirely rather than kept as
+ * A table that came back to all-water is dropped entirely rather than kept as
  * a one-row table meaning the same thing, so a circuit that authors nothing
  * exports in the default shape.
  */
-export function applyBarrierBands(
+export function applyWaterBands(
   circuit: RealmRacersCircuit,
-  bands: readonly BarrierBand[],
+  bands: readonly WaterBand[],
   fallbackBasin: RealmRacersBasin,
 ): RealmRacersCircuit {
-  const table = bands.length > 0 ? bands : DEFAULT_BARRIER_BANDS;
-  const anyShore = table.some((band) => band.kind === 'shore');
-  const allShore = table.every((band) => band.kind === 'shore');
+  const table = bands.length > 0 ? bands : DEFAULT_WATER_BANDS;
+  const anyWater = table.some((band) => band.kind === 'water');
+  const allWater = table.every((band) => band.kind === 'water');
   return {
     ...circuit,
-    barrierBands: allShore ? undefined : table.map((band) => ({ ...band })),
-    basin: anyShore ? (circuit.basin ?? fallbackBasin) : undefined,
+    waterBands: allWater ? undefined : table.map((band) => ({ ...band })),
+    basin: anyWater ? (circuit.basin ?? fallbackBasin) : undefined,
   };
 }
 
 /** Yards of lap each kind holds, for the readout that says what a stroke did. */
-export function barrierSpanYards(
-  bands: readonly BarrierBand[],
+export function waterSpanYards(
+  bands: readonly WaterBand[],
   lapLength: number,
   snap = FRACTION_SNAP,
-): Record<RallyBarrierKind, number> {
+): Record<RallyWaterKind, number> {
   const cells = Math.max(4, Math.round(1 / snap));
-  const kinds = readBarrierCells(bands, cells);
-  const out: Record<RallyBarrierKind, number> = {
-    shore: 0,
-    hedge_low: 0,
-    hedge_tall: 0,
-    wall_low: 0,
-  };
+  const kinds = readWaterCells(bands, cells);
+  const out: Record<RallyWaterKind, number> = { water: 0, dry: 0 };
   for (const kind of kinds) out[kind] += lapLength / cells;
   return out;
 }

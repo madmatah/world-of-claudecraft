@@ -17,8 +17,8 @@
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
 import {
-  RALLY_BARRIER_KINDS,
-  type RallyBarrierKind,
+  RALLY_WATER_KINDS,
+  type RallyWaterKind,
   type RealmRacersCircuit,
   type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
@@ -54,9 +54,9 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
       s: round(band.s, FRACTION_PLACES),
       halfWidth: round(band.halfWidth, BAND_PLACES),
     })),
-    ...(circuit.barrierBands
+    ...(circuit.waterBands
       ? {
-          barrierBands: circuit.barrierBands.map((band) => ({
+          waterBands: circuit.waterBands.map((band) => ({
             s: round(band.s, FRACTION_PLACES),
             kind: band.kind,
           })),
@@ -109,9 +109,9 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
     }
     lines.push('  ],');
   }
-  if (c.barrierBands) {
-    lines.push('  barrierBands: [');
-    for (const band of c.barrierBands) {
+  if (c.waterBands) {
+    lines.push('  waterBands: [');
+    for (const band of c.waterBands) {
       lines.push(`    { s: ${band.s}, kind: '${band.kind}' },`);
     }
     lines.push('  ],');
@@ -121,9 +121,9 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
     `  regionHalfZ: ${c.regionHalfZ},`,
     `  perimeter: { halfX: ${c.perimeter.halfX}, halfZ: ${c.perimeter.halfZ}, halfThickness: ${c.perimeter.halfThickness}, height: ${c.perimeter.height} },`,
   );
-  // Emitted only when the circuit HAS water, which is exactly when a shore span
-  // exists: a dry circuit that carried a basin literal would be authoring a
-  // lake nothing draws.
+  // Emitted only when the circuit HAS water, which is exactly when a `water`
+  // span exists: a dry circuit that carried a basin literal would be authoring
+  // a lake nothing draws.
   if (c.basin) {
     lines.push(
       `  basin: { waterY: ${c.basin.waterY}, bankSlope: ${c.basin.bankSlope}, depthMax: ${c.basin.depthMax}, wadeYards: ${c.basin.wadeYards} },`,
@@ -214,21 +214,20 @@ function readBands(raw: unknown, key: string, min: number, max: number): { s: nu
 }
 
 /**
- * The stepwise barrier table off the wire: sorted, first entry at 0, every
- * entry in [0, 1), and every kind one the spline knows how to stand on the
- * line.
+ * The stepwise water table off the wire: sorted, first entry at 0, every entry
+ * in [0, 1), and every kind one the spline knows.
  */
-function readBarrierBands(raw: unknown): { s: number; kind: RallyBarrierKind }[] | null {
+function readWaterBands(raw: unknown): { s: number; kind: RallyWaterKind }[] | null {
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > 512) return null;
-  const out: { s: number; kind: RallyBarrierKind }[] = [];
+  const out: { s: number; kind: RallyWaterKind }[] = [];
   let previous = -1;
   for (const item of raw) {
     const band = item as { s?: unknown; kind?: unknown };
     if (!isNumber(band.s) || band.s < 0 || band.s >= 1) return null;
     if (band.s <= previous) return null;
-    if (!RALLY_BARRIER_KINDS.includes(band.kind as RallyBarrierKind)) return null;
+    if (!RALLY_WATER_KINDS.includes(band.kind as RallyWaterKind)) return null;
     previous = band.s;
-    out.push({ s: band.s, kind: band.kind as RallyBarrierKind });
+    out.push({ s: band.s, kind: band.kind as RallyWaterKind });
   }
   if (out[0].s !== 0) return null;
   return out;
@@ -263,24 +262,24 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   if (c.apronBands !== undefined && !apronBands) return null;
 
   /**
-   * The barrier table: STEPWISE, so unlike the two band tables above it is
-   * sorted over [0, 1) with its first entry at 0 and no closing entry at 1 (one
-   * there would open a span of zero length). Read by its own reader for that
-   * reason rather than by loosening `readBands` until it takes both.
+   * The water table: STEPWISE, so unlike the two band tables above it is sorted
+   * over [0, 1) with its first entry at 0 and no closing entry at 1 (one there
+   * would open a span of zero length). Read by its own reader for that reason
+   * rather than by loosening `readBands` until it takes both.
    */
-  const barrierBands = c.barrierBands === undefined ? undefined : readBarrierBands(c.barrierBands);
-  if (c.barrierBands !== undefined && !barrierBands) return null;
+  const waterBands = c.waterBands === undefined ? undefined : readWaterBands(c.waterBands);
+  if (c.waterBands !== undefined && !waterBands) return null;
 
   const perimeter = c.perimeter as Record<string, unknown> | undefined;
   if (!perimeter) return null;
-  // Water is optional now, and required exactly where a shore span exists: the
-  // record's rule is an IFF, and both halves are refused here. Without a shore
+  // Water is optional, and required exactly where a `water` span exists: the
+  // record's rule is an IFF, and both halves are refused here. Without a basin
   // the payload is a lake circuit that forgot its lake (the absent table means a
-  // whole lap of shore); with one it authors a basin nothing is made of, which
-  // re-exports as a literal the next reader takes for a lake.
+  // whole lap of water); with one and no water span it authors a basin nothing
+  // is made of, which re-exports as a literal the next reader takes for a lake.
   const basin = c.basin as Record<string, unknown> | undefined;
-  const anyShore = !barrierBands || barrierBands.some((band) => band.kind === 'shore');
-  if (anyShore !== Boolean(basin)) return null;
+  const anyWater = !waterBands || waterBands.some((band) => band.kind === 'water');
+  if (anyWater !== Boolean(basin)) return null;
   if (basin) {
     if (
       !inRange(basin.waterY, -20, 20) ||
@@ -338,7 +337,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     controlPoints,
     widthBands,
     ...(apronBands ? { apronBands } : {}),
-    ...(barrierBands ? { barrierBands } : {}),
+    ...(waterBands ? { waterBands } : {}),
     ...(landmark ? { landmark } : {}),
     regionHalfX: c.regionHalfX,
     regionHalfZ: c.regionHalfZ,

@@ -105,32 +105,28 @@ export const REALM_RACERS_VERGE_MARGIN = 0.75;
  * The mown VERGE just outside the road edge: the first, lighter slow band, and
  * the one a racer running a touch wide lands in.
  *
- * Its width is bounded the same way the apron is, by its OWN speed loss: a cut
- * that stays inside the verge saves its depth and pays only the verge's price,
- * so `VERGE_MARGIN + RUNOFF_WIDTH` has to stay under `R * vergeLoss` at the
- * tightest corner. Widening it means making it cost more.
+ * It is also the width of the ON-TRACK grace the referee gives
+ * (`realm_racers_track_limits.ts` starts no excursion inside the verge), which
+ * is what makes clipping an apex ordinary racing rather than a track-limits
+ * event: every lap clips one.
  */
 export const REALM_RACERS_RUNOFF_WIDTH = 3.5;
 
 /**
- * The apron: drivable garden between the road edge and the basin's shore. You
- * may run as wide as you like into it, you just lose time.
+ * The apron: drivable garden between the road edge and the shore the ponds are
+ * cut along. You may run as wide as you like into it, you just lose time.
  *
- * It cannot be a constant. A racer cutting a corner along the apron's edge
- * travels an arc of radius `R - apron` instead of `R`, so the cut PAYS as soon
- * as `apron > R * slow`, whatever the wall is made of. The apron therefore
- * scales with the local corner radius and only reaches its cap on the fast
- * parts of the lap. `tests/realm_racers_colliders.test.ts` sweeps every
- * sample against that inequality, so raising the cap or softening the slow
- * without re-deriving the other fails there rather than in a race.
+ * It is not a constant, and the reason is now purely how it LOOKS: a shore that
+ * kept a fixed offset through a hairpin would swing wide of the corner and read
+ * as a lake ignoring the road, where an offset that pulls in with the radius
+ * reads as a garden the road was laid through. It used to be an ANTI-CUT
+ * ceiling (a cut along the apron's edge drives an arc of radius `R - apron`, so
+ * the cut paid as soon as `apron > R * slow`), and that proof is retired with
+ * the containment family: a cut costs arc now, not width.
  */
 export const REALM_RACERS_APRON_MAX = 15.0;
-/**
- * Fraction of the local corner radius the apron may use. Must stay strictly
- * under the garden's speed loss (`REALM_RACERS_GARDEN_SLOW`); the gap is the
- * safety margin against a racer carrying more speed through the cut than the
- * flat model assumes.
- */
+/** Fraction of the local corner radius the apron may use, which is what makes
+ *  the shore tighten through a corner and open out on a straight. */
 export const REALM_RACERS_APRON_RADIUS_FRACTION = 0.35;
 
 /**

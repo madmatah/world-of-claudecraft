@@ -14505,6 +14505,29 @@
     transform: scale(1.04);
   }
 }
+/* The track-limits line: the referee talking, not an alarm. Same box as the
+   wrong-way banner so the strip keeps one shape, in the amber the readout pills
+   already use rather than the wrong-way red, at a size that needs no mobile
+   override (the whole rally section sits outside @layer components, so a
+   layered hud-mobile rule for it would be inert). It never pulses: one of its
+   two lines is already a per-second countdown, and the other is an explanation
+   of something that has finished happening. */
+.rallyhud-limits {
+  width: max-content;
+  max-width: 100%;
+  margin: 8px auto 0;
+  padding: 5px 14px;
+  border: 1px solid #d9b83f;
+  border-radius: 5px;
+  background: #2b1f08e6;
+  color: #ffe9ac;
+  font-family: var(--font-display, serif);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+}
 /* The strip carries the only in-race forfeit control: the queue window closes
    itself when the match starts, so nothing else is reachable at speed. It rides
    in the stats row (the row centres the whole group), in the destructive red the

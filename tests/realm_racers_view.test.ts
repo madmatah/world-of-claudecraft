@@ -61,6 +61,8 @@ function live(over: Partial<Match> = {}): Match {
     chaseIn: 0,
     speed: 42,
     wrongWay: false,
+    offTrackIn: 0,
+    cutReturned: false,
     resetLocked: false,
     returnIn: 0,
     me,
@@ -237,6 +239,7 @@ describe('Realm Racers pure views', () => {
     expect(view).toMatchObject({
       speed: 53,
       wrongWay: true,
+      trackLimit: 'none',
       canReset: true,
       resetLocked: true,
     });
@@ -246,6 +249,29 @@ describe('Realm Racers pure views', () => {
     const unlocked = buildRealmRacersHudView(info({ match: live({ resetLocked: false }) }));
     const locked = buildRealmRacersHudView(info({ match: live({ resetLocked: true }) }));
     expect(locked.sig).toBe(unlocked.sig);
+  });
+
+  it('resolves the track-limits banner to ONE line, countdown before notice', () => {
+    // Two alarms cannot both be the loudest thing on the strip, and the two
+    // states cannot legitimately co-occur anyway: a pilot the referee has just
+    // returned for cutting is back ON the road, so their loiter clock is not
+    // running. The precedence is written down here rather than left to whichever
+    // branch the painter happens to test first.
+    const off = buildRealmRacersHudView(info({ match: live({ offTrackIn: 3 }) }));
+    expect(off).toMatchObject({ trackLimit: 'offTrack', offTrackIn: 3 });
+
+    const cut = buildRealmRacersHudView(info({ match: live({ cutReturned: true }) }));
+    expect(cut.trackLimit).toBe('cutReturned');
+
+    const both = buildRealmRacersHudView(
+      info({ match: live({ offTrackIn: 2, cutReturned: true }) }),
+    );
+    expect(both.trackLimit).toBe('offTrack');
+
+    expect(buildRealmRacersHudView(info({ match: live({}) })).trackLimit).toBe('none');
+    // Neither state is structural: the banner is one element the painter writes
+    // through, so a pilot running wide must not rebuild the strip under them.
+    expect(off.sig).toBe(cut.sig);
   });
 
   it('withdraws the forfeit control once the race is decided, and moves the signature', () => {

@@ -8813,6 +8813,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
     '세계 어디서든 렐름 레이서즈 창에서 레이스 대기열에 설 수 있습니다. 네 명이 모두 준비되면 모두가 함께 출발선에 앉고 카운트다운이 시작됩니다.',
   'guide.realmRacersPage.howRaceBody':
     '평소 이동 키로 조향, 가속, 제동을 하고, 점프 키를 누르고 있으면 핸드브레이크로 좁은 코너를 미끄러져 지날 수 있습니다. 모든 파일럿은 그라운드 블래스트를 지니고 있는데, 이는 맞은 상대를 휘청이게 하는 전방 사격이므로 앞을 막는 라이벌은 결코 안전하지 않습니다. 마지막 랩 이후 먼저 결승선을 넘는 쪽이 승리하며, 레이스가 결정되는 순간 각자의 위치로 전체 순위가 매겨집니다.',
+  'guide.realmRacersPage.howLimitsBody':
+    '트랙 양옆의 정원은 열려 있고 주행할 수 있어서, 넓게 나가거나 밀려나거나 화단을 미끄러져 지나가는 것도 레이스의 일부입니다. 대가는 속도뿐이죠. 다만 그것으로 이득을 봐서는 안 됩니다. 트랙을 벗어나 트랙보다 짧은 라인을 타면 진행위원이 벗어난 지점으로 되돌려 놓고, 정원에 멈춰 선 파일럿도 몇 초 뒤 트랙으로 복귀시킵니다.',
   'guide.realmRacersPage.howPracticeBody':
     '아직 낯선 상대와 겨룰 준비가 되지 않았나요? 연습 주행은 같은 머신, 같은 조작감으로 전용 서킷 사본에서 직접 고른 상대와 달릴 수 있어, 실전 대기열에 서기 전에 라인을 익힐 수 있습니다.',
   'guide.realmRacersPage.machineHeading': '대여 머신',
@@ -11086,6 +11088,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.time': '{minutes}:{seconds}',
   'hudChrome.rally.speed': '속도 {speed}',
   'hudChrome.rally.wrongWay': '역주행',
+  'hudChrome.rally.offTrack': '트랙으로 복귀: {seconds}',
+  'hudChrome.rally.cutReturned': '지름길. 트랙을 벗어난 지점으로 되돌아갔습니다.',
   'hudChrome.rally.reset': '트랙으로 복귀',
   'hudChrome.rally.countdown': '엔진 잠금 중. {seconds}초 뒤 출발',
   'hudChrome.rally.go': '출발!',

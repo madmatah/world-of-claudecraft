@@ -12,7 +12,7 @@
 // radius, so the repair converges in ONE pass with no risk of chasing its own
 // tail. It is monotone in every other direction too: a narrower road pulls the
 // basin shore in with it and shrinks the road's footprint, so it can only help
-// the shore-overlap and containment checks.
+// the shore-overlap and enclosure checks.
 //
 // Two things it deliberately does NOT do. It never moves a control point:
 // widening a corner changes the shape the operator drew, which is their design

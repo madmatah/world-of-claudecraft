@@ -19,7 +19,7 @@ import {
   REALM_RACERS_ORIGIN,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
-import { rallyContainmentLineAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { rallyShoreOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { CharacterState, Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
@@ -36,6 +36,7 @@ import {
   realmRacersCircuitOf,
   realmRacersFireGroundBlast,
   realmRacersStartMatch,
+  realmRacersToCanonical,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
@@ -98,6 +99,26 @@ function placeAtS(sim: Sim, pid: number, s: number, lateral = 0): void {
 function onLane(sim: Sim, x: number, z: number): { x: number; z: number } {
   const liveMatch = match(sim);
   return { x: liveMatch.origin.x + x, z: liveMatch.origin.z + z };
+}
+
+/**
+ * Parks a machine off the road at a chosen point, with the lap bookkeeping a
+ * machine that DROVE there would have left behind.
+ *
+ * A bare teleport is not a drive, and the track-limits referee is written in
+ * exactly that difference: it measures arc gained against ground covered, so a
+ * fixture that jumps a machine across the circuit reads as a cut and is returned
+ * before the case under test gets a tick. Stamping `lastS` at the destination is
+ * what makes the jump a premise rather than an event.
+ */
+function parkOffRoad(sim: Sim, pid: number, x: number, z: number): void {
+  const liveMatch = match(sim);
+  teleport(sim, pid, x, z);
+  const progress = required(liveMatch.progress.get(pid), `progress ${pid}`);
+  const local = realmRacersToCanonical(liveMatch, x, z);
+  const projection = realmRacersTrack(RACE_CIRCUIT).project(local.x, local.z);
+  progress.lastS = projection.s;
+  progress.trackIndex = projection.index;
 }
 
 function advanceArc(sim: Sim, pid: number, distance: number): void {
@@ -563,13 +584,13 @@ describe('The Realm Racers lifecycle', () => {
     // the shore rather than aimed at the middle of the region, which is only
     // water on a circuit shaped like the practice one.
     const sample = realmRacersTrack(RACE_CIRCUIT).samples[120];
-    const intoTheWater = rallyContainmentLineAt(RACE_CIRCUIT, sample.s) + 1;
+    const intoTheWater = rallyShoreOffsetAt(RACE_CIRCUIT, sample.s) + 1;
     const spot = onLane(
       sim,
       sample.x - sample.tz * intoTheWater,
       sample.z + sample.tx * intoTheWater,
     );
-    teleport(sim, a, spot.x, spot.z);
+    parkOffRoad(sim, a, spot.x, spot.z);
     updateRealmRacers(sim.ctx);
     expect(racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA)).toMatchObject({
       kind: 'slow',
@@ -1143,15 +1164,15 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     match(sim).phase = 'racing';
     const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
-    // Past the basin's own shore, on the infield side (mirrors the containment
-    // test's placement): the harshest of the three off-track bands.
-    const intoTheWater = rallyContainmentLineAt(RACE_CIRCUIT, sample.s) + 1;
+    // Past the basin's own shore, on the infield side (mirrors the water
+    // suite's placement): the harshest of the three off-track bands.
+    const intoTheWater = rallyShoreOffsetAt(RACE_CIRCUIT, sample.s) + 1;
     const spot = onLane(
       sim,
       sample.x - sample.tz * intoTheWater,
       sample.z + sample.tx * intoTheWater,
     );
-    teleport(sim, a, spot.x, spot.z);
+    parkOffRoad(sim, a, spot.x, spot.z);
     updateRealmRacers(sim.ctx);
     const racer = entity(sim, a);
     expect(racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA)).toMatchObject({

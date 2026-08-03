@@ -164,6 +164,12 @@ teleport, visitor spot; the jail SYSTEM logic stays on `Sim`),
 `vehicle_motion.ts` (the arcade driving model behind the `p.drive` branch of
 `player_motion.ts`: throttle/brake, steering authority, grip and drift, every number
 read from a `content/vehicles.ts` profile),
+`realm_racers_track_limits.ts` (the track-limits REFEREE: an excursion may not gain
+arc on the ground it drove, so cutting the inside and cutting the outside of a
+re-entrant shape are the same call and neither needs a barrier. It replaced a whole
+family of derived containment devices, which is why the Realm Racers garden is open
+and drivable to the perimeter on both sides; `social/realm_racers.ts` owns the
+consequences, this owns the verdict),
 `realm_racers_draft_registry.ts` (the session-only DRAFT circuit overlay: a table
 with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
 `realm_racers_layout.ts` consult it and either importing something that imported it

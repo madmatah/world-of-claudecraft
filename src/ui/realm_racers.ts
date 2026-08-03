@@ -114,6 +114,7 @@ export class RealmRacersUi {
   private timeEl: HTMLElement | null = null;
   private speedEl: HTMLElement | null = null;
   private wrongWayEl: HTMLElement | null = null;
+  private limitsEl: HTMLElement | null = null;
   private phaseEl: HTMLElement | null = null;
   private resetEl: HTMLElement | null = null;
   private forfeitEl: HTMLElement | null = null;
@@ -459,12 +460,14 @@ export class RealmRacersUi {
           : '') +
         `</div>` +
         `<div class="rallyhud-wrong-way" role="alert" aria-live="assertive"></div>` +
+        `<div class="rallyhud-limits" role="status" aria-live="polite"></div>` +
         `<div class="rallyhud-phase" aria-live="polite"></div>`;
       this.positionEl = root.querySelector('.rallyhud-position');
       this.lapEl = root.querySelector('.rallyhud-lap');
       this.timeEl = root.querySelector('.rallyhud-time');
       this.speedEl = root.querySelector('.rallyhud-speed');
       this.wrongWayEl = root.querySelector('.rallyhud-wrong-way');
+      this.limitsEl = root.querySelector('.rallyhud-limits');
       this.phaseEl = root.querySelector('.rallyhud-phase');
       this.resetEl = root.querySelector('.rallyhud-reset');
       this.forfeitEl = root.querySelector('.rallyhud-forfeit');
@@ -510,6 +513,17 @@ export class RealmRacersUi {
     if (this.wrongWayEl) {
       w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
       w.setDisplay(this.wrongWayEl, view.wrongWay ? 'block' : 'none');
+    }
+    if (this.limitsEl) {
+      // The text is written even while the line is hidden, so the two writes
+      // elide independently and a locale flip lands on both.
+      w.setText(
+        this.limitsEl,
+        view.trackLimit === 'cutReturned'
+          ? t('hudChrome.rally.cutReturned')
+          : t('hudChrome.rally.offTrack', { seconds: num(view.offTrackIn) }),
+      );
+      w.setDisplay(this.limitsEl, view.trackLimit === 'none' ? 'none' : 'block');
     }
     if (this.resetEl) {
       w.setText(this.resetEl, t('hudChrome.rally.reset'));

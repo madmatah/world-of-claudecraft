@@ -1134,6 +1134,12 @@ export const hudChromeStrings = {
     time: '{minutes}:{seconds}',
     speed: 'SPD {speed}',
     wrongWay: 'WRONG WAY',
+    // The track-limits referee's two lines. The garden is open and drivable, so
+    // leaving the road is never blocked; what it costs is said here instead.
+    // The first is a clock a pilot loitering off the circuit can act on, the
+    // second explains a teleport that would otherwise be unexplained.
+    offTrack: 'RETURN TO THE TRACK: {seconds}',
+    cutReturned: 'Shortcut. Returned to where you left the track.',
     reset: 'Reset to track',
     countdown: 'Engines locked. Start in {seconds}',
     go: 'GO!',

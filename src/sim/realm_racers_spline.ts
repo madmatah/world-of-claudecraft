@@ -1,15 +1,17 @@
 // Everything DERIVED from an authored Realm Racers circuit record: the
 // resampled centerline, the arc-length table, nearest-point projection, the
 // recovery gates, the start grid, and the two lateral boundaries (the garden's
-// edge and the CONTAINMENT line, the infield's anti-cut boundary). One source
-// of truth, shared by the sim (progress, recovery, track limits) and the
-// renderer (the road ribbon, kerbs, borders, the water, the barriers), so what
-// a racer sees and what a racer drives on cannot drift.
+// edge and the SHORE line, where the drivable apron gives out). One source of
+// truth, shared by the sim (progress, recovery, the off-track bands) and the
+// renderer (the road ribbon, kerbs, borders, the water), so what a racer sees
+// and what a racer drives on cannot drift.
 //
-// The containment line is `halfWidth + apron` and is never authored. What
-// STANDS on it is: `barrierBands` picks water, hedge or kneewall per span, and
-// only the water arm lets a racer past the line at all (see
-// `resolveRealmRacersContainment`).
+// NOTHING here contains a racer any more. The infield and the outfield are
+// open, drivable, decorated garden, and leaving the road arms the referee in
+// `realm_racers_track_limits.ts` instead of meeting a barrier. What survives of
+// the old containment line is its SHAPE: `halfWidth + apron` is where the lawn
+// gives way to water, so it is the shore the decorative ponds are cut from, and
+// `waterBands` says which spans of the lap carry water at all.
 //
 // Every entry point takes the CIRCUIT it is deriving, and each derivation is
 // memoized under that circuit's id: the geometry is static content, so one
@@ -20,11 +22,7 @@
 // with THREE.CatmullRomCurve3, re-implemented in plain numbers because src/sim
 // cannot import three.
 
-import {
-  isSolidBarrierKind,
-  type RallyBarrierKind,
-  type RealmRacersCircuit,
-} from './content/realm_racers_circuits';
+import type { RallyWaterKind, RealmRacersCircuit } from './content/realm_racers_circuits';
 import {
   type RallyGate,
   type RallyPoint,
@@ -54,13 +52,13 @@ export interface RallySample {
   halfWidth: number;
   /**
    * Signed radius of curvature, yards: POSITIVE where the circuit bends toward
-   * the INFIELD (the left normal, the side the containment line is on),
+   * the INFIELD (the left normal, the side the shore line is on),
    * negative where it bends away, Infinity on a straight. Only the positive
    * case constrains the apron, because only there does cutting shorten the
    * path.
    */
   turnRadius: number;
-  /** Drivable garden between the road edge and the containment line, yards. */
+  /** Drivable garden between the road edge and the shore line, yards. */
   apron: number;
 }
 
@@ -100,7 +98,7 @@ export interface RallyTrackModel {
    */
   project(x: number, z: number, hintIndex?: number): RallyProjection;
   halfWidthAt(s: number): number;
-  /** Drivable garden between the road edge and the containment line at `s`. */
+  /** Drivable garden between the road edge and the shore line at `s`. */
   apronAt(s: number): number;
   pointAt(s: number): RallySample;
 }
@@ -123,22 +121,6 @@ const DENSE_PER_SPAN = 64;
 const CURVATURE_WINDOW = 3;
 /** Half-window, in samples, the apron's running minimum spans. */
 const APRON_SMOOTH_WINDOW = 10;
-/** Passes the containment clamp takes to settle (see
- *  resolveRealmRacersContainment). */
-const CONTAINMENT_CLAMP_PASSES = 4;
-
-/**
- * How much lap the wading grace tapers over as a shore span runs into a solid
- * one, yards.
- *
- * Without it the clamp limit STEPS by the whole wading margin at the boundary:
- * a racer wading four yards deep who crosses into a hedge span is walked four
- * yards sideways in one tick, which is a teleport out of the back of a hedge.
- * The taper eases them out over half a second at racing pace instead, and it
- * can never reopen a shortcut because it only ever REMOVES grace (the same
- * argument the apron's running minimum rests on).
- */
-const BARRIER_EASE_YARDS = 12;
 
 /**
  * Reads a piecewise-linear band table at a lap fraction, wrapping. The road
@@ -449,22 +431,27 @@ export const realmRacersTrack: (circuit: RealmRacersCircuit) => RallyTrackModel 
   memoizePerCircuit(buildModel);
 
 /**
- * Distance from the centerline to the CONTAINMENT line: the road plus its whole
- * drivable apron. It is where the infield stops being drivable garden, and it
- * is the line every anti-cut proof is written against. Nothing is built here;
- * `barrierBands` says what stands on it.
+ * Distance from the centerline to the SHORE line: the road plus its whole
+ * drivable apron, which is where the lawn gives way to water.
+ *
+ * It used to be the CONTAINMENT line, the offset curve every anti-cut proof was
+ * written against and every barrier stood on. Nothing is contained here any
+ * more (`realm_racers_track_limits.ts` is the referee now), so the curve keeps
+ * only the job it was always best at: it is a smooth offset of the road that
+ * pulls in through corners, which is exactly the shape a pond wants, and
+ * `waterBands` says which spans of it carry one.
  */
-export function rallyContainmentLineAt(circuit: RealmRacersCircuit, s: number): number {
+export function rallyShoreOffsetAt(circuit: RealmRacersCircuit, s: number): number {
   const track = realmRacersTrack(circuit);
   return track.halfWidthAt(s) + track.apronAt(s);
 }
 
-/** Reads the stepwise barrier table at a lap fraction, wrapping. Absent table
- *  means the whole lap is shore, which is what every circuit was before the
- *  field existed. */
-function barrierKindAtFraction(circuit: RealmRacersCircuit, fraction: number): RallyBarrierKind {
-  const bands = circuit.barrierBands;
-  if (!bands || bands.length === 0) return 'shore';
+/** Reads the stepwise water table at a lap fraction, wrapping. Absent table
+ *  means the whole lap carries water, which is what every circuit was before
+ *  the field existed. */
+function waterKindAtFraction(circuit: RealmRacersCircuit, fraction: number): RallyWaterKind {
+  const bands = circuit.waterBands;
+  if (!bands || bands.length === 0) return 'water';
   const f = ((fraction % 1) + 1) % 1;
   // Walked backwards: the LAST entry at or before the fraction owns it, and a
   // fraction before the first entry wraps round to the last one.
@@ -483,99 +470,48 @@ interface RallySampleRun {
   length: number;
 }
 
-interface RallyContainmentModel {
-  /** What stands on the line at each centerline sample. */
-  readonly kinds: readonly RallyBarrierKind[];
-  /** Yards past the line a racer may still reach at each sample: the wading
-   *  margin on open shore, tapering to zero into a solid span. */
-  readonly grace: Float64Array;
-  /** The contiguous shore runs, which is where water exists at all. */
-  readonly shoreRuns: readonly RallySampleRun[];
+interface RallyWaterModel {
+  /** Whether the shore line carries water at each centerline sample. */
+  readonly kinds: readonly RallyWaterKind[];
+  /** The contiguous water runs: one pond per run. */
+  readonly runs: readonly RallySampleRun[];
 }
 
-/**
- * What the containment line carries, sample by sample.
- *
- * One derivation rather than three, because the kind decides all three answers:
- * how far past the line a racer may get, where the water is, and where a
- * barrier is built.
- */
-const realmRacersContainment: (circuit: RealmRacersCircuit) => RallyContainmentModel =
-  memoizePerCircuit((circuit) => {
-    const track = realmRacersTrack(circuit);
-    const count = track.samples.length;
-    const kinds: RallyBarrierKind[] = [];
-    for (let i = 0; i < count; i++) kinds.push(barrierKindAtFraction(circuit, i / count));
-    const wade = circuit.basin?.wadeYards ?? 0;
+/** Which spans of the shore line carry water, sample by sample, plus the
+ *  contiguous runs the renderer cuts one pond out of each. */
+const realmRacersWater: (circuit: RealmRacersCircuit) => RallyWaterModel = memoizePerCircuit(
+  (circuit) => {
+    const count = realmRacersTrack(circuit).samples.length;
+    const kinds: RallyWaterKind[] = [];
+    for (let i = 0; i < count; i++) kinds.push(waterKindAtFraction(circuit, i / count));
 
-    // Samples to the nearest SOLID sample, the short way round the lap. A lap
-    // with no solid sample at all leaves every distance at infinity, which is
-    // what makes the default's grace exactly the authored wading margin.
-    const distance = new Float64Array(count).fill(Number.POSITIVE_INFINITY);
-    let anySolid = false;
-    for (let i = 0; i < count; i++) {
-      if (isSolidBarrierKind(kinds[i])) {
-        distance[i] = 0;
-        anySolid = true;
+    const runs: RallySampleRun[] = [];
+    const origin = kinds.indexOf('dry');
+    if (origin < 0) {
+      runs.push({ from: 0, length: count });
+      return { kinds, runs };
+    }
+    // Started at a DRY sample so a pond crossing the start line is walked as ONE
+    // run rather than reported as two.
+    let open = -1;
+    for (let k = 0; k <= count; k++) {
+      const on = k < count && kinds[(origin + k) % count] === 'water';
+      if (on && open < 0) open = k;
+      if (!on && open >= 0) {
+        runs.push({ from: (origin + open) % count, length: k - open });
+        open = -1;
       }
     }
-    if (anySolid) {
-      // Two sweeps each way settle a ring: one pass cannot see a source it has
-      // already walked past.
-      for (let pass = 0; pass < 2; pass++) {
-        for (let i = 0; i < count; i++) {
-          distance[i] = Math.min(distance[i], distance[(i + count - 1) % count] + 1);
-        }
-        for (let i = count - 1; i >= 0; i--) {
-          distance[i] = Math.min(distance[i], distance[(i + 1) % count] + 1);
-        }
-      }
-    }
-    const grace = new Float64Array(count);
-    for (let i = 0; i < count; i++) {
-      // `wade * 1` is exactly `wade`, so a lap with no solid span keeps the
-      // authored margin to the last bit.
-      grace[i] = wade * Math.min(1, (distance[i] * track.step) / BARRIER_EASE_YARDS);
-    }
+    return { kinds, runs };
+  },
+);
 
-    const shoreRuns: RallySampleRun[] = [];
-    if (!anySolid) {
-      shoreRuns.push({ from: 0, length: count });
-    } else {
-      // Started at a solid sample so a shore run crossing the start line is
-      // walked as ONE run rather than reported as two.
-      const origin = kinds.findIndex(isSolidBarrierKind);
-      let open = -1;
-      for (let k = 0; k <= count; k++) {
-        const on = k < count && !isSolidBarrierKind(kinds[(origin + k) % count]);
-        if (on && open < 0) open = k;
-        if (!on && open >= 0) {
-          shoreRuns.push({ from: (origin + open) % count, length: k - open });
-          open = -1;
-        }
-      }
-    }
-    return { kinds, grace, shoreRuns };
-  });
-
-/** What stands on the containment line at arc length `s`. */
-export function rallyBarrierKindAt(circuit: RealmRacersCircuit, s: number): RallyBarrierKind {
+/** Whether the shore line carries water at arc length `s`. */
+export function rallyWaterKindAt(circuit: RealmRacersCircuit, s: number): RallyWaterKind {
   const track = realmRacersTrack(circuit);
   const count = track.samples.length;
   const wrapped = ((s % track.length) + track.length) % track.length;
-  return realmRacersContainment(circuit).kinds[Math.round(wrapped / track.step) % count];
-}
-
-/**
- * Yards past the containment line a racer may still reach at `s`: the basin's
- * wading margin on open shore, zero on anything solid, tapering between the two
- * so a barrier never walks a wading racer sideways in one tick.
- */
-export function rallyContainmentGraceAt(circuit: RealmRacersCircuit, s: number): number {
-  const track = realmRacersTrack(circuit);
-  const count = track.samples.length;
-  const wrapped = ((s % track.length) + track.length) % track.length;
-  return realmRacersContainment(circuit).grace[Math.round(wrapped / track.step) % count];
+  return realmRacersWater(circuit).kinds[Math.round(wrapped / track.step) % count];
 }
 
 /**
@@ -686,7 +622,7 @@ export const realmRacersStarts: (circuit: RealmRacersCircuit) => readonly RallyS
   });
 
 /**
- * The BANK PROFILE at (x, z): 0 at the containment line, deepening at the
+ * The BANK PROFILE at (x, z): 0 at the shore line, deepening at the
  * authored bank slope to the basin's floor. NEGATIVE outside the line, and the
  * magnitude there is how far out the point lies, which is what lets one call
  * answer both "how deep is the bank here" and "how far out is this".
@@ -708,7 +644,7 @@ export function rallyBankDepthAt(
 ): number {
   const track = realmRacersTrack(circuit);
   const projection = track.project(x, z, hintIndex);
-  const inward = projection.lateral - rallyContainmentLineAt(circuit, projection.s);
+  const inward = projection.lateral - rallyShoreOffsetAt(circuit, projection.s);
   if (inward <= 0) return inward;
   // A circuit with no basin authors no bank to ramp down at all.
   if (!circuit.basin) return 0;
@@ -719,16 +655,16 @@ export function rallyBankDepthAt(
  * Yards of WATER under (x, z), which is the bank profile above and one more
  * question: is there water on this stretch at all.
  *
- * Zero past a solid span, because there is not. The bank profile alone would
- * answer a couple of yards of depth three yards behind a hedge, which is dry
- * garden nobody can even reach; that answer was harmless only while every
- * circuit was a lake circuit all the way round.
+ * Zero past a DRY span, because there is not. The bank profile alone would
+ * answer a couple of yards of depth three yards past the end of a pond, which
+ * is dry garden; that answer was harmless only while every circuit was a lake
+ * circuit all the way round.
  *
  * NOT what the water surface is shaded with: a vertex out in the middle of a
- * lobe can be nearest to the hedged stretch across the strip, and it is still
- * open water. The renderer places its vertices inside a lobe by construction
- * and reads `rallyBankDepthAt`; this one answers for a POINT whose lobe
- * membership nobody has established.
+ * pond can be nearest to the dry stretch across the strip, and it is still open
+ * water. The renderer places its vertices inside a pond by construction and
+ * reads `rallyBankDepthAt`; this one answers for a POINT whose pond membership
+ * nobody has established.
  */
 export function rallyBasinDepthAt(
   circuit: RealmRacersCircuit,
@@ -739,69 +675,21 @@ export function rallyBasinDepthAt(
   const depth = rallyBankDepthAt(circuit, x, z, hintIndex);
   if (depth <= 0) return depth;
   const projection = realmRacersTrack(circuit).project(x, z, hintIndex);
-  return rallyBarrierKindAt(circuit, projection.s) === 'shore' ? depth : 0;
+  return rallyWaterKindAt(circuit, projection.s) === 'water' ? depth : 0;
 }
 
 /**
- * How far from the centerline a racer may get on the infield side: the
- * containment line, plus whatever grace the barrier standing there gives. Water
- * gives the basin's wading margin; anything solid gives none.
- */
-export function rallyContainmentLimitAt(circuit: RealmRacersCircuit, s: number): number {
-  return rallyContainmentLineAt(circuit, s) + rallyContainmentGraceAt(circuit, s);
-}
-
-/**
- * Holds a racer out of the infield, by clamping how far in they may be while
- * leaving their position ALONG the circuit alone: they slide around the
- * boundary rather than being stopped dead or bounced back onto the road.
- *
- * This is the infield's whole anti-shortcut story now that the stone rim is
- * gone. The rim did the same job with a wall of blocks standing in the lake.
- * What replaced it was the water itself (a navigable margin, then a line no
- * mount will cross, which is what the Lily Basin does in the open world), and
- * what replaced THAT is this: the same line, with the water now only one of the
- * things a circuit may stand on it.
- */
-export function resolveRealmRacersContainment(
-  circuit: RealmRacersCircuit,
-  x: number,
-  z: number,
-): RallyPoint {
-  const track = realmRacersTrack(circuit);
-  let px = x;
-  let pz = z;
-  let hint: number | undefined;
-  // Iterated, because one pass does not converge from out in the middle: the
-  // clamped point's nearest segment is not the one it was measured against, and
-  // the limit differs between them. Two or three passes settle it, and the loop
-  // only ever runs at all for a racer already past the line.
-  for (let pass = 0; pass < CONTAINMENT_CLAMP_PASSES; pass++) {
-    const projection = track.project(px, pz, hint);
-    hint = projection.index;
-    const back = projection.lateral - rallyContainmentLimitAt(circuit, projection.s);
-    if (back <= 0) break;
-    // Walked back along the PROJECTION's own normal, not `pointAt`'s: that
-    // interpolates and renormalizes the tangent between samples, so the result
-    // would sit off the segment's true normal by a centimetre.
-    px -= -projection.tangentZ * back;
-    pz -= projection.tangentX * back;
-  }
-  return { x: px, z: pz };
-}
-
-/**
- * The water's edge, as one closed polygon per contiguous SHORE span. The
+ * The water's edge, as one closed polygon per contiguous WATER span. The
  * renderer triangulates each into a water surface and punches the same polygons
  * out of the lawn, so the water sits in holes in the ground rather than
  * floating over it.
  *
- * A span's polygon is its stretch of the containment line, one point per
- * centerline sample, closed by the straight chord back to where it started.
- * On a circuit whose whole line is shore that chord has nowhere to go and the
- * result is exactly the closed offset curve, which is what the single mandatory
- * lake always was. Where a solid span interrupts, the chord cuts the water off
- * across the mouth of the strip the barrier encloses, and the strip is dry.
+ * A span's polygon is its stretch of the shore line, one point per centerline
+ * sample, closed by the straight chord back to where it started. On a circuit
+ * whose whole line carries water that chord has nowhere to go and the result is
+ * exactly the closed offset curve, which is what the single mandatory lake
+ * always was. Where a DRY span interrupts, the chord cuts the pond off across
+ * the mouth of the strip, and the strip is lawn a racer drives over.
  */
 export const realmRacersWaterOutlines: (
   circuit: RealmRacersCircuit,
@@ -809,14 +697,14 @@ export const realmRacersWaterOutlines: (
   const samples = realmRacersTrack(circuit).samples;
   const count = samples.length;
   // No basin means no water at all, whatever the bands say: the record test and
-  // the metrics both refuse a shore span without one, so this is the arm a DRY
+  // the metrics both refuse a water span without one, so this is the arm a DRY
   // circuit takes rather than a fallback for a broken record.
   if (!circuit.basin) return [];
-  return realmRacersContainment(circuit).shoreRuns.map((run) => {
+  return realmRacersWater(circuit).runs.map((run) => {
     const out: RallyPoint[] = [];
     for (let k = 0; k < run.length; k++) {
       const sample = samples[(run.from + k) % count];
-      const offset = rallyContainmentLineAt(circuit, sample.s);
+      const offset = rallyShoreOffsetAt(circuit, sample.s);
       out.push({ x: sample.x - sample.tz * offset, z: sample.z + sample.tx * offset });
     }
     return out;

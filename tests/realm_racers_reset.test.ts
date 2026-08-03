@@ -8,6 +8,10 @@ const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersGates, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import {
+  REALM_RACERS_LOITER_TICKS,
+  REALM_RACERS_LOITER_WARN_TICKS,
+} from '../src/sim/realm_racers_track_limits';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_RESET_LOCK_TICKS,
@@ -16,10 +20,11 @@ import {
   REALM_RACERS_WRONG_WAY_TICKS,
   type RealmRacersMatch,
   realmRacersMovementLocked,
+  realmRacersToCanonical,
   realmRacersToWorld,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
-import type { Entity } from '../src/sim/types';
+import { type Entity, TICK_RATE } from '../src/sim/types';
 import { addAt, makeWorld, teleport } from './vale_cup_util';
 
 function required<T>(value: T | null | undefined, label: string): T {
@@ -59,6 +64,25 @@ function onLane(match: RealmRacersMatch, s: number) {
   const point = realmRacersTrack(RACE_CIRCUIT).pointAt(s);
   const world = realmRacersToWorld(match, point.x, point.z);
   return { ...point, x: world.x, z: world.z };
+}
+
+/**
+ * Parks a machine off the road at a chosen arc position, with the lap
+ * bookkeeping a machine that DROVE there would have left behind.
+ *
+ * A bare teleport is not a drive, and the track-limits referee is written in
+ * exactly that difference: it measures arc gained against ground covered, so a
+ * fixture that jumps a machine a third of a lap forward reads as a cut and is
+ * returned before the case under test gets a tick. Stamping `lastS` at the
+ * destination is what makes the jump a premise rather than an event.
+ */
+function parkOffRoad(sim: Sim, match: RealmRacersMatch, pid: number, x: number, z: number): void {
+  teleport(sim, pid, x, z);
+  const progress = required(match.progress.get(pid), `progress ${pid}`);
+  const local = realmRacersToCanonical(match, x, z);
+  const projection = realmRacersTrack(RACE_CIRCUIT).project(local.x, local.z);
+  progress.lastS = projection.s;
+  progress.trackIndex = projection.index;
 }
 
 function racing() {
@@ -170,7 +194,7 @@ describe('Realm Racers recovery', () => {
     const road = onLane(match, track.length * 0.4);
     progress.resetS = road.s;
     const lateral = road.halfWidth + 8;
-    teleport(sim, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
 
     for (let i = 0; i < REALM_RACERS_STUCK_TICKS - 1; i++) sim.tick();
     expect(progress.resetLockedUntilTick).toBe(0);
@@ -202,7 +226,7 @@ describe('Realm Racers recovery', () => {
     const progress = required(match.progress.get(a), 'progress');
     const road = onLane(match, realmRacersTrack(RACE_CIRCUIT).length * 0.4);
     const lateral = road.halfWidth + 8;
-    teleport(sim, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
     const offRoadX = racer.pos.x;
     const offRoadZ = racer.pos.z;
 
@@ -264,7 +288,7 @@ describe('Realm Racers recovery', () => {
     const lateral = road.halfWidth + 8;
     const offRoadX = road.x - road.tz * lateral;
     const offRoadZ = road.z + road.tx * lateral;
-    teleport(sim, a, offRoadX, offRoadZ);
+    parkOffRoad(sim, match, a, offRoadX, offRoadZ);
 
     // Stopped off track for most, but not all, of the window.
     for (let i = 0; i < REALM_RACERS_STUCK_TICKS - 1; i++) sim.tick();
@@ -277,7 +301,7 @@ describe('Realm Racers recovery', () => {
 
     // ...so returning off track resets the wait: the two nearly-full bouts
     // never sum past the threshold, only a single unbroken window does.
-    teleport(sim, a, offRoadX, offRoadZ);
+    parkOffRoad(sim, match, a, offRoadX, offRoadZ);
     for (let i = 0; i < REALM_RACERS_STUCK_TICKS - 1; i++) sim.tick();
     expect(progress.resetLockedUntilTick).toBe(0);
     expect(racer.pos.x).toBeCloseTo(offRoadX, 5);
@@ -292,7 +316,7 @@ describe('Realm Racers recovery', () => {
     const progress = required(match.progress.get(a), 'progress');
     const road = onLane(match, realmRacersTrack(RACE_CIRCUIT).length * 0.4);
     const lateral = road.halfWidth + 8;
-    teleport(sim, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
     const lockedX = racer.pos.x;
     const lockedZ = racer.pos.z;
     progress.resetLockedUntilTick = sim.ctx.tickCount + REALM_RACERS_RESET_LOCK_TICKS;
@@ -341,5 +365,138 @@ describe('Realm Racers wrong-way state', () => {
       sim.tick();
       expect(sim.realmRacersInfoFor(a).match?.wrongWay).toBe(false);
     }
+  });
+});
+
+describe('Realm Racers track limits in a live race', () => {
+  /**
+   * Moves a machine as if it had DRIVEN there this tick: `prevPos` is where it
+   * stood, `pos` is where it ends up, and the referee reads the distance
+   * between them as the ground it covered. That is the whole difference between
+   * this and `teleport`, which collapses the two and looks like a cut.
+   */
+  function glide(sim: Sim, pid: number, x: number, z: number): void {
+    const e = required(sim.entities.get(pid), `entity ${pid}`);
+    e.prevPos = { ...e.pos };
+    e.pos.x = x;
+    e.pos.z = z;
+    sim.ctx.rebucket(e);
+    updateRealmRacers(sim.ctx);
+  }
+
+  /** Puts a machine ON the road at `s`, with the bookkeeping to match. */
+  function startFrom(sim: Sim, match: RealmRacersMatch, pid: number, s: number) {
+    const point = onLane(match, s);
+    parkOffRoad(sim, match, pid, point.x, point.z);
+    return point;
+  }
+
+  /** The first pair of samples on the lap whose straight chord saves more than
+   *  `minSaving` yards of arc: the shortest path a cheater can actually take. */
+  function findCut(minSaving: number): { from: number; to: number } {
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const count = track.samples.length;
+    for (let from = 0; from < count; from += 3) {
+      for (let ahead = 40; ahead < count / 2; ahead += 5) {
+        const to = (from + ahead) % count;
+        const a = track.samples[from];
+        const b = track.samples[to];
+        if (ahead * track.step - Math.hypot(b.x - a.x, b.z - a.z) > minSaving) {
+          return { from, to };
+        }
+      }
+    }
+    throw new Error('this circuit offers no cut worth taking, so nothing here is under test');
+  }
+
+  it('returns a machine that cuts a corner to the point it left the road', () => {
+    const { sim, a, match } = racing();
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const cut = findCut(40);
+    const exit = startFrom(sim, match, a, track.samples[cut.from].s);
+    const lapBefore = progress.lap;
+    const target = onLane(match, track.samples[cut.to].s);
+
+    // Drive the chord in racing-sized steps until the referee steps in,
+    // remembering how far down the lap the cut had got by then.
+    const span = Math.hypot(target.x - exit.x, target.z - exit.z);
+    const steps = Math.ceil(span / 3);
+    let reachedS = progress.lastS;
+    for (let i = 1; i <= steps && progress.cutReturnUntilTick === 0; i++) {
+      const t = i / steps;
+      reachedS = progress.lastS;
+      glide(sim, a, exit.x + (target.x - exit.x) * t, exit.z + (target.z - exit.z) * t);
+    }
+
+    // Caught partway across rather than credited on arrival.
+    expect(progress.cutReturnUntilTick).toBeGreaterThan(sim.ctx.tickCount);
+    const racer = required(sim.entities.get(a), 'racer');
+    // Put back ON the racing line, which is where a reset leaves a machine, and
+    // BEHIND the arc the cut had reached: the gain is undone, not banked.
+    const back = onLane(match, progress.lastS);
+    expect(Math.hypot(racer.pos.x - back.x, racer.pos.z - back.z)).toBeLessThan(0.5);
+    expect(reachedS - progress.lastS).toBeGreaterThan(20);
+    // ...and the return is to the point the road was LEFT, not to a gate: the
+    // last ordered anchor is a long way further back than this.
+    expect(progress.lastS).toBeGreaterThan(progress.resetS);
+    expect(progress.lap).toBe(lapBefore);
+    // A short control lock, not a stop-go penalty: the point is to undo a gain.
+    expect(progress.resetLockedUntilTick).toBeGreaterThan(sim.ctx.tickCount);
+    expect(progress.resetLockedUntilTick - sim.ctx.tickCount).toBeLessThan(
+      REALM_RACERS_RESET_LOCK_TICKS,
+    );
+    // ...and the pilot is told why, in one line, for a few seconds.
+    expect(sim.realmRacersInfoFor(a).match?.cutReturned).toBe(true);
+  });
+
+  it('leaves a machine that ran wide and rejoined ahead completely alone', () => {
+    // The defect the whole containment family had, and the reason this design
+    // replaced it: an excursion that DROVE its yards is racing, whichever side
+    // of the road it happened on.
+    const { sim, a, match } = racing();
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const start = track.length * 0.5;
+    startFrom(sim, match, a, start);
+    for (let i = 1; i <= 20; i++) {
+      const point = onLane(match, start + i * 3);
+      // Nine yards OUTSIDE the road: past the verge, well into the garden.
+      const wide = point.halfWidth + 9;
+      glide(sim, a, point.x + point.tz * wide, point.z - point.tx * wide);
+    }
+    expect(progress.cutReturnUntilTick).toBe(0);
+    expect(progress.lastS).toBeGreaterThan(start + 50);
+    expect(sim.realmRacersInfoFor(a).match?.cutReturned).toBe(false);
+  });
+
+  it('counts a machine loitering off the road down, then returns it to the last anchor', () => {
+    const { sim, a, match, racer } = racing();
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const progress = required(match.progress.get(a), 'progress');
+    const road = onLane(match, track.length * 0.4);
+    progress.resetS = road.s;
+    // Parked in the infield, moving just enough that the STUCK arm (three
+    // seconds under 0.75 yd/s) never fires: this is the camper, not the wedged
+    // machine, and only the loiter clock catches it.
+    const lateral = road.halfWidth + 10;
+    parkOffRoad(sim, match, a, road.x - road.tz * lateral, road.z + road.tx * lateral);
+    const countdowns: number[] = [];
+    for (let i = 0; i < REALM_RACERS_LOITER_TICKS; i++) {
+      required(racer.drive, 'drive').speed = 4;
+      // A yard of circling, so the odometer runs and the arc does not.
+      const wobble = i % 2 === 0 ? 1 : -1;
+      glide(sim, a, racer.pos.x + road.tz * wobble, racer.pos.z - road.tx * wobble);
+      countdowns.push(sim.realmRacersInfoFor(a).match?.offTrackIn ?? 0);
+    }
+    // Warned first, counting down in whole seconds, and silent before that.
+    expect(countdowns[0]).toBe(0);
+    expect(Math.max(...countdowns)).toBe(REALM_RACERS_LOITER_WARN_TICKS / TICK_RATE);
+    expect(countdowns.filter((seconds) => seconds > 0).length).toBeGreaterThan(TICK_RATE);
+    // ...then put back on the last ordered anchor, which is the recovery every
+    // other arm uses rather than a second machine of its own.
+    expect(racer.pos.x).toBeCloseTo(road.x, 5);
+    expect(racer.pos.z).toBeCloseTo(road.z, 5);
+    expect(sim.realmRacersInfoFor(a).match?.offTrackIn).toBe(0);
   });
 });

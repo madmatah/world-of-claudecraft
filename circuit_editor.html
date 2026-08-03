@@ -65,8 +65,8 @@
     #brushLabel.off input { opacity: 0.4; }
     /* An id rule with a display outranks the UA's [hidden] { display: none },
        so the barrier picker needs the same guard #preview and #empty take. */
-    #barrierLabel { display: inline; }
-    #barrierLabel[hidden] { display: none; }
+    #waterLabel { display: inline; }
+    #waterLabel[hidden] { display: none; }
     footer { padding: 6px 12px; background: #1b1e27; border-top: 1px solid #2c3040; color: #6f7890; }
     kbd { background: #262b38; border: 1px solid #3a4054; border-radius: 3px; padding: 0 4px; }
     dialog { background: #1b1e27; color: #d7dae2; border: 1px solid #3a4054; border-radius: 8px; padding: 16px; font: inherit; min-width: 280px; }
@@ -90,16 +90,14 @@
     <button type="button" id="modeHandles">Handles</button>
     <button type="button" id="modeWidth">Width</button>
     <button type="button" id="modeApron">Apron</button>
-    <button type="button" id="modeBarrier" title="Paint what stands on the containment line: water, hedge or kneewall">Barrier</button>
+    <button type="button" id="modeWater" title="Paint where the shore line carries water: pond, or open lawn">Water</button>
     <label id="brushLabel">brush <input type="number" id="brush" min="0.5" max="40" step="0.5" value="10" style="width:70px" /></label>
-    <!-- The barrier brush paints a KIND, not a number, so it gets its own
+    <!-- The water brush paints a KIND, not a number, so it gets its own
          control rather than a numeric field with a legend nobody can read. -->
-    <label id="barrierLabel" hidden>stands on the line
-      <select id="barrierKind">
-        <option value="shore">water</option>
-        <option value="hedge_low">low hedge</option>
-        <option value="hedge_tall">tall hedge</option>
-        <option value="wall_low">kneewall</option>
+    <label id="waterLabel" hidden>shore line
+      <select id="waterKind">
+        <option value="water">pond</option>
+        <option value="dry">lawn</option>
       </select>
     </label>
     <span class="grow"></span>

@@ -29,12 +29,7 @@ import {
 import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
-import {
-  buildTieredFountain,
-  GARDEN_MARBLE,
-  gardenStatueGeo,
-  gardenStatueMaterial,
-} from './garden_stonework';
+import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
 import {
   biomeGroundTint,
@@ -45,9 +40,7 @@ import {
 } from './instance_surface';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
 import {
-  RALLY_BARRIER_VISUALS,
   RALLY_FLOWER_COLOURS,
-  rallyBarrierPieces,
   rallyBasinMeshes,
   rallyBorderFlowerSpots,
   rallyDressingSpots,
@@ -116,23 +109,6 @@ const BED_URLS: Record<string, string> = {
   bedSquareB: '/models/props/flower_bed_square_b.glb',
 };
 const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
-/**
- * The Great Maze's own clipped hedge, which is what makes it the Evergarden's
- * hedge rather than a lookalike: `garden_features.ts` stands this exact model
- * on the maze walls, scaled to a nine yard cell. Here it is scaled DOWN to a
- * barrier's height, which is the only difference between a maze wall and the
- * knee-high line flanking a circuit's corridor.
- *
- * It is not in `PROP_ASSET_DEFS`, so this module registers its own preload, the
- * same move it already makes for the arch and the banners. `loadGltf` caches
- * per URL, so the second registration costs one promise and not one parse.
- */
-const HEDGE_URL = '/models/props/maze_hedge_wall.glb';
-/** Authored bounds of maze_hedge_wall.glb at scale 1: its LONG axis is x, it
- *  stands from y = 0, and its depth along z is the wall's thickness. */
-const HEDGE_SOURCE_LENGTH = 0.979;
-const HEDGE_SOURCE_HEIGHT = 0.568;
-const HEDGE_SOURCE_DEPTH = 0.381;
 const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
 const REED_URL = '/models/props/reeds.glb';
 /** Authored half-extent of the flower-bed models (see EVERGARDEN_PROPS scales). */
@@ -154,7 +130,6 @@ const ASSET_URLS = [
   TREE_URL,
   ARCH_URL,
   BANNER_URL,
-  HEDGE_URL,
   IRON_FENCE_URL,
   IRON_PILLAR_URL,
   REED_URL,
@@ -162,22 +137,9 @@ const ASSET_URLS = [
 ];
 for (const url of ASSET_URLS) preload(url);
 
-/**
- * Test-only window onto the asset set and onto the ONE model whose authored
- * bounds this module hard-codes (see tests/render_glb_replacement_assets).
- *
- * The hedge is scaled from those bounds to a height the design depends on being
- * see-over-able, so a re-export of the GLB that changed its extents would
- * silently rescale every barrier on every circuit with a green suite.
- */
+/** Test-only window onto the asset set (see tests/render_glb_replacement_assets). */
 export const realmRacersPreloadInternalsForTest = {
   assetUrls: ASSET_URLS,
-  hedgeSource: {
-    url: HEDGE_URL,
-    length: HEDGE_SOURCE_LENGTH,
-    height: HEDGE_SOURCE_HEIGHT,
-    depth: HEDGE_SOURCE_DEPTH,
-  },
 };
 
 interface ModelSpot {
@@ -558,83 +520,6 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
   );
 }
 
-/**
- * The one shared kneewall block, minted once.
- *
- * Instanced, so it MUST be shared: `realm_racers_track_dispose_core.ts` frees a
- * plain mesh's geometry and never an `InstancedMesh`'s, on the promise that
- * every instanced geometry belongs to a cache rather than to one build.
- */
-let kneewallGeo: THREE.BufferGeometry | null = null;
-
-function rallyKneewallGeo(): THREE.BufferGeometry {
-  if (kneewallGeo) return kneewallGeo;
-  // A unit block standing ON the ground, its LONG axis x, so a per-instance
-  // scale reads (length, height, depth) exactly like the hedge model's does.
-  const box = new THREE.BoxGeometry(1, 1, 1);
-  box.translate(0, 0.5, 0);
-  kneewallGeo = box;
-  return kneewallGeo;
-}
-
-let kneewallMaterial: THREE.Material | null = null;
-
-/**
- * The barriers standing on the containment line: a run of modules along every
- * solid span, scaled to the kind's own height.
- *
- * Both hedge kinds are the Great Maze's own clipped hedge, scaled down. Using
- * the model the Evergarden already wears is the point: a knee-high line beside
- * a circuit in that zone should be the same hedge as the one in the maze, and
- * the parterre's clipped BUSH line (the other candidate) is spaced planting
- * with daylight between the bushes, which reads as a place to aim at on a
- * boundary the clamp has no gaps in.
- */
-function buildBarriers(circuit: RealmRacersCircuit, group: THREE.Group): void {
-  const pieces = rallyBarrierPieces(circuit);
-  if (pieces.length === 0) return;
-  for (const kind of ['hedge_low', 'hedge_tall'] as const) {
-    const visual = RALLY_BARRIER_VISUALS[kind];
-    instanceModel(
-      group,
-      HEDGE_URL,
-      pieces
-        .filter((piece) => piece.kind === kind)
-        .map((piece) => ({
-          x: piece.x,
-          y: GRASS_Y,
-          z: piece.z,
-          yaw: piece.yaw,
-          sx: piece.length / HEDGE_SOURCE_LENGTH,
-          sy: visual.height / HEDGE_SOURCE_HEIGHT,
-          sz: visual.depth / HEDGE_SOURCE_DEPTH,
-        })),
-    );
-  }
-
-  const walls = pieces.filter((piece) => piece.kind === 'wall_low');
-  if (walls.length === 0) return;
-  const visual = RALLY_BARRIER_VISUALS.wall_low;
-  kneewallMaterial ??= surfaceMat({ color: GARDEN_MARBLE, roughness: 0.8 });
-  const mesh = new THREE.InstancedMesh(rallyKneewallGeo(), kneewallMaterial, walls.length);
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const up = new THREE.Vector3(0, 1, 0);
-  const v = new THREE.Vector3();
-  const sc = new THREE.Vector3();
-  walls.forEach((piece, i) => {
-    q.setFromAxisAngle(up, piece.yaw);
-    v.set(piece.x, GRASS_Y, piece.z);
-    sc.set(piece.length, visual.height, visual.depth);
-    mesh.setMatrixAt(i, m.compose(v, q, sc));
-  });
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.computeBoundingSphere();
-  group.add(mesh);
-}
-
 export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersTrackView {
   const group = new THREE.Group();
   group.name = 'realm-racers-track';
@@ -752,7 +637,6 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   );
 
   buildBasin(circuit, group);
-  buildBarriers(circuit, group);
   buildStartArch(circuit, group);
   const startLightLenses = buildStartLights(circuit, group);
   const startLightOff = startLightLenses[0]?.material as THREE.Material;

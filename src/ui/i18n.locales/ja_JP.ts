@@ -8825,6 +8825,8 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
     '世界のどこからでも、レルムレーサーズのウィンドウからレースの待機列に並べる。4人のフルグリッドが揃うと、全員がスタートラインに一斉に着席し、カウントダウンが始まる。',
   'guide.realmRacersPage.howRaceBody':
     'いつもの移動キーでステアリング、アクセル、ブレーキを操作し、ジャンプボタンを押し続けるとサイドブレーキでタイトなコーナーを滑って抜けられる。すべてのパイロットはグラウンドブラストを携えている。これは捕らえた相手をよろめかせる前方への一撃で、進路をふさぐライバルは決して安全ではない。最終ラップの後に先にラインを越えた者が勝利し、レースが決着した時点での位置で全員の順位が決まる。',
+  'guide.realmRacersPage.howLimitsBody':
+    'コース両脇の庭園は開かれていて走行可能なので、膨らむこと、押し出されること、花壇を滑り抜けることはレースの一部です。代償は速度だけ。ただし、それで得をすることは許されません。コースを外れてコース自体より短いラインを走れば、進行委員が離脱した地点まで戻します。庭園で止まったままの操縦者も、数秒後にコースへ戻されます。',
   'guide.realmRacersPage.howPracticeBody':
     '見知らぬ相手とまだ走る心の準備ができていない？練習走行なら同じマシン、同じ操作感覚のまま、専用のサーキットの複製上で自分で選んだ相手と走れるので、本番に並ぶ前にラインを覚えられる。',
   'guide.realmRacersPage.machineHeading': '貸与されるマシン',
@@ -11095,6 +11097,8 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.time': '{minutes}:{seconds}',
   'hudChrome.rally.speed': '速度 {speed}',
   'hudChrome.rally.wrongWay': '逆走',
+  'hudChrome.rally.offTrack': 'コースに戻れ: {seconds}',
+  'hudChrome.rally.cutReturned': 'ショートカット。コースを外れた地点に戻されました。',
   'hudChrome.rally.reset': 'コースに戻る',
   'hudChrome.rally.countdown': 'エンジン固定中。開始まで{seconds}秒',
   'hudChrome.rally.go': 'スタート！',

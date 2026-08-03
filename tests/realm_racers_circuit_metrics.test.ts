@@ -309,62 +309,62 @@ describe('Realm Racers circuit metrics: the basin shores', () => {
   });
 });
 
-describe('Realm Racers circuit metrics: what stands on the containment line', () => {
-  it('scopes the shore overlap to WATER, and reports two solid lines as a corridor', () => {
-    // The distinction the whole packet turns on. Two shores meeting is one lake
-    // drawn twice, which is a defect; two hedges facing each other across the
+describe('Realm Racers circuit metrics: which spans of the shore carry water', () => {
+  it('scopes the shore overlap to WATER, and reports two dry lines as a corridor', () => {
+    // The distinction this readout turns on. Two ponds meeting is one lake drawn
+    // twice, which is a defect; two DRY stretches facing each other across the
     // same gap is the corridor a circuit is authored FOR, so it is reported and
     // never faulted.
-    const water = draft('metrics_barrier_water_pinch', PINCHED_CONTROL_POINTS, 10);
+    const water = draft('metrics_water_water_pinch', PINCHED_CONTROL_POINTS, 10);
     expect(realmRacersCircuitMetrics(water).shoreOverlapYards).toBeCloseTo(160, 0);
-    expect(realmRacersCircuitMetrics(water).sharedBarrierYards).toBe(0);
+    expect(realmRacersCircuitMetrics(water).sharedDryYards).toBe(0);
 
-    // The same shape with both pinched stretches flipped to a solid kind. The
-    // fractions come off the water case: its overlap runs over the two long
-    // stretches that face each other.
-    const hedged = draft('metrics_barrier_hedged_pinch', PINCHED_CONTROL_POINTS, 10, {
-      barrierBands: [
-        { s: 0, kind: 'shore' },
-        { s: 0.08, kind: 'hedge_low' },
-        { s: 0.26, kind: 'shore' },
-        { s: 0.55, kind: 'hedge_low' },
-        { s: 0.72, kind: 'shore' },
+    // The same shape with both pinched stretches painted dry. The fractions come
+    // off the water case: its overlap runs over the two long stretches that face
+    // each other.
+    const drained = draft('metrics_water_dry_pinch', PINCHED_CONTROL_POINTS, 10, {
+      waterBands: [
+        { s: 0, kind: 'water' },
+        { s: 0.08, kind: 'dry' },
+        { s: 0.26, kind: 'water' },
+        { s: 0.55, kind: 'dry' },
+        { s: 0.72, kind: 'water' },
       ],
     });
-    const metrics = realmRacersCircuitMetrics(hedged);
+    const metrics = realmRacersCircuitMetrics(drained);
     expect(metrics.shoreOverlapYards).toBe(0);
-    expect(codesOf(hedged)).not.toContain('shore_overlap');
+    expect(codesOf(drained)).not.toContain('shore_overlap');
     // ...and the corridor is measured instead: real yardage, and less than the
     // whole flipped span, so it is the FACING part rather than a span count.
-    expect(metrics.sharedBarrierYards).toBeGreaterThan(100);
-    expect(metrics.sharedBarrierYards).toBeLessThan(metrics.lapLength / 2);
-    // The circuit still faces itself: flipping the barrier closed the water,
-    // not the racing.
+    expect(metrics.sharedDryYards).toBeGreaterThan(100);
+    expect(metrics.sharedDryYards).toBeLessThan(metrics.lapLength / 2);
+    // The circuit still faces itself: draining the pinch closed the water, not
+    // the racing.
     expect(metrics.shootingCorridorYards).toBeGreaterThan(150);
   });
 
   it('scopes each measurement by BOTH sides of the pair, not either', () => {
     // The two operators that decide which pair counts where. `shore_overlap`
-    // skips a pair where EITHER side is solid (only two waters can draw one
-    // lake twice); `sharedBarrierYards` counts a pair where BOTH are solid
-    // (one hedge facing open water bounds nothing). A fixture hedged on both
-    // sides satisfies either operator, so the deciding case is a pair hedged on
-    // ONE side, which must report zero for both.
-    const oneSided = draft('metrics_barrier_one_sided', PINCHED_CONTROL_POINTS, 10, {
-      barrierBands: [
-        { s: 0, kind: 'shore' },
-        { s: 0.08, kind: 'hedge_low' },
-        { s: 0.26, kind: 'shore' },
+    // skips a pair where EITHER side is dry (only two ponds can draw one lake
+    // twice); `sharedDryYards` counts a pair where BOTH are dry (one dry shore
+    // facing open water is not a corridor). A fixture dry on both sides
+    // satisfies either operator, so the deciding case is a pair dry on ONE
+    // side, which must report zero for both.
+    const oneSided = draft('metrics_water_one_sided', PINCHED_CONTROL_POINTS, 10, {
+      waterBands: [
+        { s: 0, kind: 'water' },
+        { s: 0.08, kind: 'dry' },
+        { s: 0.26, kind: 'water' },
       ],
     });
     const metrics = realmRacersCircuitMetrics(oneSided);
-    // Water on one side of the pinch, hedge on the other: no two waters meet,
-    // so nothing self-crosses...
+    // Water on one side of the pinch, lawn on the other: no two ponds meet, so
+    // nothing self-crosses...
     expect(metrics.shoreOverlapYards).toBe(0);
     expect(codesOf(oneSided)).not.toContain('shore_overlap');
-    // ...and no two barriers flank one strip, so there is no corridor either.
-    expect(metrics.sharedBarrierYards).toBe(0);
-    // Not vacuous: the same shape unhedged really does overlap, and hedged on
+    // ...and no two dry shores flank one strip, so there is no corridor either.
+    expect(metrics.sharedDryYards).toBe(0);
+    // Not vacuous: the same shape all-water really does overlap, and dry on
     // BOTH sides really does report a corridor.
     expect(
       realmRacersCircuitMetrics(draft('metrics_one_sided_control', PINCHED_CONTROL_POINTS, 10))
@@ -373,87 +373,87 @@ describe('Realm Racers circuit metrics: what stands on the containment line', ()
     expect(
       realmRacersCircuitMetrics(
         draft('metrics_one_sided_both', PINCHED_CONTROL_POINTS, 10, {
-          barrierBands: [
-            { s: 0, kind: 'shore' },
-            { s: 0.08, kind: 'hedge_low' },
-            { s: 0.26, kind: 'shore' },
-            { s: 0.55, kind: 'hedge_low' },
-            { s: 0.72, kind: 'shore' },
+          waterBands: [
+            { s: 0, kind: 'water' },
+            { s: 0.08, kind: 'dry' },
+            { s: 0.26, kind: 'water' },
+            { s: 0.55, kind: 'dry' },
+            { s: 0.72, kind: 'water' },
           ],
         }),
-      ).sharedBarrierYards,
+      ).sharedDryYards,
     ).toBeGreaterThan(100);
   });
 
-  it('refuses a shore span on a circuit that authors no water', () => {
-    const dry = draft('metrics_barrier_dry_ok', ring(60, 16), 10, {
-      barrierBands: [{ s: 0, kind: 'hedge_tall' }],
+  it('refuses a WATER span on a circuit that authors no basin', () => {
+    const dry = draft('metrics_water_dry_ok', ring(60, 16), 10, {
+      waterBands: [{ s: 0, kind: 'dry' }],
       basin: undefined,
     });
     expect(codesOf(dry)).not.toContain('shore_requires_basin');
     expect(realmRacersCircuitErrors(realmRacersCircuitMetrics(dry))).toEqual([]);
 
-    const thirsty = draft('metrics_barrier_dry_shore', ring(60, 16), 10, {
-      barrierBands: [
-        { s: 0, kind: 'hedge_tall' },
-        { s: 0.5, kind: 'shore' },
+    const thirsty = draft('metrics_water_dry_shore', ring(60, 16), 10, {
+      waterBands: [
+        { s: 0, kind: 'dry' },
+        { s: 0.5, kind: 'water' },
       ],
       basin: undefined,
     });
     expect(codesOf(thirsty)).toContain('shore_requires_basin');
-    // The default (no table at all) is a whole lap of shore, so a basinless
+    // The default (no table at all) is a whole lap of water, so a basinless
     // record with no bands is refused too rather than read as dry.
-    const bandless = draft('metrics_barrier_bandless_dry', ring(60, 16), 10, { basin: undefined });
+    const bandless = draft('metrics_water_bandless_dry', ring(60, 16), 10, { basin: undefined });
     expect(codesOf(bandless)).toContain('shore_requires_basin');
   });
 
   it.each([
-    ['not starting at zero', [{ s: 0.2, kind: 'hedge_low' }]],
+    ['not starting at zero', [{ s: 0.2, kind: 'dry' }]],
     [
       'unsorted',
       [
-        { s: 0, kind: 'shore' },
-        { s: 0.6, kind: 'hedge_low' },
-        { s: 0.3, kind: 'shore' },
+        { s: 0, kind: 'water' },
+        { s: 0.6, kind: 'dry' },
+        { s: 0.3, kind: 'water' },
       ],
     ],
     [
       'an entry at the end of the lap',
       [
-        { s: 0, kind: 'shore' },
-        { s: 1, kind: 'hedge_low' },
+        { s: 0, kind: 'water' },
+        { s: 1, kind: 'dry' },
       ],
     ],
     [
-      'a kind the spline cannot stand on the line',
+      'a kind the spline does not know',
       [
-        { s: 0, kind: 'shore' },
-        { s: 0.4, kind: 'moat' },
+        { s: 0, kind: 'water' },
+        { s: 0.4, kind: 'swamp' },
       ],
     ],
     ['empty', []],
-    ['a negative fraction', [{ s: -0.1, kind: 'hedge_low' }]],
+    ['a negative fraction', [{ s: -0.1, kind: 'dry' }]],
     [
       'a fraction that is not a number',
       [
-        { s: 0, kind: 'shore' },
-        { s: Number.NaN, kind: 'hedge_low' },
+        { s: 0, kind: 'water' },
+        { s: Number.NaN, kind: 'dry' },
       ],
     ],
-  ])('reports a barrier table %s', (label, bands) => {
-    const broken = draft(`metrics_barrier_bad_${label.replace(/\W+/g, '_')}`, ring(60, 16), 10, {
-      barrierBands: bands as RealmRacersCircuit['barrierBands'],
+  ])('reports a water table %s', (label, bands) => {
+    const broken = draft(`metrics_water_bad_${label.replace(/\W+/g, '_')}`, ring(60, 16), 10, {
+      waterBands: bands as RealmRacersCircuit['waterBands'],
     });
-    expect(codesOf(broken)).toContain('barrier_bands_malformed');
+    expect(codesOf(broken)).toContain('water_bands_malformed');
     // ...and a well formed table of the same shape is not reported.
-    const fine = draft('metrics_barrier_good_table', ring(60, 16), 10, {
-      barrierBands: [
-        { s: 0, kind: 'shore' },
-        { s: 0.4, kind: 'hedge_low' },
-        { s: 0.5, kind: 'shore' },
+    const fine = draft('metrics_water_good_table', ring(60, 16), 10, {
+      waterBands: [
+        { s: 0, kind: 'water' },
+        { s: 0.4, kind: 'dry' },
+        { s: 0.5, kind: 'water' },
       ],
     });
-    expect(codesOf(fine)).not.toContain('barrier_bands_malformed');
+    expect(codesOf(fine)).not.toContain('water_bands_malformed');
   });
 });
 
