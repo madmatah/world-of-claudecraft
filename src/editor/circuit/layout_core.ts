@@ -14,6 +14,10 @@ import type {
   RealmRacersCircuitProblem,
   RealmRacersCircuitProblemCode,
 } from '../../sim/realm_racers_circuit_metrics';
+import {
+  REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR,
+  REALM_RACERS_RADIUS_OVER_WIDTH_WARN,
+} from '../../sim/realm_racers_circuit_metrics';
 import { REALM_RACERS_MIN_HALF_WIDTH } from '../../sim/realm_racers_layout';
 import type { EditorIconId } from './editor_icons';
 
@@ -77,16 +81,29 @@ export const RAIL_MODES: readonly RailModeDef[] = [
   },
 ];
 
-export function toolFor(mode: RailModeId, drawn: boolean): CircuitTool {
-  if (mode === 'shape') return drawn ? 'handles' : 'draw';
+/**
+ * The gesture the canvas routes.
+ *
+ * SHAPE is one intent over two gestures and resolves by STATE, not by a button:
+ * a blank canvas is drawn on, a drawn one is edited by its handles. `redrawing`
+ * is the third case, and it exists because merging the two lost a real authoring
+ * move: the old tool let an operator re-stroke the centerline of a DRAWN circuit
+ * and keep everything else on the record (the dressing, the width profile, the
+ * id, the theme, the race settings), and the only way back to a stroke without it
+ * is New blank, which discards the whole document.
+ */
+export function toolFor(mode: RailModeId, drawn: boolean, redrawing = false): CircuitTool {
+  if (mode === 'shape') return drawn && !redrawing ? 'handles' : 'draw';
   return mode;
 }
 
 /** The one line the canvas banner carries: what the active tool does. */
-export function railBanner(mode: RailModeId, drawn: boolean): string {
-  switch (toolFor(mode, drawn)) {
+export function railBanner(mode: RailModeId, drawn: boolean, redrawing = false): string {
+  switch (toolFor(mode, drawn, redrawing)) {
     case 'draw':
-      return 'drag anywhere to draw the centerline in one gesture; the fitted curve replaces the stroke on release';
+      return redrawing
+        ? 'drag a new centerline: the dressing, the road profile and the race settings all stay as they are'
+        : 'drag anywhere to draw the centerline in one gesture; the fitted curve replaces the stroke on release';
     case 'handles':
       return 'drag a handle to move it, click the curve to insert one, del to delete';
     case 'width':
@@ -140,6 +157,8 @@ export type ActionId =
   | 'zoomOut'
   | 'zoomReset'
   | 'zoomIn'
+  | 'redrawCenterline'
+  | 'disarmTool'
   | 'fitEnclosure'
   | 'fixCorners'
   | 'raceSettings'
@@ -186,6 +205,9 @@ export interface EditorActionDef {
   menu?: MenuId;
   /** Whether it toggles something, so the menu can carry a checkmark. */
   toggle?: true;
+  /** Whether it needs a circuit to act on, which is what a blank canvas refuses.
+   *  On the ROW so the enable sweep and the dispatch guard read one source. */
+  needsCircuit?: true;
   /** Short verb the status bar's chord hints use. A hint is deliberately not the
    *  label: "flip direction" reads better in a hint row than "Face the racing
    *  direction". */
@@ -223,6 +245,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'saveDraft',
+    needsCircuit: true,
     label: 'Save draft',
     detail: 'Write the record to tmp/circuit-drafts, ready for /dev rallydraft',
     icon: 'save',
@@ -233,6 +256,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'copyRecord',
+    needsCircuit: true,
     label: 'Copy record',
     detail: 'Copy the record as TypeScript, to paste into realm_racers_circuits.ts',
     icon: 'clipboard',
@@ -263,6 +287,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'toggleDock',
+    needsCircuit: true,
     label: '3D dock',
     detail: "Show the circuit in 3D, through the game's own track builder",
     icon: 'cube',
@@ -353,7 +378,28 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     group: 'view',
   },
   {
+    id: 'redrawCenterline',
+    needsCircuit: true,
+    label: 'Redraw centerline',
+    detail:
+      'Draw a new centerline over this circuit, keeping its dressing, its road profile and its race settings. New blank discards those; this does not',
+    icon: 'shape',
+    scope: 'global',
+    menu: 'track',
+    group: 'track',
+  },
+  {
+    id: 'disarmTool',
+    label: 'Pointer, and drop the selection',
+    detail: 'Put the props tool back to the pointer, so a click on empty plan places nothing',
+    icon: 'close',
+    scope: 'global',
+    shortcut: 'escape',
+    group: 'selection',
+  },
+  {
     id: 'fitEnclosure',
+    needsCircuit: true,
     label: 'Fit enclosure',
     detail: 'Size the perimeter wall and the collision region to the road',
     icon: 'box',
@@ -363,6 +409,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'fixCorners',
+    needsCircuit: true,
     label: 'Fix corners',
     detail: 'Narrow the road wherever a corner is tighter than it',
     icon: 'wrench',
@@ -372,6 +419,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'raceSettings',
+    needsCircuit: true,
     label: 'Race settings',
     detail: 'The enclosure and the race numbers, in the right panel',
     icon: 'flag',
@@ -390,6 +438,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'modeWidth',
+    needsCircuit: true,
     label: 'Width',
     detail: 'Paint the road half-width along the lap',
     icon: 'width',
@@ -399,6 +448,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'modeProps',
+    needsCircuit: true,
     label: 'Props',
     detail: 'Place props, scatters and ponds',
     icon: 'props',
@@ -408,6 +458,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
   },
   {
     id: 'modeRace',
+    needsCircuit: true,
     label: 'Race',
     detail: 'The enclosure and the race settings',
     icon: 'flag',
@@ -572,7 +623,7 @@ export const MENU_ITEMS: Record<MenuId, readonly ActionId[]> = {
     'zoomIn',
     'keys',
   ],
-  track: ['fitEnclosure', 'fixCorners', 'raceSettings'],
+  track: ['redrawCenterline', 'fitEnclosure', 'fixCorners', 'raceSettings'],
 };
 
 export function menuActions(menu: MenuId): EditorActionDef[] {
@@ -602,7 +653,7 @@ export const MODE_ACTIONS: Record<RailModeId, ActionId> = {
 export function railActions(mode: RailModeId): readonly ActionId[] {
   switch (mode) {
     case 'shape':
-      return ['fitEnclosure', 'fixCorners'];
+      return ['redrawCenterline', 'fitEnclosure', 'fixCorners'];
     case 'width':
       return ['fixCorners'];
     case 'race':
@@ -680,8 +731,26 @@ export function shortcutMatches(spec: string, ev: ShortcutEvent): boolean {
  * the props branch already knows whether it has one.
  */
 export function actionForShortcut(ev: ShortcutEvent): ActionId | null {
+  return matchScope(ev, 'global');
+}
+
+/**
+ * The action a keystroke fires ON THE SELECTION, or null.
+ *
+ * A second resolver rather than one, because the two are dispatched at different
+ * times: a global chord fires whatever the tool, and a selection chord only means
+ * something with a piece armed, which is a condition only the page knows. What
+ * matters is that BOTH read the table: the selection chords used to be matched
+ * against `ev.key` literals in the page, which is a fifth hand-kept copy of the
+ * one list the table exists to replace.
+ */
+export function actionForSelectionShortcut(ev: ShortcutEvent): ActionId | null {
+  return matchScope(ev, 'selection');
+}
+
+function matchScope(ev: ShortcutEvent, scope: ActionScope): ActionId | null {
   for (const action of EDITOR_ACTIONS) {
-    if (action.scope !== 'global' || !action.shortcut) continue;
+    if (action.scope !== scope || !action.shortcut) continue;
     if (shortcutMatches(action.shortcut, ev)) return action.id;
   }
   return null;
@@ -851,7 +920,12 @@ export function parseLayout(raw: string | null): EditorLayout {
           };
         })()
       : null;
-  const zoom = typeof held.zoom === 'number' && held.zoom > 0 ? held.zoom : null;
+  // Through `clampZoom`, not a bare `> 0` test: `JSON.parse('{"zoom":1e999}')`
+  // yields Infinity, which passed the old guard and reached `view.scale`, where it
+  // turns every screen coordinate into Infinity and opens the page blank. The
+  // whole point of a versioned parse-or-default is that a corrupt store cannot do
+  // that.
+  const zoom = clampZoom(held.zoom);
   const side = SIDE_TABS.find((tab) => tab === held.side) ?? DEFAULT_LAYOUT.side;
   return {
     dock: geometry,
@@ -919,7 +993,20 @@ export const zoomPercent = (scale: number): number =>
   Math.round((scale / ZOOM_REFERENCE_SCALE) * 100);
 
 export const zoomScale = (percent: number): number =>
-  Math.min(ZOOM_MAX_SCALE, Math.max(ZOOM_MIN_SCALE, (percent / 100) * ZOOM_REFERENCE_SCALE));
+  clampScale((percent / 100) * ZOOM_REFERENCE_SCALE);
+
+/** The one clamp every zoom writer goes through: the presets, the wheel and the
+ *  restore. Three hand-written copies of the same two bounds is how one of them
+ *  ends up missing, which is exactly what happened to the restore. */
+export const clampScale = (scale: number): number =>
+  Math.min(ZOOM_MAX_SCALE, Math.max(ZOOM_MIN_SCALE, scale));
+
+/** A stored zoom, or null. Anything not a finite number in the band is nothing:
+ *  a plan cannot be drawn at Infinity and must not try. */
+export function clampZoom(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null;
+  return clampScale(value);
+}
 
 export function snapValue(value: number, enabled: boolean, step = GRID_YARDS): number {
   if (!enabled || step <= 0) return value;
@@ -981,8 +1068,17 @@ export function headlineChips(metrics: RealmRacersCircuitMetrics): HeadlineChip[
       label: 'tightest',
       value: ratio.toFixed(2),
       unit: 'r/w',
-      tone: ratio < 1 ? 'bad' : ratio < 1.5 ? 'warn' : 'good',
-      title: `corner radius over road half-width, at ${metrics.minRadiusOverWidthAtS.toFixed(0)} yd; under 1.5 is tight, under 1 folds the road`,
+      // The sim's own two thresholds, imported the way `width_fix_core.ts`
+      // imports them. Re-typing 1 and 1.5 here would be a rule the game does not
+      // share: move the readout's warn floor and the chip would tint a corner
+      // green that the readout is already complaining about.
+      tone:
+        ratio < REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR
+          ? 'bad'
+          : ratio < REALM_RACERS_RADIUS_OVER_WIDTH_WARN
+            ? 'warn'
+            : 'good',
+      title: `corner radius over road half-width, at ${metrics.minRadiusOverWidthAtS.toFixed(0)} yd; under ${REALM_RACERS_RADIUS_OVER_WIDTH_WARN} is tight, under ${REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR} folds the road`,
     },
     {
       id: 'props',
@@ -1029,6 +1125,16 @@ export function problemDetail(problem: RealmRacersCircuitProblem): string {
 export interface ProblemsChip {
   text: string;
   tone: 'clean' | 'warn' | 'bad';
+  /**
+   * The problem the chip points at, or null.
+   *
+   * Returned rather than left for the caller to re-derive: the shell was picking
+   * the same `find(error) ?? [0]` again to decide what a click focuses, so
+   * changing the tie-break here would have made the chip's TEXT and its TARGET
+   * disagree. Null when there is nothing to focus, which includes a problem with
+   * no location.
+   */
+  focus: RealmRacersCircuitProblem | null;
 }
 
 /**
@@ -1039,12 +1145,13 @@ export interface ProblemsChip {
  * and the answer is one word long.
  */
 export function problemsChip(problems: readonly RealmRacersCircuitProblem[]): ProblemsChip {
-  if (problems.length === 0) return { text: 'no problems', tone: 'clean' };
+  if (problems.length === 0) return { text: 'no problems', tone: 'clean', focus: null };
   const worst = problems.find((problem) => problem.severity === 'error') ?? problems[0];
   const count = problems.length === 1 ? '1 problem' : `${problems.length} problems`;
   return {
     text: `${count} - ${problemHeadline(worst)}`,
     tone: worst.severity === 'error' ? 'bad' : 'warn',
+    focus: worst.s >= 0 ? worst : null,
   };
 }
 

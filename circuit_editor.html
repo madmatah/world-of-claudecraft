@@ -197,21 +197,30 @@
     }
     #empty[hidden] { display: none; }
 
-    .plan-top {
+    /* One row across the plan's head, so the three overlays cannot occupy the
+       same band: the banner takes what is left, the repairs sit in the middle and
+       the metric chips hold their own width. Absolutely positioned siblings were
+       colliding under about a 1430px viewport, and the chips painted over the
+       sentence explaining the tool. */
+    .plan-head {
       position: absolute;
       top: 10px;
       left: 12px;
+      right: 12px;
       display: flex;
-      flex-direction: column;
-      gap: 6px;
       align-items: flex-start;
+      gap: 10px;
       pointer-events: none;
     }
+    .plan-head > * { pointer-events: auto; }
+    .plan-top { flex: 1 1 auto; min-width: 0; display: flex; }
     #banner {
       display: flex;
       gap: 8px;
       align-items: baseline;
+      min-width: 0;
       max-width: 46ch;
+      pointer-events: none;
       padding: 5px 10px;
       background: rgba(27, 30, 39, 0.9);
       border: 1px solid var(--line);
@@ -227,14 +236,7 @@
       display: flex;
       gap: 5px;
     }
-    #modeActions {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 5px;
-    }
+    #modeActions { flex: none; display: flex; gap: 5px; }
     #modeActions[hidden] { display: none; }
     button.chip {
       padding: 2px 8px;
@@ -252,9 +254,7 @@
     button.chip.on { background: var(--accent); border-color: var(--accent-line); color: var(--text); }
 
     #headline {
-      position: absolute;
-      top: 10px;
-      right: 12px;
+      flex: none;
       display: flex;
       gap: 1px;
       background: var(--line);
@@ -297,15 +297,16 @@
 
     /* The whole readout, on demand. Anchored LEFT so it never fights the
        headline chips or the dock's own corner. */
-    /* Stops short of the plan's foot so the view chips down there stay clickable
-       with the readout open. */
+    /* Stops short of the plan's foot so the view chips stay clickable, and short
+       of its head so the mode banner and the head row stay readable. It used to
+       run the full height and cover both, plus every callout in the left 306px. */
     #metricsDrawer {
       position: absolute;
       left: 0;
-      top: 0;
+      top: 46px;
       bottom: 40px;
       width: 306px;
-      z-index: 6;
+      z-index: 4;
       display: flex;
       flex-direction: column;
       background: var(--panel);
@@ -342,7 +343,7 @@
     /* ---- the 3D dock ---- */
     #dock {
       position: absolute;
-      z-index: 5;
+      z-index: 7;
       display: flex;
       flex-direction: column;
       background: var(--chrome);
@@ -640,8 +641,8 @@
   <footer id="statusbar">
     <button type="button" id="problemChip" class="chip problems"></button>
     <span id="cursorReadout"></span>
-    <span id="armState"></span>
-    <span id="message"></span>
+    <span id="armState" role="status" aria-live="polite"></span>
+    <span id="message" aria-live="polite"></span>
     <span class="grow"></span>
     <span id="chordHints"></span>
   </footer>

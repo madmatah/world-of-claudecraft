@@ -195,9 +195,15 @@ export class EditorShell {
   // ---- the tool rail ----
 
   private buildRail(): void {
+    this.railEl.setAttribute('role', 'radiogroup');
+    this.railEl.setAttribute('aria-label', 'Tool');
     for (const mode of RAIL_MODES) {
       const button = el('button', 'rail-btn');
       button.type = 'button';
+      // A radio, not a pressed button: the four are exclusive, and colour alone
+      // left the active tool with no programmatic state at all.
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', 'false');
       button.title = actionTooltip(editorAction(MODE_ACTIONS[mode.id]), this.platform);
       const label = el('span', 'rail-label');
       label.textContent = mode.label;
@@ -270,16 +276,19 @@ export class EditorShell {
     }
   }
 
-  setBanner(mode: RailModeId, drawn: boolean): void {
+  setBanner(mode: RailModeId, drawn: boolean, redrawing = false): void {
     const def = RAIL_MODES.find((entry) => entry.id === mode);
     this.bannerModeEl.textContent = (def?.label ?? mode).toUpperCase();
-    this.bannerTextEl.textContent = railBanner(mode, drawn);
+    this.bannerTextEl.textContent = railBanner(mode, drawn, redrawing);
     this.bannerEl.hidden = false;
   }
 
-  setMode(mode: RailModeId, drawn: boolean): void {
-    for (const [id, button] of this.modeButtons) button.classList.toggle('on', id === mode);
-    this.setBanner(mode, drawn);
+  setMode(mode: RailModeId, drawn: boolean, redrawing = false): void {
+    for (const [id, button] of this.modeButtons) {
+      button.classList.toggle('on', id === mode);
+      button.setAttribute('aria-checked', id === mode ? 'true' : 'false');
+    }
+    this.setBanner(mode, drawn, redrawing);
     // The mode's own repairs, beside its banner. Built once and shown or hidden,
     // never rebuilt: an action button is registered by id for its enabled state,
     // and rebuilding would leave the map holding buttons nothing can reach.
@@ -312,8 +321,10 @@ export class EditorShell {
     const text = el('span');
     text.textContent = chip.text;
     this.problemChipEl.append(text);
-    this.worst = problems.find((problem) => problem.severity === 'error') ?? problems[0] ?? null;
-    this.problemChipEl.disabled = !this.worst || this.worst.s < 0;
+    // Straight off the core, never re-derived here: the chip's text and the spot
+    // its click focuses have to be the same problem.
+    this.worst = chip.focus;
+    this.problemChipEl.disabled = chip.focus === null;
 
     this.calloutsEl.replaceChildren();
     const anchors = spreadCallouts(callouts.map((problem) => project(problem.s)));
@@ -424,6 +435,11 @@ export class EditorShell {
     }
     (document.getElementById('keysClose') as HTMLButtonElement).onclick = () =>
       this.keysDialog.close();
+  }
+
+  /** Whether the cheatsheet modal owns the keyboard. */
+  get keysOpen(): boolean {
+    return this.keysDialog.open;
   }
 
   toggleKeys(): void {

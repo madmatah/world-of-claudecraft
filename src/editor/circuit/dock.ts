@@ -197,7 +197,11 @@ export class CircuitDock {
   // ---- readouts ----
 
   setCameraMode(mode: 'fly' | 'orbit', playing: boolean): void {
-    this.flyTab.classList.toggle('on', mode === 'fly' && playing);
+    // The tab reads the CAMERA, not the transport: a paused ride is a first-class
+    // state you look around from, and requiring `playing` here left a paused
+    // fly-through showing no selected camera at all.
+    this.flyTab.classList.toggle('on', mode === 'fly');
+    this.flyTab.textContent = mode === 'fly' && !playing ? 'fly (paused)' : 'fly';
     this.orbitTab.classList.toggle('on', mode === 'orbit');
   }
 

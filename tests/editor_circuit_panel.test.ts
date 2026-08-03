@@ -1,0 +1,180 @@
+// What the circuit editor's right column shows, and what a blank canvas refuses.
+//
+// Both were composite boolean expressions in the page, which is why they are
+// pinned here: `modeReadoutEl.hidden = tabs.length > 0 || railMode === 'race' ||
+// !drawn` is three rules in one line, and the interesting cases are the ones where
+// two of them disagree.
+
+import { describe, expect, it } from 'vitest';
+import {
+  EDITOR_ACTIONS,
+  editorAction,
+  MODE_ACTIONS,
+  RAIL_MODES,
+  sideTabsFor,
+} from '../src/editor/circuit/layout_core';
+import {
+  armStateText,
+  CIRCUIT_ONLY_ACTIONS,
+  MAX_LISTED_PROBLEMS,
+  MODE_READOUT,
+  needsCircuit,
+  panelLayout,
+  READOUT_SECTIONS,
+} from '../src/editor/circuit/panel_core';
+
+const inputs = (over: Partial<Parameters<typeof panelLayout>[0]> = {}) =>
+  panelLayout({
+    mode: 'props',
+    drawn: true,
+    chosen: null,
+    hasSelection: false,
+    hasToolValue: true,
+    toolValueIsProps: true,
+    ...over,
+  });
+
+describe('the contextual panel', () => {
+  it('shows exactly one region at a time, in every mode', () => {
+    for (const mode of RAIL_MODES) {
+      for (const drawn of [false, true]) {
+        for (const hasSelection of [false, true]) {
+          const panel = inputs({ mode: mode.id, drawn, hasSelection });
+          const showing = [
+            panel.showLibrary,
+            panel.showInspector,
+            panel.showOutliner,
+            panel.showForm,
+            panel.showModeReadout,
+          ].filter(Boolean);
+          expect(
+            showing.length,
+            `${mode.id} drawn=${drawn} sel=${hasSelection}`,
+          ).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+
+  it('opens props on the library, and on the inspector once something is selected', () => {
+    expect(inputs().showLibrary).toBe(true);
+    expect(inputs({ hasSelection: true }).showInspector).toBe(true);
+    expect(inputs({ hasSelection: true }).active).toBe('inspector');
+  });
+
+  it('keeps a tab the operator picked, and drops one this mode does not offer', () => {
+    expect(inputs({ chosen: 'outliner' }).active).toBe('outliner');
+    // Chosen in props, then the operator switches to shape: shape offers no tabs,
+    // so the choice cannot follow it in.
+    expect(inputs({ mode: 'shape', chosen: 'outliner' }).active).toBeNull();
+    expect(inputs({ mode: 'shape', chosen: 'outliner' }).showOutliner).toBe(false);
+  });
+
+  it('gives a tabless mode its own readout instead, but never the race form', () => {
+    expect(inputs({ mode: 'shape' }).showModeReadout).toBe(true);
+    expect(inputs({ mode: 'width' }).showModeReadout).toBe(true);
+    // RACE has no tabs either, and the form is what it shows.
+    expect(inputs({ mode: 'race' }).showModeReadout).toBe(false);
+    expect(inputs({ mode: 'race' }).showForm).toBe(true);
+  });
+
+  it('shows nothing at all on a blank canvas', () => {
+    for (const mode of RAIL_MODES) {
+      const panel = inputs({ mode: mode.id, drawn: false });
+      expect(panel.showForm, mode.id).toBe(false);
+      expect(panel.showModeReadout, mode.id).toBe(false);
+    }
+  });
+
+  it('hangs the tool value over the panel it is a setting FOR, and nowhere else', () => {
+    // The props number is the scatter spacing: the library's business.
+    expect(inputs({ toolValueIsProps: true }).showToolValue).toBe(true);
+    expect(inputs({ toolValueIsProps: true, chosen: 'outliner' }).showToolValue).toBe(false);
+    expect(inputs({ toolValueIsProps: true, hasSelection: true }).showToolValue).toBe(false);
+    // The width number is the road's, and width has no tabs to follow.
+    expect(inputs({ mode: 'width', toolValueIsProps: false }).showToolValue).toBe(true);
+    // No field, nothing to show.
+    expect(inputs({ hasToolValue: false }).showToolValue).toBe(false);
+  });
+
+  it('agrees with the tab table it is built on', () => {
+    for (const mode of RAIL_MODES) {
+      expect(inputs({ mode: mode.id }).tabs).toEqual(sideTabsFor(mode.id));
+    }
+  });
+});
+
+describe('the readout sections', () => {
+  it('gives every tabless mode a non-empty readout, and every tabbed mode none', () => {
+    // The two tables answer one question between them, which is why they moved
+    // into the same core: a mode with neither tabs nor sections shows a blank
+    // column, and one with both would show two things at once.
+    for (const mode of RAIL_MODES) {
+      const tabless = sideTabsFor(mode.id).length === 0 && mode.id !== 'race';
+      expect(MODE_READOUT[mode.id].length > 0, mode.id).toBe(tabless);
+    }
+  });
+
+  it('draws every mode section from the drawer own list, so nothing is orphaned', () => {
+    for (const mode of RAIL_MODES) {
+      for (const section of MODE_READOUT[mode.id]) {
+        expect(READOUT_SECTIONS, `${mode.id}/${section}`).toContain(section);
+      }
+    }
+  });
+
+  it('lists every section once in the drawer', () => {
+    expect(new Set(READOUT_SECTIONS).size).toBe(READOUT_SECTIONS.length);
+    expect(MAX_LISTED_PROBLEMS).toBeGreaterThan(0);
+  });
+});
+
+describe('what a blank canvas refuses', () => {
+  it('derives the list from the table flag, not a second hand-kept copy', () => {
+    expect(CIRCUIT_ONLY_ACTIONS.length).toBeGreaterThan(0);
+    for (const action of EDITOR_ACTIONS) {
+      expect(needsCircuit(action.id), action.id).toBe(Boolean(action.needsCircuit));
+    }
+  });
+
+  it('refuses every action that edits or exports a circuit', () => {
+    for (const id of [
+      'saveDraft',
+      'copyRecord',
+      'fitEnclosure',
+      'fixCorners',
+      'redrawCenterline',
+      'toggleDock',
+    ] as const) {
+      expect(needsCircuit(id), id).toBe(true);
+    }
+  });
+
+  it('lets a blank canvas reach the one thing it can do, and the view controls', () => {
+    // SHAPE is the only tool on a blank canvas, and it is where the first stroke
+    // lands, so it must never be refused.
+    expect(needsCircuit('modeShape')).toBe(false);
+    expect(needsCircuit(MODE_ACTIONS.shape)).toBe(false);
+    for (const id of ['newBlank', 'load', 'undo', 'toggleGrid', 'fitView', 'keys'] as const) {
+      expect(needsCircuit(id), id).toBe(false);
+    }
+  });
+
+  it('refuses the three rail modes that need a circuit, and only those', () => {
+    for (const mode of RAIL_MODES) {
+      const refused = needsCircuit(MODE_ACTIONS[mode.id]);
+      expect(refused, mode.id).toBe(mode.id !== 'shape');
+      // And each is a real row, so the flag cannot be set on a name nothing has.
+      expect(editorAction(MODE_ACTIONS[mode.id]).id).toBe(MODE_ACTIONS[mode.id]);
+    }
+  });
+});
+
+describe('the props arm state', () => {
+  it('says what the next click will do, for as long as it is true', () => {
+    expect(armStateText(null, 'pond')).toContain('pointer');
+    expect(armStateText('postLantern', 'pond')).toBe('placing postLantern');
+    // Water is dragged out over a box, not clicked, so it says so.
+    expect(armStateText('pond', 'pond')).toContain('drag a box');
+  });
+});

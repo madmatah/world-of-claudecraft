@@ -18,6 +18,7 @@ import {
   cheatBlocks,
   chordHints,
   clampDock,
+  clampZoom,
   DEFAULT_LAYOUT,
   DOCK_MIN_HEIGHT,
   DOCK_MIN_WIDTH,
@@ -60,9 +61,12 @@ import {
 } from '../src/editor/circuit/layout_core';
 import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import {
+  REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR,
+  REALM_RACERS_RADIUS_OVER_WIDTH_WARN,
   type RealmRacersCircuitProblem,
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
+import { REALM_RACERS_MIN_HALF_WIDTH } from '../src/sim/realm_racers_layout';
 
 const problem = (over: Partial<RealmRacersCircuitProblem> = {}): RealmRacersCircuitProblem => ({
   code: 'corner_folds_road',
@@ -240,6 +244,31 @@ describe('the rail', () => {
     expect(railBanner('shape', false)).not.toBe(railBanner('shape', true));
   });
 
+  it('gives every tool its own banner, so none silently inherits another', () => {
+    const banners = new Set<string>();
+    for (const [mode, drawn] of [
+      ['shape', false],
+      ['shape', true],
+      ['width', true],
+      ['props', true],
+      ['race', true],
+    ] as const) {
+      const line = railBanner(mode, drawn);
+      expect(line.length, `${mode}/${drawn}`).toBeGreaterThan(0);
+      banners.add(line);
+    }
+    // Five tools, five sentences: a new one falling into the default arm and
+    // wearing the race text would collapse this set.
+    expect(banners.size).toBe(5);
+  });
+
+  it('says something different while re-stroking a drawn circuit', () => {
+    expect(railBanner('shape', true, true)).not.toBe(railBanner('shape', true));
+    expect(railBanner('shape', true, true)).toContain('stay');
+    expect(toolFor('shape', true, true)).toBe('draw');
+    expect(toolFor('shape', true, false)).toBe('handles');
+  });
+
   it('gives the two painting tools a value field, and the others none', () => {
     expect(TOOL_VALUE_FIELDS.width?.label).toContain('half-width');
     expect(TOOL_VALUE_FIELDS.props?.label).toContain('spacing');
@@ -248,6 +277,9 @@ describe('the rail', () => {
     expect(TOOL_VALUE_FIELDS.race).toBeNull();
     // Different quantities, so different legal ranges: one field, re-bounded.
     expect(TOOL_VALUE_FIELDS.width?.max).not.toBe(TOOL_VALUE_FIELDS.props?.max);
+    // And the road's floor is the SIM's floor, not a second opinion: the tool
+    // must not offer a road narrower than the game will drive.
+    expect(TOOL_VALUE_FIELDS.width?.min).toBe(REALM_RACERS_MIN_HALF_WIDTH);
   });
 
   it('puts a mode repair on the plan, and only where it means something', () => {
@@ -334,6 +366,7 @@ describe('the persisted layout', () => {
       dockOpen: true,
       followCursor: true,
       metricsOpen: true,
+      dockFullscreen: true,
       invertLook: true,
       grid: false,
       snap: true,
@@ -344,9 +377,13 @@ describe('the persisted layout', () => {
   });
 
   it('drops a field of the wrong type back to its default instead of carrying it', () => {
+    // `dockOpen: true` is VALID and non-default, and it has to survive: without a
+    // good field in the payload this test would pass on `parseLayout` rejecting
+    // the whole object for any reason at all, version included.
     const parsed = parseLayout(
-      JSON.stringify({ version: 1, grid: 'yes', zoom: -3, side: 'nope', dock: 7 }),
+      JSON.stringify({ version: 1, dockOpen: true, grid: 'yes', zoom: -3, side: 'nope', dock: 7 }),
     );
+    expect(parsed.dockOpen).toBe(true);
     expect(parsed.grid).toBe(DEFAULT_LAYOUT.grid);
     expect(parsed.zoom).toBeNull();
     expect(parsed.side).toBe(DEFAULT_LAYOUT.side);
@@ -379,6 +416,22 @@ describe('the dock geometry', () => {
     expect(clamped.top).toBeGreaterThanOrEqual(0);
   });
 
+  it('pulls a dock dragged off the top or the left edge back into view', () => {
+    // The low side of the same clamp. Without it, a window resized smaller can
+    // leave the header, and so the close button, above the plan.
+    const clamped = clampDock({ left: -500, top: -300, width: 400, height: 300 }, area);
+    expect(clamped.left).toBe(0);
+    expect(clamped.top).toBe(0);
+    expect(clamped.width).toBe(400);
+    expect(clamped.height).toBe(300);
+  });
+
+  it('opens an unplaced dock at a non-negative origin even on a tiny plan', () => {
+    const dock = defaultDock({ width: 100, height: 80 });
+    expect(dock.left).toBeGreaterThanOrEqual(0);
+    expect(dock.top).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps it big enough to read, and never bigger than the plan', () => {
     const tiny = clampDock({ left: 0, top: 0, width: 10, height: 10 }, area);
     expect(tiny.width).toBe(DOCK_MIN_WIDTH);
@@ -406,6 +459,32 @@ describe('zoom, grid and snap', () => {
     expect(zoomScale(100)).toBeCloseTo(ZOOM_REFERENCE_SCALE);
     expect(zoomPercent(zoomScale(50))).toBe(50);
     expect(zoomPercent(zoomScale(200))).toBe(200);
+  });
+
+  it('pins the zoom band to literals, so the constants cannot drift unnoticed', () => {
+    // The band is compared against itself everywhere else, which protects that a
+    // clamp EXISTS and not what it clamps to.
+    expect(ZOOM_MIN_SCALE).toBe(0.4);
+    expect(ZOOM_MAX_SCALE).toBe(20);
+    expect(ZOOM_REFERENCE_SCALE).toBe(2.4);
+  });
+
+  it('refuses a stored zoom that is not a finite number in the band', () => {
+    // The hole this closes: `JSON.parse('{"zoom":1e999}')` is Infinity, which
+    // passed a bare `> 0` test and reached `view.scale`, turning every screen
+    // coordinate into Infinity and opening the page blank.
+    expect(clampZoom(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(clampZoom(Number.NaN)).toBeNull();
+    expect(clampZoom(0)).toBeNull();
+    expect(clampZoom(-3)).toBeNull();
+    expect(clampZoom('4')).toBeNull();
+    expect(clampZoom(undefined)).toBeNull();
+    // A finite one comes back inside the band the plan can draw at.
+    expect(clampZoom(3)).toBe(3);
+    expect(clampZoom(9999)).toBe(ZOOM_MAX_SCALE);
+    // The raw stored text, not a literal: this is what a corrupt store holds, and
+    // `JSON.stringify` would turn the overflow back into null before it got here.
+    expect(parseLayout('{"version":1,"zoom":1e999}').zoom).toBeNull();
   });
 
   it('clamps a preset into the zoom band the plan itself uses', () => {
@@ -443,6 +522,20 @@ describe('the headline chips', () => {
     expect(chips[2].value).toBe(String(metrics.propCount));
   });
 
+  it('tints the corner ratio against the SIM own thresholds, not a copy of them', () => {
+    // The readout emits `corner_near_road_width` at exactly these two numbers;
+    // re-typing them here would let the chip tint a corner green that the readout
+    // is already complaining about.
+    const tone = (ratio: number): string =>
+      headlineChips({ ...metrics, minRadiusOverWidth: ratio }).find(
+        (chip) => chip.id === 'tightest',
+      )?.tone ?? '';
+    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR - 0.01)).toBe('bad');
+    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR)).toBe('warn');
+    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_WARN - 0.01)).toBe('warn');
+    expect(tone(REALM_RACERS_RADIUS_OVER_WIDTH_WARN)).toBe('good');
+  });
+
   it('tints the corner ratio against the 1.5 floor and the 1.0 fold', () => {
     const tone = (ratio: number): string =>
       headlineChips({ ...metrics, minRadiusOverWidth: ratio }).find(
@@ -458,7 +551,7 @@ describe('the headline chips', () => {
 
 describe('problems on the plan', () => {
   it('names the worst one in the chip rather than only counting', () => {
-    expect(problemsChip([])).toEqual({ text: 'no problems', tone: 'clean' });
+    expect(problemsChip([])).toEqual({ text: 'no problems', tone: 'clean', focus: null });
     const warned = problemsChip([problem({ severity: 'warning', code: 'corner_near_road_width' })]);
     expect(warned.tone).toBe('warn');
     expect(warned.text).toBe(`1 problem - ${PROBLEM_LABELS.corner_near_road_width}`);
@@ -469,6 +562,18 @@ describe('problems on the plan', () => {
     ]);
     expect(mixed.tone).toBe('bad');
     expect(mixed.text).toBe(`2 problems - ${PROBLEM_LABELS.self_crossing}`);
+  });
+
+  it('names the SAME problem in its text and its focus target', () => {
+    // The shell used to re-derive `find(error) ?? [0]` to decide what a click
+    // focuses, so a change to the tie-break here would have made the chip's text
+    // and its target disagree.
+    const located = problem({ severity: 'error', code: 'corner_folds_road', s: 210 });
+    const chip = problemsChip([problem({ severity: 'warning', s: 10 }), located]);
+    expect(chip.focus).toBe(located);
+    expect(chip.text).toContain(PROBLEM_LABELS.corner_folds_road);
+    // A whole-loop fault has nowhere to focus, so the chip offers no target.
+    expect(problemsChip([problem({ code: 'reversed_winding', s: -1 })]).focus).toBeNull();
   });
 
   it('calls out the LOCATED problems only, errors first, capped', () => {

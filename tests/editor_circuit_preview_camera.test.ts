@@ -58,6 +58,8 @@ describe('preview orbit rig', () => {
 
   it('never lets the pitch reach the horizon, where a flat circuit is a line', () => {
     expect(PREVIEW_ORBIT_LIMITS.minPitch).toBeGreaterThan(0);
+    // Nor past straight down, where the rig would flip over its own target.
+    expect(PREVIEW_ORBIT_LIMITS.maxPitch).toBeLessThan(Math.PI / 2);
     const state = createPreviewOrbit();
     orbitDrag(state, 0, -100_000);
     const pose = orbitPose(state);
@@ -159,6 +161,30 @@ describe('panning the orbit rig', () => {
     expect(Math.abs(turned.target.z)).toBeGreaterThan(Math.abs(turned.target.x));
   });
 
+  it('moves the ground the way the pointer went VERTICALLY too', () => {
+    // The other half of the pan, and it was unprotected: every other test passes
+    // dy = 0 or a clamped extreme, so dropping the forward term or flipping its
+    // sign shipped green. At yaw = 0 the camera looks along +z, so dragging DOWN
+    // has to send the target along +z, bringing the ground down with the pointer.
+    const state = createPreviewOrbit();
+    state.yaw = 0;
+    orbitPan(state, 0, 100);
+    expect(state.target.z).toBeGreaterThan(0);
+    expect(state.target.x).toBeCloseTo(0, 6);
+    // And back the other way, so a sign flip cannot hide behind an absolute.
+    const up = createPreviewOrbit();
+    up.yaw = 0;
+    orbitPan(up, 0, -100);
+    expect(up.target.z).toBeLessThan(0);
+  });
+
+  it('reaches a corner at the region edge, which is what the pan exists for', () => {
+    // Only the ceiling side was pinned, and against itself: dropping the limit to
+    // 100 would keep every other test green while making the far side of a legal
+    // circuit unreachable again.
+    expect(PREVIEW_PAN_LIMIT).toBeGreaterThan(REALM_RACERS_MAX_REGION_HALF_X);
+  });
+
   it('pans further per pixel the further out the camera is', () => {
     const near = createPreviewOrbit();
     near.distance = 40;
@@ -227,6 +253,35 @@ describe('looking around from the seat', () => {
     expect(turned.target).not.toEqual(pose.target);
   });
 
+  it('raises the view for a positive pitch, and lowers it for a negative one', () => {
+    // `flyLookDrag`'s signs are pinned, but the POSE applied them unchecked: an
+    // inverted vertical inside `flyLookPose` shipped green.
+    const pose = chase();
+    const up = flyLookPose(pose, { yaw: 0, pitch: 0.3 });
+    const down = flyLookPose(pose, { yaw: 0, pitch: -0.3 });
+    expect(up.target.y).toBeGreaterThan(pose.target.y);
+    expect(down.target.y).toBeLessThan(pose.target.y);
+  });
+
+  it('turns the look to opposite sides for opposite yaws, and never mirrors it', () => {
+    // The only directional yaw test was a half turn, which is sign-symmetric, so
+    // mirroring the horizontal (the one thing the module says must never happen)
+    // passed.
+    const pose = chase();
+    const flat = (p: { camera: { x: number; z: number }; target: { x: number; z: number } }) => ({
+      x: p.target.x - p.camera.x,
+      z: p.target.z - p.camera.z,
+    });
+    const ahead = flat(pose);
+    const left = flat(flyLookPose(pose, { yaw: 0.6, pitch: 0 }));
+    const right = flat(flyLookPose(pose, { yaw: -0.6, pitch: 0 }));
+    // The 2D cross product against the forward direction: opposite signs means
+    // the two look to opposite sides of the road.
+    const side = (v: { x: number; z: number }) => ahead.x * v.z - ahead.z * v.x;
+    expect(Math.sign(side(left))).toBe(-Math.sign(side(right)));
+    expect(side(left)).not.toBe(0);
+  });
+
   it('keeps the look at the same range, so the view swings rather than zooms', () => {
     const pose = chase();
     const look = createFlyLook();
@@ -265,6 +320,9 @@ describe('looking around from the seat', () => {
     }
     expect(up.pitch).toBe(FLY_LOOK_MAX_PITCH);
     expect(down.pitch).toBe(-FLY_LOOK_MAX_PITCH);
+    // And the ceiling is BELOW vertical, which is what the title claims. Pinned
+    // only against itself, setting it to 2.0 would have passed.
+    expect(FLY_LOOK_MAX_PITCH).toBeLessThan(Math.PI / 2);
     // Yaw is free: turning right round to look back down the road is legitimate.
     const spun = createFlyLook();
     for (let i = 0; i < 100; i++) flyLookDrag(spun, 400, 0);

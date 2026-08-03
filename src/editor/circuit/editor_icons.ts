@@ -123,7 +123,7 @@ export const EDITOR_ICONS: Record<EditorIconId, string> = {
  * call them dead without this list. Nothing else belongs here; an icon that is
  * neither referenced nor listed is dead weight, which is the whole check.
  */
-export const CHROME_ONLY_ICONS: readonly EditorIconId[] = ['close', 'warning'];
+export const CHROME_ONLY_ICONS: readonly EditorIconId[] = ['warning'];
 
 export function editorIcon(id: EditorIconId): string {
   return EDITOR_ICONS[id];

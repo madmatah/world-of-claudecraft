@@ -169,14 +169,19 @@ outright without `ctx.devCommands`.
   widening a corner is the operator's design, so corners under the road's own
   floor come back by name instead.
 
-## One CSS trap this page has now hit three times
+## One CSS trap this page has now hit four times, and the gate that ends it
 An author rule that sets `display` outranks the UA's `[hidden] { display: none }`,
 so `element.hidden = true` silently does nothing. It cost `#empty`, then the old
 `#preview`, then two more in the workbench pass at once: the practice rows
 (`.field`) stayed visible with practice unchecked, and a mode's repair chips
-(`button.chip`) all showed in every mode. **Any selector in this page's stylesheet
-that sets `display` needs its own `[hidden]` guard beside it**, and the guard goes
-in at the same time as the rule, not after a seat review notices.
+(`button.chip`) all showed in every mode. **A selector this page can HIDE and
+whose rules set `display` needs its own `[hidden]` guard beside it**, written at
+the same time as the rule. Prose did not stop the third and the fourth, so
+`tests/editor_circuit_page.test.ts` now reads the stylesheet and fails without the
+guard, both ways: a hidden element missing one, and a guard for an element nothing
+hides. It also pins the count of `.hidden =` assignments, so a new one cannot
+arrive without a look at the sheet. A selector nothing hides needs no guard, which
+is why the rule names the ELEMENT rather than every rule in the file.
 
 ## The 3D preview is the shipped pipeline, not a second drawing
 - It renders the draft through `buildRealmRacersTrack` (`src/render/`), which
@@ -322,6 +327,8 @@ is recoverable.
 ## Module split (the page holds no decisions)
 | Module | Owns |
 |---|---|
+| `panel_core.ts` | what the right column shows (`panelLayout`, one call for six interdependent rules), which readout sections a tabless mode carries, the props arm text, and which actions a blank canvas refuses (off the table's own `needsCircuit` flag) |
+| `history_core.ts` | the edit history: a capped undo stack with a forward branch that a new edit drops |
 | `layout_core.ts` | the shell: the action table (labels, chords, icons, menus, cheatsheet grouping), the rail modes and their tool resolution, chord matching and platform spelling, the persisted layout with its clamps, the zoom/grid/snap arithmetic, the headline chips, and the problem labels the chip, the callouts and the drawer all print |
 | `editor_icons.ts` | the icon set: one inline SVG per action and rail mode, plus the chrome-only list that keeps the completeness check honest |
 | `shell.ts` | the chrome as ELEMENTS: menu bar, rail, plan overlays, status bar, contextual right panel, metrics drawer, cheatsheet. Structure and listeners only, all of it rendered off the action table |

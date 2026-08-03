@@ -64,30 +64,41 @@ import {
   paintSpan,
   toWidthBands,
 } from './handles_core';
+import { SnapshotHistory } from './history_core';
 import {
   type ActionId,
+  actionForSelectionShortcut,
   actionForShortcut,
   type CircuitTool,
   calloutProblems,
+  clampScale,
   type DockGeometry,
   type EditorLayout,
   gridStepAt,
   headlineChips,
   LAYOUT_STORAGE_KEY,
+  MODE_ACTIONS,
   parseLayout,
   problemDetail,
   problemHeadline,
   type RailModeId,
   type SideTabId,
   serializeLayout,
-  sideTabsFor,
   snapPoint,
   TOOL_VALUE_FIELDS,
   toolFor,
-  ZOOM_MAX_SCALE,
-  ZOOM_MIN_SCALE,
   zoomScale,
 } from './layout_core';
+import {
+  armStateText,
+  CIRCUIT_ONLY_ACTIONS,
+  MAX_LISTED_PROBLEMS,
+  MODE_READOUT,
+  needsCircuit,
+  panelLayout,
+  READOUT_SECTIONS,
+  type ReadoutSection,
+} from './panel_core';
 import {
   authorPlacement,
   convertedProp,
@@ -127,10 +138,6 @@ type Selection = { kind: 'point'; index: number } | null;
  * the moment the game can play it.
  */
 const MUSIC_TRACK_IDS: readonly string[] = Object.keys(AREA_TRACK_URLS);
-
-/** How many problems the drawer lists before it says how many it is holding
- *  back. Every one of them still draws its marker on the plan. */
-const MAX_LISTED_PROBLEMS = 10;
 
 /**
  * How much lap a painted transition runs over, YARDS. In yards rather than in
@@ -207,7 +214,10 @@ let metrics: RealmRacersCircuitMetrics = realmRacersCircuitMetrics(record);
  * a button of its own.
  */
 let railMode: RailModeId = 'shape';
-const tool = (): CircuitTool => toolFor(railMode, drawn);
+/** Whether the operator asked to re-stroke the centerline of a DRAWN circuit.
+ *  One stroke long: it clears the moment a stroke lands, or on escape. */
+let redrawing = false;
+const tool = (): CircuitTool => toolFor(railMode, drawn, redrawing);
 let selection: Selection = null;
 /** The raw gesture, kept after the fit so the operator can see how far the
  *  closed centripetal Catmull-Rom sits off the line they drew. */
@@ -250,7 +260,13 @@ let paletteShowAll = false;
  *  ghost stands. Null once the pointer leaves. */
 let hover: RallyPoint | null = null;
 let panning: { x: number; z: number; clientX: number; clientY: number } | null = null;
-const undoStack: { record: RealmRacersCircuit; drawn: boolean }[] = [];
+/** The edit history. Snapshots of the whole record, because `commit` already
+ *  produces one per edit; the model and its forward branch live in the core. */
+interface EditSnapshot {
+  record: RealmRacersCircuit;
+  drawn: boolean;
+}
+const history = new SnapshotHistory<EditSnapshot>();
 const view = { x: 0, z: 0, scale: 2.4 };
 let redrawQueued = false;
 /** Edits since the last save, which is what the document's `unsaved` marker
@@ -332,11 +348,14 @@ let dockRestored = false;
 
 /** Every edit lands here: it rounds to what the export carries, re-derives the
  *  geometry and the readout, and schedules a repaint. */
+/** Every edit records the state it is LEAVING through here, so no site can
+ *  forget that a new edit drops the forward branch. */
+function pushUndo(): void {
+  history.push({ record, drawn });
+}
+
 function commit(next: RealmRacersCircuit, remember = true): void {
-  if (remember) {
-    undoStack.push({ record, drawn });
-    if (undoStack.length > 100) undoStack.shift();
-  }
+  if (remember) pushUndo();
   record = roundCircuit(next);
   if (record.basin) rememberedBasin = record.basin;
   track = realmRacersTrack(record);
@@ -354,15 +373,23 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   if (drawn) preview?.show(record);
 }
 
-function undo(): void {
-  const previous = undoStack.pop();
-  if (!previous) return;
+function restore(snapshot: EditSnapshot): void {
   selection = null;
   dressing = null;
-  drawn = previous.drawn;
-  commit(previous.record, false);
+  drawn = snapshot.drawn;
+  commit(snapshot.record, false);
   syncForm();
   refreshChrome();
+}
+
+function undo(): void {
+  const previous = history.undo({ record, drawn });
+  if (previous) restore(previous);
+}
+
+function redo(): void {
+  const next = history.redo({ record, drawn });
+  if (next) restore(next);
 }
 
 // ---- view maths (screen only: nothing here is about the circuit) ----
@@ -372,8 +399,23 @@ const local = (point: { x: number; z: number }): RallyPoint => ({
   z: point.z - REALM_RACERS_ORIGIN.z,
 });
 
-const screenX = (x: number): number => (x - view.x) * view.scale + canvas.clientWidth / 2;
-const screenY = (z: number): number => (z - view.z) * view.scale + canvas.clientHeight / 2;
+/**
+ * The plan's pixel size, sampled once per frame.
+ *
+ * Read live it was a layout property read PER POINT: `drawSurfaces` alone walks
+ * about 480 samples across five rings, so a frame did thousands of them, and the
+ * chrome paint read them again AFTER writing to the DOM, which forces a reflow.
+ * One sample at the top of the frame, before anything writes, removes both.
+ */
+const plan = { width: 0, height: 0 };
+
+function samplePlanSize(): void {
+  plan.width = canvas.clientWidth;
+  plan.height = canvas.clientHeight;
+}
+
+const screenX = (x: number): number => (x - view.x) * view.scale + plan.width / 2;
+const screenY = (z: number): number => (z - view.z) * view.scale + plan.height / 2;
 
 function toLocal(ev: { clientX: number; clientY: number }): RallyPoint {
   const rect = canvas.getBoundingClientRect();
@@ -404,7 +446,7 @@ function fitView(): void {
     : Math.max(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z) * 1.12;
   view.x = 0;
   view.z = 0;
-  view.scale = Math.min(canvas.clientWidth, canvas.clientHeight) / (2 * half);
+  view.scale = Math.min(plan.width, plan.height) / (2 * half);
   rememberZoom();
   requestRedraw();
 }
@@ -421,6 +463,8 @@ function requestRedraw(): void {
   redrawQueued = true;
   requestAnimationFrame(() => {
     redrawQueued = false;
+    // Before either painter, and before any write either makes.
+    samplePlanSize();
     draw();
     paintChrome();
   });
@@ -776,8 +820,7 @@ function drawDressing(): void {
 
 function draw(): void {
   const dpr = window.devicePixelRatio || 1;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
+  const { width, height } = plan;
   if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
@@ -828,7 +871,12 @@ function ghostPlacement(): RallyPlacedProp | null {
     at: authorPlacement(record, point.x, point.z).at,
   };
   const props = [...(record.props ?? []), pending];
-  const placed = realmRacersPlacements({ ...record, props }).props;
+  // Its OWN id, and this is not cosmetic. `memoizePerCircuit` keeps one entry
+  // per id and only while the record behind it is the same object, so a
+  // throwaway wearing the real id EVICTS the real entry on every frame: the
+  // spline model was being rebuilt twice per pointermove, once for the ghost and
+  // once for the circuit it had just displaced.
+  const placed = realmRacersPlacements({ ...record, props, id: `${record.id}__ghost` }).props;
   return placed[placed.length - 1] ?? null;
 }
 
@@ -881,7 +929,7 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
     const pond = record.ponds?.[dressing.index];
     const handle = pond && hitTestPondHandle(pond, raw.x, raw.z, tolerance);
     if (pond && handle) {
-      undoStack.push({ record, drawn });
+      pushUndo();
       dressingDrag = 'pond';
       pondHandle = handle;
       return;
@@ -894,7 +942,7 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
   if (hitProp >= 0) {
     const index = placedPropIndices()[hitProp];
     dressing = { kind: 'prop', index };
-    undoStack.push({ record, drawn });
+    pushUndo();
     dressingDrag = 'move';
     dragHint = propProjectionHint(record, (record.props ?? [])[index]);
     applySideTab();
@@ -904,7 +952,7 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
   const hitPond = hitTestPonds(placements.ponds, raw.x, raw.z);
   if (hitPond >= 0) {
     dressing = { kind: 'pond', index: hitPond };
-    undoStack.push({ record, drawn });
+    pushUndo();
     dressingDrag = 'move';
     applySideTab();
     requestRedraw();
@@ -1074,7 +1122,7 @@ paletteAllLabel.append(paletteAllEl, ' show the whole catalog');
 function armPalette(key: string | null): void {
   paletteChoice = key;
   buildPalette();
-  shell.setArmed(railMode === 'props' ? shellArmText() : '');
+  shell.setArmed(railMode === 'props' ? armStateText(paletteChoice, POND_CHOICE) : '');
   // The pointer itself says which of the two states the tool is in, before the
   // operator has read anything: a crosshair selects, a copy cursor places.
   canvas.style.cursor = key === null ? 'crosshair' : 'copy';
@@ -1155,6 +1203,9 @@ function paintOutliner(): void {
   if (!drawn) return;
   const placements = realmRacersPlacements(record);
   const props = record.props ?? [];
+  // Hoisted: called per prop it walks the whole list per prop, which is
+  // quadratic and allocates an array each time, on a path that runs per frame.
+  const placed = placedPropIndices();
   const heading = (text: string): void => {
     const h = document.createElement('h2');
     h.textContent = text;
@@ -1164,9 +1215,9 @@ function paintOutliner(): void {
   heading(`props (${props.length})`);
   if (props.length === 0) outlinerEl.append(outlinerRow('nothing placed', ''));
   props.forEach((prop, index) => {
-    const placed = placements.props[placementIndexOf(index)];
-    const where = placed ? `${placed.x.toFixed(0)}, ${placed.z.toFixed(0)}` : 'not drawn';
-    outlinerEl.append(outlinerRow(prop.asset, where, Boolean(placed?.solid)));
+    const at = placements.props[placed.indexOf(index)];
+    const where = at ? `${at.x.toFixed(0)}, ${at.z.toFixed(0)}` : 'not drawn';
+    outlinerEl.append(outlinerRow(prop.asset, where, Boolean(at?.solid)));
   });
 
   const scatters = record.scatters ?? [];
@@ -1458,8 +1509,6 @@ function problemLine(problem: RealmRacersCircuitProblem): HTMLDivElement {
  * One builder each, so the two can never quote a different number for the same
  * measurement.
  */
-type ReadoutSection = 'shape' | 'corners' | 'stretches' | 'surface' | 'dressing' | 'envelope';
-
 function readoutSection(section: ReadoutSection): HTMLElement[] {
   const table = document.createElement('table');
   switch (section) {
@@ -1575,15 +1624,6 @@ function problemsBlock(): HTMLElement[] {
   return out;
 }
 
-const READOUT_SECTIONS: ReadoutSection[] = [
-  'shape',
-  'corners',
-  'stretches',
-  'surface',
-  'dressing',
-  'envelope',
-];
-
 function paintReadout(): void {
   const body = shell.metricsBodyEl;
   body.replaceChildren();
@@ -1591,21 +1631,6 @@ function paintReadout(): void {
   for (const section of READOUT_SECTIONS) body.append(...readoutSection(section));
   body.append(...problemsBlock());
 }
-
-/**
- * What the right panel shows in a mode that has no tabs.
- *
- * The two shaping tools had the DRESSING outliner sitting in them, which is
- * nothing to do with either: it listed props while the operator was painting a
- * road. What belongs there is the measurements the tool is changing, so shaping
- * shows the geometry and painting shows the road profile.
- */
-const MODE_READOUT: Record<RailModeId, ReadoutSection[]> = {
-  shape: ['shape', 'corners', 'envelope'],
-  width: ['surface', 'corners'],
-  props: [],
-  race: [],
-};
 
 const modeReadoutEl = document.createElement('div');
 
@@ -2027,23 +2052,22 @@ function hasSelection(): boolean {
 }
 
 function applySideTab(): void {
-  const tabs = sideTabsFor(railMode);
-  // A tab the operator picked in another mode is not offered here: the library
-  // arms a piece for the props tool and the inspector edits a selected one, and
-  // neither is reachable while shaping a centerline.
-  const chosen = sideChoice && tabs.includes(sideChoice) ? sideChoice : null;
-  const active = chosen ?? shell.autoTab(railMode, hasSelection());
-  shell.setSideTab(tabs, active);
-  libraryEl.hidden = active !== 'library';
-  inspectorEl.hidden = active !== 'inspector';
-  outlinerEl.hidden = active !== 'outliner';
-  formEl.hidden = railMode !== 'race' || !drawn;
-  // A mode with no tabs shows the measurements ITS tool is changing.
-  modeReadoutEl.hidden = tabs.length > 0 || railMode === 'race' || !drawn;
-  // The tool's number belongs to the panel it is a setting FOR: the scatter
-  // spacing is the library's, and it was hanging over the inspector too.
   const field = TOOL_VALUE_FIELDS[tool()];
-  shell.setToolValueField(field, tool() !== 'props' || active === 'library');
+  const panel = panelLayout({
+    mode: railMode,
+    drawn,
+    chosen: sideChoice,
+    hasSelection: hasSelection(),
+    hasToolValue: field !== null,
+    toolValueIsProps: tool() === 'props',
+  });
+  shell.setSideTab(panel.tabs, panel.active);
+  libraryEl.hidden = !panel.showLibrary;
+  inspectorEl.hidden = !panel.showInspector;
+  outlinerEl.hidden = !panel.showOutliner;
+  formEl.hidden = !panel.showForm;
+  modeReadoutEl.hidden = !panel.showModeReadout;
+  shell.setToolValueField(field, panel.showToolValue);
   requestRedraw();
 }
 
@@ -2054,25 +2078,9 @@ function refreshChrome(): void {
   // disabled rail entry.
   if (!drawn && railMode !== 'shape') setRailMode('shape');
   emptyEl.hidden = drawn;
-  for (const mode of ['width', 'props', 'race'] as const) {
-    shell.setModeEnabled(mode, drawn);
-  }
-  const drawnOnly: ActionId[] = [
-    'saveDraft',
-    'copyRecord',
-    'fitEnclosure',
-    'fixCorners',
-    'raceSettings',
-    'toggleDock',
-  ];
-  for (const id of drawnOnly) shell.setEnabled(id, drawn);
-  // Redo has its row in the table (the menu, the cheatsheet and the button all
-  // read it) and no stack behind it yet: the bespoke undo array here holds no
-  // forward branch, so the control is present and honestly disabled rather than
-  // missing from a menu it belongs in.
-  shell.setEnabled('redo', false);
+  for (const id of CIRCUIT_ONLY_ACTIONS) shell.setEnabled(id, drawn);
   shell.setDocument(record.id, dirty);
-  shell.setBanner(railMode, drawn);
+  shell.setBanner(railMode, drawn, redrawing);
   applySideTab();
   // A layout left with the dock open re-opens it the moment there is something
   // to show, which is what makes the stored flag mean anything: at boot there is
@@ -2084,11 +2092,14 @@ function refreshChrome(): void {
 }
 
 function setRailMode(next: RailModeId): void {
+  // Leaving SHAPE cancels a pending redraw: an arm that survived a trip through
+  // another tool would eat the operator's next stroke.
+  if (next !== 'shape') redrawing = false;
   railMode = next;
   selection = null;
   dressing = null;
   sideChoice = null;
-  shell.setMode(railMode, drawn);
+  shell.setMode(railMode, drawn, redrawing);
   // Leaving props disarms: an arm that survived a trip through the width tool
   // would place a piece on the operator's first click back.
   if (next !== 'props') paletteChoice = null;
@@ -2097,19 +2108,13 @@ function setRailMode(next: RailModeId): void {
   requestRedraw();
 }
 
-/** What the status bar says the props tool will do with the next click. */
-function shellArmText(): string {
-  if (paletteChoice === null) return 'pointer: click a piece to select it';
-  return paletteChoice === POND_CHOICE ? 'placing water: drag a box' : `placing ${paletteChoice}`;
-}
-
 /** Where a lap position sits on the plan, or null when it is off it. */
 function planPointAt(s: number): { x: number; y: number } | null {
   if (!drawn) return null;
   const p = local(track.pointAt(s));
   const x = screenX(p.x);
   const y = screenY(p.z);
-  if (x < 0 || y < 0 || x > canvas.clientWidth || y > canvas.clientHeight) return null;
+  if (x < 0 || y < 0 || x > plan.width || y > plan.height) return null;
   return { x, y };
 }
 
@@ -2124,7 +2129,8 @@ function paintChrome(): void {
   shell.setDocument(record.id, dirty);
   // The undo stack moves on every commit, which is far more often than the
   // chrome is refreshed, so its button state is read here rather than there.
-  shell.setEnabled('undo', undoStack.length > 0);
+  shell.setEnabled('undo', history.canUndo);
+  shell.setEnabled('redo', history.canRedo);
   if (layout.metricsOpen) paintReadout();
   paintOutliner();
   paintInspector();
@@ -2177,6 +2183,10 @@ function paintAt(point: RallyPoint): void {
 }
 
 canvas.addEventListener('pointerdown', (ev) => {
+  // Left draws and edits, middle pans; anything else belongs to the browser. A
+  // right click used to capture the pointer and start a stroke, place a prop or
+  // begin a width paint UNDER the context menu.
+  if (ev.button !== 0 && ev.button !== 1) return;
   canvas.setPointerCapture(ev.pointerId);
   if (ev.button === 1) {
     panning = { x: view.x, z: view.z, clientX: ev.clientX, clientY: ev.clientY };
@@ -2195,7 +2205,7 @@ canvas.addEventListener('pointerdown', (ev) => {
     return;
   }
   if (active === 'width') {
-    undoStack.push({ record, drawn });
+    pushUndo();
     painting = true;
     paintBefore = paintedQuantity();
     paintOrigin = paintedBands();
@@ -2208,7 +2218,7 @@ canvas.addEventListener('pointerdown', (ev) => {
   if (hit >= 0) {
     selection = { kind: 'point', index: hit };
     dragging = selection;
-    undoStack.push({ record, drawn });
+    pushUndo();
     requestRedraw();
     return;
   }
@@ -2293,8 +2303,10 @@ function endGesture(): void {
     const fitted = fitStrokeToControlPoints(stroke);
     if (fitted.length >= MIN_CONTROL_POINTS) {
       commit({ ...record, controlPoints: fitted });
-      // The stroke that turns a blank canvas into a circuit.
+      // The stroke that turns a blank canvas into a circuit, or replaces the
+      // curve of one that already is. Either way the arm is spent.
       drawn = true;
+      redrawing = false;
       setRailMode('shape');
       refreshChrome();
       setStatus(`fitted ${fitted.length} control points from ${stroke.length} stroke points`, 'ok');
@@ -2339,10 +2351,7 @@ canvas.addEventListener('dblclick', (ev) => {
 canvas.addEventListener('wheel', (ev) => {
   ev.preventDefault();
   const before = toLocal(ev);
-  view.scale = Math.min(
-    ZOOM_MAX_SCALE,
-    Math.max(ZOOM_MIN_SCALE, view.scale * (ev.deltaY < 0 ? 1.12 : 1 / 1.12)),
-  );
+  view.scale = clampScale(view.scale * (ev.deltaY < 0 ? 1.12 : 1 / 1.12));
   const after = toLocal(ev);
   view.x += before.x - after.x;
   view.z += before.z - after.z;
@@ -2437,7 +2446,26 @@ function setLayout(next: Partial<EditorLayout>): void {
   saveLayout();
 }
 
+/**
+ * Every toggle's checked state, from the layout that owns it.
+ *
+ * One writer. The plan chips were repainted per frame by `setViewChips` while the
+ * MENU entries and the `aria-pressed` on both were written once at boot, so after
+ * the first `g` the menu said Grid was on with the grid off, and both chips lied
+ * to a screen reader.
+ */
+function syncToggles(): void {
+  shell.setChecked('toggleGrid', layout.grid);
+  shell.setChecked('toggleSnap', layout.snap);
+  shell.setChecked('toggleDock', dock.open);
+  shell.setChecked('dockFullscreen', layout.dockFullscreen);
+}
+
 function runAction(id: ActionId): void {
+  // One refusal, off the table's own flag. Nine `if (drawn)` guards inside the
+  // switch, a second list for the enable sweep and a third in the mode host was
+  // three copies of one rule.
+  if (!drawn && needsCircuit(id)) return;
   switch (id) {
     case 'newBlank':
       newBlank();
@@ -2446,18 +2474,34 @@ function runAction(id: ActionId): void {
       loadDialog.showModal();
       return;
     case 'saveDraft':
-      if (drawn) void saveDraft();
+      void saveDraft();
       return;
     case 'copyRecord':
-      if (drawn) void copyRecord();
+      void copyRecord();
       return;
     case 'undo':
       undo();
       return;
     case 'redo':
+      redo();
+      return;
+    case 'redrawCenterline':
+      redrawing = true;
+      setRailMode('shape');
+      setStatus(
+        'draw a new centerline: the dressing, the road profile and the race settings all stay',
+        '',
+      );
+      return;
+    case 'disarmTool':
+      redrawing = false;
+      dressing = null;
+      armPalette(null);
+      applySideTab();
+      shell.setMode(railMode, drawn);
       return;
     case 'toggleDock':
-      if (drawn) void togglePreview();
+      void togglePreview();
       return;
     case 'dockFullscreen':
       setLayout({ dockFullscreen: !layout.dockFullscreen });
@@ -2470,11 +2514,13 @@ function runAction(id: ActionId): void {
       return;
     case 'toggleGrid':
       setLayout({ grid: !layout.grid });
+      syncToggles();
       requestRedraw();
       return;
     case 'toggleSnap':
       setLayout({ snap: !layout.snap });
       setStatus(layout.snap ? 'snapping every placement to the grid' : 'free placement', '');
+      syncToggles();
       requestRedraw();
       return;
     case 'fitView':
@@ -2490,25 +2536,25 @@ function runAction(id: ActionId): void {
       applyZoom(200);
       return;
     case 'fitEnclosure':
-      if (drawn) fitEnclosure();
+      fitEnclosure();
       return;
     case 'fixCorners':
-      if (drawn) fixCorners();
+      fixCorners();
       return;
     case 'raceSettings':
-      if (drawn) setRailMode('race');
+      setRailMode('race');
       return;
     case 'modeShape':
       setRailMode('shape');
       return;
     case 'modeWidth':
-      if (drawn) setRailMode('width');
+      setRailMode('width');
       return;
     case 'modeProps':
-      if (drawn) setRailMode('props');
+      setRailMode('props');
       return;
     case 'modeRace':
-      if (drawn) setRailMode('race');
+      setRailMode('race');
       return;
     case 'keys':
       shell.toggleKeys();
@@ -2541,7 +2587,7 @@ function runAction(id: ActionId): void {
 const shell = new EditorShell({
   onAction: runAction,
   onMode: (mode) => {
-    if (mode !== 'shape' && !drawn) return;
+    if (!drawn && needsCircuit(MODE_ACTIONS[mode])) return;
     setRailMode(mode);
   },
   onSideTab: (tab) => {
@@ -2708,6 +2754,10 @@ async function togglePreview(): Promise<void> {
 
 window.addEventListener('keydown', (ev) => {
   if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
+  // A modal owns the keyboard while it is up. Without this, `g`, `s`, `m` and
+  // `ctrl+S` all acted on the page behind the Load dialog, and `?` opened a
+  // second nested modal.
+  if (loadDialog.open || shell.keysOpen) return;
   const action = actionForShortcut(ev);
   if (action) {
     // The space bar ACTIVATES a focused button. Taking it here would leave the
@@ -2717,52 +2767,62 @@ window.addEventListener('keydown', (ev) => {
     runAction(action);
     return;
   }
-  if (tool() === 'props') {
-    // Escape puts the pointer back and drops the selection: the one key that has
-    // to work whether or not anything is selected.
-    if (ev.key === 'Escape') {
+  // The SELECTION chords go through the same table as everything else. They were
+  // matched inline here against `ev.key` literals, which made them a fifth
+  // hand-kept copy of the very list the table exists to be the only copy of:
+  // re-spelling `rotateProp` in the table would have moved the tooltip, the hint
+  // and the cheatsheet while the page went on acting on the old key.
+  const selected = actionForSelectionShortcut(ev);
+  if (selected) {
+    if (tool() === 'props') {
+      if (!dressing) return;
       ev.preventDefault();
-      dressing = null;
-      armPalette(null);
-      applySideTab();
+      runSelectionAction(selected);
       return;
     }
-    if (!dressing) return;
-    const key = ev.key.toLowerCase();
-    if (ev.key === 'Delete' || ev.key === 'Backspace') {
+    // Outside props the only selection chord that means anything is delete, on a
+    // control point.
+    if (selected === 'deleteSelection' && selection) {
       ev.preventDefault();
-      deleteDressing();
-      return;
+      commit({
+        ...record,
+        controlPoints: deleteControlPoint(record.controlPoints, selection.index),
+      });
+      selection = null;
     }
-    if (key === 'r') {
-      ev.preventDefault();
-      // Shift faces the piece along the racing direction, which is a different
-      // thing from any angle: it re-reads the tangent wherever it is moved to.
-      if (ev.shiftKey) transformSelectedProp(tangentProp);
-      else {
-        const placed = realmRacersPlacements(record).props[placementIndexOf(dressing.index)];
-        transformSelectedProp((prop) => rotatedProp(prop, placed?.yaw ?? 0, 1));
-      }
-      return;
-    }
-    if (key === 'c') {
-      ev.preventDefault();
-      transformSelectedProp(toggledCollide);
-      return;
-    }
-    if (ev.key === '+' || ev.key === '=' || ev.key === '-') {
-      ev.preventDefault();
-      transformSelectedProp((prop) => scaledProp(prop, ev.key === '-' ? 1 : -1));
-    }
-    return;
-  }
-  if (ev.key === 'Delete' || ev.key === 'Backspace') {
-    if (!selection) return;
-    ev.preventDefault();
-    commit({ ...record, controlPoints: deleteControlPoint(record.controlPoints, selection.index) });
-    selection = null;
   }
 });
+
+/** What a selection chord does to the armed dressing piece. */
+function runSelectionAction(id: ActionId): void {
+  switch (id) {
+    case 'deleteSelection':
+      deleteDressing();
+      return;
+    case 'faceRacing':
+      // Facing the racing direction is a different thing from any angle: it
+      // re-reads the tangent wherever the piece is moved to.
+      transformSelectedProp(tangentProp);
+      return;
+    case 'rotateProp': {
+      if (dressing?.kind !== 'prop') return;
+      const placed = realmRacersPlacements(record).props[placementIndexOf(dressing.index)];
+      transformSelectedProp((prop) => rotatedProp(prop, placed?.yaw ?? 0, 1));
+      return;
+    }
+    case 'toggleCollide':
+      transformSelectedProp(toggledCollide);
+      return;
+    case 'scaleUp':
+      transformSelectedProp((prop) => scaledProp(prop, -1));
+      return;
+    case 'scaleDown':
+      transformSelectedProp((prop) => scaledProp(prop, 1));
+      return;
+    default:
+      return;
+  }
+}
 
 window.addEventListener('resize', () => {
   requestRedraw();
@@ -2784,8 +2844,7 @@ buildForm();
 buildPalette();
 shell.sideBodyEl.append(libraryEl, inspectorEl, outlinerEl, modeReadoutEl, formEl);
 shell.showMetrics(layout.metricsOpen);
-shell.setChecked('toggleGrid', layout.grid);
-shell.setChecked('toggleSnap', layout.snap);
+syncToggles();
 shell.setPreviewReady('off');
 newBlank();
 // The stored zoom, applied after the blank canvas framed itself: the operator
