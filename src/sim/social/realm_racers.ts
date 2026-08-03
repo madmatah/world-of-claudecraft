@@ -614,10 +614,35 @@ export function realmRacersStartMatch(
 }
 
 /**
+ * The circuit a queued race runs on: ONE draw from the competition pool.
+ *
+ * This is the only rng site in the rally's OWN modules (a race in progress
+ * still reaches the shared stream indirectly, the way any combat does: a
+ * Ground Blast goes through the ordinary `castAbility` path and whatever that
+ * draws for the pilot's gear is the combat system's, not the rally's). Where it
+ * sits in the tick is load bearing (src/sim/CLAUDE.md). It happens at SEAT
+ * time, inside the caller that has already committed to starting, so all four
+ * pilots learn the circuit on the same tick, and it happens exactly once per
+ * public race: a start the caller can still refuse must not perturb the shared
+ * stream, which is why every refusal in `startMatch` runs above the call.
+ *
+ * A pool of one still draws. The site must not appear and disappear with the
+ * pool size, or adding the second circuit would silently re-order every draw
+ * that follows it in the world.
+ */
+function drawCompetitionCircuit(ctx: SimContext): RealmRacersCircuit {
+  const pool = realmRacersCompetitionCircuits();
+  return pool[ctx.rng.int(0, pool.length - 1)];
+}
+
+/**
  * `circuitId` FORCES the circuit instead of resolving it from the seat, which is
  * how a caller races a specific one: an unauthored id falls through to the
  * ordinary resolution rather than refusing, so a stale id can never wedge a
- * caller into starting nothing.
+ * caller into starting nothing. A circuit forced AND RESOLVED never draws, so
+ * `/dev rally` cannot move the world's draw order; an id that does not resolve
+ * falls through to the ordinary resolution and therefore DOES draw, which is
+ * the same fallthrough this comment documents, seen from the stream's side.
  */
 function startMatch(
   ctx: SimContext,
@@ -637,13 +662,13 @@ function startMatch(
     meta: ctx.players.get(pid) as PlayerMeta,
   }));
   const profile = vehicleProfile(REALM_RACERS_VEHICLE_KEY);
-  // Practice always takes the practice circuit; a queued race takes the
-  // competition pool. The pool is drawn from POSITIONALLY while it holds one
-  // circuit: a random draw is a new site in the shared rng stream, so it lands
-  // with the second circuit, in its own commit, behind a parity regen.
+  // Practice always takes the practice circuit OUTRIGHT, never a draw: every
+  // offline practice session would otherwise perturb the global draw order. A
+  // queued race draws one from the competition pool, and only reaches the draw
+  // once nothing above can still refuse the start.
+  const forced = circuitId === undefined ? undefined : realmRacersCircuitById(circuitId);
   const circuit =
-    (circuitId === undefined ? undefined : realmRacersCircuitById(circuitId)) ??
-    (practice ? REALM_RACERS_PRACTICE_CIRCUIT : realmRacersCompetitionCircuits()[0]);
+    forced ?? (practice ? REALM_RACERS_PRACTICE_CIRCUIT : drawCompetitionCircuit(ctx));
   const id = ctx.realmRacers.nextMatchId++;
   const returns = new Map<number, RealmRacersReturn>();
   const pools = new Map<number, ArenaReturnPools>();

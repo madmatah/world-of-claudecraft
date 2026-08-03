@@ -22,6 +22,7 @@ import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
   type RealmRacersMatch,
+  realmRacersFreePracticeSlot,
   realmRacersMatchOf,
 } from '../src/sim/social/realm_racers';
 import {
@@ -339,6 +340,64 @@ describe('Realm Racers online backfill', () => {
     // queued for a real one and is getting one.
     expect(sim.realmRacers.match?.practice).toBeNull();
     expect(sim.realmRacers.practices).toEqual([]);
+  });
+
+  it('costs the shared stream exactly one draw, on the tick it seats the grid', () => {
+    // The backfill is the ONLY path that draws a circuit in production: a
+    // practice start takes the practice circuit outright and `/dev rally` is
+    // told its circuit, so both skip the draw. Everything else about the rally
+    // is deterministic with zero rng, which is what makes the count readable
+    // here: the whole tick's draw cost is this one draw.
+    const sim = makeWorld({ realmRacersBackfill: true });
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.realmRacersQueueJoin(human);
+    const drawsOnTick = (): number[] => {
+      const seen: number[] = [];
+      sim.rng.setObserver((value) => seen.push(value));
+      try {
+        sim.tick();
+      } finally {
+        sim.rng.setObserver(null);
+      }
+      return seen;
+    };
+    let seatingDraws: number[] = [];
+    for (let i = 0; i < REALM_RACERS_BACKFILL_TICKS + 60; i++) {
+      const before = sim.realmRacers.match;
+      const draws = drawsOnTick();
+      if (!before && sim.realmRacers.match) {
+        seatingDraws = draws;
+        break;
+      }
+      // Every tick before the grid is seated is free, which is what makes the
+      // seating tick's single draw attributable to the draw site.
+      expect(draws, `tick ${i} drew before the grid was seated`).toEqual([]);
+    }
+    expect(sim.realmRacers.match, 'the backfill never seated a grid').not.toBeNull();
+    expect(seatingDraws).toHaveLength(1);
+  });
+
+  it('draws nothing when a practice start is refused', () => {
+    // `seatWithBots` spawns its house pilots BEFORE the match module can refuse,
+    // then despawns them again. Neither spawn nor despawn may draw, or a
+    // refused practice press would perturb the world's draw order.
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    // Hand out every practice copy, so the next press has no lane to take.
+    const holders = realmRacersPracticeLanes().map((_, i) =>
+      addAt(sim, 'warrior', `Holder${i}`, -40 - i * 4, -40),
+    );
+    for (const pid of holders) sim.realmRacersPracticeStart('rookie', pid);
+    expect(realmRacersFreePracticeSlot(sim.ctx), 'a practice copy was still free').toBeLessThan(0);
+    const seen: number[] = [];
+    sim.rng.setObserver((value) => seen.push(value));
+    try {
+      sim.realmRacersPracticeStart('ace', human);
+    } finally {
+      sim.rng.setObserver(null);
+    }
+    expect(realmRacersMatchOf(sim.ctx, human), 'the refused start seated a race').toBeNull();
+    expect(seen).toEqual([]);
   });
 
   it('fills only the seats nobody claimed, and clocks the OLDEST waiter', () => {

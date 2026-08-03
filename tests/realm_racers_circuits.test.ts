@@ -52,6 +52,9 @@ import {
 } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
+  REALM_RACERS_CHASE_TICKS,
+  type RealmRacersMatch,
+  type RealmRacersProgress,
   realmRacersCircuitOf,
   realmRacersMatchOf,
   realmRacersStartMatch,
@@ -614,6 +617,167 @@ describe('Realm Racers circuits: which one a race lands on', () => {
     match.circuitId = 'a_circuit_that_shipped_last_week';
     expect(realmRacersCircuitOf(match).id).toBe(REALM_RACERS_PRACTICE_CIRCUIT_ID);
     expect(() => sim.tick()).not.toThrow();
+  });
+});
+
+describe('Realm Racers circuit draw: which circuit a queued race gets', () => {
+  /** Four eligible pilots standing beside the Society, ready to be seated. */
+  function grid(sim: Sim): number[] {
+    return ['Aster', 'Bryn', 'Cael', 'Dara'].map((name, index) =>
+      addAt(sim, 'warrior', name, -5 - index * 3, -40),
+    );
+  }
+
+  /** Every rng value the shared stream produced while `body` ran. The observer
+   *  is pure bookkeeping (src/sim/rng.ts), so installing it cannot move the
+   *  draw it is counting. */
+  function drawsDuring(sim: Sim, body: () => void): number[] {
+    const seen: number[] = [];
+    sim.rng.setObserver((value) => seen.push(value));
+    try {
+      body();
+    } finally {
+      sim.rng.setObserver(null);
+    }
+    return seen;
+  }
+
+  it('draws exactly one value, at seat time, and seats the circuit that value picks', () => {
+    // The pool holds one circuit today, so WHICH circuit comes back would prove
+    // nothing on its own: `pool[0]` and a draw are indistinguishable by result.
+    // Two things are asserted instead, and both stay decisive as the pool grows:
+    // the draw's COST in the shared stream (one value, once), and the MAPPING
+    // from that value to the seated circuit. The mapping is what a reverted
+    // draw, a reseeded generator, or an index computed differently would break.
+    const sim = makeWorld();
+    const pids = grid(sim);
+    let seated = false;
+    const draws = drawsDuring(sim, () => {
+      seated = realmRacersStartMatch(sim.ctx, pids);
+    });
+    expect(seated).toBe(true);
+    expect(draws).toHaveLength(1);
+    const pool = realmRacersCompetitionCircuits();
+    const picked = pool[Math.floor(draws[0] * pool.length)];
+    expect((sim.realmRacers.match as RealmRacersMatch).circuitId).toBe(picked.id);
+  });
+
+  it('draws from the competition pool, never the practice circuit', () => {
+    const sim = makeWorld();
+    expect(realmRacersStartMatch(sim.ctx, grid(sim))).toBe(true);
+    const match = sim.realmRacers.match;
+    if (!match) throw new Error('no public race');
+    const pool = realmRacersCompetitionCircuits().map((circuit) => circuit.id);
+    expect(pool).toContain(match.circuitId);
+    expect(match.circuitId).not.toBe(REALM_RACERS_PRACTICE_CIRCUIT_ID);
+  });
+
+  it('is deterministic: the same seed draws the same value, a different seed does not', () => {
+    // Pinned on the drawn VALUE, not the resolved circuit. With one circuit in
+    // the pool the resolved circuit is the same under every seed, so a test
+    // over it would pass with the seed ignored entirely, or with `Math.random`.
+    const drawsFor = (seed: number): number[] => {
+      const sim = makeWorld({ seed });
+      return drawsDuring(sim, () => {
+        expect(realmRacersStartMatch(sim.ctx, grid(sim))).toBe(true);
+      });
+    };
+    expect(drawsFor(1337)).toEqual(drawsFor(1337));
+    // The half that proves the seed reaches the draw at all.
+    expect(drawsFor(1337)).not.toEqual(drawsFor(4242));
+  });
+
+  it('never draws for a practice race, whatever the pool holds', () => {
+    // A practice lap must cost the shared stream nothing: it runs offline, on
+    // demand, as often as a player likes, and a draw here would put two realms'
+    // worlds on different draw orders because somebody practised.
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const pids = [
+      human,
+      ...['Bryn', 'Cael', 'Dara'].map((n, i) => addAt(sim, 'warrior', n, -8 - i * 3, -40)),
+    ];
+    let seated = false;
+    const draws = drawsDuring(sim, () => {
+      seated = realmRacersStartMatch(sim.ctx, pids, { ownerPid: human, slot: 1 });
+    });
+    expect(seated).toBe(true);
+    expect((sim.realmRacers.practices[0] as RealmRacersMatch).circuitId).toBe(
+      REALM_RACERS_PRACTICE_CIRCUIT_ID,
+    );
+    expect(draws).toEqual([]);
+  });
+
+  it('never draws for a race told which circuit to run', () => {
+    // A caller that names its circuit must not be able to move the world's draw
+    // order. Forced to the PRACTICE circuit deliberately: that is a circuit no
+    // draw could ever return, so the seated-circuit half proves forcing really
+    // happened rather than agreeing with what a one-circuit pool would give.
+    const sim = makeWorld();
+    const pids = grid(sim);
+    let seated = false;
+    const draws = drawsDuring(sim, () => {
+      seated = realmRacersStartMatch(sim.ctx, pids, undefined, REALM_RACERS_PRACTICE_CIRCUIT_ID);
+    });
+    expect(seated).toBe(true);
+    expect((sim.realmRacers.match as RealmRacersMatch).circuitId).toBe(
+      REALM_RACERS_PRACTICE_CIRCUIT_ID,
+    );
+    expect(draws).toEqual([]);
+  });
+
+  it('DOES draw for a forced circuit that no longer resolves', () => {
+    // The documented fallthrough, seen from the stream's side: an unauthored id
+    // resolves to nothing and the ordinary resolution takes over, so the draw
+    // happens. Pinned so the "a forced circuit never draws" shorthand cannot be
+    // read as unconditional by a later determinism audit. No live caller hits
+    // it (`startRealmRacersDevRace` validates the id first), which is exactly
+    // why nothing else would notice if it changed.
+    const sim = makeWorld();
+    const pids = grid(sim);
+    let seated = false;
+    const draws = drawsDuring(sim, () => {
+      seated = realmRacersStartMatch(sim.ctx, pids, undefined, 'a_circuit_that_shipped_last_week');
+    });
+    expect(seated).toBe(true);
+    expect(draws).toHaveLength(1);
+    expect(realmRacersCompetitionCircuits().map((c) => c.id)).toContain(
+      (sim.realmRacers.match as RealmRacersMatch).circuitId,
+    );
+  });
+
+  it('never draws for a start it refuses, on any of the four refusals', () => {
+    // The claim is over ALL the refusals, so all four arms are exercised: a
+    // grid that cannot be seated costs the shared stream nothing, and the
+    // caller can put the pilots back. Two arms would leave a future edit free
+    // to move the draw above the other two.
+    const sim = makeWorld();
+    const pids = grid(sim);
+    const nothingDrawn = (label: string, body: () => void): void => {
+      expect(drawsDuring(sim, body), label).toEqual([]);
+    };
+    // 1) Wrong grid size: a race is four abreast or it does not start.
+    nothingDrawn('short grid', () => {
+      expect(realmRacersStartMatch(sim.ctx, pids.slice(0, 2))).toBe(false);
+    });
+    // 2) The same pilot twice.
+    nothingDrawn('duplicate pid', () => {
+      expect(realmRacersStartMatch(sim.ctx, [pids[0], pids[0], pids[1], pids[2]])).toBe(false);
+    });
+    // 3) A pilot who cannot race. A dead one is the cheapest ineligible.
+    const corpse = sim.entities.get(pids[3]);
+    if (!corpse) throw new Error('no pilot');
+    corpse.dead = true;
+    nothingDrawn('ineligible pilot', () => {
+      expect(realmRacersStartMatch(sim.ctx, pids)).toBe(false);
+    });
+    corpse.dead = false;
+    // 4) The public circuit already claimed, which is the refusal a live realm
+    // actually hits.
+    expect(realmRacersStartMatch(sim.ctx, pids)).toBe(true);
+    nothingDrawn('circuit busy', () => {
+      expect(realmRacersStartMatch(sim.ctx, pids)).toBe(false);
+    });
   });
 });
 
