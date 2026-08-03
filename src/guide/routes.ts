@@ -162,6 +162,13 @@ export const GUIDE_ROUTES: GuideRoute[] = [
     descKey: 'guide.valeCupPage.intro',
   },
   {
+    id: 'realm-racers',
+    sub: 'realm-racers',
+    navKey: 'guide.nav.realmRacers',
+    group: 'compendium',
+    descKey: 'guide.realmRacersPage.intro',
+  },
+  {
     id: 'deeds',
     sub: 'deeds',
     navKey: 'guide.nav.deeds',

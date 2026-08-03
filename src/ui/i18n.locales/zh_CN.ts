@@ -8408,6 +8408,33 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'guide.valeCupPage.practiceHeading': '练习赛与空闲的球场',
   'guide.valeCupPage.practiceBody':
     '溪谷杯窗口还提供练习：一份专属的球场副本，双方都由机器人补满，任何结果都不计入你的战绩。正式比赛还差一两个人？稍等片刻，机器人便会补齐两队，而只要场上有机器人，比赛就只是友谊赛，绝不计入评级。当母猪场空闲时，机器人还会上演一场表演赛，你可以从看台上观赛、下注；一旦有真正的玩家准备就绪，表演赛便会让出球场，所有赌注原数退还。',
+  'guide.nav.realmRacers': '王国竞速赛',
+  'guide.realmRacersPage.heading': '王国竞速赛',
+  'guide.realmRacersPage.intro':
+    '永恒花园赛车协会开辟了一条花园赛道，向任何有胆量驾驶的人开放：四名车手同场竞速，一件招牌武器，还有一条两侧夹道、既奖励大胆超车也奖励干净路线的赛道。',
+  'guide.realmRacersPage.loreHeading': '永恒花园赛车协会',
+  'guide.realmRacersPage.loreBody':
+    '永恒花园的总园丁们从未打算让树篱之间的巡视小径跑得比独轮车更快，但一位闲得发慌、又借来坐骑的场地管理员却另有想法。由那第一次胆大妄为发展而来的协会，如今划出了一条正式赛道，凑满整场比赛，只要四名车手准备就绪，便会落下发车旗。',
+  'guide.realmRacersPage.howHeading': '怎么玩',
+  'guide.realmRacersPage.howQueueBody':
+    '在世界任何地方，都可以从王国竞速赛窗口排队参赛。凑满四人的整场比赛后，所有人会一同就位在发车线上，倒计时随即开始。',
+  'guide.realmRacersPage.howRaceBody':
+    '用你惯用的移动键转向、加速和刹车，按住跳跃键可拉手刹，滑过狭窄的弯道。每位车手都携带震地爆破，这是一记向前发射的冲击，会让被击中者失去平衡，因此挡在你前面的对手绝不安全。冲过最后一圈终点线的第一人获胜，全场车手则按比赛决出胜负时各自所处的位置排定名次。',
+  'guide.realmRacersPage.howPracticeBody':
+    '还没准备好和陌生人较量？练习赛会让你在同一台机器、同样的操控手感下，于专属的赛道副本中挑战自选的对手，好让你先摸清路线，再去排队参加正式比赛。',
+  'guide.realmRacersPage.machineHeading': '借用的赛车',
+  'guide.realmRacersPage.machineBody':
+    '每位车手当天驾驶的都是协会自备的借用车：没有人自带坐骑上场，也没有人因为没抢到坐骑而只能在维修区干看着。这台车上手很快，一旦你摸到弯道的极限，也能感受到它实实在在的分量。',
+  'guide.realmRacersPage.circuitsHeading': '赛道',
+  'guide.realmRacersPage.circuitsPracticeTitle': '永恒花园训练场',
+  'guide.realmRacersPage.circuitsPracticeBody':
+    '每位车手都在这条赛道上学车：一条较短的花园环道，专属于正在练习的那名车手，与其他任何人无关。',
+  'guide.realmRacersPage.circuitsCompetitionTitle': '正赛赛道',
+  'guide.realmRacersPage.circuitsCompetitionBody':
+    '排队比赛从不会跑训练赛道，而是从另一个赛道池中抽取更长的正赛赛道，每一条都披上其所借用场地所在游戏区域的主题，因此即便车辆不变，场地也会随之改变。',
+  'guide.realmRacersPage.rewardsHeading': '你为何而战',
+  'guide.realmRacersPage.rewardsBody':
+    '王国竞速赛不发放经验值，也没有战利品：这纯粹是一项运动，为了比赛本身，也为了它带来的名次而战。不过，在正式比赛中取得的名次，仍会计入功绩之书：首场比赛、胜利，以及一批更难达成的驾驶壮举，都等着愿意去追逐它们的车手，随之而来的还有名望与专属头衔。',
   'entities.npcs.groundskeeper_bram.name': '场地管理员布拉姆',
   'entities.npcs.groundskeeper_bram.title': '母猪场看守',
   'entities.npcs.groundskeeper_bram.greeting':

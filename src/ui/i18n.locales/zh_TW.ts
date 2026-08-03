@@ -8408,6 +8408,33 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'guide.valeCupPage.practiceHeading': '練習賽與閒置的球場',
   'guide.valeCupPage.practiceBody':
     '溪谷盃視窗也提供練習：一座球場的私人複本，由機器人補滿雙方，任何內容都不計入你的戰績。正式比賽還差一兩個人？稍候片刻，機器人便會補齊隊伍，而任何有機器人上場的比賽都是友誼賽，絕不計入排名。而當母豬場閒置時，機器人會上演一場表演賽，你可以從看台上觀賞、也可以下注；一旦真正的玩家準備就緒，表演賽便會讓出球場，所有賭注全數退還。',
+  'guide.nav.realmRacers': '王國競速賽',
+  'guide.realmRacersPage.heading': '王國競速賽',
+  'guide.realmRacersPage.intro':
+    '永恆花園賽車協會開闢了一條花園賽道，向任何有膽量駕駛的人開放：四名車手同場競速，一件招牌武器，還有一條兩側夾道、既獎勵大膽超車也獎勵乾淨路線的賽道。',
+  'guide.realmRacersPage.loreHeading': '永恆花園賽車協會',
+  'guide.realmRacersPage.loreBody':
+    '永恆花園的總園丁們從未打算讓樹籬之間的巡視小徑跑得比獨輪車更快，但一位閒得發慌、又借來坐騎的場地管理員卻另有想法。由那第一次膽大妄為發展而來的協會，如今劃出了一條正式賽道，湊滿整場比賽，只要四名車手準備就緒，便會落下發車旗。',
+  'guide.realmRacersPage.howHeading': '怎麼玩',
+  'guide.realmRacersPage.howQueueBody':
+    '在世界任何地方，都可以從王國競速賽視窗排隊參賽。湊滿四人的整場比賽後，所有人會一同就位在發車線上，倒數計時隨即開始。',
+  'guide.realmRacersPage.howRaceBody':
+    '用你慣用的移動鍵轉向、加速和煞車，按住跳躍鍵可拉手煞車，滑過狹窄的彎道。每位車手都攜帶震地爆破，這是一記向前發射的衝擊，會讓被擊中者失去平衡，因此擋在你前面的對手絕不安全。衝過最後一圈終點線的第一人獲勝，全場車手則按比賽決出勝負時各自所處的位置排定名次。',
+  'guide.realmRacersPage.howPracticeBody':
+    '還沒準備好和陌生人較量？練習賽會讓你在同一台機器、同樣的操控手感下，於專屬的賽道副本中挑戰自選的對手，好讓你先摸清路線，再去排隊參加正式比賽。',
+  'guide.realmRacersPage.machineHeading': '借用的賽車',
+  'guide.realmRacersPage.machineBody':
+    '每位車手當天駕駛的都是協會自備的借用車：沒有人自帶坐騎上場，也沒有人因為沒搶到坐騎而只能在維修區乾看著。這台車上手很快，一旦你摸到彎道的極限，也能感受到它實實在在的分量。',
+  'guide.realmRacersPage.circuitsHeading': '賽道',
+  'guide.realmRacersPage.circuitsPracticeTitle': '永恆花園訓練場',
+  'guide.realmRacersPage.circuitsPracticeBody':
+    '每位車手都在這條賽道上學車：一條較短的花園環道，專屬於正在練習的那名車手，與其他任何人無關。',
+  'guide.realmRacersPage.circuitsCompetitionTitle': '正賽賽道',
+  'guide.realmRacersPage.circuitsCompetitionBody':
+    '排隊比賽從不會跑訓練賽道，而是從另一個賽道池中抽取更長的正賽賽道，每一條都披上其所借用場地所在遊戲區域的主題，因此即便車輛不變，場地也會隨之改變。',
+  'guide.realmRacersPage.rewardsHeading': '你為何而戰',
+  'guide.realmRacersPage.rewardsBody':
+    '王國競速賽不發放經驗值，也沒有戰利品：這純粹是一項運動，為了比賽本身，也為了它帶來的名次而戰。不過，在正式比賽中取得的名次，仍會計入功績之書：首場比賽、勝利，以及一批更難達成的駕駛壯舉，都等著願意去追逐它們的車手，隨之而來的還有名望與專屬頭銜。',
   'entities.npcs.groundskeeper_bram.name': '場地管理員布拉姆',
   'entities.npcs.groundskeeper_bram.title': '母豬場看守',
   'entities.npcs.groundskeeper_bram.greeting':

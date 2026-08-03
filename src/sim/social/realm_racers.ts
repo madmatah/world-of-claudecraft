@@ -30,6 +30,7 @@ import {
 } from '../content/realm_racers_circuits';
 import { vehicleProfile } from '../content/vehicles';
 import { abilitiesKnownAt, DUNGEON_X_THRESHOLD } from '../data';
+import * as deedsMod from '../deeds';
 import { restorePetFromDelveStash, stowPetForDelve } from '../pet/pet_commands';
 import type { RallyDriverTier } from '../realm_racers_driver';
 import {
@@ -230,6 +231,17 @@ export interface RealmRacersProgress {
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
   groundBlastShockUntilTick: number;
+  /** Tick the current lap began (reset to GO, and to every later lap wrap).
+   *  Feeds the fast-lap deed; nothing else reads it. */
+  lapStartTick: number;
+  /** Deed-tracking state only, evaluated once at race end (docs/design/deeds.md):
+   *  whether this racer ever left the racing surface (verge excepted) or
+   *  traded a real bump with a rival, was ever hit by a Ground Blast, and was
+   *  ever classified dead last while still driving. Draws no rng. */
+  hadOffTrackContact: boolean;
+  hadRivalContact: boolean;
+  hitByShell: boolean;
+  wasLastPlace: boolean;
 }
 
 /**
@@ -721,6 +733,11 @@ function startMatch(
             charges: realmRacersWeaponCharges(profile.weaponAbilityId),
           },
           groundBlastShockUntilTick: 0,
+          lapStartTick: ctx.tickCount,
+          hadOffTrackContact: false,
+          hadRivalContact: false,
+          hitByShell: false,
+          wasLastPlace: false,
         },
       ]),
     ),
@@ -855,6 +872,41 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
     if (progress?.retiredTick !== null) continue;
     emitResult(ctx, match, pid, ranked, match.winnerPid);
   }
+  // Book of Deeds (docs/design/deeds.md): placing-based, since a four-pilot
+  // heat has a whole finishing order rather than a win/lose pair. A house
+  // pilot never banks a win or earns a deed; only a rated (non-practice) heat
+  // counts (see onRallyRaceEndForDeeds). The practice gate matters here too,
+  // independently of that call: without it a private practice win would
+  // permanently inflate the persisted meter and unlock the win deeds at the
+  // next full deeds pass, the same bug class the Vale Cup's `rated` gate on
+  // `applyStanding` exists to prevent.
+  //
+  // Deliberately NOT excluded: a QUEUED heat backfilled with house pilots. A
+  // human who wins a bot-backfilled public race still banks the win and the
+  // deed credit, unlike the Vale Cup's bot-backfilled-bout exclusion, because
+  // house pilots ARE the ordinary field here (every queued heat seats three
+  // of them until the grid fills with humans), not a friendly-only mode.
+  if (
+    match.practice === null &&
+    match.winnerPid !== null &&
+    !ctx.realmRacers.bots.has(match.winnerPid)
+  ) {
+    const winnerMeta = ctx.players.get(match.winnerPid);
+    if (winnerMeta) winnerMeta.rrWins++;
+  }
+  const deedEntries: deedsMod.RallyRaceDeedEntry[] = match.pids.map((pid) => {
+    const progress = match.progress.get(pid) as RealmRacersProgress;
+    return {
+      pid,
+      bot: ctx.realmRacers.bots.has(pid),
+      retired: progress.retiredTick !== null,
+      finished: progress.finishedTick !== null,
+      clean: !progress.hadRivalContact && !progress.hadOffTrackContact,
+      won: match.winnerPid === pid,
+      comeback: progress.wasLastPlace && progress.hitByShell,
+    };
+  });
+  deedsMod.onRallyRaceEndForDeeds(ctx, match.practice !== null, deedEntries);
 }
 
 /** Close the gameplay parenthesis for ONE racer: kit, mount, pools, position.
@@ -1080,7 +1132,10 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
       racer.onGround = false;
       racer.fallStartY = racer.pos.y;
       const progress = match.progress.get(pid);
-      if (progress) progress.groundBlastShockUntilTick = ctx.tickCount + GROUND_BLAST_SHOCK_TICKS;
+      if (progress) {
+        progress.groundBlastShockUntilTick = ctx.tickCount + GROUND_BLAST_SHOCK_TICKS;
+        progress.hitByShell = true; // deed-tracking only (docs/design/deeds.md)
+      }
       ctx.applyAura(racer, {
         id: REALM_RACERS_GROUND_BLAST_AURA,
         name: 'Ground Blast',
@@ -1168,6 +1223,16 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
       settleContact(ctx, a, bodyA);
       settleContact(ctx, b, bodyB);
       if (contact.impact < REALM_RACERS_BUMP_EVENT_MIN_IMPACT) continue;
+      // Deed-tracking only (docs/design/deeds.md): a real, announced bump
+      // (the same floor the event above uses) disqualifies a clean race for
+      // BOTH cars, not just the one that gets the announce credit. Gated on
+      // still racing: a pilot who already crossed the line clean keeps that
+      // outcome through the post-finish tableau, a rival's business no
+      // longer touches theirs.
+      const progressA = match.progress.get(match.pids[i]);
+      const progressB = match.progress.get(match.pids[j]);
+      if (progressA?.finishedTick === null) progressA.hadRivalContact = true;
+      if (progressB?.finishedTick === null) progressB.hadRivalContact = true;
       const pair = i * match.pids.length + j;
       const last = match.bumpTicks.get(pair);
       if (last !== undefined && ctx.tickCount - last < REALM_RACERS_BUMP_EVENT_TICKS) continue;
@@ -1260,6 +1325,17 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
     if (!racer || !progress) continue;
     const projection = reproject(match, pid, racer);
     const band = realmRacersOffTrackBand(circuit, projection);
+    // Deed-tracking only: the soft verge is a normal racing-line overshoot
+    // (every apex clips it), so only the garden and the wading margin beyond
+    // it count as really leaving the circuit. Gated on still racing, same as
+    // the rival-contact flag above: a finished pilot wandering the post-race
+    // tableau does not retroactively lose a clean run.
+    if (
+      progress.finishedTick === null &&
+      (band === REALM_RACERS_GARDEN_BAND || band === REALM_RACERS_WATER_BAND)
+    ) {
+      progress.hadOffTrackContact = true;
+    }
     const forwardDot = rallyForwardDot(projection, Math.sin(racer.facing), Math.cos(racer.facing));
     if (forwardDot < -0.2) {
       progress.wrongWayTicks++;
@@ -1356,6 +1432,18 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
       progress.nextResetGate = (progress.nextResetGate + 1) % gates.length;
     }
     if (!step.wrapped) continue;
+    // Deed-tracking only (docs/design/deeds.md): the lap that just closed,
+    // timed off this racer's OWN lap clock rather than the race clock, so a
+    // pit stop for someone else never counts against a fast one here.
+    deedsMod.onRallyLapForDeeds(
+      ctx,
+      match.practice !== null,
+      ctx.realmRacers.bots.has(pid),
+      match.circuitId,
+      pid,
+      (ctx.tickCount - progress.lapStartTick) / TICK_RATE,
+    );
+    progress.lapStartTick = ctx.tickCount;
     if (step.finished) {
       progress.finishedTick = ctx.tickCount;
       progress.finishFraction = step.finishFraction ?? 1;
@@ -1371,6 +1459,32 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
         pid,
       });
     }
+  }
+  // Deed-tracking only: whichever STILL-RUNNING racer trails the field this
+  // tick was, for at least this moment, dead last. A cheap argmin over
+  // travelled rather than classify(), which sorts and allocates a fresh array
+  // every tick for tracking that only ever needs the minimum. Restricted to
+  // racers still driving, for two reasons: the frozen-grid-slot tie-break
+  // that ranks a finished classification must not decide this (every racer
+  // is still tied on the exact same travelled at the green light, and
+  // flagging one of them dead last before anybody has actually fallen behind
+  // is not the comeback story this tracks), and a retired quitter sorts last
+  // in the FINAL classification forever after, which would otherwise steal
+  // the flag from whichever driving racer is really trailing.
+  let trailingPid: number | null = null;
+  let trailingTravelled = Number.POSITIVE_INFINITY;
+  for (const pid of match.pids) {
+    if (!realmRacersStillRunning(match, pid)) continue;
+    const runnerProgress = match.progress.get(pid);
+    if (!runnerProgress) continue;
+    if (runnerProgress.travelled < trailingTravelled) {
+      trailingTravelled = runnerProgress.travelled;
+      trailingPid = pid;
+    }
+  }
+  if (trailingPid !== null) {
+    const trailingProgress = match.progress.get(trailingPid);
+    if (trailingProgress) trailingProgress.wasLastPlace = true;
   }
   // Crossing the line no longer ends the race: with four on the grid the fight
   // for the last podium step is the race, for everyone not leading it. The
@@ -1467,7 +1581,11 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
     }
     if (ctx.tickCount >= match.goTick) {
       match.phase = 'racing';
-      for (const pid of match.pids) ctx.emit({ type: 'realmRacersGo', pid });
+      for (const pid of match.pids) {
+        ctx.emit({ type: 'realmRacersGo', pid });
+        const progress = match.progress.get(pid);
+        if (progress) progress.lapStartTick = ctx.tickCount;
+      }
     }
     return;
   }

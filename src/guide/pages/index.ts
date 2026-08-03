@@ -22,6 +22,7 @@ import { models } from './models';
 import { professions } from './professions';
 import { progression } from './progression';
 import { quests } from './quests';
+import { realmRacers } from './realm_racers';
 import { settings } from './settings';
 import { social } from './social';
 import { stats } from './stats';
@@ -50,6 +51,7 @@ const PAGES: Record<string, GuidePage> = {
   delves,
   arena,
   'vale-cup': valeCup,
+  'realm-racers': realmRacers,
   deeds,
   combat,
   stats,

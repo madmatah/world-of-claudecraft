@@ -30,8 +30,11 @@ import {
   onMobKillCreditForDeeds,
   onNpcTalkedForDeeds,
   onPlayerDeathForDeeds,
+  onRallyLapForDeeds,
+  onRallyRaceEndForDeeds,
   onRiteFinaleForDeeds,
   onWorldBossKilledForDeeds,
+  type RallyRaceDeedEntry,
   updateDeeds,
 } from '../src/sim/deeds';
 import { createMob } from '../src/sim/entity';
@@ -864,6 +867,140 @@ describe('Vale Cup sites', () => {
     const win = addMeta(winSim, 'Keeper');
     onCupStandingForDeeds(winSim.ctx, sheet(win, {}), win.entityId, 'A', 'A');
     expect(win.deedsEarned.has('pvp_vcup_clean_sheet')).toBe(true);
+  });
+});
+
+describe('Realm Racers sites', () => {
+  function rallyEntry(over: Partial<RallyRaceDeedEntry> & { pid: number }): RallyRaceDeedEntry {
+    return {
+      bot: false,
+      retired: false,
+      finished: true,
+      clean: false,
+      won: false,
+      comeback: false,
+      ...over,
+    };
+  }
+
+  it('pvp_rr_first_race: any non-bot on a rated heat; a bot, a practice lap, and a forfeiter never earn it', () => {
+    const sim = makeSim();
+    const racer = addMeta(sim, 'Racer');
+    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId })]);
+    expect(racer.deedsEarned.has('pvp_rr_first_race')).toBe(true);
+
+    const botSim = makeSim();
+    const bot = addMeta(botSim, 'Bot');
+    onRallyRaceEndForDeeds(botSim.ctx, false, [rallyEntry({ pid: bot.entityId, bot: true })]);
+    expect(bot.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+
+    const pracSim = makeSim();
+    const practicer = addMeta(pracSim, 'Practicer');
+    onRallyRaceEndForDeeds(pracSim.ctx, true, [rallyEntry({ pid: practicer.entityId })]);
+    expect(practicer.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+
+    // "See out a full heat": a forfeiter (retired) never earns it, even
+    // rated and even finished-adjacent (still not the same as seeing it out).
+    const quitSim = makeSim();
+    const quitter = addMeta(quitSim, 'Quitter');
+    onRallyRaceEndForDeeds(quitSim.ctx, false, [
+      rallyEntry({ pid: quitter.entityId, retired: true, finished: false }),
+    ]);
+    expect(quitter.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+  });
+
+  it('pvp_rr_first_win / wins_10 / wins_25: the rrWins meter, moved by the caller before the hook runs', () => {
+    const sim = makeSim();
+    const racer = addMeta(sim, 'Racer');
+    // The meter deeds are non-manual: onRallyRaceEndForDeeds only marks the
+    // pid dirty (rrWins carries no narrow key), and updateDeeds's full pass is
+    // what actually reads it and grants, exactly as sim.tick() runs it every
+    // tick in production.
+    racer.rrWins = 9;
+    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    updateDeeds(sim.ctx);
+    expect(racer.deedsEarned.has('pvp_rr_first_win')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_rr_wins_10')).toBe(false);
+
+    racer.rrWins = 10;
+    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    updateDeeds(sim.ctx);
+    expect(racer.deedsEarned.has('pvp_rr_wins_10')).toBe(true);
+
+    racer.rrWins = 24;
+    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    updateDeeds(sim.ctx);
+    expect(racer.deedsEarned.has('pvp_rr_wins_25')).toBe(false);
+
+    racer.rrWins = 25;
+    onRallyRaceEndForDeeds(sim.ctx, false, [rallyEntry({ pid: racer.entityId, won: true })]);
+    updateDeeds(sim.ctx);
+    expect(racer.deedsEarned.has('pvp_rr_wins_10')).toBe(true);
+    expect(racer.deedsEarned.has('pvp_rr_wins_25')).toBe(true);
+  });
+
+  it('pvp_rr_clean_race: needs a finish AND a clean run; either miss withholds it', () => {
+    const sim = makeSim();
+    const dnf = addMeta(sim, 'Retired');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: dnf.entityId, finished: false, clean: true }),
+    ]);
+    expect(dnf.deedsEarned.has('pvp_rr_clean_race')).toBe(false);
+
+    const dirty = addMeta(sim, 'Muddy');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: dirty.entityId, finished: true, clean: false }),
+    ]);
+    expect(dirty.deedsEarned.has('pvp_rr_clean_race')).toBe(false);
+
+    const spotless = addMeta(sim, 'Spotless');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: spotless.entityId, finished: true, clean: true }),
+    ]);
+    expect(spotless.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
+  });
+
+  it('pvp_rr_comeback: needs the overall win AND the comeback flag; either miss withholds it', () => {
+    const sim = makeSim();
+    const runnerUp = addMeta(sim, 'RunnerUp');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: runnerUp.entityId, won: false, comeback: true }),
+    ]);
+    expect(runnerUp.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+
+    const luckyWinner = addMeta(sim, 'LuckyWinner');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: luckyWinner.entityId, won: true, comeback: false }),
+    ]);
+    expect(luckyWinner.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+
+    const hero = addMeta(sim, 'Hero');
+    onRallyRaceEndForDeeds(sim.ctx, false, [
+      rallyEntry({ pid: hero.entityId, won: true, comeback: true }),
+    ]);
+    expect(hero.deedsEarned.has('pvp_rr_comeback')).toBe(true);
+  });
+
+  it('pvp_rr_fast_lap: only the Express Tour, only under the threshold, never practice or a bot', () => {
+    const sim = makeSim();
+    const racer = addMeta(sim, 'Flier');
+    // Wrong circuit: the practice garden lap never counts, however fast.
+    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_practice', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    // Right circuit, too slow.
+    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_express_tour', racer.entityId, 30);
+    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    // A practice lap on the Express Tour circuit id never counts either.
+    onRallyLapForDeeds(sim.ctx, true, false, 'evergarden_express_tour', racer.entityId, 10);
+    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    // A bot's fast lap never counts.
+    const bot = addMeta(sim, 'BotFlier');
+    sim.ctx.realmRacers.bots.set(bot.entityId, 'ace');
+    onRallyLapForDeeds(sim.ctx, false, true, 'evergarden_express_tour', bot.entityId, 10);
+    expect(bot.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+    // Right circuit, fast enough, a human: grants.
+    onRallyLapForDeeds(sim.ctx, false, false, 'evergarden_express_tour', racer.entityId, 25.9);
+    expect(racer.deedsEarned.has('pvp_rr_fast_lap')).toBe(true);
   });
 });
 

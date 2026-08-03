@@ -8801,6 +8801,33 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'guide.valeCupPage.practiceHeading': '연습 경기와 한가한 경기장',
   'guide.valeCupPage.practiceBody':
     '베일 컵 창에서는 연습도 할 수 있습니다. 봇이 양 팀을 채우고 무엇도 전적에 남지 않는, 경기장의 개인 사본입니다. 정식 경기에 한두 명이 모자란가요? 잠시 기다리면 봇이 팀을 채워 주며, 봇이 뛰는 경기는 언제나 친선전이고 결코 등급전으로 기록되지 않습니다. 그리고 소우필드가 한가할 때면 봇들이 시범 경기를 펼치는데, 관중석에서 구경하고 돈도 걸 수 있습니다. 진짜 플레이어들이 준비를 마치는 순간 시범 경기는 자리를 내주고, 걸린 돈은 모두 반환됩니다.',
+  'guide.nav.realmRacers': '렐름 레이서즈',
+  'guide.realmRacersPage.heading': '렐름 레이서즈',
+  'guide.realmRacersPage.intro':
+    '에버가든 레이싱 협회는 운전할 배짱만 있다면 누구나 참가할 수 있는 정원 서킷을 운영합니다: 그리드에는 네 명의 파일럿, 하나의 시그니처 무기, 그리고 대담한 라인만큼이나 깔끔한 라인에도 보상을 주는 생울타리로 둘러싸인 트랙이 있습니다.',
+  'guide.realmRacersPage.loreHeading': '에버가든 레이싱 협회',
+  'guide.realmRacersPage.loreBody':
+    '에버가든의 정원장들은 생울타리 사이의 관리용 통로가 손수레보다 빠른 무언가를 위한 것이라고는 생각한 적이 없었지만, 시간이 남아돌고 빌린 탈것을 가진 한 관리인의 생각은 달랐습니다. 그 첫 무모한 도전에서 자라난 협회는 이제 제대로 된 서킷을 그리고, 그리드를 가득 채우며, 네 명의 파일럿이 준비될 때마다 깃발을 내립니다.',
+  'guide.realmRacersPage.howHeading': '플레이 방법',
+  'guide.realmRacersPage.howQueueBody':
+    '세계 어디서든 렐름 레이서즈 창에서 레이스 대기열에 설 수 있습니다. 네 명이 모두 준비되면 모두가 함께 출발선에 앉고 카운트다운이 시작됩니다.',
+  'guide.realmRacersPage.howRaceBody':
+    '평소 이동 키로 조향, 가속, 제동을 하고, 점프 키를 누르고 있으면 핸드브레이크로 좁은 코너를 미끄러져 지날 수 있습니다. 모든 파일럿은 그라운드 블래스트를 지니고 있는데, 이는 맞은 상대를 휘청이게 하는 전방 사격이므로 앞을 막는 라이벌은 결코 안전하지 않습니다. 마지막 랩 이후 먼저 결승선을 넘는 쪽이 승리하며, 레이스가 결정되는 순간 각자의 위치로 전체 순위가 매겨집니다.',
+  'guide.realmRacersPage.howPracticeBody':
+    '아직 낯선 상대와 겨룰 준비가 되지 않았나요? 연습 주행은 같은 머신, 같은 조작감으로 전용 서킷 사본에서 직접 고른 상대와 달릴 수 있어, 실전 대기열에 서기 전에 라인을 익힐 수 있습니다.',
+  'guide.realmRacersPage.machineHeading': '대여 머신',
+  'guide.realmRacersPage.machineBody':
+    '모든 파일럿은 그날 협회의 대여 머신을 몰게 됩니다: 아무도 자신의 탈것을 그리드에 가져오지 않으며, 탈것을 얻지 못해 피트에서 구경만 하는 사람도 없습니다. 이 머신은 익히기 쉽고, 코너의 한계를 찾아내면 실제 무게감이 느껴집니다.',
+  'guide.realmRacersPage.circuitsHeading': '서킷',
+  'guide.realmRacersPage.circuitsPracticeTitle': '에버가든 훈련장',
+  'guide.realmRacersPage.circuitsPracticeBody':
+    '모든 파일럿이 머신을 익히는 서킷: 연습 중인 사람에게만 해당하며 다른 누구에게도 영향을 주지 않는, 더 짧은 정원 순환로입니다.',
+  'guide.realmRacersPage.circuitsCompetitionTitle': '대회 서킷',
+  'guide.realmRacersPage.circuitsCompetitionBody':
+    '대기열 레이스는 연습용 순환로를 절대 달리지 않습니다. 대신 더 긴 대회용 서킷들로 이루어진 별도의 풀에서 뽑히며, 각각은 땅을 빌려온 게임 존의 테마로 꾸며져 있어 머신은 그대로여도 무대는 바뀝니다.',
+  'guide.realmRacersPage.rewardsHeading': '무엇을 위해 달리는가',
+  'guide.realmRacersPage.rewardsBody':
+    '렐름 레이서즈는 경험치도 전리품도 주지 않습니다: 이것은 그 자체를 위해, 그리고 그것이 주는 위상을 위해 하는 스포츠입니다. 그래도 등급전 히트에서의 순위는 업적의 서에 반영됩니다: 첫 레이스, 승리, 그리고 도전할 의지가 있는 파일럿을 기다리는 더 어려운 운전 업적들이 그곳에 있으며, 그에 따르는 명성과 장식용 칭호도 함께합니다.',
   'entities.npcs.groundskeeper_bram.name': '경기장 관리인 브람',
   'entities.npcs.groundskeeper_bram.title': '소우필드의 관리인',
   'entities.npcs.groundskeeper_bram.greeting':

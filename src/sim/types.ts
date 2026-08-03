@@ -6007,6 +6007,7 @@ export type DeedMeterId =
   | 'arenaRankedWins'
   | 'vcupWins'
   | 'vcupGuildWins'
+  | 'rrWins'
   | 'bankPurchasedSlots'
   | 'townFocusPoints'
   | 'delveLoreCount'

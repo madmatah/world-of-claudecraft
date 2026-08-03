@@ -628,6 +628,7 @@ export const METER_DIRTY_KEYS: Record<DeedMeterId, readonly string[]> = {
   arenaRankedWins: [],
   vcupWins: [],
   vcupGuildWins: [],
+  rrWins: [],
   bankPurchasedSlots: [],
   townFocusPoints: [],
   delveLoreCount: [],
@@ -733,6 +734,7 @@ const METERS: Record<DeedMeterId, (meta: PlayerMeta) => number> = {
   arenaRankedWins: (m) => m.arenaWins + m.arena2v2Wins,
   vcupWins: (m) => m.vcupWins,
   vcupGuildWins: (m) => m.vcupGuildWins,
+  rrWins: (m) => m.rrWins,
   bankPurchasedSlots: (m) => m.bank.purchasedSlots,
   townFocusPoints: (m) => {
     // Allocation-free sum (tick-tail predicate: no Object.values array).
@@ -1748,6 +1750,81 @@ export function onCupMatchEndForDeeds(ctx: SimContext, match: CupMatchForDeeds):
   }
   ctx.deedRuntime.cupTouched.delete(match.id);
   ctx.deedRuntime.cupGoals.delete(match.id);
+}
+
+// ---------------------------------------------------------------------------
+// Realm Racers sites
+// ---------------------------------------------------------------------------
+
+// Only the Evergarden Express Tour is authored fast enough (and small enough
+// a pool) to carry a fixed lap-time threshold; a garden-practice lap is a
+// different, much shorter length and never counts. Revisit this once 13b
+// ships a second competition circuit (either a per-circuit table, like the
+// Vale Cup has no equivalent for, or a metrics-derived threshold).
+const RALLY_FAST_LAP_CIRCUIT_ID = 'evergarden_express_tour';
+const RALLY_FAST_LAP_SECONDS = 26;
+
+/** One pilot's race-end tableau, already resolved by the rally module (which
+ *  owns the progress state this is read from): whether they are a house
+ *  pilot, forfeited or disconnected under their own choice (rather than
+ *  seeing the heat out, finished or still driving when it was decided),
+ *  finished under their own power, kept the run clean (never left the
+ *  racing surface and never traded paint with a rival), took the overall
+ *  win, and, if they won, whether that win followed being dead last and
+ *  caught by a Ground Blast. Structural rather than the real
+ *  `RealmRacersProgress`, so this module never imports `social/realm_racers.ts`
+ *  (the Vale Cup sites above use the same shape trick with `CupMatchForDeeds`). */
+export interface RallyRaceDeedEntry {
+  pid: number;
+  bot: boolean;
+  retired: boolean;
+  finished: boolean;
+  clean: boolean;
+  won: boolean;
+  comeback: boolean;
+}
+
+/** Full time (or the last pilot pulling off) on a rated (non-practice) heat.
+ *  Practice laps and house pilots never earn a Rally deed. */
+export function onRallyRaceEndForDeeds(
+  ctx: SimContext,
+  practice: boolean,
+  entries: readonly RallyRaceDeedEntry[],
+): void {
+  if (practice) return;
+  for (const entry of entries) {
+    if (entry.bot) continue;
+    const meta = ctx.players.get(entry.pid);
+    if (!meta) continue;
+    // The rally module already moved meta.rrWins for a winning entry: this is
+    // the meter's one full-pass re-check site (rrWins carries no narrow key).
+    markDeedsDirty(ctx, entry.pid);
+    // "See out a full heat": a forfeiter or a disconnect never earns it, only
+    // a pilot who finished or was still driving when the classification
+    // closed (the deadline or the chase window), matching the deed's desc.
+    if (!entry.retired) grantDeed(ctx, meta, 'pvp_rr_first_race');
+    if (entry.finished && entry.clean) grantDeed(ctx, meta, 'pvp_rr_clean_race');
+    if (entry.won && entry.comeback) grantDeed(ctx, meta, 'pvp_rr_comeback');
+  }
+}
+
+/** A lap wrapped, INCLUDING the finishing lap (the final lap is a real timed
+ *  lap like any other and deliberately earns credit here too) on a rated
+ *  heat: the one per-tick spot fast enough to check against the fixed
+ *  threshold above. */
+export function onRallyLapForDeeds(
+  ctx: SimContext,
+  practice: boolean,
+  bot: boolean,
+  circuitId: string,
+  pid: number,
+  lapSeconds: number,
+): void {
+  if (practice || bot) return;
+  if (circuitId !== RALLY_FAST_LAP_CIRCUIT_ID) return;
+  if (lapSeconds >= RALLY_FAST_LAP_SECONDS) return;
+  const meta = ctx.players.get(pid);
+  if (meta) grantDeed(ctx, meta, 'pvp_rr_fast_lap');
 }
 
 // ---------------------------------------------------------------------------

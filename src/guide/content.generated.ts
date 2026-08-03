@@ -4911,6 +4911,56 @@ export const GUIDE_DEEDS: GuideDeed[] = [
     "category": "chronicle",
     "renown": 10,
     "feat": false
+  },
+  {
+    "id": "pvp_rr_first_race",
+    "name": "Wheels on the Line",
+    "category": "pvp",
+    "renown": 5,
+    "feat": false
+  },
+  {
+    "id": "pvp_rr_first_win",
+    "name": "Chequered and Cheered",
+    "category": "pvp",
+    "renown": 10,
+    "feat": false
+  },
+  {
+    "id": "pvp_rr_wins_10",
+    "name": "Podium Regular",
+    "category": "pvp",
+    "renown": 10,
+    "feat": false
+  },
+  {
+    "id": "pvp_rr_wins_25",
+    "name": "Circuit Legend",
+    "category": "pvp",
+    "renown": 25,
+    "feat": false,
+    "rewardTitle": "Circuit Legend"
+  },
+  {
+    "id": "pvp_rr_fast_lap",
+    "name": "Flying Lap",
+    "category": "pvp",
+    "renown": 10,
+    "feat": false
+  },
+  {
+    "id": "pvp_rr_clean_race",
+    "name": "Not a Scratch",
+    "category": "pvp",
+    "renown": 10,
+    "feat": false
+  },
+  {
+    "id": "pvp_rr_comeback",
+    "name": "From the Back of the Pack",
+    "category": "pvp",
+    "renown": 25,
+    "feat": false
   }
 ];
 

@@ -1323,6 +1323,11 @@ export interface PlayerMeta {
   vcupBetWins: number;
   vcupBetLosses: number;
   vcupBetNet: number;
+  // Realm Racers (docs/design/deeds.md, the Book of Deeds entry): first-place
+  // finishes in a rated (non-practice) heat, feeding the placing-based win
+  // deeds. Racing is placing-based (a four-pilot heat has a 2nd/3rd/4th, not a
+  // loss), so there is no rrLosses counterpart.
+  rrWins: number;
   // Talents & Specializations. `talents` is the active allocation; `talentMods`
   // is its precomputed flat struct — resolved only on allocation/respec/loadout
   // change (recomputeTalents), never walked on the combat or stat hot path.
@@ -1580,6 +1585,10 @@ export interface CharacterState {
   vcupBetWins?: number;
   vcupBetLosses?: number;
   vcupBetNet?: number;
+  // The Realm Racers rated win count (JSONB; optional and written only once a
+  // win exists, so pre-Rally saves load cleanly and unchanged saves stay
+  // byte-equal).
+  rrWins?: number;
   // Talents & Specializations (JSONB). All optional so characters saved before
   // talents existed load cleanly; contentRevision owns point-tree -> row migration.
   talents?: TalentAllocation;
@@ -2690,6 +2699,7 @@ export class Sim {
       vcupBetWins: savedState?.vcupBetWins ?? 0,
       vcupBetLosses: savedState?.vcupBetLosses ?? 0,
       vcupBetNet: savedState?.vcupBetNet ?? 0,
+      rrWins: savedState?.rrWins ?? 0,
       talents: emptyAllocation(),
       talentMods: emptyModifiers(),
       abilityRhythm: 0,
@@ -3793,6 +3803,8 @@ export class Sim {
             vcupBetNet: meta.vcupBetNet,
           }
         : {}),
+      // Absent until the first Rally win (back-compat + parity-stable saves).
+      ...(meta.rrWins ? { rrWins: meta.rrWins } : {}),
       talents: cloneAllocation(restore ? restore.talents : meta.talents),
       loadouts: meta.loadouts.map((l) => ({
         name: l.name,

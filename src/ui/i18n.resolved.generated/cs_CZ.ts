@@ -3279,6 +3279,7 @@ export const cs_CZ: EnTranslations = {
       "talents": "Talenty",
       "arena": "Aréna a PvP",
       "valeCup": "Pohár údolí",
+      "realmRacers": "Realm Racers",
       "deeds": "Kniha skutků",
       "glossary": "Glosář",
       "wishIKnew": "Co bych rád věděl dřív",
@@ -4096,6 +4097,25 @@ export const cs_CZ: EnTranslations = {
       "rolesBody": "Tvá role určuje výbavu, kterou si neseš na hřiště. Kopou všichni; zbytek je povaha. V bracketech jeden na jednoho a dva na dva hrají všichni všestrannou výbavu, takže volba role přijde ke slovu až od tří na tři výš.",
       "rewardsHeading": "Pravidla příměří",
       "rewardsBody": "Pravidla příměří znamenají žádné zkušenosti a žádnou kořist: rozhodnutý zápas se počítá do tvé bilance a na tabuli vítězů a výhra se počítá i do denních úkolů o odměny. Dezerce ze zápasu ti zablokuje místo a správce hřiště si to pamatuje."
+    },
+    "realmRacersPage": {
+      "heading": "Realm Racers",
+      "intro": "The Evergarden Racing Society runs a garden circuit for anyone with the nerve to drive it: four pilots to a grid, one signature weapon, and a hedge-lined track that rewards a clean line as much as a bold one.",
+      "loreHeading": "The Evergarden Racing Society",
+      "loreBody": "The Evergarden's head gardeners never meant the service paths between the hedgerows for anything faster than a wheelbarrow, but a groundskeeper with too much time and a loaned mount found otherwise. The Society that grew out of that first dare now marks out a proper circuit, seats a full grid, and drops the flag whenever four pilots are ready to go.",
+      "howHeading": "How to play",
+      "howQueueBody": "Queue for a race from the Realm Racers window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins.",
+      "howRaceBody": "Steer, throttle, and brake with your usual movement keys, and hold the jump control to pull the handbrake and slide through a tight corner. Every pilot carries Ground Blast, a forward shot that unsteadies whoever it catches, so a rival in your way is never quite safe. First across the line after the final lap takes the win, and the whole field is ranked by where each pilot stands when the race is decided.",
+      "howPracticeBody": "Not ready to race strangers yet? Practice runs the same machine and the same handling on a private copy of the circuit, against rivals you choose yourself, so you can learn the line before you queue for the real thing.",
+      "machineHeading": "The loaned machine",
+      "machineBody": "Every pilot drives the Society's own loaner for the day: nobody brings their own mount to the grid, and nobody is stuck watching from the pits because they never got one. The machine is quick to learn and has real weight to it once you find a corner's edge.",
+      "circuitsHeading": "Circuits",
+      "circuitsPracticeTitle": "Evergarden Bootcamp",
+      "circuitsPracticeBody": "The circuit every pilot learns the machine on: a shorter garden loop, private to whoever is practicing on it, with no bearing on anyone else.",
+      "circuitsCompetitionTitle": "Competition circuits",
+      "circuitsCompetitionBody": "A queued race never runs the practice loop. Instead it draws from a separate pool of longer competition circuits, each one dressed in the theme of the game zone it borrows its ground from, so the venue changes even when the machine does not.",
+      "rewardsHeading": "What you race for",
+      "rewardsBody": "Realm Racers pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: first races, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them, alongside the Renown and cosmetic titles that come with them."
     },
     "deedsPage": {
       "intro": "Kniha skutků je místo, kde si svět počítá vše, co máš za sebou: od prvních kroků z počátečního údolí až po nejtěžší boje, jaké říše nabízí. Vykonávej skutky při hraní, nos tituly, které ti udělí, a sleduj, jak tvůj věhlas roste.",

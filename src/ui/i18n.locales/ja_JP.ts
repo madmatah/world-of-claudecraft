@@ -8813,6 +8813,33 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'guide.valeCupPage.practiceHeading': '練習試合と、静かなピッチ',
   'guide.valeCupPage.practiceBody':
     'ヴェイルカップウィンドウでは練習もできる。ボットが両チームを埋める専用コピーのピッチで、何ひとつ戦績には数えられない。本番に一人か二人足りないときも、少し待てばボットが人数を埋めてくれるし、ボットがピッチにいる試合はすべて親善試合で、決してレート戦にはならない。そしてソウフィールドが空いている間は、ボットたちがエキシビションを繰り広げる。スタンドから観戦もでき、賭けることもできる。本物のプレイヤーが準備を整えた瞬間、エキシビションはピッチを譲り、賭け金はすべて返される。',
+  'guide.nav.realmRacers': 'レルムレーサーズ',
+  'guide.realmRacersPage.heading': 'レルムレーサーズ',
+  'guide.realmRacersPage.intro':
+    'エバーガーデン・レーシング協会は、運転する度胸さえあれば誰でも参加できるガーデンサーキットを運営している。グリッドには4人のパイロット、代名詞となる必殺武器がひとつ、そして大胆なラインだけでなく綺麗なラインにも報いる、生垣沿いのコースだ。',
+  'guide.realmRacersPage.loreHeading': 'エバーガーデン・レーシング協会',
+  'guide.realmRacersPage.loreBody':
+    'エバーガーデンの庭師長たちは、生垣の間の巡回路を一輪車より速く走るためのものだとは考えたこともなかった。しかし暇を持て余し、騎乗動物を借りていたある管理人は、そうは思わなかった。その最初の無謀な挑戦から育った協会は、今では本格的なサーキットを引き、フルグリッドを揃え、4人のパイロットの準備が整うたびにフラッグを振り下ろす。',
+  'guide.realmRacersPage.howHeading': '遊び方',
+  'guide.realmRacersPage.howQueueBody':
+    '世界のどこからでも、レルムレーサーズのウィンドウからレースの待機列に並べる。4人のフルグリッドが揃うと、全員がスタートラインに一斉に着席し、カウントダウンが始まる。',
+  'guide.realmRacersPage.howRaceBody':
+    'いつもの移動キーでステアリング、アクセル、ブレーキを操作し、ジャンプボタンを押し続けるとサイドブレーキでタイトなコーナーを滑って抜けられる。すべてのパイロットはグラウンドブラストを携えている。これは捕らえた相手をよろめかせる前方への一撃で、進路をふさぐライバルは決して安全ではない。最終ラップの後に先にラインを越えた者が勝利し、レースが決着した時点での位置で全員の順位が決まる。',
+  'guide.realmRacersPage.howPracticeBody':
+    '見知らぬ相手とまだ走る心の準備ができていない？練習走行なら同じマシン、同じ操作感覚のまま、専用のサーキットの複製上で自分で選んだ相手と走れるので、本番に並ぶ前にラインを覚えられる。',
+  'guide.realmRacersPage.machineHeading': '貸与されるマシン',
+  'guide.realmRacersPage.machineBody':
+    'どのパイロットもその日は協会自前の貸与マシンに乗る。誰も自分の騎乗動物をグリッドに持ち込まず、それが手に入らなかったからといってピットで見ているだけの者もいない。このマシンは覚えが早く、コーナーの限界を見つけた瞬間、確かな重みを感じさせる。',
+  'guide.realmRacersPage.circuitsHeading': 'サーキット',
+  'guide.realmRacersPage.circuitsPracticeTitle': 'エバーガーデン練習場',
+  'guide.realmRacersPage.circuitsPracticeBody':
+    'どのパイロットもここでマシンを覚える。練習中の本人だけの、他の誰にも関係のない、より短いガーデン周回コースだ。',
+  'guide.realmRacersPage.circuitsCompetitionTitle': '大会サーキット',
+  'guide.realmRacersPage.circuitsCompetitionBody':
+    '待機列からのレースは練習用の周回コースを走ることはない。代わりに、より長い大会用サーキットの別のプールから抽選される。それぞれが地面を借りているゲームゾーンのテーマで装飾されているため、マシンは変わらなくても会場は変わる。',
+  'guide.realmRacersPage.rewardsHeading': '何のために走るのか',
+  'guide.realmRacersPage.rewardsBody':
+    'レルムレーサーズは経験値も戦利品も一切支払わない。これはそれ自体のため、そしてそれがもたらす地位のために走る競技だ。とはいえ、格付けされたヒートでの順位は功績の書にはきちんと数えられる。初レース、勝利、そして挑む意志のあるパイロットを待つひと揃いのより難しい運転の偉業、それに伴う名声と装飾用の称号もそこにある。',
   'entities.npcs.groundskeeper_bram.name': '整備人ブラム',
   'entities.npcs.groundskeeper_bram.title': 'ソウフィールドの番人',
   'entities.npcs.groundskeeper_bram.greeting':

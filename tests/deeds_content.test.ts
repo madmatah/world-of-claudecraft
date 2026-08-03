@@ -61,9 +61,9 @@ const PREFIX_CATEGORY: Record<string, DeedCategory> = {
 };
 
 describe('audited launch totals (literals: update deliberately with the catalog)', () => {
-  it('ships exactly 234 deeds worth 2815 total Renown', () => {
-    expect(DEED_ORDER.length).toBe(234);
-    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(2815);
+  it('ships exactly 241 deeds worth 2910 total Renown', () => {
+    expect(DEED_ORDER.length).toBe(241);
+    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(2910);
   });
 
   it('ships the audited per-category counts', () => {
@@ -76,7 +76,7 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       delve: 13,
       chronicle: 37,
       collection: 28,
-      pvp: 28,
+      pvp: 35,
       social: 18,
       exploration: 9,
       feat: 3,
@@ -150,6 +150,14 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       // shipped capstone the first reckoning never credited.
       'chr_drakemaw_broodlord',
       'chr_maw_matriarch',
+      // Realm Racers (13c): placing-based, mirroring the Vale Cup precedent.
+      'pvp_rr_first_race',
+      'pvp_rr_first_win',
+      'pvp_rr_wins_10',
+      'pvp_rr_wins_25',
+      'pvp_rr_fast_lap',
+      'pvp_rr_clean_race',
+      'pvp_rr_comeback',
     ]);
     expect(DEEDS.dgn_wildheart_basin.renown).toBe(10);
     expect(DEEDS.dgn_wildheart_basin_heroic.renown).toBe(10);
@@ -227,6 +235,23 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       kind: 'quest',
       questId: 'q_dk_matriarch_of_the_maw',
     });
+    // Realm Racers (13c, docs/design/deeds.md): placing-based rather than a
+    // win/lose pair, mirroring the Vale Cup precedent (pvp_vcup_*).
+    expect(DEEDS.pvp_rr_first_race.renown).toBe(5);
+    expect(DEEDS.pvp_rr_first_race.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_rr_first_win.renown).toBe(10);
+    expect(DEEDS.pvp_rr_first_win.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 1 });
+    expect(DEEDS.pvp_rr_wins_10.renown).toBe(10);
+    expect(DEEDS.pvp_rr_wins_10.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 10 });
+    expect(DEEDS.pvp_rr_wins_25.renown).toBe(25);
+    expect(DEEDS.pvp_rr_wins_25.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 25 });
+    expect(DEEDS.pvp_rr_wins_25.reward).toEqual({ kind: 'title', text: 'Circuit Legend' });
+    expect(DEEDS.pvp_rr_fast_lap.renown).toBe(10);
+    expect(DEEDS.pvp_rr_fast_lap.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_rr_clean_race.renown).toBe(10);
+    expect(DEEDS.pvp_rr_clean_race.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.pvp_rr_comeback.renown).toBe(25);
+    expect(DEEDS.pvp_rr_comeback.trigger).toEqual({ kind: 'manual' });
   });
 
   it('pins the professions additions: renown and trigger literals', () => {
@@ -335,14 +360,14 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     expect(DEEDS.prog_ringwright).toBeUndefined();
   });
 
-  it('ships exactly 30 titles and 3 borders', () => {
+  it('ships exactly 31 titles and 3 borders', () => {
     const titles = ALL.filter((d) => d.reward?.kind === 'title');
     const borders = ALL.filter((d) => d.reward?.kind === 'border');
-    expect(titles.length).toBe(30);
+    expect(titles.length).toBe(31);
     expect(borders.length).toBe(3);
     // Titles and border slugs are unique (one deed per cosmetic).
     const titleTexts = titles.map((d) => (d.reward as { text: string }).text);
-    expect(new Set(titleTexts).size).toBe(30);
+    expect(new Set(titleTexts).size).toBe(31);
     const borderSlugs = borders.map((d) => (d.reward as { slug: string }).slug);
     expect([...borderSlugs].sort()).toEqual(['curators_gilt', 'deepward', 'prestige_laurels']);
   });
@@ -397,7 +422,11 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // standing broodlord rares) and chr_maw_matriarch (quest-trigger credit for
   // the shipped Cindraleth capstone). Both parents appended only, so no
   // shipped trigger or renown changed on either side.
-  const FROZEN_CATALOG_SHA256 = '4421793493830ebbde6691ea8af7f18a99d6917281c94f0b069bb66c1c82e9b1';
+  // Re-baselined for Realm Racers (13c, docs/design/deeds.md): 7 appended
+  // placing-based deeds (pvp_rr_first_race, pvp_rr_first_win, pvp_rr_wins_10,
+  // pvp_rr_wins_25, pvp_rr_fast_lap, pvp_rr_clean_race, pvp_rr_comeback). No
+  // shipped trigger or renown changed.
+  const FROZEN_CATALOG_SHA256 = '6401d3eb2d1a498e0945ee80a0831ff04ba1b5c3c30852c235d8b8d440c4889b';
 
   it('every shipped deed keeps its trigger and renown unchanged', () => {
     const canonical = JSON.stringify(
@@ -591,7 +620,7 @@ describe('table shape', () => {
     // (forbidden: the order is an append-only determinism contract; new
     // deeds append). hid_codfather's index is pinned in the refresh test.
     expect(DEED_ORDER[0]).toBe('prog_first_steps');
-    expect(DEED_ORDER[DEED_ORDER.length - 1]).toBe('chr_maw_matriarch');
+    expect(DEED_ORDER[DEED_ORDER.length - 1]).toBe('pvp_rr_comeback');
   });
 
   it('every entry key matches its id and its prefix matches its category', () => {

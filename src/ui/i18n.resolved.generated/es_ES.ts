@@ -3279,6 +3279,7 @@ export const es_ES: EnTranslations = {
       "talents": "Talentos",
       "arena": "Arena y JcJ",
       "valeCup": "Copa del Valle",
+      "realmRacers": "Realm Racers",
       "deeds": "Libro de Gestas",
       "glossary": "Glosario",
       "wishIKnew": "Lo que me habría gustado saber",
@@ -4096,6 +4097,25 @@ export const es_ES: EnTranslations = {
       "rolesBody": "Tu rol decide la equipación que llevas al campo. Todos patean; el resto es cuestión de temperamento. En las categorías de uno contra uno y dos contra dos todos juegan con la equipación polivalente, así que la elección de rol cobra sentido a partir de tres contra tres.",
       "rewardsHeading": "Reglas de la tregua",
       "rewardsBody": "Las reglas de la tregua implican que no hay experiencia ni botín: un partido decidido cuenta para tu historial y el tablón de vencedores, y una victoria también cuenta para las tareas de recompensa del día. Desertar de un partido suspende tu plaza, y el Guardacampo lo recuerda."
+    },
+    "realmRacersPage": {
+      "heading": "Realm Racers",
+      "intro": "The Evergarden Racing Society runs a garden circuit for anyone with the nerve to drive it: four pilots to a grid, one signature weapon, and a hedge-lined track that rewards a clean line as much as a bold one.",
+      "loreHeading": "The Evergarden Racing Society",
+      "loreBody": "The Evergarden's head gardeners never meant the service paths between the hedgerows for anything faster than a wheelbarrow, but a groundskeeper with too much time and a loaned mount found otherwise. The Society that grew out of that first dare now marks out a proper circuit, seats a full grid, and drops the flag whenever four pilots are ready to go.",
+      "howHeading": "How to play",
+      "howQueueBody": "Queue for a race from the Realm Racers window, from anywhere in the world. Once a full grid of four is ready, everyone is seated on the starting line together and the countdown begins.",
+      "howRaceBody": "Steer, throttle, and brake with your usual movement keys, and hold the jump control to pull the handbrake and slide through a tight corner. Every pilot carries Ground Blast, a forward shot that unsteadies whoever it catches, so a rival in your way is never quite safe. First across the line after the final lap takes the win, and the whole field is ranked by where each pilot stands when the race is decided.",
+      "howPracticeBody": "Not ready to race strangers yet? Practice runs the same machine and the same handling on a private copy of the circuit, against rivals you choose yourself, so you can learn the line before you queue for the real thing.",
+      "machineHeading": "The loaned machine",
+      "machineBody": "Every pilot drives the Society's own loaner for the day: nobody brings their own mount to the grid, and nobody is stuck watching from the pits because they never got one. The machine is quick to learn and has real weight to it once you find a corner's edge.",
+      "circuitsHeading": "Circuits",
+      "circuitsPracticeTitle": "Evergarden Bootcamp",
+      "circuitsPracticeBody": "The circuit every pilot learns the machine on: a shorter garden loop, private to whoever is practicing on it, with no bearing on anyone else.",
+      "circuitsCompetitionTitle": "Competition circuits",
+      "circuitsCompetitionBody": "A queued race never runs the practice loop. Instead it draws from a separate pool of longer competition circuits, each one dressed in the theme of the game zone it borrows its ground from, so the venue changes even when the machine does not.",
+      "rewardsHeading": "What you race for",
+      "rewardsBody": "Realm Racers pays no experience and no loot: it is a sport, run for its own sake and for the standing it gives you. A placing on a rated heat still counts, though, toward the Book of Deeds: first races, wins, and a clutch of harder feats of driving all wait there for a pilot willing to chase them, alongside the Renown and cosmetic titles that come with them."
     },
     "deedsPage": {
       "intro": "El Libro de Gestas es donde el mundo lleva la cuenta de todos tus hechos, desde tus primeros pasos fuera del valle inicial hasta los combates más duros que el reino puede ofrecer. Consigue gestas mientras juegas, luce los títulos que otorgan y mira cómo asciende tu Renombre.",

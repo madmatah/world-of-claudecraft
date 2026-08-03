@@ -44,11 +44,11 @@ describe('deed_i18n English resolution', () => {
 
   it('manifests one row per name and desc plus one per title reward', () => {
     const manifest = deedTranslationManifest();
-    // 234 deeds x (name + desc) + the 30 shipped title rewards (both counts
-    // pinned by tests/deeds_content.test.ts). 232 to 234 with the Drakelands
-    // brood deeds; the title count is unchanged, since neither rewards one.
-    expect(manifest.length).toBe(234 * 2 + 30);
-    expect(manifest.filter((row) => row.field === 'title').length).toBe(30);
+    // 241 deeds x (name + desc) + the 31 shipped title rewards (both counts
+    // pinned by tests/deeds_content.test.ts). The Drakelands brood deeds
+    // reward no title; the Realm Racers set adds the one new title.
+    expect(manifest.length).toBe(241 * 2 + 31);
+    expect(manifest.filter((row) => row.field === 'title').length).toBe(31);
     expect(manifest).toContainEqual({
       id: 'prog_veteran',
       field: 'title',

@@ -11,6 +11,7 @@ import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
 import { vehicleProfile } from '../src/sim/content/vehicles';
+import { updateDeeds } from '../src/sim/deeds';
 import { forceDismount } from '../src/sim/mounts';
 import { GROUND_BLAST_CONTROL_SPEED_MULT } from '../src/sim/realm_racers_ground_blast';
 import {
@@ -19,11 +20,12 @@ import {
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
 import { rallyContainmentLineAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
-import type { Sim } from '../src/sim/sim';
+import type { CharacterState, Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
   REALM_RACERS_BUMP_EVENT_TICKS,
   REALM_RACERS_CHASE_TICKS,
+  REALM_RACERS_COUNTDOWN_TICKS,
   REALM_RACERS_GARDEN_BAND,
   REALM_RACERS_MOUNT_KEY,
   REALM_RACERS_OFF_TRACK_AURA,
@@ -31,10 +33,12 @@ import {
   REALM_RACERS_VEHICLE_KEY,
   REALM_RACERS_VERGE_BAND,
   REALM_RACERS_WATER_BAND,
+  realmRacersCircuitOf,
   realmRacersFireGroundBlast,
   realmRacersStartMatch,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
+import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
 import type { Entity, SimEvent } from '../src/sim/types';
 import { TICK_RATE } from '../src/sim/types';
 import { addAt, makeWorld, teleport } from './vale_cup_util';
@@ -951,5 +955,566 @@ describe('The Realm Racers lifecycle', () => {
     const a = addAt(sim, 'warrior', 'Aster');
     realmRacersFireGroundBlast(sim.ctx, entity(sim, a));
     expect(sim.realmRacers.match).toBeNull();
+  });
+});
+
+describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
+  it('credits a full race, ticked from queue through the real countdown into racing', () => {
+    const { sim, pids } = makeGrid();
+    for (const pid of pids) sim.realmRacersQueueJoin(pid);
+    sim.tick();
+    expect(sim.realmRacers.match).not.toBeNull();
+    expect(match(sim).phase).toBe('countdown');
+    // The real GO branch, not a hand-flipped phase: this is what actually
+    // writes lapStartTick, and no other test in this file ticks through it.
+    for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
+    expect(match(sim).phase).toBe('racing');
+    const [a, b, c, d] = pids;
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    expect(progressA.lapStartTick).toBe(match(sim).goTick);
+    // Deliberately slow laps (tens of seconds each): this heat asserts what it
+    // expects of the fast-lap deed rather than leaving the outcome silent.
+    crossStart(sim, a);
+    sim.tickCount += 30 * TICK_RATE;
+    completeLap(sim, a);
+    sim.tickCount += 30 * TICK_RATE;
+    completeLap(sim, a);
+    sim.tickCount += 30 * TICK_RATE;
+    completeLap(sim, a);
+    for (const pid of [b, c, d]) {
+      sim.tickCount++;
+      crossStart(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+    }
+    expect(match(sim).phase).toBe('finished');
+    expect(match(sim).winnerPid).toBe(a);
+    for (const pid of pids) {
+      expect(
+        required(sim.players.get(pid), `player ${pid}`).deedsEarned.has('pvp_rr_first_race'),
+        `pid ${pid}`,
+      ).toBe(true);
+    }
+    const winnerMeta = required(sim.players.get(a), 'winner meta');
+    expect(winnerMeta.rrWins).toBe(1);
+    // pvp_rr_first_win is a meter deed (non-manual): onRallyRaceEndForDeeds only
+    // marks the pid dirty, and the full pass (sim.tick, or updateDeeds directly)
+    // is what actually grants it.
+    updateDeeds(sim.ctx);
+    expect(winnerMeta.deedsEarned.has('pvp_rr_first_win')).toBe(true);
+    // A crossed clean throughout this test: never bumped, never off the road.
+    expect(winnerMeta.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
+    // Every lap here ran at 30s, well over the 26s threshold: never fast.
+    expect(winnerMeta.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+  });
+
+  it('never credits a practice heat, even for the human who saw it out', () => {
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Practicer');
+    sim.realmRacersPracticeStart('ace', human);
+    expect(sim.realmRacers.practices).toHaveLength(1);
+    const practiceMatch = required(sim.realmRacers.practices[0], 'practice match');
+    // Break the tie among the three untouched house pilots first, so the
+    // classification below genuinely produces a winner: a null winnerPid
+    // (a dead heat) would let a deferred, never-run endMatch pass this test
+    // by accident.
+    const bots = practiceMatch.pids.filter((pid) => pid !== human);
+    const leadBotProgress = required(practiceMatch.progress.get(bots[0]), 'lead bot progress');
+    leadBotProgress.travelled += 50;
+    // The human quitting leaves only house pilots driving, which decides the
+    // race at once (raceIsDecided's house-pilot-only arm).
+    sim.realmRacersForfeit(human);
+    expect(practiceMatch.phase).toBe('finished');
+    expect(practiceMatch.winnerPid).toBe(bots[0]); // proves endMatch really ran
+    const meta = required(sim.players.get(human), 'player meta');
+    expect(meta.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+    expect(meta.rrWins).toBe(0);
+  });
+
+  it('never credits a practice WIN either: no rrWins and no first_win even though the human crosses first', () => {
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Practicer');
+    sim.realmRacersPracticeStart('ace', human);
+    const practiceMatch = required(sim.realmRacers.practices[0], 'practice match');
+    practiceMatch.phase = 'racing';
+    const circuit = realmRacersCircuitOf(practiceMatch);
+    const track = realmRacersTrack(circuit);
+    const place = (s: number) => {
+      const sample = track.pointAt(s);
+      teleport(sim, human, practiceMatch.origin.x + sample.x, practiceMatch.origin.z + sample.z);
+      updateRealmRacers(sim.ctx);
+    };
+    // Bounded steps (mirrors advanceArc/completeLap above): the wrap gate
+    // requires distanceSinceWrap to clear most of a lap, so a single big
+    // teleport straight to "one lap on" never accumulates it and the lap
+    // silently never completes. Stepping in <=40 yd hops is what makes each
+    // one register as real forward distance.
+    const advance = (distance: number) => {
+      let remaining = distance;
+      while (remaining > 0 && practiceMatch.phase === 'racing') {
+        const step = Math.min(40, remaining);
+        const progress = required(practiceMatch.progress.get(human), 'human progress');
+        place(progress.lastS + step);
+        remaining -= step;
+      }
+    };
+    // The three house pilots never move, so crossing the line every lap wins
+    // outright without needing to out-drive them.
+    for (let lap = 0; lap < practiceMatch.totalLaps; lap++) {
+      advance(track.length + 12);
+    }
+    expect(practiceMatch.phase).toBe('finished');
+    expect(practiceMatch.winnerPid).toBe(human); // the human really did win it
+    const meta = required(sim.players.get(human), 'player meta');
+    expect(meta.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+    expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(false);
+    expect(meta.rrWins).toBe(0);
+    updateDeeds(sim.ctx);
+    expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(false);
+  });
+
+  it('pvp_rr_first_race: never a forfeiter, but a pilot still driving when the clock decides it', () => {
+    const { sim, pids } = startMatch();
+    const [a, b] = pids;
+    match(sim).phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    // B forfeits early: must never earn it.
+    sim.realmRacersForfeit(b);
+    // A wins outright; the chase window then closes the race for whoever is
+    // still out there without ever finishing.
+    crossStart(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    const armed = required(match(sim).chaseUntilTick, 'chase window');
+    sim.tickCount = armed;
+    updateRealmRacers(sim.ctx);
+    expect(match(sim).phase).toBe('finished');
+    const bMeta = required(sim.players.get(b), 'b meta');
+    expect(bMeta.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+    for (const pid of pids.slice(2)) {
+      const meta = required(sim.players.get(pid), `pid ${pid}`);
+      expect(meta.deedsEarned.has('pvp_rr_first_race'), `pid ${pid}`).toBe(true);
+    }
+  });
+
+  it('never credits a house pilot, even the winner, in a bot-backfilled rated heat', () => {
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    expect(startRealmRacersDevRace(sim, RACE_CIRCUIT.id, 'ace', human)).toBe(true);
+    const liveMatch = match(sim);
+    expect(liveMatch.practice).toBeNull(); // rated: the public lane, not a private copy
+    const bots = liveMatch.pids.filter((pid) => sim.realmRacers.bots.has(pid));
+    expect(bots).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
+    // The human holds no throttle and never finishes (tests/realm_racers_circuits.test.ts's
+    // own rule), so a bot always wins this race.
+    const budget = (RACE_CIRCUIT.timeLimitSeconds + 30) * TICK_RATE;
+    for (let tick = 0; tick < budget && liveMatch.phase !== 'finished'; tick++) sim.tick();
+    expect(liveMatch.phase).toBe('finished');
+    expect(liveMatch.winnerPid).not.toBeNull();
+    expect(bots).toContain(liveMatch.winnerPid);
+    for (const pid of bots) {
+      const meta = required(sim.players.get(pid), `bot ${pid}`);
+      expect(meta.deedsEarned.has('pvp_rr_first_race'), `bot ${pid}`).toBe(false);
+      expect(meta.rrWins, `bot ${pid}`).toBe(0);
+    }
+  });
+
+  it('tracks a real off-track excursion (garden or water), but never the soft verge alone', () => {
+    const { sim, a } = startMatch();
+    match(sim).phase = 'racing';
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const sample = track.samples[120];
+    const at = (offset: number) => {
+      const spot = onLane(sim, sample.x - sample.tz * offset, sample.z + sample.tx * offset);
+      teleport(sim, a, spot.x, spot.z);
+      updateRealmRacers(sim.ctx);
+    };
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    at(sample.halfWidth + 1.5); // the soft verge only
+    expect(progress.hadOffTrackContact).toBe(false);
+    at(-(sample.halfWidth + 9)); // out into the garden
+    expect(progress.hadOffTrackContact).toBe(true);
+  });
+
+  it('tracks the water-band arm of the off-track spoiler too, not only the garden', () => {
+    const { sim, a } = startMatch();
+    match(sim).phase = 'racing';
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const sample = track.samples[120];
+    // Past the basin's own shore, on the infield side (mirrors the containment
+    // test's placement): the harshest of the three off-track bands.
+    const intoTheWater = rallyContainmentLineAt(RACE_CIRCUIT, sample.s) + 1;
+    const spot = onLane(
+      sim,
+      sample.x - sample.tz * intoTheWater,
+      sample.z + sample.tx * intoTheWater,
+    );
+    teleport(sim, a, spot.x, spot.z);
+    updateRealmRacers(sim.ctx);
+    const racer = entity(sim, a);
+    expect(racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA)).toMatchObject({
+      value: REALM_RACERS_WATER_BAND.speedMult,
+    });
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    expect(progress.hadOffTrackContact).toBe(true);
+  });
+
+  it('tracks a real rival bump, but never a gentle rub', () => {
+    const { sim, a, b } = startMatch();
+    match(sim).phase = 'racing';
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const sample = track.samples[120];
+    const facing = Math.atan2(sample.tx, sample.tz);
+    const lean = (closingSpeed: number) => {
+      teleport(sim, a, sample.x, sample.z);
+      teleport(sim, b, sample.x - sample.tz * 1.2, sample.z + sample.tx * 1.2);
+      const racerA = entity(sim, a);
+      const racerB = entity(sim, b);
+      racerA.facing = facing;
+      racerB.facing = facing;
+      const driveA = required(racerA.drive, 'drive A');
+      const driveB = required(racerB.drive, 'drive B');
+      driveA.speed = 20;
+      driveB.speed = 20;
+      driveA.slip = closingSpeed / 2;
+      driveB.slip = -closingSpeed / 2;
+      sim.tickCount++;
+      updateRealmRacers(sim.ctx);
+    };
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    const progressB = required(match(sim).progress.get(b), `progress ${b}`);
+    lean(REALM_RACERS_BUMP_EVENT_MIN_IMPACT - 1); // a rub, below the announce floor
+    expect(progressA.hadRivalContact).toBe(false);
+    expect(progressB.hadRivalContact).toBe(false);
+    lean(REALM_RACERS_BUMP_EVENT_MIN_IMPACT + 5); // a real impact
+    expect(progressA.hadRivalContact).toBe(true);
+    expect(progressB.hadRivalContact).toBe(true);
+  });
+
+  it('tracks a Ground Blast hit on the victim only', () => {
+    const { sim, a, b } = startMatch();
+    match(sim).phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    const caster = entity(sim, a);
+    const target = entity(sim, b);
+    caster.facing = 0;
+    teleport(sim, a, caster.pos.x, caster.pos.z);
+    teleport(sim, b, caster.pos.x, caster.pos.z + 12);
+    sim.castAbility(REALM_RACERS_ABILITY_ID, a, { x: target.pos.x, z: target.pos.z });
+    for (let i = 0; i < 25 && match(sim).groundBlasts.length > 0; i++) sim.tick();
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    const progressB = required(match(sim).progress.get(b), `progress ${b}`);
+    expect(progressB.hitByShell).toBe(true);
+    expect(progressA.hitByShell).toBe(false);
+  });
+
+  it('a shell hit does not spoil a clean race: comeback and clean_race are independent', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    match(sim).phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    const caster = entity(sim, b);
+    const target = entity(sim, a);
+    caster.facing = 0;
+    teleport(sim, b, caster.pos.x, caster.pos.z);
+    teleport(sim, a, caster.pos.x, caster.pos.z + 12);
+    sim.castAbility(REALM_RACERS_ABILITY_ID, b, { x: target.pos.x, z: target.pos.z });
+    for (let i = 0; i < 25 && match(sim).groundBlasts.length > 0; i++) sim.tick();
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    expect(progressA.hitByShell).toBe(true);
+    expect(progressA.hadRivalContact).toBe(false);
+    expect(progressA.hadOffTrackContact).toBe(false);
+    // The impact leaves real residual speed/slip on the machine (the physical
+    // knockup, ticked for real above); zero it before driving the rest of the
+    // lap by teleport, so only the SHELL flag is under test here, not
+    // incidental bump physics the impact scene leaves behind.
+    const driveA = required(entity(sim, a).drive, 'drive A');
+    driveA.speed = 0;
+    driveA.slip = 0;
+    crossStart(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    for (const pid of [b, c, d]) {
+      sim.tickCount++;
+      crossStart(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+    }
+    const meta = required(sim.players.get(a), 'winner meta');
+    expect(meta.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
+  });
+
+  it('keeps a clean run after the finish line: wandering off the road during the chase window does not spoil it', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    match(sim).phase = 'racing';
+    crossStart(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    expect(progressA.finishedTick).not.toBeNull();
+    expect(progressA.hadOffTrackContact).toBe(false);
+    // Wander into the garden well after crossing the line: must not spoil it.
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const sample = track.samples[120];
+    const offset = -(sample.halfWidth + 9);
+    const spot = onLane(sim, sample.x - sample.tz * offset, sample.z + sample.tx * offset);
+    teleport(sim, a, spot.x, spot.z);
+    updateRealmRacers(sim.ctx);
+    expect(progressA.hadOffTrackContact).toBe(false);
+    for (const pid of [b, c, d]) {
+      sim.tickCount++;
+      crossStart(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+    }
+    const meta = required(sim.players.get(a), 'winner meta');
+    expect(meta.deedsEarned.has('pvp_rr_clean_race')).toBe(true);
+  });
+
+  it('grants Flying Lap under the 26s threshold through the real per-tick call site', () => {
+    const { sim, a } = startMatch();
+    match(sim).phase = 'racing';
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    const meta = required(sim.players.get(a), 'player meta');
+    // Under the threshold: 25.9s, granted.
+    sim.tickCount = progress.lapStartTick + Math.round(25.9 * TICK_RATE);
+    completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_fast_lap')).toBe(true);
+  });
+
+  it('withholds Flying Lap at exactly the 26s threshold (the guard is exclusive)', () => {
+    const { sim, a } = startMatch();
+    match(sim).phase = 'racing';
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    const meta = required(sim.players.get(a), 'player meta');
+    // Exactly 26.0s: flipping the guard from >= to > would be invisible
+    // without this exact boundary pinned.
+    sim.tickCount = progress.lapStartTick + 26 * TICK_RATE;
+    completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+  });
+
+  it('withholds Flying Lap well over the threshold too', () => {
+    const { sim, a } = startMatch();
+    match(sim).phase = 'racing';
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    const meta = required(sim.players.get(a), 'player meta');
+    sim.tickCount = progress.lapStartTick + 40 * TICK_RATE;
+    completeLap(sim, a);
+    expect(meta.deedsEarned.has('pvp_rr_fast_lap')).toBe(false);
+  });
+
+  it('does not let the starting grid slot flag a pilot dead last before the field has spread out', () => {
+    const { sim, pids } = startMatch();
+    const [, , , d] = pids;
+    match(sim).phase = 'racing';
+    updateRealmRacers(sim.ctx);
+    const progressD = required(match(sim).progress.get(d), `progress ${d}`);
+    expect(progressD.wasLastPlace).toBe(false);
+  });
+
+  it('marks the trailing pilot dead last, live, as the field spreads out', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    match(sim).phase = 'racing';
+    // Explicit, unambiguous arc order: A leads, D trails everyone.
+    placeAtS(sim, a, 300);
+    placeAtS(sim, b, 150);
+    placeAtS(sim, c, 80);
+    placeAtS(sim, d, 20);
+    updateRealmRacers(sim.ctx);
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    const progressC = required(match(sim).progress.get(c), `progress ${c}`);
+    const progressD = required(match(sim).progress.get(d), `progress ${d}`);
+    expect(progressA.wasLastPlace).toBe(false);
+    expect(progressC.wasLastPlace).toBe(false);
+    expect(progressD.wasLastPlace).toBe(true);
+
+    // The field reshuffles: D now leads and A trails everyone.
+    placeAtS(sim, d, 400);
+    placeAtS(sim, a, 5);
+    updateRealmRacers(sim.ctx);
+    expect(progressA.wasLastPlace).toBe(true);
+    expect(progressD.wasLastPlace).toBe(true); // once true, deed-tracking never clears
+  });
+
+  it('keeps tracking the real trailing driver after a mid-pack quitter retires', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    match(sim).phase = 'racing';
+    placeAtS(sim, a, 300);
+    placeAtS(sim, b, 150);
+    placeAtS(sim, c, 80);
+    placeAtS(sim, d, 20);
+    updateRealmRacers(sim.ctx);
+    const progressC = required(match(sim).progress.get(c), `progress ${c}`);
+    const progressD = required(match(sim).progress.get(d), `progress ${d}`);
+    expect(progressD.wasLastPlace).toBe(true);
+    expect(progressC.wasLastPlace).toBe(false);
+    // C, mid-pack, quits. D is genuinely still the trailing DRIVER and must
+    // keep being flagged: reading the FINAL classification (which always
+    // ranks the retired band last) would instead credit C's retirement and
+    // stop tracking D, the driver actually trailing, altogether.
+    sim.realmRacersForfeit(c);
+    placeAtS(sim, a, 320);
+    placeAtS(sim, b, 170);
+    updateRealmRacers(sim.ctx);
+    expect(progressD.wasLastPlace).toBe(true);
+  });
+
+  it('winner who was last but never shelled gets no comeback, and the reverse', () => {
+    // Forced "last" with no shell: no comeback.
+    {
+      const { sim, pids } = startMatch();
+      const [a, b, c, d] = pids;
+      match(sim).phase = 'racing';
+      crossStart(sim, a);
+      completeLap(sim, a);
+      completeLap(sim, a);
+      completeLap(sim, a);
+      const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+      expect(progressA.hitByShell).toBe(false);
+      progressA.wasLastPlace = true; // force: was last at some point, never hit
+      for (const pid of [b, c, d]) {
+        sim.tickCount++;
+        crossStart(sim, pid);
+        completeLap(sim, pid);
+        completeLap(sim, pid);
+        completeLap(sim, pid);
+      }
+      expect(match(sim).winnerPid).toBe(a);
+      const meta = required(sim.players.get(a), 'winner meta');
+      expect(meta.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+    }
+    // Forced shell hit with no "last": no comeback either.
+    {
+      const { sim, pids } = startMatch();
+      const [a, b, c, d] = pids;
+      match(sim).phase = 'racing';
+      crossStart(sim, a);
+      completeLap(sim, a);
+      completeLap(sim, a);
+      completeLap(sim, a);
+      const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+      // Forced rather than asserted-natural: the grid slot's own tiny
+      // projection asymmetry can flag a leader dead-last for one tick at the
+      // green light on this circuit (see "does not let the starting grid slot
+      // flag..." above), so this case pins the DECOUPLING deliberately
+      // instead of depending on incidental start-line geometry.
+      progressA.wasLastPlace = false;
+      progressA.hitByShell = true; // force: was shelled, never actually last
+      for (const pid of [b, c, d]) {
+        sim.tickCount++;
+        crossStart(sim, pid);
+        completeLap(sim, pid);
+        completeLap(sim, pid);
+        completeLap(sim, pid);
+      }
+      expect(match(sim).winnerPid).toBe(a);
+      const meta = required(sim.players.get(a), 'winner meta');
+      expect(meta.deedsEarned.has('pvp_rr_comeback')).toBe(false);
+    }
+  });
+});
+
+describe('Realm Racers rrWins persistence (mirrors tests/vale_cup_meta.test.ts)', () => {
+  it('is absent before any win, present after one, and survives a reload into fresh meta', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    // Before any result: the field stays absent (back-compat shape).
+    const clean = sim.serializeCharacter(a)!;
+    expect('rrWins' in clean).toBe(false);
+
+    match(sim).phase = 'racing';
+    crossStart(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    completeLap(sim, a);
+    for (const pid of [b, c, d]) {
+      sim.tickCount++;
+      crossStart(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+      completeLap(sim, pid);
+    }
+    expect(match(sim).winnerPid).toBe(a);
+    const won = sim.serializeCharacter(a)!;
+    expect(won.rrWins).toBe(1);
+
+    const sim2 = makeWorld();
+    const a2 = sim2.addPlayer('warrior', 'Aleph', { state: won });
+    const meta2 = sim2.players.get(a2)!;
+    expect(meta2.rrWins).toBe(1);
+  });
+
+  it('loads an old-shape save with no rrWins, then a rated win still lands and re-serializes', () => {
+    const { sim, pids } = startMatch();
+    const [a, b, c, d] = pids;
+    const state = sim.serializeCharacter(a)!;
+    expect('rrWins' in state).toBe(false);
+    // Round-trip through JSON: a pre-Rally row genuinely has no rrWins key at
+    // all, not merely a zero value.
+    const oldShape = JSON.parse(JSON.stringify(state)) as Record<string, unknown>;
+    delete oldShape.rrWins;
+
+    const sim2 = makeWorld();
+    let reloadedPid = -1;
+    expect(() => {
+      reloadedPid = sim2.addPlayer('warrior', 'Reloaded', {
+        state: oldShape as unknown as CharacterState,
+      });
+    }).not.toThrow();
+    const reloadedMeta = sim2.players.get(reloadedPid)!;
+    expect(reloadedMeta.rrWins).toBe(0);
+
+    // Race the reloaded character to a rated win; the counter both moves and
+    // re-serializes from a save that never had the field.
+    const grid2 = [b, c, d].map((_, i) => addAt(sim2, 'warrior', `Rival${i}`, -5 - i * 3, -40));
+    const fullGrid = [reloadedPid, ...grid2];
+    for (const pid of fullGrid) sim2.realmRacersQueueJoin(pid);
+    sim2.tick();
+    expect(sim2.realmRacers.match).not.toBeNull();
+    sim2.realmRacers.match!.phase = 'racing';
+    const winMatch = sim2.realmRacers.match!;
+    const track2 = realmRacersTrack(realmRacersCircuitOf(winMatch));
+    const placeReloaded = (s: number) => {
+      const sample = track2.pointAt(s);
+      teleport(sim2, reloadedPid, winMatch.origin.x + sample.x, winMatch.origin.z + sample.z);
+      updateRealmRacers(sim2.ctx);
+    };
+    // Bounded steps: the wrap gate needs distanceSinceWrap to clear most of a
+    // lap, so a single big teleport to "one lap on" never accumulates it.
+    const advanceReloaded = (distance: number) => {
+      let remaining = distance;
+      while (remaining > 0 && winMatch.phase === 'racing') {
+        const step = Math.min(40, remaining);
+        const progress2 = winMatch.progress.get(reloadedPid)!;
+        placeReloaded(progress2.lastS + step);
+        remaining -= step;
+      }
+    };
+    for (let lap = 0; lap < winMatch.totalLaps; lap++) {
+      advanceReloaded(track2.length + 12);
+    }
+    // The other three are real (non-bot) rivals, so finishing first only arms
+    // the chase window; it does not end the race outright (four real pilots
+    // race each other to the last podium step, unlike the house-pilot-only
+    // early decision above).
+    const armed2 = winMatch.chaseUntilTick;
+    expect(armed2).not.toBeNull();
+    sim2.tickCount = armed2 as number;
+    updateRealmRacers(sim2.ctx);
+    expect(winMatch.phase).toBe('finished');
+    expect(winMatch.winnerPid).toBe(reloadedPid);
+    expect(reloadedMeta.rrWins).toBe(1);
+    const reSerialized = sim2.serializeCharacter(reloadedPid)!;
+    expect(reSerialized.rrWins).toBe(1);
   });
 });

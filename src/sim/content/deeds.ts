@@ -2399,6 +2399,69 @@ export const DEEDS: Record<string, DeedDef> = {
     // already finished the chain), so the boss template needs no rare flag.
     trigger: { kind: 'quest', questId: 'q_dk_matriarch_of_the_maw' },
   },
+  // Realm Racers (docs/design/deeds.md, docs/prd/... the rally minigame):
+  // placing-based, mirroring the Vale Cup precedent (pvp_vcup_*) rather than a
+  // win/lose pair, since a four-pilot heat has a whole finishing order. Only
+  // rated (queued, non-practice) heats count, and a house pilot never earns
+  // one of these (see onRallyRaceEndForDeeds / onRallyLapForDeeds in
+  // src/sim/deeds.ts, credited from src/sim/social/realm_racers.ts).
+  pvp_rr_first_race: {
+    id: 'pvp_rr_first_race',
+    name: 'Wheels on the Line',
+    desc: 'See out a full Realm Racers heat at the Evergarden circuit, placing or not.',
+    category: 'pvp',
+    renown: 5,
+    trigger: { kind: 'manual' },
+  },
+  pvp_rr_first_win: {
+    id: 'pvp_rr_first_win',
+    name: 'Chequered and Cheered',
+    desc: 'Take first place in a rated Realm Racers heat.',
+    category: 'pvp',
+    renown: 10,
+    trigger: { kind: 'meter', meter: 'rrWins', amount: 1 },
+  },
+  pvp_rr_wins_10: {
+    id: 'pvp_rr_wins_10',
+    name: 'Podium Regular',
+    desc: 'Take first place in 10 rated Realm Racers heats.',
+    category: 'pvp',
+    renown: 10,
+    trigger: { kind: 'meter', meter: 'rrWins', amount: 10 },
+  },
+  pvp_rr_wins_25: {
+    id: 'pvp_rr_wins_25',
+    name: 'Circuit Legend',
+    desc: 'Take first place in 25 rated Realm Racers heats.',
+    category: 'pvp',
+    renown: 25,
+    trigger: { kind: 'meter', meter: 'rrWins', amount: 25 },
+    reward: { kind: 'title', text: 'Circuit Legend' },
+  },
+  pvp_rr_fast_lap: {
+    id: 'pvp_rr_fast_lap',
+    name: 'Flying Lap',
+    desc: 'Post a lap of the Evergarden Express Tour in under 26 seconds.',
+    category: 'pvp',
+    renown: 10,
+    trigger: { kind: 'manual' },
+  },
+  pvp_rr_clean_race: {
+    id: 'pvp_rr_clean_race',
+    name: 'Not a Scratch',
+    desc: 'Finish a rated Realm Racers heat without leaving the racing surface or trading paint with a rival.',
+    category: 'pvp',
+    renown: 10,
+    trigger: { kind: 'manual' },
+  },
+  pvp_rr_comeback: {
+    id: 'pvp_rr_comeback',
+    name: 'From the Back of the Pack',
+    desc: 'Take first place in a rated Realm Racers heat after falling to dead last and taking a Ground Blast hit.',
+    category: 'pvp',
+    renown: 25,
+    trigger: { kind: 'manual' },
+  },
 };
 
 for (const def of Object.values(DEEDS)) {
