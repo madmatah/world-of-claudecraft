@@ -7,6 +7,7 @@ import { markDialogRoot } from './dialog_root';
 import { esc } from './esc';
 import { formatNumber, type TranslationKey, t } from './i18n';
 import type { PainterHostWriters } from './painter_host';
+import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
 import { RealmRacersPodium } from './realm_racers_podium';
 import { buildRealmRacersPodiumView } from './realm_racers_podium_view';
 import { RealmRacersStandingsPanel } from './realm_racers_standings_panel';
@@ -85,6 +86,11 @@ export interface RealmRacersDeps {
   isTouchHud(): boolean;
   /** One sampled cue per authoritative countdown number. */
   countdownTick(): void;
+  /**
+   * The HUD's big centre-screen banner. Injected rather than reached for, the
+   * same way `countdownTick` is: this module never imports `Hud`.
+   */
+  showBanner(text: string): void;
   writers: PainterHostWriters;
 }
 
@@ -95,6 +101,14 @@ export class RealmRacersUi {
   private hudRoot: HTMLElement | null = null;
   private readonly standings: RealmRacersStandingsPanel;
   private readonly podium: RealmRacersPodium;
+  /** The off-screen live region that SPEAKS the drawn circuit. Kept outside the
+   *  strip's rebuilt subtree so a rebuild cannot re-announce. */
+  private announceEl: HTMLElement | null = null;
+  /** The drawn circuit's localized name, resolved once per strip rebuild rather
+   *  than per frame. Safe to cache against the language: the strip's signature
+   *  starts with the match id, and `relocalize()` clears it, so a language flip
+   *  re-resolves through the same path a new race does. */
+  private circuitName: string | null = null;
   private lapEl: HTMLElement | null = null;
   private positionEl: HTMLElement | null = null;
   private timeEl: HTMLElement | null = null;
@@ -176,6 +190,26 @@ export class RealmRacersUi {
       // armed would put the player back on it after the race.
       this.setupOpen = false;
       if (this.isOpen) this.close();
+      // The circuit, big and centre-screen, on the one frame it is news. Driven
+      // from STATE rather than from the `realmRacersFound` event, because the
+      // name is what the banner says and the circuit rides the SNAPSHOT: the
+      // server routes events before it broadcasts, so at the event the mirrored
+      // match is still absent. Online this lands at most one snapshot later,
+      // inside the nine-second countdown either way.
+      //
+      // This is the same rising edge that closes the queue window, so it fires
+      // exactly once per race and re-arms for the next one (the match goes null
+      // between races). Gated on the pre-race phase so a mid-race reconnect
+      // restores a HUD without announcing a circuit the pilot has been driving
+      // for a minute.
+      const match = info.match;
+      if (match && match.phase === 'countdown') {
+        // A circuit nothing names can only be a DRAFT registered by a dev
+        // command (`tests/realm_racers_circuit_i18n.test.ts` pins that every
+        // authored circuit has a name), so the raw id here is a developer
+        // reading their own draft's id, never a player seeing a token.
+        this.deps.showBanner(realmRacersCircuitName(match.circuitId) ?? match.circuitId);
+      }
     }
     this.wasInMatch = inMatch;
     const countdown = info.match?.phase === 'countdown' ? info.match.countdown : 0;
@@ -276,9 +310,17 @@ export class RealmRacersUi {
       ? `<button type="button" class="btn btn-primary rally-cta rally-play" data-rally-practice-play>` +
         `${esc(t('hudChrome.rally.practicePlay'))}</button>`
       : `<div class="rally-status queued">${esc(t('hudChrome.rally.practiceUnavailable'))}</div>`;
+    // Which circuit practice runs, and that competition runs a different one.
+    // The trade is the pool's, not a detail: a pilot learns the machine here
+    // and meets the map for the first time on the grid.
+    const circuit = realmRacersCircuitName(view.circuitId);
+    const circuitLine = circuit
+      ? `<p class="rally-setup-circuit">${esc(t('hudChrome.rally.practiceCircuit', { circuit }))}</p>`
+      : '';
     return (
       `${this.headerHtml()}<div class="rally-body rally-setup">` +
       `<p class="rally-setup-intro">${esc(t('hudChrome.rally.practiceIntro'))}</p>` +
+      circuitLine +
       `<h3 class="rally-legend">${esc(t('hudChrome.rally.practiceTierLegend'))}</h3>` +
       `<div class="rally-tiers">${tiers}</div>` +
       `<h3 class="rally-legend">${esc(t('hudChrome.rally.practiceControlsLegend'))}</h3>` +
@@ -378,6 +420,11 @@ export class RealmRacersUi {
       this.standings.update(standings);
       this.forfeitArmedUntil = 0;
       this.lastCountdown = 0;
+      // Reset the announcement with the strip, so back-to-back races on the
+      // SAME circuit are each announced rather than elided into silence by the
+      // second one writing what is already there.
+      this.circuitName = null;
+      if (this.announceEl) w.setText(this.announceEl, '');
       return;
     }
     const root = this.ensureHud();
@@ -386,9 +433,20 @@ export class RealmRacersUi {
     if (view.sig !== this.lastHudSig) {
       this.lastHudSig = view.sig;
       this.forfeitArmedUntil = 0;
+      // Competition DRAWS its circuit the moment the grid fills, so the pill at
+      // the head of the strip carries the circuit's name for the whole race
+      // instead of the minigame's: nobody chose this circuit, the player has to
+      // be told which one they got before the flag drops, and "Realm Racers" is
+      // not news to someone already sitting on the grid. It falls back to the
+      // minigame title for a circuit nothing names (a dev draft), because the
+      // pill can never be empty.
+      //
+      // Resolved BEFORE the skeleton is built: both the pill and the announcer
+      // below read it, and they must not be able to disagree.
+      this.circuitName = realmRacersCircuitName(view.circuitId);
       root.innerHTML =
-        `<div class="rallyhud-top"><span class="rallyhud-mark">G</span>` +
-        `<span class="rallyhud-title">${esc(t('hudChrome.rally.title'))}</span></div>` +
+        `<div class="rallyhud-top">` +
+        `<span class="rallyhud-title">${esc(this.circuitName ?? t('hudChrome.rally.title'))}</span></div>` +
         `<div class="rallyhud-stats"><span class="rallyhud-position"></span>` +
         `<span class="rallyhud-lap"></span><span class="rallyhud-time"></span>` +
         `<span class="rallyhud-speed"></span></div>` +
@@ -414,6 +472,15 @@ export class RealmRacersUi {
       this.forfeitEl?.addEventListener('click', () => this.pressForfeit());
     }
     this.standings.update(standings);
+    // The pill is a VISUAL swap, and a swapped label is not an announcement: a
+    // screen-reader user would otherwise first learn the circuit at the podium,
+    // after the race. The announcer is an off-screen live region that lives
+    // OUTSIDE the strip's rebuilt subtree, so the countdown-to-racing rebuild
+    // cannot re-announce, and the write is elided, so it speaks exactly once per
+    // race. Cleared when the strip goes down, so the next race announces even
+    // when the draw lands on the same circuit.
+    const announcer = this.ensureAnnouncer();
+    if (announcer) w.setText(announcer, this.circuitName ?? '');
     if (this.positionEl)
       w.setText(
         this.positionEl,
@@ -496,6 +563,34 @@ export class RealmRacersUi {
       return;
     }
     this.forfeitArmedUntil = now + FORFEIT_ARM_MS;
+  }
+
+  /**
+   * The circuit announcer: an off-screen `role="status"` region on the HUD
+   * layer, NOT inside the strip.
+   *
+   * Two reasons it is its own node rather than an `aria-live` on the pill.
+   * The strip's skeleton is rebuilt whenever its signature moves (the reset
+   * control appears at GO, the forfeit control goes at the flag), and a live
+   * region replaced wholesale re-announces its content; and the pill is a
+   * truncating one-line label, whose visible text is not necessarily the whole
+   * name. This speaks the name once, in full.
+   *
+   * `.visually-hidden` is the shared utility the rest of the HUD announces
+   * through (`claudium_window`, `party_frame_row`, `market_window`).
+   */
+  private ensureAnnouncer(): HTMLElement | null {
+    if (this.announceEl) return this.announceEl;
+    const layer = this.deps.layer();
+    if (!layer) return null;
+    const el = document.createElement('div');
+    el.className = 'visually-hidden';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.dataset.rallyCircuitAnnounce = '';
+    layer.appendChild(el);
+    this.announceEl = el;
+    return el;
   }
 
   private ensureHud(): HTMLElement | null {

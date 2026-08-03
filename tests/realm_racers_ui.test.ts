@@ -4,7 +4,7 @@
 // centered over the viewport through the whole countdown and race, and the only
 // forfeit control lived inside it, so closing it left no way out of a race.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The standings portrait is the party frames' class crest, whose procedural path
 // needs a real 2D canvas jsdom does not provide. The strip only ever needs a
@@ -16,9 +16,11 @@ vi.mock('../src/ui/icons', async (importOriginal) => ({
   iconDataUrl: iconDataUrlSpy,
 }));
 
-import { t } from '../src/ui/i18n';
+import { REALM_RACERS_PRACTICE_CIRCUIT_ID } from '../src/sim/content/realm_racers_circuits';
+import { ensureLocaleLoaded, setLanguage, type TranslationKey, t } from '../src/ui/i18n';
 import { makeWriterFacet } from '../src/ui/painter_host';
 import { RealmRacersUi } from '../src/ui/realm_racers';
+import { realmRacersCircuitName } from '../src/ui/realm_racers_circuit_i18n';
 import type { IWorld, RealmRacersInfo } from '../src/world_api';
 
 type RallyMatch = NonNullable<RealmRacersInfo['match']>;
@@ -89,6 +91,7 @@ function harness() {
   const resetRealmRacersPosition = vi.fn();
   const startRealmRacersPractice = vi.fn();
   const countdownTick = vi.fn();
+  const showBanner = vi.fn();
   const touch = { value: false };
   const restoreFocus = vi.fn();
   const world = {
@@ -110,6 +113,7 @@ function harness() {
     controlKeys: (action) => CONTROL_KEYS[action],
     isTouchHud: () => touch.value,
     countdownTick,
+    showBanner,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
   });
   const forfeitButton = (): HTMLButtonElement | null =>
@@ -124,6 +128,7 @@ function harness() {
     forfeitRealmRacers,
     resetRealmRacersPosition,
     countdownTick,
+    showBanner,
     startRealmRacersPractice,
     forfeitButton,
     touch,
@@ -255,6 +260,27 @@ describe('Realm Racers practice setup screen', () => {
     practiceButton(h.root)?.click();
     expect(playButton(h.root)).toBeNull();
     expect(h.root.textContent).toContain(t('hudChrome.rally.practiceUnavailable'));
+  });
+
+  it('names the circuit practice runs, and says competition draws its own', () => {
+    // The pool's trade, stated rather than discovered: a player learns the
+    // machine on a circuit no queued race will ever put them on.
+    const h = harness();
+    h.ui.toggle();
+    practiceButton(h.root)?.click();
+    const line = h.root.querySelector('.rally-setup-circuit') as HTMLElement | null;
+    expect(line).not.toBeNull();
+    expect(line?.textContent).toBe(
+      t('hudChrome.rally.practiceCircuit', {
+        circuit: realmRacersCircuitName(REALM_RACERS_PRACTICE_CIRCUIT_ID) as string,
+      }),
+    );
+    // Anchored to literals as well as to the round trip: the `toBe` above moves
+    // with the catalog on any copy edit, so these are what prove the
+    // placeholder really interpolated and that the sentence still makes the
+    // pool's trade rather than merely naming a circuit.
+    expect(line?.textContent).toContain('Evergarden Bootcamp');
+    expect(line?.textContent).toContain('Competition draws its own');
   });
 
   it('keeps offering practice to a player already waiting in the queue', () => {
@@ -811,5 +837,288 @@ describe('Realm Racers race-feel HUD', () => {
     h.info.match = match({ phase: 'racing', countdown: 0, countdownTicks: 0 });
     h.ui.update();
     expect(h.countdownTick).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Realm Racers circuit announcement', () => {
+  /** The pill at the head of the race strip: the minigame's name outside a
+   *  race, the drawn circuit's name during one. */
+  const pill = (h: ReturnType<typeof harness>): HTMLElement =>
+    h.layer.querySelector('.rallyhud-title') as HTMLElement;
+  /** The off-screen live region that SPEAKS the circuit. */
+  const announcer = (h: ReturnType<typeof harness>): HTMLElement =>
+    h.layer.querySelector('[data-rally-circuit-announce]') as HTMLElement;
+
+  it('banners the circuit once, on the frame the match appears', () => {
+    // Driven from STATE, not from the `realmRacersFound` event: the name is what
+    // the banner says, and the circuit rides the snapshot, which online lands
+    // one frame after the event. It is the same rising edge that closes the
+    // queue window, so it cannot fire twice for one race.
+    const h = harness();
+    h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    expect(h.showBanner.mock.calls).toEqual([['Evergarden Express Tour']]);
+    // Every later frame of the same race is silent, including the phase changes
+    // that rebuild the strip.
+    for (const phase of ['countdown', 'racing', 'finished'] as const) {
+      h.info.match = match({ phase, circuitId: 'evergarden_express_tour' });
+      h.ui.update();
+    }
+    expect(h.showBanner).toHaveBeenCalledTimes(1);
+  });
+
+  it('banners the NEXT race too, even on the same circuit', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    h.info.match = null;
+    h.ui.update();
+    h.info.match = match({ id: 9, phase: 'countdown', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    expect(h.showBanner.mock.calls).toEqual([
+      ['Evergarden Express Tour'],
+      ['Evergarden Express Tour'],
+    ]);
+  });
+
+  it('does not banner a race the viewer joins already under way', () => {
+    // A mid-race reconnect restores the HUD; announcing a circuit the pilot has
+    // been driving for a minute would be noise, not news.
+    const h = harness();
+    h.info.match = match({ phase: 'racing', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    expect(h.showBanner).not.toHaveBeenCalled();
+  });
+
+  it('banners the raw id for a circuit nothing names', () => {
+    // Only reachable for a DRAFT a dev command registered, since every authored
+    // circuit is pinned to have a name. A developer reading their own draft id
+    // is the whole audience.
+    const h = harness();
+    h.info.match = match({ phase: 'countdown', circuitId: 'draft_scratch_1' });
+    h.ui.update();
+    expect(h.showBanner.mock.calls).toEqual([['draft_scratch_1']]);
+  });
+
+  it('carries the drawn circuit in the strip pill, for the WHOLE race', () => {
+    // The player did not choose this circuit: the grid filling drew it. The
+    // pill is the one piece of strip chrome big enough to say so, and the
+    // minigame's own name is not news to somebody already on the grid.
+    const h = harness();
+    for (const phase of ['countdown', 'racing', 'finished'] as const) {
+      h.info.match = match({ phase, circuitId: 'evergarden_express_tour' });
+      h.ui.update();
+      expect(pill(h).textContent, phase).toBe('Evergarden Express Tour');
+    }
+  });
+
+  it('keeps the pill on one line, so nothing under it moves', () => {
+    // jsdom does no layout, so the box cannot be measured here. What CAN be
+    // asserted is the two things that actually keep the readout row still: the
+    // text does not change DURING a race (the swap happens once, at seat time,
+    // before there is anything to disturb), and the pill is still the element
+    // whose stylesheet rule pins nowrap + ellipsis + overflow hidden, so a long
+    // circuit name widens and then truncates instead of wrapping to a second
+    // line and pushing the row and both tap targets down.
+    const h = harness();
+    const texts: string[] = [];
+    for (const phase of ['countdown', 'racing', 'finished'] as const) {
+      h.info.match = match({ phase, circuitId: 'evergarden_express_tour' });
+      h.ui.update();
+      texts.push(pill(h).textContent ?? '');
+      expect(pill(h).classList.contains('rallyhud-title'), phase).toBe(true);
+    }
+    expect(new Set(texts).size, 'the pill text changed mid-race').toBe(1);
+    // And the old separate countdown line is gone, not merely hidden: a second
+    // circuit label under the pill would be the layout jump this replaced.
+    expect(h.layer.querySelector('.rallyhud-circuit')).toBeNull();
+    // The gold "G" medallion is gone with it: it stood for nothing a player
+    // could read, and the pill now holds the circuit name alone.
+    expect(h.layer.querySelector('.rallyhud-mark')).toBeNull();
+  });
+
+  it('follows the draw rather than assuming one circuit', () => {
+    const h = harness();
+    h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    expect(pill(h).textContent).toBe('Evergarden Express Tour');
+    // A second race, a different circuit: the strip follows the id it is given.
+    h.info.match = match({
+      id: 8,
+      phase: 'countdown',
+      circuitId: REALM_RACERS_PRACTICE_CIRCUIT_ID,
+    });
+    h.ui.update();
+    expect(pill(h).textContent).toBe('Evergarden Bootcamp');
+  });
+
+  it('falls back to the minigame title for a circuit nothing names', () => {
+    // A draft circuit a dev command registered. A raw id is not copy, and the
+    // pill can never be empty, so it keeps the name it had before 13a-2.
+    const h = harness();
+    h.info.match = match({ phase: 'countdown', circuitId: 'draft_scratch_1' });
+    h.ui.update();
+    expect(pill(h).textContent).toBe(t('hudChrome.rally.title'));
+    // And nothing is announced, because there is nothing to announce.
+    expect(announcer(h).textContent).toBe('');
+  });
+
+  it('ANNOUNCES the circuit once per race, and again for the next one', () => {
+    // The accessibility half, and the reason this is a node of its own rather
+    // than an aria-live on the pill: a screen-reader user would otherwise first
+    // learn the circuit at the podium, after the race is over.
+    const h = harness();
+    h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    const live = announcer(h);
+    expect(live.getAttribute('aria-live')).toBe('polite');
+    expect(live.getAttribute('role')).toBe('status');
+    expect(live.className).toBe('visually-hidden');
+    expect(live.textContent).toBe('Evergarden Express Tour');
+
+    // It lives OUTSIDE the strip, so the countdown-to-racing rebuild (which
+    // adds the reset control) cannot re-announce by replacing the region.
+    expect(live.parentElement).toBe(h.layer);
+    h.info.match = match({ phase: 'racing', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    expect(announcer(h), 'the live region was rebuilt: it would re-announce').toBe(live);
+    expect(live.textContent).toBe('Evergarden Express Tour');
+
+    // The race ends and the strip goes down: the region clears, so the NEXT
+    // race announces even when the draw lands on the same circuit again.
+    h.info.match = null;
+    h.ui.update();
+    expect(live.textContent).toBe('');
+    h.info.match = match({ id: 9, phase: 'countdown', circuitId: 'evergarden_express_tour' });
+    h.ui.update();
+    expect(live.textContent).toBe('Evergarden Express Tour');
+  });
+
+  it('heads the podium with the circuit that was raced', () => {
+    const h = harness();
+    const field = [
+      racer({ pid: 2, name: 'Briar', position: 1, finished: true, finishSeconds: 71.2 }),
+      racer({ pid: 1, name: 'Aster', position: 2, finished: true, finishSeconds: 74.9 }),
+    ];
+    h.info.match = match({
+      phase: 'finished',
+      decided: true,
+      result: 'lost',
+      circuitId: 'evergarden_express_tour',
+      me: field[1],
+      standings: field,
+    });
+    h.ui.update();
+    const heading = h.layer.querySelector('.rally-podium-heading') as HTMLElement | null;
+    expect(heading?.textContent).toBe('Evergarden Express Tour');
+    // It heads the ceremony: nothing else may come before it.
+    expect(heading?.previousElementSibling).toBeNull();
+  });
+
+  // A runtime language change does not reload the page: it dispatches
+  // `woc:languagechange` and the HUD forces one repaint of every open surface
+  // (`tests/language_fanout_relocalize.test.ts` owns that contract). The circuit
+  // NAME is the one piece of rally copy that reaches three surfaces through
+  // three different repaint regimes, which is exactly where one of them can
+  // quietly stay English. These live here rather than in the fan-out suite
+  // because they need the class-crest icon mock at the top of this file.
+  //
+  // zh_CN rather than a Latin locale: the circuit names are NEW keys, filled in
+  // the five non-Latin locales under exception M16 and still pending elsewhere,
+  // and a pending locale falls back to English, which would make every
+  // assertion below vacuous.
+  describe('a language change reaches every surface that names the circuit', () => {
+    const LANG = 'zh_CN';
+    beforeAll(async () => {
+      await ensureLocaleLoaded(LANG);
+    });
+    afterEach(() => setLanguage('en'));
+
+    const bilingual = (key: string): { en: string; other: string } => {
+      setLanguage('en');
+      const en = t(key as TranslationKey);
+      setLanguage(LANG);
+      const other = t(key as TranslationKey);
+      setLanguage('en');
+      expect(other, `${key} is untranslated in ${LANG}, so it witnesses nothing`).not.toBe(en);
+      return { en, other };
+    };
+
+    it('re-localizes the circuit name in the strip pill and the announcer', () => {
+      const names = bilingual('hudChrome.rally.circuitName_evergarden_express_tour');
+      const h = harness();
+      h.info.match = match({ phase: 'countdown', circuitId: 'evergarden_express_tour' });
+      h.ui.update();
+      const pill = (): string => h.layer.querySelector('.rallyhud-title')?.textContent ?? '';
+      const spoken = (): string =>
+        h.layer.querySelector('[data-rally-circuit-announce]')?.textContent ?? '';
+      expect(pill()).toBe(names.en);
+      expect(spoken()).toBe(names.en);
+      setLanguage(LANG);
+      h.ui.relocalize();
+      h.ui.update();
+      expect(pill()).toBe(names.other);
+      // The announcer follows the same cached resolve, so a language flip does
+      // not leave a screen reader on the old locale.
+      expect(spoken()).toBe(names.other);
+    });
+
+    it('re-localizes the podium heading, which repaints only on its signature', () => {
+      const names = bilingual('hudChrome.rally.circuitName_evergarden_express_tour');
+      const h = harness();
+      const field = [racer({ pid: 1, position: 1, finished: true, finishSeconds: 71.2 })];
+      h.info.match = match({
+        phase: 'finished',
+        decided: true,
+        result: 'won',
+        circuitId: 'evergarden_express_tour',
+        me: field[0],
+        standings: field,
+      });
+      h.ui.update();
+      const heading = (): string =>
+        h.layer.querySelector('.rally-podium-heading')?.textContent ?? '';
+      expect(heading()).toBe(names.en);
+      // The ceremony's signature is the classification, which a language flip
+      // cannot move, so the ordinary repaint path leaves English on screen:
+      // that is the bug this arm reproduces before the fan-out fixes it.
+      setLanguage(LANG);
+      h.ui.update();
+      expect(heading(), 'the podium repainted itself: this arm proves nothing').toBe(names.en);
+      h.ui.relocalize();
+      h.ui.update();
+      expect(heading()).toBe(names.other);
+    });
+
+    it('re-localizes the circuit name on the practice setup screen', () => {
+      const names = bilingual('hudChrome.rally.circuitName_evergarden_practice');
+      const h = harness();
+      h.ui.toggle();
+      (h.root.querySelector('[data-rally-practice-open]') as HTMLElement | null)?.click();
+      const line = (): string => h.root.querySelector('.rally-setup-circuit')?.textContent ?? '';
+      expect(line()).toContain(names.en);
+      setLanguage(LANG);
+      h.ui.relocalize();
+      expect(line()).toContain(names.other);
+    });
+  });
+
+  it('leaves the podium unheaded for a circuit nothing names', () => {
+    const h = harness();
+    const field = [racer({ pid: 1, position: 1, finished: true, finishSeconds: 70 })];
+    h.info.match = match({
+      phase: 'finished',
+      decided: true,
+      result: 'won',
+      circuitId: 'draft_scratch_1',
+      me: field[0],
+      standings: field,
+    });
+    h.ui.update();
+    expect(h.layer.querySelector('.rally-podium-heading')).toBeNull();
+    // ...and the ceremony itself still runs.
+    expect(
+      (h.layer.querySelector('#realm-racers-podium') as HTMLElement).classList.contains('shown'),
+    ).toBe(true);
   });
 });

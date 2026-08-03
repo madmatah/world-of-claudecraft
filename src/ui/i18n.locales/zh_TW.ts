@@ -10526,6 +10526,8 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.practiceIntro':
     '一條完全屬於你的私人賽道。挑選對手、熟悉操作，準備好了就揮旗起跑。',
   'hudChrome.rally.practiceUnavailable': '所有試車賽道都在使用中。請幾分鐘後再試。',
+  'hudChrome.rally.practiceCircuit':
+    '你將在{circuit}上駕駛，這是每位車手熟悉機車的賽道。正式比賽會另外抽取賽道。',
   'hudChrome.rally.practiceTierLegend': '挑選你的對手',
   'hudChrome.rally.practiceControlsLegend': '你的操作',
   'hudChrome.rally.practicePlay': '開始比賽',
@@ -10551,6 +10553,8 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.standingsYou': '你',
   'hudChrome.rally.standingsFinished': '已完賽',
   'hudChrome.rally.standingsRetired': '退賽',
+  'hudChrome.rally.circuitName_evergarden_practice': '永恆花園訓練場',
+  'hudChrome.rally.circuitName_evergarden_express_tour': '永恆花園特快巡迴賽',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': '不分勝負。賽事裁判宣布比賽平手。',
   'hudChrome.rally.position': '名次 {position}/{total}',
@@ -10568,7 +10572,6 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.drawReturn': '平手。{seconds} 秒後返回',
   'hudChrome.rally.logQueued': '王國競速賽佇列位置：{position}。',
   'hudChrome.rally.logUnqueued': '你已離開王國競速賽佇列。',
-  'hudChrome.rally.bannerFound': '已找到比賽。發車格上共有 {count} 台機車。',
   'hudChrome.rally.bannerGo': '出發！',
   'hudChrome.rally.bannerLap': '第 {lap}/{total} 圈',
   'hudChrome.rally.bannerWin': '你贏得了比賽！',

@@ -1,6 +1,7 @@
 // Pure view model for The Realm Racers queue window, its practice setup
 // screen, and the in-race HUD.
 
+import { REALM_RACERS_PRACTICE_CIRCUIT_ID } from '../sim/content/realm_racers_circuits';
 import type { RallyDriverTier, RealmRacersInfo } from '../world_api';
 
 /**
@@ -39,6 +40,13 @@ export interface RallyControlRow {
 export interface RealmRacersSetupView {
   tiers: readonly { tier: RallyDriverTier; selected: boolean }[];
   controls: readonly RallyControlRow[];
+  /**
+   * Which circuit a practice lap runs, always the practice circuit. It is a
+   * constant rather than a live value because practice never draws: naming it
+   * here is what makes the pool's trade honest, since the circuit a player
+   * learns on is one they will never race competitively.
+   */
+  circuitId: string;
   /** True on a touch HUD: the key column is meaningless there, so the screen
    *  teaches the on-screen controls in one line instead. */
   touch: boolean;
@@ -72,6 +80,13 @@ export type RealmRacersWindowView =
 
 export interface RealmRacersHudView {
   active: boolean;
+  /**
+   * The circuit this race is on, as a record id. Competition DRAWS it when the
+   * grid fills, so the strip names it through the countdown: the player has to
+   * be told what they got before the flag drops. Carried as the id, never the
+   * name, because this view is i18n-free.
+   */
+  circuitId: string;
   phase: 'countdown' | 'racing' | 'finished';
   countdown: number;
   lap: number;
@@ -102,6 +117,7 @@ export interface RealmRacersHudView {
 
 const HUD_OFF: RealmRacersHudView = {
   active: false,
+  circuitId: '',
   phase: 'countdown',
   countdown: 0,
   lap: 1,
@@ -175,6 +191,9 @@ export function buildRealmRacersSetupView(
   return {
     tiers: RALLY_PRACTICE_TIERS.map((tier) => ({ tier, selected: tier === selected })),
     controls,
+    // Out of the signature deliberately: it is a build-time constant, so it can
+    // never move on its own and adding it would only be noise.
+    circuitId: REALM_RACERS_PRACTICE_CIRCUIT_ID,
     touch,
     available: info.practiceAvailable,
     sig: `setup|${selected}|${info.practiceAvailable ? 'open' : 'full'}|${touch ? 't' : 'k'}|${keySig}`,
@@ -188,6 +207,7 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
   const canReset = match.phase === 'racing';
   return {
     active: true,
+    circuitId: match.circuitId,
     phase: match.phase,
     countdown: match.countdown,
     lap: match.me.lap,

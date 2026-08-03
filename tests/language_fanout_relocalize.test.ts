@@ -120,6 +120,7 @@ function openRealmRacers(): { ui: RealmRacersUi; root: HTMLElement } {
     controlKeys: () => ['W'],
     isTouchHud: () => false,
     countdownTick: noop,
+    showBanner: noop,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
   });
   ui.toggle();

@@ -34,6 +34,9 @@ export interface RealmRacersPodiumEntry {
 
 export interface RealmRacersPodiumView {
   active: boolean;
+  /** The circuit the race was run on, as a record id: it heads the ceremony,
+   *  which is the slot workstream 12 left empty for exactly this. */
+  circuitId: string;
   /**
    * The top three in DISPLAY order, second to the left of first: the shape of a
    * real podium, not the classification order. Shorter than three only if a
@@ -51,6 +54,7 @@ export interface RealmRacersPodiumView {
 
 const EMPTY: RealmRacersPodiumView = {
   active: false,
+  circuitId: '',
   steps: [],
   rest: [],
   totalLaps: 0,
@@ -81,6 +85,7 @@ export function buildRealmRacersPodiumView(
   const steps = STEP_ORDER.flatMap((index) => (top[index] ? [top[index]] : []));
   return {
     active: true,
+    circuitId: match.circuitId,
     steps,
     rest: entries.slice(RALLY_PODIUM_STEPS),
     totalLaps: match.totalLaps,
@@ -88,7 +93,10 @@ export function buildRealmRacersPodiumView(
     returnIn: match.returnIn,
     // The return countdown is out: it ticks once a second and the painter writes
     // it through the elided writers, so it may not rebuild the whole ceremony.
-    sig: `${match.id}|${match.result ?? '-'}|${entries
+    // The circuit is IN, even though it cannot move inside one match id: the
+    // heading is structure the painter builds from it, so the thing that
+    // decides the heading has to be the thing that rebuilds it.
+    sig: `${match.id}|${match.circuitId}|${match.result ?? '-'}|${entries
       .map((entry) => `${entry.pid}:${entry.placing}${entry.isMe ? '*' : ''}`)
       .join(',')}`,
   };

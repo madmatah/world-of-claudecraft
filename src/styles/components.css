@@ -14104,6 +14104,19 @@
   font-size: 13px;
   line-height: 1.55;
 }
+/* Which circuit practice runs, and the plain admission that competition runs a
+   different one. Set apart from the intro copy above it: it is the one line on
+   this screen a returning player still needs to read. */
+.rally-setup-circuit {
+  margin: -8px 0 14px;
+  padding: 8px 10px;
+  border-left: 2px solid #d7be7080;
+  border-radius: 0 6px 6px 0;
+  color: #e6cf83;
+  background: #0c150f80;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .rally-legend {
   margin: 0 0 8px;
   color: #d7be70;
@@ -14242,27 +14255,27 @@
   align-items: center;
   justify-content: center;
 }
+/* The pill holds one thing now, the circuit name, so its padding is symmetric.
+   It used to carry a gold "G" medallion on the left, which is what the 7px
+   left inset and the 9px gap were for; the mark said nothing a player could
+   read, so it is gone and the label is simply centred in the pill. */
 .rallyhud-top {
-  gap: 9px;
   margin: 0 auto;
   width: max-content;
   max-width: 100%;
-  padding: 4px 14px 5px 7px;
+  padding: 5px 14px;
   border: 1px solid #dfc36c99;
   border-radius: 999px;
   background: #122218e8;
 }
-.rallyhud-mark {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  color: #17301e;
-  background: #e1c765;
-  font-family: var(--font-display, serif);
-  font-weight: 900;
-}
+/* During a race this pill carries the DRAWN CIRCUIT's name rather than the
+   minigame's (the player did not choose the circuit and needs telling; the
+   minigame's own name is not news to someone already on the grid). The
+   nowrap + ellipsis + hidden trio is load-bearing because of that: a circuit
+   name is longer and unbounded in length, and wrapping it to a second line
+   would grow the pill downward and push the whole readout row, plus both tap
+   targets under it, down mid-race. The pill widens instead, to the strip's
+   width, and then truncates. */
 .rallyhud-title {
   overflow: hidden;
   font-size: 12px;
@@ -14595,6 +14608,20 @@
       opacity 240ms ease-out,
       transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1),
       visibility 0s;
+  }
+  /* The circuit that was raced, heading the ceremony. Competition draws it, so
+     it is worth naming at the end as well as at the start; it is absent
+     entirely for a circuit nothing names (a dev draft). */
+  .rally-podium-heading {
+    margin: 0;
+    color: #e6cf83;
+    font-family: var(--font-display, serif);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-align: center;
+    text-transform: uppercase;
+    text-shadow: 0 2px 6px #000a;
   }
   /* Three steps, second to the LEFT of first: the core hands them over in
      display order, so the row needs no re-ordering here. */

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  REALM_RACERS_PRACTICE_CIRCUIT_ID,
+  realmRacersCompetitionCircuits,
+} from '../src/sim/content/realm_racers_circuits';
+import {
   buildRealmRacersHudView,
   buildRealmRacersSetupView,
   buildRealmRacersWindowView,
@@ -119,6 +123,15 @@ describe('Realm Racers pure views: the practice setup screen', () => {
     expect(a.sig).not.toBe(b.sig);
   });
 
+  it('names the circuit practice runs, which is always the practice circuit', () => {
+    // Practice never draws, so this is a build-time constant rather than a live
+    // value; carrying it here is what lets the screen be honest that the
+    // circuit a player learns on is not one competition will ever give them.
+    const view = buildRealmRacersSetupView(info(), 'driver', keys, false);
+    expect(view.circuitId).toBe(REALM_RACERS_PRACTICE_CIRCUIT_ID);
+    expect(realmRacersCompetitionCircuits().map((c) => c.id)).not.toContain(view.circuitId);
+  });
+
   it('distinguishes a practice field from a queued one, in the window signature', () => {
     const practice = live({ practice: true });
     const queued = live();
@@ -160,6 +173,18 @@ describe('Realm Racers pure views', () => {
     expect(
       buildRealmRacersHudView(info({ match: live({ totalLaps: 4, practice: true }) })),
     ).toMatchObject({ totalLaps: 4 });
+  });
+
+  it('carries the drawn circuit to the strip, as an id rather than a name', () => {
+    // The view is i18n-free, so it hands the painter the record id and the
+    // painter resolves the copy. Nobody CHOSE this circuit, so the strip has to
+    // be able to say which one the draw gave the grid.
+    const view = buildRealmRacersHudView(
+      info({ match: live({ circuitId: 'evergarden_express_tour' }) }),
+    );
+    expect(view.circuitId).toBe('evergarden_express_tour');
+    // And nothing to name when there is no race at all.
+    expect(buildRealmRacersHudView(info()).circuitId).toBe('');
   });
 
   it('keeps the structural HUD signature stable while race values tick', () => {

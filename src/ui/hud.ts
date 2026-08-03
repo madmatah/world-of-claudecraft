@@ -4389,6 +4389,7 @@ export class Hud {
     controlKeys: (action) => this.rallyControlKeys(action),
     isTouchHud: () => document.body.classList.contains('mobile-touch'),
     countdownTick: () => audio.realmRacersCountdownTick(),
+    showBanner: (text) => this.showBanner(text),
     writers: this.writerFacet,
     ...this.windowFocus('#realm-racers-window'),
   });
@@ -12026,16 +12027,13 @@ export class Hud {
           if (ev.pid === sim.playerId) this.log(t('hudChrome.rally.logUnqueued'), '#dcb75b');
           break;
         case 'realmRacersFound':
-          if (ev.pid === sim.playerId) {
-            // The whole grid, the viewer included: the banner is about the size
-            // of the field, not about one named rival.
-            this.showBanner(
-              t('hudChrome.rally.bannerFound', {
-                count: formatNumber(ev.rivalNames.length + 1, { maximumFractionDigits: 0 }),
-              }),
-            );
-            audio.realmRacersFound();
-          }
+          // The CUE only. The banner that used to live here is now driven from
+          // STATE, by `RealmRacersUi` on the edge where the match first appears:
+          // the circuit's name is what the banner says, and this event reaches
+          // the client one frame BEFORE the snapshot that carries the circuit
+          // (the server routes events, then broadcasts). The event still owns
+          // the sound here and the start-light deadline in `online.ts`.
+          if (ev.pid === sim.playerId) audio.realmRacersFound();
           break;
         case 'realmRacersGo':
           if (ev.pid === sim.playerId) {

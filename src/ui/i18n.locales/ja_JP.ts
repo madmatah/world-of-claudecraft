@@ -11026,6 +11026,8 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
     'あなただけのプライベートサーキット。相手を選び、操作を覚えて、準備ができたらスタートです。',
   'hudChrome.rally.practiceUnavailable':
     '練習用サーキットはすべて使用中です。数分後にもう一度お試しください。',
+  'hudChrome.rally.practiceCircuit':
+    '走るのは{circuit}。すべてのパイロットがマシンを覚えるサーキットです。公式レースは別のサーキットが抽選されます。',
   'hudChrome.rally.practiceTierLegend': '対戦相手を選ぶ',
   'hudChrome.rally.practiceControlsLegend': '操作方法',
   'hudChrome.rally.practicePlay': 'レースを始める',
@@ -11057,6 +11059,8 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.standingsYou': 'あなた',
   'hudChrome.rally.standingsFinished': 'ゴール',
   'hudChrome.rally.standingsRetired': 'リタイア',
+  'hudChrome.rally.circuitName_evergarden_practice': 'エバーガーデン練習場',
+  'hudChrome.rally.circuitName_evergarden_express_tour': 'エバーガーデン・エクスプレスツアー',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': '同着。レースの審判が引き分けを宣言しました。',
   'hudChrome.rally.position': '順位 {position}/{total}',
@@ -11074,7 +11078,6 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.drawReturn': '引き分け。{seconds}秒後に戻ります',
   'hudChrome.rally.logQueued': 'レルムレーサーズの待機位置：{position}。',
   'hudChrome.rally.logUnqueued': 'レルムレーサーズの待機列から離れました。',
-  'hudChrome.rally.bannerFound': 'レース成立。グリッドに{count}台。',
   'hudChrome.rally.bannerGo': 'スタート！',
   'hudChrome.rally.bannerLap': '{total}周中{lap}周目',
   'hudChrome.rally.bannerWin': 'レースに勝利しました！',

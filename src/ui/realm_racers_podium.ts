@@ -14,6 +14,7 @@
 import { formatNumber, t } from './i18n';
 import { iconDataUrl } from './icons';
 import type { PainterHostWriters } from './painter_host';
+import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
 import type { RealmRacersPodiumEntry, RealmRacersPodiumView } from './realm_racers_podium_view';
 
 /** Portrait edge on a podium step. Bigger than the standings row's 20: this is
@@ -55,22 +56,34 @@ export class RealmRacersPodium {
     }
     if (view.sig !== this.lastSig) {
       this.lastSig = view.sig;
-      root.innerHTML = this.markup(view);
+      // Resolved once and handed to both halves: the skeleton decides whether
+      // the heading EXISTS from it and paintNames fills it, and those two must
+      // never be able to disagree.
+      const circuit = realmRacersCircuitName(view.circuitId);
+      root.innerHTML = this.markup(view, circuit);
       this.returnEl = root.querySelector('.rally-podium-return');
-      this.paintNames(root, view);
+      this.paintNames(root, view, circuit);
     }
     if (this.returnEl) w.setText(this.returnEl, returnLabel(view));
   }
 
   /**
-   * The skeleton: steps in display order, then the rows below. It carries no
-   * player text at all, which is what lets it be a template string; the names
-   * are written into it by paintNames.
+   * The skeleton: the circuit that was raced, the steps in display order, then
+   * the rows below. It carries no text at all, which is what lets it be a
+   * template string; the names and the heading are written into it by
+   * paintNames.
    *
-   * The heading slot is deliberately empty. Workstream 13 puts the circuit's
-   * name there once there is more than one circuit to name.
+   * The heading is present only for a circuit the catalog names. A draft
+   * circuit registered by a dev command has no name, and an unnamed ceremony is
+   * better than one headed by a raw id.
+   *
+   * It is a `p`, not an `h`: this root is an atomic `role="status"` live region,
+   * so assistive tech reads the whole ceremony as one string and a heading role
+   * buys nothing, while a document-outline entry that exists only while a
+   * ceremony is up (and only for a named circuit) is a real cost. The window's
+   * own section headings are `h3`; a lone `h2` here would not match them either.
    */
-  private markup(view: RealmRacersPodiumView): string {
+  private markup(view: RealmRacersPodiumView, circuit: string | null): string {
     const steps = view.steps
       .map(
         (entry) =>
@@ -93,16 +106,21 @@ export class RealmRacersPodium {
           `</li>`,
       )
       .join('');
+    const heading = circuit ? `<p class="rally-podium-heading"></p>` : '';
     return (
+      heading +
       `<ol class="rally-podium-steps">${steps}</ol>` +
       (rest ? `<ol class="rally-podium-rest">${rest}</ol>` : '') +
       `<div class="rally-podium-return" aria-live="polite"></div>`
     );
   }
 
-  /** Names and times, in the order the skeleton laid them out. */
-  private paintNames(root: HTMLElement, view: RealmRacersPodiumView): void {
+  /** The circuit heading, then the names and times, in the order the skeleton
+   *  laid them out. */
+  private paintNames(root: HTMLElement, view: RealmRacersPodiumView, circuit: string | null): void {
     const w = this.deps.writers;
+    const heading = root.querySelector('.rally-podium-heading') as HTMLElement | null;
+    if (heading && circuit) w.setText(heading, circuit);
     const names = [...root.querySelectorAll('.rally-podium-name')] as HTMLElement[];
     const times = [...root.querySelectorAll('.rally-podium-time')] as HTMLElement[];
     const entries = [...view.steps, ...view.rest];

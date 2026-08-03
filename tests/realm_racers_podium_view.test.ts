@@ -111,6 +111,16 @@ describe('Realm Racers podium core', () => {
     expect(view.rest).toEqual([]);
   });
 
+  it('carries the circuit that was raced, and rebuilds the ceremony when it changes', () => {
+    // The heading is the slot workstream 12 left empty. It is structure the
+    // painter builds from this id, so the id has to be in the signature that
+    // rebuilds it, and it is an id rather than a name: this core is i18n-free.
+    const view = buildRealmRacersPodiumView(match({ circuitId: 'evergarden_express_tour' }));
+    expect(view.circuitId).toBe('evergarden_express_tour');
+    expect(view.sig).not.toBe(buildRealmRacersPodiumView(match()).sig);
+    expect(buildRealmRacersPodiumView(null).circuitId).toBe('');
+  });
+
   it('keeps the countdown out of its signature, and the classification in', () => {
     const base = buildRealmRacersPodiumView(match());
     // The return clock ticks once a second and the painter writes it through

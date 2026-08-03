@@ -11017,6 +11017,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
     '온전히 당신만의 서킷입니다. 상대를 고르고 조작을 익힌 뒤, 준비되면 출발하세요.',
   'hudChrome.rally.practiceUnavailable':
     '연습 서킷이 모두 사용 중입니다. 몇 분 뒤에 다시 시도해 주세요.',
+  'hudChrome.rally.practiceCircuit':
+    '이번 주행은 {circuit}에서 진행됩니다. 모든 파일럿이 기체를 익히는 서킷이며, 정식 경기는 별도의 서킷을 추첨합니다.',
   'hudChrome.rally.practiceTierLegend': '상대 고르기',
   'hudChrome.rally.practiceControlsLegend': '조작 방법',
   'hudChrome.rally.practicePlay': '경기 시작',
@@ -11048,6 +11050,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.standingsYou': '나',
   'hudChrome.rally.standingsFinished': '완주',
   'hudChrome.rally.standingsRetired': '기권',
+  'hudChrome.rally.circuitName_evergarden_practice': '에버가든 훈련장',
+  'hudChrome.rally.circuitName_evergarden_express_tour': '에버가든 익스프레스 투어',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': '동시 결승. 경기 심판진이 무승부를 선언했습니다.',
   'hudChrome.rally.position': '순위 {position}/{total}',
@@ -11065,7 +11069,6 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.drawReturn': '무승부. {seconds}초 뒤 돌아갑니다',
   'hudChrome.rally.logQueued': '렐름 레이서즈 대기 순번: {position}.',
   'hudChrome.rally.logUnqueued': '렐름 레이서즈 대기열에서 나왔습니다.',
-  'hudChrome.rally.bannerFound': '경기 성사. 출발 그리드에 {count}대.',
   'hudChrome.rally.bannerGo': '출발!',
   'hudChrome.rally.bannerLap': '{total}바퀴 중 {lap}바퀴',
   'hudChrome.rally.bannerWin': '경기에서 승리했습니다!',

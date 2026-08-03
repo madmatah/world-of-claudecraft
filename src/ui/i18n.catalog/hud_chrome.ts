@@ -1076,6 +1076,15 @@ export const hudChromeStrings = {
     practiceIntro:
       'A private circuit, all yours. Pick your rivals, learn the controls, then drop the flag when you are ready.',
     practiceUnavailable: 'Every practice circuit is in use right now. Try again in a few minutes.',
+    // The setup screen names the circuit practice runs on, and says plainly
+    // that competition runs a different one: the player learns the machine
+    // here, not the map, and that trade should be read rather than discovered.
+    //
+    // No article in front of `{circuit}`: it is an interpolated proper noun, and
+    // an English "the" forces every gendered or case-marked locale to agree with
+    // a name it cannot see. Keep the placeholder free-standing.
+    practiceCircuit:
+      'You will be racing {circuit}, the circuit every pilot learns the machine on. Competition draws its own.',
     practiceTierLegend: 'Choose your rivals',
     practiceControlsLegend: 'Your controls',
     practicePlay: 'Start the race',
@@ -1109,8 +1118,16 @@ export const hudChromeStrings = {
     standingsYou: 'YOU',
     standingsFinished: 'Finished',
     standingsRetired: 'Out',
+    // One key per circuit in `src/sim/content/realm_racers_circuits.ts`, keyed
+    // by its record id. Competition DRAWS its circuit when the grid fills, so
+    // the name is the first thing a pilot has to be told: it names the circuit
+    // on the race strip through the countdown, heads the podium, and says which
+    // one practice runs. A circuit with no key here (a draft registered by a
+    // dev command) simply goes unnamed; nothing falls back to an id.
+    circuitName_evergarden_practice: 'Evergarden Bootcamp',
+    circuitName_evergarden_express_tour: 'Evergarden Express Tour',
     // The end-of-race podium: a race time on each step, to a tenth. The heading
-    // is deliberately absent until there is more than one circuit to name.
+    // above the steps is the circuit name, from the keys above.
     podiumTime: '{minutes}:{seconds}.{tenths}',
     position: 'Position {position}/{total}',
     lap: 'Lap {lap}/{total}',
@@ -1129,7 +1146,6 @@ export const hudChromeStrings = {
     drawReturn: 'DRAW. Returning in {seconds}',
     logQueued: 'Realm Racers queue position: {position}.',
     logUnqueued: 'You left the Realm Racers queue.',
-    bannerFound: 'Race found. {count} machines on the grid.',
     bannerGo: 'GO!',
     bannerLap: 'Lap {lap} of {total}',
     bannerWin: 'You win the race!',
