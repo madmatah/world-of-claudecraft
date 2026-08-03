@@ -620,6 +620,138 @@ describe('Realm Racers circuits: which one a race lands on', () => {
   });
 });
 
+describe('Realm Racers competition circuits: raceable to the flag', () => {
+  /**
+   * The stand-in for workstream 09's lap-time balance gate, and the only thing
+   * that can answer whether a circuit's LAP COUNT is right: a full field drives
+   * the whole race distance on the real geometry, through the real vehicle
+   * kernel, and the clock is read off the result.
+   *
+   * The band is the design target, about 80 seconds of driving for a
+   * competition race, widened to what a standing start and four machines
+   * trading paint really produce. It is two-sided, and the bounds are sized
+   * against the NEIGHBOURING lap counts rather than around the shipped one.
+   * Measured on the Express Tour at the ace tier, varying only `totalLaps`:
+   *
+   *   1 lap  26.1 s    2 laps  48.9 s    3 laps  71.7 s (shipped)
+   *   4 laps 94.3 s    5 laps 117.0 s
+   *
+   * A first draft of this gate used 50 to 95 and was NOT decisive: 4 laps lands
+   * at 94.3 s and passed the ceiling with 0.7 s to spare, so the one alternative
+   * the record explicitly rejects would have shipped green. 60 to 85 fails both
+   * neighbours by roughly ten seconds each.
+   *
+   * The neighbour assertions below make that reasoning self-checking rather than
+   * a comment: they re-derive what one more and one fewer lap would cost from
+   * the race's OWN measured lap split, so the band cannot silently stop
+   * bracketing the count when the kernel or the geometry is tuned.
+   */
+  const RACE_FLOOR_SECONDS = 60;
+  const RACE_CEILING_SECONDS = 85;
+
+  it('has competition circuits to race', () => {
+    // The `it.each` below registers ZERO cases over an empty pool and the file
+    // still reports green, which would silently delete the only gate on the lap
+    // count. Vacuity floor, per tests/CLAUDE.md.
+    expect(realmRacersCompetitionCircuits().length).toBeGreaterThan(0);
+  });
+
+  it.each(realmRacersCompetitionCircuits().map((c) => [c.id, c] as const))(
+    '%s runs to completion inside its own deadline, at the design length',
+    (_id, circuit) => {
+      const sim = makeWorld();
+      const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+      expect(startRealmRacersDevRace(sim, circuit.id, 'ace', human)).toBe(true);
+      const match = realmRacersMatchOf(sim.ctx, human);
+      if (!match) throw new Error('no race');
+      expect(match.totalLaps).toBe(circuit.laps);
+      const bots = match.pids.filter((pid) => sim.realmRacers.bots.has(pid));
+      expect(bots).toHaveLength(REALM_RACERS_GRID_SIZE - 1);
+      const progresses = bots.map((pid) => {
+        const progress = match.progress.get(pid);
+        if (!progress) throw new Error('no progress');
+        return progress;
+      });
+      const done = (): boolean => progresses.every((p) => p.finishedTick !== null);
+      // The leader's own lap splits, so one more or one fewer lap can be priced
+      // from this race rather than from a remembered number.
+      const laps = new Map<number, number[]>(bots.map((pid) => [pid, []]));
+      const lastLap = new Map<number, number>(bots.map((pid) => [pid, 1]));
+      // Run past the deadline on purpose: a race that only finishes because the
+      // loop ran out of ticks must not read as a pass.
+      const budget = (circuit.timeLimitSeconds + 30) * TICK_RATE;
+      for (let tick = 0; tick < budget && !done(); tick++) {
+        sim.tick();
+        for (const pid of bots) {
+          const progress = match.progress.get(pid) as RealmRacersProgress;
+          if (progress.lap === lastLap.get(pid)) continue;
+          lastLap.set(pid, progress.lap);
+          (laps.get(pid) as number[]).push((sim.tickCount - match.goTick) / TICK_RATE);
+        }
+      }
+      expect(done(), `${circuit.id}: not every pilot finished`).toBe(true);
+
+      const seconds = new Map(
+        bots.map((pid) => [
+          pid,
+          ((match.progress.get(pid) as RealmRacersProgress).finishedTick as number) / 1,
+        ]),
+      );
+      const times = [...seconds.values()].map((tick) => (tick - match.goTick) / TICK_RATE);
+      const winnerPid = bots[times.indexOf(Math.min(...times))];
+      const winner = Math.min(...times);
+      const last = Math.max(...times);
+      // Every BOT crossed the line under the circuit's own deadline. The human
+      // is excluded on purpose and is not "the field": a test player holds no
+      // throttle and never finishes, which is also why the human cannot be the
+      // one measured here.
+      expect(last, `${circuit.id}: last house pilot home at ${last.toFixed(1)}s`).toBeLessThan(
+        circuit.timeLimitSeconds,
+      );
+      // The deadline is a BACKSTOP and has to be sized like one: comfortably
+      // past the whole field plus the chase window that actually closes the
+      // classification, and not so far past that it stops meaning anything.
+      const chaseSeconds = REALM_RACERS_CHASE_TICKS / TICK_RATE;
+      expect(
+        circuit.timeLimitSeconds,
+        `${circuit.id}: deadline binds before the chase window closes`,
+      ).toBeGreaterThan(last + chaseSeconds);
+      expect(
+        circuit.timeLimitSeconds,
+        `${circuit.id}: deadline is so large it bounds nothing`,
+      ).toBeLessThan(last * 3);
+
+      // And the race is the length it was designed to be. This is what pins the
+      // lap count: `laps` is the only record field that can move this number.
+      expect(winner, `${circuit.id}: winner home at ${winner.toFixed(1)}s`).toBeGreaterThan(
+        RACE_FLOOR_SECONDS,
+      );
+      expect(winner, `${circuit.id}: winner home at ${winner.toFixed(1)}s`).toBeLessThan(
+        RACE_CEILING_SECONDS,
+      );
+      // The band BRACKETS this lap count rather than merely containing it: one
+      // lap either side of the shipped count has to miss it. Priced off the
+      // winner's own settled lap split, so tuning that moves the pace moves
+      // this check with it instead of leaving it stale.
+      const splits = laps.get(winnerPid) as number[];
+      expect(splits.length, `${circuit.id}: no lap splits recorded`).toBeGreaterThanOrEqual(2);
+      const settledLap = splits[splits.length - 1] - splits[splits.length - 2];
+      expect(
+        winner - settledLap,
+        `${circuit.id}: ${circuit.laps - 1} laps would also pass the band`,
+      ).toBeLessThan(RACE_FLOOR_SECONDS);
+      expect(
+        winner + settledLap,
+        `${circuit.id}: ${circuit.laps + 1} laps would also pass the band`,
+      ).toBeGreaterThan(RACE_CEILING_SECONDS);
+
+      // Every lap really was driven, so the clock above is a race and not a
+      // pilot who wrapped the line on the spot.
+      for (const progress of progresses) expect(progress.lap).toBe(circuit.laps);
+    },
+  );
+});
+
 describe('Realm Racers circuit draw: which circuit a queued race gets', () => {
   /** Four eligible pilots standing beside the Society, ready to be seated. */
   function grid(sim: Sim): number[] {

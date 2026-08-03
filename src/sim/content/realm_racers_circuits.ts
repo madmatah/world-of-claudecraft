@@ -463,8 +463,33 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
   startBack: 7,
   startSpacing: 5,
+  /**
+   * Three, RE-CHECKED against the shipped 829 yard lap rather than the 1100
+   * yard draft the count was first written for. Measured on the real geometry
+   * through the real kernel, house pilots from a standing start (the first lap
+   * carries the grid, so it is the slow one):
+   *
+   *   settled lap    ace 22.8 s   driver 24.3 s   rookie 26.5 s
+   *   three laps     ace 72 to 77 s   driver 75 to 78 s   rookie 82 to 85 s
+   *
+   * The design target for a competition race is about 80 seconds of driving,
+   * which three laps of this circuit lands on without changing the count. The
+   * neighbours, measured the same way by varying only the lap count, are two
+   * laps at 49 s (ace) to 56 s (rookie), which is barely a race, and four at
+   * 94 s (ace) to 109 s (rookie), which is the long race the seat already
+   * rejected once. `tests/realm_racers_circuits.test.ts` races each competition
+   * circuit to the flag and holds the winner inside a band sized to EXCLUDE
+   * both neighbours, so a lap count edited either way fails there rather than
+   * in someone's seat.
+   */
   laps: 3,
   practiceLaps: 3,
+  /**
+   * The deadline is a BACKSTOP, not a challenge: it exists so a race where
+   * nobody can finish still ends. It never binds here. The winner is home by
+   * 72 to 85 s and the 30 s chase window closes the classification by 115 s at
+   * the worst measured pace, comfortably inside 180.
+   */
   timeLimitSeconds: 180,
   musicTrack: 'realm_racers',
   roles: ['competition'],
