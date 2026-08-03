@@ -1,15 +1,9 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CAMERA_ZOOM_MAX } from '../src/game/input';
+import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import {
-  cameraBoomDistance,
-  REALM_RACERS_CAMERA_BOOM_PROFILE,
-} from '../src/render/camera_boom_core';
-import {
-  RALLY_FLOWER_COLOURS,
   rallyBorderFlowerSpots,
-  rallyDressingSpots,
   rallyFlowerSpots,
   rallyKerbRuns,
   rallyPerimeterPieces,
@@ -47,6 +41,9 @@ function mockTextures(): void {
     rallyGroundBlastMarkerTexture: vi.fn(texture),
     rallyStartGridTexture: vi.fn(texture),
     flowerTuftTexture: vi.fn(texture),
+    // The lawn's grass card comes from foliage.ts, which mints its own tuft
+    // texture out of this module.
+    grassTuftTexture: vi.fn(texture),
     // The circuit now dresses itself in the world's own ground material, so the
     // stub has to cover what THAT reads too.
     groundDetailTexture: vi.fn(texture),
@@ -66,6 +63,10 @@ const track = realmRacersTrack(GARDEN_CIRCUIT);
 const GARDEN_BASIN = GARDEN_CIRCUIT.basin;
 if (!GARDEN_BASIN) throw new Error('the practice circuit authors a basin');
 
+/** The theme both shipped circuits wear. Everything the build used to hardcode
+ *  as the Evergarden's now comes from here. */
+const GARDEN_THEME = CIRCUIT_THEMES.evergarden;
+
 /** One racer row, shared by the start-light fixtures below. The light gantry
  *  reads the phase and the countdown, never the field, so one row is enough. */
 const RALLY_ME = {
@@ -81,28 +82,6 @@ const RALLY_ME = {
 } as const;
 
 describe('Realm Racers procedural render', () => {
-  it("keeps every dressing piece outside the chase camera's furthest reach", () => {
-    // A machine pinned against the garden wall with its nose to the infield puts
-    // the camera OUTSIDE the wall, and the boom reaches the zoom clamp times the
-    // rally profile's distance scale. Anything nearer than that is something a
-    // player ends up looking from inside, which is what the ring used to do: it
-    // stepped outward RADIALLY from the circuit's centre, so a piece nominally
-    // 30 yards out sat barely 18 clear of a long face.
-    const reach = cameraBoomDistance(CAMERA_ZOOM_MAX, REALM_RACERS_CAMERA_BOOM_PROFILE);
-    const spots = rallyDressingSpots(GARDEN_CIRCUIT);
-    expect(spots.length).toBeGreaterThan(20);
-    for (const spot of spots) {
-      const outX = Math.abs(spot.x - REALM_RACERS_ORIGIN.x) - GARDEN_CIRCUIT.perimeter.halfX;
-      const outZ = Math.abs(spot.z - REALM_RACERS_ORIGIN.z) - GARDEN_CIRCUIT.perimeter.halfZ;
-      // The piece's own footprint counts: the camera meets the canopy, not the
-      // trunk. Clearance is to the NEAREST face, so the larger overhang wins.
-      const clear = Math.max(outX, outZ) - spot.radius;
-      expect(clear, `${spot.kind} at ${spot.x.toFixed(1)}, ${spot.z.toFixed(1)}`).toBeGreaterThan(
-        reach,
-      );
-    }
-  });
-
   beforeEach(() => {
     vi.resetModules();
     mockTextures();
@@ -531,22 +510,6 @@ describe('Realm Racers procedural render', () => {
     expect(Math.sign(laterals[0])).toBe(-Math.sign(laterals[1]));
   });
 
-  it('keeps every solid prop out of the drivable garden', () => {
-    // The garden between the two walls is drivable now, so anything standing in
-    // it is either an obstacle a racer hits without warning or a thing they
-    // drive through. The dressing therefore lives OUTSIDE the perimeter.
-    const outsidePerimeter = (x: number, z: number, radius: number): boolean =>
-      Math.abs(x - REALM_RACERS_ORIGIN.x) - radius > GARDEN_CIRCUIT.perimeter.halfX ||
-      Math.abs(z - REALM_RACERS_ORIGIN.z) - radius > GARDEN_CIRCUIT.perimeter.halfZ;
-    const dressing = rallyDressingSpots(GARDEN_CIRCUIT);
-    expect(dressing.length).toBeGreaterThan(8);
-    for (const spot of dressing) {
-      expect(outsidePerimeter(spot.x, spot.z, spot.radius)).toBe(true);
-      expect(Math.abs(spot.x - REALM_RACERS_ORIGIN.x)).toBeLessThan(GARDEN_CIRCUIT.regionHalfX);
-      expect(Math.abs(spot.z - REALM_RACERS_ORIGIN.z)).toBeLessThan(GARDEN_CIRCUIT.regionHalfZ);
-    }
-  });
-
   it('gives the water real depth to shade, not a rim of zeroes', () => {
     // A triangulated outline polygon puts EVERY vertex on the edge, so the
     // per-vertex shore depth the water shader reads would be zero everywhere:
@@ -638,7 +601,7 @@ describe('Realm Racers procedural render', () => {
         rallyGardenEdgeOffsetAt(GARDEN_CIRCUIT, projection.s),
       );
       expect(spot.colour).toBeGreaterThanOrEqual(0);
-      expect(spot.colour).toBeLessThan(RALLY_FLOWER_COLOURS.length);
+      expect(spot.colour).toBeLessThan(GARDEN_THEME.flowers.colours.length);
     }
     // Patches, not confetti: neighbours within a patch share their colour, so
     // the palette is used far fewer times than there are flowers.
@@ -858,8 +821,67 @@ describe('Realm Racers procedural render', () => {
     });
   });
 
+  describe('the Evergarden theme reproduces the pre-theme build', () => {
+    // Pinned against the theme by NAME rather than against whatever the record
+    // carries: `theme` is the field an operator flips to look at another skin
+    // in game, and these literals are about the Evergarden's output.
+    const GARDEN_THEMED: RealmRacersCircuit = { ...GARDEN_CIRCUIT, theme: 'evergarden' };
+    // Every value below was read off the build BEFORE the visuals moved onto a
+    // theme record, and pasted here unrounded. That is the whole point: the
+    // extraction's promise is that a themed Evergarden circuit is the SAME
+    // circuit, and only a literal captured on the far side of the change can
+    // say so. Re-deriving any of it from today's records would pass by
+    // construction.
+
+    it('cuts the perimeter into the same panels', () => {
+      // The panel run is the theme's now, and it decides how many pieces a
+      // face is cut into: a wall module measured at one scale and drawn at
+      // another leaves gaps, and the count is what says it did not happen.
+      const pieces = rallyPerimeterPieces(GARDEN_THEMED);
+      expect(pieces).toHaveLength(244);
+      expect(pieces[0]).toEqual({ x: 113582, z: -92, yaw: -0, pillar: true });
+      expect(pieces[1]).toEqual({ x: 113583.76119402985, z: -92, yaw: -0, pillar: false });
+      expect(GARDEN_THEME.perimeter.scale).toBe(1);
+    });
+
+    it('keeps the kit, the palette and the ground the garden had', () => {
+      // Not a restatement of the record: these are the ids and colours the
+      // build carried as its own constants, so a theme edit that quietly
+      // repoints the shipped circuit at another kit fails here.
+      expect(GARDEN_THEME.ground).toBe('garden');
+      expect(GARDEN_THEME.perimeter.fenceUrl).toBe('/models/props/garden_iron_fence.glb');
+      expect(GARDEN_THEME.perimeter.pillarUrl).toBe('/models/props/garden_iron_pillar.glb');
+      expect(GARDEN_THEME.startFixture.archUrl).toBe('/models/props/course_arch.glb');
+      expect(GARDEN_THEME.startFixture.bannerUrl).toBe('/models/dungeon/banner_patterna_white.glb');
+      expect(GARDEN_THEME.reedUrl).toBe('/models/props/reeds.glb');
+      expect(GARDEN_THEME.kerb).toEqual({ base: 0xe8e2d4, stripe: 0xb8402f });
+      expect(GARDEN_THEME.startGrid).toEqual({ light: 0xf2efe6, dark: 0x22201d });
+      expect(GARDEN_THEME.flowers.colours).toEqual([
+        0xf6f2ea, 0xf4b8cf, 0xf6dd7a, 0xc9b4e8, 0xf3a973,
+      ]);
+      expect(GARDEN_THEME.flowers.card).toEqual([{ p: [244, 242, 240], c: [252, 226, 140] }]);
+      // The shipped pools are the world's own water: the ramp only moves for a
+      // theme that asks, and this one does not.
+      expect(GARDEN_THEME.water).toBeUndefined();
+    });
+
+    it('sows the same border, in the same colours', () => {
+      const flowers = rallyBorderFlowerSpots(GARDEN_THEMED);
+      expect(flowers).toHaveLength(790);
+      expect(flowers[0]).toEqual({
+        x: 113697.9808449484,
+        z: -37.646071074350836,
+        rot: 5.16329402634403,
+        scale: 1.1108818834647536,
+        // The palette's LENGTH decides this index, so a theme that adds or
+        // drops a colour re-sows the whole border.
+        colour: 1,
+      });
+    });
+  });
+
   it('runs the perimeter around the garden wall', () => {
-    const pieces = rallyPerimeterPieces(GARDEN_CIRCUIT, 3.5);
+    const pieces = rallyPerimeterPieces(GARDEN_CIRCUIT);
     expect(pieces.length).toBeGreaterThan(50);
     expect(pieces.filter((piece) => piece.pillar)).toHaveLength(4);
     for (const piece of pieces) {

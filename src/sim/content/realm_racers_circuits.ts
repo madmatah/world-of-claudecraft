@@ -24,6 +24,22 @@ import type { RallyPoint } from '../realm_racers_layout';
  */
 export type RealmRacersCircuitRole = 'practice' | 'competition';
 
+/**
+ * Every theme a circuit may name, and the one a record falls back on.
+ *
+ * Pure data, no logic, and deliberately sim-side: the circuit editor offers this
+ * list as a picker and the metrics readout flags an id that is not in it
+ * (`unknown_theme`), neither of which may import render code. The records the
+ * ids resolve to live in `src/render/realm_racers_themes.ts`, and
+ * `tests/realm_racers_themes.test.ts` pins the two against each other BOTH
+ * ways, so an id here with no record (or a record with no id) fails.
+ */
+export const REALM_RACERS_THEME_IDS: readonly string[] = ['evergarden', 'galecrest', 'nightbloom'];
+
+/** The theme a circuit wears unless it says otherwise, and what a bad id falls
+ *  back to at draw time. */
+export const REALM_RACERS_DEFAULT_THEME_ID = 'evergarden';
+
 /** The water's bank, read by BOTH the renderer (per-vertex shore depth,
  *  which drives the colour ramp and the foam band) and the sim (how deep a
  *  racer is standing). Two profiles would mean a racer swimming where the water
@@ -243,6 +259,21 @@ export interface RealmRacersCircuit {
    * and `tests/instance_music.test.ts` pins that every circuit's track has one.
    */
   musicTrack: string;
+  /**
+   * The art this circuit wears: ground tints, kerbs, the perimeter kit, the
+   * dressing ring, the flowers, the water and the sky.
+   *
+   * A PLAIN STRING for the same reason `musicTrack` is one: the registry that
+   * resolves it is `src/render/realm_racers_themes.ts`, and `src/sim/` may not
+   * import from `src/render/` at all. `REALM_RACERS_THEME_IDS` below is the
+   * language-agnostic list the editor's picker and the metrics readout resolve
+   * against, and the render registry is pinned against it both ways.
+   *
+   * A theme is VISUALS ONLY. Nothing a racer feels comes from it: the off-track
+   * bands, the referee and every handling number stay on this record and the
+   * shared constants.
+   */
+  theme: string;
   /** What this circuit is used for; see `RealmRacersCircuitRole`. */
   roles: readonly RealmRacersCircuitRole[];
   /**
@@ -378,6 +409,7 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
   practiceLaps: 4,
   timeLimitSeconds: 180,
   musicTrack: 'realm_racers',
+  theme: 'evergarden',
   roles: ['practice'],
   practiceCopies: 6,
 };
@@ -527,6 +559,7 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
    */
   timeLimitSeconds: 180,
   musicTrack: 'realm_racers',
+  theme: 'evergarden',
   roles: ['competition'],
   practiceCopies: 0,
 };

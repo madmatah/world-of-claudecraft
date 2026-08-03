@@ -407,6 +407,10 @@ const RENDER_PURE_CORES = [
   'src/render/gfx_override_core.ts',
   'src/render/ground_aim_reticle_core.ts',
   'src/render/realm_racers_audio_core.ts',
+  'src/render/realm_racers_grass_core.ts',
+  // Data-as-code, but it is a purity DEPENDENCY of the two cores above, so it
+  // is swept: a three import here would make both of them three-loading.
+  'src/render/realm_racers_themes.ts',
   'src/render/realm_racers_track_core.ts',
   'src/render/realm_racers_track_dispose_core.ts',
   'src/render/realm_racers_visibility_core.ts',
@@ -473,6 +477,7 @@ const BARE_NAMED = [
   'src/ui/item_kind_label.ts',
   'src/ui/item_name_color.ts',
   'src/render/foliage_lod.ts',
+  'src/render/realm_racers_themes.ts',
   'src/render/compile_gate.ts',
   'src/render/prewarm_pass.ts',
   'src/render/prewarm_policy.ts',
@@ -1065,6 +1070,7 @@ const EXPECTED_BARE_NAMED = [
   'src/render/prewarm_pass.ts',
   'src/render/prewarm_policy.ts',
   'src/render/prewarm_resume.ts',
+  'src/render/realm_racers_themes.ts',
   'src/ui/absorb_bar.ts',
   'src/ui/bag_filter.ts',
   'src/ui/bag_item_context_menu.ts',

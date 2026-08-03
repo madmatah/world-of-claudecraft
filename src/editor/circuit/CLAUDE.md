@@ -114,6 +114,24 @@ outright without `ctx.devCommands`.
   (`src/sim/realm_racers_track_limits.ts`) so nothing on either curve stopped
   anyone, and a table of lap fractions still derives the water from the road's
   own shape, which puts a canal down the middle of every circuit.
+- **The palette is folded by the THEME, not by a favourites list.** A theme
+  carries `props`, the catalog keys that belong on a circuit in that zone, and
+  those are what the palette offers before it is unfolded. It filters nothing:
+  every key still shows, because a record may place any of them and the readout
+  judges the PLACEMENT rather than the vocabulary. It exists because the derived
+  dressing ring was deleted (it walked the perimeter repeating a fixed list, so
+  it followed the wall rather than the design), and hand-dressing a circuit is
+  mostly the hunt for the six pieces that look like this zone inside a catalog
+  that holds every zone's.
+- **The theme is an ID, and the readout is what judges it.** A circuit names its
+  art (`theme`) the same way it names its music: a plain string, offered by the
+  panel as a datalist off `REALM_RACERS_THEME_IDS` and resolved render-side by
+  `src/render/realm_racers_themes.ts`. The save endpoint checks the SHAPE only;
+  whether a registry authors the id is a metrics error (`unknown_theme`) the
+  panel shows live, so a theme being written in the same change can still be
+  typed in and previewed. Drawing a draft against a theme no circuit ships is
+  the intended way to look at one: set the field, and the 3D preview rebuilds
+  through the real track builder wearing it.
 - **The water is PLACED.** A pond is an entry in the Props palette: drag a box,
   then drag its handles. Deleting the last one leaves a circuit with no water at
   all, which is a shape the tool has to be able to reach, and the basin follows

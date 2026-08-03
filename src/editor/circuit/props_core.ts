@@ -472,31 +472,37 @@ const PALETTE_GROUPS: readonly { group: string; assets: readonly string[] }[] = 
   { group: 'waterside', assets: ['reeds', 'lilyRaft'] },
 ];
 
-/** The pieces offered before the full catalog is unfolded. */
-const FEATURED = new Set([
-  'fountain',
-  'statue',
-  'gardenArch',
-  'bench',
-  'postLantern',
-  'banner',
-  'oak',
-  'shrub',
-  'bedRound',
-  'reeds',
-  'lilyRaft',
-]);
-
-/** Every authorable key, grouped and flagged, in palette order. `catalog` is the
- *  SIM catalog, handed in so this stays a pure function of it. */
-export function propPalette(catalog: Readonly<Record<string, unknown>>): PropPaletteEntry[] {
+/**
+ * Every authorable key, grouped and flagged, in palette order.
+ *
+ * `catalog` is the SIM catalog and `featured` the CIRCUIT THEME's own
+ * vocabulary, both handed in so this stays a pure function of them. The
+ * theme's pieces come first, in the theme's own order, and they are the ones
+ * offered before the full catalog is unfolded: hand-dressing a circuit is
+ * mostly the hunt for the six pieces that look like this zone inside a catalog
+ * that holds every zone's. Everything else still shows, because a record may
+ * place any key and the readout judges the PLACEMENT, never the vocabulary.
+ */
+export function propPalette(
+  catalog: Readonly<Record<string, unknown>>,
+  featured: readonly string[],
+): PropPaletteEntry[] {
   const out: PropPaletteEntry[] = [];
   const seen = new Set<string>();
+  const groups = new Map<string, string>();
+  for (const { group, assets } of PALETTE_GROUPS) {
+    for (const asset of assets) groups.set(asset, group);
+  }
+  for (const asset of featured) {
+    if (!(asset in catalog) || seen.has(asset)) continue;
+    seen.add(asset);
+    out.push({ asset, group: groups.get(asset) ?? 'other', featured: true });
+  }
   for (const { group, assets } of PALETTE_GROUPS) {
     for (const asset of assets) {
       if (!(asset in catalog) || seen.has(asset)) continue;
       seen.add(asset);
-      out.push({ asset, group, featured: FEATURED.has(asset) });
+      out.push({ asset, group, featured: false });
     }
   }
   for (const asset of Object.keys(catalog)) {

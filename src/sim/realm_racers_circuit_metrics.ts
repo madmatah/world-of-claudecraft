@@ -14,7 +14,7 @@
 //
 // Pure leaf: no SimContext, no rng, no clock, no DOM, no three.
 
-import type { RealmRacersCircuit } from './content/realm_racers_circuits';
+import { REALM_RACERS_THEME_IDS, type RealmRacersCircuit } from './content/realm_racers_circuits';
 import { polygonContainsPoint } from './geometry2d';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
@@ -149,6 +149,14 @@ export type RealmRacersCircuitProblemCode =
   | 'stretches_too_close'
   /** A pond on a record that authors no basin for it to be made of. */
   | 'pond_requires_basin'
+  /**
+   * The circuit names a theme no registry authors, so every visual it derives
+   * falls back to the Evergarden's and the circuit silently wears the wrong
+   * skin. Flagged here rather than at the render seam because that is where a
+   * DRAFT is admitted from: a hand-typed theme id reaches the game through this
+   * readout and never through the record test.
+   */
+  | 'unknown_theme'
   | 'road_outside_perimeter'
   | 'perimeter_outside_region'
   | 'region_outside_band'
@@ -421,6 +429,15 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
   const pondCount = circuit.ponds?.length ?? 0;
   if (!circuit.basin && pondCount > 0) {
     problem('pond_requires_basin', 'error', pondCount, 0);
+  }
+  // Same reason, and the same shape as an unrecognised prop key: the id itself
+  // cannot ride on a numeric problem, so the editor reads the name off the
+  // record and what belongs here is that the circuit is not shippable.
+  if (!REALM_RACERS_THEME_IDS.includes(circuit.theme)) {
+    // (1, 0), the same shape `unknown_prop_asset` uses: the editor renders a
+    // problem as "value against limit", so a count against a ceiling of zero
+    // reads as "one of these, and none is allowed".
+    problem('unknown_theme', 'error', 1, 0);
   }
 
   if (roadHalfX > circuit.perimeter.halfX) {

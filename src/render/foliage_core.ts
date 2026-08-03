@@ -1,7 +1,7 @@
 import { isEastbrookGrandArmoury } from '../sim/building_layout';
 import { EASTBROOK_LAYOUT } from '../sim/eastbrook_layout';
 import { FENBRIDGE_LAYOUT } from '../sim/fenbridge_layout';
-import type { BuildingDef, NoticeboardDef } from '../sim/types';
+import type { BiomeId, BuildingDef, NoticeboardDef } from '../sim/types';
 
 export type EastbrookGrassExclusion =
   | {
@@ -274,4 +274,58 @@ export function insideEastbrookGrassExclusion(
     }
   }
   return false;
+}
+
+// --- the realm grass palette -------------------------------------------------
+//
+// Which colour a realm's grass is and how thickly it grows. They live in the
+// CORE rather than in `foliage.ts` because three consumers need them and only
+// one of the three may load three.js: the card-tuft field and the near-field
+// blade carpet are both renderers, but `realm_racers_grass_core.ts` is a
+// registered pure core, and reaching these through `foliage.ts` would drag
+// three and its module-level preload registrations in behind them.
+
+export const GRASS_TINT: Record<BiomeId, number> = {
+  vale: 0xdde4c0,
+  marsh: 0xbfc492,
+  peaks: 0xc2cec8,
+  beach: 0xe8e2b0,
+  desert: 0xdcc890,
+  volcano: 0x8a7a68,
+  cave: 0xa2a89c,
+  dusk: 0xccc3da,
+  ember: 0xd8c890,
+  frost: 0xdde8f2,
+  amber: 0xe8cf8a,
+  fen: 0xcfe4b0,
+  night: 0xe598ff, // orchid dream grass (green blade albedo mutes it)
+  haunt: 0x99a382, // sickly pale grass
+  jungle: 0xc4ec96, // bright wet tropical grass
+  garden: 0xd0eeb0, // mown lawn
+  gale: 0xb8d09a, // wind-silvered grass
+};
+
+// Exported: the near-field blade carpet (blade_grass.ts) follows the same
+// per-biome bare/lush rules as the card tufts.
+export const GRASS_BIOME_DENSITY: Partial<Record<BiomeId, number>> = {
+  frost: 0,
+  ember: 0, // the Drakelands are scorched waste: no blades in the cinders
+  haunt: 1.55,
+  // the Evergarden is mown lawn: no wild tufts, its flowers grow in the
+  // authored parterre beds instead (garden_parterre_core.ts)
+  garden: 0,
+};
+
+/**
+ * A realm's own grass tint, for a scatter OUTSIDE the terrain chunks that has
+ * to read as that realm's ground cover: the Realm Racers circuits, which sit in
+ * an instance band no chunk ever reaches and would otherwise be the one place
+ * in a zone's colour where its grass is missing.
+ *
+ * Read through rather than copied, so a retinted realm carries its circuit with
+ * it. The band's own answer for "which realm am I in" is meaningless out there,
+ * so the caller passes the biome its CONTENT names (a circuit theme's `ground`).
+ */
+export function biomeGrassTint(biome: BiomeId): number {
+  return GRASS_TINT[biome];
 }

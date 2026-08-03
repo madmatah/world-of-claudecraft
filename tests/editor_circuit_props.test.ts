@@ -442,16 +442,45 @@ describe('circuit editor props: the scatter rectangle', () => {
 });
 
 describe('circuit editor props: the palette', () => {
+  /** A theme's vocabulary, as the page hands it in. */
+  const VOCABULARY = ['bench', 'oak', 'reeds'];
+
   it('offers every key the sim catalog authors, exactly once', () => {
-    const palette = propPalette(REALM_RACERS_PROPS);
+    const palette = propPalette(REALM_RACERS_PROPS, VOCABULARY);
     const assets = palette.map((entry) => entry.asset);
     expect(new Set(assets).size).toBe(assets.length);
     expect(new Set(assets)).toEqual(new Set(Object.keys(REALM_RACERS_PROPS)));
-    expect(palette.some((entry) => entry.featured)).toBe(true);
+  });
+
+  it("puts the theme's own vocabulary first, and features only it", () => {
+    // The whole point of the list: hand-dressing a circuit is the hunt for the
+    // pieces that look like THIS zone inside a catalog that holds every zone's,
+    // so the theme's are what the folded palette offers.
+    const palette = propPalette(REALM_RACERS_PROPS, VOCABULARY);
+    expect(palette.slice(0, VOCABULARY.length).map((entry) => entry.asset)).toEqual(VOCABULARY);
+    expect(palette.filter((entry) => entry.featured).map((entry) => entry.asset)).toEqual(
+      VOCABULARY,
+    );
+    // ...and a featured piece keeps the group it belongs to, rather than being
+    // filed under 'other' for having arrived by another door.
+    expect(palette.find((entry) => entry.asset === 'oak')?.group).toBe('planting');
+    // A different theme, a different fold: nothing here is the garden's by
+    // default any more.
+    const other = propPalette(REALM_RACERS_PROPS, ['amethyst', 'glowFlower']);
+    expect(other.filter((entry) => entry.featured).map((entry) => entry.asset)).toEqual([
+      'amethyst',
+      'glowFlower',
+    ]);
+  });
+
+  it('drops a vocabulary key the catalog does not author, and never twice-lists one', () => {
+    const palette = propPalette(REALM_RACERS_PROPS, ['bench', 'notAThing', 'bench']);
+    expect(palette.filter((entry) => entry.asset === 'bench')).toHaveLength(1);
+    expect(palette.some((entry) => entry.asset === 'notAThing')).toBe(false);
   });
 
   it('files a key the tool has never heard of rather than dropping it', () => {
-    const palette = propPalette({ ...REALM_RACERS_PROPS, brandNewThing: {} });
+    const palette = propPalette({ ...REALM_RACERS_PROPS, brandNewThing: {} }, VOCABULARY);
     const entry = palette.find((row) => row.asset === 'brandNewThing');
     expect(entry).toBeDefined();
     expect(entry?.group).toBe('other');

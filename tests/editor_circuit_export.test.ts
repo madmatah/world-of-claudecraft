@@ -60,6 +60,24 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(after.nearestApproach).toEqual(before.nearestApproach);
   });
 
+  it('carries the theme, including one no shipped circuit wears', () => {
+    // The tool is how a themed circuit gets authored at all, so the field has
+    // to survive both directions. An id the registry does not know is carried
+    // rather than refused on purpose: the readout is what calls it out
+    // (`unknown_theme`), and a theme being written in the same change is not in
+    // the list yet.
+    const themed: RealmRacersCircuit = {
+      ...DRAFT,
+      id: 'draft_export_themed',
+      theme: 'galecrest',
+    };
+    expect(circuitToTypeScript(themed)).toContain("theme: 'galecrest',");
+    expect(circuitFromTypeScript(circuitToTypeScript(themed))?.theme).toBe('galecrest');
+    expect(validateCircuitPayload(payload(themed))?.theme).toBe('galecrest');
+    const unknown: RealmRacersCircuit = { ...themed, theme: 'frostveil' };
+    expect(validateCircuitPayload(payload(unknown))?.theme).toBe('frostveil');
+  });
+
   it('round-trips a dry circuit, carrying the ABSENCE of a basin', () => {
     const text = circuitToTypeScript(DRY);
     expect(text).not.toContain('basin:');
@@ -206,6 +224,8 @@ describe('circuit editor export: the save endpoint validator', () => {
     ['id: too short', 'id', 'ab'],
     ['id: not a string', 'id', 12],
     ['musicTrack: a path', 'musicTrack', '../music'],
+    ['theme: a path', 'theme', '../evergarden'],
+    ['theme: not a string', 'theme', 3],
     [
       'controlPoints: too few',
       'controlPoints',

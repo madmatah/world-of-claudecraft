@@ -35,7 +35,10 @@ import {
   updateCollapseUniforms,
 } from './foliage_collapse';
 import {
+  biomeGrassTint,
   eastbrookGrassExclusions,
+  GRASS_BIOME_DENSITY,
+  GRASS_TINT,
   insideDressingExclusion,
   insideEastbrookGrassExclusion,
   insideGrassHubExclusion,
@@ -137,16 +140,6 @@ const GRASS_DENSITY_HIGH = 0.5;
 // Per-biome grass density multipliers over the base above. The Reach is bare
 // snow (no blades, and with them no ground flowers); the Wraithwood's floor is
 // deep grass instead of flowers, so its forest reads lush, not decorated.
-// Exported: the near-field blade carpet (blade_grass.ts) follows the same
-// per-biome bare/lush rules as the card tufts.
-export const GRASS_BIOME_DENSITY: Partial<Record<BiomeId, number>> = {
-  frost: 0,
-  ember: 0, // the Drakelands are scorched waste: no blades in the cinders
-  haunt: 1.55,
-  // the Evergarden is mown lawn: no wild tufts, its flowers grow in the
-  // authored parterre beds instead (garden_parterre_core.ts)
-  garden: 0,
-};
 const GRASS_DENSITY_MULT_MAX = Math.max(1, ...Object.values(GRASS_BIOME_DENSITY));
 // Ground flowers never grow in these biomes (the Reach loses them with its
 // grass anchors; the Wraithwood keeps grass but blooms nothing).
@@ -371,25 +364,6 @@ const TRUNK_TINT: Record<BiomeId, number> = {
 // (same palette zone blend and patch noise the terrain vertex colours use),
 // then multiplies in the biome accent so authored casts survive (night stays
 // orchid, jungle stays wet-bright) while the base still tracks the meadow.
-const GRASS_TINT: Record<BiomeId, number> = {
-  vale: 0xdde4c0,
-  marsh: 0xbfc492,
-  peaks: 0xc2cec8,
-  beach: 0xe8e2b0,
-  desert: 0xdcc890,
-  volcano: 0x8a7a68,
-  cave: 0xa2a89c,
-  dusk: 0xccc3da,
-  ember: 0xd8c890,
-  frost: 0xdde8f2,
-  amber: 0xe8cf8a,
-  fen: 0xcfe4b0,
-  night: 0xe598ff, // orchid dream grass (green blade albedo mutes it)
-  haunt: 0x99a382, // sickly pale grass
-  jungle: 0xc4ec96, // bright wet tropical grass
-  garden: 0xd0eeb0, // mown lawn
-  gale: 0xb8d09a, // wind-silvered grass
-};
 // The cards are lit with up normals (see applyGrassShader), so no N.L
 // compensation is needed; per-channel because the grass photo the ground
 // multiplies in is not neutral against the tuft map.
@@ -2190,7 +2164,7 @@ function applyGrassShader(
 
 /** The overworld jungle grass tint (GRASS_TINT.jungle), for interiors that
  *  reuse the grass-tuft look (the Wildheart Basin ground cover). */
-export const JUNGLE_GRASS_TINT: number = GRASS_TINT.jungle;
+export const JUNGLE_GRASS_TINT: number = biomeGrassTint('jungle');
 
 /**
  * The standard high-tier grass-tuft material (lush texture card, alphaTest

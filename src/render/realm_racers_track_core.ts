@@ -13,6 +13,10 @@
 //
 // All positions are WORLD coordinates, straight off the shared sim spline, so
 // the drawn circuit and the driven circuit come from one source.
+//
+// What each piece IS (which model, which colours, how big) belongs to the
+// circuit's THEME (`realm_racers_themes.ts`) and never to this file: the
+// decisions here are geometric and the same on every circuit in every zone.
 
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import {
@@ -25,6 +29,7 @@ import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../sim/realm_racers_s
 import { hash2 } from '../sim/rng';
 import { TICK_RATE } from '../sim/types';
 import type { RealmRacersPhase } from '../world_api/realm_racers';
+import { realmRacersTheme } from './realm_racers_themes';
 
 /**
  * A contiguous run of centerline samples that gets a kerb. `from` is a real
@@ -34,17 +39,6 @@ import type { RealmRacersPhase } from '../world_api/realm_racers';
 export interface RallyKerbRun {
   from: number;
   to: number;
-}
-
-export type RallyDressingKind = 'bedRound' | 'bedSquareA' | 'bedSquareB' | 'tree' | 'statue';
-
-export interface RallyDressingSpot {
-  kind: RallyDressingKind;
-  x: number;
-  z: number;
-  rot: number;
-  /** Footprint radius, yards: what keeps a piece clear of the perimeter. */
-  radius: number;
 }
 
 export interface RallyPerimeterPiece {
@@ -118,8 +112,8 @@ export interface RallyFlowerSpot {
   z: number;
   rot: number;
   scale: number;
-  /** Index into RALLY_FLOWER_COLOURS. Constant across a patch, which is what
-   *  makes the garden read as sown beds rather than confetti. */
+  /** Index into the theme's `flowers.colours`. Constant across a patch, which
+   *  is what makes the garden read as sown beds rather than confetti. */
   colour: number;
 }
 
@@ -133,37 +127,6 @@ const KERB_FEATHER = 5;
 const KERB_MERGE_GAP = 10;
 /** Shortest kerb worth drawing, in samples (one sample is about a yard). */
 const KERB_MIN_LENGTH = 10;
-
-/** Arc spacing between dressing pieces, yards. */
-const DRESSING_SPACING = 16;
-/**
- * Clear grass between the perimeter wall and the dressing ring, yards.
- *
- * It is sized by the CAMERA, not by taste. A machine pinned against the wall
- * with its nose to the infield puts the chase camera outside the wall, and the
- * boom reaches `camDist` (clamped to 22 in src/game/input.ts) times the rally
- * profile's 1.16 distance scale, so 25.5 yards. At the old 2.5 the camera sat
- * inside a tree canopy every time. The ring's own `outward` adds each piece's
- * radius on top of this, so 30 is the CLEAR grass and the nearest trunk stands
- * further out still.
- */
-const DRESSING_MARGIN = 30;
-/** Keep the authored opening orbit out of the south dressing ring. The tree
- * previously generated here sat directly on the camera path for both grid slots. */
-const START_PANORAMA_TREE_CLEARANCE = {
-  x: REALM_RACERS_ORIGIN.x - 16,
-  z: REALM_RACERS_ORIGIN.z - 87,
-  radius: 8,
-};
-
-const DRESSING_KINDS: readonly { kind: RallyDressingKind; radius: number }[] = [
-  { kind: 'bedSquareA', radius: 4.5 },
-  { kind: 'tree', radius: 2.6 },
-  { kind: 'bedRound', radius: 3.1 },
-  { kind: 'bedSquareB', radius: 4.5 },
-  { kind: 'statue', radius: 1.4 },
-  { kind: 'tree', radius: 2.6 },
-];
 
 /**
  * Which stretches of road get kerbs: the corners. A circuit reads as a circuit
@@ -215,79 +178,6 @@ export function rallyKerbRuns(circuit: RealmRacersCircuit): RallyKerbRun[] {
       from: (origin + run.from) % count,
       to: ((origin + run.from) % count) + (run.to - run.from),
     }));
-}
-
-function insideRegion(circuit: RealmRacersCircuit, x: number, z: number, pad: number): boolean {
-  return (
-    Math.abs(x - REALM_RACERS_ORIGIN.x) + pad <= circuit.regionHalfX &&
-    Math.abs(z - REALM_RACERS_ORIGIN.z) + pad <= circuit.regionHalfZ
-  );
-}
-
-/**
- * The dressing ring, and the rule that decides where it may stand: OUTSIDE the
- * perimeter wall. Everything inside the perimeter is drivable now, so a bed or
- * a statue in there would be an obstacle a racer hits without being told, or
- * worse, drives through. The garden a racer can reach carries only the lawn.
- */
-export function rallyDressingSpots(circuit: RealmRacersCircuit): RallyDressingSpot[] {
-  const out: RallyDressingSpot[] = [];
-  const halfX = circuit.perimeter.halfX + circuit.perimeter.halfThickness;
-  const halfZ = circuit.perimeter.halfZ + circuit.perimeter.halfThickness;
-  const ring = 2 * (halfX + halfZ) * 2;
-  const steps = Math.floor(ring / DRESSING_SPACING);
-  for (let i = 0; i < steps; i++) {
-    const spec = DRESSING_KINDS[i % DRESSING_KINDS.length];
-    const roll = hash2(i, spec.radius, 0x9a11e);
-    // Walk the perimeter rectangle, then step out along the face's own NORMAL
-    // by the piece's footprint plus a jittered margin, so the ring never reads
-    // as a fence line and every piece really is `DRESSING_MARGIN` clear.
-    const along = ((i + 0.5) / steps) * ring;
-    const [ex, ez, nx, nz] = perimeterPoint(along, halfX, halfZ);
-    const outward = DRESSING_MARGIN + spec.radius + roll * 6;
-    const x = REALM_RACERS_ORIGIN.x + ex + nx * outward;
-    const z = REALM_RACERS_ORIGIN.z + ez + nz * outward;
-    if (
-      spec.kind === 'tree' &&
-      Math.hypot(x - START_PANORAMA_TREE_CLEARANCE.x, z - START_PANORAMA_TREE_CLEARANCE.z) <
-        START_PANORAMA_TREE_CLEARANCE.radius
-    ) {
-      continue;
-    }
-    out.push({
-      kind: spec.kind,
-      x,
-      z,
-      rot: roll * Math.PI * 2,
-      radius: spec.radius,
-    });
-  }
-  return out.filter((spot) => insideRegion(circuit, spot.x, spot.z, spot.radius));
-}
-
-/**
- * A point at `along` yards around the perimeter rectangle, region-local, plus
- * the OUTWARD NORMAL of the face it sits on.
- *
- * The normal is what the caller steps along. Stepping radially from the centre
- * instead looks equivalent and is not: on a long face the radial direction is
- * oblique to the wall, so a piece placed 30 yards "out" ends up barely 18 clear
- * of it, which is how the chase camera kept finding itself inside a tree.
- */
-function perimeterPoint(
-  along: number,
-  halfX: number,
-  halfZ: number,
-): [number, number, number, number] {
-  const w = halfX * 2;
-  const h = halfZ * 2;
-  let d = along % (2 * (w + h));
-  if (d < w) return [-halfX + d, -halfZ, 0, -1];
-  d -= w;
-  if (d < h) return [halfX, -halfZ + d, 1, 0];
-  d -= h;
-  if (d < w) return [halfX - d, halfZ, 0, 1];
-  return [-halfX, halfZ - (d - w), -1, 0];
 }
 
 /**
@@ -343,6 +233,7 @@ const BANNER_BEAM_DROP = 0.9;
 export function rallyBorderFlowerSpots(circuit: RealmRacersCircuit): RallyFlowerSpot[] {
   const track = realmRacersTrack(circuit);
   const out: RallyFlowerSpot[] = [];
+  const palette = realmRacersTheme(circuit).flowers.colours.length;
   const steps = Math.round(track.length / REALM_RACERS_BORDER_SPACING);
   for (let i = 0; i < steps; i++) {
     const s = (i / steps) * track.length;
@@ -350,9 +241,7 @@ export function rallyBorderFlowerSpots(circuit: RealmRacersCircuit): RallyFlower
     // One colour per RUN of the border rather than per flower, so the edge
     // reads as planted stretches the way an Evergarden walk does.
     const colour =
-      Math.floor(
-        hash2(Math.floor(i / BORDER_RUN_LENGTH), 0, 0xb105) * RALLY_FLOWER_COLOURS.length,
-      ) % RALLY_FLOWER_COLOURS.length;
+      Math.floor(hash2(Math.floor(i / BORDER_RUN_LENGTH), 0, 0xb105) * palette) % palette;
     for (const side of [1, -1]) {
       const roll = hash2(i, side, 0x5eed);
       // Sown on the VERGE/GARDEN boundary, not at the road edge: at the edge
@@ -426,20 +315,6 @@ export function rallyStartLightPlacements(circuit: RealmRacersCircuit): RallySta
     };
   });
 }
-
-/**
- * The garden's flower colours, applied per INSTANCE over one near-white card.
- * That is how the Evergarden does its beds: a coloured texture would multiply
- * against the tint and muddy every hue, so the card stays pale and the colour
- * comes from here.
- */
-export const RALLY_FLOWER_COLOURS: readonly number[] = [
-  0xf6f2ea, // white
-  0xf4b8cf, // pink
-  0xf6dd7a, // butter
-  0xc9b4e8, // lilac
-  0xf3a973, // apricot
-];
 
 /** Pitch of the patch grid, yards: one colour per cell. */
 const PATCH_PITCH = 11;
@@ -615,6 +490,7 @@ function basinMeshOf(
 export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): RallyFlowerSpot[] {
   const track = realmRacersTrack(circuit);
   const out: RallyFlowerSpot[] = [];
+  const palette = realmRacersTheme(circuit).flowers.colours.length;
   const halfX = circuit.perimeter.halfX;
   const halfZ = circuit.perimeter.halfZ;
   const cols = Math.floor((halfX * 2) / PATCH_PITCH);
@@ -626,7 +502,7 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
       const roll = hash2(col, row, 0x7a5f);
       if (roll > keep) continue;
       const jitter = hash2(row, col, 0x31c7);
-      const colour = Math.floor(hash2(col, row, 0xb105) * RALLY_FLOWER_COLOURS.length);
+      const colour = Math.floor(hash2(col, row, 0xb105) * palette);
       const cx = REALM_RACERS_ORIGIN.x - halfX + (col + 0.2 + roll * 0.6) * PATCH_PITCH;
       const cz = REALM_RACERS_ORIGIN.z - halfZ + (row + 0.2 + jitter * 0.6) * PATCH_PITCH;
       for (let k = 0; k < PATCH_COUNT; k++) {
@@ -652,7 +528,7 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
           z,
           rot: a * Math.PI * 2,
           scale: 0.75 + b * 0.5,
-          colour: Math.min(colour, RALLY_FLOWER_COLOURS.length - 1),
+          colour: Math.min(colour, palette - 1),
         });
       }
     }
@@ -661,15 +537,25 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
 }
 
 /**
- * The wrought-iron perimeter: panels around the garden wall with a pillar at
- * every corner. This is the circuit's OUTER bound, so what is drawn here is
- * exactly what `realm_racers_colliders.ts` stops a racer against.
+ * The perimeter: panels around the garden wall with a pillar at every corner.
+ * This is the circuit's OUTER bound, so what is drawn here is exactly what
+ * `realm_racers_colliders.ts` stops a racer against.
+ *
+ * Both numbers a wall kit brings come from the THEME, and neither is optional:
+ *
+ *  - `panelYards` is one module's run AT THE SCALE IT IS DRAWN AT, which is what
+ *    decides how many pieces a face is cut into. A module measured at scale 1
+ *    and drawn at another leaves gaps between panels.
+ *  - `lengthAxis` is which of the module's own axes that run lies along, and
+ *    the two shipped kits disagree: the garden's ironwork runs along local +x,
+ *    the world's stone wall along local +z (`props.ts` says so where it builds
+ *    the town fences, and builds each kind with its own yaw for exactly this
+ *    reason). Assuming +x for both is what stood the Galecrest wall's every
+ *    module broadside to the wall it was supposed to be.
  */
-export function rallyPerimeterPieces(
-  circuit: RealmRacersCircuit,
-  panel: number,
-): RallyPerimeterPiece[] {
+export function rallyPerimeterPieces(circuit: RealmRacersCircuit): RallyPerimeterPiece[] {
   const out: RallyPerimeterPiece[] = [];
+  const kit = realmRacersTheme(circuit).perimeter;
   const halfX = circuit.perimeter.halfX;
   const halfZ = circuit.perimeter.halfZ;
   const corners: [number, number][] = [
@@ -686,8 +572,11 @@ export function rallyPerimeterPieces(
     const run = Math.hypot(dx, dz);
     const ux = dx / run;
     const uz = dz / run;
-    const yaw = Math.atan2(-uz, ux);
-    const panels = Math.max(1, Math.round(run / panel));
+    // A three.js yaw maps local +x to (cos, -sin) and local +z to (sin, cos),
+    // so the two kits need yaws a quarter turn apart to lay the same module
+    // along the same wall.
+    const yaw = kit.lengthAxis === 'z' ? Math.atan2(ux, uz) : Math.atan2(-uz, ux);
+    const panels = Math.max(1, Math.round(run / kit.panelYards));
     const step = run / panels;
     out.push({
       x: a[0] + REALM_RACERS_ORIGIN.x,

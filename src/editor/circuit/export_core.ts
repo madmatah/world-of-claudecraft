@@ -16,13 +16,14 @@
 //
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
-import type {
-  RallyPond,
-  RallyProp,
-  RallyPropCollide,
-  RallyScatter,
-  RealmRacersCircuit,
-  RealmRacersCircuitRole,
+import {
+  type RallyPond,
+  type RallyProp,
+  type RallyPropCollide,
+  type RallyScatter,
+  REALM_RACERS_DEFAULT_THEME_ID,
+  type RealmRacersCircuit,
+  type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
@@ -39,7 +40,8 @@ const BAND_PLACES = 2;
 const PROP_PLACES = 2;
 
 const ID_RE = /^[a-z][a-z0-9_]{2,40}$/;
-const MUSIC_TRACK_RE = /^[a-z0-9_]{1,40}$/;
+/** A plain lower-case token: what a music track id and a theme id both are. */
+const TOKEN_RE = /^[a-z0-9_]{1,40}$/;
 const ROLES: readonly RealmRacersCircuitRole[] = ['practice', 'competition'];
 
 function round(value: number, places: number): number {
@@ -220,6 +222,7 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
     `  practiceLaps: ${c.practiceLaps},`,
     `  timeLimitSeconds: ${c.timeLimitSeconds},`,
     `  musicTrack: '${c.musicTrack}',`,
+    `  theme: '${c.theme}',`,
     `  roles: [${c.roles.map((role) => `'${role}'`).join(', ')}],`,
     `  practiceCopies: ${c.practiceCopies},`,
     '};',
@@ -409,7 +412,19 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   if (!raw || typeof raw !== 'object') return null;
   const c = raw as Record<string, unknown>;
   if (typeof c.id !== 'string' || !ID_RE.test(c.id)) return null;
-  if (typeof c.musicTrack !== 'string' || !MUSIC_TRACK_RE.test(c.musicTrack)) return null;
+  if (typeof c.musicTrack !== 'string' || !TOKEN_RE.test(c.musicTrack)) return null;
+  // The SHAPE of a theme id, never its membership: whether a registry authors
+  // it is a metrics ERROR (`unknown_theme`), which the panel shows live and the
+  // content test fails on. Refusing it here instead would make a draft carrying
+  // a theme id typed one letter wrong unsaveable and unexplained, where the
+  // readout can name it.
+  //
+  // ABSENT is legal and defaults, unlike every other required field: a draft
+  // written before themes existed is a scratch file on the operator's disk, and
+  // refusing the whole record for a field that has a default would read as
+  // "this is not a circuit" with nothing naming the reason.
+  const theme = c.theme === undefined ? REALM_RACERS_DEFAULT_THEME_ID : c.theme;
+  if (typeof theme !== 'string' || !TOKEN_RE.test(theme)) return null;
 
   const controlPoints = readPoints(c.controlPoints);
   if (!controlPoints) return null;
@@ -499,6 +514,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     practiceLaps: c.practiceLaps,
     timeLimitSeconds: c.timeLimitSeconds,
     musicTrack: c.musicTrack,
+    theme,
     roles,
     practiceCopies: c.practiceCopies,
   };

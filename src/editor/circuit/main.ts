@@ -8,12 +8,14 @@
 //
 // Dev tool: English-only, absent from every production build. See CLAUDE.md.
 
+import { realmRacersTheme } from '../../render/realm_racers_themes';
 import {
   type RallyPond,
   type RallyProp,
   type RallyScatter,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_PRACTICE_CIRCUIT,
+  REALM_RACERS_THEME_IDS,
   type RealmRacersBasin,
   type RealmRacersCircuit,
 } from '../../sim/content/realm_racers_circuits';
@@ -136,6 +138,7 @@ const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   region_outside_band: 'the region is wider than the instance band',
   region_deeper_than_lane_budget: 'the region is deeper than the gap between two lanes',
   pond_requires_basin: 'a pond on a circuit with no water authored',
+  unknown_theme: 'the theme is not one the game authors',
   unknown_prop_asset: 'a prop names a catalog key nothing draws',
   prop_blocks_racing_surface: 'a prop stands on the racing surface',
   prop_outside_region: 'a prop stands outside the collision region',
@@ -316,6 +319,12 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   track = realmRacersTrack(record);
   metrics = realmRacersCircuitMetrics(record);
   requestRedraw();
+  // The palette follows the theme, so retyping the theme field re-offers the
+  // zone's own vocabulary rather than the one the circuit opened on.
+  if (record.theme !== paletteTheme) {
+    paletteTheme = record.theme;
+    buildPalette();
+  }
   // The preview debounces this itself: a drag lands one build on release, never
   // one per pointermove.
   if (drawn) preview?.show(record);
@@ -881,6 +890,9 @@ function deleteDressing(): void {
  *  their own is what the deleted water paint already was. */
 const POND_CHOICE = 'pond';
 
+/** Which theme the palette on screen was built for. */
+let paletteTheme = '';
+
 function buildPalette(): void {
   paletteEl.replaceChildren();
   const heading = document.createElement('h2');
@@ -888,7 +900,7 @@ function buildPalette(): void {
   paletteEl.append(heading);
   const list = document.createElement('div');
   list.className = 'palette-list';
-  const entries = propPalette(REALM_RACERS_PROPS);
+  const entries = propPalette(REALM_RACERS_PROPS, realmRacersTheme(record).props);
   const shown = paletteShowAll ? entries : entries.filter((entry) => entry.featured);
   const choose = (key: string, label: string, detail: string): void => {
     const button = document.createElement('button');
@@ -1338,6 +1350,7 @@ function field(
   read: () => string,
   write: (raw: string) => RealmRacersCircuit | null,
   attrs: Partial<HTMLInputElement> = {},
+  choices?: readonly string[],
 ): void {
   const wrap = document.createElement('div');
   wrap.className = 'field';
@@ -1346,6 +1359,19 @@ function field(
   const input = document.createElement('input');
   input.type = attrs.type ?? 'number';
   Object.assign(input, attrs);
+  if (choices) {
+    // `list` is a read-only IDL property (it resolves the ELEMENT), so it goes
+    // on through the attribute; assigning it in the Object.assign above throws.
+    const list = document.createElement('datalist');
+    list.id = `field-choices-${label.replace(/\s+/g, '-')}`;
+    for (const choice of choices) {
+      const option = document.createElement('option');
+      option.value = choice;
+      list.append(option);
+    }
+    wrap.append(list);
+    input.setAttribute('list', list.id);
+  }
   input.value = read();
   input.onchange = () => {
     const next = write(input.value);
@@ -1475,6 +1501,17 @@ function buildForm(): void {
     () => record.musicTrack,
     (raw) => ({ ...record, musicTrack: raw.trim() }),
     { type: 'text' },
+  );
+  // A datalist rather than a select: an unknown id is a legal thing to TYPE
+  // (a theme being written in the same change is not in the list yet), and the
+  // readout names it live rather than the field refusing it.
+  field(
+    race,
+    'theme',
+    () => record.theme,
+    (raw) => ({ ...record, theme: raw.trim() }),
+    { type: 'text' },
+    REALM_RACERS_THEME_IDS,
   );
   formEl.append(race);
 }

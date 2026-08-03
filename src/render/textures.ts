@@ -1462,24 +1462,40 @@ export function sparkleTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-// Kerb stripes: one red block plus one white block per repeat, so the arc
-// length UV lays a classic alternating kerb down the outside of a corner.
-/** Built once. Freshly minted per call it took a new material with it every
+// Kerb stripes: one coloured block plus one pale block per repeat, so the arc
+// length UV lays a classic alternating kerb down the outside of a corner. The
+// two colours come from the circuit's THEME (`realm_racers_themes.ts`); the
+// pattern, the shading and the size are the same on every circuit, because a
+// kerb is the one thing on the road a pilot reads at speed.
+/** One entry per colour pair, because this is drawn ONCE per pair and used
+ *  forever after. Freshly minted per call it took a new material with it every
  *  time (`surfaceMat` keys on the map), so a rebuilt track leaked both. */
-let rallyKerb: THREE.CanvasTexture | null = null;
+const rallyKerbCache = new Map<string, THREE.CanvasTexture>();
 
-export function rallyKerbTexture(): THREE.CanvasTexture {
-  if (rallyKerb) return rallyKerb;
-  rallyKerb = makeCanvas(64, (ctx, s) => {
-    ctx.fillStyle = '#e8e2d4';
+/** The Evergarden's pair, and the shipped look before a theme could ask for
+ *  another: default callers get exactly the texture they always got. */
+const RALLY_KERB_DEFAULT = { base: 0xe8e2d4, stripe: 0xb8402f };
+
+export function rallyKerbTexture(colours = RALLY_KERB_DEFAULT): THREE.CanvasTexture {
+  const key = `${colours.base}:${colours.stripe}`;
+  const cached = rallyKerbCache.get(key);
+  if (cached) return cached;
+  const kerb = makeCanvas(64, (ctx, s) => {
+    ctx.fillStyle = cssHex(colours.base);
     ctx.fillRect(0, 0, s, s);
-    ctx.fillStyle = '#b8402f';
+    ctx.fillStyle = cssHex(colours.stripe);
     ctx.fillRect(0, 0, s / 2, s);
     ctx.fillStyle = 'rgba(40,30,24,0.18)';
     ctx.fillRect(0, 0, s, 3);
     ctx.fillRect(0, s - 3, s, 3);
   });
-  return rallyKerb;
+  rallyKerbCache.set(key, kerb);
+  return kerb;
+}
+
+/** A 24-bit colour as the `#rrggbb` a 2D context wants. */
+function cssHex(colour: number): string {
+  return `#${(colour & 0xffffff).toString(16).padStart(6, '0')}`;
 }
 
 /**
@@ -1535,20 +1551,28 @@ export function rallyGroundBlastMarkerTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-// The start/finish chequer, four blocks across the road per repeat.
-/** Built once, same reason as the kerb above. */
-let rallyStartGrid: THREE.CanvasTexture | null = null;
+// The start/finish chequer, four blocks across the road per repeat. Themed the
+// same way as the kerb: the two squares are the circuit's, the chequer is not.
+/** One entry per colour pair, same reason as the kerb above. */
+const rallyStartGridCache = new Map<string, THREE.CanvasTexture>();
 
-export function rallyStartGridTexture(): THREE.CanvasTexture {
-  if (rallyStartGrid) return rallyStartGrid;
-  rallyStartGrid = makeCanvas(64, (ctx, s) => {
+const RALLY_START_GRID_DEFAULT = { light: 0xf2efe6, dark: 0x22201d };
+
+export function rallyStartGridTexture(colours = RALLY_START_GRID_DEFAULT): THREE.CanvasTexture {
+  const key = `${colours.light}:${colours.dark}`;
+  const cached = rallyStartGridCache.get(key);
+  if (cached) return cached;
+  const light = cssHex(colours.light);
+  const dark = cssHex(colours.dark);
+  const grid = makeCanvas(64, (ctx, s) => {
     const cell = s / 4;
     for (let row = 0; row < 4; row++) {
       for (let col = 0; col < 4; col++) {
-        ctx.fillStyle = (row + col) % 2 === 0 ? '#f2efe6' : '#22201d';
+        ctx.fillStyle = (row + col) % 2 === 0 ? light : dark;
         ctx.fillRect(col * cell, row * cell, cell, cell);
       }
     }
   });
-  return rallyStartGrid;
+  rallyStartGridCache.set(key, grid);
+  return grid;
 }

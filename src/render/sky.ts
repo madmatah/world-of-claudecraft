@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { COLUMN_ZONES, columnBlendAt, STRIP_ZONES } from '../sim/data';
+import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
 import type { BiomeId } from '../sim/types';
 import { SOWFIELD_CENTER } from '../sim/vale_cup_layout';
 import { loadHdr, loadTexture } from './assets/loader';
@@ -9,6 +10,7 @@ import {
   stepEnvironmentBlend,
 } from './environment_transition_core';
 import { GFX, type GfxSettings } from './gfx';
+import { realmRacersThemeAt } from './realm_racers_themes';
 import { skyTexture } from './textures';
 
 // HDRI sky dome. Cloud cover comes from the sky HDRIs themselves; there is
@@ -662,6 +664,20 @@ function biomeBlendAt(x: number, z: number): BiomeBlend {
     from = t > 0 ? to : from;
     to = 'vale_cup';
     t = cupT;
+  }
+  // ...and a third: a Realm Racers circuit flies the sky its THEME names, so a
+  // Nightbloom circuit is raced under the Nightbloom's dome wherever in the
+  // instance band it happens to sit. Without this the band falls through to
+  // whatever the world zones answer out at x = 113_700, which is a day sky and
+  // is not even the same one from lane to lane.
+  //
+  // Hard, with no cross-fade, unlike the two above: those blend because a
+  // player WALKS over their edge, and the band is only ever arrived at by
+  // teleport. There is no boundary to smooth.
+  if (isAtRealmRacersXZ(x, z)) {
+    from = realmRacersThemeAt(x, z).sky.biome;
+    to = from;
+    t = 0;
   }
   return { from, to, t };
 }

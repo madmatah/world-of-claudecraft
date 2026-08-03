@@ -310,6 +310,7 @@ import {
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
+import { realmRacersThemeAt } from './realm_racers_themes';
 import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
 import {
   isOutsideRealmRacersDrawRange,
@@ -1697,6 +1698,8 @@ export class Renderer {
   // Futuristic-fantasy skybox for the private practice pitch (a random variant
   // per bout, camera-centred, only shown while the local player is practicing).
   private valeCupSky = new ValeCupPracticeSky();
+  /** Which circuit sky has already been fetched this session, if any. */
+  private realmRacersSkyReady: BiomeId | null = null;
   private valeCupTeamRings: ValeCupTeamRingsView;
   private realmRacersTrack: RealmRacersTracksView;
   private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
@@ -7753,6 +7756,34 @@ export class Renderer {
     this.buildAllDelveModules(delve.id, slot, origin, modules);
   }
 
+  /**
+   * The HDRI and prefiltered environment a Realm Racers circuit's sky needs,
+   * fetched on first arrival in the band.
+   *
+   * The world's own lane cannot cover it: `prepareZoneSky` runs off zone
+   * residency, and the instance band belongs to no zone, so nothing would ever
+   * ask for the Nightbloom's dome out there and the circuit would keep flying
+   * whichever sky the player teleported in from. Idempotent per key on both
+   * halves (`ensureSkyBiomeAssets` memoizes its fetch, `ensureEnvironmentBiome`
+   * its PMREM), and remembered here as well so a per-frame call is one map
+   * lookup once the sky is up.
+   */
+  private ensureRealmRacersSky(biome: BiomeId): void {
+    if (this.realmRacersSkyReady === biome) return;
+    this.realmRacersSkyReady = biome;
+    void ensureSkyBiomeAssets([biome])
+      .then(() => {
+        this.ensureEnvironmentBiome(biome);
+      })
+      .catch(() => {
+        // Left MARKED rather than cleared. `ensureSkyBiomeAssets` memoizes its
+        // rejected promise, so clearing here would re-enter that same dead memo
+        // on the next frame and every frame after it, allocating a fresh
+        // then/catch pair for a fetch that can never succeed. A circuit under
+        // the shipped sky is a worse look, not a broken frame.
+      });
+  }
+
   // Which futuristic sky this practice bout flies: hashed off the match id so it
   // feels random and stays stable for the whole bout (a new bout, a new sky).
   private practiceSkyVariant(): number {
@@ -7778,7 +7809,16 @@ export class Renderer {
     } else {
       this.valeCupSky.mesh.visible = false;
     }
-    const biome = zoneBiomeAt(this.sim.player.pos.x, pz);
+    // A Realm Racers circuit flies its THEME's sky rather than the band's own
+    // zone answer. Two reasons, and the second is a defect: a circuit is meant
+    // to wear its zone's art wherever the band happens to sit, and
+    // `zoneBiomeAt` out there depends on which LANE a copy of the circuit is
+    // on (the public lane reads vale, the private practice copies read marsh,
+    // jungle, night, amber, ember), so a practice lap was lit by a different
+    // sky than the race it practises for.
+    const rallyTheme = inRally ? realmRacersThemeAt(this.sim.player.pos.x, pz) : null;
+    const biome = rallyTheme ? rallyTheme.sky.biome : zoneBiomeAt(this.sim.player.pos.x, pz);
+    if (rallyTheme) this.ensureRealmRacersSky(rallyTheme.sky.biome);
     const phaseOverride = dayNightPhaseOverride();
     if (this.lowGfx && DAY_ONLY && phaseOverride === null) {
       if (this.fixedLowDayBiome !== biome) {
@@ -8023,9 +8063,14 @@ export class Renderer {
         fog.near = 60;
         fog.far = 420;
       } else if (desired === 'rally') {
-        fog.color.setHex(0xa7c995);
-        fog.near = 85;
-        fog.far = 430;
+        // The circuit's own haze, out of the same theme record as its ground,
+        // its kerbs and its planting. `desired` is only ever 'rally' inside the
+        // band, so the theme here is the one the track under the player is
+        // drawn from (or the default, between two lanes).
+        const rallyFog = (rallyTheme ?? realmRacersThemeAt(px, pz)).sky.fog;
+        fog.color.setHex(rallyFog.color);
+        fog.near = rallyFog.near;
+        fog.far = rallyFog.far;
       } else if (desired === 'underwater') {
         fog.color.setHex(0x17506e);
         fog.near = 2;
@@ -8207,7 +8252,13 @@ export class Renderer {
   // low contribution, authorizes the texture/rotation swap, then restores the
   // new biome on the same long response as fog and light tint.
   private updateEnvBiome(dt: number): void {
-    if (this.lowGfx || this.envRTs.size < 2 || this.fogState !== 'outdoor') return;
+    // 'rally' rides along with 'outdoor' because a circuit is outdoors: it
+    // keeps the sky dome, and its ambient has to come from the dome it is
+    // actually under. Left out, the IBL stayed frozen on the last overworld
+    // biome the player crossed, so a Nightbloom circuit was lit by whatever
+    // realm they teleported in from.
+    if (this.lowGfx || this.envRTs.size < 2) return;
+    if (this.fogState !== 'outdoor' && this.fogState !== 'rally') return;
     const blend = this.skyView.currentBiomeBlend();
     const dominant = blend.t < 0.5 ? blend.from : blend.to;
     // the biome's light-level scale applies to the IBL too, or a dimmed realm

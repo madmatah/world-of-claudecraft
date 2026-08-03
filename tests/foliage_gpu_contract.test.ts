@@ -8,7 +8,11 @@ const canopy = readFileSync(new URL('../src/render/canopy_detail.ts', import.met
 describe('foliage GPU optimization production wiring', () => {
   it('omits all-up normal buffers only where the exact constant-normal patch is live', () => {
     expect(blades).not.toContain("setAttribute('normal'");
-    expect(blades).toContain('patchConstantUpNormalVertexShader(sh.vertexShader)');
+    // BOTH call sites: the player-centred pool and the static cluster the Realm
+    // Racers circuits scatter. A single `toContain` was satisfied by the pool
+    // alone, so a static cluster that forgot the patch would have shipped with
+    // its blades lit off their raw strip normals.
+    expect(blades.match(/patchConstantUpNormalVertexShader\(sh\.vertexShader\)/g)).toHaveLength(2);
 
     expect(foliage).toContain("geo.deleteAttribute('normal');");
     expect(foliage).toContain("flowerGeo.deleteAttribute('normal');");

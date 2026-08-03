@@ -6,6 +6,11 @@
 // garden is sown) live in the Three-free core beside this file; this module
 // only builds meshes from them.
 //
+// WHAT each piece is made of (which model, which colours, which ground) is the
+// circuit's THEME (`realm_racers_themes.ts`), resolved once at the top of the
+// build. Nothing here names an Evergarden asset: that is what makes one themed
+// circuit per zone a data exercise rather than a second copy of this file.
+//
 // One view per authored circuit, each built once and visibility gated by which
 // LANE the local player stands on: a circuit draws only on its own lanes, and
 // moves to whichever copy of itself the viewer is standing on.
@@ -30,7 +35,7 @@ import { type RallySample, realmRacersTrack } from '../sim/realm_racers_spline';
 import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
-import { gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
+import { createStaticBladeCluster } from './blade_grass';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
 import {
   biomeGroundTint,
@@ -40,11 +45,20 @@ import {
   paintInstanceGround,
 } from './instance_surface';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
+import {
+  REALM_RACERS_GRASS_TILE_RADIUS,
+  REALM_RACERS_GRASS_Y,
+  realmRacersGrassTiles,
+  realmRacersGrassTint,
+} from './realm_racers_grass_core';
 import { REALM_RACERS_PROP_URLS, REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import {
-  RALLY_FLOWER_COLOURS,
+  type RallyCircuitTheme,
+  REALM_RACERS_THEME_ASSET_URLS,
+  realmRacersTheme,
+} from './realm_racers_themes';
+import {
   rallyBorderFlowerSpots,
-  rallyDressingSpots,
   rallyFlowerSpots,
   rallyKerbRuns,
   rallyPerimeterPieces,
@@ -54,12 +68,8 @@ import {
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
 } from './realm_racers_track_core';
-import {
-  type FlowerKind,
-  flowerTuftTexture,
-  rallyKerbTexture,
-  rallyStartGridTexture,
-} from './textures';
+import { renderLayerDisabled } from './render_dev_flags';
+import { flowerTuftTexture, rallyKerbTexture, rallyStartGridTexture } from './textures';
 import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_material';
 
 export interface RealmRacersTrackView {
@@ -75,7 +85,10 @@ export interface RealmRacersTracksView extends RealmRacersTrackView {
 
 // Surface heights, all relative to the instance band's flat floor (y = 0, the
 // height groundHeight returns inside the region), stacked so nothing z-fights.
-const GRASS_Y = -0.12;
+// The lawn's own height, out of the core the grass mask reads it from: two
+// copies of one ground height is how a meadow ends up floating over the grass
+// it is supposed to grow out of.
+const GRASS_Y = REALM_RACERS_GRASS_Y;
 const RUNOFF_Y = -0.03;
 const ROAD_Y = 0;
 const KERB_Y = 0.03;
@@ -84,38 +97,11 @@ const START_LINE_Y = 0.02;
 const KERB_WIDTH = 1.1;
 /** Yards of road covered by the chequered start/finish band. */
 const START_LINE_LENGTH = 3;
-/** Panel run of the wrought-iron perimeter set at scale 1. */
-const IRON_PANEL = 3.5;
 /** How far the lawn runs past the region envelope, yards. */
 const LAWN_OVERSHOOT = 160;
 /** A flower card's size at scale 1, yards. */
 const FLOWER_WIDTH = 0.95;
 const FLOWER_HEIGHT = 0.7;
-/** The Evergarden's own flower card: near-white petals, butter centre. */
-const RALLY_FLOWER_CARD: FlowerKind[] = [{ p: [244, 242, 240], c: [252, 226, 140] }];
-
-// The bed, tree, reed and ironwork models are already shipped and manifested
-// (props.ts and garden_features.ts place the same files elsewhere); loadGltf
-// caches per URL, so registering them here costs one extra promise, not one
-// extra parse.
-const TREE_URL = '/models/foliage/twisted_1.glb';
-// The game's own race arch: props.ts already places this exact model as the
-// Highwatch show-jumping start gate, so the rally's start line inherits a
-// fixture the world has established rather than inventing one.
-const ARCH_URL = '/models/props/course_arch.glb';
-const BANNER_URL = '/models/dungeon/banner_patterna_white.glb';
-const BED_URLS: Record<string, string> = {
-  bedRound: '/models/props/flower_bed_round.glb',
-  bedSquareA: '/models/props/flower_bed_square_a.glb',
-  bedSquareB: '/models/props/flower_bed_square_b.glb',
-};
-const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
-const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
-const REED_URL = '/models/props/reeds.glb';
-/** Authored half-extent of the flower-bed models (see EVERGARDEN_PROPS scales). */
-const BED_SOURCE_RADIUS = 0.47;
-/** The specimen elders use the Evergarden's own radius-to-scale ratio. */
-const TREE_SCALE_PER_RADIUS = 2.6;
 
 const loaded = new Map<string, THREE.Group>();
 
@@ -127,22 +113,15 @@ function preload(url: string): void {
   );
 }
 
-// The authored dressing's whole catalog rides in the same lane. A prop is
-// placed by hand on one circuit and drawn from nothing on a cold client if its
-// url is not preloaded, which is a failure no test that does not check the
-// lane can see; `tests/realm_racers_props.test.ts` checks it.
-const ASSET_URLS = [
-  ...new Set([
-    TREE_URL,
-    ARCH_URL,
-    BANNER_URL,
-    IRON_FENCE_URL,
-    IRON_PILLAR_URL,
-    REED_URL,
-    ...Object.values(BED_URLS),
-    ...REALM_RACERS_PROP_URLS,
-  ]),
-];
+// EVERY theme's kit and the authored dressing's whole catalog ride in the same
+// lane, whether or not a shipped circuit uses them today. A model that is not
+// preloaded draws from nothing on a cold client, which is a failure no test
+// that does not check the lane can see; `tests/realm_racers_props.test.ts` and
+// `tests/realm_racers_themes.test.ts` check it. The models themselves are
+// already shipped and manifested (props.ts and garden_features.ts place the
+// same files elsewhere) and loadGltf caches per URL, so registering them here
+// costs one extra promise each, not one extra parse.
+const ASSET_URLS = [...new Set([...REALM_RACERS_THEME_ASSET_URLS, ...REALM_RACERS_PROP_URLS])];
 for (const url of ASSET_URLS) preload(url);
 
 /** Test-only window onto the asset set (see tests/render_glb_replacement_assets). */
@@ -291,9 +270,13 @@ function runoffGrassWeight(vertexIndex: number): number {
  * from the core, because each one of them has shipped wrong at least once and
  * an eye cannot check them; `tests/realm_racers_render.test.ts` can.
  */
-function buildStartArch(circuit: RealmRacersCircuit, group: THREE.Group): void {
+function buildStartArch(
+  circuit: RealmRacersCircuit,
+  theme: RallyCircuitTheme,
+  group: THREE.Group,
+): void {
   const place = rallyStartArchPlacement(circuit);
-  instanceModel(group, ARCH_URL, [
+  instanceModel(group, theme.startFixture.archUrl, [
     {
       x: place.x,
       y: GRASS_Y,
@@ -306,7 +289,7 @@ function buildStartArch(circuit: RealmRacersCircuit, group: THREE.Group): void {
   ]);
   instanceModel(
     group,
-    BANNER_URL,
+    theme.startFixture.bannerUrl,
     place.banners.map((banner) => ({
       x: banner.x,
       y: GRASS_Y + banner.lift,
@@ -358,14 +341,18 @@ function buildStartLights(circuit: RealmRacersCircuit, group: THREE.Group): THRE
  * own meadow uses it: a vertical card lit only by a zenith sun through Lambert
  * comes out nearly black, which is exactly how these first shipped.
  */
-function buildFlowers(circuit: RealmRacersCircuit, group: THREE.Group): void {
+function buildFlowers(
+  circuit: RealmRacersCircuit,
+  theme: RallyCircuitTheme,
+  group: THREE.Group,
+): void {
   const spots = [
     ...rallyBorderFlowerSpots(circuit),
     ...rallyFlowerSpots(circuit, GFX.leanFoliage ? 0.45 : 1),
   ];
   if (spots.length === 0) return;
   const geo = rallyFlowerCardGeo();
-  const map = flowerTuftTexture(RALLY_FLOWER_CARD);
+  const map = flowerTuftTexture(theme.flowers.card);
   const mat = configureMaskedDoubleSidedVegetationMaterial(
     GFX.standardMaterials
       ? new THREE.MeshStandardMaterial({ map, alphaTest: 0.3, roughness: 0.85 })
@@ -383,7 +370,7 @@ function buildFlowers(circuit: RealmRacersCircuit, group: THREE.Group): void {
     v.set(spot.x, GRASS_Y, spot.z);
     sc.setScalar(spot.scale);
     mesh.setMatrixAt(i, m.compose(v, q, sc));
-    mesh.setColorAt(i, tint.setHex(RALLY_FLOWER_COLOURS[spot.colour]));
+    mesh.setColorAt(i, tint.setHex(theme.flowers.colours[spot.colour]));
   });
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -474,7 +461,11 @@ function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
  * `uWaveEnabled` branch costs a comparison and the broad swell still moves the
  * surface.
  */
-function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
+function buildBasin(
+  circuit: RealmRacersCircuit,
+  theme: RallyCircuitTheme,
+  group: THREE.Group,
+): void {
   const basin = circuit.basin;
   if (!basin) return;
   const meshes = rallyPondMeshes(circuit);
@@ -485,9 +476,18 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
   // per re-registration) are exactly the ones a per-pond material multiplies
   // against. The ponds differ by geometry alone; nothing about the water's
   // surface is per pond.
+  // The colour ramp is the theme's, and it is the ONLY thing about the water a
+  // theme moves: the ripples, the fresnel sky tint, the sun glints and the foam
+  // are the world's own water everywhere, deliberately.
   const material = buildWaterSurfaceMaterial({
     wave: zeroWaveUniforms(),
     surfaceOrigin: REALM_RACERS_ORIGIN,
+    ...(theme.water
+      ? {
+          shallow: new THREE.Color(theme.water.shallow),
+          deep: new THREE.Color(theme.water.deep),
+        }
+      : {}),
   });
   for (const mesh of meshes) {
     const count = mesh.depths.length;
@@ -522,7 +522,7 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
   // Reeds around the rim, so the water's edge is planted rather than kerbed.
   instanceModel(
     group,
-    REED_URL,
+    theme.reedUrl,
     rallyPondReedSpots(circuit).map((spot) => ({
       x: spot.x,
       y: basin.waterY,
@@ -625,12 +625,107 @@ function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): Br
   return breathing;
 }
 
+/**
+ * The circuit's grass: the world's OWN blade clusters, placed once over every
+ * free square yard of the garden.
+ *
+ * Fixed rather than following the player, which is the difference from the
+ * overworld's carpet and the reason this exists at all: the pool that follows a
+ * player is what lets a zone be dense, and out here it read as a disc of grass
+ * moving with the camera, because the band has no card-tuft layer beyond it to
+ * hide the rim the way a zone does.
+ *
+ * One InstancedMesh per tile so the frustum can throw away what is behind the
+ * camera; the cluster geometry and its material are shared across every tile
+ * and every build.
+ */
+function buildGrass(circuit: RealmRacersCircuit, group: THREE.Group): void {
+  // The same gate the overworld carpet takes, and for the same reason: blades
+  // are a close-camera detail layer, they are the heaviest thing a circuit
+  // draws (a Nightbloom Express Tour is 75 000 clusters and about 1.9 M
+  // triangles resident), and tiers below high keep neither them nor the
+  // world's. `?bladegrass=off` is the dev perf-attribution switch.
+  if (GFX.bladeCarpetRadius <= 0 || renderLayerDisabled('bladegrass')) return;
+  const tiles = realmRacersGrassTiles(circuit);
+  if (tiles.length === 0) return;
+  // One material per TINT, not one colour per instance. The colour is a
+  // property of the circuit, so writing it into an `instanceColor` would carry
+  // one repeated value in about 900 KB of per-instance buffer at the cluster
+  // counts a full meadow reaches. A cached material is still shared, so the
+  // dispose core's borrowing rule is untouched.
+  const { geometry, material } = rallyGrassCluster(realmRacersGrassTint(circuit));
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const lean = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const axis = new THREE.Vector3();
+  const v = new THREE.Vector3();
+  const sc = new THREE.Vector3();
+  for (const tile of tiles) {
+    const mesh = new THREE.InstancedMesh(geometry, material, tile.clusters.length);
+    mesh.userData.renderCategory = 'grass';
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    tile.clusters.forEach((cluster, i) => {
+      q.setFromAxisAngle(up, cluster.rot);
+      axis.set(cluster.leanAxisX, 0, cluster.leanAxisZ);
+      q.premultiply(lean.setFromAxisAngle(axis, cluster.lean));
+      v.set(cluster.x + REALM_RACERS_ORIGIN.x, GRASS_Y, cluster.z + REALM_RACERS_ORIGIN.z);
+      sc.setScalar(cluster.scale);
+      mesh.setMatrixAt(i, m.compose(v, q, sc));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    // The tile's own centre and reach, rather than `computeBoundingSphere`
+    // walking a thousand instance matrices per tile: the core already knows
+    // where the tile is, and the sphere is what the frustum culls against.
+    mesh.boundingSphere = new THREE.Sphere(
+      new THREE.Vector3(tile.x + REALM_RACERS_ORIGIN.x, GRASS_Y, tile.z + REALM_RACERS_ORIGIN.z),
+      REALM_RACERS_GRASS_TILE_RADIUS,
+    );
+    group.add(mesh);
+  }
+}
+
+/**
+ * The blade cluster, minted once and SHARED, for the same reason the flower
+ * card is: the editor preview rebuilds a whole track on every edit, and the
+ * dispose core frees only what a build MINTS.
+ *
+ * The geometry is one for every circuit; the material is one per TINT, since
+ * the blades carry a base-to-tip vertex gradient the colour multiplies into.
+ * Bounded by the theme registry, which is the only thing that names a tint.
+ */
+let grassGeometry: THREE.BufferGeometry | null = null;
+const grassMaterials = new Map<number, THREE.Material>();
+
+function rallyGrassCluster(tint: number): {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+} {
+  const cached = grassMaterials.get(tint);
+  if (grassGeometry && cached) return { geometry: grassGeometry, material: cached };
+  // Minted only for a tint nobody has asked for yet. The factory hands back a
+  // pair; the FIRST geometry it makes is the one every tile of every circuit
+  // then shares, and a later tint's copy is dropped unbuilt-upon rather than
+  // becoming a second geometry the dispose core would have to reason about.
+  const built = createStaticBladeCluster(0x5eed);
+  grassGeometry ??= built.geometry;
+  // The same lift the world gives its blades over the raw ground tint: they
+  // catch more sky than the soil they stand on.
+  (built.material as THREE.MeshStandardMaterial).color.setHex(tint).multiplyScalar(1.18);
+  grassMaterials.set(tint, built.material);
+  return { geometry: grassGeometry, material: built.material };
+}
+
 export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersTrackView {
   const group = new THREE.Group();
   group.name = 'realm-racers-track';
   const track = realmRacersTrack(circuit);
   const samples = track.samples;
   const count = samples.length;
+  // Everything below that is a colour, a model or a size comes from HERE. The
+  // geometry is the same on every circuit in every zone; the skin is not.
+  const theme = realmRacersTheme(circuit);
 
   // --- the lawn the whole circuit sits on. It runs well past the region so the
   // horizon beyond the perimeter fence stays lawn instead of the empty instance
@@ -642,7 +737,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   // surface here, because which layer a surface is made of is a per-vertex
   // weight, not a material (see instance_surface.ts).
   const ground = buildInstanceGroundMaterial(REALM_RACERS_ORIGIN);
-  const tint = biomeGroundTint('garden');
+  const tint = biomeGroundTint(theme.ground);
   // The lawn is a rectangle with the basin punched out of it, so the water sits
   // in a hole in the ground instead of floating over it. Rotated and placed at
   // BUILD time: the ground material reads object space as world space, so a
@@ -702,7 +797,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
     ),
   );
 
-  const kerbMat = surfaceMat({ map: rallyKerbTexture(), roughness: 0.7 });
+  const kerbMat = surfaceMat({ map: rallyKerbTexture(theme.kerb), roughness: 0.7 });
   for (const run of rallyKerbRuns(circuit)) {
     for (const side of [1, -1]) {
       group.add(
@@ -724,7 +819,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   }
 
   // --- the start/finish band, straddling s = 0 ---
-  const gridTexture = rallyStartGridTexture();
+  const gridTexture = rallyStartGridTexture(theme.startGrid);
   group.add(
     surface(
       ribbon(
@@ -741,98 +836,35 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
     ),
   );
 
-  buildBasin(circuit, group);
-  buildStartArch(circuit, group);
+  buildBasin(circuit, theme, group);
+  buildStartArch(circuit, theme, group);
   const startLightLenses = buildStartLights(circuit, group);
   const startLightOff = startLightLenses[0]?.material as THREE.Material;
   const startLightRed = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
   const startLightGreen = new THREE.MeshBasicMaterial({ color: 0x45e06f });
   let lastStartLightSignal = '';
-  buildFlowers(circuit, group);
+  buildFlowers(circuit, theme, group);
+  buildGrass(circuit, group);
 
   // --- the AUTHORED dressing: every piece a designer placed by hand, plus the
   // seeded fills, from the one resolver the collision set reads too ---
   const breathingProps = buildDressingProps(circuit, group);
 
-  // --- the DERIVED dressing ring, every piece outside the perimeter by
-  // construction. It follows the perimeter rather than the design, so the
-  // authored props layer on top of it rather than replacing it ---
-  const dressing = rallyDressingSpots(circuit);
-  for (const [kind, url] of Object.entries(BED_URLS)) {
-    instanceModel(
-      group,
-      url,
-      dressing
-        .filter((spot) => spot.kind === kind)
-        .map((spot) => {
-          const scale = spot.radius / BED_SOURCE_RADIUS;
-          return {
-            x: spot.x,
-            y: GRASS_Y,
-            z: spot.z,
-            yaw: spot.rot,
-            sx: scale,
-            sy: scale,
-            sz: scale,
-          };
-        }),
-    );
-  }
-  instanceModel(
-    group,
-    TREE_URL,
-    dressing
-      .filter((spot) => spot.kind === 'tree')
-      .map((spot) => {
-        const scale = spot.radius * TREE_SCALE_PER_RADIUS;
-        return {
-          x: spot.x,
-          y: GRASS_Y,
-          z: spot.z,
-          yaw: spot.rot,
-          sx: scale,
-          sy: scale,
-          sz: scale,
-        };
-      }),
-  );
-  const gardenStatues = dressing.filter((spot) => spot.kind === 'statue');
-  if (gardenStatues.length > 0) {
-    const mesh = new THREE.InstancedMesh(
-      gardenStatueGeo(),
-      gardenStatueMaterial(),
-      gardenStatues.length,
-    );
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const up = new THREE.Vector3(0, 1, 0);
-    const v = new THREE.Vector3();
-    const sc = new THREE.Vector3(1, 1, 1);
-    gardenStatues.forEach((spot, i) => {
-      q.setFromAxisAngle(up, spot.rot);
-      v.set(spot.x, GRASS_Y, spot.z);
-      mesh.setMatrixAt(i, m.compose(v, q, sc));
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.computeBoundingSphere();
-    group.add(mesh);
-  }
-
-  // --- the wrought-iron perimeter, so the circuit sits in a walled garden ---
-  const perimeter = rallyPerimeterPieces(circuit, IRON_PANEL);
-  const ironSpot = (piece: (typeof perimeter)[number]): ModelSpot => ({
+  // --- the perimeter, so the circuit sits in a walled garden ---
+  const perimeter = rallyPerimeterPieces(circuit);
+  const wallScale = theme.perimeter.scale;
+  const wallSpot = (piece: (typeof perimeter)[number]): ModelSpot => ({
     x: piece.x,
     y: GRASS_Y,
     z: piece.z,
     yaw: piece.yaw,
-    sx: 1,
-    sy: 1,
-    sz: 1,
+    sx: wallScale,
+    sy: wallScale,
+    sz: wallScale,
   });
-  instanceModel(group, IRON_FENCE_URL, perimeter.filter((p) => !p.pillar).map(ironSpot));
-  instanceModel(group, IRON_PILLAR_URL, perimeter.filter((p) => p.pillar).map(ironSpot));
+  const { fenceUrl, pillarUrl } = theme.perimeter;
+  instanceModel(group, fenceUrl, perimeter.filter((p) => !p.pillar).map(wallSpot));
+  instanceModel(group, pillarUrl, perimeter.filter((p) => p.pillar).map(wallSpot));
 
   group.visible = false;
 
@@ -887,28 +919,41 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
  * with the procedural textures stubbed (so the numbers are the CPU cost of
  * generating and packing geometry, not of uploading it):
  *
- *   evergarden_practice      29 to 47 ms    28 geometries    6 166 vertices    369 KiB
- *   evergarden_express_tour  109 to 110 ms  27 geometries   10 421 vertices    642 KiB
+ *   evergarden_practice       21 to 47 ms
+ *   evergarden_express_tour   75 to 76 ms
  *
- * So the whole pool is about 140 ms and 1.0 MiB of attribute data, paid once
- * during world build, behind the loading screen. Three things decided it:
+ * So the whole pool is about 120 ms, paid once during world build, behind the
+ * loading screen. Three things decided it:
  *
- *  - Lazy moves the LARGER of those two (110 ms) onto the frame a viewer
- *    arrives at a circuit, and that frame is the countdown. A tenth of a second
- *    of hitch as the lights come on is the one place this cost must not land.
+ *  - Lazy moves the LARGER of those two onto the frame a viewer arrives at a
+ *    circuit, and that frame is the countdown. A tenth of a second of hitch as
+ *    the lights come on is the one place this cost must not land.
  *  - Eviction has nothing to evict. The policy worth having is "keep at most
  *    two", and the pool IS two, so the whole mechanism would be inert code with
  *    no reachable path, which is exactly what 13a-1 declined to write blind.
- *  - 1.0 MiB resident is not a budget anyone is fighting over out here.
+ *  - A megabyte of resident attribute data is not a budget anyone is fighting
+ *    over out here.
  *
  * Where the time goes, so the next circuit can be judged before it is drawn:
  * the road ribbons are cheap and the cost tracks the SCATTER, which follows the
  * area inside the perimeter rather than the lap. On the Express Tour,
- * `rallyFlowerSpots` is 72 ms for 4 984 tufts and the water surfaces 29 ms for
- * two pools; everything else together is under 4 ms. That is
- * superlinear in circuit size (1.8x the lap, 3.7x the build), so revisit this
- * decision when the pool reaches roughly four circuits of this size, where the
- * eager cost approaches half a second and lazy starts paying for itself.
+ * `rallyFlowerSpots` is 72 ms for 4 984 tufts (one spline projection per
+ * candidate point, which is the whole of it) and the water surfaces are 29 ms
+ * for two pools; everything else together is under 4 ms.
+ *
+ * The GRASS is not in those numbers, because neither shipped circuit grows any:
+ * both wear the Evergarden, which is mown lawn (`GRASS_BIOME_DENSITY.garden` is
+ * 0). A circuit whose zone DOES grow blades pays about 25 ms more on a lap this
+ * size, measured on a Nightbloom probe of the same two curves: 4 ms to bake the
+ * mask, 11 ms to place 74 057 clusters over 96 tiles, and the rest in the
+ * instancing. The mask is a grid stamped off the centerline rather than a
+ * projection per candidate, which is why that half is cheap.
+ *
+ * The build is superlinear in circuit size (1.8x the lap, 3.6x the build), so
+ * revisit this decision at roughly four more circuits of this size, where the
+ * eager cost approaches half a second and lazy starts paying for itself. The
+ * cheapest levers, in order: `REALM_RACERS_GRASS_YARDS_PER_CLUSTER` for a
+ * grassy zone, then the flower patch pitch.
  */
 export function buildRealmRacersTracks(): RealmRacersTracksView {
   const group = new THREE.Group();

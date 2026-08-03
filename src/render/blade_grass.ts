@@ -7,8 +7,7 @@ import {
   type DenseSlotState,
   deactivateDenseSlot,
 } from './blade_grass_dense_core';
-import { GRASS_BIOME_DENSITY } from './foliage';
-import { insideGrassHubExclusion } from './foliage_core';
+import { GRASS_BIOME_DENSITY, insideGrassHubExclusion } from './foliage_core';
 import { patchConstantUpNormalVertexShader } from './foliage_shader_core';
 import { GFX, sharedUniforms } from './gfx';
 import { renderLayerDisabled } from './render_dev_flags';
@@ -373,4 +372,48 @@ export function buildBladeGrass(
       }
     },
   };
+}
+
+/**
+ * The carpet's own cluster and material, for a STATIC scatter that is NOT the
+ * player-centred pool: a Realm Racers circuit, which lies outside every terrain
+ * chunk and so never gets the pool at all.
+ *
+ * The blades, the sway and the lighting are the ones above, deliberately: the
+ * whole point is that a circuit's meadow is made of the same grass its zone is.
+ * What is left out is the toroidal ring's FADE, which shrinks a cluster toward
+ * its root as it nears the pool's edge; a fixed scatter has no edge, and the
+ * term would simply erase everything past the radius. `seed` picks the blade
+ * layout, exactly as it does for the pool.
+ */
+export function createStaticBladeCluster(seed: number): {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+} {
+  const geometry = clusterGeometry(mulberry32(seed ^ 0x6b1a));
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.92,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+  material.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = sharedUniforms.uTime;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>\n        uniform float uTime;`)
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 bgOrigin = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+          float bgPhase = bgOrigin.x * 1.7 + bgOrigin.z * 2.3;
+          float bgSway = (sin(uTime * 2.1 + bgPhase) + 0.4 * sin(uTime * 3.7 + bgPhase * 1.31))
+            * 0.085 * position.y * position.y;
+          transformed.x += bgSway;
+          transformed.z += bgSway * 0.7;
+        #endif`,
+      );
+    sh.vertexShader = patchConstantUpNormalVertexShader(sh.vertexShader);
+  };
+  return { geometry, material };
 }

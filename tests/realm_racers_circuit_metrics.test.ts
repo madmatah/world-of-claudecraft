@@ -43,6 +43,7 @@ const DRAFT_BASE = {
   practiceLaps: 4,
   timeLimitSeconds: 420,
   musicTrack: 'realm_racers',
+  theme: 'evergarden',
   roles: ['competition'],
   practiceCopies: 0,
 } satisfies Omit<RealmRacersCircuit, 'id' | 'controlPoints' | 'widthBands'>;
@@ -160,6 +161,27 @@ describe('Realm Racers circuit metrics: the loop is a loop', () => {
     // the racing line all read the sign of `turnRadius`, so it is rejected.
     expect(codesOf(reversed)).toContain('reversed_winding');
     expect(codesOf(forward)).not.toContain('reversed_winding');
+  });
+});
+
+describe('Realm Racers circuit metrics: the theme', () => {
+  it('calls a theme no registry authors an error, by name', () => {
+    // The readout is what a DRAFT is admitted by, so a theme id typed one
+    // letter wrong has to be reported rather than swallowed. The value/limit
+    // pair is checked too, because the editor renders it as "value against
+    // limit" and a swapped pair reads backwards on screen.
+    const typo = draft('theme_typo', ring(120), 10, { theme: 'evergardn' });
+    const problem = realmRacersCircuitErrors(realmRacersCircuitMetrics(typo)).find(
+      (p) => p.code === 'unknown_theme',
+    );
+    expect(problem).toBeDefined();
+    expect([problem?.value, problem?.limit]).toEqual([1, 0]);
+    // ...and a circuit on a theme the game DOES author is not reported, or the
+    // readout is just noise.
+    const clean = draft('theme_ok', ring(120), 10, { theme: 'evergarden' });
+    expect(
+      realmRacersCircuitErrors(realmRacersCircuitMetrics(clean)).map((p) => p.code),
+    ).not.toContain('unknown_theme');
   });
 });
 

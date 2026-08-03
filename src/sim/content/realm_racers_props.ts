@@ -71,6 +71,19 @@ export const REALM_RACERS_PROPS: Record<string, RallyPropDef> = {
   leafyFoxStatue: { footprint: { kind: 'circle', r: 0.35 }, solid: true, height: 0.98 },
   goldenHorseStatue: { footprint: { kind: 'circle', r: 0.48 }, solid: true, height: 0.9 },
 
+  // --- the Nightbloom's growth: what a dream wood is dressed with, and what
+  // the deleted dressing ring used to plant out there. Measured the same way as
+  // everything above, off the shipped GLB. The mushroom takes the radius the
+  // ZONE itself collides it with (`realm.ts` seats it at scale 10 for a 1.9
+  // yard radius, which is its STALK, not its cap, the same trunk-tight trim
+  // `oak` takes); the amethyst is trimmed under its own 2.20 half-extent rather
+  // than taking the zone's 2.4, which would be the too-generous footprint this
+  // table's header warns reads as a bug ---
+  giantMushroom: { footprint: { kind: 'circle', r: 0.19 }, solid: true, height: 0.98 },
+  amethyst: { footprint: { kind: 'circle', r: 2.2 }, solid: true, height: 6.0 },
+  glowCluster: { footprint: { kind: 'circle', r: 0.38 }, solid: false, height: 0.97 },
+  glowFlower: { footprint: { kind: 'circle', r: 0.42 }, solid: false, height: 0.72 },
+
   // --- planting: drivable by design, whatever its size ---
   oak: { footprint: { kind: 'circle', r: 0.55 }, solid: true, height: 9.44 },
   shrub: { footprint: { kind: 'circle', r: 0.45 }, solid: false, height: 0.45 },

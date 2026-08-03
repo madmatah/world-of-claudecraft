@@ -17,11 +17,16 @@ import {
   REALM_RACERS_CAMERA_BOOM_PROFILE,
 } from '../src/render/camera_boom_core';
 import {
-  rallyDressingSpots,
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
 } from '../src/render/realm_racers_track_core';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
+  type RealmRacersCircuit,
+} from '../src/sim/content/realm_racers_circuits';
+import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
+import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
+import { realmRacersPlacedProps } from '../src/sim/realm_racers_props_resolve';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { REALM_RACERS_COUNTDOWN_TICKS } from '../src/sim/social/realm_racers';
 import { TICK_RATE } from '../src/sim/types';
@@ -329,11 +334,27 @@ describe('Realm Racers start camera', () => {
     expect(gameplay).toBeCloseTo(6.18, 2);
   });
 
-  it('keeps the complete panorama clear of every circuit tree from both grid slots', () => {
-    const trees = rallyDressingSpots(GARDEN_CIRCUIT).filter((spot) => spot.kind === 'tree');
-    for (const start of realmRacersStarts(GARDEN_CIRCUIT)) {
+  /**
+   * How close the opening orbit passes to a piece of scenery tall enough to
+   * swallow the frame, over both grid slots and the whole panorama.
+   *
+   * It reads the AUTHORED dressing now. The derived ring it used to read was
+   * deleted with the theme's `dressing` table, and a circuit's scenery is
+   * hand-placed from here on, so the rule this case exists for (nothing tall
+   * stands on the camera path) moved to the pieces a designer actually puts
+   * there. `REALM_RACERS_CAMERA_CANOPY_HEIGHT` is the same 3 yard bar the
+   * circuit readout uses for its own camera check.
+   */
+  const nearestTallProp = (circuit: RealmRacersCircuit): number => {
+    const tall = realmRacersPlacedProps(circuit)
+      .filter((prop) => (REALM_RACERS_PROPS[prop.asset]?.height ?? 0) * prop.scale > 3)
+      .map((prop) => ({
+        x: prop.x + REALM_RACERS_ORIGIN.x,
+        z: prop.z + REALM_RACERS_ORIGIN.z,
+      }));
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const start of realmRacersStarts(circuit)) {
       const state = createRealmRacersStartCamera();
-      let nearestTree = Number.POSITIVE_INFINITY;
       for (let elapsed = 0; elapsed <= REALM_RACERS_PANORAMA_TICKS; elapsed++) {
         const pose = stepRealmRacersStartCamera(state, {
           matchId: 31,
@@ -351,12 +372,48 @@ describe('Realm Racers start camera', () => {
           Math.cos(pose?.pitch ?? 0);
         const cameraX = start.x - Math.sin(pose?.yaw ?? 0) * horizontalBoom;
         const cameraZ = start.z - Math.cos(pose?.yaw ?? 0) * horizontalBoom;
-        for (const tree of trees) {
-          nearestTree = Math.min(nearestTree, Math.hypot(cameraX - tree.x, cameraZ - tree.z));
+        for (const prop of tall) {
+          nearest = Math.min(nearest, Math.hypot(cameraX - prop.x, cameraZ - prop.z));
         }
       }
-      expect(nearestTree).toBeGreaterThan(12);
     }
+    return nearest;
+  };
+
+  it('keeps the complete panorama clear of every tall piece, from both grid slots', () => {
+    expect(nearestTallProp(GARDEN_CIRCUIT)).toBeGreaterThan(12);
+  });
+
+  it('would SEE a tall piece dropped on the opening orbit', () => {
+    // Without this the case above passes on any circuit that simply has no
+    // tall scenery yet, which is what every circuit looks like the day the
+    // derived ring is deleted. Planting one on the path proves the measurement
+    // still bites.
+    const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
+    const state = createRealmRacersStartCamera();
+    const pose = stepRealmRacersStartCamera(state, {
+      matchId: 31,
+      phase: 'countdown',
+      countdownTicks: REALM_RACERS_START_TICKS,
+      elapsedTicks: 0,
+      liveYaw: 0,
+      facing: start.facing,
+      liveDist: 12,
+      reducedMotion: false,
+    });
+    const horizontalBoom =
+      cameraBoomDistance(pose?.dist ?? 0, REALM_RACERS_CAMERA_BOOM_PROFILE) *
+      Math.cos(pose?.pitch ?? 0);
+    const onPath = {
+      x: start.x - Math.sin(pose?.yaw ?? 0) * horizontalBoom - REALM_RACERS_ORIGIN.x,
+      z: start.z - Math.cos(pose?.yaw ?? 0) * horizontalBoom - REALM_RACERS_ORIGIN.z,
+    };
+    const blocked: RealmRacersCircuit = {
+      ...GARDEN_CIRCUIT,
+      id: 'panorama_blocked',
+      props: [...(GARDEN_CIRCUIT.props ?? []), { asset: 'oak', at: onPath, scale: 1 }],
+    };
+    expect(nearestTallProp(blocked)).toBeLessThan(1);
   });
 
   it('gives two consecutive races back exactly the zoom the player set', () => {

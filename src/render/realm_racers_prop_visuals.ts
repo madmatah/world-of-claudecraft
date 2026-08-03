@@ -70,6 +70,11 @@ export const REALM_RACERS_PROP_VISUALS: Record<string, RallyPropVisual> = {
   leafyFoxStatue: gltf('leafyFoxStatue'),
   goldenHorseStatue: gltf('goldenHorseStatue'),
 
+  giantMushroom: gltf('mushroomGiantPurple'),
+  amethyst: gltf('crystalAmethystCluster'),
+  glowCluster: gltf('mushroomGlowCluster'),
+  glowFlower: gltf('flowerGlow'),
+
   oak: gltf('oakTree'),
   shrub: gltf('shrubFlowering'),
   bedRound: gltf('flowerBedRound'),

@@ -99,7 +99,7 @@ export function hasWaterShaderAssets(): boolean {
   return Boolean(WATER_TEX.n1 && WATER_TEX.n2 && WATER_TEX.broad);
 }
 
-const DEEP_COLOR = new THREE.Color(0x0d3a52);
+export const DEEP_COLOR = new THREE.Color(0x0d3a52);
 /** Canonical shallow-water tint, exported for surfaces that must match the
  *  sea palette without the full shader (the Wildheart waterfall ribbons). */
 export const SHALLOW_COLOR = new THREE.Color(0x2d8077);
@@ -314,6 +314,18 @@ export interface WaterSurfaceMaterialOptions {
    * overworld output is unchanged.
    */
   shoreEdgeFade?: boolean;
+  /**
+   * The two ends of the depth ramp, if this surface wants its own.
+   *
+   * Absent leaves the world's shipped pair, which every overworld body and the
+   * shipped rally pools use, so this is invisible until something asks. What
+   * asks is a Realm Racers circuit THEME: a coastal circuit's pools have to read
+   * as its own sea rather than as the Evergarden's pond, and the colour ramp is
+   * the whole of that difference (the ripples, the fresnel and the foam are the
+   * same water everywhere, deliberately).
+   */
+  deep?: THREE.Color;
+  shallow?: THREE.Color;
 }
 
 /**
@@ -333,8 +345,8 @@ export function buildWaterSurfaceMaterial(
       uSunDir: { value: SUN_DIR.clone() }, // the one shared sun (gfx.ts)
       uSunColor: { value: SUN_COLOR },
       uSkyColor: { value: SKY_TINT },
-      uDeep: { value: DEEP_COLOR },
-      uShallow: { value: SHALLOW_COLOR },
+      uDeep: { value: options.deep ?? DEEP_COLOR },
+      uShallow: { value: options.shallow ?? SHALLOW_COLOR },
       uTime: sharedUniforms.uTime,
       uSurfaceOrigin: { value: new THREE.Vector2(origin.x, origin.z) },
       uWaveState: options.wave.uWaveState,

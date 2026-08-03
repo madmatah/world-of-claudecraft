@@ -164,6 +164,21 @@ describe('Realm Racers circuits: every record is well formed', () => {
       // enough to corrupt the projection, and the two shores never meet.
       const metrics = realmRacersCircuitMetrics(circuit);
       expect(realmRacersCircuitErrors(metrics), `${circuit.id} problems`).toEqual([]);
+      // The camera WARNING is counted too, which errors alone would let
+      // through. The derived dressing ring used to carry a hard test that every
+      // piece stood clear of the chase camera's furthest reach; the ring is
+      // gone and scenery is authored, so the rule survives only as a warning,
+      // and nothing would go red if a circuit grew a canopy over its road.
+      //
+      // Pinned at the KNOWN count rather than at zero: the practice circuit's
+      // tiered fountain has stood 30 yards off the road since it was authored
+      // (a 35.5 yard reach at that corner), which is a seat call already taken
+      // and not this change's to reopen. A SECOND piece inside the reach, or
+      // one on the Express Tour, fails here.
+      expect(
+        metrics.problems.filter((problem) => problem.code === 'prop_in_camera_reach').length,
+        `${circuit.id} camera reach`,
+      ).toBe(circuit.id === 'evergarden_practice' ? 1 : 0);
       // Not vacuous: the checks really did run over a measured lap.
       expect(metrics.sampleCount).toBeGreaterThan(100);
       expect(metrics.turningDegrees).toBeCloseTo(360, 3);
