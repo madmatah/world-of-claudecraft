@@ -1,13 +1,20 @@
-// The circuit editor page: a canvas, pointer routing, and the readout panel.
+// The circuit editor page: the plan canvas, pointer routing, and the workbench
+// chrome hung off it.
 //
 // Every decision lives in a core (`stroke_fit_core`, `handles_core`,
-// `export_core`) or in the sim (`realmRacersTrack` for the geometry,
-// `realmRacersCircuitMetrics` for the readout). Nothing here computes anything
-// about a circuit: this file turns pointers into calls and returned numbers into
-// pixels, which is the only reason a page is allowed to be this long.
+// `export_core`, `layout_core`) or in the sim (`realmRacersTrack` for the
+// geometry, `realmRacersCircuitMetrics` for the readout). Nothing here computes
+// anything about a circuit or about the shell: this file turns pointers into
+// calls and returned numbers into pixels, which is the only reason a page is
+// allowed to be this long.
+//
+// The chrome itself is `shell.ts` (menu bar, rail, plan overlays, status bar,
+// contextual panel) and `dock.ts` (the floating 3D panel). Both are structure
+// over the same action table, so what this file wires is behavior.
 //
 // Dev tool: English-only, absent from every production build. See CLAUDE.md.
 
+import { AREA_TRACK_URLS } from '../../game/music_tracks';
 import { realmRacersTheme } from '../../render/realm_racers_themes';
 import {
   type RallyPond,
@@ -18,19 +25,18 @@ import {
   REALM_RACERS_THEME_IDS,
   type RealmRacersBasin,
   type RealmRacersCircuit,
+  type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import {
   type RealmRacersCircuitMetrics,
   type RealmRacersCircuitProblem,
-  type RealmRacersCircuitProblemCode,
   realmRacersCircuitMetrics,
 } from '../../sim/realm_racers_circuit_metrics';
 import {
   type RallyPoint,
   REALM_RACERS_MAX_REGION_HALF_X,
   REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_MIN_HALF_WIDTH,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
@@ -43,6 +49,7 @@ import {
   realmRacersStarts,
   realmRacersTrack,
 } from '../../sim/realm_racers_spline';
+import { CircuitDock } from './dock';
 import { suggestEnvelope } from './envelope_core';
 import { circuitToTypeScript, roundCircuit, validateCircuitPayload } from './export_core';
 import {
@@ -57,6 +64,30 @@ import {
   paintSpan,
   toWidthBands,
 } from './handles_core';
+import {
+  type ActionId,
+  actionForShortcut,
+  type CircuitTool,
+  calloutProblems,
+  type DockGeometry,
+  type EditorLayout,
+  gridStepAt,
+  headlineChips,
+  LAYOUT_STORAGE_KEY,
+  parseLayout,
+  problemDetail,
+  problemHeadline,
+  type RailModeId,
+  type SideTabId,
+  serializeLayout,
+  sideTabsFor,
+  snapPoint,
+  TOOL_VALUE_FIELDS,
+  toolFor,
+  ZOOM_MAX_SCALE,
+  ZOOM_MIN_SCALE,
+  zoomScale,
+} from './layout_core';
 import {
   authorPlacement,
   convertedProp,
@@ -81,14 +112,24 @@ import {
   tangentProp,
   toggledCollide,
 } from './props_core';
+import { detectPlatform, EditorShell } from './shell';
 import { fitStrokeToControlPoints } from './stroke_fit_core';
 import { suggestWidthBands } from './width_fix_core';
 
-type Mode = 'draw' | 'handles' | 'width' | 'props';
 type Selection = { kind: 'point'; index: number } | null;
 
-/** How many problems the panel lists before it says how many it is holding
- *  back. Every one of them still draws its marker on the canvas. */
+/**
+ * The music a circuit may name.
+ *
+ * The area-track table is the set the game can actually stream for a lane, so it
+ * is the honest vocabulary; a circuit naming anything else would play silence. Read
+ * off that table rather than re-listed here, so a new track appears in the picker
+ * the moment the game can play it.
+ */
+const MUSIC_TRACK_IDS: readonly string[] = Object.keys(AREA_TRACK_URLS);
+
+/** How many problems the drawer lists before it says how many it is holding
+ *  back. Every one of them still draws its marker on the plan. */
 const MAX_LISTED_PROBLEMS = 10;
 
 /**
@@ -102,49 +143,6 @@ const MAX_LISTED_PROBLEMS = 10;
  * replaces, is 2.3 yards, and a two yard change over that is a wall.
  */
 const PAINT_RAMP_YARDS = 25;
-
-/**
- * What the one number in the header MEANS in each mode, and what it is allowed
- * to be. It is not a brush SIZE, which is what "brush" says in every other
- * tool: it is the value the stroke paints, in yards, and the two painting modes
- * paint two different quantities with two different legal ranges.
- */
-const BRUSH_FIELDS: Record<Mode, { label: string; min: number; max: number } | null> = {
-  draw: null,
-  handles: null,
-  width: { label: 'road half-width (yd)', min: REALM_RACERS_MIN_HALF_WIDTH, max: 40 },
-  // In props mode the field is the SCATTER's spacing: the one number a
-  // rectangle drag cannot carry, since the box says where and the spacing says
-  // how dense.
-  props: { label: 'scatter spacing (yd)', min: 2, max: 60 },
-};
-
-const MODE_HINTS: Record<Mode, string> = {
-  draw: 'drag anywhere to draw the centerline in one gesture; the fitted curve replaces the stroke on release',
-  handles: 'drag a handle to move it, click the curve to insert one, del to delete',
-  width: 'drag along the circuit to set the road half-width there; the road is twice this wide',
-  props:
-    'click to place the palette piece, drag to move it, shift+drag for a seeded scatter over that box; R rotates, shift+R faces the racing direction, +/- scales, C toggles collision, del deletes',
-};
-
-const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
-  self_crossing: 'the loop crosses itself',
-  reversed_winding: 'the loop runs clockwise',
-  corner_folds_road: 'a corner is tighter than its own road',
-  corner_near_road_width: 'a corner is close to its own road width',
-  stretches_too_close: 'two stretches run close enough to break the projection',
-  road_outside_perimeter: 'the road runs outside the perimeter wall',
-  perimeter_outside_region: 'the perimeter wall is outside the collision region',
-  region_outside_band: 'the region is wider than the instance band',
-  region_deeper_than_lane_budget: 'the region is deeper than the gap between two lanes',
-  pond_requires_basin: 'a pond on a circuit with no water authored',
-  unknown_theme: 'the theme is not one the game authors',
-  unknown_prop_asset: 'a prop names a catalog key nothing draws',
-  prop_blocks_racing_surface: 'a prop stands on the racing surface',
-  prop_outside_region: 'a prop stands outside the collision region',
-  prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
-  pond_on_racing_surface: 'a pond reaches onto the racing surface',
-};
 
 /**
  * An oval a new circuit opens on, so the tool never starts on geometry the
@@ -202,7 +200,14 @@ let record: RealmRacersCircuit = blankCircuit();
 let drawn = false;
 let track: RallyTrackModel = realmRacersTrack(record);
 let metrics: RealmRacersCircuitMetrics = realmRacersCircuitMetrics(record);
-let mode: Mode = 'draw';
+/**
+ * Which rail entry is armed. The GESTURE it routes is derived
+ * (`toolFor(railMode, drawn)`): SHAPE draws a blank canvas and edits handles on
+ * a drawn one, and which of the two the operator gets was never a choice worth
+ * a button of its own.
+ */
+let railMode: RailModeId = 'shape';
+const tool = (): CircuitTool => toolFor(railMode, drawn);
 let selection: Selection = null;
 /** The raw gesture, kept after the fit so the operator can see how far the
  *  closed centripetal Catmull-Rom sits off the line they drew. */
@@ -230,49 +235,37 @@ let pondHandle: PondHandle | null = null;
 let dragHint: number | undefined;
 /** The live rectangle a scatter or a pond is being dragged out over. */
 let dressingRect: DressingRect | null = null;
-/** The palette key a click places: a catalog asset, or the pond. */
-let paletteChoice = 'fountain';
+/**
+ * What a click on empty plan PLACES: a catalog asset, the pond, or nothing.
+ *
+ * Null is the pointer, and it is the default. With something permanently armed,
+ * a click that missed the bench the operator meant to grab silently authored a
+ * second bench, which is the worst kind of edit: one nobody asked for, at a place
+ * nobody chose. Arming is now a deliberate act with a visible state in the status
+ * bar, and `esc` puts the pointer back.
+ */
+let paletteChoice: string | null = null;
 let paletteShowAll = false;
+/** Where the pointer last was on the plan, which is where the armed piece's
+ *  ghost stands. Null once the pointer leaves. */
+let hover: RallyPoint | null = null;
 let panning: { x: number; z: number; clientX: number; clientY: number } | null = null;
 const undoStack: { record: RealmRacersCircuit; drawn: boolean }[] = [];
 const view = { x: 0, z: 0, scale: 2.4 };
 let redrawQueued = false;
+/** Edits since the last save, which is what the document's `unsaved` marker
+ *  reports. Not a save gate: a dev tool never blocks the operator. */
+let dirty = false;
 
 // ---- dom ----
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-const readoutEl = document.getElementById('readout') as HTMLDivElement;
-const formEl = document.getElementById('form') as HTMLDivElement;
-const statusEl = document.getElementById('status') as HTMLSpanElement;
-const hintEl = document.getElementById('hint') as HTMLSpanElement;
-const brushInput = document.getElementById('brush') as HTMLInputElement;
-const brushLabel = document.getElementById('brushLabel') as HTMLLabelElement;
 const emptyEl = document.getElementById('empty') as HTMLDivElement;
 const loadDialog = document.getElementById('loadDialog') as HTMLDialogElement;
 const loadListEl = document.getElementById('loadList') as HTMLDivElement;
-const fitBtn = document.getElementById('fitBtn') as HTMLButtonElement;
-const fitBoxBtn = document.getElementById('fitBoxBtn') as HTMLButtonElement;
-const fixCornersBtn = document.getElementById('fixCornersBtn') as HTMLButtonElement;
-const copyBtn = document.getElementById('copyBtn') as HTMLButtonElement;
-const saveBtn = document.getElementById('saveBtn') as HTMLButtonElement;
-const previewBtn = document.getElementById('previewBtn') as HTMLButtonElement;
-const previewEl = document.getElementById('preview') as HTMLDivElement;
 const previewCanvas = document.getElementById('preview3d') as HTMLCanvasElement;
-const flyBtn = document.getElementById('flyBtn') as HTMLButtonElement;
-const orbitBtn = document.getElementById('orbitBtn') as HTMLButtonElement;
-const flySpeedEl = document.getElementById('flySpeed') as HTMLSelectElement;
-const flyAtEl = document.getElementById('flyAt') as HTMLInputElement;
-const flyLabelEl = document.getElementById('flyLabel') as HTMLSpanElement;
-const modeButtons: Record<Mode, HTMLButtonElement> = {
-  draw: document.getElementById('modeDraw') as HTMLButtonElement,
-  handles: document.getElementById('modeHandles') as HTMLButtonElement,
-  width: document.getElementById('modeWidth') as HTMLButtonElement,
-  props: document.getElementById('modeProps') as HTMLButtonElement,
-};
-const paletteEl = document.getElementById('palette') as HTMLDivElement;
-const paletteAllEl = document.getElementById('paletteAll') as HTMLInputElement;
-const paletteAllLabel = document.getElementById('paletteAllLabel') as HTMLLabelElement;
+const platform = detectPlatform();
 
 /**
  * The last basin the record carried, so deleting the final pond and then
@@ -291,9 +284,36 @@ let rememberedBasin: RealmRacersBasin = record.basin ??
     wadeYards: 4,
   };
 
-function setStatus(text: string, cls = ''): void {
-  statusEl.textContent = text;
-  statusEl.className = cls;
+// ---- the persisted layout ----
+
+function readLayout(): EditorLayout {
+  try {
+    return parseLayout(window.localStorage.getItem(LAYOUT_STORAGE_KEY));
+  } catch {
+    // Private browsing and a blocked origin both throw on access rather than
+    // returning null, and a tool that cannot remember its panels still works.
+    return parseLayout(null);
+  }
+}
+
+let layout: EditorLayout = readLayout();
+let layoutSaveTimer = 0;
+
+function saveLayout(): void {
+  window.clearTimeout(layoutSaveTimer);
+  // Coalesced: the zoom lands in here on every wheel notch, and a write per
+  // notch is a synchronous storage hit inside a gesture.
+  layoutSaveTimer = window.setTimeout(() => {
+    try {
+      window.localStorage.setItem(LAYOUT_STORAGE_KEY, serializeLayout(layout));
+    } catch {
+      // Nothing to do and nothing to say: the layout is a convenience.
+    }
+  }, 400);
+}
+
+function setStatus(text: string, cls: '' | 'ok' | 'err' = ''): void {
+  shell.setMessage(text, cls);
 }
 
 // ---- the record ----
@@ -306,6 +326,9 @@ function setStatus(text: string, cls = ''): void {
  * simply skips it while it is.
  */
 let preview: import('./preview3d').CircuitPreview | null = null;
+/** One-shot: a layout that was left with the dock open re-opens it as soon as
+ *  there is a circuit to show, and never asks again. */
+let dockRestored = false;
 
 /** Every edit lands here: it rounds to what the export carries, re-derives the
  *  geometry and the readout, and schedules a repaint. */
@@ -318,6 +341,7 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   if (record.basin) rememberedBasin = record.basin;
   track = realmRacersTrack(record);
   metrics = realmRacersCircuitMetrics(record);
+  dirty = true;
   requestRedraw();
   // The palette follows the theme, so retyping the theme field re-offers the
   // zone's own vocabulary rather than the one the circuit opened on.
@@ -334,6 +358,7 @@ function undo(): void {
   const previous = undoStack.pop();
   if (!previous) return;
   selection = null;
+  dressing = null;
   drawn = previous.drawn;
   commit(previous.record, false);
   syncForm();
@@ -367,6 +392,10 @@ function fractionAt(point: RallyPoint): number {
   return projection.s / track.length;
 }
 
+/** What a gesture authors from a raw pointer position: the grid rounds it when
+ *  the operator asked for a grid to round to. */
+const authored = (point: RallyPoint): RallyPoint => snapPoint(point, layout.snap);
+
 function fitView(): void {
   // A blank canvas frames the room a circuit HAS; the placeholder record's own
   // extents would be framing a shape nobody drew.
@@ -376,7 +405,13 @@ function fitView(): void {
   view.x = 0;
   view.z = 0;
   view.scale = Math.min(canvas.clientWidth, canvas.clientHeight) / (2 * half);
+  rememberZoom();
   requestRedraw();
+}
+
+function rememberZoom(): void {
+  layout = { ...layout, zoom: view.scale };
+  saveLayout();
 }
 
 // ---- drawing ----
@@ -387,7 +422,7 @@ function requestRedraw(): void {
   requestAnimationFrame(() => {
     redrawQueued = false;
     draw();
-    paintPanel();
+    paintChrome();
   });
 }
 
@@ -408,6 +443,42 @@ function strokeRect(halfX: number, halfZ: number, color: string, dash: number[] 
   ctx.strokeStyle = color;
   ctx.lineWidth = 1;
   ctx.strokeRect(screenX(-halfX), screenY(-halfZ), halfX * 2 * view.scale, halfZ * 2 * view.scale);
+  ctx.restore();
+}
+
+/** The reference grid, under everything. The step comes from the core, which
+ *  multiplies it up until the lines are far enough apart to read. */
+function drawGridLines(): void {
+  if (!layout.grid) return;
+  const step = gridStepAt(view.scale);
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const left = view.x - width / (2 * view.scale);
+  const right = view.x + width / (2 * view.scale);
+  const top = view.z - height / (2 * view.scale);
+  const bottom = view.z + height / (2 * view.scale);
+  ctx.save();
+  ctx.strokeStyle = '#1d212b';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = Math.ceil(left / step) * step; x <= right; x += step) {
+    ctx.moveTo(screenX(x), 0);
+    ctx.lineTo(screenX(x), height);
+  }
+  for (let z = Math.ceil(top / step) * step; z <= bottom; z += step) {
+    ctx.moveTo(0, screenY(z));
+    ctx.lineTo(width, screenY(z));
+  }
+  ctx.stroke();
+  // The origin, so a circuit-local coordinate in the inspector has something on
+  // screen to mean anything against.
+  ctx.strokeStyle = '#252b38';
+  ctx.beginPath();
+  ctx.moveTo(screenX(0), 0);
+  ctx.lineTo(screenX(0), height);
+  ctx.moveTo(0, screenY(0));
+  ctx.lineTo(width, screenY(0));
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -466,7 +537,7 @@ function drawSurfaces(): void {
   ctx.stroke();
 }
 
-function drawGrid(): void {
+function drawGates(): void {
   // The recovery anchors are DERIVED, so they are drawn and never edited: they
   // are here to show where a reset would put a racer back, which is worth
   // seeing while shaping the curve that decides it.
@@ -504,7 +575,7 @@ function drawHandles(): void {
 /**
  * The room a circuit has, drawn on a blank canvas.
  *
- * On a blank canvas the panel is hidden, so the two ceilings a circuit lives
+ * On a blank canvas the readout is hidden, so the two ceilings a circuit lives
  * under (`REALM_RACERS_MAX_REGION_HALF_X`, set by the instance band, and
  * `REALM_RACERS_MAX_REGION_HALF_Z`, set by the gap between two lanes) are
  * nowhere on screen at the exact moment they matter most: before the first
@@ -666,6 +737,28 @@ function drawDressing(): void {
     }
   }
 
+  // The GHOST: what the next click will put down, where it will put it.
+  //
+  // Resolved through `realmRacersPlacements` on a record carrying the pending
+  // piece, never worked out here: a ghost that drew its own footprint would be a
+  // second derivation of a placement, which is the exact class of bug the one
+  // resolver exists to make impossible. So the outline under the cursor is the
+  // outline the collision set will hold.
+  const ghost = ghostPlacement();
+  if (ghost) {
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = '#ffd479';
+    ctx.lineWidth = 1.5;
+    traceFootprint(ghost);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#ffd479';
+    ctx.font = '11px ui-monospace, Menlo, monospace';
+    ctx.fillText(ghost.asset, screenX(ghost.x) + 8, screenY(ghost.z) - 8);
+    ctx.restore();
+  }
+
   if (dressingRect) {
     ctx.save();
     ctx.setLineDash([4, 4]);
@@ -681,10 +774,63 @@ function drawDressing(): void {
   }
 }
 
+function draw(): void {
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#14161c';
+  ctx.fillRect(0, 0, width, height);
+  drawGridLines();
+
+  if (!drawn) {
+    // Nothing of the placeholder record is drawn, so a blank canvas really is
+    // blank: the room a circuit has, and the live stroke so a gesture is
+    // visible as it happens.
+    drawLimits();
+    drawStroke();
+    return;
+  }
+  strokeRect(record.regionHalfX, record.regionHalfZ, '#3a4054', [8, 6]);
+  strokeRect(record.perimeter.halfX, record.perimeter.halfZ, '#55607a');
+  drawSurfaces();
+  drawGates();
+  drawStroke();
+  if (tool() === 'props') drawDressing();
+  else drawHandles();
+  drawProblemMarkers();
+}
+
 // ---- the dressing gestures ----
 
 /** Click tolerance in yards, so a bench is grabbable at any zoom. */
 const dressingTolerance = (): number => 7 / view.scale;
+
+/**
+ * The piece the cursor is carrying, placed where a click would place it.
+ *
+ * Null unless the props tool is armed and the pointer is over the plan. It goes
+ * through the resolver on a throwaway record, which costs one resolve per
+ * repaint: `drawDressing` already resolves once per repaint, so this is the same
+ * order, and it is the only way for the ghost's footprint, yaw and solidity to be
+ * the ones the game will use.
+ */
+function ghostPlacement(): RallyPlacedProp | null {
+  if (!drawn || tool() !== 'props' || paletteChoice === null) return null;
+  if (paletteChoice === POND_CHOICE || !hover || dressingDrag) return null;
+  const point = authored(hover);
+  const pending: RallyProp = {
+    asset: paletteChoice,
+    at: authorPlacement(record, point.x, point.z).at,
+  };
+  const props = [...(record.props ?? []), pending];
+  const placed = realmRacersPlacements({ ...record, props }).props;
+  return placed[placed.length - 1] ?? null;
+}
 
 /**
  * Record indices of the props the resolver actually placed, in its own order.
@@ -725,7 +871,7 @@ function commitDressing(next: Partial<RealmRacersCircuit>, remember = true): voi
   commit({ ...record, ...next, basin }, remember);
 }
 
-function startDressingGesture(point: RallyPoint, rect: boolean): void {
+function startDressingGesture(raw: RallyPoint, rect: boolean): void {
   const placements = realmRacersPlacements(record);
   const tolerance = dressingTolerance();
 
@@ -733,7 +879,7 @@ function startDressingGesture(point: RallyPoint, rect: boolean): void {
   // the shape before them would make a resize impossible.
   if (dressing?.kind === 'pond') {
     const pond = record.ponds?.[dressing.index];
-    const handle = pond && hitTestPondHandle(pond, point.x, point.z, tolerance);
+    const handle = pond && hitTestPondHandle(pond, raw.x, raw.z, tolerance);
     if (pond && handle) {
       undoStack.push({ record, drawn });
       dressingDrag = 'pond';
@@ -742,27 +888,41 @@ function startDressingGesture(point: RallyPoint, rect: boolean): void {
     }
   }
 
-  const hitProp = hitTestPlaced(placements.props, point.x, point.z, tolerance);
+  // Hit testing reads the RAW pointer: what is under the finger is under the
+  // finger whether or not the next placement will be rounded to the grid.
+  const hitProp = hitTestPlaced(placements.props, raw.x, raw.z, tolerance);
   if (hitProp >= 0) {
     const index = placedPropIndices()[hitProp];
     dressing = { kind: 'prop', index };
     undoStack.push({ record, drawn });
     dressingDrag = 'move';
     dragHint = propProjectionHint(record, (record.props ?? [])[index]);
+    applySideTab();
     requestRedraw();
     return;
   }
-  const hitPond = hitTestPonds(placements.ponds, point.x, point.z);
+  const hitPond = hitTestPonds(placements.ponds, raw.x, raw.z);
   if (hitPond >= 0) {
     dressing = { kind: 'pond', index: hitPond };
     undoStack.push({ record, drawn });
     dressingDrag = 'move';
+    applySideTab();
+    requestRedraw();
+    return;
+  }
+
+  // Nothing under the pointer, and nothing armed: the click was a miss, or a
+  // deliberate deselect. Either way it must not author anything.
+  if (paletteChoice === null) {
+    dressing = null;
+    applySideTab();
     requestRedraw();
     return;
   }
 
   // Nothing under the pointer: this is a placement. A pond and a scatter are
   // both dragged out over a box, a prop lands on the click.
+  const point = authored(raw);
   if (rect || paletteChoice === POND_CHOICE) {
     dressingRect = { x0: point.x, z0: point.z, x1: point.x, z1: point.z };
     dressingDrag = 'rect';
@@ -774,10 +934,12 @@ function startDressingGesture(point: RallyPoint, rect: boolean): void {
   dressingDrag = 'move';
   dragHint = placement.hint;
   commitDressing({ props });
+  applySideTab();
   setStatus(`placed ${paletteChoice} (${propFrameOf(props[props.length - 1])})`, 'ok');
 }
 
-function moveDressingGesture(point: RallyPoint): void {
+function moveDressingGesture(raw: RallyPoint): void {
+  const point = authored(raw);
   if (dressingDrag === 'rect' && dressingRect) {
     dressingRect = { ...dressingRect, x1: point.x, z1: point.z };
     requestRedraw();
@@ -825,12 +987,13 @@ function moveDressingGesture(point: RallyPoint): void {
 }
 
 function endDressingGesture(): void {
-  if (dressingDrag === 'rect' && dressingRect) {
+  const armed = paletteChoice;
+  if (dressingDrag === 'rect' && dressingRect && armed) {
     const box = dressingRect;
     const dragged = Math.hypot(box.x1 - box.x0, box.z1 - box.z0);
     if (dragged < 2) {
       setStatus('drag a box: a scatter fills a stretch of one side, a pond fills the box', 'err');
-    } else if (paletteChoice === POND_CHOICE) {
+    } else if (armed === POND_CHOICE) {
       const ponds = [
         ...(record.ponds ?? []),
         pondFromDrag(box.x0, box.z0, box.x1, box.z1, nextSeed()),
@@ -839,19 +1002,17 @@ function endDressingGesture(): void {
       commitDressing({ ponds });
       setStatus(`placed a pond, ${ponds.length} on this circuit`, 'ok');
     } else {
-      const spacing = Number(brushInput.value);
-      const scatter = scatterFromRect(record, box, paletteChoice, spacing, nextSeed());
+      const spacing = Number(shell.toolValueInput.value);
+      const scatter = scatterFromRect(record, box, armed, spacing, nextSeed());
       const scatters = [...(record.scatters ?? []), scatter];
       dressing = { kind: 'scatter', index: scatters.length - 1 };
       commitDressing({ scatters });
       // What a fill LANDED is the only useful readout: a scatter rejects every
       // piece that would sit on the racing surface or outside the wall, so the
       // count is nothing like the box divided by the spacing.
-      setStatus(
-        `scattered ${paletteChoice}: ${metrics.scatterCount} pieces at ${spacing} yd`,
-        'ok',
-      );
+      setStatus(`scattered ${armed}: ${metrics.scatterCount} pieces at ${spacing} yd`, 'ok');
     }
+    applySideTab();
   }
   dressingDrag = null;
   dressingRect = null;
@@ -881,9 +1042,10 @@ function deleteDressing(): void {
   }
   if (dressing.kind === 'pond') commitDressing({ ponds: removedAt(record.ponds, dressing.index) });
   dressing = null;
+  applySideTab();
 }
 
-// ---- the palette ----
+// ---- the library ----
 
 /** The palette entry that places WATER rather than a catalog piece. Ponds live
  *  in the same list because placing one is the same gesture, and a mode of
@@ -893,13 +1055,37 @@ const POND_CHOICE = 'pond';
 /** Which theme the palette on screen was built for. */
 let paletteTheme = '';
 
+const libraryEl = document.createElement('div');
+const paletteListEl = document.createElement('div');
+paletteListEl.className = 'palette-list';
+const pointerButton = document.createElement('button');
+pointerButton.type = 'button';
+pointerButton.className = 'pointer-mode';
+pointerButton.title =
+  'Select and edit what is already there. A click on empty plan places nothing (esc)';
+pointerButton.onclick = () => armPalette(null);
+const paletteAllLabel = document.createElement('label');
+paletteAllLabel.id = 'paletteAllLabel';
+const paletteAllEl = document.createElement('input');
+paletteAllEl.type = 'checkbox';
+paletteAllLabel.append(paletteAllEl, ' show the whole catalog');
+
+/** What the status bar says a click will do, and what the palette highlights. */
+function armPalette(key: string | null): void {
+  paletteChoice = key;
+  buildPalette();
+  shell.setArmed(railMode === 'props' ? shellArmText() : '');
+  // The pointer itself says which of the two states the tool is in, before the
+  // operator has read anything: a crosshair selects, a copy cursor places.
+  canvas.style.cursor = key === null ? 'crosshair' : 'copy';
+  requestRedraw();
+}
+
 function buildPalette(): void {
-  paletteEl.replaceChildren();
+  libraryEl.replaceChildren();
   const heading = document.createElement('h2');
-  heading.textContent = 'palette';
-  paletteEl.append(heading);
-  const list = document.createElement('div');
-  list.className = 'palette-list';
+  heading.textContent = 'library';
+  paletteListEl.replaceChildren();
   const entries = propPalette(REALM_RACERS_PROPS, realmRacersTheme(record).props);
   const shown = paletteShowAll ? entries : entries.filter((entry) => entry.featured);
   const choose = (key: string, label: string, detail: string): void => {
@@ -908,15 +1094,99 @@ function buildPalette(): void {
     button.textContent = label;
     button.title = detail;
     button.classList.toggle('on', paletteChoice === key);
-    button.onclick = () => {
-      paletteChoice = key;
-      buildPalette();
-    };
-    list.append(button);
+    // Clicking the armed piece again disarms it, so the pointer is always one
+    // click away from wherever the operator's hand already is.
+    button.onclick = () => armPalette(paletteChoice === key ? null : key);
+    paletteListEl.append(button);
   };
-  choose(POND_CHOICE, 'pond', 'drag a box: decorative water, no slow and no mechanic');
+  choose(POND_CHOICE, 'pond', 'Drag a box: decorative water, no slow and no mechanic');
   for (const entry of shown) choose(entry.asset, entry.asset, entry.group);
-  paletteEl.append(list);
+  // The pointer is a MODE, not a piece, so it gets its own row above the pieces.
+  // Sat inside the list as the first tile it read as "the first asset is armed",
+  // which is the opposite of what it means.
+  pointerButton.classList.toggle('on', paletteChoice === null);
+  pointerButton.textContent =
+    paletteChoice === null ? 'pointer (armed)' : `pointer (esc) - placing ${paletteChoice}`;
+  const hint = document.createElement('div');
+  hint.className = 'hint-line';
+  hint.textContent =
+    railMode === 'props'
+      ? paletteChoice === null
+        ? 'arm a piece above, then click the plan to place one'
+        : 'click the plan to place one; shift+drag a box to sow a whole patch of them at the spacing above'
+      : 'arm a piece here, then switch to the PROPS tool to place it';
+  libraryEl.append(heading, pointerButton, paletteListEl, paletteAllLabel, hint);
+}
+
+paletteAllEl.onchange = () => {
+  paletteShowAll = paletteAllEl.checked;
+  buildPalette();
+};
+
+// ---- the outliner ----
+//
+// What is STANDING on this circuit, entry by entry. The drawer counts the
+// dressing in aggregate, which answers "how much" and never "which one", and on
+// a dressed circuit the fourth lantern is the thing an operator is looking for.
+
+const outlinerEl = document.createElement('div');
+
+function outlinerRow(name: string, detail: string, solid = false): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'outline-row';
+  const label = document.createElement('span');
+  label.className = 'n';
+  label.textContent = name;
+  const note = document.createElement('span');
+  note.textContent = detail;
+  row.append(label, note);
+  if (solid) {
+    const mark = document.createElement('span');
+    mark.className = 'solid';
+    mark.textContent = 'solid';
+    row.append(mark);
+  }
+  return row;
+}
+
+function paintOutliner(): void {
+  if (outlinerEl.hidden) return;
+  outlinerEl.replaceChildren();
+  if (!drawn) return;
+  const placements = realmRacersPlacements(record);
+  const props = record.props ?? [];
+  const heading = (text: string): void => {
+    const h = document.createElement('h2');
+    h.textContent = text;
+    outlinerEl.append(h);
+  };
+
+  heading(`props (${props.length})`);
+  if (props.length === 0) outlinerEl.append(outlinerRow('nothing placed', ''));
+  props.forEach((prop, index) => {
+    const placed = placements.props[placementIndexOf(index)];
+    const where = placed ? `${placed.x.toFixed(0)}, ${placed.z.toFixed(0)}` : 'not drawn';
+    outlinerEl.append(outlinerRow(prop.asset, where, Boolean(placed?.solid)));
+  });
+
+  const scatters = record.scatters ?? [];
+  heading(`scatters (${scatters.length}, ${metrics.scatterCount} pieces)`);
+  for (const scatter of scatters) {
+    outlinerEl.append(outlinerRow(scatter.asset, `${scatter.zone}, ${scatter.spacing} yd`));
+  }
+
+  const ponds = record.ponds ?? [];
+  heading(`ponds (${ponds.length})`);
+  ponds.forEach((pond, index) => {
+    outlinerEl.append(
+      outlinerRow(`pond ${index}`, `${(pond.rx * 2).toFixed(0)} x ${(pond.rz * 2).toFixed(0)} yd`),
+    );
+  });
+
+  const hint = document.createElement('div');
+  hint.className = 'hint-line';
+  hint.textContent = 'click a piece on the plan to edit its numbers';
+  outlinerEl.append(hint);
 }
 
 // ---- the inspector ----
@@ -957,17 +1227,18 @@ function inspectorButton(label: string, onClick: () => void): void {
 }
 
 function paintInspector(): void {
-  if (mode !== 'props') {
-    inspectorEl.replaceChildren();
-    return;
-  }
-  if (inspectorEl.contains(document.activeElement)) {
-    readoutEl.append(inspectorEl);
-    return;
-  }
+  if (inspectorEl.hidden || inspectorEl.contains(document.activeElement)) return;
   inspectorEl.replaceChildren();
-  readoutEl.append(inspectorEl);
-  if (!dressing) return;
+  if (!dressing) {
+    const hint = document.createElement('div');
+    hint.className = 'hint-line';
+    hint.textContent =
+      railMode === 'props'
+        ? 'click a prop, a scatter or a pond on the plan'
+        : 'the PROPS tool is where a piece is selected';
+    inspectorEl.append(hint);
+    return;
+  }
   const title = document.createElement('h2');
   title.textContent = `${dressing.kind} ${dressing.index}`;
   inspectorEl.append(title);
@@ -1147,37 +1418,7 @@ function paintInspector(): void {
   );
 }
 
-function draw(): void {
-  const dpr = window.devicePixelRatio || 1;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-  }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#14161c';
-  ctx.fillRect(0, 0, width, height);
-
-  if (!drawn) {
-    // Nothing of the placeholder record is drawn, so a blank canvas really is
-    // blank: the room a circuit has, and the live stroke so a gesture is
-    // visible as it happens.
-    drawLimits();
-    drawStroke();
-    return;
-  }
-  strokeRect(record.regionHalfX, record.regionHalfZ, '#3a4054', [8, 6]);
-  strokeRect(record.perimeter.halfX, record.perimeter.halfZ, '#55607a');
-  drawSurfaces();
-  drawGrid();
-  drawStroke();
-  if (mode === 'props') drawDressing();
-  else drawHandles();
-  drawProblemMarkers();
-}
-
-// ---- the panel ----
+// ---- the readout drawer ----
 
 function row(table: HTMLTableElement, key: string, value: string, cls = ''): void {
   const tr = table.insertRow();
@@ -1200,135 +1441,183 @@ function problemLine(problem: RealmRacersCircuitProblem): HTMLDivElement {
   div.className = `problem ${problem.severity}`;
   const label = document.createElement('div');
   label.className = 'c';
-  label.textContent = problem.axis
-    ? `${PROBLEM_LABELS[problem.code]} (${problem.axis})`
-    : PROBLEM_LABELS[problem.code];
+  label.textContent = problemHeadline(problem);
   const detail = document.createElement('div');
   detail.className = 'd';
-  const where = problem.s >= 0 ? ` at ${problem.s.toFixed(0)} yd` : '';
-  detail.textContent = `${problem.value.toFixed(2)} against ${problem.limit.toFixed(2)}${where}`;
+  detail.textContent = problemDetail(problem);
   div.append(label, detail);
   return div;
 }
 
-function paintPanel(): void {
-  readoutEl.replaceChildren();
-  if (!drawn) return;
-  const shape = document.createElement('table');
-  row(shape, 'lap', `${metrics.lapLength.toFixed(1)} yd`);
-  row(shape, 'samples', String(metrics.sampleCount));
-  row(
-    shape,
-    'total turning',
-    `${metrics.turningDegrees.toFixed(1)} deg`,
-    Math.abs(Math.abs(metrics.turningDegrees) - 360) > 5 ? 'bad' : 'good',
-  );
-  row(
-    shape,
-    'winding',
-    metrics.winding > 0 ? 'counter-clockwise' : 'clockwise',
-    metrics.winding > 0 ? 'good' : 'bad',
-  );
-  row(shape, 'control points', String(record.controlPoints.length));
-  readoutEl.append(heading('shape'), shape);
+/**
+ * The readout, section by section, each one an element.
+ *
+ * Sections rather than one paint, because two surfaces show them: the drawer
+ * shows every one, and the right panel shows the SECTIONS THE ACTIVE TOOL IS
+ * ABOUT (shape's geometry while shaping, the road profile while painting it).
+ * One builder each, so the two can never quote a different number for the same
+ * measurement.
+ */
+type ReadoutSection = 'shape' | 'corners' | 'stretches' | 'surface' | 'dressing' | 'envelope';
 
-  const corners = document.createElement('table');
-  row(corners, 'tightest corner', `${metrics.tightestRadius.toFixed(1)} yd`);
-  row(
-    corners,
-    'radius / road',
-    metrics.minRadiusOverWidth.toFixed(2),
-    metrics.minRadiusOverWidth < 1 ? 'bad' : metrics.minRadiusOverWidth < 1.5 ? 'warn' : 'good',
-  );
-  row(corners, 'at', `${metrics.minRadiusOverWidthAtS.toFixed(0)} yd`);
-  readoutEl.append(heading('corners'), corners);
+function readoutSection(section: ReadoutSection): HTMLElement[] {
+  const table = document.createElement('table');
+  switch (section) {
+    case 'shape':
+      row(table, 'lap', `${metrics.lapLength.toFixed(1)} yd`);
+      row(table, 'samples', String(metrics.sampleCount));
+      row(
+        table,
+        'total turning',
+        `${metrics.turningDegrees.toFixed(1)} deg`,
+        Math.abs(Math.abs(metrics.turningDegrees) - 360) > 5 ? 'bad' : 'good',
+      );
+      row(
+        table,
+        'winding',
+        metrics.winding > 0 ? 'counter-clockwise' : 'clockwise',
+        metrics.winding > 0 ? 'good' : 'bad',
+      );
+      row(table, 'control points', String(record.controlPoints.length));
+      break;
+    case 'corners':
+      row(table, 'tightest corner', `${metrics.tightestRadius.toFixed(1)} yd`);
+      row(
+        table,
+        'radius / road',
+        metrics.minRadiusOverWidth.toFixed(2),
+        metrics.minRadiusOverWidth < 1 ? 'bad' : metrics.minRadiusOverWidth < 1.5 ? 'warn' : 'good',
+      );
+      row(table, 'at', `${metrics.minRadiusOverWidthAtS.toFixed(0)} yd`);
+      break;
+    case 'stretches': {
+      const nearest = metrics.nearestApproach;
+      row(
+        table,
+        'nearest approach',
+        Number.isFinite(nearest.distance) ? `${nearest.distance.toFixed(1)} yd` : 'none',
+        Number.isFinite(nearest.distance) && nearest.distance < 48 ? 'bad' : 'good',
+      );
+      row(table, 'tangent dot', nearest.tangentDot.toFixed(2));
+      row(table, 'between', `${nearest.s.toFixed(0)} and ${nearest.otherS.toFixed(0)} yd`);
+      row(table, 'shooting corridor', `${metrics.shootingCorridorYards.toFixed(0)} yd`);
+      break;
+    }
+    case 'surface': {
+      // What the brush actually left on the circuit, read back off the derived
+      // samples rather than off the band table: the table is breakpoints and the
+      // road is samples, and only the second one is what a racer meets.
+      const halfWidths = track.samples.map((sample) => sample.halfWidth);
+      row(
+        table,
+        'road half-width',
+        `${Math.min(...halfWidths).toFixed(1)} to ${Math.max(...halfWidths).toFixed(1)} yd`,
+      );
+      row(table, 'width bands', String(record.widthBands.length));
+      row(table, 'recovery anchors', String(realmRacersGates(record).length));
+      break;
+    }
+    case 'dressing': {
+      // What is STANDING on the circuit, counted off the resolver rather than off
+      // the record: a scatter is a handful of rows and hundreds of pieces, and
+      // the pieces are what the operator is looking at.
+      row(table, 'props', String(metrics.propCount));
+      row(table, 'solid props', String(metrics.solidPropCount));
+      row(table, 'scatters', `${record.scatters?.length ?? 0} (${metrics.scatterCount} pieces)`);
+      row(table, 'ponds', String(metrics.pondCount));
+      row(table, 'water authored', record.basin ? 'yes' : 'no');
+      const unknown = realmRacersPlacements(record).unknownAssets;
+      if (unknown.length > 0) row(table, 'unknown keys', unknown.join(', '), 'bad');
+      break;
+    }
+    default:
+      row(table, 'road half-extent x', `${metrics.roadHalfX.toFixed(0)} yd`);
+      row(table, 'road half-extent z', `${metrics.roadHalfZ.toFixed(0)} yd`);
+      // The two ceilings, so a circuit that cannot fit the band says so BEFORE
+      // the operator has drawn a lap around it.
+      row(
+        table,
+        'widest region',
+        `${REALM_RACERS_MAX_REGION_HALF_X} yd`,
+        record.regionHalfX > REALM_RACERS_MAX_REGION_HALF_X ? 'bad' : '',
+      );
+      row(
+        table,
+        'deepest region',
+        `${REALM_RACERS_MAX_REGION_HALF_Z} yd`,
+        record.regionHalfZ > REALM_RACERS_MAX_REGION_HALF_Z ? 'bad' : '',
+      );
+      break;
+  }
+  return [heading(section), table];
+}
 
-  const gaps = document.createElement('table');
-  const nearest = metrics.nearestApproach;
-  row(
-    gaps,
-    'nearest approach',
-    Number.isFinite(nearest.distance) ? `${nearest.distance.toFixed(1)} yd` : 'none',
-    Number.isFinite(nearest.distance) && nearest.distance < 48 ? 'bad' : 'good',
-  );
-  row(gaps, 'tangent dot', nearest.tangentDot.toFixed(2));
-  row(gaps, 'between', `${nearest.s.toFixed(0)} and ${nearest.otherS.toFixed(0)} yd`);
-  row(gaps, 'shooting corridor', `${metrics.shootingCorridorYards.toFixed(0)} yd`);
-  readoutEl.append(heading('stretches'), gaps);
-
-  // What the brush actually left on the circuit, read back off the derived
-  // samples rather than off the band table: the table is breakpoints and the
-  // road is samples, and only the second one is what a racer meets.
-  const surface = document.createElement('table');
-  const halfWidths = track.samples.map((sample) => sample.halfWidth);
-  row(
-    surface,
-    'road half-width',
-    `${Math.min(...halfWidths).toFixed(1)} to ${Math.max(...halfWidths).toFixed(1)} yd`,
-  );
-  row(surface, 'width bands', String(record.widthBands.length));
-  row(surface, 'recovery anchors', String(realmRacersGates(record).length));
-  readoutEl.append(heading('surface'), surface);
-
-  // What is STANDING on the circuit, counted off the resolver rather than off
-  // the record: a scatter is a handful of rows and hundreds of pieces, and the
-  // pieces are what the operator is looking at.
-  const dressingTable = document.createElement('table');
-  row(dressingTable, 'props', String(metrics.propCount));
-  row(dressingTable, 'solid props', String(metrics.solidPropCount));
-  row(
-    dressingTable,
-    'scatters',
-    `${record.scatters?.length ?? 0} (${metrics.scatterCount} pieces)`,
-  );
-  row(dressingTable, 'ponds', String(metrics.pondCount));
-  row(dressingTable, 'water authored', record.basin ? 'yes' : 'no');
-  const unknown = realmRacersPlacements(record).unknownAssets;
-  if (unknown.length > 0) row(dressingTable, 'unknown keys', unknown.join(', '), 'bad');
-  readoutEl.append(heading('dressing'), dressingTable);
-
-  const envelope = document.createElement('table');
-  row(envelope, 'road half-extent x', `${metrics.roadHalfX.toFixed(0)} yd`);
-  row(envelope, 'road half-extent z', `${metrics.roadHalfZ.toFixed(0)} yd`);
-  // The two ceilings, so a circuit that cannot fit the band says so BEFORE the
-  // operator has drawn a lap around it.
-  row(
-    envelope,
-    'widest region',
-    `${REALM_RACERS_MAX_REGION_HALF_X} yd`,
-    record.regionHalfX > REALM_RACERS_MAX_REGION_HALF_X ? 'bad' : '',
-  );
-  row(
-    envelope,
-    'deepest region',
-    `${REALM_RACERS_MAX_REGION_HALF_Z} yd`,
-    record.regionHalfZ > REALM_RACERS_MAX_REGION_HALF_Z ? 'bad' : '',
-  );
-  readoutEl.append(heading('envelope'), envelope);
-
-  readoutEl.append(heading('problems'));
+function problemsBlock(): HTMLElement[] {
+  const out: HTMLElement[] = [heading('problems')];
   if (metrics.problems.length === 0) {
     const clean = document.createElement('div');
     clean.className = 'clean';
     clean.textContent = 'none: this is drivable geometry';
-    readoutEl.append(clean);
-  } else {
-    // Capped, and the cap SAYS so: a list that silently stopped at ten would
-    // read as "ten problems" when there are thirty.
-    for (const problem of metrics.problems.slice(0, MAX_LISTED_PROBLEMS)) {
-      readoutEl.append(problemLine(problem));
-    }
-    if (metrics.problems.length > MAX_LISTED_PROBLEMS) {
-      const more = document.createElement('div');
-      more.className = 'd';
-      more.textContent = `and ${metrics.problems.length - MAX_LISTED_PROBLEMS} more`;
-      readoutEl.append(more);
-    }
+    out.push(clean);
+    return out;
   }
-  // Last, because it is about the SELECTION rather than about the circuit, and
-  // because a panel that reordered itself around a selection would move the
-  // numbers the operator is reading.
-  paintInspector();
+  // Capped, and the cap SAYS so: a list that silently stopped at ten would read
+  // as "ten problems" when there are thirty.
+  for (const problem of metrics.problems.slice(0, MAX_LISTED_PROBLEMS)) {
+    out.push(problemLine(problem));
+  }
+  if (metrics.problems.length > MAX_LISTED_PROBLEMS) {
+    const more = document.createElement('div');
+    more.className = 'd';
+    more.textContent = `and ${metrics.problems.length - MAX_LISTED_PROBLEMS} more`;
+    out.push(more);
+  }
+  return out;
+}
+
+const READOUT_SECTIONS: ReadoutSection[] = [
+  'shape',
+  'corners',
+  'stretches',
+  'surface',
+  'dressing',
+  'envelope',
+];
+
+function paintReadout(): void {
+  const body = shell.metricsBodyEl;
+  body.replaceChildren();
+  if (!drawn) return;
+  for (const section of READOUT_SECTIONS) body.append(...readoutSection(section));
+  body.append(...problemsBlock());
+}
+
+/**
+ * What the right panel shows in a mode that has no tabs.
+ *
+ * The two shaping tools had the DRESSING outliner sitting in them, which is
+ * nothing to do with either: it listed props while the operator was painting a
+ * road. What belongs there is the measurements the tool is changing, so shaping
+ * shows the geometry and painting shows the road profile.
+ */
+const MODE_READOUT: Record<RailModeId, ReadoutSection[]> = {
+  shape: ['shape', 'corners', 'envelope'],
+  width: ['surface', 'corners'],
+  props: [],
+  race: [],
+};
+
+const modeReadoutEl = document.createElement('div');
+
+function paintModeReadout(): void {
+  if (modeReadoutEl.hidden) return;
+  modeReadoutEl.replaceChildren();
+  if (!drawn) return;
+  for (const section of MODE_READOUT[railMode]) modeReadoutEl.append(...readoutSection(section));
+  const hint = document.createElement('div');
+  hint.className = 'hint-line';
+  hint.textContent = 'the whole readout is under View > metrics detail';
+  modeReadoutEl.append(hint);
 }
 
 // ---- the record form ----
@@ -1338,11 +1627,53 @@ function paintPanel(): void {
 // take the focus out of an input the operator is still typing in.
 
 interface FormField {
-  input: HTMLInputElement;
+  input: HTMLInputElement | HTMLSelectElement;
   read: () => string;
+  /**
+   * How this control re-reads the record, when assigning `value` is not enough.
+   *
+   * A `<select>` given a value no option carries goes BLANK, silently. Every
+   * commit the control did not make itself lands here (an undo, a Load, a fresh
+   * draft), so a select whose options were built for the previous record has to
+   * rebuild them rather than take the assignment.
+   */
+  sync?: () => void;
 }
 
+const formEl = document.createElement('div');
 const formFields: FormField[] = [];
+/** The rows only a PRACTICE circuit has, hidden when it is not one. */
+const practiceRows: HTMLElement[] = [];
+/** The role checkboxes, synced from the record rather than trusted. */
+const roleBoxes = new Map<RealmRacersCircuitRole, HTMLInputElement>();
+
+/**
+ * One edit, validated the way the SAVE endpoint validates.
+ *
+ * Checked through `validateCircuitPayload` rather than against a second copy of
+ * every field's range here: a value the form accepts that the endpoint would
+ * refuse is a draft the operator cannot save, found out one step too late. A
+ * value that is merely unwise (a region deeper than the lane budget) still lands,
+ * because the readout is what says so.
+ */
+function applyEdit(label: string, next: RealmRacersCircuit | null, refusal?: string): boolean {
+  const valid = next && validateCircuitPayload(next);
+  if (!valid) {
+    setStatus(refusal ?? `${label}: not a value a circuit can carry`, 'err');
+    return false;
+  }
+  commit(valid);
+  return true;
+}
+
+function fieldRow(label: string): { wrap: HTMLDivElement; name: HTMLLabelElement } {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const name = document.createElement('label');
+  name.textContent = label;
+  wrap.append(name);
+  return { wrap, name };
+}
 
 function field(
   parent: HTMLElement,
@@ -1350,54 +1681,142 @@ function field(
   read: () => string,
   write: (raw: string) => RealmRacersCircuit | null,
   attrs: Partial<HTMLInputElement> = {},
-  choices?: readonly string[],
-): void {
-  const wrap = document.createElement('div');
-  wrap.className = 'field';
-  const name = document.createElement('label');
-  name.textContent = label;
+): HTMLDivElement {
+  const { wrap, name } = fieldRow(label);
   const input = document.createElement('input');
   input.type = attrs.type ?? 'number';
   Object.assign(input, attrs);
-  if (choices) {
-    // `list` is a read-only IDL property (it resolves the ELEMENT), so it goes
-    // on through the attribute; assigning it in the Object.assign above throws.
-    const list = document.createElement('datalist');
-    list.id = `field-choices-${label.replace(/\s+/g, '-')}`;
-    for (const choice of choices) {
-      const option = document.createElement('option');
-      option.value = choice;
-      list.append(option);
-    }
-    wrap.append(list);
-    input.setAttribute('list', list.id);
-  }
   input.value = read();
   input.onchange = () => {
-    const next = write(input.value);
-    // Checked through the SAVE endpoint's own validator rather than against a
-    // second copy of every field's range here: a value the form accepts that
-    // the endpoint would refuse is a draft the operator cannot save, found out
-    // one step too late. A value that is merely unwise (a region deeper than
-    // the lane budget) still lands, because the readout is what says so.
-    const valid = next && validateCircuitPayload(next);
-    if (valid) {
-      commit(valid);
-    } else {
-      // Written back HERE rather than through syncForm, which deliberately
-      // skips the focused input: a refused edit is the one case where the field
-      // still holds the caret and must be overwritten anyway, or the panel shows
-      // a number the record does not carry.
-      setStatus(`${label}: ${input.value} is not a value a circuit can carry`, 'err');
-      input.value = read();
-    }
+    // Written back HERE on a refusal rather than through syncForm, which
+    // deliberately skips the focused input: a refused edit is the one case where
+    // the field still holds the caret and must be overwritten anyway, or the
+    // panel shows a number the record does not carry.
+    if (!applyEdit(`${label}: ${input.value}`, write(input.value))) input.value = read();
     syncForm();
   };
   name.append(input);
-  wrap.append(name);
   parent.append(wrap);
   formFields.push({ input, read });
+  return wrap;
 }
+
+/** The option value that means "not one of the above". */
+const CUSTOM_OPTION = '__custom__';
+
+/**
+ * A real `<select>` over a known set, with a way out.
+ *
+ * It replaced a datalist, which only ever worked as a SEARCH: there was no way to
+ * see what the themes even were, which is the first thing anyone wants from a
+ * fixed vocabulary. The way out matters too, and it is why this is not a plain
+ * select: an id being written in the same change is legally typeable, and the
+ * readout is what says whether a registry authors it (`unknown_theme`). A value
+ * already on the record that is not in the list is added as an option, so the
+ * control always shows the truth.
+ */
+function selectField(
+  parent: HTMLElement,
+  label: string,
+  read: () => string,
+  write: (raw: string) => RealmRacersCircuit | null,
+  choices: readonly string[],
+): HTMLDivElement {
+  const { wrap, name } = fieldRow(label);
+  const select = document.createElement('select');
+  const custom = document.createElement('input');
+  custom.type = 'text';
+  custom.placeholder = 'id not in the list';
+  custom.hidden = true;
+
+  const fill = (): void => {
+    const current = read();
+    const known = [...choices, ...(choices.includes(current) || !current ? [] : [current])];
+    select.replaceChildren();
+    for (const choice of known) {
+      const option = document.createElement('option');
+      option.value = choice;
+      option.textContent = choices.includes(choice) ? choice : `${choice} (not in the list)`;
+      select.append(option);
+    }
+    const other = document.createElement('option');
+    other.value = CUSTOM_OPTION;
+    other.textContent = 'other, type it';
+    select.append(other);
+    select.value = current;
+  };
+  fill();
+
+  select.onchange = () => {
+    if (select.value === CUSTOM_OPTION) {
+      custom.hidden = false;
+      custom.value = read();
+      custom.focus();
+      select.value = read();
+      return;
+    }
+    custom.hidden = true;
+    if (!applyEdit(`${label}: ${select.value}`, write(select.value))) fill();
+    syncForm();
+  };
+  custom.onchange = () => {
+    if (applyEdit(`${label}: ${custom.value}`, write(custom.value))) {
+      custom.hidden = true;
+      fill();
+    }
+    syncForm();
+  };
+
+  name.append(select);
+  wrap.append(custom);
+  parent.append(wrap);
+  formFields.push({ input: select, read, sync: fill });
+  return wrap;
+}
+
+/**
+ * A role, on or off.
+ *
+ * The record needs at least one, so unchecking the last is REFUSED by name rather
+ * than silently ignored: a checkbox that springs back with no explanation reads as
+ * a broken control. Turning practice off also zeroes the copy count, because a
+ * circuit nobody practises on has nothing to copy.
+ */
+function roleBox(parent: HTMLElement, role: RealmRacersCircuitRole, detail: string): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const name = document.createElement('label');
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = record.roles.includes(role);
+  name.append(box, ` ${role}`);
+  name.title = detail;
+  box.onchange = () => {
+    const wanted = new Set(record.roles);
+    if (box.checked) wanted.add(role);
+    else wanted.delete(role);
+    const roles = ROLE_ORDER.filter((entry) => wanted.has(entry));
+    const next =
+      roles.length === 0
+        ? null
+        : {
+            ...record,
+            roles,
+            practiceCopies: roles.includes('practice') ? record.practiceCopies : 0,
+          };
+    applyEdit(
+      role,
+      next,
+      'a circuit has to be at least one of competition or practice, so the last one cannot come off',
+    );
+    syncForm();
+  };
+  wrap.append(name);
+  parent.append(wrap);
+  roleBoxes.set(role, box);
+}
+
+const ROLE_ORDER: readonly RealmRacersCircuitRole[] = ['competition', 'practice'];
 
 const asNumber = (raw: string, fallback: number): number => {
   const value = Number(raw);
@@ -1407,6 +1826,87 @@ const asNumber = (raw: string, fallback: number): number => {
 function buildForm(): void {
   formEl.replaceChildren();
   formFields.length = 0;
+  practiceRows.length = 0;
+  roleBoxes.clear();
+
+  formEl.append(heading('roles'));
+  const roles = document.createElement('div');
+  roleBox(roles, 'competition', 'Drawn from the competition pool when a four-pilot roster fills');
+  roleBox(roles, 'practice', 'Offered as practice, with one lane copy per practising player');
+  formEl.append(roles);
+
+  formEl.append(heading('race'));
+  const race = document.createElement('div');
+  field(
+    race,
+    'id',
+    () => record.id,
+    (raw) => ({ ...record, id: raw.trim() }),
+    { type: 'text' },
+  );
+  field(
+    race,
+    'laps',
+    () => String(record.laps),
+    (raw) => ({ ...record, laps: Math.round(asNumber(raw, record.laps)) }),
+    { min: '1', max: '20', step: '1' },
+  );
+  field(
+    race,
+    'time limit (s)',
+    () => String(record.timeLimitSeconds),
+    (raw) => ({ ...record, timeLimitSeconds: asNumber(raw, record.timeLimitSeconds) }),
+    { min: '10', max: '3600', step: '10' },
+  );
+  field(
+    race,
+    'start back',
+    () => String(record.startBack),
+    (raw) => ({ ...record, startBack: asNumber(raw, record.startBack) }),
+    { step: '0.5' },
+  );
+  field(
+    race,
+    'start spacing',
+    () => String(record.startSpacing),
+    (raw) => ({ ...record, startSpacing: asNumber(raw, record.startSpacing) }),
+    { step: '0.5' },
+  );
+  practiceRows.push(
+    field(
+      race,
+      'practice laps',
+      () => String(record.practiceLaps),
+      (raw) => ({ ...record, practiceLaps: Math.round(asNumber(raw, record.practiceLaps)) }),
+      { min: '1', max: '20', step: '1' },
+    ),
+    field(
+      race,
+      'practice copies',
+      () => String(record.practiceCopies),
+      (raw) => ({ ...record, practiceCopies: Math.round(asNumber(raw, record.practiceCopies)) }),
+      { min: '0', max: '32', step: '1' },
+    ),
+  );
+  formEl.append(race);
+
+  formEl.append(heading('presentation'));
+  const art = document.createElement('div');
+  selectField(
+    art,
+    'music track',
+    () => record.musicTrack,
+    (raw) => ({ ...record, musicTrack: raw.trim() }),
+    MUSIC_TRACK_IDS,
+  );
+  selectField(
+    art,
+    'theme',
+    () => record.theme,
+    (raw) => ({ ...record, theme: raw.trim() }),
+    REALM_RACERS_THEME_IDS,
+  );
+  formEl.append(art);
 
   formEl.append(heading('enclosure'));
   const box = document.createElement('div');
@@ -1443,86 +1943,21 @@ function buildForm(): void {
     { max: String(REALM_RACERS_MAX_REGION_HALF_Z) },
   );
   formEl.append(box);
-
-  formEl.append(heading('race'));
-  const race = document.createElement('div');
-  field(
-    race,
-    'id',
-    () => record.id,
-    (raw) => ({ ...record, id: raw.trim() }),
-    { type: 'text' },
-  );
-  field(
-    race,
-    'laps',
-    () => String(record.laps),
-    (raw) => ({ ...record, laps: Math.round(asNumber(raw, record.laps)) }),
-    { min: '1', max: '20', step: '1' },
-  );
-  field(
-    race,
-    'practice laps',
-    () => String(record.practiceLaps),
-    (raw) => ({ ...record, practiceLaps: Math.round(asNumber(raw, record.practiceLaps)) }),
-    { min: '1', max: '20', step: '1' },
-  );
-  field(
-    race,
-    'time limit (s)',
-    () => String(record.timeLimitSeconds),
-    (raw) => ({ ...record, timeLimitSeconds: asNumber(raw, record.timeLimitSeconds) }),
-    { min: '10', max: '3600', step: '10' },
-  );
-  field(
-    race,
-    'start back',
-    () => String(record.startBack),
-    (raw) => ({ ...record, startBack: asNumber(raw, record.startBack) }),
-    { step: '0.5' },
-  );
-  field(
-    race,
-    'start spacing',
-    () => String(record.startSpacing),
-    (raw) => ({ ...record, startSpacing: asNumber(raw, record.startSpacing) }),
-    { step: '0.5' },
-  );
-  field(
-    race,
-    'practice copies',
-    () => String(record.practiceCopies),
-    (raw) => ({ ...record, practiceCopies: Math.round(asNumber(raw, record.practiceCopies)) }),
-    { min: '0', max: '32', step: '1' },
-  );
-  field(
-    race,
-    'music track',
-    () => record.musicTrack,
-    (raw) => ({ ...record, musicTrack: raw.trim() }),
-    { type: 'text' },
-  );
-  // A datalist rather than a select: an unknown id is a legal thing to TYPE
-  // (a theme being written in the same change is not in the list yet), and the
-  // readout names it live rather than the field refusing it.
-  field(
-    race,
-    'theme',
-    () => record.theme,
-    (raw) => ({ ...record, theme: raw.trim() }),
-    { type: 'text' },
-    REALM_RACERS_THEME_IDS,
-  );
-  formEl.append(race);
 }
 
 function syncForm(): void {
-  for (const { input, read } of formFields) {
+  for (const { input, read, sync } of formFields) {
     if (input === document.activeElement) continue;
-    input.value = read();
+    if (sync) sync();
+    else input.value = read();
   }
+  for (const [role, box] of roleBoxes) box.checked = record.roles.includes(role);
+  // A circuit nobody practises on has no practice numbers worth showing. The lap
+  // count STAYS on the record while hidden, because the validator holds it to 1
+  // to 20 and a zero there is a draft that cannot be saved.
+  const practises = record.roles.includes('practice');
+  for (const wrap of practiceRows) wrap.hidden = !practises;
 }
-
 /** Sizes the wall and the region to the road, clamped to the band and the lane
  *  depth budget. What makes a big circuit drawable at all: the enclosure follows
  *  the drawing rather than the drawing being trapped inside the enclosure. */
@@ -1582,45 +2017,121 @@ function fixCorners(): void {
   );
 }
 
-// ---- pointer routing ----
+// ---- the chrome ----
+
+/** Which contextual panel is on screen. Null means the auto choice wins. */
+let sideChoice: SideTabId | null = layout.side;
+
+function hasSelection(): boolean {
+  return dressing !== null;
+}
+
+function applySideTab(): void {
+  const tabs = sideTabsFor(railMode);
+  // A tab the operator picked in another mode is not offered here: the library
+  // arms a piece for the props tool and the inspector edits a selected one, and
+  // neither is reachable while shaping a centerline.
+  const chosen = sideChoice && tabs.includes(sideChoice) ? sideChoice : null;
+  const active = chosen ?? shell.autoTab(railMode, hasSelection());
+  shell.setSideTab(tabs, active);
+  libraryEl.hidden = active !== 'library';
+  inspectorEl.hidden = active !== 'inspector';
+  outlinerEl.hidden = active !== 'outliner';
+  formEl.hidden = railMode !== 'race' || !drawn;
+  // A mode with no tabs shows the measurements ITS tool is changing.
+  modeReadoutEl.hidden = tabs.length > 0 || railMode === 'race' || !drawn;
+  // The tool's number belongs to the panel it is a setting FOR: the scatter
+  // spacing is the library's, and it was hanging over the inspector too.
+  const field = TOOL_VALUE_FIELDS[tool()];
+  shell.setToolValueField(field, tool() !== 'props' || active === 'library');
+  requestRedraw();
+}
 
 /** Everything whose availability depends on there being a circuit at all. */
 function refreshChrome(): void {
   // A blank canvas has exactly one thing to do, so it says so rather than
   // leaving whatever mode the last circuit was being edited in selected under a
-  // disabled button.
-  if (!drawn && mode !== 'draw') setMode('draw');
+  // disabled rail entry.
+  if (!drawn && railMode !== 'shape') setRailMode('shape');
   emptyEl.hidden = drawn;
-  formEl.hidden = !drawn;
-  for (const [key, button] of Object.entries(modeButtons)) {
-    button.disabled = !drawn && key !== 'draw';
+  for (const mode of ['width', 'props', 'race'] as const) {
+    shell.setModeEnabled(mode, drawn);
   }
-  for (const button of [fitBtn, fitBoxBtn, fixCornersBtn, copyBtn, saveBtn, previewBtn]) {
-    button.disabled = !drawn;
+  const drawnOnly: ActionId[] = [
+    'saveDraft',
+    'copyRecord',
+    'fitEnclosure',
+    'fixCorners',
+    'raceSettings',
+    'toggleDock',
+  ];
+  for (const id of drawnOnly) shell.setEnabled(id, drawn);
+  // Redo has its row in the table (the menu, the cheatsheet and the button all
+  // read it) and no stack behind it yet: the bespoke undo array here holds no
+  // forward branch, so the control is present and honestly disabled rather than
+  // missing from a menu it belongs in.
+  shell.setEnabled('redo', false);
+  shell.setDocument(record.id, dirty);
+  shell.setBanner(railMode, drawn);
+  applySideTab();
+  // A layout left with the dock open re-opens it the moment there is something
+  // to show, which is what makes the stored flag mean anything: at boot there is
+  // no circuit and a 3D panel over a blank canvas is a loading cost for nothing.
+  if (drawn && layout.dockOpen && !dockRestored) {
+    dockRestored = true;
+    void openPreview();
   }
 }
 
-function setMode(next: Mode): void {
-  mode = next;
+function setRailMode(next: RailModeId): void {
+  railMode = next;
   selection = null;
-  for (const [key, button] of Object.entries(modeButtons)) {
-    button.classList.toggle('on', key === next);
-  }
-  hintEl.textContent = MODE_HINTS[next];
-  const brush = BRUSH_FIELDS[next];
-  paletteEl.hidden = next !== 'props';
-  paletteAllLabel.hidden = next !== 'props';
   dressing = null;
-  brushLabel.classList.toggle('off', brush === null);
-  brushInput.disabled = brush === null;
-  brushLabel.firstChild?.replaceWith(`${brush?.label ?? 'brush'} `);
-  if (brush) {
-    brushInput.min = String(brush.min);
-    brushInput.max = String(brush.max);
-    brushInput.value = String(Math.min(brush.max, Math.max(brush.min, Number(brushInput.value))));
-  }
+  sideChoice = null;
+  shell.setMode(railMode, drawn);
+  // Leaving props disarms: an arm that survived a trip through the width tool
+  // would place a piece on the operator's first click back.
+  if (next !== 'props') paletteChoice = null;
+  armPalette(paletteChoice);
+  applySideTab();
   requestRedraw();
 }
+
+/** What the status bar says the props tool will do with the next click. */
+function shellArmText(): string {
+  if (paletteChoice === null) return 'pointer: click a piece to select it';
+  return paletteChoice === POND_CHOICE ? 'placing water: drag a box' : `placing ${paletteChoice}`;
+}
+
+/** Where a lap position sits on the plan, or null when it is off it. */
+function planPointAt(s: number): { x: number; y: number } | null {
+  if (!drawn) return null;
+  const p = local(track.pointAt(s));
+  const x = screenX(p.x);
+  const y = screenY(p.z);
+  if (x < 0 || y < 0 || x > canvas.clientWidth || y > canvas.clientHeight) return null;
+  return { x, y };
+}
+
+function paintChrome(): void {
+  shell.setViewChips(view.scale, layout.grid, layout.snap);
+  shell.setHeadline(drawn ? headlineChips(metrics) : null);
+  shell.setProblems(
+    drawn ? metrics.problems : [],
+    drawn ? calloutProblems(metrics.problems) : [],
+    planPointAt,
+  );
+  shell.setDocument(record.id, dirty);
+  // The undo stack moves on every commit, which is far more often than the
+  // chrome is refreshed, so its button state is read here rather than there.
+  shell.setEnabled('undo', undoStack.length > 0);
+  if (layout.metricsOpen) paintReadout();
+  paintOutliner();
+  paintInspector();
+  paintModeReadout();
+}
+
+// ---- pointer routing ----
 
 /** The quantity the painting mode edits, per centerline sample. */
 function paintedQuantity(): number[] {
@@ -1629,26 +2140,21 @@ function paintedQuantity(): number[] {
 
 /** What the stroke that just ended did, in the operator's own units. */
 function reportStroke(): void {
-  const brush = BRUSH_FIELDS[mode];
-  if (!paintBefore || !brush) return;
+  const field = TOOL_VALUE_FIELDS[tool()];
+  if (!paintBefore || !field) return;
   const after = paintedQuantity();
   let changed = 0;
   for (let i = 0; i < after.length && i < paintBefore.length; i++) {
     if (Math.abs(after[i] - paintBefore[i]) > 0.01) changed += track.step;
   }
-  const value = Number(brushInput.value);
+  const value = Number(shell.toolValueInput.value);
   if (changed > 0) {
-    setStatus(`${brush.label}: ${changed.toFixed(0)} yd of lap set to ${value}`, 'ok');
+    setStatus(`${field.label}: ${changed.toFixed(0)} yd of lap set to ${value}`, 'ok');
     return;
   }
   // The case that made this whole readout necessary. Naming the reason is the
   // difference between "the tool is broken" and "you painted what was there".
-  setStatus(
-    mode === 'width'
-      ? `nothing changed: the road is already ${value} yd there`
-      : `nothing changed: a ${value} yd cap is not below what those corners already allow`,
-    'err',
-  );
+  setStatus(`nothing changed: the road is already ${value} yd there`, 'err');
 }
 
 /** The table the painting mode edits, as it stands on the record. */
@@ -1658,13 +2164,13 @@ function paintedBands(): CircuitBand[] {
 
 /** Extends the live stroke to this point and re-applies the whole of it. */
 function paintAt(point: RallyPoint): void {
-  const brush = BRUSH_FIELDS[mode];
-  const value = Number(brushInput.value);
-  if (!brush || !paintOrigin || !Number.isFinite(value)) return;
+  const field = TOOL_VALUE_FIELDS[tool()];
+  const value = Number(shell.toolValueInput.value);
+  if (!field || !paintOrigin || !Number.isFinite(value)) return;
   paintFractions.push(fractionAt(point));
   const bands = paintSpan(paintOrigin, paintFractions, value, {
-    min: brush.min,
-    max: brush.max,
+    min: field.min,
+    max: field.max,
     ramp: PAINT_RAMP_YARDS / track.length,
   });
   commit({ ...record, widthBands: toWidthBands(bands) }, false);
@@ -1676,26 +2182,29 @@ canvas.addEventListener('pointerdown', (ev) => {
     panning = { x: view.x, z: view.z, clientX: ev.clientX, clientY: ev.clientY };
     return;
   }
-  const point = toLocal(ev);
-  if (mode === 'draw') {
+  const raw = toLocal(ev);
+  const active = tool();
+  if (active === 'race') return;
+  if (active === 'draw') {
     drawing = true;
-    stroke = [point];
+    stroke = [raw];
     return;
   }
-  if (mode === 'props') {
-    startDressingGesture(point, ev.shiftKey);
+  if (active === 'props') {
+    startDressingGesture(raw, ev.shiftKey);
     return;
   }
-  if (mode === 'width') {
+  if (active === 'width') {
     undoStack.push({ record, drawn });
     painting = true;
     paintBefore = paintedQuantity();
     paintOrigin = paintedBands();
     paintFractions = [];
-    paintAt(point);
+    paintAt(raw);
     return;
   }
-  const hit = hitTestControlPoint(record.controlPoints, point.x, point.z, 8 / view.scale);
+  const point = authored(raw);
+  const hit = hitTestControlPoint(record.controlPoints, raw.x, raw.z, 8 / view.scale);
   if (hit >= 0) {
     selection = { kind: 'point', index: hit };
     dragging = selection;
@@ -1703,11 +2212,11 @@ canvas.addEventListener('pointerdown', (ev) => {
     requestRedraw();
     return;
   }
-  const segment = nearestSegment(record.controlPoints, point.x, point.z);
+  const segment = nearestSegment(record.controlPoints, raw.x, raw.z);
   if (segment.distance <= 10 / view.scale) {
     commit({
       ...record,
-      controlPoints: insertControlPoint(record.controlPoints, segment.index, segment.point),
+      controlPoints: insertControlPoint(record.controlPoints, segment.index, point),
     });
     selection = { kind: 'point', index: segment.index + 1 };
     dragging = selection;
@@ -1718,6 +2227,22 @@ canvas.addEventListener('pointerdown', (ev) => {
   requestRedraw();
 });
 
+/** The status bar's live cursor. In the two track tools it also carries where
+ *  the pointer sits ALONG the lap, which is the coordinate those tools author
+ *  in. */
+function reportCursor(point: RallyPoint): void {
+  const parts = [`x ${point.x.toFixed(1)}`, `z ${point.z.toFixed(1)}`];
+  const active = tool();
+  if (drawn && (active === 'width' || active === 'props')) {
+    const projection = track.project(
+      point.x + REALM_RACERS_ORIGIN.x,
+      point.z + REALM_RACERS_ORIGIN.z,
+    );
+    parts.push(`s ${projection.s.toFixed(0)} yd`, `off ${projection.lateral.toFixed(1)}`);
+  }
+  shell.setCursor(parts.join('   '));
+}
+
 canvas.addEventListener('pointermove', (ev) => {
   if (panning) {
     view.x = panning.x - (ev.clientX - panning.clientX) / view.scale;
@@ -1726,6 +2251,19 @@ canvas.addEventListener('pointermove', (ev) => {
     return;
   }
   const point = toLocal(ev);
+  hover = point;
+  reportCursor(point);
+  // An armed piece has a ghost to move, so a plain hover repaints. Only while
+  // armed: a repaint per pointermove for nothing is a whole circuit redrawn to
+  // show no change.
+  if (tool() === 'props' && paletteChoice !== null && !dressingDrag) requestRedraw();
+  // The dock rides the pointer when asked to: hovering a corner on the plan is
+  // then the gesture that looks at it in 3D, with no camera to fly.
+  if (layout.followCursor && preview && drawn) {
+    const fraction = fractionAt(point);
+    preview.setFlyFraction(fraction);
+    dock.setAt(fraction * track.length, fraction);
+  }
   if (drawing) {
     stroke.push(point);
     requestRedraw();
@@ -1741,7 +2279,10 @@ canvas.addEventListener('pointermove', (ev) => {
   }
   if (!dragging) return;
   commit(
-    { ...record, controlPoints: moveControlPoint(record.controlPoints, dragging.index, point) },
+    {
+      ...record,
+      controlPoints: moveControlPoint(record.controlPoints, dragging.index, authored(point)),
+    },
     false,
   );
 });
@@ -1754,8 +2295,8 @@ function endGesture(): void {
       commit({ ...record, controlPoints: fitted });
       // The stroke that turns a blank canvas into a circuit.
       drawn = true;
+      setRailMode('shape');
       refreshChrome();
-      setMode('handles');
       setStatus(`fitted ${fitted.length} control points from ${stroke.length} stroke points`, 'ok');
       // A freshly drawn loop is whatever size it is, and the enclosure it
       // inherited is the previous circuit's. Sizing it here is what lets an
@@ -1777,25 +2318,415 @@ function endGesture(): void {
 
 canvas.addEventListener('pointerup', endGesture);
 canvas.addEventListener('pointercancel', endGesture);
+canvas.addEventListener('pointerleave', () => {
+  if (!hover) return;
+  hover = null;
+  requestRedraw();
+});
+
+// Double-clicking the plan is the shortest way to say "look at THAT" to the 3D
+// dock: the orbit rig opens on the circuit's origin, and on a big lap its far
+// side is off the frame at any distance you can read the road from.
+canvas.addEventListener('dblclick', (ev) => {
+  if (!preview || !drawn) return;
+  const point = toLocal(ev);
+  preview.lookAt(point.x, point.z);
+  dock.setOpen(true);
+  syncDockChrome();
+  setStatus(`orbiting ${point.x.toFixed(0)}, ${point.z.toFixed(0)}`, '');
+});
 
 canvas.addEventListener('wheel', (ev) => {
   ev.preventDefault();
   const before = toLocal(ev);
-  view.scale = Math.min(20, Math.max(0.4, view.scale * (ev.deltaY < 0 ? 1.12 : 1 / 1.12)));
+  view.scale = Math.min(
+    ZOOM_MAX_SCALE,
+    Math.max(ZOOM_MIN_SCALE, view.scale * (ev.deltaY < 0 ? 1.12 : 1 / 1.12)),
+  );
   const after = toLocal(ev);
   view.x += before.x - after.x;
   view.z += before.z - after.z;
+  rememberZoom();
   requestRedraw();
 });
 
-window.addEventListener('keydown', (ev) => {
-  if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
-  if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z') {
-    ev.preventDefault();
-    undo();
+function applyZoom(percent: number): void {
+  view.scale = zoomScale(percent);
+  rememberZoom();
+  requestRedraw();
+}
+
+function focusProblem(problem: RealmRacersCircuitProblem): void {
+  if (!drawn || problem.s < 0) return;
+  const p = local(track.pointAt(problem.s));
+  view.x = p.x;
+  view.z = p.z;
+  requestRedraw();
+  setStatus(`${problemHeadline(problem)}: ${problemDetail(problem)}`, 'err');
+}
+
+// ---- actions ----
+
+function newBlank(): void {
+  stroke = [];
+  selection = null;
+  dressing = null;
+  // Committed BEFORE the flag moves: `commit` snapshots the state it is
+  // leaving, and clearing the flag first made that snapshot say the canvas was
+  // already blank, so undoing a discard restored nothing.
+  commit(blankCircuit());
+  drawn = false;
+  dirty = false;
+  setRailMode('shape');
+  refreshChrome();
+  fitView();
+  setStatus('blank canvas: draw a closed loop', '');
+}
+
+/** Starting from something: the starter oval, or any circuit the game ships. */
+function loadCircuit(circuit: RealmRacersCircuit, label: string): void {
+  stroke = [];
+  selection = null;
+  dressing = null;
+  // A shipped record is loaded under a DRAFT id, so editing it can never hand
+  // the memoized derivation of a live circuit a shape the game did not author.
+  // Committed before the flag moves, for the same reason as `newBlank`.
+  commit(circuit);
+  drawn = true;
+  dirty = false;
+  setRailMode('shape');
+  refreshChrome();
+  syncForm();
+  fitView();
+  setStatus(`loaded ${label}`, 'ok');
+}
+
+async function copyRecord(): Promise<void> {
+  const text = circuitToTypeScript(record);
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('record copied: paste it into realm_racers_circuits.ts', 'ok');
+  } catch {
+    // Clipboard access needs a secure context; a download is the fallback that
+    // always works over plain http on a dev host.
+    const anchor = document.createElement('a');
+    anchor.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    anchor.download = `${record.id}.ts`;
+    anchor.click();
+    setStatus('clipboard refused: downloaded the record instead', 'ok');
+  }
+}
+
+async function saveDraft(): Promise<void> {
+  try {
+    const response = await fetch('/__circuit_editor/save', {
+      method: 'POST',
+      body: JSON.stringify(record),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    dirty = false;
+    shell.setDocument(record.id, dirty);
+    setStatus(`saved tmp/circuit-drafts/${record.id}.ts`, 'ok');
+  } catch (err) {
+    setStatus(`save failed: ${err}`, 'err');
+  }
+}
+
+function setLayout(next: Partial<EditorLayout>): void {
+  layout = { ...layout, ...next };
+  saveLayout();
+}
+
+function runAction(id: ActionId): void {
+  switch (id) {
+    case 'newBlank':
+      newBlank();
+      return;
+    case 'load':
+      loadDialog.showModal();
+      return;
+    case 'saveDraft':
+      if (drawn) void saveDraft();
+      return;
+    case 'copyRecord':
+      if (drawn) void copyRecord();
+      return;
+    case 'undo':
+      undo();
+      return;
+    case 'redo':
+      return;
+    case 'toggleDock':
+      if (drawn) void togglePreview();
+      return;
+    case 'dockFullscreen':
+      setLayout({ dockFullscreen: !layout.dockFullscreen });
+      dock.setFullscreen(layout.dockFullscreen);
+      return;
+    case 'toggleMetrics':
+      setLayout({ metricsOpen: !layout.metricsOpen });
+      shell.showMetrics(layout.metricsOpen);
+      requestRedraw();
+      return;
+    case 'toggleGrid':
+      setLayout({ grid: !layout.grid });
+      requestRedraw();
+      return;
+    case 'toggleSnap':
+      setLayout({ snap: !layout.snap });
+      setStatus(layout.snap ? 'snapping every placement to the grid' : 'free placement', '');
+      requestRedraw();
+      return;
+    case 'fitView':
+      fitView();
+      return;
+    case 'zoomOut':
+      applyZoom(50);
+      return;
+    case 'zoomReset':
+      applyZoom(100);
+      return;
+    case 'zoomIn':
+      applyZoom(200);
+      return;
+    case 'fitEnclosure':
+      if (drawn) fitEnclosure();
+      return;
+    case 'fixCorners':
+      if (drawn) fixCorners();
+      return;
+    case 'raceSettings':
+      if (drawn) setRailMode('race');
+      return;
+    case 'modeShape':
+      setRailMode('shape');
+      return;
+    case 'modeWidth':
+      if (drawn) setRailMode('width');
+      return;
+    case 'modeProps':
+      if (drawn) setRailMode('props');
+      return;
+    case 'modeRace':
+      if (drawn) setRailMode('race');
+      return;
+    case 'keys':
+      shell.toggleKeys();
+      return;
+    case 'dockPlay': {
+      if (!preview || !dock.open) return;
+      const riding = preview.cameraMode === 'fly' && preview.playing;
+      if (riding) {
+        preview.setFlyPlaying(false);
+        setStatus('fly-through paused: drag to look around', '');
+      } else {
+        // Resuming puts the head back down the road: a lap restarted from a view
+        // turned ninety degrees is not the lap anyone paused to look at.
+        preview.resetLook();
+        preview.setFlyPlaying(true);
+        setStatus('riding the lap', '');
+      }
+      syncDockChrome();
+      return;
+    }
+    default:
+      // Selection and pointer rows: the props branch and the canvas own those,
+      // and the table carries them for the cheatsheet and the hints.
+      return;
+  }
+}
+
+// ---- the shell ----
+
+const shell = new EditorShell({
+  onAction: runAction,
+  onMode: (mode) => {
+    if (mode !== 'shape' && !drawn) return;
+    setRailMode(mode);
+  },
+  onSideTab: (tab) => {
+    sideChoice = tab;
+    setLayout({ side: tab });
+    applySideTab();
+  },
+  onFocusProblem: focusProblem,
+  onToolValue: () => {
+    // Nothing to recompute: the field is read at the start of the next stroke.
+    // Reported so a change the operator made is visibly the tool's now.
+    const field = TOOL_VALUE_FIELDS[tool()];
+    if (field) setStatus(`${field.label}: ${shell.toolValueInput.value}`, '');
+  },
+});
+
+const planArea = (): { width: number; height: number } => ({
+  width: shell.planEl.clientWidth,
+  height: shell.planEl.clientHeight,
+});
+
+const dock = new CircuitDock(
+  {
+    onGeometry: (geometry: DockGeometry) => setLayout({ dock: geometry }),
+    onFullscreen: (on) => {
+      setLayout({ dockFullscreen: on });
+      dock.setFullscreen(on);
+    },
+    onInvertLook: (on) => {
+      setLayout({ invertLook: on });
+      dock.setInvertLook(on);
+      preview?.setInvertLook(on);
+    },
+    onFollowCursor: (on) => {
+      setLayout({ followCursor: on });
+      dock.setFollowCursor(on);
+      // A camera that is being pointed at things must not also be driving off
+      // on its own.
+      if (on) preview?.setFlyPlaying(false);
+      syncDockChrome();
+    },
+    onCameraMode: (mode) => {
+      if (!preview) return;
+      if (mode === 'fly') {
+        preview.setFlyPlaying(!(preview.cameraMode === 'fly' && preview.playing));
+      } else {
+        preview.setFlyPlaying(false);
+        preview.setMode('orbit');
+        preview.frame(metrics.roadHalfX, metrics.roadHalfZ);
+      }
+      syncDockChrome();
+    },
+    onFlySpeed: (speed) => preview?.setFlySpeed(speed),
+    onFlyFraction: (fraction) => {
+      preview?.setFlyFraction(fraction);
+      dock.setAt(drawn ? fraction * track.length : null, fraction);
+      syncDockChrome();
+    },
+    onClose: () => void togglePreview(),
+    onResized: () => preview?.resize(),
+  },
+  platform,
+);
+
+function syncDockChrome(): void {
+  dock.setCameraMode(preview?.cameraMode === 'fly' ? 'fly' : 'orbit', preview?.playing ?? false);
+}
+
+// ---- the load dialog ----
+
+const LOAD_CHOICES: { label: string; detail: string; build: () => RealmRacersCircuit }[] = [
+  {
+    label: 'starter oval',
+    detail: 'a plain loop to deform',
+    build: () => ({ ...blankCircuit(), id: 'draft_circuit' }),
+  },
+  ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => ({
+    label: circuit.id,
+    detail: `${circuit.roles.join(' and ')}, ${circuit.laps} laps`,
+    build: () => ({ ...circuit, id: `draft_${circuit.id}` }),
+  })),
+];
+
+for (const choice of LOAD_CHOICES) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  const name = document.createElement('div');
+  name.textContent = choice.label;
+  const detail = document.createElement('div');
+  detail.className = 'sub';
+  detail.textContent = choice.detail;
+  button.append(name, detail);
+  button.onclick = () => {
+    loadDialog.close();
+    loadCircuit(choice.build(), choice.label);
+  };
+  loadListEl.append(button);
+}
+
+(document.getElementById('loadCancel') as HTMLButtonElement).onclick = () => loadDialog.close();
+
+// ---- the 3D dock's preview ----
+
+async function openPreview(): Promise<void> {
+  if (preview) return;
+  shell.setEnabled('toggleDock', false);
+  setStatus('preview: starting', '');
+  try {
+    const { CircuitPreview } = await import('./preview3d');
+    dock.setGeometry(layout.dock, planArea());
+    dock.setOpen(true);
+    dock.setFullscreen(layout.dockFullscreen);
+    dock.setFollowCursor(layout.followCursor);
+    dock.setInvertLook(layout.invertLook);
+    dock.setAt(null, 0);
+    shell.setChecked('toggleDock', true);
+    const created = new CircuitPreview({
+      canvas: previewCanvas,
+      onStatus: (text) => setStatus(text, ''),
+    });
+    created.onFlyProgress = (fraction) => {
+      dock.setAt(drawn ? fraction * track.length : null, fraction);
+    };
+    created.setInvertLook(layout.invertLook);
+    preview = created;
+    created.frame(metrics.roadHalfX, metrics.roadHalfZ);
+    created.show(record);
+    await created.start();
+    setLayout({ dockOpen: true });
+    shell.setPreviewReady('ready');
+    syncDockChrome();
+  } catch (err) {
+    // A dev page with no WebGL still has a working 2D tool, and saying so beats
+    // a blank panel over the plan.
+    dock.setOpen(false);
+    shell.setChecked('toggleDock', false);
+    shell.setPreviewReady('error');
+    setStatus(`preview unavailable: ${err}`, 'err');
+  } finally {
+    shell.setEnabled('toggleDock', drawn);
+  }
+}
+
+async function togglePreview(): Promise<void> {
+  if (!preview) {
+    await openPreview();
     return;
   }
-  if (mode === 'props') {
+  const showing = !dock.open;
+  dock.setOpen(showing);
+  shell.setChecked('toggleDock', showing);
+  setLayout({ dockOpen: showing });
+  // Told either way: a hidden preview STOPS rendering rather than drawing a
+  // whole circuit behind the plan, under the 2D drag path.
+  preview.setVisible(showing);
+  shell.setPreviewReady(showing ? 'ready' : 'off');
+  if (showing) {
+    preview.show(record);
+    dock.reflow(planArea());
+  }
+}
+
+// ---- keyboard ----
+
+window.addEventListener('keydown', (ev) => {
+  if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
+  const action = actionForShortcut(ev);
+  if (action) {
+    // The space bar ACTIVATES a focused button. Taking it here would leave the
+    // rail and the menus unusable from the keyboard the moment one has focus.
+    if (action === 'dockPlay' && document.activeElement instanceof HTMLButtonElement) return;
+    ev.preventDefault();
+    runAction(action);
+    return;
+  }
+  if (tool() === 'props') {
+    // Escape puts the pointer back and drops the selection: the one key that has
+    // to work whether or not anything is selected.
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      dressing = null;
+      armPalette(null);
+      applySideTab();
+      return;
+    }
     if (!dressing) return;
     const key = ev.key.toLowerCase();
     if (ev.key === 'Delete' || ev.key === 'Backspace') {
@@ -1833,191 +2764,12 @@ window.addEventListener('keydown', (ev) => {
   }
 });
 
-window.addEventListener('resize', requestRedraw);
+window.addEventListener('resize', () => {
+  requestRedraw();
+  dock.reflow(planArea());
+  preview?.resize();
+});
 
-// ---- header wiring ----
-
-for (const [key, button] of Object.entries(modeButtons)) {
-  button.onclick = () => setMode(key as Mode);
-}
-(document.getElementById('undoBtn') as HTMLButtonElement).onclick = undo;
-(document.getElementById('fitBtn') as HTMLButtonElement).onclick = fitView;
-(document.getElementById('fitBoxBtn') as HTMLButtonElement).onclick = fitEnclosure;
-(document.getElementById('fixCornersBtn') as HTMLButtonElement).onclick = fixCorners;
-
-(document.getElementById('copyBtn') as HTMLButtonElement).onclick = async () => {
-  const text = circuitToTypeScript(record);
-  try {
-    await navigator.clipboard.writeText(text);
-    setStatus('record copied: paste it into realm_racers_circuits.ts', 'ok');
-  } catch {
-    // Clipboard access needs a secure context; a download is the fallback that
-    // always works over plain http on a dev host.
-    const anchor = document.createElement('a');
-    anchor.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    anchor.download = `${record.id}.ts`;
-    anchor.click();
-    setStatus('clipboard refused: downloaded the record instead', 'ok');
-  }
-};
-
-(document.getElementById('saveBtn') as HTMLButtonElement).onclick = async () => {
-  try {
-    const response = await fetch('/__circuit_editor/save', {
-      method: 'POST',
-      body: JSON.stringify(record),
-    });
-    if (!response.ok) throw new Error(await response.text());
-    setStatus(`saved tmp/circuit-drafts/${record.id}.ts`, 'ok');
-  } catch (err) {
-    setStatus(`save failed: ${err}`, 'err');
-  }
-};
-
-/**
- * Starting from nothing. A `<select>` used to do both jobs and did the second
- * one badly: it only fires on a CHANGE, so an operator who had drawn over the
- * starter oval and wanted a fresh one had no way to ask for it.
- */
-function newBlank(): void {
-  stroke = [];
-  selection = null;
-  // Committed BEFORE the flag moves: `commit` snapshots the state it is
-  // leaving, and clearing the flag first made that snapshot say the canvas was
-  // already blank, so undoing a discard restored nothing.
-  commit(blankCircuit());
-  drawn = false;
-  setMode('draw');
-  refreshChrome();
-  fitView();
-  setStatus('blank canvas: draw a closed loop', '');
-}
-
-/** Starting from something: the starter oval, or any circuit the game ships. */
-function loadCircuit(circuit: RealmRacersCircuit, label: string): void {
-  stroke = [];
-  selection = null;
-  // A shipped record is loaded under a DRAFT id, so editing it can never hand
-  // the memoized derivation of a live circuit a shape the game did not author.
-  // Committed before the flag moves, for the same reason as `newBlank`.
-  commit(circuit);
-  drawn = true;
-  setMode('handles');
-  refreshChrome();
-  syncForm();
-  fitView();
-  setStatus(`loaded ${label}`, 'ok');
-}
-
-const LOAD_CHOICES: { label: string; detail: string; build: () => RealmRacersCircuit }[] = [
-  {
-    label: 'starter oval',
-    detail: 'a plain loop to deform',
-    build: () => ({ ...blankCircuit(), id: 'draft_circuit' }),
-  },
-  ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => ({
-    label: circuit.id,
-    detail: `${circuit.roles.join(' and ')}, ${circuit.laps} laps`,
-    build: () => ({ ...circuit, id: `draft_${circuit.id}` }),
-  })),
-];
-
-for (const choice of LOAD_CHOICES) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  const name = document.createElement('div');
-  name.textContent = choice.label;
-  const detail = document.createElement('div');
-  detail.className = 'sub';
-  detail.textContent = choice.detail;
-  button.append(name, detail);
-  button.onclick = () => {
-    loadDialog.close();
-    loadCircuit(choice.build(), choice.label);
-  };
-  loadListEl.append(button);
-}
-
-// ---- the 3D preview ----
-//
-// The panel is a toggle rather than a second window: the readout is what says
-// whether a circuit is legal, the 3D is what says whether it is any good, and
-// an operator switches between them constantly.
-
-function syncFlyChrome(): void {
-  const flying = preview?.cameraMode === 'fly';
-  flyBtn.classList.toggle('on', flying && (preview?.playing ?? false));
-  orbitBtn.classList.toggle('on', !flying);
-}
-
-async function togglePreview(): Promise<void> {
-  if (preview) {
-    const showing = Boolean(previewEl.hidden);
-    previewEl.hidden = !showing;
-    previewBtn.classList.toggle('on', showing);
-    // Told either way: a hidden preview STOPS rendering rather than drawing a
-    // whole circuit behind the panel, under the 2D drag path.
-    preview.setVisible(showing);
-    if (showing) {
-      preview.show(record);
-      preview.resize();
-    }
-    return;
-  }
-  previewBtn.disabled = true;
-  setStatus('preview: starting', '');
-  try {
-    const { CircuitPreview } = await import('./preview3d');
-    previewEl.hidden = false;
-    previewBtn.classList.add('on');
-    const created = new CircuitPreview({
-      canvas: previewCanvas,
-      onStatus: (text) => setStatus(text, ''),
-    });
-    created.onFlyProgress = (fraction) => {
-      flyAtEl.value = String(Math.round(fraction * 1000));
-      flyLabelEl.textContent = `${Math.round(fraction * 100)}%`;
-    };
-    preview = created;
-    created.frame(metrics.roadHalfX, metrics.roadHalfZ);
-    created.show(record);
-    await created.start();
-    syncFlyChrome();
-  } catch (err) {
-    // A dev page with no WebGL still has a working 2D tool, and saying so beats
-    // a blank half-screen.
-    previewEl.hidden = true;
-    previewBtn.classList.remove('on');
-    setStatus(`preview unavailable: ${err}`, 'err');
-  } finally {
-    previewBtn.disabled = !drawn;
-  }
-}
-
-previewBtn.onclick = () => void togglePreview();
-flyBtn.onclick = () => {
-  if (!preview) return;
-  preview.setFlyPlaying(!(preview.cameraMode === 'fly' && preview.playing));
-  syncFlyChrome();
-};
-orbitBtn.onclick = () => {
-  if (!preview) return;
-  preview.setFlyPlaying(false);
-  preview.setMode('orbit');
-  preview.frame(metrics.roadHalfX, metrics.roadHalfZ);
-  syncFlyChrome();
-};
-flySpeedEl.onchange = () => {
-  preview?.setFlySpeed(flySpeedEl.value === 'scenic' ? 'scenic' : 'race');
-};
-flyAtEl.oninput = () => {
-  const fraction = Number(flyAtEl.value) / 1000;
-  flyLabelEl.textContent = `${Math.round(fraction * 100)}%`;
-  preview?.setFlyFraction(fraction);
-  syncFlyChrome();
-};
-
-window.addEventListener('resize', () => preview?.resize());
 // The page's one teardown. A dev tool is left open for hours and reloaded often;
 // giving the GL context and the built circuit back on the way out is what keeps
 // a reload from stacking contexts until the browser starts dropping the oldest.
@@ -2026,15 +2778,20 @@ window.addEventListener('pagehide', () => {
   preview = null;
 });
 
-(document.getElementById('newBtn') as HTMLButtonElement).onclick = newBlank;
-(document.getElementById('loadBtn') as HTMLButtonElement).onclick = () => loadDialog.showModal();
-(document.getElementById('loadCancel') as HTMLButtonElement).onclick = () => loadDialog.close();
-
-paletteAllEl.onchange = () => {
-  paletteShowAll = paletteAllEl.checked;
-  buildPalette();
-};
+// ---- boot ----
 
 buildForm();
 buildPalette();
+shell.sideBodyEl.append(libraryEl, inspectorEl, outlinerEl, modeReadoutEl, formEl);
+shell.showMetrics(layout.metricsOpen);
+shell.setChecked('toggleGrid', layout.grid);
+shell.setChecked('toggleSnap', layout.snap);
+shell.setPreviewReady('off');
 newBlank();
+// The stored zoom, applied after the blank canvas framed itself: the operator
+// left the plan at a zoom they were working at, and `newBlank` frames the room a
+// circuit has rather than the one they were looking at.
+if (layout.zoom) {
+  view.scale = layout.zoom;
+  requestRedraw();
+}

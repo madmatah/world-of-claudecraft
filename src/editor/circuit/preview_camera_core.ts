@@ -62,6 +62,25 @@ export const PREVIEW_ORBIT_LIMITS = {
 const ORBIT_RADIANS_PER_PIXEL = 0.005;
 /** Zoom sensitivity per wheel unit, applied multiplicatively. */
 const ZOOM_PER_WHEEL_UNIT = 0.001;
+/**
+ * Yards the orbit target slides per pixel dragged, PER YARD of orbit distance.
+ *
+ * Scaled by the distance rather than fixed, so a pan feels the same zoomed out
+ * over a whole lap and zoomed in on one corner: the thing under the pointer moves
+ * with the pointer either way, which is the only pan that reads as grabbing the
+ * ground.
+ */
+const PAN_YARDS_PER_PIXEL_PER_YARD = 0.0022;
+/**
+ * How far the orbit target may be slid from the circuit's own origin, yards.
+ *
+ * Generous against `REALM_RACERS_MAX_REGION_HALF_X` (300), because a pan is for
+ * getting the eye onto a corner and the corner can be at the region's edge with
+ * the camera further out still. What it prevents is the one failure a free pan
+ * has: a target dragged off into empty band, with the circuit nowhere on screen
+ * and no way back but Fit.
+ */
+export const PREVIEW_PAN_LIMIT = 900;
 
 function clamp(value: number, low: number, high: number): number {
   return value < low ? low : value > high ? high : value;
@@ -79,6 +98,50 @@ export function orbitDrag(state: PreviewOrbitState, dxPixels: number, dyPixels: 
     PREVIEW_ORBIT_LIMITS.minPitch,
     PREVIEW_ORBIT_LIMITS.maxPitch,
   );
+}
+
+/**
+ * Slide the orbit target across the ground, in the camera's own screen basis.
+ *
+ * Without this the rig could only ever circle one fixed point, so half a big
+ * circuit was unreachable: the far corners of an 1100 yard lap are simply not
+ * inspectable from a target pinned at the origin. The ground under the pointer
+ * follows the pointer, which is why the basis is the camera's and not the
+ * world's, and the target stays on the ground plane (`y`) because a circuit is
+ * flat and a lifted target only ever tilts the horizon.
+ */
+export function orbitPan(state: PreviewOrbitState, dxPixels: number, dyPixels: number): void {
+  const scale = state.distance * PAN_YARDS_PER_PIXEL_PER_YARD;
+  // The horizontal forward (camera toward target) and the screen right derived
+  // from it. Same yaw convention as `orbitPose`.
+  const forwardX = Math.sin(state.yaw);
+  const forwardZ = Math.cos(state.yaw);
+  const rightX = -forwardZ;
+  const rightZ = forwardX;
+  // Opposite to the pointer in screen space, which is what "grab the ground"
+  // means: drag right and the scene goes right, so the target goes left.
+  state.target.x = clamp(
+    state.target.x - rightX * dxPixels * scale + forwardX * dyPixels * scale,
+    -PREVIEW_PAN_LIMIT,
+    PREVIEW_PAN_LIMIT,
+  );
+  state.target.z = clamp(
+    state.target.z - rightZ * dxPixels * scale + forwardZ * dyPixels * scale,
+    -PREVIEW_PAN_LIMIT,
+    PREVIEW_PAN_LIMIT,
+  );
+}
+
+/**
+ * Put the orbit target on a point, keeping the current angles and distance.
+ *
+ * What the plan is FOR: double-clicking a corner on the 2D plan is the shortest
+ * way to say "look at that", and it needs no camera flying and no hunting.
+ */
+export function orbitLookAt(state: PreviewOrbitState, x: number, z: number): void {
+  state.target.x = clamp(x, -PREVIEW_PAN_LIMIT, PREVIEW_PAN_LIMIT);
+  state.target.y = 0;
+  state.target.z = clamp(z, -PREVIEW_PAN_LIMIT, PREVIEW_PAN_LIMIT);
 }
 
 export function orbitZoom(state: PreviewOrbitState, wheelDelta: number): void {
@@ -196,6 +259,75 @@ export function flyThroughPose(
       x: point.x + point.tx * profile.lookAhead,
       y: profile.eyeHeight,
       z: point.z + point.tz * profile.lookAhead,
+    },
+  };
+}
+
+/**
+ * Where the fly-through is LOOKING, relative to straight down the road.
+ *
+ * Zero is the chase pose, which is the one that answers "does this corner arrive
+ * with any warning". Everything else is the operator turning their head: paused
+ * at a corner exit, the question becomes what the dressing looks like from the
+ * seat, and the chase pose cannot answer it because it only ever faces forward.
+ */
+export interface PreviewFlyLook {
+  /** Radians left/right of the racing direction. */
+  yaw: number;
+  /** Radians up/down, clamped so the view never rolls past vertical. */
+  pitch: number;
+}
+
+export const FLY_LOOK_MAX_PITCH = 1.15;
+/** Radians of head turn per pixel dragged, matched to the orbit rig's feel. */
+const FLY_LOOK_RADIANS_PER_PIXEL = 0.004;
+
+export const createFlyLook = (): PreviewFlyLook => ({ yaw: 0, pitch: 0 });
+
+/**
+ * Turn the head by a drag.
+ *
+ * `invertPitch` flips the vertical only, which is the axis people genuinely
+ * disagree about: pulling the pointer down either tips the view down (the
+ * pointer IS the aim) or up (the pointer is the machine's stick). Nobody wants an
+ * inverted horizontal, so there is no switch for one.
+ */
+export function flyLookDrag(
+  look: PreviewFlyLook,
+  dxPixels: number,
+  dyPixels: number,
+  invertPitch = false,
+): void {
+  look.yaw -= dxPixels * FLY_LOOK_RADIANS_PER_PIXEL;
+  const vertical = (invertPitch ? -dyPixels : dyPixels) * FLY_LOOK_RADIANS_PER_PIXEL;
+  look.pitch = clamp(look.pitch - vertical, -FLY_LOOK_MAX_PITCH, FLY_LOOK_MAX_PITCH);
+}
+
+/**
+ * The same pose, looking somewhere else.
+ *
+ * It turns the LOOK and never the camera: the eye stays exactly where the chase
+ * boom put it, so what the operator sees is still what a pilot at that point on
+ * the lap would see, from the seat height the game's own boom profile gives them.
+ * Moving the camera instead would answer a question about nowhere.
+ */
+export function flyLookPose(pose: PreviewPose, look: PreviewFlyLook): PreviewPose {
+  if (look.yaw === 0 && look.pitch === 0) return pose;
+  const dx = pose.target.x - pose.camera.x;
+  const dy = pose.target.y - pose.camera.y;
+  const dz = pose.target.z - pose.camera.z;
+  const flat = Math.hypot(dx, dz);
+  const range = Math.hypot(dx, dy, dz);
+  if (!(range > 0)) return pose;
+  const heading = Math.atan2(dx, dz) + look.yaw;
+  const elevation = Math.atan2(dy, flat || 1e-6) + look.pitch;
+  const cosEl = Math.cos(elevation);
+  return {
+    camera: { ...pose.camera },
+    target: {
+      x: pose.camera.x + Math.sin(heading) * cosEl * range,
+      y: pose.camera.y + Math.sin(elevation) * range,
+      z: pose.camera.z + Math.cos(heading) * cosEl * range,
     },
   };
 }

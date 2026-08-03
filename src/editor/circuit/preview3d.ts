@@ -33,11 +33,16 @@ import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import { realmRacersTrack } from '../../sim/realm_racers_spline';
 import {
   advanceFlyThrough,
+  createFlyLook,
   createPreviewOrbit,
+  flyLookDrag,
+  flyLookPose,
   flySpeedYardsPerSecond,
   flyThroughPoseAt,
   orbitDrag,
   orbitFrame,
+  orbitLookAt,
+  orbitPan,
   orbitPose,
   orbitZoom,
   PREVIEW_REBUILD_DEBOUNCE_MS,
@@ -76,6 +81,11 @@ export class CircuitPreview {
   private trackGroup: THREE.Group | null = null;
 
   private readonly orbit = createPreviewOrbit();
+  /** Where the fly-through is looking, relative to straight down the road. */
+  private readonly flyLook = createFlyLook();
+  /** Whether a downward drag tips the view up. An operator preference, held in
+   *  the page's layout store. */
+  private invertLook = false;
   private mode: PreviewCameraMode = 'orbit';
   private flyS = 0;
   private flyPlaying = false;
@@ -97,7 +107,7 @@ export class CircuitPreview {
   private assetsPromise: Promise<void> | null = null;
   private started = false;
   private disposed = false;
-  private dragging: { x: number; y: number } | null = null;
+  private dragging: { x: number; y: number; pan: boolean } | null = null;
   private viewWidth = 0;
   private viewHeight = 0;
 
@@ -220,6 +230,19 @@ export class CircuitPreview {
     this.mode = mode;
   }
 
+  /**
+   * Orbit that point instead, in CIRCUIT-LOCAL yards.
+   *
+   * The plan is the fastest way to say which corner: double-clicking it beats
+   * panning a rig that started on the origin, especially on a lap big enough that
+   * its far side is off the frame at any readable distance.
+   */
+  lookAt(x: number, z: number): void {
+    orbitLookAt(this.orbit, x, z);
+    this.flyPlaying = false;
+    this.mode = 'orbit';
+  }
+
   get cameraMode(): PreviewCameraMode {
     return this.mode;
   }
@@ -235,6 +258,22 @@ export class CircuitPreview {
 
   setFlySpeed(preset: PreviewFlySpeed): void {
     this.flySpeed = preset;
+  }
+
+  setInvertLook(invert: boolean): void {
+    this.invertLook = invert;
+  }
+
+  /**
+   * Put the look back down the road.
+   *
+   * What "the default POV" means: the chase pose the game's own boom profile
+   * gives a pilot, facing forward. A lap resumed from a head turned ninety
+   * degrees is not the lap anyone wanted to watch.
+   */
+  resetLook(): void {
+    this.flyLook.yaw = 0;
+    this.flyLook.pitch = 0;
   }
 
   /** Jump the fly-through to a lap fraction (the scrubber). */
@@ -260,15 +299,37 @@ export class CircuitPreview {
   private attachPointer(): void {
     this.canvas.addEventListener('pointerdown', (ev) => {
       this.canvas.setPointerCapture(ev.pointerId);
-      this.dragging = { x: ev.clientX, y: ev.clientY };
+      // Middle button, or shift held, PANS instead of turning. Both, because the
+      // middle drag is the pan gesture the 2D plan already uses and a trackpad
+      // has no middle button to offer.
+      const pan = ev.button === 1 || ev.shiftKey;
+      this.dragging = { x: ev.clientX, y: ev.clientY, pan };
+      if (pan) ev.preventDefault();
     });
     this.canvas.addEventListener('pointermove', (ev) => {
-      if (!this.dragging) return;
-      orbitDrag(this.orbit, ev.clientX - this.dragging.x, ev.clientY - this.dragging.y);
-      this.dragging = { x: ev.clientX, y: ev.clientY };
+      const from = this.dragging;
+      if (!from) return;
+      const dx = ev.clientX - from.x;
+      const dy = ev.clientY - from.y;
+      this.dragging = { x: ev.clientX, y: ev.clientY, pan: from.pan };
+      // In FLY the drag turns the pilot's head and stays in fly: the eye is the
+      // one thing that must not move, or the view stops being what a pilot at
+      // that point on the lap sees. In ORBIT it moves the rig.
+      if (this.mode === 'fly' && !from.pan) {
+        flyLookDrag(this.flyLook, dx, dy, this.invertLook);
+        return;
+      }
+      if (from.pan) orbitPan(this.orbit, dx, dy);
+      else orbitDrag(this.orbit, dx, dy);
       // Touching the orbit rig is a request to look around, which the
       // fly-through would otherwise fight for the camera every frame.
       this.mode = 'orbit';
+    });
+    // A double click puts the look back down the road: a head turned a long way
+    // round is easy to reach and awkward to undo by hand.
+    this.canvas.addEventListener('dblclick', () => {
+      this.flyLook.yaw = 0;
+      this.flyLook.pitch = 0;
     });
     const end = (): void => {
       this.dragging = null;
@@ -302,7 +363,8 @@ export class CircuitPreview {
     // Sampling, the world-to-stage conversion and the chase pose are ONE call:
     // the conversion was skippable when they were three, and skipping it put
     // the camera out at the instance band looking at empty sky.
-    return flyThroughPoseAt(realmRacersTrack(circuit), this.flyS, REALM_RACERS_ORIGIN);
+    const chase = flyThroughPoseAt(realmRacersTrack(circuit), this.flyS, REALM_RACERS_ORIGIN);
+    return flyLookPose(chase, this.flyLook);
   }
 
   private loop = (): void => {

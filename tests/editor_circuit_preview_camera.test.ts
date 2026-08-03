@@ -10,17 +10,24 @@ import { describe, expect, it } from 'vitest';
 import {
   advanceFlyThrough,
   circuitLocalSample,
+  createFlyLook,
   createPreviewOrbit,
+  FLY_LOOK_MAX_PITCH,
+  flyLookDrag,
+  flyLookPose,
   flySpeedYardsPerSecond,
   flyThroughPose,
   flyThroughPoseAt,
   orbitDrag,
   orbitFrame,
+  orbitLookAt,
+  orbitPan,
   orbitPose,
   orbitZoom,
   PREVIEW_CHASE_PROFILE,
   PREVIEW_FLY_SPEED_FRACTIONS,
   PREVIEW_ORBIT_LIMITS,
+  PREVIEW_PAN_LIMIT,
   PREVIEW_REBUILD_DEBOUNCE_MS,
 } from '../src/editor/circuit/preview_camera_core';
 import { REALM_RACERS_CAMERA_BOOM_PROFILE } from '../src/render/camera_boom_core';
@@ -119,6 +126,167 @@ describe('preview orbit rig', () => {
     orbitZoom(state, -220);
     const pose = orbitPose(state);
     expect(distance(pose.camera, pose.target)).toBeCloseTo(state.distance, 6);
+  });
+});
+
+describe('panning the orbit rig', () => {
+  // Why it exists: a target pinned on the origin makes half of a big circuit
+  // unreachable, so the far corners of an 1100 yard lap cannot be inspected.
+  it('slides the target across the ground, leaving the angles and distance alone', () => {
+    const state = createPreviewOrbit();
+    const { yaw, pitch, distance: was } = state;
+    orbitPan(state, 60, -25);
+    expect(state.yaw).toBe(yaw);
+    expect(state.pitch).toBe(pitch);
+    expect(state.distance).toBe(was);
+    expect(state.target.y).toBe(0);
+    expect(Math.hypot(state.target.x, state.target.z)).toBeGreaterThan(0);
+  });
+
+  it('moves the ground the way the pointer went, in the CAMERA basis', () => {
+    // At yaw = 0 the camera looks along +z, so its screen right is world -x:
+    // dragging right must send the target the other way, +x, which is what makes
+    // the ground under the pointer follow the pointer.
+    const state = createPreviewOrbit();
+    state.yaw = 0;
+    orbitPan(state, 100, 0);
+    expect(state.target.x).toBeGreaterThan(0);
+    expect(state.target.z).toBeCloseTo(0, 6);
+    // A quarter turn later the same drag moves it along z instead.
+    const turned = createPreviewOrbit();
+    turned.yaw = Math.PI / 2;
+    orbitPan(turned, 100, 0);
+    expect(Math.abs(turned.target.z)).toBeGreaterThan(Math.abs(turned.target.x));
+  });
+
+  it('pans further per pixel the further out the camera is', () => {
+    const near = createPreviewOrbit();
+    near.distance = 40;
+    const far = createPreviewOrbit();
+    far.distance = 400;
+    orbitPan(near, 50, 0);
+    orbitPan(far, 50, 0);
+    // Same gesture, ten times the reach: what keeps the ground under the pointer
+    // moving with the pointer at every zoom.
+    expect(Math.hypot(far.target.x, far.target.z)).toBeCloseTo(
+      Math.hypot(near.target.x, near.target.z) * 10,
+      4,
+    );
+  });
+
+  it('cannot be dragged off into empty band, with no way back but Fit', () => {
+    const state = createPreviewOrbit();
+    state.distance = PREVIEW_ORBIT_LIMITS.maxDistance;
+    for (let i = 0; i < 200; i++) orbitPan(state, 500, 500);
+    expect(Math.abs(state.target.x)).toBeLessThanOrEqual(PREVIEW_PAN_LIMIT);
+    expect(Math.abs(state.target.z)).toBeLessThanOrEqual(PREVIEW_PAN_LIMIT);
+  });
+
+  it('puts the target on a named point, which is what a plan double-click says', () => {
+    const state = createPreviewOrbit();
+    orbitDrag(state, 90, 20);
+    const { yaw, pitch } = state;
+    orbitLookAt(state, -140, 88);
+    expect(state.target).toEqual({ x: -140, y: 0, z: 88 });
+    // Looking somewhere else is not looking from somewhere else.
+    expect(state.yaw).toBe(yaw);
+    expect(state.pitch).toBe(pitch);
+    // Clamped by the same limit a pan is, so a stray coordinate cannot lose it.
+    orbitLookAt(state, 99_999, -99_999);
+    expect(state.target.x).toBe(PREVIEW_PAN_LIMIT);
+    expect(state.target.z).toBe(-PREVIEW_PAN_LIMIT);
+  });
+
+  it('is undone by Fit, which returns the target to the circuit centre', () => {
+    const state = createPreviewOrbit();
+    orbitPan(state, 400, 400);
+    orbitFrame(state, 200, 120, (62 * Math.PI) / 180, 1.6);
+    expect(state.target).toEqual({ x: 0, y: 0, z: 0 });
+  });
+});
+
+describe('looking around from the seat', () => {
+  const track = realmRacersTrack(GARDEN);
+  const chase = (): ReturnType<typeof flyThroughPoseAt> =>
+    flyThroughPoseAt(track, 120, REALM_RACERS_ORIGIN);
+
+  it('is the chase pose exactly, until the head turns', () => {
+    const look = createFlyLook();
+    expect(look).toEqual({ yaw: 0, pitch: 0 });
+    expect(flyLookPose(chase(), look)).toEqual(chase());
+  });
+
+  it('turns the LOOK and never the eye', () => {
+    // The whole point: the camera stays where the game boom profile put it, so
+    // what is on screen is still what a pilot at that point on the lap sees.
+    const pose = chase();
+    const look = createFlyLook();
+    flyLookDrag(look, 200, 60);
+    const turned = flyLookPose(pose, look);
+    expect(turned.camera).toEqual(pose.camera);
+    expect(turned.target).not.toEqual(pose.target);
+  });
+
+  it('keeps the look at the same range, so the view swings rather than zooms', () => {
+    const pose = chase();
+    const look = createFlyLook();
+    flyLookDrag(look, -150, -40);
+    const turned = flyLookPose(pose, look);
+    expect(distance(turned.camera, turned.target)).toBeCloseTo(
+      distance(pose.camera, pose.target),
+      4,
+    );
+  });
+
+  it('turns the head left for a rightward drag, and lifts it for an upward one', () => {
+    const look = createFlyLook();
+    flyLookDrag(look, 100, -100);
+    expect(look.yaw).toBeLessThan(0);
+    expect(look.pitch).toBeGreaterThan(0);
+  });
+
+  it('flips the VERTICAL when asked, and never the horizontal', () => {
+    // Which way a downward drag tips the view is the axis people disagree about;
+    // an inverted horizontal is nobody preference, so there is no switch for one.
+    const direct = createFlyLook();
+    const inverted = createFlyLook();
+    flyLookDrag(direct, 80, 50);
+    flyLookDrag(inverted, 80, 50, true);
+    expect(inverted.pitch).toBeCloseTo(-direct.pitch, 10);
+    expect(inverted.yaw).toBeCloseTo(direct.yaw, 10);
+  });
+
+  it('never rolls the view past vertical, however far the pointer is dragged', () => {
+    const up = createFlyLook();
+    const down = createFlyLook();
+    for (let i = 0; i < 100; i++) {
+      flyLookDrag(up, 0, -400);
+      flyLookDrag(down, 0, 400);
+    }
+    expect(up.pitch).toBe(FLY_LOOK_MAX_PITCH);
+    expect(down.pitch).toBe(-FLY_LOOK_MAX_PITCH);
+    // Yaw is free: turning right round to look back down the road is legitimate.
+    const spun = createFlyLook();
+    for (let i = 0; i < 100; i++) flyLookDrag(spun, 400, 0);
+    expect(Math.abs(spun.yaw)).toBeGreaterThan(Math.PI * 2);
+  });
+
+  it('looks behind on a half turn, which is how a mirror check reads', () => {
+    const pose = chase();
+    const look = { yaw: Math.PI, pitch: 0 };
+    const turned = flyLookPose(pose, look);
+    const forward = {
+      x: pose.target.x - pose.camera.x,
+      y: 0,
+      z: pose.target.z - pose.camera.z,
+    };
+    const behind = {
+      x: turned.target.x - turned.camera.x,
+      y: 0,
+      z: turned.target.z - turned.camera.z,
+    };
+    const dot = forward.x * behind.x + forward.z * behind.z;
+    expect(dot).toBeLessThan(0);
   });
 });
 

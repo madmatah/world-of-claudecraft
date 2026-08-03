@@ -1,6 +1,8 @@
-// The circuit editor's public surface: the three pure cores it is built from.
-// The page (`main.ts`, loaded by `circuit_editor.html`) is deliberately NOT
-// re-exported: it is an entry point, not a module anything imports.
+// The circuit editor's public surface: the pure cores it is built from. The page
+// (`main.ts`, loaded by `circuit_editor.html`) is deliberately NOT re-exported:
+// it is an entry point, not a module anything imports. Nor are its two DOM
+// consumers (`shell.ts`, `dock.ts`), which are structure over the cores below
+// and have nothing a test or another module wants.
 //
 // The readout every drag is measured against is not here either. It lives in
 // `src/sim/realm_racers_circuit_metrics.ts`, because it is the same validation a
@@ -14,6 +16,12 @@ export {
   draftListResponse,
   draftResponse,
 } from './draft_endpoints_core';
+export {
+  CHROME_ONLY_ICONS,
+  EDITOR_ICONS,
+  type EditorIconId,
+  editorIcon,
+} from './editor_icons';
 export { type EnvelopeSuggestion, suggestEnvelope } from './envelope_core';
 export {
   circuitFromTypeScript,
@@ -38,21 +46,92 @@ export {
   toWidthBands,
 } from './handles_core';
 export {
+  type ActionId,
+  type ActionScope,
+  actionChord,
+  actionForShortcut,
+  actionTooltip,
+  autoSideTab,
+  CALLOUT_MIN_GAP,
+  type CheatBlock,
+  type CircuitTool,
+  calloutProblems,
+  cheatBlocks,
+  chordHints,
+  clampDock,
+  DEFAULT_LAYOUT,
+  DOCK_MIN_HEIGHT,
+  DOCK_MIN_WIDTH,
+  type DockGeometry,
+  defaultDock,
+  EDITOR_ACTIONS,
+  type EditorActionDef,
+  type EditorLayout,
+  editorAction,
+  formatShortcut,
+  GRID_YARDS,
+  gridStepAt,
+  type HeadlineChip,
+  headlineChips,
+  LAYOUT_STORAGE_KEY,
+  MAX_CANVAS_CALLOUTS,
+  MENU_ITEMS,
+  MENUS,
+  type MenuId,
+  MODE_ACTIONS,
+  menuActions,
+  type PlanArea,
+  PROBLEM_LABELS,
+  type ProblemsChip,
+  parseLayout,
+  problemDetail,
+  problemHeadline,
+  problemsChip,
+  RAIL_MODES,
+  type RailModeDef,
+  type RailModeId,
+  railBanner,
+  type ShortcutPlatform,
+  SIDE_TAB_LABELS,
+  type SideTabId,
+  serializeLayout,
+  shortcutMatches,
+  snapPoint,
+  snapValue,
+  spreadCallouts,
+  TOOL_VALUE_FIELDS,
+  type ToolValueField,
+  toolFor,
+  ZOOM_MAX_SCALE,
+  ZOOM_MIN_SCALE,
+  ZOOM_REFERENCE_SCALE,
+  zoomPercent,
+  zoomScale,
+} from './layout_core';
+export {
   advanceFlyThrough,
   circuitLocalSample,
+  createFlyLook,
   createPreviewOrbit,
+  FLY_LOOK_MAX_PITCH,
+  flyLookDrag,
+  flyLookPose,
   flySpeedYardsPerSecond,
   flyThroughPose,
   flyThroughPoseAt,
   orbitDrag,
   orbitFrame,
+  orbitLookAt,
+  orbitPan,
   orbitPose,
   orbitZoom,
   PREVIEW_CHASE_PROFILE,
   PREVIEW_FLY_SPEED_FRACTIONS,
   PREVIEW_ORBIT_LIMITS,
+  PREVIEW_PAN_LIMIT,
   PREVIEW_REBUILD_DEBOUNCE_MS,
   type PreviewChaseProfile,
+  type PreviewFlyLook,
   type PreviewFlySpeed,
   type PreviewOrbitState,
   type PreviewPose,

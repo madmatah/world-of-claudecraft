@@ -158,7 +158,7 @@ outright without `ctx.devCommands`.
   thinned to the rows the shape needs, EXCEPT its outermost breakpoint: that is
   where the transition meets the profile it interrupted, and dropping it lets
   the road lean toward the stroke from arbitrarily far away.
-- **The one number in the header is a VALUE, not a brush size.** It means a
+- **The tool's one number is a VALUE, not a brush size.** It means a
   different quantity in each painting mode with a different legal range, so the
   field is renamed and re-bounded per mode, and every stroke reports what it
   changed. It reported nothing at all before, and a default equal to the blank
@@ -168,6 +168,15 @@ outright without `ctx.devCommands`.
   road than the record already gives it, and it never moves a control point:
   widening a corner is the operator's design, so corners under the road's own
   floor come back by name instead.
+
+## One CSS trap this page has now hit three times
+An author rule that sets `display` outranks the UA's `[hidden] { display: none }`,
+so `element.hidden = true` silently does nothing. It cost `#empty`, then the old
+`#preview`, then two more in the workbench pass at once: the practice rows
+(`.field`) stayed visible with practice unchecked, and a mode's repair chips
+(`button.chip`) all showed in every mode. **Any selector in this page's stylesheet
+that sets `display` needs its own `[hidden]` guard beside it**, and the guard goes
+in at the same time as the rule, not after a seat review notices.
 
 ## The 3D preview is the shipped pipeline, not a second drawing
 - It renders the draft through `buildRealmRacersTrack` (`src/render/`), which
@@ -182,6 +191,23 @@ outright without `ctx.devCommands`.
 - It never calls the builder's own `update()`: that exists to hide a circuit
   that does not own the viewer's LANE, and a preview has one circuit and no
   lanes.
+- **The rig PANS, and the seat looks around.** Two gaps a fixed orbit target and
+  a forward-only chase left: half of a big circuit is unreachable from a target
+  pinned on the origin, and a paused fly-through could only ever stare down the
+  road. So `orbitPan` slides the target across the ground in the camera's own
+  basis (shift-drag or middle-drag, scaled by distance so the ground under the
+  pointer follows the pointer, clamped by `PREVIEW_PAN_LIMIT` so it cannot be lost
+  in empty band), `orbitLookAt` puts it on a named point (double-clicking the 2D
+  plan, the fastest way to say which corner), and `flyLookPose` turns the LOOK
+  while leaving the eye exactly where the game's boom profile put it: move the
+  camera instead and the view answers a question about nowhere. Fit returns the
+  target to the centre; a double click in the dock returns the head to the road.
+  Which way a downward drag tips the view is the one axis people genuinely
+  disagree about, so `invertLook` is an operator preference in the layout store
+  and the horizontal is never inverted. `space` plays or pauses the ride, and
+  RESUMING resets the look: a lap restarted from a head turned ninety degrees is
+  not the lap anyone paused to look at. It is refused while a button holds the
+  focus, because there the space bar is that button's activation.
 - A rebuild is a full group swap on a debounce, never a rebuild inside a
   pointermove: the builder is one call that lands about half a megabyte of
   geometry. Freeing the old group goes through
@@ -191,18 +217,115 @@ outright without `ctx.devCommands`.
   circuits down with the draft).
 
 ## Starting a circuit
-`New blank` and `Load` are two buttons, never one dropdown: a `<select>` fires
-only on a CHANGE, so an operator who had drawn over the starter oval could not
-ask for a fresh one. A blank canvas is a STATE (`drawn`), not a shape: the page
+`New blank` and `Load` are two File entries, never one dropdown: a `<select>`
+fires only on a CHANGE, so an operator who had drawn over the starter oval could
+not ask for a fresh one. A blank canvas is a STATE (`drawn`), not a shape: the page
 keeps a valid placeholder record underneath, because a circuit with no curve is
 not something the spline, the readout or the export can represent, and shows and
 offers none of it until the first stroke. Both buttons commit before moving the
 flag, so the undo stack snapshots the state being left and discarding a circuit
 is recoverable.
 
+## The workbench shell (layout, not features)
+- **The plan IS the bench.** One full-bleed 2D canvas; a menu bar and an icon
+  tool rail frame it and everything else floats over it. The 3D preview used to
+  take half the drawing area, which made a 1100 yard lap a scrolling exercise:
+  it is a movable, resizable DOCK now (`dock.ts`), `shift+F` for the whole plan,
+  with a "follows cursor" mode where hovering a corner on the plan is the gesture
+  that looks at it in 3D.
+- **The rail has four entries, and SHAPE is one intent over two gestures.** A
+  blank canvas is drawn on, a drawn one is edited by its handles, and which of
+  the two the operator gets was never a choice worth a button (`toolFor`). RACE
+  is not a canvas tool: its "options" are the enclosure and race forms.
+- **One action table, four surfaces.** `layout_core.ts` carries every action's
+  label, detail, icon, chord and menu, and the menu bar, the rail, the status-bar
+  chord hints and the `?` cheatsheet all render THAT. Four hand-kept lists of the
+  same shortcuts is the drift this exists to make impossible, and
+  `tests/editor_circuit_layout.test.ts` pins the table both ways (every
+  menu-tagged action is in exactly one menu, every invocable action is in exactly
+  one cheatsheet block).
+- **Icons are inline SVG in one module** (`editor_icons.ts`), never emojis and
+  never an icon font: nothing here ships, so an external asset would be a request
+  that only resolves under `npm run dev`. The test is a TABLE check (every
+  referenced icon exists, every icon is referenced or declared chrome-only), not
+  a pixel one.
+- **The readout is a drawer, and the problems are on the plan.** Three headline
+  chips stay in the eye line (lap, tightest corner ratio, props); the nine
+  sections moved behind `View > metrics detail`. Every located problem draws a
+  callout pinned at its own lap position and the status chip names the WORST one,
+  because a fault that is a PLACE was something the operator had to scroll a
+  panel to find.
+- **The layout persists, and a corrupt store degrades to defaults.** Dock
+  geometry, the drawer, grid, snap, zoom and the last panel tab live under
+  `woc_circuit_editor_layout_v1`, parse-or-default by version. Geometry is
+  clamped on every apply rather than only on the drag: the window a dock was
+  parked in is not the window it is restored into, and a panel off-screen is a
+  panel nobody can close.
+- **Snap is off by default and rounds what a gesture AUTHORS, never what it hit
+  tests.** What is under the finger is under the finger; the grid only rounds the
+  coordinate that lands on the record.
+- **A tab a mode cannot use is not offered, and a mode with no tabs shows its own
+  numbers.** `sideTabsFor` gives PROPS all three (library, inspector, outliner)
+  and every other mode NONE: the library arms a piece for the props tool and the
+  inspector edits a selected one, so both are dead in the tools that select
+  nothing, and the DRESSING outliner sitting in the width tool was listing props
+  at an operator painting a road. Shape and width get `MODE_READOUT` instead, the
+  readout sections their own tool is changing, built by the same `readoutSection`
+  the drawer uses so the two can never quote a different number. The tool's one
+  value field follows the same rule: the scatter spacing shows over the LIBRARY
+  and nowhere else.
+- **A mode's repairs sit on the plan, beside its banner** (`railActions`). Both
+  were reachable only through the Track menu, and that is where they were lost: an
+  operator who has just finished a stroke wants Fit enclosure and Fix corners
+  immediately, and hunting a menu bar for them breaks the gesture. They stay in
+  the menu too, off the same table. The chrome builds one button per action and
+  only shows or hides it, because an action button is registered by id for its
+  enabled state and rebuilding would leave the registry holding buttons nothing
+  can reach.
+- **A fixed vocabulary gets a real `<select>`, with a way out.** The theme and the
+  music track were datalists, which only ever worked as a SEARCH: there was no way
+  to see what the themes even are, which is the first thing anyone wants from a
+  fixed set. `selectField` lists the known ids, adds an `other, type it` entry
+  (an id being written in the same change is legally typeable, and `unknown_theme`
+  in the readout is what judges it), and shows a value the record already carries
+  as its own option so the control never lies. The music vocabulary is read off
+  `AREA_TRACK_URLS`, the set the game can actually stream for a lane.
+- **The race form shows the fields the circuit's ROLES make real.** Two
+  checkboxes; unchecking the last is refused BY NAME (the record needs at least
+  one role and a control that springs back unexplained reads as broken), and
+  turning practice off hides the practice rows and zeroes the copy count. The lap
+  count stays on the record while hidden, because the validator holds it to 1..20
+  and a zero there is a draft that cannot be saved.
+- **The props tool has a POINTER state, and it is the default.** With a piece
+  permanently armed, a click that missed the bench the operator meant to grab
+  silently authored a second bench: an edit nobody asked for, at a place nobody
+  chose. Arming is deliberate (`armPalette`), clicking the armed tile again
+  disarms, `esc` disarms, and the status bar holds "placing postLantern" or
+  "pointer" for as long as it is true, because a transient message cannot answer
+  "am I still placing lanterns". Three things say which state the tool is in, so
+  none of them has to be read: the pointer entry is its own row above the pieces
+  rather than the first tile (as a tile it read as "the first asset is armed"), the
+  canvas cursor is a crosshair or a copy cursor, and the armed piece has a GHOST.
+- **The ghost goes through the resolver, like every other placement here.**
+  `ghostPlacement` resolves a throwaway record carrying the pending piece and
+  draws what came back, so the outline under the cursor is the outline the
+  collision set will hold. Drawing its own footprint would be a second derivation
+  of a placement, which is the exact bug class the one resolver exists to prevent.
+  It costs one resolve per repaint, which is the order `drawDressing` already
+  pays, and a hover only repaints while something is armed.
+- **A digit shortcut matches the PHYSICAL key.** On AZERTY the digit row is
+  shifted: the `1` key reports `&`, and `1` only arrives with shift held, so the
+  rail's `1..4` were dead on a French keyboard until `shortcutMatches` grew a
+  `code` arm (`Digit1`). Punctuation gets the same treatment for the same reason
+  (`?` is shift+`/`). Pinned in `tests/editor_circuit_layout.test.ts`.
+
 ## Module split (the page holds no decisions)
 | Module | Owns |
 |---|---|
+| `layout_core.ts` | the shell: the action table (labels, chords, icons, menus, cheatsheet grouping), the rail modes and their tool resolution, chord matching and platform spelling, the persisted layout with its clamps, the zoom/grid/snap arithmetic, the headline chips, and the problem labels the chip, the callouts and the drawer all print |
+| `editor_icons.ts` | the icon set: one inline SVG per action and rail mode, plus the chrome-only list that keeps the completeness check honest |
+| `shell.ts` | the chrome as ELEMENTS: menu bar, rail, plan overlays, status bar, contextual right panel, metrics drawer, cheatsheet. Structure and listeners only, all of it rendered off the action table |
+| `dock.ts` | the floating 3D panel: move, resize, fullscreen, the camera tabs and the lap readout. Geometry rules come from `layout_core.ts` |
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
 | `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS and never resolves; where a piece ends up is `src/sim/realm_racers_props_resolve.ts` and the page reads the placements back off it |
@@ -212,7 +335,7 @@ is recoverable.
 | `draft_endpoints_core.ts` | what the dev server answers for the two READ endpoints: the draft list and one parsed draft. It is handed a READER and has no writer, which is what makes "a GET never writes" structural |
 | `preview_camera_core.ts` | where the 3D preview's camera stands: the orbit rig's clamps, and the fly-through pose along the racing line |
 | `preview3d.ts` | the 3D preview itself: the scene, the light rig, the rebuild lifecycle and the camera modes. Loaded on demand, so the 2D tool still opens instantly |
-| `main.ts` | the page: canvas, pointer routing, the panel. No formulas |
+| `main.ts` | the page: canvas, pointer routing, and the wiring between the shell and the record. No formulas |
 
 New tool logic lands as another `*_core.ts` here (DOM-free, deterministic, its
 own `tests/editor_circuit_<name>.test.ts`), never appended to `main.ts`. Note

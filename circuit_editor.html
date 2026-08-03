@@ -6,143 +6,654 @@
      REAL readout (src/sim/realm_racers_circuit_metrics.ts), so every metric on
      screen is the one a content test runs over shipped circuits.
 
+     Plan-first workbench: the 2D plan IS the bench, full bleed. A menu bar and
+     an icon tool rail frame it, the 3D preview floats over it as a movable dock,
+     the right column is contextual (library, inspector, outliner, or the race
+     form), the whole readout lives in a drawer, and problems are called out on
+     the plan where they happen. The markup here is containers only: the chrome
+     is built from the action table in src/editor/circuit/layout_core.ts by
+     shell.ts, so the menus, the rail, the status hints and the cheatsheet cannot
+     name the same action two different ways.
+
      Open under npm run dev: http://localhost:PORT/circuit_editor.html
-     Export copies a TypeScript literal to paste into
+     Copy record copies a TypeScript literal to paste into
      src/sim/content/realm_racers_circuits.ts; Save draft writes a scratch file
      to tmp/circuit-drafts/ and never touches the curated module. -->
 <head>
   <meta charset="utf-8" />
   <title>WoC Circuit Editor</title>
   <style>
-    :root { color-scheme: dark; }
+    /* The look is the map editor's, deliberately: the two tools sit beside each
+       other in the same repo and an operator moves between them. Only the LAYOUT
+       changed in the workbench pass. */
+    :root {
+      color-scheme: dark;
+      --bg: #14161c;
+      --panel: #191c24;
+      --chrome: #1b1e27;
+      --raised: #21242e;
+      --line: #2c3040;
+      --input: #262b38;
+      --input-line: #3a4054;
+      --text: #d7dae2;
+      --muted: #9aa3b5;
+      --dim: #6f7890;
+      --faint: #4b5268;
+      --accent: #2c5d8f;
+      --accent-line: #3d7ab8;
+      --ok: #7fd48a;
+      --warn: #e0c48a;
+      --bad: #e08a8a;
+      --pick: #ffd479;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #14161c; color: #d7dae2; font: 13px/1.4 ui-monospace, Menlo, monospace; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-    header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: #1b1e27; border-bottom: 1px solid #2c3040; flex-wrap: wrap; }
-    header .grow { flex: 1; }
-    select, button, input[type="number"], input[type="text"] { background: #262b38; color: #d7dae2; border: 1px solid #3a4054; border-radius: 4px; padding: 4px 8px; font: inherit; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.4 ui-monospace, Menlo, monospace;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .grow { flex: 1; }
+    select, button, input[type="number"], input[type="text"] {
+      background: var(--input);
+      color: var(--text);
+      border: 1px solid var(--input-line);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font: inherit;
+    }
     button { cursor: pointer; }
     button:hover { background: #323950; }
     button:disabled { opacity: 0.35; cursor: not-allowed; }
-    button:disabled:hover { background: #262b38; }
-    button.on { background: #2c5d8f; border-color: #3d7ab8; }
-    button.primary { background: #2c5d8f; border-color: #3d7ab8; }
+    button:disabled:hover { background: var(--input); }
+    button.on { background: var(--accent); border-color: var(--accent-line); }
+    button.primary { background: var(--accent); border-color: var(--accent-line); }
     button.primary:hover { background: #366fa9; }
-    #status { color: #9aa3b5; min-width: 200px; }
-    #status.ok { color: #7fd48a; }
-    #status.err { color: #e08a8a; }
+    .ico { display: inline-flex; align-items: center; color: inherit; }
+    .ico svg { display: block; }
+    kbd {
+      background: var(--input);
+      border: 1px solid var(--input-line);
+      border-radius: 3px;
+      padding: 0 4px;
+    }
+
+    /* ---- the menu bar ---- */
+    #menubar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 5px 10px;
+      background: var(--chrome);
+      border-bottom: 1px solid var(--line);
+      flex: none;
+    }
+    .brand { color: var(--text); letter-spacing: 0.04em; }
+    .brand span { color: var(--dim); }
+    #menus { display: flex; gap: 2px; }
+    details.menu { position: relative; }
+    details.menu > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 4px;
+      color: var(--muted);
+    }
+    details.menu > summary::-webkit-details-marker { display: none; }
+    details.menu > summary:hover { background: var(--input); color: var(--text); }
+    details.menu[open] > summary { background: var(--input); color: var(--text); }
+    .menu-items {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 30;
+      margin-top: 4px;
+      min-width: 230px;
+      padding: 4px;
+      background: var(--chrome);
+      border: 1px solid var(--input-line);
+      border-radius: 6px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    button.menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      background: none;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 8px;
+      text-align: left;
+      color: var(--text);
+    }
+    button.menu-item:hover { background: var(--input); }
+    button.menu-item.on { background: none; color: var(--pick); }
+    button.menu-item.on .ico { color: var(--pick); }
+    .menu-label { flex: 1; }
+    .menu-chord { color: var(--dim); }
+    .doc { display: flex; gap: 8px; align-items: baseline; }
+    #docId { color: var(--muted); }
+    #docDirty { color: var(--warn); font-size: 11px; }
+    #docDirty[hidden] { display: none; }
+    #quick { display: flex; gap: 6px; }
+    #quick button { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+    .dot.ready { background: var(--ok); }
+    .dot.error { background: var(--bad); }
+
+    /* ---- the bench ---- */
     main { flex: 1; display: flex; min-height: 0; }
-    #viewwrap { flex: 1; position: relative; min-width: 0; }
-    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
-    /* The 3D preview takes half the drawing area rather than a floating pane:
-       the two views answer different questions about the same circuit and are
-       read side by side. */
-    #preview { flex: 1; position: relative; min-width: 0; border-left: 1px solid #2c3040; display: flex; flex-direction: column; }
-    #preview[hidden] { display: none; }
-    #preview canvas { cursor: grab; flex: 1; min-height: 0; }
-    #preview canvas:active { cursor: grabbing; }
-    #previewBar { display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: #1b1e27; border-bottom: 1px solid #2c3040; flex-wrap: wrap; }
-    #previewBar label { color: #9aa3b5; }
-    #flyAt { flex: 1; min-width: 90px; }
-    #panel { width: 340px; flex: none; overflow-y: auto; background: #191c24; border-left: 1px solid #2c3040; padding: 10px; }
-    #panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #7f8798; margin: 14px 0 6px; }
-    #panel h2:first-child { margin-top: 0; }
+    #rail {
+      width: 64px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 6px 0;
+      background: var(--chrome);
+      border-right: 1px solid var(--line);
+    }
+    button.rail-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 2px;
+      background: none;
+      border: none;
+      border-left: 2px solid transparent;
+      border-radius: 0;
+      color: var(--muted);
+    }
+    button.rail-btn:hover { background: var(--input); color: var(--text); }
+    button.rail-btn.on {
+      background: var(--raised);
+      border-left-color: var(--accent-line);
+      color: var(--pick);
+    }
+    .rail-label { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; }
+    #railTop, #railFoot { display: flex; flex-direction: column; }
+
+    #plan { flex: 1; position: relative; min-width: 0; overflow: hidden; }
+    canvas#view { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    /* An id rule with a display outranks the UA's [hidden] { display: none }, so
+       every overlay that can hide repeats the guard. */
+    #empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--faint);
+      pointer-events: none;
+    }
+    #empty[hidden] { display: none; }
+
+    .plan-top {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-start;
+      pointer-events: none;
+    }
+    #banner {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      max-width: 46ch;
+      padding: 5px 10px;
+      background: rgba(27, 30, 39, 0.9);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+    }
+    #banner[hidden] { display: none; }
+    #bannerMode { color: var(--pick); letter-spacing: 0.08em; font-size: 11px; }
+    #bannerText { color: var(--muted); font-size: 11px; }
+    #viewChips {
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      display: flex;
+      gap: 5px;
+    }
+    #modeActions {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 5px;
+    }
+    #modeActions[hidden] { display: none; }
+    button.chip {
+      padding: 2px 8px;
+      font-size: 11px;
+      background: rgba(38, 43, 56, 0.88);
+      border: 1px solid var(--input-line);
+      border-radius: 999px;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    button.chip[hidden] { display: none; }
+    button.chip:hover { color: var(--text); }
+    button.chip.on { background: var(--accent); border-color: var(--accent-line); color: var(--text); }
+
+    #headline {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      display: flex;
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    #headline[hidden] { display: none; }
+    .metric { min-width: 86px; padding: 4px 10px; background: rgba(27, 30, 39, 0.94); }
+    .metric-label {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    .metric-value { font-size: 15px; font-variant-numeric: tabular-nums; }
+    .metric-unit { font-size: 10px; color: var(--dim); }
+    .metric.good .metric-value { color: var(--ok); }
+    .metric.warn .metric-value { color: var(--warn); }
+    .metric.bad .metric-value { color: var(--bad); }
+
+    #callouts { position: absolute; inset: 0; pointer-events: none; }
+    button.callout {
+      position: absolute;
+      transform: translate(14px, -50%);
+      max-width: 30ch;
+      text-align: left;
+      pointer-events: auto;
+      padding: 4px 8px;
+      background: rgba(33, 36, 46, 0.95);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--bad);
+      border-radius: 0 4px 4px 0;
+    }
+    button.callout.warning { border-left-color: var(--warn); }
+    button.callout:hover { background: var(--input); }
+    .callout-title { color: var(--bad); font-size: 11px; }
+    button.callout.warning .callout-title { color: var(--warn); }
+    .callout-detail { color: var(--muted); font-size: 10px; }
+
+    /* The whole readout, on demand. Anchored LEFT so it never fights the
+       headline chips or the dock's own corner. */
+    /* Stops short of the plan's foot so the view chips down there stay clickable
+       with the readout open. */
+    #metricsDrawer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 40px;
+      width: 306px;
+      z-index: 6;
+      display: flex;
+      flex-direction: column;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      box-shadow: 6px 0 18px rgba(0, 0, 0, 0.35);
+    }
+    #metricsDrawer[hidden] { display: none; }
+    #metricsHead {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px 6px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    #metricsHead h3 {
+      flex: 1;
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    #metricsBody { flex: 1; overflow-y: auto; padding: 8px 12px 14px; }
+    button.x-btn {
+      display: inline-flex;
+      padding: 3px;
+      background: none;
+      border: none;
+      color: var(--dim);
+    }
+    button.x-btn:hover { background: var(--input); color: var(--text); }
+    button.x-btn.on { background: var(--accent); color: var(--text); }
+
+    /* ---- the 3D dock ---- */
+    #dock {
+      position: absolute;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      background: var(--chrome);
+      border: 1px solid var(--input-line);
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    #dock[hidden] { display: none; }
+    #dock.full { border-radius: 0; }
+    #dockHead {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      background: var(--raised);
+      border-bottom: 1px solid var(--line);
+      cursor: move;
+      flex: none;
+    }
+    #dockTabs { display: flex; gap: 2px; }
+    button.dock-tab {
+      padding: 2px 10px;
+      font-size: 11px;
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--muted);
+    }
+    button.dock-tab:hover { background: var(--input); color: var(--text); }
+    button.dock-tab.on { background: var(--accent); border-color: var(--accent-line); color: var(--text); }
+    #dock canvas { flex: 1; min-height: 0; width: 100%; cursor: grab; }
+    #dock canvas:active { cursor: grabbing; }
+    #dockFoot {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      background: var(--raised);
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      flex: none;
+    }
+    #dockFoot select { padding: 1px 4px; font-size: 11px; }
+    #dockRange { flex: 1; min-width: 60px; }
+    #dockHint { color: var(--dim); }
+    #dockResize {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 16px;
+      height: 16px;
+      z-index: 2;
+      cursor: nwse-resize;
+      background: linear-gradient(135deg, transparent 52%, var(--input-line) 52%);
+    }
+    #dock.full #dockResize { display: none; }
+
+    /* ---- the contextual right column ---- */
+    #side {
+      width: 326px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+    }
+    #sideTabs { display: flex; gap: 2px; padding: 6px 8px 0; flex: none; }
+    #sideTabs[hidden] { display: none; }
+    button.side-tab {
+      flex: 1;
+      padding: 5px 4px;
+      font-size: 11px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      color: var(--dim);
+    }
+    button.side-tab:hover { color: var(--text); }
+    button.side-tab.on { color: var(--pick); border-bottom-color: var(--accent-line); }
+    #toolOptions { flex: none; padding: 8px 10px 0; }
+    #toolValueLabel { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+    #toolValueLabel[hidden] { display: none; }
+    #toolValueLabel input { width: 84px; }
+    #sideBody { flex: 1; overflow-y: auto; padding: 8px 10px 14px; min-height: 0; }
+    #sideBody h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7f8798;
+      margin: 12px 0 6px;
+    }
+    #sideBody h2:first-child { margin-top: 0; }
+    #metricsBody h2 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7f8798;
+      margin: 12px 0 6px;
+    }
+    #metricsBody h2:first-child { margin-top: 0; }
     table { width: 100%; border-collapse: collapse; }
     td { padding: 2px 0; vertical-align: top; }
-    td.k { color: #9aa3b5; }
+    td.k { color: var(--muted); }
     td.v { text-align: right; font-variant-numeric: tabular-nums; }
-    td.v.bad { color: #e08a8a; }
-    td.v.warn { color: #e0c48a; }
-    td.v.good { color: #7fd48a; }
-    .problem { border-left: 3px solid #e08a8a; padding: 4px 8px; margin-bottom: 5px; background: #21242e; border-radius: 0 4px 4px 0; }
-    .problem.warning { border-left-color: #e0c48a; }
+    td.v.bad { color: var(--bad); }
+    td.v.warn { color: var(--warn); }
+    td.v.good { color: var(--ok); }
+    .problem {
+      border-left: 3px solid var(--bad);
+      padding: 4px 8px;
+      margin-bottom: 5px;
+      background: var(--raised);
+      border-radius: 0 4px 4px 0;
+    }
+    .problem.warning { border-left-color: var(--warn); }
     .problem .c { font-weight: 700; }
-    .problem .d { color: #9aa3b5; }
-    .clean { color: #7fd48a; }
+    .problem .d { color: var(--muted); }
+    .clean { color: var(--ok); }
     .field { display: flex; gap: 6px; align-items: center; margin-bottom: 5px; }
-    .field label { flex: 1; color: #9aa3b5; }
-    .field input { width: 110px; }
-    #brushLabel.off { color: #4b5268; }
-    #brushLabel.off input { opacity: 0.4; }
+    .field[hidden] { display: none; }
+    .field label { flex: 1; display: flex; gap: 6px; align-items: center; color: var(--muted); }
+    .field input { width: 108px; margin-left: auto; }
+    /* The pointer is a MODE, not a piece, so it does not look like a palette
+       tile: as the first tile in the list it read as "the first asset is armed". */
+    button.pointer-mode {
+      display: block;
+      width: 100%;
+      margin-bottom: 8px;
+      text-align: left;
+      border-style: dashed;
+    }
     .palette-list { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
     .palette-list button { padding: 2px 6px; }
-    #paletteAllLabel { display: block; color: #9aa3b5; margin-bottom: 8px; }
+    #paletteAllLabel { display: block; color: var(--muted); margin-bottom: 8px; }
     #paletteAllLabel[hidden] { display: none; }
-    #inspector { border-top: 1px solid #2c3040; margin-top: 8px; padding-top: 6px; }
+    .outline-row {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      padding: 2px 0;
+      color: var(--muted);
+    }
+    .outline-row .n { flex: 1; color: var(--text); }
+    .outline-row .solid { color: #e0a86f; }
+    .hint-line { color: var(--dim); }
     #inspector button { margin-bottom: 4px; width: 100%; }
-    #inspector .d { color: #6f7890; margin-bottom: 5px; }
-    footer { padding: 6px 12px; background: #1b1e27; border-top: 1px solid #2c3040; color: #6f7890; }
-    kbd { background: #262b38; border: 1px solid #3a4054; border-radius: 3px; padding: 0 4px; }
-    dialog { background: #1b1e27; color: #d7dae2; border: 1px solid #3a4054; border-radius: 8px; padding: 16px; font: inherit; min-width: 280px; }
+    #inspector .d { color: var(--dim); margin-bottom: 5px; }
+
+    /* ---- the status bar ---- */
+    #statusbar {
+      flex: none;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 4px 10px;
+      background: var(--chrome);
+      border-top: 1px solid var(--line);
+      color: var(--dim);
+      font-size: 11px;
+    }
+    #problemChip.clean { color: var(--ok); }
+    #problemChip.warn { color: var(--warn); border-color: #6b5a35; }
+    #problemChip.bad { color: var(--bad); border-color: #6b3a3a; }
+    #cursorReadout { color: var(--muted); font-variant-numeric: tabular-nums; }
+    #armState { color: var(--pick); }
+    #message.ok { color: var(--ok); }
+    #message.err { color: var(--bad); }
+    #chordHints { color: var(--faint); }
+
+    /* ---- dialogs ---- */
+    dialog {
+      background: var(--chrome);
+      color: var(--text);
+      border: 1px solid var(--input-line);
+      border-radius: 8px;
+      padding: 16px;
+      font: inherit;
+      min-width: 280px;
+    }
     dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
-    dialog h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #7f8798; }
+    dialog h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #7f8798;
+    }
     #loadList { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
     #loadList button { text-align: left; }
-    #loadList .sub { color: #6f7890; }
-    #empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #4b5268; pointer-events: none; }
-    /* An id rule with a display outranks the UA's [hidden] { display: none }, so
-       the hint kept showing over a loaded circuit. Same trap #preview handles. */
-    #empty[hidden] { display: none; }
+    #loadList .sub { color: var(--dim); }
+    #keysBody {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(210px, 1fr));
+      gap: 10px 22px;
+      margin-bottom: 12px;
+    }
+    .keys-block h4 {
+      margin: 0 0 4px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    .keys-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; }
+    .keys-row kbd { min-width: 70px; text-align: center; }
+    .keys-row span { color: var(--muted); }
   </style>
 </head>
 <body>
-  <header>
-    <strong>WoC Circuit Editor</strong>
-    <button type="button" id="newBtn" title="Clear the canvas and draw a circuit from nothing">New blank</button>
-    <button type="button" id="loadBtn" title="Start from a shipped circuit, or from a starter oval">Load</button>
-    <button type="button" id="modeDraw">Draw</button>
-    <button type="button" id="modeHandles">Handles</button>
-    <button type="button" id="modeWidth">Width</button>
-    <button type="button" id="modeProps" title="Place the circuit's scenery: props, seeded scatters and decorative ponds">Props</button>
-    <label id="brushLabel">brush <input type="number" id="brush" min="0.5" max="40" step="0.5" value="10" style="width:70px" /></label>
+  <!-- The menu bar. Its menus, its quick actions and every tooltip come from the
+       action table; only the containers are here. -->
+  <div id="menubar">
+    <strong class="brand">WoC <span>/ Circuit</span></strong>
+    <div id="menus"></div>
+    <span class="doc"><span id="docId"></span><span id="docDirty" hidden>unsaved</span></span>
     <span class="grow"></span>
-    <button type="button" id="undoBtn">Undo</button>
-    <button type="button" id="fitBtn">Fit view</button>
-    <button type="button" id="fitBoxBtn" title="Size the perimeter wall and the collision region to the road">Fit enclosure</button>
-    <button type="button" id="fixCornersBtn" title="Narrow the road wherever a corner is tighter than it">Fix corners</button>
-    <button type="button" id="previewBtn" title="Show the circuit in 3D, through the game's own track builder">3D</button>
-    <button type="button" id="copyBtn" class="primary">Copy record</button>
-    <button type="button" id="saveBtn">Save draft</button>
-    <span id="status"></span>
-  </header>
+    <span id="readyDot" class="dot off"></span>
+    <div id="quick"></div>
+  </div>
   <main>
-    <div id="viewwrap"><canvas id="view"></canvas><div id="empty" hidden>draw a closed loop to begin, or press Load</div></div>
-    <!-- The 3D preview. It renders the draft through buildRealmRacersTrack, the
-         same builder the game runs, so a later dressing or theme pass shows up
-         here for free. -->
-    <div id="preview" hidden>
-      <div id="previewBar">
-        <button type="button" id="flyBtn" title="Ride the racing line at pace">Fly</button>
-        <button type="button" id="orbitBtn" title="Orbit the whole circuit from above">Orbit</button>
-        <select id="flySpeed" title="Fly-through pace">
-          <option value="race">race pace</option>
-          <option value="scenic">scenic</option>
-        </select>
-        <input type="range" id="flyAt" min="0" max="1000" value="0" title="Where on the lap the fly-through sits" />
-        <span id="flyLabel">0%</span>
-      </div>
-      <canvas id="preview3d"></canvas>
+    <div id="rail">
+      <div id="railTop"></div>
+      <span class="grow"></span>
+      <div id="railFoot"></div>
     </div>
-    <div id="panel">
-      <!-- The readout is rebuilt on every drag; the record form is built once
-           and only has its values written back, so an input keeps focus and a
-           half-typed number is never overwritten mid-keystroke. -->
-      <!-- The palette is above the readout because in Props mode it is what
-           the operator is aiming with, and the readout is what they check
-           afterwards. Hidden in every other mode. -->
-      <div id="palette" hidden></div>
-      <label id="paletteAllLabel" hidden><input type="checkbox" id="paletteAll" /> show the whole catalog</label>
-      <div id="readout"></div>
-      <div id="form"></div>
+    <!-- The plan IS the workspace: full bleed, with every other surface floating
+         over it. -->
+    <div id="plan">
+      <canvas id="view"></canvas>
+      <div id="empty" hidden>draw a closed loop to begin, or press Load</div>
+      <div class="plan-top">
+        <div id="banner" hidden><span id="bannerMode"></span><span id="bannerText"></span></div>
+      </div>
+      <!-- The active tool's own repairs, where the work is, centred clear of the
+           banner sentence on one side and the metric chips on the other. In the
+           Track menu too, and the menu is where they were LOST. -->
+      <div id="modeActions" hidden></div>
+      <!-- The view toggles sit at the FOOT of the plan, away from the banner:
+           beside it they read as part of the sentence explaining the tool, which
+           is exactly how they were misread. -->
+      <div id="viewChips"></div>
+      <div id="headline" hidden></div>
+      <div id="callouts"></div>
+      <div id="metricsDrawer" hidden>
+        <div id="metricsHead"><h3>readout</h3></div>
+        <div id="metricsBody"></div>
+      </div>
+      <!-- The 3D dock. It renders the draft through buildRealmRacersTrack, the
+           same builder the game runs, so a later dressing or theme pass shows up
+           here for free. -->
+      <div id="dock" hidden>
+        <div id="dockHead">
+          <div id="dockTabs"></div>
+          <span class="grow"></span>
+          <button type="button" id="dockFollow" class="chip"></button>
+          <button type="button" id="dockInvert" class="chip"></button>
+          <button type="button" id="dockFull" class="x-btn"></button>
+          <button type="button" id="dockClose" class="x-btn"></button>
+        </div>
+        <canvas id="preview3d"></canvas>
+        <div id="dockFoot">
+          <span id="dockAt"></span>
+          <select id="dockSpeed" title="Fly-through pace">
+            <option value="race">race pace</option>
+            <option value="scenic">scenic</option>
+          </select>
+          <input
+            type="range"
+            id="dockRange"
+            min="0"
+            max="1000"
+            value="0"
+            title="Where on the lap the fly-through sits"
+          />
+          <span id="dockHint"></span>
+        </div>
+        <div id="dockResize" title="Drag to resize the dock"></div>
+      </div>
+    </div>
+    <!-- One contextual region: the library while placing, the inspector over a
+         selection, the outliner over what is standing there, and the race form
+         in RACE mode. -->
+    <div id="side">
+      <div id="sideTabs"></div>
+      <div id="toolOptions">
+        <label id="toolValueLabel" hidden>value <input type="number" id="toolValue" step="0.5" /></label>
+      </div>
+      <div id="sideBody"></div>
     </div>
   </main>
-  <footer>
-    <span id="hint"></span>
-    <kbd>wheel</kbd> zoom, <kbd>middle drag</kbd> pan, <kbd>ctrl+Z</kbd> undo, <kbd>del</kbd> delete selection, <kbd>R</kbd>/<kbd>+</kbd>/<kbd>-</kbd>/<kbd>C</kbd> turn, size and collide a prop
+  <footer id="statusbar">
+    <button type="button" id="problemChip" class="chip problems"></button>
+    <span id="cursorReadout"></span>
+    <span id="armState"></span>
+    <span id="message"></span>
+    <span class="grow"></span>
+    <span id="chordHints"></span>
   </footer>
   <dialog id="loadDialog">
     <h3>Load a circuit</h3>
     <div id="loadList"></div>
     <button type="button" id="loadCancel">Cancel</button>
+  </dialog>
+  <dialog id="keysDialog">
+    <h3>Keyboard</h3>
+    <div id="keysBody"></div>
+    <button type="button" id="keysClose">Close</button>
   </dialog>
   <script type="module" src="/src/editor/circuit/main.ts"></script>
 </body>
