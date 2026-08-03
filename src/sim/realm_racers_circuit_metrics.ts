@@ -14,7 +14,8 @@
 //
 // Pure leaf: no SimContext, no rng, no clock, no DOM, no three.
 
-import { RALLY_WATER_KINDS, type RealmRacersCircuit } from './content/realm_racers_circuits';
+import type { RealmRacersCircuit } from './content/realm_racers_circuits';
+import { polygonContainsPoint } from './geometry2d';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_MAX_RANGE,
@@ -27,20 +28,16 @@ import {
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
-  REALM_RACERS_SOLID_LEGIBILITY_HEIGHT,
-  REALM_RACERS_SOLID_RUN_GAP,
   REALM_RACERS_VERGE_MARGIN,
 } from './realm_racers_layout';
 import {
-  type RallyPlacedProp,
   rallyFootprintRadius,
   realmRacersPlacedPonds,
   realmRacersPlacements,
 } from './realm_racers_props_resolve';
 import {
   REALM_RACERS_PROJECTION_ENVELOPE,
-  rallyRacingSurfaceOffsetAt,
-  rallyWaterKindAt,
+  rallyGardenEdgeOffsetAt,
   realmRacersTrack,
 } from './realm_racers_spline';
 
@@ -150,12 +147,8 @@ export type RealmRacersCircuitProblemCode =
   | 'corner_folds_road'
   | 'corner_near_road_width'
   | 'stretches_too_close'
-  | 'shore_overlap'
-  /** A `water` span on a record that authors no basin for it to be made of. */
-  | 'shore_requires_basin'
-  /** `waterBands` is not a table the stepwise reader can use: unsorted, not
-   *  starting at 0, out of [0, 1), or naming a kind that does not exist. */
-  | 'water_bands_malformed'
+  /** A pond on a record that authors no basin for it to be made of. */
+  | 'pond_requires_basin'
   | 'road_outside_perimeter'
   | 'perimeter_outside_region'
   | 'region_outside_band'
@@ -175,19 +168,22 @@ export type RealmRacersCircuitProblemCode =
   /** A prop's footprint leaves the collision region, where the rally's own
    *  short-circuits stop applying at all. */
   | 'prop_outside_region'
-  /** A SOLID prop stands in the drivable garden. Allowed, and what makes
-   *  running wide interesting, but never by accident. */
-  | 'prop_in_drivable_garden'
   /** A tall prop stands inside the chase camera's reach of the road. */
   | 'prop_in_camera_reach'
-  /** A solid prop a racer cannot read: too low to see coming, or standing
-   *  alone rather than as part of a run. */
-  | 'solid_prop_illegible'
-  /** A pond's outline reaches into the racing surface. */
-  | 'pond_on_racing_surface'
-  /** A pond covers drivable garden. Legal decor (machines drive through it with
-   *  no splash and no slow in v1), and a deliberate call. */
-  | 'pond_in_drivable_garden';
+  /**
+   * A pond's outline reaches into the racing surface.
+   *
+   * The only thing a pond can get wrong, and deliberately so. There WAS a
+   * second code beside it, warning that a pond covered drivable garden; since
+   * track limits became a rule the whole garden inside the wall is drivable, so
+   * it was true of every pond that was not outside the circuit altogether. A
+   * check that cannot come back false is not a check, and it fired five times
+   * over the two shipped circuits without ever saying anything. What it was
+   * trying to protect is this error: water may not touch the ground the race is
+   * run on. Past that line a machine drives through a pond exactly as it drives
+   * over the lawn around it.
+   */
+  | 'pond_on_racing_surface';
 
 export interface RealmRacersCircuitProblem {
   code: RealmRacersCircuitProblemCode;
@@ -233,20 +229,6 @@ export interface RealmRacersCircuitMetrics {
   /** Yards of lap that can be shot at across the infield. Information, not a
    *  fault: an opposed stretch in Ground Blast range is a circuit FEATURE. */
   shootingCorridorYards: number;
-  /**
-   * Yards of lap whose shore line is DRY while the nearest far-apart stretch is
-   * dry too, near enough to shoot across: the shooting corridor as a piece of
-   * open lawn rather than as a canal.
-   *
-   * Information, never a fault, and the reason `shore_overlap` is scoped to
-   * water: two dry lines running close bound a strip a designer meant to keep
-   * open, where two PONDS that close would be one lake drawn twice, which is a
-   * defect that self-crosses the polygon.
-   */
-  sharedDryYards: number;
-  /** Yards of lap where two stretches' WATER meets, which is where the basin
-   *  polygon self-crosses. What `apronBands` exists to clear. */
-  shoreOverlapYards: number;
   /** Half-extents of the ROAD's whole footprint (out to the garden edge, both
    *  sides) from the circuit's origin, yards. */
   roadHalfX: number;
@@ -258,22 +240,6 @@ export interface RealmRacersCircuitMetrics {
   solidPropCount: number;
   pondCount: number;
   problems: readonly RealmRacersCircuitProblem[];
-}
-
-/** Whether a point lies inside a closed polygon (ray casting). Used on pond
- *  outlines, which are closed by construction and never self-crossing. */
-function insidePolygon(
-  polygon: readonly { x: number; z: number }[],
-  x: number,
-  z: number,
-): boolean {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i];
-    const b = polygon[j];
-    if (a.z > z !== b.z > z && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
-  }
-  return inside;
 }
 
 /** The whole readout for one circuit, measured through the real spline. */
@@ -312,16 +278,11 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     }
   }
 
-  // One pass over every far-apart pair answers all three of the "two stretches
-  // running alongside each other" questions at once: how close they get, how
-  // much lap is shootable across the gap, and where the shores meet.
-  const shoreOffset = samples.map((sample) => sample.halfWidth + sample.apron);
-  // Whether the line carries water at each sample: it decides whether two lines
-  // meeting is a broken water polygon or an authored dry corridor.
-  const dry = samples.map((sample) => rallyWaterKindAt(circuit, sample.s) === 'dry');
+  // One pass over every far-apart pair answers both "two stretches running
+  // alongside each other" questions at once: how close they get, and how much
+  // lap is shootable across the gap.
   const nearestDistance = new Float64Array(count).fill(Number.POSITIVE_INFINITY);
   const nearestIndex = new Int32Array(count).fill(-1);
-  const overlapDepth = new Float64Array(count);
   for (let i = 0; i < count; i++) {
     const a = samples[i];
     for (let j = i + FAR_APART_SAMPLES; j < count; j++) {
@@ -341,25 +302,10 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
         nearestDistance[j] = distance;
         nearestIndex[j] = i;
       }
-      // Water only exists over a WATER span, so only two ponds can draw one
-      // lake twice. Where either side is dry the same closeness is the authored
-      // corridor, counted as information further down.
-      if (dry[i] || dry[j]) continue;
-      // The basin sits on the INFIELD (the left normal) side only, so two
-      // stretches' shores can only meet where each one lies on the other's
-      // infield side. Both offsets measured along the respective left normal.
-      const bIsInfieldOfA = dx * -a.tz + dz * a.tx > 0;
-      const aIsInfieldOfB = -dx * -b.tz + -dz * b.tx > 0;
-      if (!bIsInfieldOfA || !aIsInfieldOfB) continue;
-      const overlap = shoreOffset[i] + shoreOffset[j] - distance;
-      if (overlap > overlapDepth[i]) overlapDepth[i] = overlap;
-      if (overlap > overlapDepth[j]) overlapDepth[j] = overlap;
     }
   }
 
   let shootingCorridorYards = 0;
-  let sharedDryYards = 0;
-  let shoreOverlapYards = 0;
   const nearestApproach: RealmRacersNearestApproach = {
     distance: Number.POSITIVE_INFINITY,
     s: 0,
@@ -367,7 +313,6 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     tangentDot: 0,
   };
   for (let i = 0; i < count; i++) {
-    if (overlapDepth[i] > 0) shoreOverlapYards += step;
     const other = nearestIndex[i];
     if (other < 0) continue;
     const dot = samples[i].tx * samples[other].tx + samples[i].tz * samples[other].tz;
@@ -379,9 +324,6 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     }
     if (nearestDistance[i] <= SHOOTING_REACH && dot <= OPPOSED_TANGENT_DOT) {
       shootingCorridorYards += step;
-    }
-    if (nearestDistance[i] <= SHOOTING_REACH && dry[i] && dry[other]) {
-      sharedDryYards += step;
     }
   }
 
@@ -471,29 +413,14 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
       nearestApproach.s,
     );
   }
-  if (shoreOverlapYards > 0) {
-    problem('shore_overlap', 'error', shoreOverlapYards, 0);
-  }
-
-  // The water table, checked here as well as in the record test because this
-  // readout is what a DRAFT is admitted by: a hand-edited scratch file reaches
-  // the game through it and never through the record test.
-  const bands = circuit.waterBands;
-  if (bands) {
-    let malformed = bands.length === 0 || bands[0].s !== 0;
-    for (let i = 0; i < bands.length; i++) {
-      if (!(bands[i].s >= 0) || bands[i].s >= 1) malformed = true;
-      if (i > 0 && bands[i].s <= bands[i - 1].s) malformed = true;
-      if (!RALLY_WATER_KINDS.includes(bands[i].kind)) malformed = true;
-    }
-    if (malformed) problem('water_bands_malformed', 'error', bands.length, 0);
-  }
-  const waterSamples = dry.filter((isDry) => !isDry).length;
-  if (!circuit.basin && (waterSamples > 0 || (circuit.ponds?.length ?? 0) > 0)) {
-    // The basin carries the bank profile every piece of water on the circuit is
-    // shaded with, so a circuit that authors water of EITHER kind (a shore span
-    // or a placed pond) and no basin has water made of nothing at all.
-    problem('shore_requires_basin', 'error', waterSamples + (circuit.ponds?.length ?? 0), 0);
+  // Checked here as well as in the record test because this readout is what a
+  // DRAFT is admitted by: a hand-edited scratch file reaches the game through
+  // it and never through the record test. The basin carries the bank profile
+  // every pond is shaded with, so a circuit that places one and authors no
+  // basin has water made of nothing at all.
+  const pondCount = circuit.ponds?.length ?? 0;
+  if (!circuit.basin && pondCount > 0) {
+    problem('pond_requires_basin', 'error', pondCount, 0);
   }
 
   if (roadHalfX > circuit.perimeter.halfX) {
@@ -549,26 +476,14 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     problem('unknown_prop_asset', 'error', placements.unknownAssets.length, 0);
   }
 
-  const solids = placements.props.filter((prop) => prop.solid);
-  /** Whether another solid piece stands near enough to read as one run with
-   *  this one. A line of hedging is a boundary a racer can see and follow; a
-   *  lone bollard on open lawn is the surprise the open garden outlawed. */
-  const inSolidRun = (prop: RallyPlacedProp): boolean =>
-    solids.some(
-      (other) =>
-        other !== prop &&
-        Math.hypot(other.x - prop.x, other.z - prop.z) <= REALM_RACERS_SOLID_RUN_GAP,
-    );
-
   for (const prop of placements.props) {
     const radius = rallyFootprintRadius(prop.footprint);
     const projection = track.project(
       prop.x + REALM_RACERS_ORIGIN.x,
       prop.z + REALM_RACERS_ORIGIN.z,
     );
-    const side: 1 | -1 = projection.lateral >= 0 ? 1 : -1;
     const clear = Math.abs(projection.lateral) - radius;
-    const surface = rallyRacingSurfaceOffsetAt(circuit, projection.s, side);
+    const surface = rallyGardenEdgeOffsetAt(circuit, projection.s);
     if (clear < surface) {
       problem('prop_blocks_racing_surface', 'error', clear, surface, projection.s);
     }
@@ -592,24 +507,6 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
         'z',
       );
     }
-    // Everything inside the perimeter is drivable garden since track limits
-    // became a rule, so a solid piece in there is something a racer can hit.
-    // Legal, and what makes running wide interesting; never accidental.
-    const insidePerimeter =
-      Math.abs(prop.x) - radius < circuit.perimeter.halfX &&
-      Math.abs(prop.z) - radius < circuit.perimeter.halfZ;
-    if (prop.solid && insidePerimeter) {
-      problem('prop_in_drivable_garden', 'warning', clear, surface, projection.s);
-    }
-    if (prop.solid && (prop.height < REALM_RACERS_SOLID_LEGIBILITY_HEIGHT || !inSolidRun(prop))) {
-      problem(
-        'solid_prop_illegible',
-        'warning',
-        prop.height,
-        REALM_RACERS_SOLID_LEGIBILITY_HEIGHT,
-        projection.s,
-      );
-    }
     // Only a piece tall enough to swallow the boom: a bench beside the road is
     // scenery, a canopy over it is the frame going green.
     if (prop.height > REALM_RACERS_CAMERA_CANOPY_HEIGHT) {
@@ -629,8 +526,7 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
         point.x + REALM_RACERS_ORIGIN.x,
         point.z + REALM_RACERS_ORIGIN.z,
       );
-      const side: 1 | -1 = projection.lateral >= 0 ? 1 : -1;
-      if (Math.abs(projection.lateral) < rallyRacingSurfaceOffsetAt(circuit, projection.s, side)) {
+      if (Math.abs(projection.lateral) < rallyGardenEdgeOffsetAt(circuit, projection.s)) {
         onSurface = true;
         break;
       }
@@ -639,29 +535,21 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
       const sample = samples[i];
       const localX = sample.x - REALM_RACERS_ORIGIN.x;
       const localZ = sample.z - REALM_RACERS_ORIGIN.z;
-      const inward = rallyRacingSurfaceOffsetAt(circuit, sample.s, 1);
-      const outward = rallyRacingSurfaceOffsetAt(circuit, sample.s, -1);
-      const span = Math.max(inward, outward);
+      const span = rallyGardenEdgeOffsetAt(circuit, sample.s);
       if (Math.hypot(localX - pond.x, localZ - pond.z) > pond.radius + span) continue;
       const probes: [number, number][] = [
         [localX, localZ],
-        [localX - sample.tz * inward, localZ + sample.tx * inward],
-        [localX + sample.tz * outward, localZ - sample.tx * outward],
+        [localX - sample.tz * span, localZ + sample.tx * span],
+        [localX + sample.tz * span, localZ - sample.tx * span],
       ];
       for (const [x, z] of probes) {
-        if (insidePolygon(pond.outline, x, z)) {
+        if (polygonContainsPoint(pond.outline, x, z)) {
           onSurface = true;
           break;
         }
       }
     }
     if (onSurface) problem('pond_on_racing_surface', 'error', 0, 0);
-    if (
-      Math.abs(pond.x) - pond.radius < circuit.perimeter.halfX &&
-      Math.abs(pond.z) - pond.radius < circuit.perimeter.halfZ
-    ) {
-      problem('pond_in_drivable_garden', 'warning', pond.radius, 0);
-    }
   }
 
   return {
@@ -675,8 +563,6 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     minRadiusOverWidthAtS,
     nearestApproach,
     shootingCorridorYards,
-    sharedDryYards,
-    shoreOverlapYards,
     roadHalfX,
     roadHalfZ,
     propCount: placements.props.length,

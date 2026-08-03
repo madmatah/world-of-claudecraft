@@ -53,7 +53,7 @@ import {
   realmRacersPlacedProps,
   realmRacersPlacements,
 } from '../src/sim/realm_racers_props_resolve';
-import { rallyRacingSurfaceOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 const SEED = 42;
 const publicDir = path.join(process.cwd(), 'public');
@@ -234,7 +234,7 @@ describe('Realm Racers props: the resolver is the single source of positions', (
       fountain.z + REALM_RACERS_ORIGIN.z,
     );
     expect(projection.lateral - 3.3 * 2.2).toBeGreaterThan(
-      rallyRacingSurfaceOffsetAt(GARDEN, projection.s, 1),
+      rallyGardenEdgeOffsetAt(GARDEN, projection.s),
     );
     // ...and it collides with nothing, exactly as it never did.
     expect(realmRacersColliders(GARDEN)).toHaveLength(4);
@@ -284,7 +284,7 @@ describe('Realm Racers props: a seeded scatter', () => {
         const side: 1 | -1 = projection.lateral >= 0 ? 1 : -1;
         expect(side).toBe(zone === 'infield' ? 1 : -1);
         expect(Math.abs(projection.lateral)).toBeGreaterThan(
-          rallyRacingSurfaceOffsetAt(circuit, projection.s, side),
+          rallyGardenEdgeOffsetAt(circuit, projection.s),
         );
         // A fill is dressing by definition: a field of colliders an author
         // never looked at one by one is the invisible wall the design outlawed.
@@ -365,7 +365,7 @@ describe('Realm Racers props: the readout refuses what cannot ship', () => {
       props: [
         {
           asset: 'bench',
-          at: { s: 0.1, offset: -(rallyRacingSurfaceOffsetAt(GARDEN, 0.1 * track.length, -1) + 6) },
+          at: { s: 0.1, offset: -(rallyGardenEdgeOffsetAt(GARDEN, 0.1 * track.length) + 6) },
         },
       ],
     });
@@ -385,24 +385,31 @@ describe('Realm Racers props: the readout refuses what cannot ship', () => {
     ).toContain('prop_outside_region');
   });
 
-  it('warns on a solid piece where racers drive, and on one nobody can read', () => {
+  it('leaves a solid piece out in the garden alone, wherever it stands', () => {
+    // Two warnings used to fire here and neither could ever come back false.
+    // One said a solid prop stood on drivable ground, which since track limits
+    // became a rule is true of everything inside the wall; the other said a
+    // solid prop was too low or too alone to be read, which is a rule about the
+    // PIECE and never about where it is, so a bench forty yards off the road
+    // tripped it as surely as one at a corner exit. What is left is the error
+    // below: nothing may stand on the ground the race is run on.
     const lone = draft('props_lone_bollard', {
-      props: [{ asset: 'statueBlock', at: { x: -4, z: 40 } }],
+      props: [{ asset: 'statueBlock', at: { x: 0, z: 0 } }],
     });
-    expect(codes(lone)).toContain('prop_in_drivable_garden');
-    // Too low to see coming AND standing alone: a rock in a field, which is the
-    // surprise an open drivable garden cannot afford.
-    expect(codes(lone)).toContain('solid_prop_illegible');
-    // A RUN of the same piece reads as a boundary, so the legibility half of it
-    // stops firing while the deliberate-call half stays.
+    expect(realmRacersCircuitMetrics(lone).problems).toEqual([]);
     const run = draft('props_solid_run', {
       props: [0, 1, 2, 3].map((i) => ({
         asset: 'gardenIronFence' as const,
-        at: { x: -4 + i * 4, z: 40 },
+        at: { x: -6 + i * 4, z: 0 },
       })),
     });
-    expect(codes(run)).not.toContain('solid_prop_illegible');
-    expect(codes(run)).toContain('prop_in_drivable_garden');
+    expect(realmRacersCircuitMetrics(run).problems).toEqual([]);
+    // Not vacuous: the same lone piece ON the road is still the one error the
+    // dressing can commit.
+    const onRoad = draft('props_lone_on_road', {
+      props: [{ asset: 'statueBlock', at: { s: 0.1, offset: 2 } }],
+    });
+    expect(codes(onRoad)).toEqual(['prop_blocks_racing_surface']);
   });
 
   it('warns on a tall piece inside the chase camera reach, and not on a low one', () => {
@@ -430,20 +437,19 @@ describe('Realm Racers props: the readout refuses what cannot ship', () => {
       ],
     });
     expect(codes(swallowing)).toContain('pond_on_racing_surface');
-    // A pond out in the infield is legal decor and still a deliberate call: a
-    // machine drives through it with no splash and no slow.
+    // A pond out in the infield is legal decor, reported as nothing at all: a
+    // machine drives through it with no splash and no slow, and the ground it
+    // covers is garden every yard of which is drivable anyway.
     const infield = draft('pond_infield', { ponds: [{ x: -4, z: 4, rx: 16, rz: 10 }] });
     expect(codes(infield)).not.toContain('pond_on_racing_surface');
-    expect(codes(infield)).toContain('pond_in_drivable_garden');
   });
 
   it('refuses a pond on a circuit with no bank profile to shade it', () => {
     const dry = draft('pond_no_basin', {
       basin: undefined,
-      waterBands: [{ s: 0, kind: 'dry' }],
       ponds: [{ x: -4, z: 4, rx: 16, rz: 10 }],
     });
-    expect(codes(dry)).toContain('shore_requires_basin');
+    expect(codes(dry)).toContain('pond_requires_basin');
   });
 
   it('leaves both shipped circuits free of every dressing ERROR', () => {

@@ -113,23 +113,6 @@ export const REALM_RACERS_VERGE_MARGIN = 0.75;
 export const REALM_RACERS_RUNOFF_WIDTH = 3.5;
 
 /**
- * The apron: drivable garden between the road edge and the shore the ponds are
- * cut along. You may run as wide as you like into it, you just lose time.
- *
- * It is not a constant, and the reason is now purely how it LOOKS: a shore that
- * kept a fixed offset through a hairpin would swing wide of the corner and read
- * as a lake ignoring the road, where an offset that pulls in with the radius
- * reads as a garden the road was laid through. It used to be an ANTI-CUT
- * ceiling (a cut along the apron's edge drives an arc of radius `R - apron`, so
- * the cut paid as soon as `apron > R * slow`), and that proof is retired with
- * the containment family: a cut costs arc now, not width.
- */
-export const REALM_RACERS_APRON_MAX = 15.0;
-/** Fraction of the local corner radius the apron may use, which is what makes
- *  the shore tighten through a corner and open out on a straight. */
-export const REALM_RACERS_APRON_RADIUS_FRACTION = 0.35;
-
-/**
  * The road edge is marked the way an Evergarden walk is: a sown line of flowers
  * and low shrubs, not a built border. Nothing here collides; a racer drives
  * straight through it into the garden.
@@ -159,20 +142,6 @@ export const REALM_RACERS_CAMERA_REACH = 22 * 1.16;
  * rise: a bench cannot swallow a camera, a canopy can.
  */
 export const REALM_RACERS_CAMERA_CANOPY_HEIGHT = 3.0;
-
-/**
- * How tall a SOLID prop has to be to be seen coming, yards. Under this a piece
- * is a bollard: a racer meets it without ever having been told it was there,
- * which is exactly the surprise the open-garden design outlawed.
- */
-export const REALM_RACERS_SOLID_LEGIBILITY_HEIGHT = 1.0;
-
-/**
- * How close two solid props have to stand to read as one RUN, yards. A
- * continuous line of hedging or ironwork is a boundary a racer can see and
- * follow; a single solid piece alone on open lawn is a rock in a field.
- */
-export const REALM_RACERS_SOLID_RUN_GAP = 8.0;
 
 /**
  * How many machines line up. Every race is a four-pilot race, practice

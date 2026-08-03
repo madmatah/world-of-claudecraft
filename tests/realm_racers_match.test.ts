@@ -19,7 +19,7 @@ import {
   REALM_RACERS_ORIGIN,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
-import { rallyShoreOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { CharacterState, Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
@@ -32,7 +32,6 @@ import {
   REALM_RACERS_RETURN_TICKS,
   REALM_RACERS_VEHICLE_KEY,
   REALM_RACERS_VERGE_BAND,
-  REALM_RACERS_WATER_BAND,
   realmRacersCircuitOf,
   realmRacersFireGroundBlast,
   realmRacersStartMatch,
@@ -579,22 +578,22 @@ describe('The Realm Racers lifecycle', () => {
     match(sim).phase = 'racing';
     const racer = entity(sim, a);
     const hp = racer.hp;
-    // Past the basin's own shore, on the infield side: that is the cut a cheater
-    // actually wants, and it draws the harshest band of the three. Derived from
-    // the shore rather than aimed at the middle of the region, which is only
-    // water on a circuit shaped like the practice one.
+    // Well past the run-off, out in the open garden on the infield side: that
+    // is the cut a cheater actually wants, and it draws the harsher of the two
+    // bands. Derived from the garden edge rather than aimed at the middle of
+    // the region, which is a different distance on every circuit.
     const sample = realmRacersTrack(RACE_CIRCUIT).samples[120];
-    const intoTheWater = rallyShoreOffsetAt(RACE_CIRCUIT, sample.s) + 1;
+    const intoTheGarden = rallyGardenEdgeOffsetAt(RACE_CIRCUIT, sample.s) + 6;
     const spot = onLane(
       sim,
-      sample.x - sample.tz * intoTheWater,
-      sample.z + sample.tx * intoTheWater,
+      sample.x - sample.tz * intoTheGarden,
+      sample.z + sample.tx * intoTheGarden,
     );
     parkOffRoad(sim, a, spot.x, spot.z);
     updateRealmRacers(sim.ctx);
     expect(racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA)).toMatchObject({
       kind: 'slow',
-      value: REALM_RACERS_WATER_BAND.speedMult,
+      value: REALM_RACERS_GARDEN_BAND.speedMult,
     });
     expect(racer.hp).toBe(hp);
   });
@@ -729,10 +728,10 @@ describe('The Realm Racers lifecycle', () => {
     });
     // Back on the road it recovers, rather than staying punished for the lap.
     expect(surfaceAt(0)).toEqual({ grip: 1, drag: 1, cap: 1 });
-    // The bands really are a ladder, harshest in the water.
-    expect(REALM_RACERS_WATER_BAND.gripMult).toBeLessThan(REALM_RACERS_GARDEN_BAND.gripMult);
+    // The bands really are a ladder, harshest furthest out. There were three
+    // and there are two: the wading band went with the water, which is
+    // decoration a machine drives straight through.
     expect(REALM_RACERS_GARDEN_BAND.gripMult).toBeLessThan(REALM_RACERS_VERGE_BAND.gripMult);
-    expect(REALM_RACERS_WATER_BAND.dragMult).toBeGreaterThan(REALM_RACERS_GARDEN_BAND.dragMult);
     expect(REALM_RACERS_GARDEN_BAND.dragMult).toBeGreaterThan(REALM_RACERS_VERGE_BAND.dragMult);
   });
 
@@ -1159,24 +1158,24 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     expect(progress.hadOffTrackContact).toBe(true);
   });
 
-  it('tracks the water-band arm of the off-track spoiler too, not only the garden', () => {
+  it('tracks the deep-infield arm of the off-track spoiler, not only the verge', () => {
     const { sim, a } = startMatch();
     match(sim).phase = 'racing';
     const track = realmRacersTrack(RACE_CIRCUIT);
     const sample = track.samples[120];
-    // Past the basin's own shore, on the infield side (mirrors the water
-    // suite's placement): the harshest of the three off-track bands.
-    const intoTheWater = rallyShoreOffsetAt(RACE_CIRCUIT, sample.s) + 1;
+    // Well past the apron, on the infield side: deep enough that a pilot who
+    // ends up there has really left the circuit rather than clipped an apex.
+    const intoTheGarden = rallyGardenEdgeOffsetAt(RACE_CIRCUIT, sample.s) + 6;
     const spot = onLane(
       sim,
-      sample.x - sample.tz * intoTheWater,
-      sample.z + sample.tx * intoTheWater,
+      sample.x - sample.tz * intoTheGarden,
+      sample.z + sample.tx * intoTheGarden,
     );
     parkOffRoad(sim, a, spot.x, spot.z);
     updateRealmRacers(sim.ctx);
     const racer = entity(sim, a);
     expect(racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA)).toMatchObject({
-      value: REALM_RACERS_WATER_BAND.speedMult,
+      value: REALM_RACERS_GARDEN_BAND.speedMult,
     });
     const progress = required(match(sim).progress.get(a), `progress ${a}`);
     expect(progress.hadOffTrackContact).toBe(true);

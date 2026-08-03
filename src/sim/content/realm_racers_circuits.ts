@@ -8,7 +8,7 @@
 // `../realm_racers_spline.ts`, and the collision set in
 // `../realm_racers_colliders.ts`. What stays in
 // `../realm_racers_layout.ts` is what every circuit SHARES: the margins, the
-// apron rule, the grid size, the gate-crossing math and the lane table.
+// grid size, the gate-crossing math and the lane table.
 //
 // Coordinates are LOCAL to `REALM_RACERS_ORIGIN`, which sits in the reserved
 // instance band between the Yumi maze and dungeon overflow, so a circuit cannot
@@ -24,25 +24,6 @@ import type { RallyPoint } from '../realm_racers_layout';
  */
 export type RealmRacersCircuitRole = 'practice' | 'competition';
 
-/**
- * Whether the SHORE line, the derived offset curve (`halfWidth + apron`), carries
- * water over a span of the lap.
- *
- * The LINE is geometry and is never authored; this is the only thing about it a
- * designer picks. It used to be a palette of CONTAINMENT devices (water, two
- * hedges, a kneewall), and that whole family is gone: nothing on this curve
- * stops a racer any more, because track limits are a RULE now
- * (`realm_racers_track_limits.ts`) rather than a fence hugging the road.
- *
- * What is left is a decorating decision. `water` cuts a pond out of the lawn
- * along that span (it still costs speed to drive through, which is feel, not
- * fairness); `dry` leaves lawn the dressing can put anything it likes on.
- */
-export type RallyWaterKind = 'water' | 'dry';
-
-/** Every kind, for the validators that have to enumerate them. */
-export const RALLY_WATER_KINDS: readonly RallyWaterKind[] = ['water', 'dry'];
-
 /** The water's bank, read by BOTH the renderer (per-vertex shore depth,
  *  which drives the colour ramp and the foam band) and the sim (how deep a
  *  racer is standing). Two profiles would mean a racer swimming where the water
@@ -53,7 +34,7 @@ export interface RealmRacersBasin {
    * reads as a bank rather than a decal.
    */
   waterY: number;
-  /** Yards of depth gained per yard in from the shore. */
+  /** Yards of depth gained per yard in from a pond's own outline. */
   bankSlope: number;
   /**
    * The depth it levels off at. Matches the renderer's own seabed clamp
@@ -63,11 +44,11 @@ export interface RealmRacersBasin {
    */
   depthMax: number;
   /**
-   * How far in from the shore the water still reads as wadeable rather than as
+   * How far in from the edge the water still reads as wadeable rather than as
    * open lake, yards. Purely a LOOK now: it used to be the containment margin
    * (a navigable strip, then a line no mount would cross, which is what held a
    * racer out of the infield), and nothing holds anyone out of anything any
-   * more. The dressing and the shore band read it; nothing gameplay does.
+   * more. The dressing reads it; nothing gameplay does.
    */
   wadeYards: number;
 }
@@ -161,14 +142,22 @@ export interface RallyScatter {
 
 /**
  * A decorative pond: an ellipse with a deterministic radial wobble, so five
- * numbers give a natural blob rather than a drawn polygon.
+ * numbers give a natural blob rather than a drawn polygon. The ONLY water a
+ * circuit can carry.
  *
- * Placed, not derived. The water used to be a ribbon offset from the road
- * (`waterBands` over the shore line), which puts a canal down the middle of
- * every circuit whatever its shape; a pond stands where the author put it.
+ * Placed, not derived. The water used to be a ribbon offset from the road (a
+ * stepwise `waterBands` table saying which spans of the shore line carried
+ * one), and the shape of that authoring was the defect: a table of lap
+ * fractions still derives the water from the road's own offset curve, so every
+ * circuit wore a canal down its middle whatever its shape, and painting it away
+ * span by span was the only control anyone had. A pond stands where the author
+ * put it.
  *
  * Purely visual: no depth band, no slow, no mechanic. A machine drives through
- * one exactly as it drives over lawn.
+ * one exactly as it drives over lawn. A wading feel band is a recorded v2 if
+ * the seat ever asks for one; what it must not be again is a device that
+ * contains anyone, because the referee (`../realm_racers_track_limits.ts`) is
+ * what decides a cut.
  */
 export interface RallyPond {
   /** Circuit-local centre. */
@@ -196,30 +185,6 @@ export interface RealmRacersCircuit {
    *  `REALM_RACERS_MIN_HALF_WIDTH`. */
   widthBands: readonly { s: number; halfWidth: number }[];
   /**
-   * Optional CEILING on the derived apron, as (lap fraction, yards),
-   * interpolated and wrapped exactly like `widthBands`. Applied as a further
-   * `min` on top of the derived value and never as a raise.
-   *
-   * What it is for: on a STRAIGHT the apron reaches its cap, and the shore the
-   * ponds are cut along sits `halfWidth + apron` off the centerline. Where two
-   * far-apart stretches of the lap run close to each other, those two shores
-   * meet and the water polygon self-crosses. Pulling the apron in over the
-   * pinch is the fix, and nothing else in the record can express it. Omit the
-   * field entirely on a circuit with no pinch.
-   */
-  apronBands?: readonly { s: number; maxApron: number }[];
-  /**
-   * Which spans of the shore line carry WATER, as a STEPWISE table: entry `i`'s
-   * kind applies from its lap fraction to entry `i + 1`'s, wrapping, so the
-   * last entry runs back round to the first. Sorted, first entry at `s = 0`,
-   * every entry in [0, 1). Never interpolated, unlike `widthBands` and
-   * `apronBands`: a shore either has water behind it or it does not.
-   *
-   * Omitting the field means `[{ s: 0, kind: 'water' }]`, which is the shape
-   * every circuit had before the field existed and derives byte-identically.
-   */
-  waterBands?: readonly { s: number; kind: RallyWaterKind }[];
-  /**
    * Region envelope, half-extents from the circuit's origin. It must cover the
    * circuit, the drivable garden, the perimeter wall AND the dressing ring
    * beyond it, because every collision short-circuit in `colliders.ts` keys on
@@ -232,9 +197,8 @@ export interface RealmRacersCircuit {
   regionHalfZ: number;
   perimeter: RealmRacersPerimeter;
   /**
-   * The water's bank profile, REQUIRED if and only if the circuit carries water
-   * at all: some span of the shore line is `water` (the default when
-   * `waterBands` is absent), or it authors a `ponds` entry.
+   * The water's bank profile, REQUIRED if and only if the circuit authors a
+   * `ponds` entry.
    *
    * Optional because the water used to be the mechanic: the only thing keeping
    * a racer out of the infield was how deep it got, so every circuit in every
@@ -332,10 +296,9 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
    * grid's own spacing need about 18 yards and it offers 17), which was the
    * whole point of keeping it tight.
    *
-   * What bounds the widths is the OUTSIDE, not the lake: the garden between the
-   * road and the perimeter wall is what makes running wide legible. The basin
-   * is not the constraint at any width worth authoring, since its own shore is
-   * `halfWidth + apron` and moves outward with the road.
+   * What bounds the widths is the OUTSIDE, not the water: the garden between
+   * the road and the perimeter wall is what makes running wide legible, and the
+   * pools are placed well clear of both.
    */
   widthBands: [
     { s: 0.0, halfWidth: 10.5 }, // start / finish straight
@@ -358,10 +321,32 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
   perimeter: { halfX: 118, halfZ: 92, halfThickness: 0.4, height: 2.2 },
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4.0 },
   /**
-   * The tiered fountain on its island, out in the lake where this circuit's own
+   * The infield lake, now that it is PLACED: two pools with the fountain's lawn
+   * between them, instead of the one ring of water the shore line derived.
+   *
+   * The identity is the same (this circuit has always been a lake circuit) and
+   * the shape is the part that changed: a derived ring was as wide as the road's
+   * own offset curve happened to be at every point of the lap, so it was a moat,
+   * and the fountain stood on an island in it because nothing else could be
+   * standing there. Two pools leave a lawn down the middle for the fountain and
+   * for whatever the dressing puts beside it.
+   *
+   * The radii are measured, not eyed: each pool sits at the centre of the
+   * largest circle that fits inside the infield's racing-surface ring, and its
+   * biggest wobbled radius (`r * (1 + wobble)`) stays a few yards inside that
+   * circle. `pond_on_racing_surface` is the check that says so.
+   */
+  ponds: [
+    { x: -34, z: -3, rx: 18, rz: 18, wobble: 0.16, seed: 41 },
+    { x: 32, z: -3, rx: 19, rz: 17, wobble: 0.14, seed: 42 },
+  ],
+  /**
+   * The tiered fountain on its lawn, out in the middle where this circuit's own
    * infield has always put it. It was the `landmark` field, the one authorable
    * placement a circuit had; the point and the scale are the same numbers that
    * field and the painter carried between them, so the fountain has not moved.
+   * What moved is the WATER: it used to be standing in it, and the two pools
+   * above are placed to leave it the strip of lawn it sits on.
    *
    * `collide: 'none'` preserves what it has always been: nothing on this
    * circuit stopped a racer except the perimeter, and a fountain that starts
@@ -403,21 +388,24 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
  *
  * Measured through the shared spline: an 829 yard lap over 829 samples, turning
  * +360 degrees (so it closes without crossing itself), winding counter-clockwise
- * (so the infield is on the left normal, which is what the apron and the
- * containment line are built on), and a tightest corner of 13.3 yards.
+ * (so the infield is on the left normal, which is the side the dressing and the
+ * pools are measured against), and a tightest corner of 13.3 yards.
  *
- * Its `apronBands` are the reason the shore line never self-crosses: where two
- * stretches of the lap run close to each other the derived apron would push
- * both lines into the same yards of infield, and pulling it in over those arcs
- * is the only thing in the record that can say so.
+ * The pinch is the circuit's one real FEATURE: its two long stretches run 51
+ * yards apart, dead head on (tangent dot -1.0), for 42 yards of lap, which is
+ * inside a Ground Blast's cone-limited reach, so a pilot can see (and shell) a
+ * rival across it. The corridor is open lawn: the water is two placed pools
+ * well clear of it, where it used to be a ribbon the record had to paint away
+ * span by span to keep the strip from being a canal. Nothing closes the strip
+ * physically: a machine that drives across it is a cut, and the referee in
+ * `realm_racers_track_limits.ts` is what returns it.
  *
- * The pinch those bands hold open is the circuit's one real FEATURE: its two
- * long stretches run 51 yards apart, dead head on (tangent dot -1.0), for 42
- * yards of lap, which is inside a Ground Blast's cone-limited reach. Both sides
- * of that strip are authored DRY, so the corridor is open lawn rather than a
- * canal, and a pilot can see (and shell) a rival across it. Nothing closes the
- * strip physically: a machine that drives across it is a cut, and the referee
- * in `realm_racers_track_limits.ts` is what returns it.
+ * It carried 54 rows of `apronBands` until the apron itself was deleted. They
+ * held a second offset curve off the road, out to the water, and every one of
+ * them existed to stop that curve reaching across this strip from both sides.
+ * With the water placed and the referee deciding cuts, nothing read the apron
+ * but the envelope that keeps the dressing off the track, and that envelope is
+ * the garden edge.
  */
 const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
   id: 'evergarden_express_tour',
@@ -482,89 +470,32 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
     { s: 0.955, halfWidth: 10 },
     { s: 1, halfWidth: 10 },
   ],
-  apronBands: [
-    { s: 0, maxApron: 15 },
-    { s: 0.175, maxApron: 15 },
-    { s: 0.18, maxApron: 14.58 },
-    { s: 0.185, maxApron: 13.51 },
-    { s: 0.19, maxApron: 12.05 },
-    { s: 0.195, maxApron: 10.45 },
-    { s: 0.2, maxApron: 8.99 },
-    { s: 0.205, maxApron: 7.92 },
-    { s: 0.21, maxApron: 7.5 },
-    { s: 0.22, maxApron: 7.5 },
-    { s: 0.225, maxApron: 7.92 },
-    { s: 0.23, maxApron: 8.83 },
-    { s: 0.235, maxApron: 9.31 },
-    { s: 0.24, maxApron: 8.91 },
-    { s: 0.245, maxApron: 8.14 },
-    { s: 0.25, maxApron: 7.64 },
-    { s: 0.255, maxApron: 7.51 },
-    { s: 0.3, maxApron: 7.5 },
-    { s: 0.41, maxApron: 7.5 },
-    { s: 0.415, maxApron: 7.92 },
-    { s: 0.42, maxApron: 8.99 },
-    { s: 0.425, maxApron: 10.45 },
-    { s: 0.43, maxApron: 12.05 },
-    { s: 0.435, maxApron: 13.51 },
-    { s: 0.44, maxApron: 14.58 },
-    { s: 0.445, maxApron: 15 },
-    { s: 0.575, maxApron: 15 },
-    { s: 0.58, maxApron: 14.67 },
-    { s: 0.585, maxApron: 13.81 },
-    { s: 0.59, maxApron: 12.64 },
-    { s: 0.595, maxApron: 11.36 },
-    { s: 0.6, maxApron: 10.19 },
-    { s: 0.605, maxApron: 9.33 },
-    { s: 0.61, maxApron: 9 },
-    { s: 0.77, maxApron: 9 },
-    { s: 0.775, maxApron: 9.31 },
-    { s: 0.78, maxApron: 10.19 },
-    { s: 0.785, maxApron: 11.36 },
-    { s: 0.79, maxApron: 12.25 },
-    { s: 0.795, maxApron: 12.09 },
-    { s: 0.8, maxApron: 10.97 },
-    { s: 0.805, maxApron: 9.75 },
-    { s: 0.81, maxApron: 9.15 },
-    { s: 0.815, maxApron: 9.01 },
-    { s: 0.87, maxApron: 9 },
-    { s: 0.875, maxApron: 9.13 },
-    { s: 0.88, maxApron: 9.72 },
-    { s: 0.885, maxApron: 10.89 },
-    { s: 0.89, maxApron: 12.44 },
-    { s: 0.895, maxApron: 13.81 },
-    { s: 0.9, maxApron: 14.67 },
-    { s: 0.905, maxApron: 15 },
-    { s: 1, maxApron: 15 },
-  ],
-  /**
-   * The pinch strip, kept DRY on both sides. The two fractions come off the
-   * measured shape rather than off the eye: samples 133 to 178 face samples 356
-   * to 400 across a gap that closes to 11 yards between the two shore lines,
-   * and these two spans cover both sides of it, running a handful of samples
-   * past the facing stretch at each end so the lawn starts before the strip
-   * does.
-   *
-   * These fractions carried two knee-high hedges for exactly one shipped
-   * revision. That was the containment answer to the shooting corridor (a
-   * SOLID line either side of the strip, so nobody could wander across it), and
-   * the whole family is gone: the referee handles a machine that crosses the
-   * strip, so the strip can be open lawn and pretty. What the spans buy now is
-   * the LOOK: eleven yards of water between two shores would be an ugly canal,
-   * so the lake is two ponds instead, one each side of the corridor, each
-   * closed off across its mouth.
-   */
-  waterBands: [
-    { s: 0, kind: 'water' },
-    { s: 0.155, kind: 'dry' },
-    { s: 0.225, kind: 'water' },
-    { s: 0.425, kind: 'dry' },
-    { s: 0.49, kind: 'water' },
-  ],
   regionHalfX: 265,
   regionHalfZ: 150,
   perimeter: { halfX: 217, halfZ: 124, halfThickness: 0.4, height: 2.2 },
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
+  /**
+   * Two pools, one in each wide part of the infield, both of them well clear of
+   * the pinch strip.
+   *
+   * This is what replaced a five row `waterBands` table whose whole job was
+   * saying where the derived ribbon must NOT be: samples 133 to 178 face
+   * samples 356 to 400 across a gap that closes to 11 yards, and eleven yards
+   * of water between two shores is a canal, so two of its five rows existed to
+   * paint that stretch dry. Placed water needs no such instruction, because
+   * nothing puts water beside the road in the first place.
+   *
+   * There is a third wide spot, in the pocket beside the first of those two
+   * stretches, and it is deliberately EMPTY: it opens onto the strip, so a pool
+   * there would be the canal again by another route. Same measured discipline
+   * as the practice circuit's two otherwise: each centre is the largest circle
+   * that fits inside the infield's racing-surface ring, and the widest wobbled
+   * radius stays a few yards inside it.
+   */
+  ponds: [
+    { x: 21, z: 46, rx: 15.5, rz: 14.5, wobble: 0.16, seed: 11 },
+    { x: -147, z: -17, rx: 13, rz: 12, wobble: 0.15, seed: 12 },
+  ],
   startBack: 7,
   startSpacing: 5,
   /**

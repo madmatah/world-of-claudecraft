@@ -3,8 +3,8 @@ import { resolvePosition } from '../src/sim/colliders';
 import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { DUNGEON_OVERFLOW_X_BASE, YUMI_BAND_X_MAX } from '../src/sim/data';
 import { realmRacersColliders } from '../src/sim/realm_racers_colliders';
-import { REALM_RACERS_APRON_MAX, REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { rallyShoreOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
+import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 const SEED = 42;
 const track = realmRacersTrack(GARDEN_CIRCUIT);
@@ -28,17 +28,6 @@ function outline(collider: (typeof colliders)[number]): { x: number; z: number }
 }
 
 describe('Realm Racers boundaries', () => {
-  it('gives the garden real room while the apron still reaches its cap', () => {
-    // The apron shapes the SHORE now rather than bounding a cut, so what it has
-    // to hold is that it still opens out on the straights and still tightens
-    // through a corner instead of collapsing onto the road.
-    const aprons = track.samples.map((sample) => sample.apron);
-    expect(Math.max(...aprons)).toBeCloseTo(REALM_RACERS_APRON_MAX, 6);
-    // The tightest corner keeps a usable apron rather than collapsing onto the
-    // road: this is the "you can run wide anywhere" half of the design.
-    expect(Math.min(...aprons)).toBeGreaterThan(5);
-  });
-
   it('leaves the whole racing surface clear', () => {
     // The reported "bars in the middle of the track": nothing solid may reach
     // the road, on either side.
@@ -71,8 +60,8 @@ describe('Realm Racers boundaries', () => {
       const sample = track.samples[i];
       for (const [offset, side] of [
         [track.halfWidthAt(sample.s) + 6, -1],
-        [rallyShoreOffsetAt(GARDEN_CIRCUIT, sample.s) - 0.5, 1],
-        [rallyShoreOffsetAt(GARDEN_CIRCUIT, sample.s) + 20, 1],
+        [rallyGardenEdgeOffsetAt(GARDEN_CIRCUIT, sample.s) - 0.5, 1],
+        [rallyGardenEdgeOffsetAt(GARDEN_CIRCUIT, sample.s) + 20, 1],
       ] as const) {
         const x = sample.x - sample.tz * offset * side;
         const z = sample.z + sample.tx * offset * side;

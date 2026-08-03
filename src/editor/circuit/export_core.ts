@@ -5,7 +5,7 @@
 // The tool deliberately does NOT rewrite `src/sim/content/realm_racers_circuits.ts`
 // the way the music editor rewrites its generated module. That file is
 // hand-curated and its comments carry the reasoning behind every number (why a
-// chicane is 8.5, what bounds the apron); a generator would destroy all of it.
+// chicane is 8.5, why a pool sits where it does); a generator would destroy it.
 // So the primary export is a literal the operator pastes and then comments, and
 // the save endpoint only ever writes a scratch draft.
 //
@@ -16,15 +16,13 @@
 //
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
-import {
-  RALLY_WATER_KINDS,
-  type RallyPond,
-  type RallyProp,
-  type RallyPropCollide,
-  type RallyScatter,
-  type RallyWaterKind,
-  type RealmRacersCircuit,
-  type RealmRacersCircuitRole,
+import type {
+  RallyPond,
+  RallyProp,
+  RallyPropCollide,
+  RallyScatter,
+  RealmRacersCircuit,
+  RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
@@ -34,7 +32,7 @@ import type { RallyPoint } from '../../sim/realm_racers_layout';
 const POINT_PLACES = 1;
 /** Lap fractions, to four places: a ten thousandth of a 1000 yard lap. */
 const FRACTION_PLACES = 4;
-/** Band values (road half-width, apron ceiling), yards to two places. */
+/** Road half-width, yards to two places. */
 const BAND_PLACES = 2;
 /** Prop yaw and scale, to two places: a hundredth of a radian is under a
  *  degree, and a hundredth of a scale is invisible on anything a garden holds. */
@@ -62,22 +60,6 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
       s: round(band.s, FRACTION_PLACES),
       halfWidth: round(band.halfWidth, BAND_PLACES),
     })),
-    ...(circuit.waterBands
-      ? {
-          waterBands: circuit.waterBands.map((band) => ({
-            s: round(band.s, FRACTION_PLACES),
-            kind: band.kind,
-          })),
-        }
-      : {}),
-    ...(circuit.apronBands
-      ? {
-          apronBands: circuit.apronBands.map((band) => ({
-            s: round(band.s, FRACTION_PLACES),
-            maxApron: round(band.maxApron, BAND_PLACES),
-          })),
-        }
-      : {}),
     ...(circuit.props ? { props: circuit.props.map(roundProp) } : {}),
     ...(circuit.scatters ? { scatters: circuit.scatters.map(roundScatter) } : {}),
     ...(circuit.ponds ? { ponds: circuit.ponds.map(roundPond) } : {}),
@@ -200,20 +182,6 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
     lines.push(`    { s: ${band.s}, halfWidth: ${band.halfWidth} },`);
   }
   lines.push('  ],');
-  if (c.apronBands) {
-    lines.push('  apronBands: [');
-    for (const band of c.apronBands) {
-      lines.push(`    { s: ${band.s}, maxApron: ${band.maxApron} },`);
-    }
-    lines.push('  ],');
-  }
-  if (c.waterBands) {
-    lines.push('  waterBands: [');
-    for (const band of c.waterBands) {
-      lines.push(`    { s: ${band.s}, kind: '${band.kind}' },`);
-    }
-    lines.push('  ],');
-  }
   lines.push(
     `  regionHalfX: ${c.regionHalfX},`,
     `  regionHalfZ: ${c.regionHalfZ},`,
@@ -307,9 +275,8 @@ function readPoints(raw: unknown): RallyPoint[] | null {
 }
 
 /**
- * A band table read straight off the wire: sorted, spanning the whole lap, and
- * every value inside the range its own field allows. The same shape twice, so
- * one reader takes both and neither can be validated the loose way by accident.
+ * The road-width table read straight off the wire: sorted, spanning the whole
+ * lap, and every value inside the range the field allows.
  */
 function readBands(raw: unknown, key: string, min: number, max: number): { s: number }[] | null {
   if (!Array.isArray(raw) || raw.length < 2 || raw.length > 512) return null;
@@ -323,26 +290,6 @@ function readBands(raw: unknown, key: string, min: number, max: number): { s: nu
     out.push({ s: band.s, [key]: band[key] as number });
   }
   if (out[0].s !== 0 || out[out.length - 1].s !== 1) return null;
-  return out;
-}
-
-/**
- * The stepwise water table off the wire: sorted, first entry at 0, every entry
- * in [0, 1), and every kind one the spline knows.
- */
-function readWaterBands(raw: unknown): { s: number; kind: RallyWaterKind }[] | null {
-  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 512) return null;
-  const out: { s: number; kind: RallyWaterKind }[] = [];
-  let previous = -1;
-  for (const item of raw) {
-    const band = item as { s?: unknown; kind?: unknown };
-    if (!isNumber(band.s) || band.s < 0 || band.s >= 1) return null;
-    if (band.s <= previous) return null;
-    if (!RALLY_WATER_KINDS.includes(band.kind as RallyWaterKind)) return null;
-    previous = band.s;
-    out.push({ s: band.s, kind: band.kind as RallyWaterKind });
-  }
-  if (out[0].s !== 0) return null;
   return out;
 }
 
@@ -470,30 +417,8 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     | { s: number; halfWidth: number }[]
     | null;
   if (!widthBands) return null;
-  const apronBands =
-    c.apronBands === undefined
-      ? undefined
-      : ((readBands(c.apronBands, 'maxApron', 0.1, 100) ?? null) as
-          | { s: number; maxApron: number }[]
-          | null);
-  if (c.apronBands !== undefined && !apronBands) return null;
-
-  /**
-   * The water table: STEPWISE, so unlike the two band tables above it is sorted
-   * over [0, 1) with its first entry at 0 and no closing entry at 1 (one there
-   * would open a span of zero length). Read by its own reader for that reason
-   * rather than by loosening `readBands` until it takes both.
-   */
-  const waterBands = c.waterBands === undefined ? undefined : readWaterBands(c.waterBands);
-  if (c.waterBands !== undefined && !waterBands) return null;
-
   const perimeter = c.perimeter as Record<string, unknown> | undefined;
   if (!perimeter) return null;
-  // Water is optional, and required exactly where a `water` span exists: the
-  // record's rule is an IFF, and both halves are refused here. Without a basin
-  // the payload is a lake circuit that forgot its lake (the absent table means a
-  // whole lap of water); with one and no water span it authors a basin nothing
-  // is made of, which re-exports as a literal the next reader takes for a lake.
   const props = c.props === undefined ? undefined : readProps(c.props);
   if (c.props !== undefined && !props) return null;
   const scatters = c.scatters === undefined ? undefined : readScatters(c.scatters);
@@ -502,12 +427,11 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   if (c.ponds !== undefined && !ponds) return null;
 
   const basin = c.basin as Record<string, unknown> | undefined;
-  // A PLACED pond is water too, so it needs the same bank profile a shore span
-  // does: the IFF is over every kind of water the circuit carries, not just the
-  // one cut along the shore line.
-  const anyWater =
-    !waterBands || waterBands.some((band) => band.kind === 'water') || (ponds?.length ?? 0) > 0;
-  if (anyWater !== Boolean(basin)) return null;
+  // Water is optional, and required exactly where a pond is placed: the record's
+  // rule is an IFF and both halves are refused here. Without a basin the ponds
+  // are made of nothing at all; with one and no pond the payload authors a bank
+  // profile nothing is shaded with.
+  if ((ponds?.length ?? 0) > 0 !== Boolean(basin)) return null;
   if (basin) {
     if (
       !inRange(basin.waterY, -20, 20) ||
@@ -548,8 +472,6 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     id: c.id,
     controlPoints,
     widthBands,
-    ...(apronBands ? { apronBands } : {}),
-    ...(waterBands ? { waterBands } : {}),
     ...(props ? { props } : {}),
     ...(scatters ? { scatters } : {}),
     ...(ponds ? { ponds } : {}),

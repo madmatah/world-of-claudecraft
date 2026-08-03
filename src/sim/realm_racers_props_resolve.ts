@@ -29,7 +29,7 @@ import type { RallyPoint } from './realm_racers_layout';
 import { REALM_RACERS_ORIGIN } from './realm_racers_layout';
 import {
   memoizePerCircuit,
-  rallyRacingSurfaceOffsetAt,
+  rallyGardenEdgeOffsetAt,
   realmRacersTrack,
 } from './realm_racers_spline';
 import { hash2 } from './rng';
@@ -213,10 +213,7 @@ function resolveScatter(
       const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z, hint);
       hint = projection.index;
       if (Math.sign(projection.lateral) !== side) continue;
-      if (
-        Math.abs(projection.lateral) - radius <
-        rallyRacingSurfaceOffsetAt(circuit, projection.s, side)
-      )
+      if (Math.abs(projection.lateral) - radius < rallyGardenEdgeOffsetAt(circuit, projection.s))
         continue;
       if (scatter.span) {
         const fraction = projection.s / track.length;

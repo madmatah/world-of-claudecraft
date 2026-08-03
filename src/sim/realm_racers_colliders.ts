@@ -1,10 +1,11 @@
 // The Realm Racers's static collision. There is exactly ONE wall, the
 // garden's own iron perimeter, and everything inside it is drivable:
 //
-//   [ pond ] ..apron.. |road| ..verge.. ..garden.. ##PERIMETER##
+//   ..garden.. [ pond ] ..garden.. |road| ..verge.. ..garden.. ##PERIMETER##
 //
-// Verge, garden and water alike cost time rather than stopping you (see the
-// slow bands in social/realm_racers.ts). The circuit has now had four shapes:
+// Verge and garden cost time rather than stopping you (see the slow bands in
+// social/realm_racers.ts); a pond costs nothing at all, being decoration a
+// machine drives through. The circuit has now had four shapes:
 // no collision at all (racers drove through every hedge), a wall hugging both
 // road edges (no room to make a mistake in), a stone rim around the basin
 // (which read as a line of blocks standing in the lake), and a containment line

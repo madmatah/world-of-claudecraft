@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 import {
   type CircuitBand,
   deleteControlPoint,
-  fromApronBands,
   fromWidthBands,
   hitTestControlPoint,
   insertControlPoint,
@@ -20,7 +19,6 @@ import {
   moveControlPoint,
   nearestSegment,
   paintSpan,
-  toApronBands,
   toWidthBands,
 } from '../src/editor/circuit/handles_core';
 import type { RallyPoint } from '../src/sim/realm_racers_layout';
@@ -296,16 +294,11 @@ describe('circuit editor: painting a band table', () => {
     expect(paintSpan(flat, [Number.NaN], 8, WIDTH_BRUSH)).toEqual(flat);
   });
 
-  it('round-trips both record shapes through the neutral band', () => {
+  it('round-trips the record shape through the neutral band', () => {
     const width = [
       { s: 0, halfWidth: 10.5 },
       { s: 1, halfWidth: 10.5 },
     ];
     expect(toWidthBands(fromWidthBands(width))).toEqual(width);
-    const apron = [
-      { s: 0, maxApron: 15 },
-      { s: 1, maxApron: 15 },
-    ];
-    expect(toApronBands(fromApronBands(apron))).toEqual(apron);
   });
 });

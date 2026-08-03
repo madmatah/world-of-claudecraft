@@ -26,11 +26,7 @@ import {
   realmRacersPlacedPonds,
   realmRacersPlacedProps,
 } from '../sim/realm_racers_props_resolve';
-import {
-  type RallySample,
-  realmRacersTrack,
-  realmRacersWaterOutlines,
-} from '../sim/realm_racers_spline';
+import { type RallySample, realmRacersTrack } from '../sim/realm_racers_spline';
 import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
@@ -47,7 +43,6 @@ import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
 import { REALM_RACERS_PROP_URLS, REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import {
   RALLY_FLOWER_COLOURS,
-  rallyBasinMeshes,
   rallyBorderFlowerSpots,
   rallyDressingSpots,
   rallyFlowerSpots,
@@ -55,7 +50,6 @@ import {
   rallyPerimeterPieces,
   rallyPondMeshes,
   rallyPondReedSpots,
-  rallyReedSpots,
   rallyStartArchPlacement,
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
@@ -443,26 +437,21 @@ function mergeCrossedCards(card: THREE.BufferGeometry): THREE.BufferGeometry {
 }
 
 /**
- * The water outlines as flat shapes, region-local, one per shore span. A
- * ShapeGeometry rotated -PI/2 about X maps the shape's y to world -z, so the
- * points go in with z negated; the lawn is cut with the SAME shapes as holes,
- * which is what makes the water read as a sunken basin rather than a puddle on
- * the grass. A circuit with no shore span punches no hole at all, and its whole
- * infield is lawn.
+ * The pond outlines as flat shapes, region-local, one per pond. A ShapeGeometry
+ * rotated -PI/2 about X maps the shape's y to world -z, so the points go in
+ * with z negated; the lawn is cut with the SAME shapes as holes, which is what
+ * makes the water read as a sunken basin rather than a puddle on the grass. A
+ * circuit that places no pond punches no hole at all, and its whole infield is
+ * lawn.
  */
 function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
   if (!circuit.basin) return [];
-  // Both kinds of water punch the same hole: the spans cut along the shore
-  // line, and the ponds placed wherever the author put them.
-  const outlines = [
-    ...realmRacersWaterOutlines(circuit),
-    ...realmRacersPlacedPonds(circuit).map((pond) =>
-      pond.outline.map((point) => ({
-        x: point.x + REALM_RACERS_ORIGIN.x,
-        z: point.z + REALM_RACERS_ORIGIN.z,
-      })),
-    ),
-  ];
+  const outlines = realmRacersPlacedPonds(circuit).map((pond) =>
+    pond.outline.map((point) => ({
+      x: point.x + REALM_RACERS_ORIGIN.x,
+      z: point.z + REALM_RACERS_ORIGIN.z,
+    })),
+  );
   return outlines.map(
     (outline) =>
       new THREE.Shape(
@@ -488,16 +477,14 @@ function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
 function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
   const basin = circuit.basin;
   if (!basin) return;
-  // The shore's lobes and the placed ponds are the same surface built from two
-  // different outlines, so they share the material, the reeds and this code.
-  const meshes = [...rallyBasinMeshes(circuit), ...rallyPondMeshes(circuit)];
+  const meshes = rallyPondMeshes(circuit);
   if (meshes.length === 0) return;
-  // ONE material for every lobe of this build. It is a ShaderMaterial with its
+  // ONE material for every pond of this build. It is a ShaderMaterial with its
   // own uniform block and its own compiled program, and the two callers that
   // rebuild a circuit over and over (the editor preview per edit, a dev draft
-  // per re-registration) are exactly the ones a per-lobe material multiplies
-  // against. The lobes differ by geometry alone; nothing about the water's
-  // surface is per lobe.
+  // per re-registration) are exactly the ones a per-pond material multiplies
+  // against. The ponds differ by geometry alone; nothing about the water's
+  // surface is per pond.
   const material = buildWaterSurfaceMaterial({
     wave: zeroWaveUniforms(),
     surfaceOrigin: REALM_RACERS_ORIGIN,
@@ -532,11 +519,11 @@ function buildBasin(circuit: RealmRacersCircuit, group: THREE.Group): void {
     group.add(water);
   }
 
-  // Reeds around the shore, so the water's edge is planted rather than kerbed.
+  // Reeds around the rim, so the water's edge is planted rather than kerbed.
   instanceModel(
     group,
     REED_URL,
-    [...rallyReedSpots(circuit), ...rallyPondReedSpots(circuit)].map((spot) => ({
+    rallyPondReedSpots(circuit).map((spot) => ({
       x: spot.x,
       y: basin.waterY,
       z: spot.z,
@@ -917,8 +904,8 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
  * Where the time goes, so the next circuit can be judged before it is drawn:
  * the road ribbons are cheap and the cost tracks the SCATTER, which follows the
  * area inside the perimeter rather than the lap. On the Express Tour,
- * `rallyFlowerSpots` is 72 ms for 4 984 tufts and `rallyBasinMeshes` 29 ms for
- * its two water lobes; everything else together is under 4 ms. That is
+ * `rallyFlowerSpots` is 72 ms for 4 984 tufts and the water surfaces 29 ms for
+ * two pools; everything else together is under 4 ms. That is
  * superlinear in circuit size (1.8x the lap, 3.7x the build), so revisit this
  * decision when the pool reaches roughly four circuits of this size, where the
  * eager cost approaches half a second and lazy starts paying for itself.

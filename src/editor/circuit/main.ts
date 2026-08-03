@@ -9,12 +9,15 @@
 // Dev tool: English-only, absent from every production build. See CLAUDE.md.
 
 import {
-  type RallyWaterKind,
+  type RallyPond,
+  type RallyProp,
+  type RallyScatter,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_PRACTICE_CIRCUIT,
   type RealmRacersBasin,
   type RealmRacersCircuit,
 } from '../../sim/content/realm_racers_circuits';
+import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import {
   type RealmRacersCircuitMetrics,
   type RealmRacersCircuitProblem,
@@ -23,7 +26,6 @@ import {
 } from '../../sim/realm_racers_circuit_metrics';
 import {
   type RallyPoint,
-  REALM_RACERS_APRON_MAX,
   REALM_RACERS_MAX_REGION_HALF_X,
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_MIN_HALF_WIDTH,
@@ -31,22 +33,19 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../../sim/realm_racers_layout';
+import { type RallyPlacedProp, realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
 import {
   type RallyTrackModel,
   rallyGardenEdgeOffsetAt,
-  rallyShoreOffsetAt,
-  rallyWaterKindAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
-  realmRacersWaterOutlines,
 } from '../../sim/realm_racers_spline';
 import { suggestEnvelope } from './envelope_core';
 import { circuitToTypeScript, roundCircuit, validateCircuitPayload } from './export_core';
 import {
   type CircuitBand,
   deleteControlPoint,
-  fromApronBands,
   fromWidthBands,
   hitTestControlPoint,
   insertControlPoint,
@@ -54,20 +53,36 @@ import {
   moveControlPoint,
   nearestSegment,
   paintSpan,
-  toApronBands,
   toWidthBands,
 } from './handles_core';
-import { fitStrokeToControlPoints } from './stroke_fit_core';
 import {
-  applyWaterBands,
-  DEFAULT_WATER_BANDS,
-  paintWaterSpan,
-  type WaterBand,
-  waterSpanYards,
-} from './water_paint_core';
+  authorPlacement,
+  convertedProp,
+  type DressingRect,
+  type DressingSelection,
+  hitTestPlaced,
+  hitTestPondHandle,
+  hitTestPonds,
+  movedProp,
+  type PondHandle,
+  pondFromDrag,
+  pondHandlePoints,
+  pondWithHandleAt,
+  propFrameOf,
+  propPalette,
+  propProjectionHint,
+  removedAt,
+  replacedAt,
+  rotatedProp,
+  scaledProp,
+  scatterFromRect,
+  tangentProp,
+  toggledCollide,
+} from './props_core';
+import { fitStrokeToControlPoints } from './stroke_fit_core';
 import { suggestWidthBands } from './width_fix_core';
 
-type Mode = 'draw' | 'handles' | 'width' | 'apron' | 'water';
+type Mode = 'draw' | 'handles' | 'width' | 'props';
 type Selection = { kind: 'point'; index: number } | null;
 
 /** How many problems the panel lists before it says how many it is holding
@@ -96,27 +111,18 @@ const BRUSH_FIELDS: Record<Mode, { label: string; min: number; max: number } | n
   draw: null,
   handles: null,
   width: { label: 'road half-width (yd)', min: REALM_RACERS_MIN_HALF_WIDTH, max: 40 },
-  apron: { label: 'apron cap (yd)', min: 0.5, max: REALM_RACERS_APRON_MAX },
-  // The water brush paints a KIND, so it takes the picker beside this field
-  // rather than a number with a legend.
-  water: null,
-};
-
-/** What each shore kind is drawn in on the canvas: blue where the line carries
- *  a pond, green where it is open lawn. */
-const WATER_COLOURS: Record<RallyWaterKind, string> = {
-  water: '#4a7fae',
-  dry: '#63a86f',
+  // In props mode the field is the SCATTER's spacing: the one number a
+  // rectangle drag cannot carry, since the box says where and the spacing says
+  // how dense.
+  props: { label: 'scatter spacing (yd)', min: 2, max: 60 },
 };
 
 const MODE_HINTS: Record<Mode, string> = {
   draw: 'drag anywhere to draw the centerline in one gesture; the fitted curve replaces the stroke on release',
   handles: 'drag a handle to move it, click the curve to insert one, del to delete',
   width: 'drag along the circuit to set the road half-width there; the road is twice this wide',
-  apron:
-    'drag along the circuit to CAP the apron, the drivable garden between the road edge and the water; the cap can only narrow what the corner already allows, so painting it wide removes it',
-  water:
-    'drag along the circuit to say whether the shore line carries a pond there or open lawn; nothing here stops a racer either way, and painting the last pond away leaves a circuit with no water at all',
+  props:
+    'click to place the palette piece, drag to move it, shift+drag for a seeded scatter over that box; R rotates, shift+R faces the racing direction, +/- scales, C toggles collision, del deletes',
 };
 
 const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
@@ -125,21 +131,16 @@ const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   corner_folds_road: 'a corner is tighter than its own road',
   corner_near_road_width: 'a corner is close to its own road width',
   stretches_too_close: 'two stretches run close enough to break the projection',
-  shore_overlap: 'the two basin shores intersect',
   road_outside_perimeter: 'the road runs outside the perimeter wall',
   perimeter_outside_region: 'the perimeter wall is outside the collision region',
   region_outside_band: 'the region is wider than the instance band',
   region_deeper_than_lane_budget: 'the region is deeper than the gap between two lanes',
-  shore_requires_basin: 'a stretch of pond on a circuit with no water authored',
-  water_bands_malformed: 'the water table is not sorted from the start line',
+  pond_requires_basin: 'a pond on a circuit with no water authored',
   unknown_prop_asset: 'a prop names a catalog key nothing draws',
   prop_blocks_racing_surface: 'a prop stands on the racing surface',
   prop_outside_region: 'a prop stands outside the collision region',
-  prop_in_drivable_garden: 'a solid prop stands where racers drive',
   prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
-  solid_prop_illegible: 'a solid prop is too low or too alone to be read',
   pond_on_racing_surface: 'a pond reaches onto the racing surface',
-  pond_in_drivable_garden: 'a pond covers ground racers drive on',
 };
 
 /**
@@ -165,16 +166,17 @@ function blankCircuit(): RealmRacersCircuit {
       { s: 0, halfWidth: 10 },
       { s: 1, halfWidth: 10 },
     ],
-    apronBands: undefined,
-    waterBands: undefined,
     // A blank canvas is UNDRESSED. The template's dressing belongs to the
     // template's shape: inheriting it is how the practice circuit's infield
     // fountain used to land on every new circuit, and on one whose road runs
     // through that point it is now a metrics error the operator did not author
-    // and cannot see the source of.
+    // and cannot see the source of. The basin goes with the ponds, because the
+    // record's rule is an IFF and a basin with nothing to shade is a payload
+    // the save endpoint refuses.
     props: undefined,
     scatters: undefined,
     ponds: undefined,
+    basin: undefined,
     roles: ['competition'],
     practiceCopies: 0,
   };
@@ -214,12 +216,20 @@ let paintBefore: number[] | null = null;
  *  on every move, which is what keeps it from denting against its own earlier
  *  points as it extends. */
 let paintOrigin: CircuitBand[] | null = null;
-/** The water table as it stood when the stroke began, and the kind under
- *  every centerline sample then. Separate from the two numeric brushes because
- *  a kind is not a value on a scale: nothing about it ramps or thins. */
-let paintWaterOrigin: WaterBand[] | null = null;
-let paintKindsBefore: RallyWaterKind[] | null = null;
 let paintFractions: number[] = [];
+/** What the dressing gesture in flight is doing, and to which entry. */
+let dressing: DressingSelection | null = null;
+let dressingDrag: 'move' | 'rect' | 'pond' | null = null;
+/** The pond handle under a resize/rotate drag. */
+let pondHandle: PondHandle | null = null;
+/** The projection index a track-space drag started from: without it a drag
+ *  across a pinch re-anchors the piece to the facing stretch. */
+let dragHint: number | undefined;
+/** The live rectangle a scatter or a pond is being dragged out over. */
+let dressingRect: DressingRect | null = null;
+/** The palette key a click places: a catalog asset, or the pond. */
+let paletteChoice = 'fountain';
+let paletteShowAll = false;
 let panning: { x: number; z: number; clientX: number; clientY: number } | null = null;
 const undoStack: { record: RealmRacersCircuit; drawn: boolean }[] = [];
 const view = { x: 0, z: 0, scale: 2.4 };
@@ -255,15 +265,15 @@ const modeButtons: Record<Mode, HTMLButtonElement> = {
   draw: document.getElementById('modeDraw') as HTMLButtonElement,
   handles: document.getElementById('modeHandles') as HTMLButtonElement,
   width: document.getElementById('modeWidth') as HTMLButtonElement,
-  apron: document.getElementById('modeApron') as HTMLButtonElement,
-  water: document.getElementById('modeWater') as HTMLButtonElement,
+  props: document.getElementById('modeProps') as HTMLButtonElement,
 };
-const waterLabel = document.getElementById('waterLabel') as HTMLLabelElement;
-const waterKindEl = document.getElementById('waterKind') as HTMLSelectElement;
+const paletteEl = document.getElementById('palette') as HTMLDivElement;
+const paletteAllEl = document.getElementById('paletteAll') as HTMLInputElement;
+const paletteAllLabel = document.getElementById('paletteAllLabel') as HTMLLabelElement;
 
 /**
- * The last basin the record carried, so painting the final shore span away and
- * then painting one back restores THAT lake rather than a default one.
+ * The last basin the record carried, so deleting the final pond and then
+ * placing one back restores THAT water rather than a default one.
  *
  * A circuit that has never had a basin falls back to the practice circuit's own
  * water, READ off the record rather than copied: a second literal of those four
@@ -392,7 +402,7 @@ function strokeRect(halfX: number, halfZ: number, color: string, dash: number[] 
   ctx.restore();
 }
 
-/** The road, its two off-track bands and the water, offset from the centerline
+/** The road, its two off-track bands and the ponds, offset from the centerline
  *  exactly the way the sim and the renderer offset them. */
 function drawSurfaces(): void {
   const samples = track.samples;
@@ -403,37 +413,14 @@ function drawSurfaces(): void {
       return { x: p.x - sample.tz * distance, z: p.z + sample.tx * distance };
     });
 
-  // The water: one polygon per WATER span, straight off the sim, so a strip the
-  // operator has just painted dry stops being drawn as lake here too.
+  // The ponds, straight off the resolver: the same outlines the renderer cuts
+  // its water and its holes in the lawn from, so a wobble the operator seeded
+  // is the wobble they will drive past.
   ctx.fillStyle = '#1d3448';
-  for (const outline of realmRacersWaterOutlines(record)) {
-    tracePolygon(outline.map((point) => local(point)));
+  for (const pond of realmRacersPlacements(record).ponds) {
+    tracePolygon(pond.outline);
     ctx.fill();
   }
-
-  // The shore line itself, coloured by whether it carries water: the line never
-  // moves, and this is the only thing about it the operator authors.
-  ctx.save();
-  ctx.lineWidth = 2;
-  let runStart = 0;
-  const kindAt = (index: number): RallyWaterKind =>
-    rallyWaterKindAt(record, samples[index % samples.length].s);
-  const containment = offsetRing((i) => rallyShoreOffsetAt(record, samples[i].s), 1);
-  for (let i = 1; i <= samples.length; i++) {
-    if (i < samples.length && kindAt(i) === kindAt(runStart)) continue;
-    ctx.strokeStyle = WATER_COLOURS[kindAt(runStart)];
-    ctx.beginPath();
-    for (let k = runStart; k <= i; k++) {
-      const point = containment[k % containment.length];
-      const x = screenX(point.x);
-      const y = screenY(point.z);
-      if (k === runStart) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    runStart = i;
-  }
-  ctx.restore();
 
   // The road ribbon: out one side and back the other.
   const leftEdge = offsetRing((i) => samples[i].halfWidth, 1);
@@ -587,6 +574,567 @@ function drawProblemMarkers(): void {
   }
 }
 
+/**
+ * The dressing, as the resolver placed it.
+ *
+ * Every footprint here is read off `realmRacersPlacements`, never worked out
+ * from the record: the canvas is a VIEW of the one placement, and a tool that
+ * drew a fountain where the game does not put one is the whole defect the
+ * resolver exists to prevent.
+ */
+function drawDressing(): void {
+  const placements = realmRacersPlacements(record);
+  const placed = placedPropIndices();
+  const traceFootprint = (prop: RallyPlacedProp): void => {
+    ctx.beginPath();
+    if (prop.footprint.kind === 'circle') {
+      ctx.arc(
+        screenX(prop.x),
+        screenY(prop.z),
+        Math.max(2, prop.footprint.r * view.scale),
+        0,
+        Math.PI * 2,
+      );
+      return;
+    }
+    const { hw, hd, rot } = prop.footprint;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    const corners: [number, number][] = [
+      [-hw, -hd],
+      [hw, -hd],
+      [hw, hd],
+      [-hw, hd],
+    ];
+    corners.forEach(([lx, lz], i) => {
+      const x = screenX(prop.x + lx * cos - lz * sin);
+      const y = screenY(prop.z + lx * sin + lz * cos);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  };
+
+  // The seeded pieces first and faint: there can be hundreds, and none of them
+  // is a thing the operator clicks.
+  ctx.strokeStyle = '#4a6a4e';
+  ctx.lineWidth = 1;
+  for (const piece of placements.scattered) {
+    traceFootprint(piece);
+    ctx.stroke();
+  }
+
+  // Solid pieces are FILLED and decorative ones hollow: whether a piece stops a
+  // machine is the one thing about it that is not visible from its shape.
+  const named = view.scale > 1.6;
+  for (const [index, prop] of placements.props.entries()) {
+    const chosen = dressing?.kind === 'prop' && dressing.index === placed[index];
+    ctx.strokeStyle = chosen ? '#ffd479' : prop.solid ? '#e0a86f' : '#8fb2d8';
+    ctx.lineWidth = chosen ? 2 : 1;
+    traceFootprint(prop);
+    if (prop.solid) {
+      ctx.fillStyle = chosen ? 'rgba(255, 212, 121, 0.35)' : 'rgba(224, 168, 111, 0.25)';
+      ctx.fill();
+    }
+    ctx.stroke();
+    if (!named) continue;
+    ctx.fillStyle = '#9aa3b5';
+    ctx.font = '11px ui-monospace, Menlo, monospace';
+    ctx.fillText(prop.asset, screenX(prop.x) + 6, screenY(prop.z) - 6);
+  }
+
+  // A selected pond gets its handles; the outline itself is drawn with the
+  // surfaces, because it is water whatever mode the tool is in.
+  if (dressing?.kind === 'pond') {
+    const pond = record.ponds?.[dressing.index];
+    if (pond) {
+      ctx.fillStyle = '#ffd479';
+      for (const handle of Object.values(pondHandlePoints(pond))) {
+        ctx.beginPath();
+        ctx.arc(screenX(handle.x), screenY(handle.z), 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  if (dressingRect) {
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = '#e0c48a';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      screenX(Math.min(dressingRect.x0, dressingRect.x1)),
+      screenY(Math.min(dressingRect.z0, dressingRect.z1)),
+      Math.abs(dressingRect.x1 - dressingRect.x0) * view.scale,
+      Math.abs(dressingRect.z1 - dressingRect.z0) * view.scale,
+    );
+    ctx.restore();
+  }
+}
+
+// ---- the dressing gestures ----
+
+/** Click tolerance in yards, so a bench is grabbable at any zoom. */
+const dressingTolerance = (): number => 7 / view.scale;
+
+/**
+ * Record indices of the props the resolver actually placed, in its own order.
+ *
+ * The resolver SKIPS a catalog key nothing authors rather than throwing, so a
+ * record carrying one (a hand-pasted draft can) hands back a shorter list than
+ * it was given. Without this map every selection past the unknown key would
+ * edit the entry after the one the operator clicked.
+ */
+function placedPropIndices(): number[] {
+  const out: number[] = [];
+  (record.props ?? []).forEach((prop, index) => {
+    if (prop.asset in REALM_RACERS_PROPS) out.push(index);
+  });
+  return out;
+}
+
+/** Where a record prop sits in the resolver's list, or -1. */
+function placementIndexOf(recordIndex: number): number {
+  return placedPropIndices().indexOf(recordIndex);
+}
+
+/** A seed a new scatter or pond gets. Taken off the record's own size rather
+ *  than off a clock: the page must stay reloadable to the same circuit, and a
+ *  seed nobody chose is still a number the operator can edit afterwards. */
+function nextSeed(): number {
+  return (record.scatters?.length ?? 0) + (record.ponds?.length ?? 0) + record.id.length;
+}
+
+/** The record with one dressing list replaced, committed. */
+function commitDressing(next: Partial<RealmRacersCircuit>, remember = true): void {
+  // A pond is the only thing on a circuit that needs the basin, and the record
+  // requires the two to agree: authoring the first pond brings the water back
+  // and deleting the last one takes it away, so neither is a second step the
+  // operator has to remember (and the save endpoint refuses either half alone).
+  const ponds = 'ponds' in next ? next.ponds : record.ponds;
+  const basin = (ponds?.length ?? 0) > 0 ? (record.basin ?? rememberedBasin) : undefined;
+  commit({ ...record, ...next, basin }, remember);
+}
+
+function startDressingGesture(point: RallyPoint, rect: boolean): void {
+  const placements = realmRacersPlacements(record);
+  const tolerance = dressingTolerance();
+
+  // A selected pond's handles come first: they sit ON the pond, so hit-testing
+  // the shape before them would make a resize impossible.
+  if (dressing?.kind === 'pond') {
+    const pond = record.ponds?.[dressing.index];
+    const handle = pond && hitTestPondHandle(pond, point.x, point.z, tolerance);
+    if (pond && handle) {
+      undoStack.push({ record, drawn });
+      dressingDrag = 'pond';
+      pondHandle = handle;
+      return;
+    }
+  }
+
+  const hitProp = hitTestPlaced(placements.props, point.x, point.z, tolerance);
+  if (hitProp >= 0) {
+    const index = placedPropIndices()[hitProp];
+    dressing = { kind: 'prop', index };
+    undoStack.push({ record, drawn });
+    dressingDrag = 'move';
+    dragHint = propProjectionHint(record, (record.props ?? [])[index]);
+    requestRedraw();
+    return;
+  }
+  const hitPond = hitTestPonds(placements.ponds, point.x, point.z);
+  if (hitPond >= 0) {
+    dressing = { kind: 'pond', index: hitPond };
+    undoStack.push({ record, drawn });
+    dressingDrag = 'move';
+    requestRedraw();
+    return;
+  }
+
+  // Nothing under the pointer: this is a placement. A pond and a scatter are
+  // both dragged out over a box, a prop lands on the click.
+  if (rect || paletteChoice === POND_CHOICE) {
+    dressingRect = { x0: point.x, z0: point.z, x1: point.x, z1: point.z };
+    dressingDrag = 'rect';
+    return;
+  }
+  const placement = authorPlacement(record, point.x, point.z);
+  const props = [...(record.props ?? []), { asset: paletteChoice, at: placement.at }];
+  dressing = { kind: 'prop', index: props.length - 1 };
+  dressingDrag = 'move';
+  dragHint = placement.hint;
+  commitDressing({ props });
+  setStatus(`placed ${paletteChoice} (${propFrameOf(props[props.length - 1])})`, 'ok');
+}
+
+function moveDressingGesture(point: RallyPoint): void {
+  if (dressingDrag === 'rect' && dressingRect) {
+    dressingRect = { ...dressingRect, x1: point.x, z1: point.z };
+    requestRedraw();
+    return;
+  }
+  if (dressingDrag === 'pond' && pondHandle && dressing?.kind === 'pond') {
+    const pond = record.ponds?.[dressing.index];
+    if (!pond) return;
+    commitDressing(
+      {
+        ponds: replacedAt(
+          record.ponds,
+          dressing.index,
+          pondWithHandleAt(pond, pondHandle, point.x, point.z),
+        ),
+      },
+      false,
+    );
+    return;
+  }
+  if (dressingDrag !== 'move' || !dressing) return;
+  if (dressing.kind === 'prop') {
+    const prop = (record.props ?? [])[dressing.index];
+    if (!prop) return;
+    commitDressing(
+      {
+        props: replacedAt(
+          record.props,
+          dressing.index,
+          movedProp(record, prop, point.x, point.z, dragHint),
+        ),
+      },
+      false,
+    );
+    return;
+  }
+  if (dressing.kind === 'pond') {
+    const pond = record.ponds?.[dressing.index];
+    if (!pond) return;
+    commitDressing(
+      { ponds: replacedAt(record.ponds, dressing.index, { ...pond, x: point.x, z: point.z }) },
+      false,
+    );
+  }
+}
+
+function endDressingGesture(): void {
+  if (dressingDrag === 'rect' && dressingRect) {
+    const box = dressingRect;
+    const dragged = Math.hypot(box.x1 - box.x0, box.z1 - box.z0);
+    if (dragged < 2) {
+      setStatus('drag a box: a scatter fills a stretch of one side, a pond fills the box', 'err');
+    } else if (paletteChoice === POND_CHOICE) {
+      const ponds = [
+        ...(record.ponds ?? []),
+        pondFromDrag(box.x0, box.z0, box.x1, box.z1, nextSeed()),
+      ];
+      dressing = { kind: 'pond', index: ponds.length - 1 };
+      commitDressing({ ponds });
+      setStatus(`placed a pond, ${ponds.length} on this circuit`, 'ok');
+    } else {
+      const spacing = Number(brushInput.value);
+      const scatter = scatterFromRect(record, box, paletteChoice, spacing, nextSeed());
+      const scatters = [...(record.scatters ?? []), scatter];
+      dressing = { kind: 'scatter', index: scatters.length - 1 };
+      commitDressing({ scatters });
+      // What a fill LANDED is the only useful readout: a scatter rejects every
+      // piece that would sit on the racing surface or outside the wall, so the
+      // count is nothing like the box divided by the spacing.
+      setStatus(
+        `scattered ${paletteChoice}: ${metrics.scatterCount} pieces at ${spacing} yd`,
+        'ok',
+      );
+    }
+  }
+  dressingDrag = null;
+  dressingRect = null;
+  pondHandle = null;
+  dragHint = undefined;
+  requestRedraw();
+}
+
+/** The selected prop, or null: every keyboard transform reads this. */
+function selectedProp(): RallyProp | null {
+  if (dressing?.kind !== 'prop') return null;
+  return (record.props ?? [])[dressing.index] ?? null;
+}
+
+function transformSelectedProp(next: (prop: RallyProp) => RallyProp): void {
+  const prop = selectedProp();
+  if (!prop || dressing?.kind !== 'prop') return;
+  commitDressing({ props: replacedAt(record.props, dressing.index, next(prop)) });
+}
+
+/** Deletes whatever is selected, and drops the selection with it. */
+function deleteDressing(): void {
+  if (!dressing) return;
+  if (dressing.kind === 'prop') commitDressing({ props: removedAt(record.props, dressing.index) });
+  if (dressing.kind === 'scatter') {
+    commitDressing({ scatters: removedAt(record.scatters, dressing.index) });
+  }
+  if (dressing.kind === 'pond') commitDressing({ ponds: removedAt(record.ponds, dressing.index) });
+  dressing = null;
+}
+
+// ---- the palette ----
+
+/** The palette entry that places WATER rather than a catalog piece. Ponds live
+ *  in the same list because placing one is the same gesture, and a mode of
+ *  their own is what the deleted water paint already was. */
+const POND_CHOICE = 'pond';
+
+function buildPalette(): void {
+  paletteEl.replaceChildren();
+  const heading = document.createElement('h2');
+  heading.textContent = 'palette';
+  paletteEl.append(heading);
+  const list = document.createElement('div');
+  list.className = 'palette-list';
+  const entries = propPalette(REALM_RACERS_PROPS);
+  const shown = paletteShowAll ? entries : entries.filter((entry) => entry.featured);
+  const choose = (key: string, label: string, detail: string): void => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.title = detail;
+    button.classList.toggle('on', paletteChoice === key);
+    button.onclick = () => {
+      paletteChoice = key;
+      buildPalette();
+    };
+    list.append(button);
+  };
+  choose(POND_CHOICE, 'pond', 'drag a box: decorative water, no slow and no mechanic');
+  for (const entry of shown) choose(entry.asset, entry.asset, entry.group);
+  paletteEl.append(list);
+}
+
+// ---- the inspector ----
+//
+// The numbers behind the selection, editable. Rebuilt with the readout, EXCEPT
+// while one of its own inputs has the caret: a drag repaints the panel, and
+// rebuilding under a half-typed number would take the focus out of it.
+
+const inspectorEl = document.createElement('div');
+inspectorEl.id = 'inspector';
+
+function inspectorRow(
+  label: string,
+  value: string,
+  write: (raw: string) => void,
+  attrs: Partial<HTMLInputElement> = {},
+): void {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const name = document.createElement('label');
+  name.textContent = label;
+  const input = document.createElement('input');
+  input.type = attrs.type ?? 'number';
+  Object.assign(input, attrs);
+  input.value = value;
+  input.onchange = () => write(input.value);
+  name.append(input);
+  wrap.append(name);
+  inspectorEl.append(wrap);
+}
+
+function inspectorButton(label: string, onClick: () => void): void {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.onclick = onClick;
+  inspectorEl.append(button);
+}
+
+function paintInspector(): void {
+  if (mode !== 'props') {
+    inspectorEl.replaceChildren();
+    return;
+  }
+  if (inspectorEl.contains(document.activeElement)) {
+    readoutEl.append(inspectorEl);
+    return;
+  }
+  inspectorEl.replaceChildren();
+  readoutEl.append(inspectorEl);
+  if (!dressing) return;
+  const title = document.createElement('h2');
+  title.textContent = `${dressing.kind} ${dressing.index}`;
+  inspectorEl.append(title);
+  const number = (raw: string, fallback: number): number =>
+    Number.isFinite(Number(raw)) ? Number(raw) : fallback;
+
+  if (dressing.kind === 'prop') {
+    const prop = selectedProp();
+    if (!prop) return;
+    const index = dressing.index;
+    const placed = realmRacersPlacements(record).props[placementIndexOf(index)];
+    const edit = (next: RallyProp): void =>
+      commitDressing({ props: replacedAt(record.props, index, next) });
+    if ('s' in prop.at) {
+      inspectorRow(
+        'lap fraction',
+        String(prop.at.s),
+        (raw) => {
+          const at = prop.at as { s: number; offset: number };
+          edit({ ...prop, at: { s: number(raw, at.s), offset: at.offset } });
+        },
+        { step: '0.001', min: '0', max: '1' },
+      );
+      inspectorRow(
+        'offset (yd)',
+        String(prop.at.offset),
+        (raw) => {
+          const at = prop.at as { s: number; offset: number };
+          edit({ ...prop, at: { s: at.s, offset: number(raw, at.offset) } });
+        },
+        { step: '0.5' },
+      );
+    } else {
+      inspectorRow(
+        'x',
+        String(prop.at.x),
+        (raw) => {
+          const at = prop.at as { x: number; z: number };
+          edit({ ...prop, at: { x: number(raw, at.x), z: at.z } });
+        },
+        { step: '0.5' },
+      );
+      inspectorRow(
+        'z',
+        String(prop.at.z),
+        (raw) => {
+          const at = prop.at as { x: number; z: number };
+          edit({ ...prop, at: { x: at.x, z: number(raw, at.z) } });
+        },
+        { step: '0.5' },
+      );
+    }
+    inspectorRow(
+      'yaw (rad)',
+      prop.yaw === 'tangent' ? '' : String(prop.yaw ?? 0),
+      (raw) => {
+        edit({ ...prop, yaw: number(raw, 0) });
+      },
+      { step: '0.05' },
+    );
+    inspectorRow(
+      'scale',
+      String(prop.scale ?? 1),
+      (raw) => {
+        edit({ ...prop, scale: number(raw, 1) });
+      },
+      { step: '0.05', min: '0.05', max: '50' },
+    );
+    if (placed) {
+      const detail = document.createElement('div');
+      detail.className = 'd';
+      detail.textContent = `${propFrameOf(prop)}, ${placed.solid ? 'solid' : 'decor'}, stands at ${placed.x.toFixed(1)}, ${placed.z.toFixed(1)}`;
+      inspectorEl.append(detail);
+      inspectorButton('to the other frame', () => {
+        edit(convertedProp(record, prop, placed.x, placed.z));
+      });
+    }
+    inspectorButton(prop.collide === 'none' ? 'make it solid again' : 'stop it colliding', () => {
+      edit(toggledCollide(prop));
+    });
+    return;
+  }
+
+  if (dressing.kind === 'scatter') {
+    const scatter = (record.scatters ?? [])[dressing.index];
+    if (!scatter) return;
+    const index = dressing.index;
+    const edit = (next: RallyScatter): void =>
+      commitDressing({ scatters: replacedAt(record.scatters, index, next) });
+    inspectorRow(
+      'spacing (yd)',
+      String(scatter.spacing),
+      (raw) => {
+        edit({ ...scatter, spacing: number(raw, scatter.spacing) });
+      },
+      { step: '0.5', min: '1', max: '200' },
+    );
+    inspectorRow(
+      'seed',
+      String(scatter.seed),
+      (raw) => {
+        edit({ ...scatter, seed: Math.round(number(raw, scatter.seed)) });
+      },
+      { step: '1' },
+    );
+    if (scatter.span) {
+      const span = scatter.span;
+      inspectorRow(
+        'span from',
+        String(span.s0),
+        (raw) => {
+          edit({ ...scatter, span: { s0: number(raw, span.s0), s1: span.s1 } });
+        },
+        { step: '0.01', min: '0', max: '1' },
+      );
+      inspectorRow(
+        'span to',
+        String(span.s1),
+        (raw) => {
+          edit({ ...scatter, span: { s0: span.s0, s1: number(raw, span.s1) } });
+        },
+        { step: '0.01', min: '0', max: '1' },
+      );
+    }
+    const detail = document.createElement('div');
+    detail.className = 'd';
+    detail.textContent = `${scatter.asset}, ${scatter.zone}`;
+    inspectorEl.append(detail);
+    inspectorButton(
+      scatter.zone === 'infield' ? 'move to the outfield' : 'move to the infield',
+      () => {
+        edit({ ...scatter, zone: scatter.zone === 'infield' ? 'outfield' : 'infield' });
+      },
+    );
+    return;
+  }
+
+  const pond = (record.ponds ?? [])[dressing.index];
+  if (!pond) return;
+  const index = dressing.index;
+  const edit = (next: RallyPond): void =>
+    commitDressing({ ponds: replacedAt(record.ponds, index, next) });
+  inspectorRow('x', String(pond.x), (raw) => edit({ ...pond, x: number(raw, pond.x) }), {
+    step: '0.5',
+  });
+  inspectorRow('z', String(pond.z), (raw) => edit({ ...pond, z: number(raw, pond.z) }), {
+    step: '0.5',
+  });
+  inspectorRow('radius x', String(pond.rx), (raw) => edit({ ...pond, rx: number(raw, pond.rx) }), {
+    step: '0.5',
+    min: '0.5',
+  });
+  inspectorRow('radius z', String(pond.rz), (raw) => edit({ ...pond, rz: number(raw, pond.rz) }), {
+    step: '0.5',
+    min: '0.5',
+  });
+  inspectorRow('rotation', String(pond.rot ?? 0), (raw) => edit({ ...pond, rot: number(raw, 0) }), {
+    step: '0.05',
+  });
+  inspectorRow(
+    'wobble',
+    String(pond.wobble ?? 0.15),
+    (raw) => edit({ ...pond, wobble: number(raw, 0.15) }),
+    {
+      step: '0.01',
+      min: '0',
+      max: '0.35',
+    },
+  );
+  inspectorRow(
+    'seed',
+    String(pond.seed ?? 0),
+    (raw) => edit({ ...pond, seed: Math.round(number(raw, 0)) }),
+    {
+      step: '1',
+    },
+  );
+}
+
 function draw(): void {
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth;
@@ -612,7 +1160,8 @@ function draw(): void {
   drawSurfaces();
   drawGrid();
   drawStroke();
-  drawHandles();
+  if (mode === 'props') drawDressing();
+  else drawHandles();
   drawProblemMarkers();
 }
 
@@ -693,49 +1242,38 @@ function paintPanel(): void {
   row(gaps, 'tangent dot', nearest.tangentDot.toFixed(2));
   row(gaps, 'between', `${nearest.s.toFixed(0)} and ${nearest.otherS.toFixed(0)} yd`);
   row(gaps, 'shooting corridor', `${metrics.shootingCorridorYards.toFixed(0)} yd`);
-  // Two DRY lines flanking the same strip: an authored open corridor, which is
-  // information rather than a fault (two PONDS that close would be one lake
-  // drawn twice, and that is the error below).
-  row(gaps, 'shared dry line', `${metrics.sharedDryYards.toFixed(0)} yd`);
-  row(
-    gaps,
-    'shore overlap',
-    `${metrics.shoreOverlapYards.toFixed(0)} yd`,
-    metrics.shoreOverlapYards > 0 ? 'bad' : 'good',
-  );
   readoutEl.append(heading('stretches'), gaps);
 
-  // What the two brushes actually left on the circuit, read back off the
-  // derived samples rather than off the band tables: the apron is a running
-  // minimum of a derived value, so the table is not what the road ends up with.
+  // What the brush actually left on the circuit, read back off the derived
+  // samples rather than off the band table: the table is breakpoints and the
+  // road is samples, and only the second one is what a racer meets.
   const surface = document.createElement('table');
   const halfWidths = track.samples.map((sample) => sample.halfWidth);
-  const aprons = track.samples.map((sample) => sample.apron);
   row(
     surface,
     'road half-width',
     `${Math.min(...halfWidths).toFixed(1)} to ${Math.max(...halfWidths).toFixed(1)} yd`,
   );
-  row(
-    surface,
-    'apron',
-    `${Math.min(...aprons).toFixed(1)} to ${Math.max(...aprons).toFixed(1)} yd`,
-  );
   row(surface, 'width bands', String(record.widthBands.length));
-  row(surface, 'apron bands', record.apronBands ? String(record.apronBands.length) : 'none');
-  // What the shore line carries, in yards of lap rather than in rows: the table
-  // is breakpoints and the operator paints stretches.
-  const spans = waterSpanYards(record.waterBands ?? DEFAULT_WATER_BANDS, track.length);
-  for (const [kind, label] of [
-    ['water', 'pond'],
-    ['dry', 'dry shore'],
-  ] as const) {
-    if (spans[kind] <= 0) continue;
-    row(surface, label, `${spans[kind].toFixed(0)} yd`);
-  }
-  row(surface, 'water authored', record.basin ? 'yes' : 'no', record.basin ? '' : 'warn');
   row(surface, 'recovery anchors', String(realmRacersGates(record).length));
   readoutEl.append(heading('surface'), surface);
+
+  // What is STANDING on the circuit, counted off the resolver rather than off
+  // the record: a scatter is a handful of rows and hundreds of pieces, and the
+  // pieces are what the operator is looking at.
+  const dressingTable = document.createElement('table');
+  row(dressingTable, 'props', String(metrics.propCount));
+  row(dressingTable, 'solid props', String(metrics.solidPropCount));
+  row(
+    dressingTable,
+    'scatters',
+    `${record.scatters?.length ?? 0} (${metrics.scatterCount} pieces)`,
+  );
+  row(dressingTable, 'ponds', String(metrics.pondCount));
+  row(dressingTable, 'water authored', record.basin ? 'yes' : 'no');
+  const unknown = realmRacersPlacements(record).unknownAssets;
+  if (unknown.length > 0) row(dressingTable, 'unknown keys', unknown.join(', '), 'bad');
+  readoutEl.append(heading('dressing'), dressingTable);
 
   const envelope = document.createElement('table');
   row(envelope, 'road half-extent x', `${metrics.roadHalfX.toFixed(0)} yd`);
@@ -775,6 +1313,10 @@ function paintPanel(): void {
       readoutEl.append(more);
     }
   }
+  // Last, because it is about the SELECTION rather than about the circuit, and
+  // because a panel that reordered itself around a selection would move the
+  // numbers the operator is reading.
+  paintInspector();
 }
 
 // ---- the record form ----
@@ -1028,9 +1570,10 @@ function setMode(next: Mode): void {
     button.classList.toggle('on', key === next);
   }
   hintEl.textContent = MODE_HINTS[next];
-  waterLabel.hidden = next !== 'water';
   const brush = BRUSH_FIELDS[next];
-  brushLabel.hidden = next === 'water';
+  paletteEl.hidden = next !== 'props';
+  paletteAllLabel.hidden = next !== 'props';
+  dressing = null;
   brushLabel.classList.toggle('off', brush === null);
   brushInput.disabled = brush === null;
   brushLabel.firstChild?.replaceWith(`${brush?.label ?? 'brush'} `);
@@ -1042,46 +1585,13 @@ function setMode(next: Mode): void {
   requestRedraw();
 }
 
-/** The quantity the current painting mode edits, per centerline sample. */
+/** The quantity the painting mode edits, per centerline sample. */
 function paintedQuantity(): number[] {
-  return track.samples.map((sample) => (mode === 'width' ? sample.halfWidth : sample.apron));
-}
-
-/** What the shore line carries at every centerline sample, read back
- *  through the SPLINE rather than off the table: the table is breakpoints and
- *  the road is samples, and only the second one is what a racer meets. */
-function paintedKinds(): RallyWaterKind[] {
-  return track.samples.map((sample) => rallyWaterKindAt(record, sample.s));
-}
-
-/** The kind the picker is set to. */
-function brushKind(): RallyWaterKind {
-  return waterKindEl.value as RallyWaterKind;
+  return track.samples.map((sample) => sample.halfWidth);
 }
 
 /** What the stroke that just ended did, in the operator's own units. */
 function reportStroke(): void {
-  if (mode === 'water') {
-    if (!paintKindsBefore) return;
-    const after = paintedKinds();
-    let changed = 0;
-    for (let i = 0; i < after.length && i < paintKindsBefore.length; i++) {
-      if (after[i] !== paintKindsBefore[i]) changed += track.step;
-    }
-    const spans = waterSpanYards(record.waterBands ?? DEFAULT_WATER_BANDS, track.length);
-    const water = spans.water.toFixed(0);
-    if (changed > 0) {
-      setStatus(
-        `${changed.toFixed(0)} yd of shore set to ${brushKind()}; ${water} yd of pond left${
-          record.basin ? '' : ', and no water on this circuit at all now'
-        }`,
-        'ok',
-      );
-      return;
-    }
-    setStatus(`nothing changed: that stretch of shore is already ${brushKind()}`, 'err');
-    return;
-  }
   const brush = BRUSH_FIELDS[mode];
   if (!paintBefore || !brush) return;
   const after = paintedQuantity();
@@ -1104,26 +1614,13 @@ function reportStroke(): void {
   );
 }
 
-/** The table the current painting mode edits, as it stands on the record. */
+/** The table the painting mode edits, as it stands on the record. */
 function paintedBands(): CircuitBand[] {
-  if (mode === 'width') return fromWidthBands(record.widthBands);
-  return fromApronBands(
-    record.apronBands ?? [
-      { s: 0, maxApron: REALM_RACERS_APRON_MAX },
-      { s: 1, maxApron: REALM_RACERS_APRON_MAX },
-    ],
-  );
+  return fromWidthBands(record.widthBands);
 }
 
 /** Extends the live stroke to this point and re-applies the whole of it. */
 function paintAt(point: RallyPoint): void {
-  if (mode === 'water') {
-    if (!paintWaterOrigin) return;
-    paintFractions.push(fractionAt(point));
-    const bands = paintWaterSpan(paintWaterOrigin, paintFractions, brushKind());
-    commit(applyWaterBands(record, bands, rememberedBasin), false);
-    return;
-  }
   const brush = BRUSH_FIELDS[mode];
   const value = Number(brushInput.value);
   if (!brush || !paintOrigin || !Number.isFinite(value)) return;
@@ -1133,12 +1630,7 @@ function paintAt(point: RallyPoint): void {
     max: brush.max,
     ramp: PAINT_RAMP_YARDS / track.length,
   });
-  commit(
-    mode === 'width'
-      ? { ...record, widthBands: toWidthBands(bands) }
-      : { ...record, apronBands: toApronBands(bands) },
-    false,
-  );
+  commit({ ...record, widthBands: toWidthBands(bands) }, false);
 }
 
 canvas.addEventListener('pointerdown', (ev) => {
@@ -1153,16 +1645,15 @@ canvas.addEventListener('pointerdown', (ev) => {
     stroke = [point];
     return;
   }
-  if (mode === 'width' || mode === 'apron' || mode === 'water') {
+  if (mode === 'props') {
+    startDressingGesture(point, ev.shiftKey);
+    return;
+  }
+  if (mode === 'width') {
     undoStack.push({ record, drawn });
     painting = true;
-    paintBefore = mode === 'water' ? null : paintedQuantity();
-    paintKindsBefore = mode === 'water' ? paintedKinds() : null;
-    paintOrigin = mode === 'water' ? null : paintedBands();
-    paintWaterOrigin =
-      mode === 'water'
-        ? [...(record.waterBands ?? DEFAULT_WATER_BANDS)].map((band) => ({ ...band }))
-        : null;
+    paintBefore = paintedQuantity();
+    paintOrigin = paintedBands();
     paintFractions = [];
     paintAt(point);
     return;
@@ -1207,6 +1698,10 @@ canvas.addEventListener('pointermove', (ev) => {
     paintAt(point);
     return;
   }
+  if (dressingDrag) {
+    moveDressingGesture(point);
+    return;
+  }
   if (!dragging) return;
   commit(
     { ...record, controlPoints: moveControlPoint(record.controlPoints, dragging.index, point) },
@@ -1234,12 +1729,11 @@ function endGesture(): void {
     }
   }
   if (painting) reportStroke();
+  if (dressingDrag) endDressingGesture();
   panning = null;
   painting = false;
   paintBefore = null;
-  paintKindsBefore = null;
   paintOrigin = null;
-  paintWaterOrigin = null;
   paintFractions = [];
   dragging = null;
 }
@@ -1262,6 +1756,36 @@ window.addEventListener('keydown', (ev) => {
   if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z') {
     ev.preventDefault();
     undo();
+    return;
+  }
+  if (mode === 'props') {
+    if (!dressing) return;
+    const key = ev.key.toLowerCase();
+    if (ev.key === 'Delete' || ev.key === 'Backspace') {
+      ev.preventDefault();
+      deleteDressing();
+      return;
+    }
+    if (key === 'r') {
+      ev.preventDefault();
+      // Shift faces the piece along the racing direction, which is a different
+      // thing from any angle: it re-reads the tangent wherever it is moved to.
+      if (ev.shiftKey) transformSelectedProp(tangentProp);
+      else {
+        const placed = realmRacersPlacements(record).props[placementIndexOf(dressing.index)];
+        transformSelectedProp((prop) => rotatedProp(prop, placed?.yaw ?? 0, 1));
+      }
+      return;
+    }
+    if (key === 'c') {
+      ev.preventDefault();
+      transformSelectedProp(toggledCollide);
+      return;
+    }
+    if (ev.key === '+' || ev.key === '=' || ev.key === '-') {
+      ev.preventDefault();
+      transformSelectedProp((prop) => scaledProp(prop, ev.key === '-' ? 1 : -1));
+    }
     return;
   }
   if (ev.key === 'Delete' || ev.key === 'Backspace') {
@@ -1469,5 +1993,11 @@ window.addEventListener('pagehide', () => {
 (document.getElementById('loadBtn') as HTMLButtonElement).onclick = () => loadDialog.showModal();
 (document.getElementById('loadCancel') as HTMLButtonElement).onclick = () => loadDialog.close();
 
+paletteAllEl.onchange = () => {
+  paletteShowAll = paletteAllEl.checked;
+  buildPalette();
+};
+
 buildForm();
+buildPalette();
 newBlank();

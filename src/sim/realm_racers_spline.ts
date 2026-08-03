@@ -1,17 +1,20 @@
 // Everything DERIVED from an authored Realm Racers circuit record: the
 // resampled centerline, the arc-length table, nearest-point projection, the
-// recovery gates, the start grid, and the two lateral boundaries (the garden's
-// edge and the SHORE line, where the drivable apron gives out). One source of
-// truth, shared by the sim (progress, recovery, the off-track bands) and the
-// renderer (the road ribbon, kerbs, borders, the water), so what a racer sees
-// and what a racer drives on cannot drift.
+// recovery gates, the start grid, and the one lateral boundary (the garden's
+// edge, where the run-off gives way to lawn). One source of truth, shared by
+// the sim (progress, recovery, the off-track bands) and the renderer (the road
+// ribbon, kerbs, borders), so what a racer sees and what a racer drives on
+// cannot drift.
 //
-// NOTHING here contains a racer any more. The infield and the outfield are
-// open, drivable, decorated garden, and leaving the road arms the referee in
-// `realm_racers_track_limits.ts` instead of meeting a barrier. What survives of
-// the old containment line is its SHAPE: `halfWidth + apron` is where the lawn
-// gives way to water, so it is the shore the decorative ponds are cut from, and
-// `waterBands` says which spans of the lap carry water at all.
+// NOTHING here contains a racer any more, and nothing here is offset from the
+// road except the road's own edges. The infield and the outfield are open,
+// drivable, decorated garden; leaving the road arms the referee in
+// `realm_racers_track_limits.ts` instead of meeting a barrier; and the ponds
+// are PLACED (`realm_racers_props_resolve.ts`). The APRON, a second offset
+// curve that used to run from the road edge out to the water, went with them:
+// once the water was placed and the referee decided cuts, the only thing left
+// reading it was the envelope that keeps the dressing off the track, and that
+// envelope is the garden edge.
 //
 // Every entry point takes the CIRCUIT it is deriving, and each derivation is
 // memoized under that circuit's id: the geometry is static content, so one
@@ -22,12 +25,9 @@
 // with THREE.CatmullRomCurve3, re-implemented in plain numbers because src/sim
 // cannot import three.
 
-import type { RallyWaterKind, RealmRacersCircuit } from './content/realm_racers_circuits';
+import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import {
   type RallyGate,
-  type RallyPoint,
-  REALM_RACERS_APRON_MAX,
-  REALM_RACERS_APRON_RADIUS_FRACTION,
   REALM_RACERS_GATE_MARGIN,
   REALM_RACERS_GATE_SNAP_FRACTION,
   REALM_RACERS_GATE_SPACING,
@@ -52,14 +52,10 @@ export interface RallySample {
   halfWidth: number;
   /**
    * Signed radius of curvature, yards: POSITIVE where the circuit bends toward
-   * the INFIELD (the left normal, the side the shore line is on),
-   * negative where it bends away, Infinity on a straight. Only the positive
-   * case constrains the apron, because only there does cutting shorten the
-   * path.
+   * the INFIELD (the left normal), negative where it bends away, Infinity on a
+   * straight.
    */
   turnRadius: number;
-  /** Drivable garden between the road edge and the shore line, yards. */
-  apron: number;
 }
 
 export interface RallyProjection {
@@ -98,8 +94,6 @@ export interface RallyTrackModel {
    */
   project(x: number, z: number, hintIndex?: number): RallyProjection;
   halfWidthAt(s: number): number;
-  /** Drivable garden between the road edge and the shore line at `s`. */
-  apronAt(s: number): number;
   pointAt(s: number): RallySample;
 }
 
@@ -113,20 +107,21 @@ export interface RallyTrackModel {
  * remember the number.
  */
 export const REALM_RACERS_PROJECTION_ENVELOPE = 24;
-/** Half-width of the hinted search window, in samples. */
-const PROJECTION_WINDOW = 40;
+/**
+ * Half-width of the hinted search window, in samples.
+ *
+ * Exported because a hinted projection silently FALLS BACK to a scan of the
+ * whole lap when the local answer is not trusted, and a caller dragging a point
+ * around (the circuit editor's dressing) has to be able to tell the two apart:
+ * an answer further than this from the hint is the fallback, which on a circuit
+ * with two stretches running close can be the other one.
+ */
+export const REALM_RACERS_PROJECTION_WINDOW = 40;
 /** Sub-samples per authored control-point span while measuring the curve. */
 const DENSE_PER_SPAN = 64;
 /** Half-window, in samples, the curvature is measured over. */
 const CURVATURE_WINDOW = 3;
-/** Half-window, in samples, the apron's running minimum spans. */
-const APRON_SMOOTH_WINDOW = 10;
-
-/**
- * Reads a piecewise-linear band table at a lap fraction, wrapping. The road
- * width and the apron ceiling are the same shape authored twice, so they read
- * through one function rather than two copies that can drift apart.
- */
+/** Reads a piecewise-linear band table at a lap fraction, wrapping. */
 function bandValueAtFraction<T extends { s: number }>(
   bands: readonly T[],
   value: (band: T) => number,
@@ -146,20 +141,6 @@ function bandValueAtFraction<T extends { s: number }>(
 
 function widthAtFraction(circuit: RealmRacersCircuit, fraction: number): number {
   return bandValueAtFraction(circuit.widthBands, (band) => band.halfWidth, fraction);
-}
-
-/**
- * The authored ceiling on the apron, or the shared cap where a circuit authors
- * none. Only ever narrows the derived value (see `apronBands` on the record),
- * so the anti-cut inequality the derivation exists for still holds.
- */
-function maxApronAtFraction(circuit: RealmRacersCircuit, fraction: number): number {
-  const bands = circuit.apronBands;
-  if (!bands || bands.length === 0) return REALM_RACERS_APRON_MAX;
-  return Math.min(
-    REALM_RACERS_APRON_MAX,
-    bandValueAtFraction(bands, (band) => band.maxApron, fraction),
-  );
 }
 
 /**
@@ -259,28 +240,6 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
     return (Math.sign(cross) || 1) * ((ab * bc * ca) / (4 * area));
   });
 
-  // 4) The apron, then a running MINIMUM over a window so it narrows BEFORE a
-  // corner and reopens after it. Taking the minimum (never the average) keeps
-  // every sample at or under its own limit, so the smoothing cannot reopen a
-  // shortcut the raw profile had closed.
-  const rawApron = radii.map((r, i) => {
-    const derived =
-      r > 0 && Number.isFinite(r)
-        ? Math.min(REALM_RACERS_APRON_MAX, REALM_RACERS_APRON_RADIUS_FRACTION * r)
-        : REALM_RACERS_APRON_MAX;
-    // The authored ceiling lands BEFORE the running minimum below, so a pinch
-    // the operator narrows widens by the smoothing window rather than stepping
-    // at its edge, and the smoothing still cannot reopen anything.
-    return Math.min(derived, maxApronAtFraction(circuit, i / radii.length));
-  });
-  const apron = rawApron.map((_, i) => {
-    let best = Number.POSITIVE_INFINITY;
-    for (let k = -APRON_SMOOTH_WINDOW; k <= APRON_SMOOTH_WINDOW; k++) {
-      best = Math.min(best, rawApron[(i + k + count) % count]);
-    }
-    return best;
-  });
-
   const samples: RallySample[] = positions.map(([x, z], i) => {
     const prev = positions[(i + count - 1) % count];
     const next = positions[(i + 1) % count];
@@ -295,7 +254,6 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
       s: i * step,
       halfWidth: widthAtFraction(circuit, i / count),
       turnRadius: radii[i],
-      apron: apron[i],
     };
   });
 
@@ -357,8 +315,13 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
     step,
     project(x, z, hintIndex) {
       if (hintIndex !== undefined && Number.isFinite(hintIndex)) {
-        const from = Math.round(hintIndex) - PROJECTION_WINDOW;
-        const local = scan(x, z, ((from % count) + count) % count, PROJECTION_WINDOW * 2 + 1);
+        const from = Math.round(hintIndex) - REALM_RACERS_PROJECTION_WINDOW;
+        const local = scan(
+          x,
+          z,
+          ((from % count) + count) % count,
+          REALM_RACERS_PROJECTION_WINDOW * 2 + 1,
+        );
         if (
           !local.atEdge &&
           Math.abs(local.projection.lateral) <= REALM_RACERS_PROJECTION_ENVELOPE
@@ -370,12 +333,6 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
     },
     halfWidthAt(s) {
       return widthAtFraction(circuit, s / length);
-    },
-    apronAt(s) {
-      const wrapped = ((s % length) + length) % length;
-      // The apron is already a running minimum, so reading the nearer sample
-      // keeps it conservative rather than interpolating a wider value in.
-      return apron[Math.round(wrapped / step) % count];
     },
     pointAt(s) {
       const wrapped = ((s % length) + length) % length;
@@ -395,7 +352,6 @@ function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
         s: wrapped,
         halfWidth: widthAtFraction(circuit, wrapped / length),
         turnRadius: t < 0.5 ? a.turnRadius : b.turnRadius,
-        apron: Math.min(a.apron, b.apron),
       };
     },
   };
@@ -431,125 +387,22 @@ export const realmRacersTrack: (circuit: RealmRacersCircuit) => RallyTrackModel 
   memoizePerCircuit(buildModel);
 
 /**
- * Distance from the centerline to the SHORE line: the road plus its whole
- * drivable apron, which is where the lawn gives way to water.
- *
- * It used to be the CONTAINMENT line, the offset curve every anti-cut proof was
- * written against and every barrier stood on. Nothing is contained here any
- * more (`realm_racers_track_limits.ts` is the referee now), so the curve keeps
- * only the job it was always best at: it is a smooth offset of the road that
- * pulls in through corners, which is exactly the shape a pond wants, and
- * `waterBands` says which spans of it carry one.
- */
-export function rallyShoreOffsetAt(circuit: RealmRacersCircuit, s: number): number {
-  const track = realmRacersTrack(circuit);
-  return track.halfWidthAt(s) + track.apronAt(s);
-}
-
-/** Reads the stepwise water table at a lap fraction, wrapping. Absent table
- *  means the whole lap carries water, which is what every circuit was before
- *  the field existed. */
-function waterKindAtFraction(circuit: RealmRacersCircuit, fraction: number): RallyWaterKind {
-  const bands = circuit.waterBands;
-  if (!bands || bands.length === 0) return 'water';
-  const f = ((fraction % 1) + 1) % 1;
-  // Walked backwards: the LAST entry at or before the fraction owns it, and a
-  // fraction before the first entry wraps round to the last one.
-  for (let i = bands.length - 1; i >= 0; i--) {
-    if (f >= bands[i].s) return bands[i].kind;
-  }
-  return bands[bands.length - 1].kind;
-}
-
-/**
- * A contiguous run of centerline samples, `from` inclusive and possibly
- * wrapping past the end of the sample array.
- */
-interface RallySampleRun {
-  from: number;
-  length: number;
-}
-
-interface RallyWaterModel {
-  /** Whether the shore line carries water at each centerline sample. */
-  readonly kinds: readonly RallyWaterKind[];
-  /** The contiguous water runs: one pond per run. */
-  readonly runs: readonly RallySampleRun[];
-}
-
-/** Which spans of the shore line carry water, sample by sample, plus the
- *  contiguous runs the renderer cuts one pond out of each. */
-const realmRacersWater: (circuit: RealmRacersCircuit) => RallyWaterModel = memoizePerCircuit(
-  (circuit) => {
-    const count = realmRacersTrack(circuit).samples.length;
-    const kinds: RallyWaterKind[] = [];
-    for (let i = 0; i < count; i++) kinds.push(waterKindAtFraction(circuit, i / count));
-
-    const runs: RallySampleRun[] = [];
-    const origin = kinds.indexOf('dry');
-    if (origin < 0) {
-      runs.push({ from: 0, length: count });
-      return { kinds, runs };
-    }
-    // Started at a DRY sample so a pond crossing the start line is walked as ONE
-    // run rather than reported as two.
-    let open = -1;
-    for (let k = 0; k <= count; k++) {
-      const on = k < count && kinds[(origin + k) % count] === 'water';
-      if (on && open < 0) open = k;
-      if (!on && open >= 0) {
-        runs.push({ from: (origin + open) % count, length: k - open });
-        open = -1;
-      }
-    }
-    return { kinds, runs };
-  },
-);
-
-/** Whether the shore line carries water at arc length `s`. */
-export function rallyWaterKindAt(circuit: RealmRacersCircuit, s: number): RallyWaterKind {
-  const track = realmRacersTrack(circuit);
-  const count = track.samples.length;
-  const wrapped = ((s % track.length) + track.length) % track.length;
-  return realmRacersWater(circuit).kinds[Math.round(wrapped / track.step) % count];
-}
-
-/**
  * Distance from the centerline to the boundary between the VERGE and the
- * GARDEN, i.e. between the two off-track slow bands (`realmRacersOffTrackBand` in
- * `social/realm_racers.ts` splits them at exactly this offset). Nothing is
- * built here either: the renderer sows the border flowers along it, so the line
- * a racer reads is the line the penalty actually steps at.
+ * GARDEN: road, plus the two off-track bands a racer running wide actually
+ * uses. THE lateral boundary of a circuit, now that the apron is gone.
+ *
+ * It is where the two slow bands change over (`realmRacersOffTrackBand` in
+ * `social/realm_racers.ts` splits them at exactly this offset), it is where the
+ * renderer sows the border flowers, so the line a racer reads is the line the
+ * penalty steps at, and it is the RACING SURFACE the dressing may not stand on:
+ * the seeded scatter rejects against it and the readout errors on it
+ * (`prop_blocks_racing_surface`). Nothing is built on it and nothing is
+ * contained by it.
  */
 export function rallyGardenEdgeOffsetAt(circuit: RealmRacersCircuit, s: number): number {
   return (
     realmRacersTrack(circuit).halfWidthAt(s) + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH
   );
-}
-
-/**
- * How far off the centerline the RACING SURFACE reaches on one side: the
- * envelope nothing may be built on, and the envelope the seeded dressing keeps
- * clear of.
- *
- * `side` is +1 for the infield (the left normal, the side the shore and the
- * ponds are on) and -1 for the outfield. The two are not symmetric: inward the
- * surface runs road plus verge plus run-off plus the whole drivable apron out
- * to the shore, while outward there is no apron at all and the racing surface
- * stops at the garden edge, with open lawn from there to the perimeter.
- *
- * One function rather than the same `max` written at three call sites: the
- * seeded scatter rejects against it, the readout errors on it
- * (`prop_blocks_racing_surface`), and the two disagreeing is precisely the bug
- * class the whole packet exists for.
- */
-export function rallyRacingSurfaceOffsetAt(
-  circuit: RealmRacersCircuit,
-  s: number,
-  side: 1 | -1,
-): number {
-  const edge = rallyGardenEdgeOffsetAt(circuit, s);
-  return side > 0 ? Math.max(edge, rallyShoreOffsetAt(circuit, s)) : edge;
 }
 
 /**
@@ -645,96 +498,6 @@ export const realmRacersStarts: (circuit: RealmRacersCircuit) => readonly RallyS
       };
     });
   });
-
-/**
- * The BANK PROFILE at (x, z): 0 at the shore line, deepening at the
- * authored bank slope to the basin's floor. NEGATIVE outside the line, and the
- * magnitude there is how far out the point lies, which is what lets one call
- * answer both "how deep is the bank here" and "how far out is this".
- *
- * Purely geometric, and deliberately says nothing about whether there is WATER
- * at the point: it is the ramp shape a water surface is shaded with, and the
- * renderer only ever samples it at vertices it has already placed inside a
- * water lobe. Ask `rallyBasinDepthAt` for the other question.
- *
- * Measured along the track normal rather than to the outline polygon: the line
- * IS an offset of the centerline, so the normal distance is the exact distance
- * to it, and it costs one projection instead of a walk over 450 segments.
- */
-export function rallyBankDepthAt(
-  circuit: RealmRacersCircuit,
-  x: number,
-  z: number,
-  hintIndex?: number,
-): number {
-  const track = realmRacersTrack(circuit);
-  const projection = track.project(x, z, hintIndex);
-  const inward = projection.lateral - rallyShoreOffsetAt(circuit, projection.s);
-  if (inward <= 0) return inward;
-  // A circuit with no basin authors no bank to ramp down at all.
-  if (!circuit.basin) return 0;
-  return Math.min(circuit.basin.depthMax, circuit.basin.bankSlope * inward);
-}
-
-/**
- * Yards of WATER under (x, z), which is the bank profile above and one more
- * question: is there water on this stretch at all.
- *
- * Zero past a DRY span, because there is not. The bank profile alone would
- * answer a couple of yards of depth three yards past the end of a pond, which
- * is dry garden; that answer was harmless only while every circuit was a lake
- * circuit all the way round.
- *
- * NOT what the water surface is shaded with: a vertex out in the middle of a
- * pond can be nearest to the dry stretch across the strip, and it is still open
- * water. The renderer places its vertices inside a pond by construction and
- * reads `rallyBankDepthAt`; this one answers for a POINT whose pond membership
- * nobody has established.
- */
-export function rallyBasinDepthAt(
-  circuit: RealmRacersCircuit,
-  x: number,
-  z: number,
-  hintIndex?: number,
-): number {
-  const depth = rallyBankDepthAt(circuit, x, z, hintIndex);
-  if (depth <= 0) return depth;
-  const projection = realmRacersTrack(circuit).project(x, z, hintIndex);
-  return rallyWaterKindAt(circuit, projection.s) === 'water' ? depth : 0;
-}
-
-/**
- * The water's edge, as one closed polygon per contiguous WATER span. The
- * renderer triangulates each into a water surface and punches the same polygons
- * out of the lawn, so the water sits in holes in the ground rather than
- * floating over it.
- *
- * A span's polygon is its stretch of the shore line, one point per centerline
- * sample, closed by the straight chord back to where it started. On a circuit
- * whose whole line carries water that chord has nowhere to go and the result is
- * exactly the closed offset curve, which is what the single mandatory lake
- * always was. Where a DRY span interrupts, the chord cuts the pond off across
- * the mouth of the strip, and the strip is lawn a racer drives over.
- */
-export const realmRacersWaterOutlines: (
-  circuit: RealmRacersCircuit,
-) => readonly (readonly RallyPoint[])[] = memoizePerCircuit((circuit) => {
-  const samples = realmRacersTrack(circuit).samples;
-  const count = samples.length;
-  // No basin means no water at all, whatever the bands say: the record test and
-  // the metrics both refuse a water span without one, so this is the arm a DRY
-  // circuit takes rather than a fallback for a broken record.
-  if (!circuit.basin) return [];
-  return realmRacersWater(circuit).runs.map((run) => {
-    const out: RallyPoint[] = [];
-    for (let k = 0; k < run.length; k++) {
-      const sample = samples[(run.from + k) % count];
-      const offset = rallyShoreOffsetAt(circuit, sample.s);
-      out.push({ x: sample.x - sample.tz * offset, z: sample.z + sample.tx * offset });
-    }
-    return out;
-  });
-});
 
 /** Positive when a heading points along the racing direction, negative when it
  *  points back up the circuit (the wrong-way test). */

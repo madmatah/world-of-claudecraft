@@ -1,5 +1,5 @@
 // The editing rules for everything a circuit record holds as an ORDERED list:
-// the control-point ring and the two band tables (road width, apron ceiling).
+// the control-point ring and the road-width band table.
 //
 // They are together because they are one problem twice: pick the thing under
 // the cursor, move it without breaking the order the record depends on, and
@@ -313,9 +313,3 @@ export const toWidthBands = (bands: readonly CircuitBand[]): { s: number; halfWi
 
 export const fromWidthBands = (bands: readonly { s: number; halfWidth: number }[]): CircuitBand[] =>
   bands.map((band) => ({ s: band.s, value: band.halfWidth }));
-
-export const toApronBands = (bands: readonly CircuitBand[]): { s: number; maxApron: number }[] =>
-  bands.map((band) => ({ s: band.s, maxApron: band.value }));
-
-export const fromApronBands = (bands: readonly { s: number; maxApron: number }[]): CircuitBand[] =>
-  bands.map((band) => ({ s: band.s, value: band.maxApron }));

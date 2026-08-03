@@ -8,7 +8,6 @@ import {
 } from '../src/render/camera_boom_core';
 import {
   RALLY_FLOWER_COLOURS,
-  rallyBasinMeshes,
   rallyBorderFlowerSpots,
   rallyDressingSpots,
   rallyFlowerSpots,
@@ -16,7 +15,6 @@ import {
   rallyPerimeterPieces,
   rallyPondMeshes,
   rallyPondReedSpots,
-  rallyReedSpots,
   rallyStartArchPlacement,
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
@@ -34,14 +32,7 @@ import {
   realmRacersPlacedPonds,
   realmRacersPlacedProps,
 } from '../src/sim/realm_racers_props_resolve';
-import {
-  rallyBasinDepthAt,
-  rallyGardenEdgeOffsetAt,
-  rallyShoreOffsetAt,
-  rallyWaterKindAt,
-  realmRacersTrack,
-  realmRacersWaterOutlines,
-} from '../src/sim/realm_racers_spline';
+import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 // The circuit builder mints procedural canvas textures, so it needs the same
 // texture stub the other headless render suites use (terrain_chunk_geometry).
@@ -557,63 +548,44 @@ describe('Realm Racers procedural render', () => {
   });
 
   it('gives the water real depth to shade, not a rim of zeroes', () => {
-    // A triangulated outline polygon puts EVERY vertex on the shore, so the
+    // A triangulated outline polygon puts EVERY vertex on the edge, so the
     // per-vertex shore depth the water shader reads would be zero everywhere:
-    // the whole basin would render as the shallowest possible water with the
+    // the whole pond would render as the shallowest possible water with the
     // foam band covering all of it. Rings put vertices where the depth is.
-    const meshes = rallyBasinMeshes(GARDEN_CIRCUIT);
-    // One shore span (the whole lap), so one water surface.
-    expect(meshes).toHaveLength(1);
-    const mesh = meshes[0];
-    const count = mesh.depths.length;
-    expect(count).toBe(mesh.columns * (mesh.rings + 1) + 1);
-    // The shore ring reads exactly 0...
-    for (let col = 0; col < mesh.columns; col++) expect(mesh.depths[col]).toBe(0);
-    // ...and the middle is at the basin floor, which is the whole point.
-    expect(mesh.depths[count - 1]).toBeCloseTo(GARDEN_BASIN.depthMax, 6);
-    // The rings crowd the shore, because everything the shader varies (the
-    // ramp to the basin floor, the surf band) is within a few yards of the
-    // waterline. Evenly spaced rings across a basin this wide put the first one
-    // past all of it, and the bank renders as one hard step.
-    const firstRing = mesh.depths.slice(mesh.columns, mesh.columns * 2);
-    expect(Math.max(...firstRing)).toBeLessThan(GARDEN_BASIN.depthMax);
-    // ...and it really is a ramp: shallow, mid and floor all present.
-    const all: number[] = Array.from(mesh.depths);
-    expect(all.some((d) => d > 0 && d < 1)).toBe(true);
-    expect(all.some((d) => d >= 1 && d < GARDEN_BASIN.depthMax)).toBe(true);
-    expect(all.some((d) => d >= GARDEN_BASIN.depthMax - 1e-6)).toBe(true);
-    for (const depth of all) {
-      expect(depth).toBeGreaterThanOrEqual(0);
-      expect(depth).toBeLessThanOrEqual(GARDEN_BASIN.depthMax);
+    const meshes = rallyPondMeshes(GARDEN_CIRCUIT);
+    // Two placed pools, so two water surfaces.
+    expect(meshes).toHaveLength(2);
+    for (const mesh of meshes) {
+      const count = mesh.depths.length;
+      expect(count).toBe(mesh.columns * (mesh.rings + 1) + 1);
+      // The outline ring reads exactly 0...
+      for (let col = 0; col < mesh.columns; col++) expect(mesh.depths[col]).toBe(0);
+      // ...and the middle is at the basin floor, which is the whole point.
+      expect(mesh.depths[count - 1]).toBeCloseTo(GARDEN_BASIN.depthMax, 6);
+      // The rings crowd the edge, because everything the shader varies (the
+      // ramp to the basin floor, the surf band) is within a few yards of the
+      // waterline. Evenly spaced rings across a pool this wide put the first
+      // one past all of it, and the bank renders as one hard step.
+      const firstRing = mesh.depths.slice(mesh.columns, mesh.columns * 2);
+      expect(Math.max(...firstRing)).toBeLessThan(GARDEN_BASIN.depthMax);
+      // ...and it really is a ramp: shallow, mid and floor all present.
+      const all: number[] = Array.from(mesh.depths);
+      expect(all.some((d) => d > 0 && d < 1)).toBe(true);
+      expect(all.some((d) => d >= 1 && d < GARDEN_BASIN.depthMax)).toBe(true);
+      expect(all.some((d) => d >= GARDEN_BASIN.depthMax - 1e-6)).toBe(true);
+      // Every depth is the authored ramp read at that vertex's own distance in
+      // from the outline, to the authored floor. It is the ONE thing a placed
+      // pond can answer about its depth: the road's bank profile is an offset
+      // of the centerline and says nothing about a pool fifty yards away.
+      for (const depth of all) {
+        expect(depth).toBeGreaterThanOrEqual(0);
+        expect(depth).toBeLessThanOrEqual(GARDEN_BASIN.depthMax);
+      }
+      // Every triangle is a real one: a ring that folded through itself would
+      // still index cleanly and render as a crumpled sheet.
+      expect(mesh.index.length % 3).toBe(0);
+      expect(new Set(mesh.index).size).toBe(count);
     }
-    // Every vertex is on the infield side, and the depth is the SIM's, so the
-    // water a racer sees is the water the sim decides they are wading in.
-    // EXACTLY, not approximately: the mesh keeps its positions in float64
-    // precisely so this holds. At float32 the band's x = 113_700 resolves to
-    // about 7mm, which near a spot where two parts of the shore compete for
-    // "nearest" is enough to flip the winner and step the depth by a third of a
-    // yard, and that step would be a colour seam across open water.
-    for (let i = mesh.columns; i < count; i++) {
-      const x = mesh.positions[i * 2];
-      const z = mesh.positions[i * 2 + 1];
-      expect(mesh.depths[i]).toBeCloseTo(Math.max(0, rallyBasinDepthAt(GARDEN_CIRCUIT, x, z)), 9);
-    }
-    // The shore ring is PINNED to zero instead, because the projection measures
-    // against a polyline that reads a sagitta short of the true curve. Bound
-    // what that pin is allowed to paper over, so it can never hide a real
-    // disagreement between the drawn shore and the sim's.
-    for (let col = 0; col < mesh.columns; col++) {
-      const depth = rallyBasinDepthAt(
-        GARDEN_CIRCUIT,
-        mesh.positions[col * 2],
-        mesh.positions[col * 2 + 1],
-      );
-      expect(Math.abs(depth)).toBeLessThan(0.05);
-    }
-    // Every triangle is a real one: a ring that folded through itself would
-    // still index cleanly and render as a crumpled sheet.
-    expect(mesh.index.length % 3).toBe(0);
-    expect(new Set(mesh.index).size).toBe(count);
   });
 
   it('plants the shore and sows both road edges, building neither', () => {
@@ -624,15 +596,17 @@ describe('Realm Racers procedural render', () => {
     // The water's edge is planted, not kerbed. It carried a ring of stone that
     // was also the circuit's inner collision, and from the circuit that read as
     // blocks standing in the lake.
-    const reeds = rallyReedSpots(GARDEN_CIRCUIT);
-    expect(reeds.length).toBeGreaterThan(50);
+    const reeds = rallyPondReedSpots(GARDEN_CIRCUIT);
+    expect(reeds.length).toBeGreaterThan(20);
+    const rims = realmRacersPlacedPonds(GARDEN_CIRCUIT);
     for (const spot of reeds) {
-      const projection = track.project(spot.x, spot.z);
-      // On the infield side, on the shore. Loose to a centimetre: the reeds are
-      // placed off the interpolated centerline and measured back against the
-      // resampled POLYLINE, which reads a sagitta short of the true curve.
-      expect(projection.lateral).toBeGreaterThan(0);
-      expect(projection.lateral).toBeCloseTo(rallyShoreOffsetAt(GARDEN_CIRCUIT, projection.s), 1);
+      // On a pond's own rim: every clump sits on an outline point, which is
+      // what makes it a waterline rather than decoration near some water.
+      const local = { x: spot.x - REALM_RACERS_ORIGIN.x, z: spot.z - REALM_RACERS_ORIGIN.z };
+      const onRim = rims.some((pond) =>
+        pond.outline.some((point) => Math.hypot(point.x - local.x, point.z - local.z) < 1e-6),
+      );
+      expect(onRim).toBe(true);
     }
 
     // The road edge is sown, not built: flowers on BOTH sides, on the boundary
@@ -683,31 +657,25 @@ describe('Realm Racers procedural render', () => {
       expect(full.has(`${spot.x.toFixed(4)},${spot.z.toFixed(4)}`)).toBe(true);
   });
 
-  describe('the ponds cut along the shore line', () => {
-    /** The practice circuit's curve with two spans painted dry: one over the
-     *  start straight and one round the parabolic. */
-    const FLIPPED: RealmRacersCircuit = {
+  describe('the ponds, placed', () => {
+    /** The practice circuit's curve with ONE pool instead of its two, so a case
+     *  can say what changes when a pond is added or taken away. */
+    const ONE_POND: RealmRacersCircuit = {
       ...GARDEN_CIRCUIT,
-      id: 'render_water_fixture',
-      waterBands: [
-        { s: 0, kind: 'water' },
-        { s: 0.05, kind: 'dry' },
-        { s: 0.12, kind: 'water' },
-        { s: 0.63, kind: 'dry' },
-        { s: 0.7, kind: 'water' },
-      ],
+      id: 'render_one_pond',
+      ponds: [{ x: -4, z: 4, rx: 22, rz: 13, wobble: 0.2, seed: 1 }],
     };
 
-    /** The same curve with every span dry and no water authored at all. */
+    /** The same curve with no water authored at all. */
     const DRY: RealmRacersCircuit = {
       ...GARDEN_CIRCUIT,
       id: 'render_water_dry',
-      waterBands: [{ s: 0, kind: 'dry' }],
+      ponds: undefined,
       basin: undefined,
     };
 
     /** The water sheets of a build. The shore-depth attribute is the one thing
-     *  only the basin writes, so counting them counts the lobes. */
+     *  only the water writes, so counting them counts the pools. */
     const waterMeshes = (group: THREE.Group): THREE.Mesh[] =>
       group.children.filter(
         (child): child is THREE.Mesh =>
@@ -749,16 +717,24 @@ describe('Realm Racers procedural render', () => {
       return inside;
     };
 
-    it('cuts the water into one lobe per water span and leaves the strip dry', () => {
-      const outlines = realmRacersWaterOutlines(FLIPPED);
-      expect(outlines).toHaveLength(2);
-      // No reed grows on a dry shore: reeds mark a waterline.
-      for (const spot of rallyReedSpots(FLIPPED)) {
-        expect(rallyWaterKindAt(FLIPPED, track.project(spot.x, spot.z).s)).toBe('water');
-      }
-      expect(rallyReedSpots(FLIPPED).length).toBeLessThan(rallyReedSpots(GARDEN_CIRCUIT).length);
-      // Each lobe still has real depth to shade rather than a rim of zeroes.
-      const meshes = rallyBasinMeshes(FLIPPED);
+    /** A circuit's pond outlines in WORLD coordinates, which is the frame the
+     *  lawn and the water meshes are built in. */
+    const worldOutlines = (circuit: RealmRacersCircuit) =>
+      realmRacersPlacedPonds(circuit).map((pond) =>
+        pond.outline.map(
+          (point) => [point.x + REALM_RACERS_ORIGIN.x, point.z + REALM_RACERS_ORIGIN.z] as const,
+        ),
+      );
+
+    it('plants every rim and leaves a circuit with no water bare', () => {
+      // Reeds mark a waterline, so they exist per pond and nowhere else.
+      expect(rallyPondReedSpots(DRY)).toEqual([]);
+      expect(rallyPondReedSpots(ONE_POND).length).toBeGreaterThan(10);
+      expect(rallyPondReedSpots(GARDEN_CIRCUIT).length).toBeGreaterThan(
+        rallyPondReedSpots(ONE_POND).length,
+      );
+      // Each pool still has real depth to shade rather than a rim of zeroes.
+      const meshes = rallyPondMeshes(GARDEN_CIRCUIT);
       expect(meshes).toHaveLength(2);
       for (const mesh of meshes) {
         expect(mesh.columns).toBeGreaterThan(8);
@@ -766,20 +742,20 @@ describe('Realm Racers procedural render', () => {
       }
     });
 
-    it('builds one water surface per lobe, and none on a dry circuit', async () => {
+    it('builds one water surface per pond, and none on a circuit with no water', async () => {
       const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
       expect(waterMeshes(buildRealmRacersTrack(DRY).group)).toHaveLength(0);
-      expect(waterMeshes(buildRealmRacersTrack(FLIPPED).group)).toHaveLength(2);
-      expect(waterMeshes(buildRealmRacersTrack(GARDEN_CIRCUIT).group)).toHaveLength(1);
-      // ONE material across a build's lobes, never one per lobe: it is a
+      expect(waterMeshes(buildRealmRacersTrack(ONE_POND).group)).toHaveLength(1);
+      expect(waterMeshes(buildRealmRacersTrack(GARDEN_CIRCUIT).group)).toHaveLength(2);
+      // ONE material across a build's pools, never one per pool: it is a
       // ShaderMaterial with its own compiled program, and the two callers that
-      // rebuild a circuit over and over are exactly the ones a per-lobe
+      // rebuild a circuit over and over are exactly the ones a per-pool
       // material multiplies against (see realm_racers_track_dispose_core).
-      const lobes = waterMeshes(buildRealmRacersTrack(FLIPPED).group);
-      expect(new Set(lobes.map((mesh) => mesh.material)).size).toBe(1);
+      const pools = waterMeshes(buildRealmRacersTrack(GARDEN_CIRCUIT).group);
+      expect(new Set(pools.map((mesh) => mesh.material)).size).toBe(1);
     });
 
-    it('punches the lawn open under every lobe, and nowhere else', async () => {
+    it('punches the lawn open under every pond, and nowhere else', async () => {
       // The hole is what makes the water read as a sunken basin instead of a
       // sheet laid on the grass, and nothing else in this suite can see it:
       // counting water meshes passes just as well with one hole, or none.
@@ -788,29 +764,26 @@ describe('Realm Racers procedural render', () => {
       // n + 2h - 2 triangles, the two bridge vertices per hole included. So the
       // lawn's own index count states BOTH how many holes it carries and how
       // many points each one has: neither can move without this moving.
-      for (const circuit of [DRY, GARDEN_CIRCUIT, FLIPPED]) {
-        const outlines = realmRacersWaterOutlines(circuit);
-        const holes = outlines.length;
+      for (const circuit of [DRY, ONE_POND, GARDEN_CIRCUIT]) {
+        const outlines = worldOutlines(circuit);
         const corners = 4;
         const points = outlines.reduce((sum, outline) => sum + outline.length, corners);
         const geo = lawnMesh(buildRealmRacersTrack(circuit).group).geometry;
         expect(geo.getIndex()?.count, `${circuit.id} lawn triangles`).toBe(
-          3 * (points + 2 * holes - 2),
+          3 * (points + 2 * outlines.length - 2),
         );
       }
       // ...and the three cases really are none, one and two holes, so the
       // identity above is not being satisfied three times by the same shape.
-      expect(realmRacersWaterOutlines(DRY)).toHaveLength(0);
-      expect(realmRacersWaterOutlines(GARDEN_CIRCUIT)).toHaveLength(1);
-      expect(realmRacersWaterOutlines(FLIPPED)).toHaveLength(2);
+      expect(worldOutlines(DRY)).toHaveLength(0);
+      expect(worldOutlines(ONE_POND)).toHaveLength(1);
+      expect(worldOutlines(GARDEN_CIRCUIT)).toHaveLength(2);
 
       // ...and the holes are in the right PLACES: no lawn triangle survives
-      // inside a water outline. A hole punched with the wrong polygon would
+      // inside a pond outline. A hole punched with the wrong polygon would
       // still change the count.
-      for (const circuit of [GARDEN_CIRCUIT, FLIPPED]) {
-        const outlines = realmRacersWaterOutlines(circuit).map((outline) =>
-          outline.map((point) => [point.x, point.z] as const),
-        );
+      for (const circuit of [ONE_POND, GARDEN_CIRCUIT]) {
+        const outlines = worldOutlines(circuit);
         const geo = lawnMesh(buildRealmRacersTrack(circuit).group).geometry;
         const position = geo.getAttribute('position');
         const index = geo.getIndex();
@@ -829,129 +802,47 @@ describe('Realm Racers procedural render', () => {
       }
     });
 
-    it('draws a PLACED pond through the same machinery, hole, reeds and all', async () => {
-      // A pond is water the author put somewhere, not water derived from the
-      // road's own offset curve, and that is the whole point: the shape of the
-      // authoring is what was wrong, never the water. So it goes through the
-      // shore's own ring builder, its own material and its own lawn hole, and
-      // the only thing it answers differently is how deep it is, because the
-      // road's bank profile says nothing about a pond fifty yards away.
-      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-      const PONDS: RealmRacersCircuit = {
-        ...DRY,
-        id: 'render_ponds',
-        basin: GARDEN_CIRCUIT.basin,
-        ponds: [
-          { x: -4, z: 4, rx: 22, rz: 13, wobble: 0.2, seed: 1 },
-          { x: 46, z: -6, rx: 9, rz: 7, seed: 2 },
-        ],
-      };
-      const group = buildRealmRacersTrack(PONDS).group;
-      // Two sheets, no shore lobe at all: this circuit's shore is entirely dry.
-      const sheets = waterMeshes(group);
-      expect(sheets).toHaveLength(2);
-      expect(new Set(sheets.map((mesh) => mesh.material)).size).toBe(1);
-      // Real depth in the middle of each, ramping from a zero shore.
-      for (const mesh of rallyPondMeshes(PONDS)) {
-        expect(Math.max(...Array.from(mesh.depths))).toBeGreaterThan(1);
-        expect(Math.min(...Array.from(mesh.depths))).toBe(0);
-      }
-      // The lawn opens under both, and only under both.
-      const outlines = realmRacersPlacedPonds(PONDS).map((pond) =>
-        pond.outline.map(
-          (point) => [point.x + REALM_RACERS_ORIGIN.x, point.z + REALM_RACERS_ORIGIN.z] as const,
-        ),
-      );
-      const points = outlines.reduce((sum, outline) => sum + outline.length, 4);
-      const geo = lawnMesh(group).geometry;
-      expect(geo.getIndex()?.count).toBe(3 * (points + 2 * outlines.length - 2));
-      const position = geo.getAttribute('position');
-      const index = geo.getIndex();
-      if (!index) throw new Error('the lawn is an indexed ShapeGeometry');
-      let over = 0;
-      for (let t = 0; t < index.count; t += 3) {
-        let cx = 0;
-        let cz = 0;
-        for (let k = 0; k < 3; k++) {
-          cx += position.getX(index.getX(t + k)) / 3;
-          cz += position.getZ(index.getX(t + k)) / 3;
-        }
-        if (outlines.some((outline) => pointInPolygon(cx, cz, outline))) over++;
-      }
-      expect(over, 'lawn triangles over a pond').toBe(0);
-      // ...and the banks are planted, so a pond does not read as a painted
-      // puddle beside a lake that has reeds.
-      expect(rallyPondReedSpots(PONDS).length).toBeGreaterThan(10);
-      expect(rallyPondReedSpots(DRY)).toEqual([]);
-    });
-
     it('sinks the water below the lawn, which is what masks the shore seam', async () => {
-      // The lobes are triangulated rings, so a ring edge can sit a hair outside
+      // The pools are triangulated rings, so a ring edge can sit a hair outside
       // the hole it fills. That is invisible only while the water sheet is
       // BELOW the lawn: level with it, every ring would show a lip of surface
       // lying on the grass. Both heights read off the real build rather than
       // off a copy of the builder's constants.
       const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-      for (const circuit of [GARDEN_CIRCUIT, FLIPPED]) {
+      for (const circuit of [GARDEN_CIRCUIT, ONE_POND]) {
         const group = buildRealmRacersTrack(circuit).group;
         const lawnY = lawnMesh(group).geometry.getAttribute('position').getY(0);
-        const lobes = waterMeshes(group);
-        expect(lobes.length).toBeGreaterThan(0);
-        for (const lobe of lobes) {
-          expect(lobe.position.y, `${circuit.id} water under lawn`).toBeLessThan(lawnY);
+        const pools = waterMeshes(group);
+        expect(pools.length).toBeGreaterThan(0);
+        for (const pool of pools) {
+          expect(pool.position.y, `${circuit.id} water under lawn`).toBeLessThan(lawnY);
         }
       }
     });
 
-    it('never builds a degenerate lobe out of a two-yard shore span', () => {
-      // A one-cell water span is paintable in the editor (the brush snaps to
-      // 0.005 of a lap), and it reaches the mesh builder as an outline of two
-      // or three points: neither a ring to lerp toward a middle, nor something
-      // the authored one-in-four stride can thin any further.
-      const sliver: RealmRacersCircuit = {
-        ...GARDEN_CIRCUIT,
-        id: 'render_water_sliver',
-        waterBands: [
-          { s: 0, kind: 'dry' },
-          { s: 0.5, kind: 'water' },
-          { s: 0.505, kind: 'dry' },
-        ],
+    it('never builds a degenerate ring out of the smallest pond authorable', () => {
+      // The record's validator takes a radius down to half a yard, which is a
+      // puddle: it still has to reach the mesh builder as a ring rather than as
+      // a shard that indexes cleanly and renders as one.
+      const puddle: RealmRacersCircuit = {
+        ...ONE_POND,
+        id: 'render_pond_puddle',
+        ponds: [{ x: -4, z: 4, rx: 0.5, rz: 0.5, seed: 3 }],
       };
-      const outlines = realmRacersWaterOutlines(sliver);
-      expect(outlines).toHaveLength(1);
-      expect(outlines[0].length).toBeLessThan(4);
-      // Either it is skipped or it is a real ring: never a mesh with fewer
-      // columns than a triangle, which indexes cleanly and renders as a shard.
-      for (const mesh of rallyBasinMeshes(sliver)) {
-        expect(mesh.columns).toBeGreaterThanOrEqual(3);
-        expect(mesh.depths.length).toBe(mesh.columns * (mesh.rings + 1) + 1);
-      }
-      // ...and a slightly longer span really does build one, so the guard above
-      // is a floor rather than a way of skipping every short span.
-      const short: RealmRacersCircuit = {
-        ...sliver,
-        id: 'render_water_short_span',
-        waterBands: [
-          { s: 0, kind: 'dry' },
-          { s: 0.5, kind: 'water' },
-          { s: 0.53, kind: 'dry' },
-        ],
-      };
-      const built = rallyBasinMeshes(short);
+      const built = rallyPondMeshes(puddle);
       expect(built).toHaveLength(1);
       expect(built[0].columns).toBeGreaterThanOrEqual(3);
+      expect(built[0].depths.length).toBe(built[0].columns * (built[0].rings + 1) + 1);
     });
 
-    it('mints its water per build on a circuit with TWO lobes', async () => {
-      // The packet-19 sweep runs on the all-water practice circuit, where there
-      // is one lobe: the per-lobe water is outside what it covers.
+    it('mints its water per build on a circuit with TWO pools', async () => {
       const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-      const first = buildRealmRacersTrack(FLIPPED);
-      const second = buildRealmRacersTrack(FLIPPED);
+      const first = buildRealmRacersTrack(GARDEN_CIRCUIT);
+      const second = buildRealmRacersTrack(GARDEN_CIRCUIT);
       const waterA = waterMeshes(first.group).map((mesh) => mesh.geometry);
       const waterB = waterMeshes(second.group).map((mesh) => mesh.geometry);
       expect(waterA).toHaveLength(2);
-      // Every lobe's sheet is FRESH, which is what makes disposing it correct.
+      // Every pool's sheet is FRESH, which is what makes disposing it correct.
       const owned = new Set(waterA);
       for (const geometry of waterB) expect(owned.has(geometry)).toBe(false);
       // ...and every instanced geometry is still BORROWED.

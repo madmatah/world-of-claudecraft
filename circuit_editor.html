@@ -63,10 +63,13 @@
     .field input { width: 110px; }
     #brushLabel.off { color: #4b5268; }
     #brushLabel.off input { opacity: 0.4; }
-    /* An id rule with a display outranks the UA's [hidden] { display: none },
-       so the barrier picker needs the same guard #preview and #empty take. */
-    #waterLabel { display: inline; }
-    #waterLabel[hidden] { display: none; }
+    .palette-list { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .palette-list button { padding: 2px 6px; }
+    #paletteAllLabel { display: block; color: #9aa3b5; margin-bottom: 8px; }
+    #paletteAllLabel[hidden] { display: none; }
+    #inspector { border-top: 1px solid #2c3040; margin-top: 8px; padding-top: 6px; }
+    #inspector button { margin-bottom: 4px; width: 100%; }
+    #inspector .d { color: #6f7890; margin-bottom: 5px; }
     footer { padding: 6px 12px; background: #1b1e27; border-top: 1px solid #2c3040; color: #6f7890; }
     kbd { background: #262b38; border: 1px solid #3a4054; border-radius: 3px; padding: 0 4px; }
     dialog { background: #1b1e27; color: #d7dae2; border: 1px solid #3a4054; border-radius: 8px; padding: 16px; font: inherit; min-width: 280px; }
@@ -89,17 +92,8 @@
     <button type="button" id="modeDraw">Draw</button>
     <button type="button" id="modeHandles">Handles</button>
     <button type="button" id="modeWidth">Width</button>
-    <button type="button" id="modeApron">Apron</button>
-    <button type="button" id="modeWater" title="Paint where the shore line carries water: pond, or open lawn">Water</button>
+    <button type="button" id="modeProps" title="Place the circuit's scenery: props, seeded scatters and decorative ponds">Props</button>
     <label id="brushLabel">brush <input type="number" id="brush" min="0.5" max="40" step="0.5" value="10" style="width:70px" /></label>
-    <!-- The water brush paints a KIND, not a number, so it gets its own
-         control rather than a numeric field with a legend nobody can read. -->
-    <label id="waterLabel" hidden>shore line
-      <select id="waterKind">
-        <option value="water">pond</option>
-        <option value="dry">lawn</option>
-      </select>
-    </label>
     <span class="grow"></span>
     <button type="button" id="undoBtn">Undo</button>
     <button type="button" id="fitBtn">Fit view</button>
@@ -132,13 +126,18 @@
       <!-- The readout is rebuilt on every drag; the record form is built once
            and only has its values written back, so an input keeps focus and a
            half-typed number is never overwritten mid-keystroke. -->
+      <!-- The palette is above the readout because in Props mode it is what
+           the operator is aiming with, and the readout is what they check
+           afterwards. Hidden in every other mode. -->
+      <div id="palette" hidden></div>
+      <label id="paletteAllLabel" hidden><input type="checkbox" id="paletteAll" /> show the whole catalog</label>
       <div id="readout"></div>
       <div id="form"></div>
     </div>
   </main>
   <footer>
     <span id="hint"></span>
-    <kbd>wheel</kbd> zoom, <kbd>middle drag</kbd> pan, <kbd>ctrl+Z</kbd> undo, <kbd>del</kbd> delete selection
+    <kbd>wheel</kbd> zoom, <kbd>middle drag</kbd> pan, <kbd>ctrl+Z</kbd> undo, <kbd>del</kbd> delete selection, <kbd>R</kbd>/<kbd>+</kbd>/<kbd>-</kbd>/<kbd>C</kbd> turn, size and collide a prop
   </footer>
   <dialog id="loadDialog">
     <h3>Load a circuit</h3>

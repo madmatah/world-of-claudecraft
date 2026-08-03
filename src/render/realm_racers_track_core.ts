@@ -21,14 +21,7 @@ import {
   REALM_RACERS_ORIGIN,
 } from '../sim/realm_racers_layout';
 import { realmRacersPlacedPonds } from '../sim/realm_racers_props_resolve';
-import {
-  rallyBankDepthAt,
-  rallyGardenEdgeOffsetAt,
-  rallyShoreOffsetAt,
-  rallyWaterKindAt,
-  realmRacersTrack,
-  realmRacersWaterOutlines,
-} from '../sim/realm_racers_spline';
+import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../sim/realm_racers_spline';
 import { hash2 } from '../sim/rng';
 import { TICK_RATE } from '../sim/types';
 import type { RealmRacersPhase } from '../world_api/realm_racers';
@@ -480,54 +473,18 @@ export interface RallyBasinMesh {
 }
 
 /**
- * The basin's water surfaces, one per contiguous SHORE span, as concentric
- * rings lerped from that span's shore toward the middle of the lobe it closes.
- * A circuit whose shore line carries no water at all gets none.
+ * The ponds' water surfaces, one per pond, as concentric rings lerped from the
+ * pond's own outline toward its middle.
  *
  * A triangulated outline polygon would be simpler and is not usable: every one
- * of its vertices sits ON the shore, so the per-vertex shore depth the water
+ * of its vertices sits ON the edge, so the per-vertex shore depth the water
  * shader reads would be zero everywhere. The whole surface would render as the
  * shallowest possible water, with the foam band covering all of it. Rings put
  * real vertices in the middle, which is where the depth has to be.
  *
- * Depth comes from the sim's own BANK PROFILE, so the water a racer sees is
- * exactly the ramp the sim measures. The profile rather than
- * `rallyBasinDepthAt`: every vertex here is inside a lobe by construction, and
- * one out in the middle of one can be nearest to the DRY stretch across the
- * strip, where the water question answers zero and the ramp still runs.
- */
-export function rallyBasinMeshes(circuit: RealmRacersCircuit): RallyBasinMesh[] {
-  const out: RallyBasinMesh[] = [];
-  for (const outline of realmRacersWaterOutlines(circuit)) {
-    // Two or fewer points is not a ring to lerp toward a middle at all: a span
-    // that short is a sliver of water nobody can see, and skipping it is what
-    // keeps the mesh builder from having to mean anything by a degenerate one.
-    if (outline.length < 3) continue;
-    // A short span cannot spare one shore point in four and still be a ring, so
-    // the stride tightens for it. The full-lap outline every all-shore circuit
-    // derives is hundreds of points long and keeps the authored stride exactly.
-    const stride = Math.min(BASIN_RING_STRIDE, Math.max(1, Math.floor(outline.length / 8)));
-    // The shore line's own bank profile, which is what the sim measures at the
-    // same point, so the drawn water and the measured water are one ramp. The
-    // shore ring reads exactly 0 by construction, so it is pinned rather than
-    // let the projection's polyline sagitta hand back a hair either way.
-    out.push(
-      basinMeshOf(outline, stride, (x, z, inward) =>
-        inward <= 0 ? 0 : Math.max(0, rallyBankDepthAt(circuit, x, z)),
-      ),
-    );
-  }
-  return out;
-}
-
-/**
- * The PLACED ponds' water surfaces, one per pond, through the same ring
- * machinery the shore lobes use.
- *
- * Their depth is the only thing that differs, and it has to: a pond stands
- * wherever the author put it, so the shore line's bank profile (an offset of
- * the ROAD) says nothing about how deep it is. It ramps in from its own outline
- * at the basin's authored slope instead, to the same floor.
+ * Depth ramps in from the outline at the basin's authored slope, to its floor.
+ * There is nothing else it could come from: a pond stands wherever the author
+ * put it, so the road's own offset curve says nothing about how deep it is.
  */
 export function rallyPondMeshes(circuit: RealmRacersCircuit): RallyBasinMesh[] {
   const basin = circuit.basin;
@@ -545,9 +502,10 @@ export function rallyPondMeshes(circuit: RealmRacersCircuit): RallyBasinMesh[] {
 }
 
 /**
- * Reed clumps around every placed pond's edge, on the same footing as the
- * shore's: they are what says there is water behind them, and a pond with a
- * bare rim reads as a painted puddle next to a lake that has one.
+ * Reed clumps around every pond's edge. They are what says there is water
+ * behind them, and a pond with a bare rim reads as a painted puddle: the shore
+ * used to be a stone rim and the reeds grew along its pieces, and with the rim
+ * gone they are the only thing marking where the lawn stops.
  */
 export function rallyPondReedSpots(
   circuit: RealmRacersCircuit,
@@ -637,39 +595,6 @@ function basinMeshOf(
     index.push(BASIN_RINGS * columns + col, middle, BASIN_RINGS * columns + next);
   }
   return { positions, depths, index, columns, rings: BASIN_RINGS };
-}
-
-/**
- * Reeds around the water's edge. The shore used to be a stone rim and the reeds
- * grew along its pieces; with the rim gone they are the only thing marking
- * where the lawn stops, so they follow the shore itself: the WATER spans of it,
- * and nothing else.
- */
-export function rallyReedSpots(
-  circuit: RealmRacersCircuit,
-): { x: number; z: number; rot: number; scale: number }[] {
-  const track = realmRacersTrack(circuit);
-  const out: { x: number; z: number; rot: number; scale: number }[] = [];
-  if (!circuit.basin) return out;
-  const steps = Math.round(track.length / REED_SPACING);
-  for (let i = 0; i < steps; i++) {
-    const s = (i / steps) * track.length;
-    // Reeds mark a WATERLINE, so they follow the water spans and stop where the
-    // shore runs dry: a reed bed on open lawn would be saying there is water
-    // behind it.
-    if (rallyWaterKindAt(circuit, s) !== 'water') continue;
-    const point = track.pointAt(s);
-    const offset = rallyShoreOffsetAt(circuit, s);
-    const roll = hash2(i, 0, 0x2ee6);
-    out.push({
-      x: point.x - point.tz * offset,
-      z: point.z + point.tx * offset,
-      // Along the shore, so a clump reads as a bank rather than a bristle.
-      rot: Math.atan2(point.tx, point.tz),
-      scale: 0.8 + roll * 0.5,
-    });
-  }
-  return out;
 }
 
 /**

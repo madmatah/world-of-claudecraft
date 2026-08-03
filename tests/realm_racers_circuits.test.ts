@@ -11,7 +11,6 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
-  RALLY_WATER_KINDS,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_CIRCUITS,
   REALM_RACERS_PRACTICE_CIRCUIT,
@@ -20,6 +19,7 @@ import {
   realmRacersCompetitionCircuits,
 } from '../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../src/sim/content/vehicles';
+import { polygonContainsPoint } from '../src/sim/geometry2d';
 import {
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
@@ -40,13 +40,14 @@ import {
   realmRacersPublicLane,
 } from '../src/sim/realm_racers_layout';
 import {
-  rallyBasinDepthAt,
-  rallyShoreOffsetAt,
-  rallyWaterKindAt,
+  realmRacersPlacedPonds,
+  realmRacersPlacements,
+} from '../src/sim/realm_racers_props_resolve';
+import {
+  rallyGardenEdgeOffsetAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
-  realmRacersWaterOutlines,
 } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
@@ -98,14 +99,12 @@ describe('Realm Racers circuits: the move preserved the garden circuit exactly',
     });
   });
 
-  it('derives the same road width and apron around the lap', () => {
+  it('derives the same road width around the lap', () => {
     const track = realmRacersTrack(GARDEN);
     const fractions = [0, 0.25, 0.5, 0.75];
     const widths = [10.5, 9.5, 10, 8.714285714285714];
-    const aprons = [15, 15, 15, 7.639026439213784];
     fractions.forEach((f, i) => {
       expect(track.halfWidthAt(f * track.length), `width at ${f}`).toBeCloseTo(widths[i], 12);
-      expect(track.apronAt(f * track.length), `apron at ${f}`).toBeCloseTo(aprons[i], 12);
     });
   });
 });
@@ -132,44 +131,19 @@ describe('Realm Racers circuits: every record is well formed', () => {
         );
       }
 
-      // An apron ceiling, where a circuit authors one, is the same band shape as
-      // the road width: sorted, spanning the whole lap, and a positive number of
-      // yards (a zero would delete the drivable garden rather than narrow it).
-      const apronBands = circuit.apronBands;
-      if (apronBands) {
-        expect(apronBands.length).toBeGreaterThan(0);
-        expect(apronBands[0].s).toBe(0);
-        expect(apronBands[apronBands.length - 1].s).toBe(1);
-        for (let i = 1; i < apronBands.length; i++) {
-          expect(apronBands[i].s, `apron band ${i} of ${circuit.id}`).toBeGreaterThan(
-            apronBands[i - 1].s,
-          );
-        }
-        for (const band of apronBands) {
-          expect(band.maxApron, `apron band at s=${band.s}`).toBeGreaterThan(0);
+      // A pond is MADE of water, so a circuit placing one has to author a
+      // basin, and a circuit placing none may author none. The record's rule is
+      // an IFF and both halves are checked: a basin nothing is made of
+      // re-exports as a literal the next reader takes for a lake.
+      expect(Boolean(circuit.basin), `${circuit.id} basin`).toBe((circuit.ponds?.length ?? 0) > 0);
+      for (const [i, pond] of (circuit.ponds ?? []).entries()) {
+        expect(pond.rx, `pond ${i} of ${circuit.id}`).toBeGreaterThan(0);
+        expect(pond.rz, `pond ${i} of ${circuit.id}`).toBeGreaterThan(0);
+        if (pond.wobble !== undefined) {
+          expect(pond.wobble, `pond ${i} of ${circuit.id}`).toBeGreaterThanOrEqual(0);
+          expect(pond.wobble, `pond ${i} of ${circuit.id}`).toBeLessThanOrEqual(0.35);
         }
       }
-
-      // The water table, where a circuit authors one, is STEPWISE rather than
-      // interpolated: sorted, first entry at 0, every entry in [0, 1) because
-      // an entry at 1 would open a span of zero length, and every kind one the
-      // spline knows how to stand on the line.
-      const waterBands = circuit.waterBands;
-      if (waterBands) {
-        expect(waterBands.length).toBeGreaterThan(0);
-        expect(waterBands[0].s).toBe(0);
-        for (let i = 0; i < waterBands.length; i++) {
-          const band = waterBands[i];
-          expect(band.s, `water band ${i} of ${circuit.id}`).toBeGreaterThanOrEqual(0);
-          expect(band.s, `water band ${i} of ${circuit.id}`).toBeLessThan(1);
-          if (i > 0) expect(band.s).toBeGreaterThan(waterBands[i - 1].s);
-          expect(RALLY_WATER_KINDS, `water band ${i} of ${circuit.id}`).toContain(band.kind);
-        }
-      }
-      // A pond is MADE of water, so a circuit authoring one has to author a
-      // basin; a circuit whose whole shore is dry may author none.
-      const anyWater = !waterBands || waterBands.some((band) => band.kind === 'water');
-      if (anyWater) expect(circuit.basin, `${circuit.id} basin`).toBeDefined();
 
       // The race has to be finishable, and the region has to contain the wall.
       expect(circuit.laps).toBeGreaterThan(0);
@@ -309,72 +283,96 @@ describe('Realm Racers circuits: the Express Tour pinch strip', () => {
   if (!EXPRESS) throw new Error('the Express Tour is the competition circuit this pins');
   const track = realmRacersTrack(EXPRESS);
 
-  it('keeps the strip its two stretches flank as open LAWN on both sides', () => {
-    // The design outcome, not the table: the two facing stretches are both dry,
-    // so the corridor between them is one piece of lawn rather than a canal
-    // eleven yards wide. It carried two knee-high hedges for one shipped
-    // revision, when a solid line either side was what stopped anyone crossing;
-    // the referee does that now, so nothing stands there.
+  it('keeps the strip its two stretches flank as open LAWN, with no water near it', () => {
+    // The design outcome, not the authoring: the corridor between the two
+    // facing stretches is one piece of lawn rather than a canal eleven yards
+    // wide. It carried two knee-high hedges for one shipped revision, when a
+    // solid line either side was what stopped anyone crossing, and then two
+    // rows of a water table whose only job was painting the strip dry. Placed
+    // water needs neither, so what this checks is the strip itself.
     const metrics = realmRacersCircuitMetrics(EXPRESS);
-    // The measured strip, not a floor: shortening either span, or moving one off
-    // the stretch it faces, moves this.
-    expect(metrics.sharedDryYards).toBeCloseTo(42, 0);
-    // Every yard the two stretches can shoot across is a yard both of them keep
-    // dry: the corridor and the lawn are the same strip.
-    expect(metrics.sharedDryYards).toBe(metrics.shootingCorridorYards);
     expect(metrics.shootingCorridorYards).toBeGreaterThan(30);
-    const dry = track.samples.filter((sample) => rallyWaterKindAt(EXPRESS, sample.s) === 'dry');
-    expect(dry.length).toBeGreaterThan(80);
-    expect(new Set(track.samples.map((sample) => rallyWaterKindAt(EXPRESS, sample.s)))).toEqual(
-      new Set(['water', 'dry']),
-    );
-  });
-
-  it('draws two water lobes with dry ground between them', () => {
-    // Two dry spans cut the ring in two, so the lake is two ponds closed off
-    // across the two mouths of the strip. That IS the corridor staying lawn.
-    const outlines = realmRacersWaterOutlines(EXPRESS);
-    expect(outlines).toHaveLength(2);
-    for (const outline of outlines) expect(outline.length).toBeGreaterThan(100);
-    // ...and the strip really is DRIVABLE, which is the whole point of 16b: a
-    // machine crossing it meets nothing, and the referee is what returns it.
+    // The strip itself, walked: for every sample of one facing stretch, the
+    // straight line across to the nearest sample of the other one crosses no
+    // water at any point. That is what "you can see and shell a rival across
+    // it" means, and it is the claim the two deleted `waterBands` rows used to
+    // buy by painting this stretch of the ribbon away.
+    const local = (sample: { x: number; z: number }) => ({
+      x: sample.x - REALM_RACERS_ORIGIN.x,
+      z: sample.z - REALM_RACERS_ORIGIN.z,
+    });
+    const inWindow = (sample: { s: number }, from: number, to: number): boolean =>
+      sample.s / track.length >= from && sample.s / track.length <= to;
+    const near = track.samples.filter((sample) => inWindow(sample, 0.15, 0.22));
+    const far = track.samples.filter((sample) => inWindow(sample, 0.42, 0.49));
+    expect(near.length).toBeGreaterThan(40);
+    expect(far.length).toBeGreaterThan(40);
+    const ponds = realmRacersPlacedPonds(EXPRESS);
     let probed = 0;
-    for (const sample of track.samples) {
-      if (rallyWaterKindAt(EXPRESS, sample.s) !== 'dry') continue;
-      const offset = rallyShoreOffsetAt(EXPRESS, sample.s) + 4;
-      const x = sample.x - sample.tz * offset;
-      const z = sample.z + sample.tx * offset;
-      expect(rallyBasinDepthAt(EXPRESS, x, z)).toBe(0);
-      probed++;
+    for (const sample of near) {
+      const a = local(sample);
+      let closest = local(far[0]);
+      let best = Number.POSITIVE_INFINITY;
+      for (const other of far) {
+        const b = local(other);
+        const distance = Math.hypot(b.x - a.x, b.z - a.z);
+        if (distance < best) {
+          best = distance;
+          closest = b;
+        }
+      }
+      for (let step = 0; step <= 20; step++) {
+        const t = step / 20;
+        const x = a.x + (closest.x - a.x) * t;
+        const z = a.z + (closest.z - a.z) * t;
+        for (const pond of ponds) {
+          expect(
+            polygonContainsPoint(pond.outline, x, z),
+            `across from ${sample.s.toFixed(0)}`,
+          ).toBe(false);
+        }
+        probed++;
+      }
     }
-    expect(probed).toBeGreaterThan(80);
+    expect(probed).toBeGreaterThan(800);
   });
 
-  it('kept the strip without reshaping the circuit', () => {
-    // The water table is what changed, and only that: the shore line is derived
+  it('places two pools, both of them clear of the racing surface', () => {
+    const ponds = realmRacersPlacedPonds(EXPRESS);
+    expect(ponds).toHaveLength(2);
+    for (const pond of ponds) expect(pond.outline.length).toBeGreaterThan(16);
+    expect(realmRacersCircuitErrors(realmRacersCircuitMetrics(EXPRESS))).toEqual([]);
+  });
+
+  it('put the water where it is without reshaping the circuit', () => {
+    // The dressing is what changed, and only that: the shore line is derived
     // from the control points and the apron rule, both untouched, so the two
-    // stretches faced each other at this distance before the ponds were split.
-    const before = { ...EXPRESS, id: 'express_before_the_split', waterBands: undefined };
-    const beforeMetrics = realmRacersCircuitMetrics(before);
+    // stretches face each other at exactly the distance they always did.
+    const bare = { ...EXPRESS, id: 'express_before_the_ponds', ponds: undefined, basin: undefined };
+    const bareMetrics = realmRacersCircuitMetrics(bare);
     const afterMetrics = realmRacersCircuitMetrics(EXPRESS);
-    expect(afterMetrics.lapLength).toBe(beforeMetrics.lapLength);
-    expect(afterMetrics.nearestApproach).toEqual(beforeMetrics.nearestApproach);
-    expect(afterMetrics.shootingCorridorYards).toBe(beforeMetrics.shootingCorridorYards);
-    for (const sample of realmRacersTrack(before).samples) {
-      expect(rallyShoreOffsetAt(EXPRESS, sample.s)).toBe(rallyShoreOffsetAt(before, sample.s));
+    expect(afterMetrics.lapLength).toBe(bareMetrics.lapLength);
+    expect(afterMetrics.nearestApproach).toEqual(bareMetrics.nearestApproach);
+    expect(afterMetrics.shootingCorridorYards).toBe(bareMetrics.shootingCorridorYards);
+    for (const sample of realmRacersTrack(bare).samples) {
+      expect(rallyGardenEdgeOffsetAt(EXPRESS, sample.s)).toBe(
+        rallyGardenEdgeOffsetAt(bare, sample.s),
+      );
     }
     expect(realmRacersCircuitErrors(afterMetrics)).toEqual([]);
-    // ...and the split is the only thing that moved: without it this circuit
-    // draws ONE lake, over the corridor as well.
-    expect(realmRacersWaterOutlines(before)).toHaveLength(1);
   });
 
-  it('leaves the practice circuit a lake circuit, untouched', () => {
-    // The other half of the acceptance: one content edit, one circuit.
-    expect(GARDEN.waterBands).toBeUndefined();
+  it('leaves the practice circuit a lake circuit, in two pools around its fountain', () => {
+    // The other half of the acceptance: the circuit a player learns on still
+    // reads as water in the middle, and the fountain still stands on ground.
+    const ponds = realmRacersPlacedPonds(GARDEN);
+    expect(ponds).toHaveLength(2);
     expect(GARDEN.basin).toBeDefined();
-    expect(realmRacersWaterOutlines(GARDEN)).toHaveLength(1);
-    expect(realmRacersCircuitMetrics(GARDEN).sharedDryYards).toBe(0);
+    const fountain = realmRacersPlacements(GARDEN).props[0];
+    expect(fountain.asset).toBe('fountain');
+    for (const pond of ponds) {
+      expect(polygonContainsPoint(pond.outline, fountain.x, fountain.z)).toBe(false);
+    }
   });
 });
 

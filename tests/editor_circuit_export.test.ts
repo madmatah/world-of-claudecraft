@@ -21,30 +21,20 @@ import {
 } from '../src/sim/content/realm_racers_circuits';
 import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
 
-/** The garden circuit under a draft id, plus an apron ceiling and a water
- *  table so both optional fields are exercised by the round trip rather than
- *  skipped by it. */
+/** The garden circuit under a draft id. It carries the two pools and the
+ *  fountain it ships with, so the dressing rides the round trip rather than
+ *  being skipped by it. */
 const DRAFT: RealmRacersCircuit = {
   ...GARDEN,
   id: 'draft_export_fixture',
-  apronBands: [
-    { s: 0, maxApron: 15 },
-    { s: 0.4, maxApron: 9 },
-    { s: 1, maxApron: 15 },
-  ],
-  waterBands: [
-    { s: 0, kind: 'water' },
-    { s: 0.3, kind: 'dry' },
-    { s: 0.4, kind: 'water' },
-  ],
 };
 
-/** A circuit with no water at all: every span dry and no basin. The round trip
- *  has to carry the ABSENCE of a field as carefully as its presence. */
+/** A circuit with no water at all: no pond and no basin. The round trip has to
+ *  carry the ABSENCE of a field as carefully as its presence. */
 const DRY: RealmRacersCircuit = {
   ...GARDEN,
   id: 'draft_export_dry',
-  waterBands: [{ s: 0, kind: 'dry' }],
+  ponds: undefined,
   basin: undefined,
 };
 
@@ -67,14 +57,13 @@ describe('circuit editor export: the pasteable literal', () => {
     const after = realmRacersCircuitMetrics({ ...parsed, id: 'export_after' });
     expect(after.lapLength).toBe(before.lapLength);
     expect(after.turningDegrees).toBe(before.turningDegrees);
-    expect(after.shoreOverlapYards).toBe(before.shoreOverlapYards);
     expect(after.nearestApproach).toEqual(before.nearestApproach);
   });
 
   it('round-trips a dry circuit, carrying the ABSENCE of a basin', () => {
     const text = circuitToTypeScript(DRY);
     expect(text).not.toContain('basin:');
-    expect(text).toContain("kind: 'dry'");
+    expect(text).not.toContain('ponds:');
     const parsed = circuitFromTypeScript(text);
     expect(parsed).toEqual(roundCircuit(DRY));
     expect(parsed?.basin).toBeUndefined();
@@ -145,15 +134,17 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(validateCircuitPayload(payload({ ...pondNoBasin, basin: GARDEN.basin }))).not.toBeNull();
   });
 
-  it('round-trips a circuit that authors no apron ceiling', () => {
-    const plain = { ...GARDEN, id: 'draft_no_apron' };
-    expect(plain.apronBands).toBeUndefined();
-    expect(plain.waterBands).toBeUndefined();
+  it('round-trips a circuit that authors no dressing at all', () => {
+    const plain = {
+      ...GARDEN,
+      id: 'draft_bare',
+      props: undefined,
+      ponds: undefined,
+      basin: undefined,
+    };
     const text = circuitToTypeScript(plain);
-    expect(text).not.toContain('apronBands');
-    // No water table either: an all-water circuit exports in the default shape
-    // rather than as a one-row table meaning the same thing.
-    expect(text).not.toContain('waterBands');
+    expect(text).not.toContain('props');
+    expect(text).not.toContain('ponds');
     expect(circuitFromTypeScript(text)).toEqual(roundCircuit(plain));
   });
 
@@ -267,51 +258,13 @@ describe('circuit editor export: the save endpoint validator', () => {
         { s: 1, halfWidth: 10 },
       ],
     ],
+    ['ponds: a radius of zero', 'ponds', [{ x: 0, z: 0, rx: 0, rz: 8 }]],
     [
-      'apronBands: unsorted',
-      'apronBands',
-      [
-        { s: 0, maxApron: 10 },
-        { s: 0.5, maxApron: 8 },
-        { s: 0.2, maxApron: 8 },
-        { s: 1, maxApron: 10 },
-      ],
+      'ponds: a wobble past what an outline can take',
+      'ponds',
+      [{ x: 0, z: 0, rx: 8, rz: 8, wobble: 0.9 }],
     ],
-    [
-      'apronBands: a zero ceiling',
-      'apronBands',
-      [
-        { s: 0, maxApron: 0 },
-        { s: 1, maxApron: 0 },
-      ],
-    ],
-    ['waterBands: not starting at the start line', 'waterBands', [{ s: 0.2, kind: 'dry' }]],
-    [
-      'waterBands: unsorted',
-      'waterBands',
-      [
-        { s: 0, kind: 'water' },
-        { s: 0.6, kind: 'dry' },
-        { s: 0.3, kind: 'water' },
-      ],
-    ],
-    [
-      'waterBands: an entry at the end of the lap',
-      'waterBands',
-      [
-        { s: 0, kind: 'water' },
-        { s: 1, kind: 'dry' },
-      ],
-    ],
-    [
-      'waterBands: a kind the spline does not know',
-      'waterBands',
-      [
-        { s: 0, kind: 'water' },
-        { s: 0.4, kind: 'moat' },
-      ],
-    ],
-    ['waterBands: empty', 'waterBands', []],
+    ['ponds: a centre off the band', 'ponds', [{ x: 99_999, z: 0, rx: 8, rz: 8 }]],
     ['laps: fractional', 'laps', 2.5],
     ['laps: zero', 'laps', 0],
     ['practiceCopies: negative', 'practiceCopies', -1],

@@ -16,7 +16,7 @@ import {
   rallyGateCrossingFraction,
 } from '../src/sim/realm_racers_layout';
 import {
-  rallyShoreOffsetAt,
+  rallyGardenEdgeOffsetAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
@@ -49,7 +49,7 @@ describe('Realm Racers recovery gates', () => {
       );
       // The crossing band stays well inside the water's edge, so a gate is
       // always something a racer crosses on drivable ground.
-      expect(gate.halfWidth).toBeLessThan(rallyShoreOffsetAt(GARDEN_CIRCUIT, gate.s));
+      expect(gate.halfWidth).toBeLessThan(rallyGardenEdgeOffsetAt(GARDEN_CIRCUIT, gate.s));
     }
   });
 

@@ -59,8 +59,6 @@ import {
 import {
   type RallyProjection,
   rallyForwardDot,
-  rallyShoreOffsetAt,
-  rallyWaterKindAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
@@ -145,12 +143,12 @@ export const REALM_RACERS_OFF_TRACK_AURA = 'realm_racers_soft_verge';
 
 /**
  * The off-track bands. Leaving the circuit costs time, in proportion to how far
- * out you are: the mown verge is a nudge, the garden beyond it is a real price,
- * and the basin's wading margin is the wall's replacement. All three are tuning
- * knobs, and all three are LOAD BEARING: together they are the only thing
- * making a cut across the infield slower than driving the road, so the sweep in
- * `tests/realm_racers_colliders.test.ts` pins every one of them against
- * `REALM_RACERS_APRON_RADIUS_FRACTION` and the wading margin.
+ * out you are: the mown verge is a nudge and the garden beyond it is a real
+ * price. Two knobs, and pure FEEL: they were the only thing making a cut across
+ * the infield slower than the road, back when a third (the basin's wading
+ * margin) stood behind them, and the referee in `realm_racers_track_limits.ts`
+ * does that job now. What they still have to hold is the ORDER, since further
+ * out being slower is what makes running wide legible.
  */
 export const REALM_RACERS_VERGE_BAND: RealmRacersSlowBand = {
   name: 'Soft Verge',
@@ -163,17 +161,6 @@ export const REALM_RACERS_GARDEN_BAND: RealmRacersSlowBand = {
   speedMult: 0.6,
   gripMult: 0.5,
   dragMult: 6,
-};
-/**
- * The third band: the basin's wading margin, the only water a racer can enter
- * at all. It is the harshest by a distance because it is the LAST thing between
- * the circuit and the shortcut across the middle, now that no wall is.
- */
-export const REALM_RACERS_WATER_BAND: RealmRacersSlowBand = {
-  name: 'Wading',
-  speedMult: 0.4,
-  gripMult: 0.35,
-  dragMult: 8,
 };
 /** Two racers within this many yards of each other are a dead heat. */
 export const REALM_RACERS_DEAD_HEAT_YARDS = 0.5;
@@ -1319,12 +1306,12 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
  * stop on the whole circuit, and everything inside it is drivable at a price.
  * Returns null while the racer is still on the road.
  *
- * Water is a band like the others, just the harshest, and a racer may now drive
- * as far into a pond as they like: the wading margin used to be the last thing
- * between the circuit and a shortcut across the middle, and the referee
- * (`realm_racers_track_limits.ts`) is what does that job now. The three bands
- * are therefore pure FEEL: no fairness argument rests on their values any more,
- * only the ordering (further out is slower) that makes running wide legible.
+ * There were three bands and there are two: the wading margin was the last
+ * thing between the circuit and a shortcut across the middle, the referee
+ * (`realm_racers_track_limits.ts`) does that job now, and water is decoration a
+ * machine drives straight through. Both bands are therefore pure FEEL: no
+ * fairness argument rests on their values any more, only the ordering (further
+ * out is slower) that makes running wide legible.
  */
 export function realmRacersOffTrackBand(
   circuit: RealmRacersCircuit,
@@ -1338,15 +1325,9 @@ export function realmRacersOffTrackBand(
   if (over <= REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH) {
     return REALM_RACERS_VERGE_BAND;
   }
-  // Outward is garden all the way to the wall on every circuit. Inward it is
-  // garden as far as the shore line, and water past it wherever the circuit
-  // authored a pond there.
-  if (
-    projection.lateral > rallyShoreOffsetAt(circuit, projection.s) &&
-    rallyWaterKindAt(circuit, projection.s) === 'water'
-  ) {
-    return REALM_RACERS_WATER_BAND;
-  }
+  // Garden all the way to the wall, both ways. A pond is decoration a machine
+  // drives through: it used to be a third, harsher band, back when how deep the
+  // water got was the only thing keeping anyone out of the infield.
   return REALM_RACERS_GARDEN_BAND;
 }
 
@@ -1445,14 +1426,11 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
     const projection = reproject(match, pid, racer);
     const band = realmRacersOffTrackBand(circuit, projection);
     // Deed-tracking only: the soft verge is a normal racing-line overshoot
-    // (every apex clips it), so only the garden and the wading margin beyond
-    // it count as really leaving the circuit. Gated on still racing, same as
-    // the rival-contact flag above: a finished pilot wandering the post-race
-    // tableau does not retroactively lose a clean run.
-    if (
-      progress.finishedTick === null &&
-      (band === REALM_RACERS_GARDEN_BAND || band === REALM_RACERS_WATER_BAND)
-    ) {
+    // (every apex clips it), so only the garden beyond it counts as really
+    // leaving the circuit. Gated on still racing, same as the rival-contact
+    // flag above: a finished pilot wandering the post-race tableau does not
+    // retroactively lose a clean run.
+    if (progress.finishedTick === null && band === REALM_RACERS_GARDEN_BAND) {
       progress.hadOffTrackContact = true;
     }
     const forwardDot = rallyForwardDot(projection, Math.sin(racer.facing), Math.cos(racer.facing));
