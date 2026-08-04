@@ -76,9 +76,9 @@ export function rotateStep(rotY: number, deltaY: number): number {
  * slider bounds, rounded to 2 decimals so repeated ticks stay tidy.
  * Scrolling up (negative deltaY) grows the placement.
  */
-export function scaleStep(scale: number, deltaY: number): number {
+export function scaleStep(scale: number, deltaY: number, max = PLACEMENT_SCALE_MAX): number {
   const next = deltaY > 0 ? scale / SCALE_WHEEL_FACTOR : scale * SCALE_WHEEL_FACTOR;
-  const clamped = Math.min(PLACEMENT_SCALE_MAX, Math.max(PLACEMENT_SCALE_MIN, next));
+  const clamped = Math.min(max, Math.max(PLACEMENT_SCALE_MIN, next));
   return Math.round(clamped * 100) / 100;
 }
 

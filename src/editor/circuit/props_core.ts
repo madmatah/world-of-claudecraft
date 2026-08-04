@@ -37,7 +37,6 @@ import {
   NUDGE_STEP_YD,
   type NudgeKey,
   nudgeDelta,
-  PLACEMENT_SCALE_MAX,
   PLACEMENT_SCALE_MIN,
   ROTATE_STEP_RAD,
   rotateStep,
@@ -218,22 +217,30 @@ export function tangentProp(prop: RallyProp): RallyProp {
   return { ...prop, yaw: 'tangent' };
 }
 
-/** One scale tick, clamped to the shared placement bounds. */
+/** The circuit tool's own scale ceiling, deliberately far above the map
+ *  editor's shared PLACEMENT_SCALE_MAX of 5: the promoted kit pieces (the hex
+ *  and kmed buildings) are authored around a yard at scale 1 and the zones
+ *  themselves seat them at 7 to 11, so a circuit needs building-sized scales
+ *  the map editor's furniture never does. The export validator has accepted
+ *  up to 50 all along; this lifts the interactive clamp to the same ceiling. */
+export const RALLY_PLACEMENT_SCALE_MAX = 50;
+
+/** One scale tick, clamped to the circuit tool's own bounds. */
 export function scaledProp(prop: RallyProp, deltaY: number): RallyProp {
-  const scale = scaleStep(prop.scale ?? 1, deltaY);
+  const scale = scaleStep(prop.scale ?? 1, deltaY, RALLY_PLACEMENT_SCALE_MAX);
   return { ...prop, scale };
 }
 
 /** Whether a scale is one the tool will author. */
 export function propScaleInRange(scale: number): boolean {
-  return scale >= PLACEMENT_SCALE_MIN && scale <= PLACEMENT_SCALE_MAX;
+  return scale >= PLACEMENT_SCALE_MIN && scale <= RALLY_PLACEMENT_SCALE_MAX;
 }
 
 /** A scale the tool will author, from one a gesture asked for. The same clamp
  *  and the same two decimals `scaleStep` lands on, so a dragged corner and a
  *  tapped `+` cannot leave the record in two different shapes. */
 export function clampPropScale(scale: number): number {
-  const clamped = Math.min(PLACEMENT_SCALE_MAX, Math.max(PLACEMENT_SCALE_MIN, scale));
+  const clamped = Math.min(RALLY_PLACEMENT_SCALE_MAX, Math.max(PLACEMENT_SCALE_MIN, scale));
   return Math.round(clamped * 100) / 100;
 }
 

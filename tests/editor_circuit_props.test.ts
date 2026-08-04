@@ -43,6 +43,7 @@ import {
   propPalette,
   propProjectionHint,
   propWithHandleAt,
+  RALLY_PLACEMENT_SCALE_MAX,
   removedAt,
   replacedAt,
   rotatedProp,
@@ -275,11 +276,14 @@ describe('circuit editor props: transforms', () => {
     expect(facing.yaw).toBeCloseTo(1.5 + Math.PI / 12, 6);
   });
 
-  it('scales within the shared placement bounds', () => {
+  it('scales within the circuit tool placement bounds', () => {
     expect(scaledProp(BENCH, -1).scale).toBeCloseTo(1.1, 6);
-    let big: RallyProp = { ...BENCH, scale: 5 };
+    // The ceiling is the circuit tool's own 50, not the map editor's 5:
+    // a kit building at scale 5 keeps growing under the wheel.
+    expect(scaledProp({ ...BENCH, scale: 5 }, -1).scale).toBeCloseTo(5.5, 6);
+    let big: RallyProp = { ...BENCH, scale: RALLY_PLACEMENT_SCALE_MAX };
     for (let i = 0; i < 5; i++) big = scaledProp(big, -1);
-    expect(big.scale).toBe(5);
+    expect(big.scale).toBe(RALLY_PLACEMENT_SCALE_MAX);
     let small: RallyProp = { ...BENCH, scale: 0.2 };
     for (let i = 0; i < 5; i++) small = scaledProp(small, 1);
     expect(small.scale).toBe(0.2);
@@ -415,13 +419,17 @@ describe('circuit editor props: the selected piece own grips', () => {
 
   it('clamps a corner drag to the bounds the inspector and the keypress share', () => {
     const placed = placedOn(GARDEN, BENCH);
-    expect(propWithHandleAt(BENCH, placed, 'scale', placed.x + 5_000, placed.z).scale).toBe(5);
+    expect(propWithHandleAt(BENCH, placed, 'scale', placed.x + 5_000, placed.z).scale).toBe(50);
     expect(propWithHandleAt(BENCH, placed, 'scale', placed.x, placed.z).scale).toBe(0.2);
     // Two decimals, the same tidying a `+` keypress lands on, so a dragged
     // corner and a tapped key cannot leave the record in two different shapes.
     expect(clampPropScale(1.2345)).toBe(1.23);
     expect(clampPropScale(-4)).toBe(0.2);
-    expect(clampPropScale(400)).toBe(5);
+    // The circuit tool's own ceiling: building-sized kit pieces need 7 to 11
+    // and up, and the export validator has accepted 50 all along. Pinned to
+    // the literal so a shared-bound refactor cannot silently re-bridle it.
+    expect(RALLY_PLACEMENT_SCALE_MAX).toBe(50);
+    expect(clampPropScale(400)).toBe(50);
   });
 
   it('leaves every other field of the piece alone', () => {

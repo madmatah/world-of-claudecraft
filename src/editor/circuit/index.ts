@@ -306,6 +306,7 @@ export {
   propProjectionHint,
   propScaleInRange,
   propWithHandleAt,
+  RALLY_PLACEMENT_SCALE_MAX,
   removedAt,
   replacedAt,
   rotatedProp,
