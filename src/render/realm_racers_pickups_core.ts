@@ -13,6 +13,10 @@
 // may be as cosmetic as it likes.
 //
 // It also owns the box's one COLOUR, which is deliberately NOT a theme entry.
+// (A box now wears the world's own supply crate, so in the game that colour is
+// what the FALLBACK body is painted when the model is not resolved; the editor
+// plan draws its rows in it either way, and both stay the same in every zone
+// for the reason below.)
 // Every other surface a circuit wears comes from `realm_racers_themes.ts` so a
 // zone can look like itself, and race FURNITURE is the exemption: a pickup box
 // has to read as a pickup box on the first lap of a circuit a player has never
@@ -24,8 +28,8 @@
 // Pure core: no three, no DOM, no i18n, no clock of its own (time and dt are
 // arguments).
 
-/** The box's body colour, as the renderer's material wants it. Race furniture,
- *  so it is the same in every zone: see the header. */
+/** The box's body colour, as the renderer's fallback material wants it. Race
+ *  furniture, so it is the same in every zone: see the header. */
 export const REALM_RACERS_PICKUP_COLOR = 0xf2c14a;
 /** The same colour as a canvas string, for the editor plan. */
 export const REALM_RACERS_PICKUP_COLOR_CSS = '#f2c14a';

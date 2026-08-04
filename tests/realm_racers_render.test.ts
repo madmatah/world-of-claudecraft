@@ -14,6 +14,7 @@ import {
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
 } from '../src/render/realm_racers_track_core';
+import { SPARKLE_BOOST } from '../src/render/sparkle_sprite';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
   REALM_RACERS_CIRCUIT_LIST,
@@ -24,7 +25,10 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
-import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
+import {
+  REALM_RACERS_PICKUP_BOX_HALF,
+  realmRacersPickupBoxes,
+} from '../src/sim/realm_racers_pickups';
 import {
   realmRacersPlacedPonds,
   realmRacersPlacedProps,
@@ -49,6 +53,9 @@ function mockTextures(): void {
     // The lawn's grass card comes from foliage.ts, which mints its own tuft
     // texture out of this module.
     grassTuftTexture: vi.fn(texture),
+    // The pickup boxes wear the world's own quest-object sparkle, which is a
+    // canvas texture out of this module too.
+    sparkleTexture: vi.fn(texture),
     // The circuit now dresses itself in the world's own ground material, so the
     // stub has to cover what THAT reads too.
     groundDetailTexture: vi.fn(texture),
@@ -1103,16 +1110,26 @@ describe('the pickup boxes, drawn', () => {
     view: {
       update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
     };
-    boxes: THREE.Mesh[];
+    /** One body per box: the crate plus its glint, animated as one object. */
+    boxes: THREE.Object3D[];
   }> {
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
     const view = buildRealmRacersTrack(GARDEN_CIRCUIT);
     const group = view.group.getObjectByName('realm-racers-pickups') as THREE.Group;
     expect(group).toBeDefined();
-    return { view, boxes: group.children as THREE.Mesh[] };
+    return { view, boxes: group.children };
   }
 
-  it('stands one mesh on every box the sim resolved', async () => {
+  /** Every mesh under one box's body, at whatever depth the crate nests them. */
+  function drawnMeshes(body: THREE.Object3D): THREE.Mesh[] {
+    const found: THREE.Mesh[] = [];
+    body.traverse((object) => {
+      if ((object as THREE.Mesh).isMesh) found.push(object as THREE.Mesh);
+    });
+    return found;
+  }
+
+  it('stands one body on every box the sim resolved', async () => {
     const { boxes } = await pickupsGroup();
     const resolved = realmRacersPickupBoxes(GARDEN_CIRCUIT);
     expect(resolved.length).toBeGreaterThan(0);
@@ -1188,6 +1205,126 @@ describe('the pickup boxes, drawn', () => {
       );
     }
     for (const mesh of boxes) expect(mesh.visible).toBe(true);
+  });
+
+  describe('and the crate they wear', () => {
+    /** What `normalizeRoot` hands every ground quest object: scaled to the
+     *  ground-object height and standing on y = 0. */
+    const QUEST_OBJECT_HEIGHT = 1.35;
+    /** The cube a crate is refitted into. Derived, not a literal: the size is a
+     *  seat-tuning knob, and this case is about the REFIT following it. */
+    const BOX_SIZE = REALM_RACERS_PICKUP_BOX_HALF * 2;
+
+    /**
+     * Stand in for `quest_objects.ts`, whose real model needs a GLB fetch this
+     * suite has no loader for.
+     *
+     * The fake is shaped like the real thing where it matters: ONE geometry
+     * behind every call (the module caches its prepared template and clones it,
+     * so the world's ground crates draw the same buffer), and a mesh sitting on
+     * y = 0 at the ground-object height.
+     */
+    function mockQuestObject(resolved: boolean): {
+      asked: string[];
+      shared: THREE.BufferGeometry;
+    } {
+      const shared = new THREE.BoxGeometry(0.9, QUEST_OBJECT_HEIGHT, 0.8);
+      const asked: string[] = [];
+      vi.doMock('../src/render/quest_objects', () => ({
+        buildGroundQuestObject: (itemId: string) => {
+          asked.push(itemId);
+          const group = new THREE.Group();
+          if (resolved) {
+            const mesh = new THREE.Mesh(shared, new THREE.MeshBasicMaterial());
+            mesh.position.y = QUEST_OBJECT_HEIGHT / 2;
+            group.add(mesh);
+          }
+          return { group, height: QUEST_OBJECT_HEIGHT };
+        },
+      }));
+      return { asked, shared };
+    }
+
+    afterEach(() => {
+      vi.doUnmock('../src/render/quest_objects');
+    });
+
+    it('cuts every box out of the world own supply crate', async () => {
+      const { asked, shared } = mockQuestObject(true);
+      const { boxes } = await pickupsGroup();
+      // The q_supplies crate, asked for ONCE for the whole build: a request per
+      // box would rebuild and refit the same model a dozen times a circuit.
+      expect(asked).toEqual(['supply_crate']);
+      for (const body of boxes) expect(drawnMeshes(body)).toHaveLength(1);
+      const first = drawnMeshes(boxes[0])[0];
+      // A COPY of the quest object's buffer, shared across this build's boxes.
+      // The track disposer frees the geometry of every plain mesh it walks, so
+      // drawing the cached one would take the world's own quest crates down
+      // with the next editor rebuild.
+      expect(first.geometry).not.toBe(shared);
+      for (const body of boxes) expect(drawnMeshes(body)[0].geometry).toBe(first.geometry);
+    });
+
+    it('refits the crate into the cube the catch radius is tuned against', async () => {
+      mockQuestObject(true);
+      const { boxes } = await pickupsGroup();
+      // Measured in the BOX's own frame, so this says nothing about where the
+      // lane put the body: the crate is centred on the box's point rather than
+      // standing on it, which is what makes the spin and the bob turn about the
+      // crate itself instead of swinging it around.
+      const probe = new THREE.Group();
+      probe.add(boxes[0].children[0].clone(true));
+      probe.updateMatrixWorld(true);
+      const bounds = new THREE.Box3().setFromObject(probe);
+      const span = bounds.getSize(new THREE.Vector3());
+      expect(Math.max(span.x, span.y, span.z)).toBeCloseTo(BOX_SIZE, 6);
+      const centre = bounds.getCenter(new THREE.Vector3());
+      expect(centre.x).toBeCloseTo(0, 6);
+      expect(centre.y).toBeCloseTo(0, 6);
+      expect(centre.z).toBeCloseTo(0, 6);
+    });
+
+    it('falls back to a solid box when the crate model is not resolved', async () => {
+      // A fetch that failed, or any host with no loader: a box is a thing a
+      // pilot steers at, so it is never nothing.
+      mockQuestObject(false);
+      const { view, boxes } = await pickupsGroup();
+      const here = REALM_RACERS_ORIGIN;
+      view.update(here.x, here.z, 1, matchOn(GARDEN_CIRCUIT.id, []));
+      expect(boxes.length).toBeGreaterThan(0);
+      const first = drawnMeshes(boxes[0])[0];
+      expect(first.geometry.type).toBe('BoxGeometry');
+      for (const body of boxes) {
+        expect(body.visible).toBe(true);
+        const drawn = drawnMeshes(body);
+        expect(drawn).toHaveLength(1);
+        expect(drawn[0].visible).toBe(true);
+        // One geometry per build here too, not one per box.
+        expect(drawn[0].geometry).toBe(first.geometry);
+      }
+    });
+
+    it('hangs the world own gold glint over every box, at full boost', async () => {
+      mockQuestObject(true);
+      const { boxes } = await pickupsGroup();
+      const sprites = boxes.map(
+        (body) =>
+          body.children.filter((child) => (child as THREE.Sprite).isSprite) as THREE.Sprite[],
+      );
+      for (const perBox of sprites) expect(perBox).toHaveLength(1);
+      // One material for the lot: it carries a canvas texture, and the editor
+      // rebuilds a whole circuit per edit.
+      const materials = new Set(sprites.map((perBox) => perBox[0].material));
+      expect(materials.size).toBe(1);
+      // Boosted whatever the tier: a glint a preset could dim is a box a pilot
+      // could miss, which is the race-furniture fairness rule.
+      const material = [...materials][0] as THREE.SpriteMaterial;
+      expect(material.color.r).toBeCloseTo(SPARKLE_BOOST, 6);
+      expect(material.map).not.toBeNull();
+      // And it pops WITH the box rather than hanging in the air after it: the
+      // glint is a child of the body the take animation writes.
+      expect(sprites[0][0].parent).toBe(boxes[0]);
+    });
   });
 
   describe('and the oil they leave behind', () => {

@@ -249,6 +249,8 @@ describe('Realm Racers grass', () => {
           rallyStartGridTexture: vi.fn(texture),
           flowerTuftTexture: vi.fn(texture),
           grassTuftTexture: vi.fn(texture),
+          // The pickup boxes wear the world's own quest-object sparkle.
+          sparkleTexture: vi.fn(texture),
           groundDetailTexture: vi.fn(texture),
           macroNoiseTexture: vi.fn(texture),
           groundSplatMaps: vi.fn(() => ({

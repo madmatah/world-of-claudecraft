@@ -43,9 +43,20 @@ export const REALM_RACERS_PICKUP_LANES = 4;
  */
 export const REALM_RACERS_PICKUP_SPREAD = 0.8;
 
-/** Half the box's own size, yards: what the renderer draws and what the readout
- *  measures against the road. */
-export const REALM_RACERS_PICKUP_BOX_HALF = 0.6;
+/**
+ * Half the box's own size, yards: what the renderer draws and what the readout
+ * measures against the road.
+ *
+ * Raised from 0.6 once a box wore the world's supply crate instead of a solid
+ * cube, because the crate read as a pebble at race speed. This is the sanctioned
+ * direction: the reach below is the number a machine is actually caught by, and
+ * closing the gap between what a box LOOKS like and what it CATCHES means
+ * growing the box, never shrinking the reach. The readout's own corner rule is
+ * what bounds it: on the tightest shipped row (the Express Tour's, whose outer
+ * boxes sit 1.6 yards inside the edge) a box this size still keeps about 0.7
+ * yards of road beyond its worst corner.
+ */
+export const REALM_RACERS_PICKUP_BOX_HALF = 0.9;
 
 /**
  * How close a machine's path has to pass a box's centre to take it, yards.

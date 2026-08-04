@@ -54,6 +54,8 @@ function mockTextures(): void {
     // The lawn's grass card comes from foliage.ts, which mints its own tuft
     // texture out of this module.
     grassTuftTexture: vi.fn(texture),
+    // The pickup boxes wear the world's own quest-object sparkle.
+    sparkleTexture: vi.fn(texture),
     groundDetailTexture: vi.fn(texture),
     macroNoiseTexture: vi.fn(texture),
     groundSplatMaps: vi.fn(() => ({

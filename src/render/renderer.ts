@@ -350,6 +350,7 @@ import {
   type SkyView,
 } from './sky';
 import { nearestSloppyPickId, type SloppyPickCandidate } from './sloppy_pick';
+import { sparkleSpriteMaterial } from './sparkle_sprite';
 import { freezeStaticMatrices, freezeStaticSubtreeMatrices } from './static_matrix';
 import { buildStationProps } from './stations';
 import { shouldRenderStealthGhost } from './stealth';
@@ -363,7 +364,6 @@ import {
 } from './temporal_hourglass_visual';
 import { buildTerrain, type TerrainView } from './terrain';
 import { uploadDataTextureInChunks } from './texture_upload';
-import { sparkleTexture } from './textures';
 import { targetIntensityFromValues } from './travel_speed_fx';
 import { TravelSpeedFxPainter } from './travel_speed_fx_painter';
 import {
@@ -560,7 +560,6 @@ for (const set of Object.values(ITEM_SETS)) {
   }
 }
 const CLICK_MARKER_POOL = 4; // concurrent click-feedback markers before reuse
-const SPARKLE_BOOST = 1.5;
 // Third-person camera obstruction is opacity-only. Anything registered as a
 // hideable crosses the eye-to-camera segment through the shared fade policy.
 // The requested chase-camera distance is never changed by scene geometry.
@@ -6932,14 +6931,7 @@ export class Renderer {
         e.templateId !== 'delve_locked_door' &&
         e.templateId !== 'delve_destructible_wall'
       ) {
-        if (!this.sparkleMat) {
-          this.sparkleMat = new THREE.SpriteMaterial({
-            map: sparkleTexture(),
-            transparent: true,
-            depthWrite: false,
-          });
-          if (!this.lowGfx) this.sparkleMat.color.setScalar(SPARKLE_BOOST);
-        }
+        if (!this.sparkleMat) this.sparkleMat = sparkleSpriteMaterial(!this.lowGfx);
         sparkle = new THREE.Sprite(this.sparkleMat);
         sparkle.scale.set(0.9, 0.9, 1);
         sparkle.position.y = 1.35;
@@ -6959,14 +6951,8 @@ export class Renderer {
         objectPoolKey = null;
       }
       objectMesh = body;
-      if (!this.sparkleMat) {
-        this.sparkleMat = new THREE.SpriteMaterial({
-          map: sparkleTexture(),
-          transparent: true,
-          depthWrite: false,
-        });
-        if (!this.lowGfx) this.sparkleMat.color.setScalar(SPARKLE_BOOST); // gold glint via bloom
-      }
+      // Gold glint via bloom, on the low tier without the boost.
+      if (!this.sparkleMat) this.sparkleMat = sparkleSpriteMaterial(!this.lowGfx);
       sparkle = new THREE.Sprite(this.sparkleMat);
       sparkle.scale.set(0.9, 0.9, 1);
       sparkle.position.y = 1.35;
