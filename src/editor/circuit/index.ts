@@ -24,6 +24,18 @@ export {
   draftResponse,
 } from './draft_endpoints_core';
 export {
+  DRAFT_SAVE_DEBOUNCE_MS,
+  DRAFT_STORAGE_KEY,
+  draftAgeText,
+  parseDraft,
+  parseThumbnailCache,
+  resumeOfferText,
+  type StoredDraft,
+  serializeDraft,
+  shouldWarnOnUnload,
+  THUMBNAIL_STORAGE_KEY,
+} from './draft_store_core';
+export {
   CHROME_ONLY_ICONS,
   EDITOR_ICONS,
   type EditorIconId,
@@ -99,6 +111,7 @@ export {
   type MenuId,
   MODE_ACTIONS,
   menuActions,
+  type PlacementMode,
   type PlanArea,
   PREVIEW_READY_TITLES,
   PROBLEM_LABELS,
@@ -135,6 +148,18 @@ export {
   zoomScale,
 } from './layout_core';
 export {
+  filterLibrary,
+  LIBRARY_ALL_CATEGORY,
+  LIBRARY_DEFAULT_CATEGORY,
+  LIBRARY_THEME_CATEGORY,
+  type LibraryCategory,
+  type LibraryFilter,
+  libraryCategories,
+  libraryCategoryExists,
+  libraryEmptyText,
+  librarySearchPlaceholder,
+} from './library_core';
+export {
   armStateText,
   CIRCUIT_ONLY_ACTIONS,
   MAX_LISTED_PROBLEMS,
@@ -147,15 +172,41 @@ export {
   type ReadoutSection,
 } from './panel_core';
 export {
+  ALONG_ROAD_MAX_PIECES,
+  ALONG_ROAD_MIN_SPACING,
+  type AlongRoadOptions,
+  type AlongRoadRun,
+  alongRoadProps,
+  lapPositionAt,
+  lateralAt,
+  type PendingYaw,
+  type PlacementLegality,
+  pendingYawText,
+  placementLegality,
+  pressWasDrag,
+  ROAD_EDGE_CLEARANCE,
+  ROAD_EDGE_SNAP_BAND,
+  resolveSnap,
+  rotatedPendingYaw,
+  SCATTER_MIN_SPACING,
+  type SnapKind,
+  type SnapOptions,
+  type SnapResult,
+  spacingFloor,
+  TILE_DRAG_SLOP,
+} from './placement_core';
+export {
   FIT_MARGIN_BLANK,
   FIT_MARGIN_DRAWN,
   fitHalfExtent,
   fitScale,
   HIT_TOLERANCE_PIXELS,
+  labelledPieces,
   PLAN_PALETTE_FALLBACK,
   PLAN_PALETTE_VARS,
   type PlanLimits,
   type PlanPaletteId,
+  PROP_LABEL_MIN_GAP,
   PROP_LABEL_MIN_SCALE,
   planLimits,
   resolvePlanPalette,
@@ -203,6 +254,7 @@ export {
   type DressingSelection,
   GHOST_ID_SUFFIX,
   ghostPlacement,
+  ghostRowPlacements,
   hitTestPlaced,
   hitTestPondHandle,
   hitTestPonds,
@@ -239,4 +291,16 @@ export {
   resampleClosed,
   type StrokeFitOptions,
 } from './stroke_fit_core';
+export {
+  THUMBNAIL_MARGIN,
+  THUMBNAIL_MIN_DISTANCE,
+  THUMBNAIL_PITCH,
+  THUMBNAIL_YAW,
+  type ThumbnailBounds,
+  type ThumbnailPoint,
+  type ThumbnailPose,
+  thumbnailBoundsUsable,
+  thumbnailOwnsGeometry,
+  thumbnailPose,
+} from './thumbnail_core';
 export { suggestWidthBands, type WidthFixResult } from './width_fix_core';

@@ -529,6 +529,25 @@ describe('the cursor ghost', () => {
     expect(realmRacersTrack(circuit)).toBe(before);
   });
 
+  it('carries the yaw the ghost is being turned to, before the piece exists', () => {
+    // `R` and `shift+R` aim at the GHOST, so the outline under the cursor has to
+    // be at the angle the drop will use. Without the argument the ghost showed
+    // the catalog default and the piece landed rotated, which is the one thing a
+    // ghost exists not to do.
+    const circuit = withProps(GARDEN, []);
+    const plain = ghostPlacement(circuit, 'bench', 40, 30);
+    const turned = ghostPlacement(circuit, 'bench', 40, 30, 1.2);
+    expect(turned?.yaw).toBeCloseTo(1.2, 6);
+    expect(turned?.yaw).not.toBeCloseTo(plain?.yaw ?? 0, 3);
+    // ...and the footprint turns with it, or the outline is a lie about the
+    // collision set.
+    expect(turned?.footprint).not.toEqual(plain?.footprint);
+    // `tangent` is a different KIND of answer: it re-reads the road there.
+    const tangent = ghostPlacement(circuit, 'bench', 40, 30, 'tangent');
+    expect(typeof tangent?.yaw).toBe('number');
+    expect(tangent?.yaw).not.toBeCloseTo(1.2, 3);
+  });
+
   it('draws nothing for a key the catalog does not author', () => {
     // Rather than silently drawing the previous piece's outline, which is what
     // taking the last placement unconditionally would do.

@@ -31,6 +31,7 @@ import {
   REALM_RACERS_VERGE_MARGIN,
 } from './realm_racers_layout';
 import {
+  type RallyPlacedProp,
   rallyFootprintRadius,
   realmRacersPlacedPonds,
   realmRacersPlacements,
@@ -495,15 +496,8 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
 
   for (const prop of placements.props) {
     const radius = rallyFootprintRadius(prop.footprint);
-    const projection = track.project(
-      prop.x + REALM_RACERS_ORIGIN.x,
-      prop.z + REALM_RACERS_ORIGIN.z,
-    );
-    const clear = Math.abs(projection.lateral) - radius;
-    const surface = rallyGardenEdgeOffsetAt(circuit, projection.s);
-    if (clear < surface) {
-      problem('prop_blocks_racing_surface', 'error', clear, surface, projection.s);
-    }
+    const { s, clear, surface, clearOfSurface } = realmRacersPropStanding(circuit, prop);
+    if (!clearOfSurface) problem('prop_blocks_racing_surface', 'error', clear, surface, s);
     if (Math.abs(prop.x) + radius > circuit.regionHalfX) {
       problem(
         'prop_outside_region',
@@ -527,8 +521,8 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     // Only a piece tall enough to swallow the boom: a bench beside the road is
     // scenery, a canopy over it is the frame going green.
     if (prop.height > REALM_RACERS_CAMERA_CANOPY_HEIGHT) {
-      const reach = track.halfWidthAt(projection.s) + REALM_RACERS_CAMERA_REACH;
-      if (clear < reach) problem('prop_in_camera_reach', 'warning', clear, reach, projection.s);
+      const reach = track.halfWidthAt(s) + REALM_RACERS_CAMERA_REACH;
+      if (clear < reach) problem('prop_in_camera_reach', 'warning', clear, reach, s);
     }
   }
 
@@ -591,6 +585,41 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
 }
 
 /** The errors only: what makes a circuit unauthorable, as opposed to tight. */
+/**
+ * Where one placed piece stands relative to the racing surface.
+ *
+ * Extracted so the ONE rule has one reader. The circuit editor tints a placement
+ * ghost red before the drop, and a tint derived from its own arithmetic would be
+ * a second copy of `prop_blocks_racing_surface` free to disagree with the readout
+ * the operator is about to be judged by. Behaviour is exactly the loop below's:
+ * the piece's own footprint radius against the garden edge at the lap position it
+ * projects to.
+ */
+export interface RealmRacersPropStanding {
+  /** Lap position it projects to, yards. */
+  s: number;
+  /** Lateral clearance from the centerline, less the footprint radius. */
+  clear: number;
+  /** The garden edge there: road plus verge plus run-off, the one boundary. */
+  surface: number;
+  clearOfSurface: boolean;
+}
+
+export function realmRacersPropStanding(
+  circuit: RealmRacersCircuit,
+  prop: RallyPlacedProp,
+): RealmRacersPropStanding {
+  const track = realmRacersTrack(circuit);
+  const projection = track.project(prop.x + REALM_RACERS_ORIGIN.x, prop.z + REALM_RACERS_ORIGIN.z);
+  const clear = Math.abs(projection.lateral) - rallyFootprintRadius(prop.footprint);
+  const surface = rallyGardenEdgeOffsetAt(circuit, projection.s);
+  // Spelled as the NEGATION of the loop's own `clear < surface` rather than as
+  // `clear >= surface`, which is the same thing for every real number and NOT
+  // the same for NaN: a malformed draft used to raise nothing here and would
+  // otherwise start raising a racing-surface error it has no business raising.
+  return { s: projection.s, clear, surface, clearOfSurface: !(clear < surface) };
+}
+
 export function realmRacersCircuitErrors(
   metrics: RealmRacersCircuitMetrics,
 ): readonly RealmRacersCircuitProblem[] {

@@ -20,6 +20,7 @@ import type {
   RallyScatter,
   RealmRacersCircuit,
 } from '../../sim/content/realm_racers_circuits';
+import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import { polygonContainsPoint } from '../../sim/geometry2d';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
 import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
@@ -292,16 +293,39 @@ export function ghostPlacement(
   asset: string,
   x: number,
   z: number,
+  yaw?: number | 'tangent',
 ): RallyPlacedProp | null {
   const pending: RallyProp = { asset, at: authorPlacement(circuit, x, z).at };
-  const props = [...(circuit.props ?? []), pending];
+  if (yaw !== undefined) pending.yaw = yaw;
+  const placed = ghostRowPlacements(circuit, [pending]);
+  return placed[placed.length - 1] ?? null;
+}
+
+/**
+ * Where a whole PENDING row would stand, through the same one resolver.
+ *
+ * The along-road gesture lays a dozen pieces at once and has to show them before
+ * the drop, which is the same problem the single ghost has and must not be a
+ * second answer to it: a preview that drew its own dots would be exactly the
+ * separate derivation `ghostPlacement` exists to refuse, only twelve times over.
+ */
+export function ghostRowPlacements(
+  circuit: RealmRacersCircuit,
+  pending: readonly RallyProp[],
+): RallyPlacedProp[] {
+  if (pending.length === 0) return [];
+  const standing = (circuit.props ?? []).length;
   const resolved = realmRacersPlacements({
     ...circuit,
-    props,
+    props: [...(circuit.props ?? []), ...pending],
     id: `${circuit.id}${GHOST_ID_SUFFIX}`,
   });
-  if (resolved.unknownAssets.includes(asset)) return null;
-  return resolved.props[resolved.props.length - 1] ?? null;
+  // Counted off the START of the pending block rather than taken as "the tail":
+  // the resolver SKIPS a catalog key nothing authors, so a row of an unknown key
+  // would otherwise hand back the circuit's own last props as the preview.
+  const known = placedPropIndices(circuit.props, REALM_RACERS_PROPS).length;
+  const before = Math.min(known, standing);
+  return resolved.props.slice(before);
 }
 
 /**

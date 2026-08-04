@@ -41,6 +41,21 @@ export type RailModeId = 'shape' | 'width' | 'props' | 'race';
 /** The gesture the canvas is actually routing, which SHAPE resolves into two. */
 export type CircuitTool = 'draw' | 'handles' | 'width' | 'props' | 'race';
 
+/**
+ * How the next dressing gesture lays what is armed.
+ *
+ * Three because they are three different QUESTIONS, not three densities: a
+ * single piece is placed, a scatter is sown over an area, and a row is laid
+ * along the road. Only the last two have a spacing, and only the last one
+ * follows a later centerline edit.
+ *
+ * It lives HERE, in the shell's own vocabulary, because the banner has to name
+ * it and `placement_core.ts` already imports this module for the grid snap: one
+ * union in the other direction would be a cycle, and two unions spelled the same
+ * way is a fourth mode that compiles while the banner silently says "single".
+ */
+export type PlacementMode = 'single' | 'scatter' | 'alongRoad';
+
 export interface RailModeDef {
   id: RailModeId;
   label: string;
@@ -97,8 +112,20 @@ export function toolFor(mode: RailModeId, drawn: boolean, redrawing = false): Ci
   return mode;
 }
 
-/** The one line the canvas banner carries: what the active tool does. */
-export function railBanner(mode: RailModeId, drawn: boolean, redrawing = false): string {
+/**
+ * The one line the canvas banner carries: what the active tool does.
+ *
+ * PROPS takes a fourth argument because it is no longer one gesture. The
+ * library's placement block decides whether a drag places, sows or lays, and a
+ * banner that went on describing all three at once would be the tool refusing to
+ * say which one it is about to do.
+ */
+export function railBanner(
+  mode: RailModeId,
+  drawn: boolean,
+  redrawing = false,
+  placement: PlacementMode = 'single',
+): string {
   switch (toolFor(mode, drawn, redrawing)) {
     case 'draw':
       return redrawing
@@ -109,7 +136,11 @@ export function railBanner(mode: RailModeId, drawn: boolean, redrawing = false):
     case 'width':
       return 'drag along the circuit to set the road half-width there; the road is twice this wide';
     case 'props':
-      return 'click to place the armed piece, drag to move it, shift+drag for a seeded scatter over that box';
+      return placement === 'scatter'
+        ? 'drag a box to sow a seeded patch of the armed piece over that stretch of one side'
+        : placement === 'alongRoad'
+          ? 'drag ALONG the road to lay a row at the spacing, from the offset the drag started at'
+          : 'drag a tile from the library, or click to place the armed piece; R turns it, alt places it free';
     default:
       return 'the numbers a circuit carries that nothing on the canvas can show';
   }
@@ -139,10 +170,11 @@ export const TOOL_VALUE_FIELDS: Record<CircuitTool, ToolValueField | null> = {
   draw: null,
   handles: null,
   width: { label: 'road half-width (yd)', min: REALM_RACERS_MIN_HALF_WIDTH, max: 40 },
-  // In props mode the field is the SCATTER's spacing: the one number a
-  // rectangle drag cannot carry, since the box says where and the spacing says
-  // how dense.
-  props: { label: 'scatter spacing (yd)', min: 2, max: 60 },
+  // PROPS has none any more. It used to carry the scatter's spacing, and the
+  // library's own placement block now owns that number along with the mode and
+  // the two toggles it only means anything beside: a spacing in the tool strip
+  // and a spacing in the placement block would be two boxes holding one value.
+  props: null,
   race: null,
 };
 
@@ -1321,10 +1353,14 @@ export function sideTabsFor(mode: RailModeId): readonly SideTabId[] {
 }
 
 /** Which tab the panel opens on when the operator has not picked one. */
-export function autoSideTab(mode: RailModeId, hasSelection: boolean): SideTabId | null {
+export function autoSideTab(
+  mode: RailModeId,
+  hasSelection: boolean,
+  isPlacing = false,
+): SideTabId | null {
   const tabs = sideTabsFor(mode);
   if (tabs.length === 0) return null;
-  if (hasSelection && tabs.includes('inspector')) return 'inspector';
+  if (hasSelection && !isPlacing && tabs.includes('inspector')) return 'inspector';
   return tabs[0];
 }
 

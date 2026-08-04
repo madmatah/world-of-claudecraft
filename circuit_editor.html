@@ -495,10 +495,59 @@
       text-align: left;
       border-style: dashed;
     }
-    .palette-list { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-    .palette-list button { padding: 2px 6px; }
-    #paletteAllLabel { display: block; color: var(--muted); margin-bottom: 8px; }
-    #paletteAllLabel[hidden] { display: none; }
+    /* ---- the prop library ---- */
+    .lib-search { width: 100%; margin-bottom: 6px; }
+    .lib-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    button.lib-chip { font-size: 10px; }
+    /* A grid rather than a wrapped row: every tile the same size is what makes a
+       column of thumbnails scannable, which is the whole point of having them. */
+    .lib-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    button.lib-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
+      padding: 4px;
+      text-align: left;
+      overflow: hidden;
+    }
+    button.lib-tile img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border-radius: 3px;
+      background: var(--raised);
+    }
+    /* The text chip the library used to be, kept as the honest placeholder while
+       a picture is still being taken and forever on a page with no WebGL. */
+    .lib-chip-shot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1;
+      border-radius: 3px;
+      background: var(--raised);
+      color: var(--dim);
+      font-size: 20px;
+      text-transform: uppercase;
+    }
+    .lib-label {
+      font-size: 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .lib-badge { font-size: 9px; color: var(--dim); }
+    .lib-placement { margin-bottom: 8px; }
+    .lib-spacing { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 34px; }
+    .seg { display: flex; gap: 2px; margin-bottom: 6px; }
+    .seg button { flex: 1; padding: 3px 4px; font-size: 11px; }
     .outline-row {
       display: flex;
       gap: 6px;
@@ -524,6 +573,8 @@
       color: var(--dim);
       font-size: 11px;
     }
+    #resumeOffer { color: var(--warn); border-color: #6b5a35; }
+    #resumeOffer[hidden] { display: none; }
     #problemChip.clean { color: var(--ok); }
     #problemChip.warn { color: var(--warn); border-color: #6b5a35; }
     #problemChip.bad { color: var(--bad); border-color: #6b3a3a; }
@@ -667,6 +718,9 @@
     <span id="cursorReadout"></span>
     <span id="armState" role="status" aria-live="polite"></span>
     <span id="message" aria-live="polite"></span>
+    <!-- The autosaved draft, offered rather than opened: a modal at boot would
+         make the first thing an operator does every session be dismissing it. -->
+    <button type="button" id="resumeOffer" class="chip" hidden></button>
     <span class="grow"></span>
     <span id="chordHints"></span>
   </footer>

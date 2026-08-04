@@ -255,6 +255,21 @@ describe('the constants the chrome reads back', () => {
   });
 });
 
+describe('which tab a mode opens on', () => {
+  it('follows the selection, EXCEPT while a piece is armed', () => {
+    // Every placement selects what it just placed, so following the selection
+    // took the library away after every single drop. A placing loop stays where
+    // the tiles are; the inspector is one click, or one esc, away.
+    expect(autoSideTab('props', false)).toBe('library');
+    expect(autoSideTab('props', true)).toBe('inspector');
+    expect(autoSideTab('props', true, true)).toBe('library');
+    expect(autoSideTab('props', false, true)).toBe('library');
+    // A mode with no tabs has nothing to open on, armed or not.
+    expect(autoSideTab('width', true, true)).toBeNull();
+    expect(autoSideTab('race', false)).toBeNull();
+  });
+});
+
 describe('shortcut matching', () => {
   it('is exact about the modifier keys', () => {
     expect(shortcutMatches('mod+z', { key: 'z', ctrlKey: true })).toBe(true);
@@ -357,6 +372,24 @@ describe('the rail', () => {
     expect(banners.size).toBe(5);
   });
 
+  it('says which placement gesture PROPS is waiting for, one sentence each', () => {
+    // The visible half of the placement block. Without this the whole ternary
+    // could go back to one sentence describing all three modes at once, which is
+    // the tool refusing to say what it is about to do.
+    const say = (placement: 'single' | 'scatter' | 'alongRoad') =>
+      railBanner('props', true, false, placement);
+    expect(new Set([say('single'), say('scatter'), say('alongRoad')]).size).toBe(3);
+    expect(say('single')).toContain('drag a tile');
+    expect(say('single')).toContain('alt');
+    expect(say('scatter')).toContain('box');
+    expect(say('alongRoad')).toContain('ALONG');
+    expect(say('alongRoad')).toContain('spacing');
+    // The default is the one an operator meets first.
+    expect(railBanner('props', true)).toBe(say('single'));
+    // ...and it changes nothing for a tool that has no placement to speak of.
+    expect(railBanner('width', true, false, 'alongRoad')).toBe(railBanner('width', true));
+  });
+
   it('says something different while re-stroking a drawn circuit', () => {
     expect(railBanner('shape', true, true)).not.toBe(railBanner('shape', true));
     expect(railBanner('shape', true, true)).toContain('stay');
@@ -364,17 +397,19 @@ describe('the rail', () => {
     expect(toolFor('shape', true, false)).toBe('handles');
   });
 
-  it('gives the two painting tools a value field, and the others none', () => {
+  it('gives the strip to the one tool that paints a number, and nobody else', () => {
     expect(TOOL_VALUE_FIELDS.width?.label).toContain('half-width');
-    expect(TOOL_VALUE_FIELDS.props?.label).toContain('spacing');
     expect(TOOL_VALUE_FIELDS.draw).toBeNull();
     expect(TOOL_VALUE_FIELDS.handles).toBeNull();
     expect(TOOL_VALUE_FIELDS.race).toBeNull();
-    // Different quantities, so different legal ranges: one field, re-bounded.
-    expect(TOOL_VALUE_FIELDS.width?.max).not.toBe(TOOL_VALUE_FIELDS.props?.max);
-    // And the road's floor is the SIM's floor, not a second opinion: the tool
-    // must not offer a road narrower than the game will drive.
+    // PROPS lost its field to the library. The spacing means nothing without the
+    // placement MODE and the two toggles beside it, and a copy in the tool strip
+    // would be a second box holding the same number.
+    expect(TOOL_VALUE_FIELDS.props).toBeNull();
+    // The road's floor is the SIM's floor, not a second opinion: the tool must
+    // not offer a road narrower than the game will drive.
     expect(TOOL_VALUE_FIELDS.width?.min).toBe(REALM_RACERS_MIN_HALF_WIDTH);
+    expect(TOOL_VALUE_FIELDS.width?.max).toBeGreaterThan(REALM_RACERS_MIN_HALF_WIDTH);
   });
 
   it('puts a mode repair on the plan, and only where it means something', () => {

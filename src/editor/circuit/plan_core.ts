@@ -119,6 +119,34 @@ export const HIT_TOLERANCE_PIXELS = { handle: 8, segment: 10, dressing: 7 } as c
  *  Below it the labels are a wash of overlapping text. */
 export const PROP_LABEL_MIN_SCALE = 1.6;
 
+/** How much clear room a label needs before the next one, pixels. Roughly a
+ *  catalog key's own width at the 11px the canvas draws them at. */
+export const PROP_LABEL_MIN_GAP = 70;
+
+/**
+ * Which pieces get their key written beside them.
+ *
+ * A zoom threshold alone stopped being enough the moment one gesture could lay a
+ * row: eleven lanterns eight yards apart are eleven labels on top of each other,
+ * which is less readable than none at all. Greedy and FIRST-COME, so the answer
+ * is stable while the pointer moves: a later piece never displaces a label
+ * already granted, and the same set of pieces always gets the same set of labels.
+ */
+export function labelledPieces(
+  points: readonly { x: number; y: number }[],
+  minGap = PROP_LABEL_MIN_GAP,
+): boolean[] {
+  const taken: { x: number; y: number }[] = [];
+  return points.map((point) => {
+    const crowded = taken.some(
+      (other) => Math.abs(other.x - point.x) < minGap && Math.abs(other.y - point.y) < minGap / 4,
+    );
+    if (crowded) return false;
+    taken.push(point);
+    return true;
+  });
+}
+
 /** How much one wheel notch zooms. */
 export const WHEEL_ZOOM_STEP = 1.12;
 

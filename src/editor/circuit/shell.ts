@@ -23,6 +23,7 @@ import {
   MENUS,
   MODE_ACTIONS,
   menuActions,
+  type PlacementMode,
   PREVIEW_READY_TITLES,
   type PreviewReadyState,
   problemDetail,
@@ -49,6 +50,8 @@ export interface ShellHost {
   /** A callout or the status chip was clicked: centre the plan on that spot. */
   onFocusProblem(problem: RealmRacersCircuitProblem): void;
   onToolValue(): void;
+  /** The operator took the autosaved draft the status bar was offering. */
+  onResume(): void;
 }
 
 /** Where a plan point sits in the overlay layer, or null when it is off-plan. */
@@ -119,6 +122,7 @@ export class EditorShell {
   private readonly cursorEl = document.getElementById('cursorReadout') as HTMLSpanElement;
   private readonly armEl = document.getElementById('armState') as HTMLSpanElement;
   private readonly messageEl = document.getElementById('message') as HTMLSpanElement;
+  private readonly resumeEl = document.getElementById('resumeOffer') as HTMLButtonElement;
   private readonly hintsEl = document.getElementById('chordHints') as HTMLSpanElement;
   private readonly keysDialog = document.getElementById('keysDialog') as HTMLDialogElement;
   private readonly keysBodyEl = document.getElementById('keysBody') as HTMLDivElement;
@@ -146,6 +150,7 @@ export class EditorShell {
       if (this.worst) this.host.onFocusProblem(this.worst);
     };
     this.toolValueInput.onchange = () => this.host.onToolValue();
+    this.resumeEl.onclick = () => this.host.onResume();
     this.hintsEl.textContent = chordHints(this.platform).join('  -  ');
   }
 
@@ -318,19 +323,29 @@ export class EditorShell {
     }
   }
 
-  setBanner(mode: RailModeId, drawn: boolean, redrawing = false): void {
+  setBanner(
+    mode: RailModeId,
+    drawn: boolean,
+    redrawing = false,
+    placement: PlacementMode = 'single',
+  ): void {
     const def = RAIL_MODES.find((entry) => entry.id === mode);
     this.bannerModeEl.textContent = (def?.label ?? mode).toUpperCase();
-    this.bannerTextEl.textContent = railBanner(mode, drawn, redrawing);
+    this.bannerTextEl.textContent = railBanner(mode, drawn, redrawing, placement);
     this.bannerEl.hidden = false;
   }
 
-  setMode(mode: RailModeId, drawn: boolean, redrawing = false): void {
+  setMode(
+    mode: RailModeId,
+    drawn: boolean,
+    redrawing = false,
+    placement: PlacementMode = 'single',
+  ): void {
     for (const [id, button] of this.modeButtons) {
       button.classList.toggle('on', id === mode);
       button.setAttribute('aria-checked', id === mode ? 'true' : 'false');
     }
-    this.setBanner(mode, drawn, redrawing);
+    this.setBanner(mode, drawn, redrawing, placement);
     // The mode's own repairs, beside its banner. Built once and shown or hidden,
     // never rebuilt: an action button is registered by id for its enabled state,
     // and rebuilding would leave the map holding buttons nothing can reach.
@@ -507,6 +522,19 @@ export class EditorShell {
     this.cursorEl.textContent = text;
   }
 
+  /**
+   * The resume offer, on the status bar rather than in a modal.
+   *
+   * A dev tool that opened a dialog over the canvas at boot would make the FIRST
+   * thing an operator does every session be dismissing something. The offer sits
+   * there until it is taken or the canvas is drawn on, and taking it is one
+   * click; ignoring it costs nothing at all.
+   */
+  setResume(text: string | null): void {
+    this.resumeEl.hidden = text === null;
+    if (text) this.resumeEl.textContent = text;
+  }
+
   setMessage(text: string, tone: MessageTone = ''): void {
     this.messageEl.textContent = text;
     this.messageEl.className = tone;
@@ -546,7 +574,7 @@ export class EditorShell {
   }
 
   /** Which tab the panel should be showing, given the mode and the selection. */
-  autoTab(mode: RailModeId, hasSelection: boolean): SideTabId | null {
-    return autoSideTab(mode, hasSelection);
+  autoTab(mode: RailModeId, hasSelection: boolean, isPlacing = false): SideTabId | null {
+    return autoSideTab(mode, hasSelection, isPlacing);
   }
 }

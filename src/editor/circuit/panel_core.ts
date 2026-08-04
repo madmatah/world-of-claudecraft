@@ -78,10 +78,10 @@ export interface PanelInputs {
   /** A tab the operator picked, which only applies where the mode offers it. */
   chosen: SideTabId | null;
   hasSelection: boolean;
+  /** Whether a piece is ARMED, which means the operator is in a placing loop. */
+  isPlacing: boolean;
   /** Whether the active tool has a value field at all. */
   hasToolValue: boolean;
-  /** Whether that field is the PROPS one, which belongs to the library alone. */
-  toolValueIsProps: boolean;
 }
 
 /**
@@ -93,13 +93,13 @@ export interface PanelInputs {
  * not survive into this one.
  */
 export function panelLayout(inputs: PanelInputs): PanelState {
-  const { mode, drawn, chosen, hasSelection, hasToolValue, toolValueIsProps } = inputs;
+  const { mode, drawn, chosen, hasSelection, isPlacing, hasToolValue } = inputs;
   const tabs = sideTabsFor(mode);
   // A tab picked in another mode is not offered here: the library arms a piece
   // for the props tool and the inspector edits a selected one, and neither is
   // reachable while shaping a centerline.
   const kept = chosen && tabs.includes(chosen) ? chosen : null;
-  const active = kept ?? autoTab(tabs, hasSelection);
+  const active = kept ?? autoTab(tabs, hasSelection, isPlacing);
   const showForm = mode === 'race' && drawn;
   return {
     tabs,
@@ -110,15 +110,29 @@ export function panelLayout(inputs: PanelInputs): PanelState {
     showForm,
     // Only where a mode has no tabs AND is not the form's own mode.
     showModeReadout: tabs.length === 0 && mode !== 'race' && drawn,
-    // The scatter spacing is a setting FOR the library and had no reason to hang
-    // over the inspector and the outliner, which is where it was showing.
-    showToolValue: hasToolValue && (!toolValueIsProps || active === 'library'),
+    // Whichever tool has one shows it. The props tool no longer does: its
+    // spacing moved into the library's own placement block, beside the mode and
+    // the toggles it only means anything with.
+    showToolValue: hasToolValue,
   };
 }
 
-function autoTab(tabs: readonly SideTabId[], hasSelection: boolean): SideTabId | null {
+/**
+ * Which tab the panel opens on when the operator has not picked one.
+ *
+ * A selection normally means "show me its numbers". While a piece is ARMED it
+ * means the opposite: every placement selects what it just placed, so following
+ * the selection took the library away after every single drop and put it back
+ * only when the operator went looking. A placing loop stays in the library, and
+ * the inspector is one click (or one `esc`, which disarms) away.
+ */
+function autoTab(
+  tabs: readonly SideTabId[],
+  hasSelection: boolean,
+  isPlacing: boolean,
+): SideTabId | null {
   if (tabs.length === 0) return null;
-  if (hasSelection && tabs.includes('inspector')) return 'inspector';
+  if (hasSelection && !isPlacing && tabs.includes('inspector')) return 'inspector';
   return tabs[0];
 }
 

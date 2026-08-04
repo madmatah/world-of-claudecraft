@@ -114,15 +114,63 @@ outright without `ctx.devCommands`.
   (`src/sim/realm_racers_track_limits.ts`) so nothing on either curve stopped
   anyone, and a table of lap fractions still derives the water from the road's
   own shape, which puts a canal down the middle of every circuit.
-- **The palette is folded by the THEME, not by a favourites list.** A theme
-  carries `props`, the catalog keys that belong on a circuit in that zone, and
-  those are what the palette offers before it is unfolded. It filters nothing:
-  every key still shows, because a record may place any of them and the readout
-  judges the PLACEMENT rather than the vocabulary. It exists because the derived
-  dressing ring was deleted (it walked the perimeter repeating a fixed list, so
-  it followed the wall rather than the design), and hand-dressing a circuit is
-  mostly the hunt for the six pieces that look like this zone inside a catalog
-  that holds every zone's.
+- **The library is folded by the THEME, and that is its default category.** A
+  theme carries `props`, the catalog keys that belong on a circuit in that zone,
+  and the library opens on exactly those under a chip wearing the THEME's own id
+  (`evergarden`, not "theme": the first is an answer, the second is a category
+  name). Every other key is one chip away and the whole catalog is one more,
+  because a record may place any of them and the readout judges the PLACEMENT
+  rather than the vocabulary. It exists because the derived dressing ring was
+  deleted (it walked the perimeter repeating a fixed list, so it followed the
+  wall rather than the design), and hand-dressing a circuit is mostly the hunt
+  for the six pieces that look like this zone inside a catalog that holds every
+  zone's. A SEARCH deliberately outranks the chips: typing "lantern" under the
+  theme chip means "find me the lantern", not "find me the lantern if this zone
+  happens to own one".
+- **A tile is a PHOTOGRAPH, taken once through the game's own visual registry.**
+  A name is not a picture, and `statueHead` is exactly the key nobody can
+  picture. Each asset renders once off screen (`prop_thumbnails.ts`, lazily
+  imported like `preview3d.ts`) and caches to `localStorage` under one version
+  salt for the whole store. It never blocks: a tile shows its text chip until
+  its picture arrives, and a page with no WebGL keeps the chips forever. A
+  picture arriving REPLACES the tile's face in place rather than rebuilding the
+  grid, and that is load-bearing rather than tidy: the grid is what a tile drag
+  captures the pointer on, and rebuilding it mid-gesture is how the
+  drag-a-tile-onto-the-plan gesture died the first time.
+- **Dragging a tile onto the plan is the primary gesture, and it is pointer
+  capture, not HTML5 drag-and-drop.** The drop target is a canvas, so there is
+  nothing to hit-test against and the ghost has to be drawn by the plan itself.
+  Three browser behaviours have to be answered for it to work at all, and every
+  one of them cost a debugging round: a press on the tile's `<img>` starts
+  Chrome's own image drag, which fires `pointercancel` and takes the capture with
+  it (`preventDefault` plus `draggable = false`); the PRESS has to arm, because a
+  drag must know what it is carrying from its first move, which means the click
+  that follows cannot also be a toggle or every click would arm and then disarm
+  the same piece; and a click with NO press is the keyboard (enter and space send
+  a bare one), so that arm is the plain toggle or the tiles are mouse-only. What
+  is left for the pointer's click is the two cases the press cannot answer: a
+  second click asking for the pointer back, and the tail of a drag, which is
+  swallowed. Pinned in `tests/editor_circuit_library_panel.test.ts`, because all
+  four paths look identical from the outside.
+- **A placing loop stays in the library.** Every placement selects what it just
+  placed, and the panel's "a selection means show me its numbers" rule took the
+  library away after every single drop. While a piece is ARMED that rule is
+  suspended (`panelLayout`'s `isPlacing`); the inspector is one click, or one
+  `esc`, away.
+- **A row along the road is spaced along ITSELF, not along the lap.** An offset
+  curve is shorter than the centerline inside a corner and longer outside one, so
+  stepping the lap by the spacing bunched a row of lanterns to five yards through
+  a hairpin. `alongRoadProps` walks the offset curve and emits a piece each time
+  the real distance reaches the spacing. It authors TRACK space for the same
+  reason the rest of the dressing does: a row at a constant `{s, offset}` follows
+  a later centerline edit, and a line of world coordinates leaves the verge the
+  first time a corner moves. Capped, and the cap SAYS what it dropped.
+- **The road edge is a magnet with no band on the inside.** Outside the garden
+  edge the snap bites within a few yards, because a placement made out in the
+  lawn is a placement nobody made near the road. Inside it there is no ambiguity
+  to respect: every point from the centerline to the garden edge is racing
+  surface, so a drop there is a drop the readout is about to refuse, and the
+  operator meant the roadside. `alt` overrules all of it.
 - **The theme is an ID, and the readout is what judges it.** A circuit names its
   art (`theme`) the same way it names its music: a plain string, offered by the
   panel as a datalist off `REALM_RACERS_THEME_IDS` and resolved render-side by
@@ -317,7 +365,44 @@ is recoverable.
   collision set will hold. Drawing its own footprint would be a second derivation
   of a placement, which is the exact bug class the one resolver exists to prevent.
   It costs one resolve per repaint, which is the order `drawDressing` already
-  pays, and a hover only repaints while something is armed.
+  pays, and a hover only repaints while something is armed. The along-road
+  PREVIEW goes through the same door (`ghostRowPlacements`), or it would be that
+  bug twelve times over.
+- **The ghost's tint is the READOUT's own verdict.** Red comes from
+  `realmRacersPropStanding`, the predicate `prop_blocks_racing_surface` is raised
+  from, extracted in `src/sim/realm_racers_circuit_metrics.ts` so it has one
+  reader. A tint derived from the editor's own arithmetic would be free to say
+  green about a placement the panel then refuses, which is the whole thing the
+  ghost exists to prevent one step earlier.
+- **The keys beside the pieces are decluttered, not just zoom-gated.** A zoom
+  threshold was enough while every piece was placed by hand; one gesture that
+  lays eleven lanterns eight yards apart makes eleven labels one unreadable
+  smear. `labelledPieces` grants them greedily and FIRST-COME, so the set does
+  not reshuffle while the pointer moves.
+- **The draft autosaves, and resuming is an OFFER.** The working record goes to
+  `localStorage` on a debounce after every commit, and boot puts a chip in the
+  status bar rather than opening a dialog: a dev tool whose first act every
+  session is something to dismiss trains people to dismiss it. A stored draft is
+  validated through `validateCircuitPayload`, the same check the save endpoint
+  runs, so an older schema degrades to a fresh canvas rather than half-loading.
+  `beforeunload` warns only while DIRTY and DRAWN, or every reload asks.
+  **A BLANK canvas writes nothing, and that guard is the whole safety net rather
+  than tidiness.** `newBlank()` runs at boot and commits, so the timer it
+  schedules fires a second later and wrote `{drawn: false}` straight over the
+  draft the status bar was at that moment offering: an operator who did not press
+  Resume inside that second lost the work for good. The in-memory offer went on
+  working, which is exactly what hid it from a manual test.
+- **The spacing control has one value and TWO floors.** A row lays what the drag
+  covers; a scatter walks a grid of `(2*halfX/spacing) x (2*halfZ/spacing)` cells
+  with a spline projection in each, so halving the spacing quadruples the work.
+  Sharing the row's floor of one yard gave an 1100 yard circuit a slider position
+  that stops the page answering, so `spacingFloor` gives the scatter its own, and
+  switching modes carries the value up to it rather than leaving it under.
+- **The along-road preview is computed per POINTER MOVE, not per frame.** It is a
+  walk of up to a couple of thousand spline samples, a full placement resolve and
+  an unhinted projection per previewed piece; per repaint that is a drag that
+  stops answering on a big circuit. What the release commits is the list already
+  on screen, so what is drawn is what lands.
 - **A digit shortcut matches the PHYSICAL key.** On AZERTY the digit row is
   shifted: the `1` key reports `&`, and `1` only arrives with shift held, so the
   rail's `1..4` were dead on a French keyboard until `shortcutMatches` grew a
@@ -342,6 +427,11 @@ is recoverable.
 | `dock.ts` | the floating 3D panel: move, resize, fullscreen, the camera tabs and the lap readout. Geometry rules come from `layout_core.ts` |
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
+| `library_core.ts` | what the library OFFERS: the category chips (theme first and by default), what a search matches, and what an empty grid says |
+| `placement_core.ts` | what the GESTURE meant: which snap a drop takes, whether the readout will have it, and what a drag along the road lays down |
+| `thumbnail_core.ts` | where the camera stands to photograph one catalog piece: one pose for every tile, framed on the axis that binds |
+| `draft_store_core.ts` | what survives a reload: the autosaved draft (versioned, validated, offered) and the tile cache |
+| `prop_thumbnails.ts` | the off-screen rig that takes the pictures. Lazily imported; never disposes what it borrowed from a shared cache |
 | `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
 | `envelope_core.ts` | what perimeter wall and collision region fit a road of a given size, clamped to the band and the lane depth budget. A convenience, not a rule: the enclosure rules themselves are in the metrics core |

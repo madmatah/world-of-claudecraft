@@ -36,7 +36,17 @@ import {
   realmRacersStarts,
   realmRacersTrack,
 } from '../../sim/realm_racers_spline';
+import { rotateStep } from '../placement_transform_core';
 import { CircuitDock } from './dock';
+import {
+  DRAFT_SAVE_DEBOUNCE_MS,
+  DRAFT_STORAGE_KEY,
+  parseDraft,
+  resumeOfferText,
+  type StoredDraft,
+  serializeDraft,
+  shouldWarnOnUnload,
+} from './draft_store_core';
 import { suggestEnvelope } from './envelope_core';
 import { circuitToTypeScript, roundCircuit } from './export_core';
 import {
@@ -79,13 +89,30 @@ import {
 import { armStateText, CIRCUIT_ONLY_ACTIONS, needsCircuit, panelLayout } from './panel_core';
 import { RecordFormPanel } from './panel_form';
 import { InspectorPanel } from './panel_inspector';
-import { type LibraryHost, LibraryPanel } from './panel_library';
+import {
+  DEFAULT_PLACEMENT,
+  type LibraryHost,
+  LibraryPanel,
+  type PlacementSettings,
+} from './panel_library';
 import { OutlinerPanel } from './panel_outliner';
 import { MetricsDrawerPanel, ModeReadoutPanel } from './panel_readout';
+import {
+  alongRoadProps,
+  lapPositionAt,
+  lateralAt,
+  type PendingYaw,
+  pendingYawText,
+  placementLegality,
+  resolveSnap,
+  rotatedPendingYaw,
+  type SnapResult,
+} from './placement_core';
 import {
   fitHalfExtent,
   fitScale,
   HIT_TOLERANCE_PIXELS,
+  labelledPieces,
   PROP_LABEL_MIN_SCALE,
   planLimits,
   resolvePlanPalette,
@@ -98,6 +125,7 @@ import {
   type DressingRect,
   type DressingSelection,
   ghostPlacement,
+  ghostRowPlacements,
   hitTestPlaced,
   hitTestPondHandle,
   hitTestPonds,
@@ -211,7 +239,7 @@ let paintOrigin: CircuitBand[] | null = null;
 let paintFractions: number[] = [];
 /** What the dressing gesture in flight is doing, and to which entry. */
 let dressing: DressingSelection | null = null;
-let dressingDrag: 'move' | 'rect' | 'pond' | null = null;
+let dressingDrag: 'move' | 'rect' | 'pond' | 'road' | null = null;
 /** The pond handle under a resize/rotate drag. */
 let pondHandle: PondHandle | null = null;
 /** The projection index a track-space drag started from: without it a drag
@@ -219,6 +247,32 @@ let pondHandle: PondHandle | null = null;
 let dragHint: number | undefined;
 /** The live rectangle a scatter or a pond is being dragged out over. */
 let dressingRect: DressingRect | null = null;
+/**
+ * The yaw the NEXT piece goes down at, before it is a piece.
+ *
+ * `R` turns the ghost and `shift+R` faces it down the road, both while nothing
+ * is selected: rotating after the drop means placing a lantern, looking at it,
+ * selecting it and rotating it, which is four gestures for a decision the
+ * operator had already made. Null means the catalog's own default.
+ */
+let pendingYaw: PendingYaw = null;
+/** How the next gesture lays what is armed: the library's placement block. */
+let placement: PlacementSettings = { ...DEFAULT_PLACEMENT };
+/** Where a row being dragged along the road started, in lap yards, and at what
+ *  lateral offset. Null unless an along-road drag is in flight. */
+let roadRun: { fromS: number; offset: number } | null = null;
+/** A drag that began on a LIBRARY TILE rather than on the plan. The ghost has to
+ *  follow the pointer over a canvas the gesture never touched down on. */
+let tileDrag: { asset: string; pointerId: number } | null = null;
+/** What the ghost's readout says about the snap it took, live. */
+let ghostSnap: SnapResult | null = null;
+/**
+ * Whether `alt` is down, which is the operator overruling every magnet.
+ *
+ * Tracked rather than read off the pointer event, because the ghost is redrawn
+ * on a repaint the key press caused and there is no pointer event in hand there.
+ */
+let altHeld = false;
 /** Where the pointer last was on the plan, which is where the armed piece's
  *  ghost stands. Null once the pointer leaves. */
 let hover: RallyPoint | null = null;
@@ -309,6 +363,59 @@ function setStatus(text: string, tone: MessageTone = ''): void {
   shell.setMessage(text, tone);
 }
 
+// ---- the autosaved draft ----
+//
+// The tool is left open for hours and reloaded often, and until now a reload was
+// a discard. Every commit schedules a write of the working record; boot OFFERS
+// what it finds rather than opening it, because a dev tool that silently reopened
+// yesterday's circuit over a blank canvas would be deciding what the operator
+// came here to do.
+
+let draftSaveTimer = 0;
+
+function saveDraftLocally(): void {
+  window.clearTimeout(draftSaveTimer);
+  draftSaveTimer = window.setTimeout(() => {
+    // A BLANK canvas writes nothing, and this is the whole safety net rather
+    // than a tidy guard. `newBlank()` runs at boot and commits, so the timer it
+    // schedules fires a second later and wrote `{drawn: false}` straight over
+    // the draft the status bar was at that moment offering to restore: an
+    // operator who did not press Resume within the second lost the work for
+    // good, and the in-memory offer kept working, which is exactly what hid it.
+    if (!drawn) return;
+    try {
+      window.localStorage.setItem(DRAFT_STORAGE_KEY, serializeDraft(record, drawn, Date.now()));
+    } catch {
+      // A full quota or a blocked origin: the draft is a safety net, not a save.
+    }
+  }, DRAFT_SAVE_DEBOUNCE_MS);
+}
+
+/** What boot found, until the operator takes it or draws over it. */
+let offered: StoredDraft | null = null;
+
+function offerResume(): void {
+  let stored: StoredDraft | null = null;
+  try {
+    stored = parseDraft(window.localStorage.getItem(DRAFT_STORAGE_KEY));
+  } catch {
+    stored = null;
+  }
+  if (!stored) return;
+  offered = stored;
+  shell.setResume(resumeOfferText(stored, Date.now()));
+}
+
+function takeResume(): void {
+  const stored = offered;
+  if (!stored) return;
+  offered = null;
+  shell.setResume(null);
+  loadCircuit(stored.record, `${stored.record.id} (resumed)`);
+  drawn = stored.drawn;
+  refreshChrome();
+}
+
 // ---- the record ----
 
 /**
@@ -338,6 +445,7 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   track = realmRacersTrack(record);
   metrics = realmRacersCircuitMetrics(record);
   dirty = true;
+  saveDraftLocally();
   requestRedraw();
   // The palette follows the theme, so retyping the theme field re-offers the
   // zone's own vocabulary rather than the one the circuit opened on.
@@ -665,10 +773,13 @@ function drawProblemMarkers(): void {
  */
 function cursorGhost(): RallyPlacedProp | null {
   const armed = library.armed;
-  if (!drawn || tool() !== 'props' || armed === null) return null;
-  if (armed === POND_CHOICE || !hover || dressingDrag) return null;
-  const point = authored(hover);
-  return ghostPlacement(record, armed, point.x, point.z);
+  if (!drawn || armed === null || armed === POND_CHOICE || !hover) return null;
+  // A tile drag draws its ghost over whatever tool is showing; a plan hover only
+  // draws one in PROPS, and never in the middle of another dressing gesture.
+  if (!tileDrag && (tool() !== 'props' || dressingDrag)) return null;
+  const snap = resolveSnap(record, hover.x, hover.z, { grid: layout.snap, free: altHeld });
+  ghostSnap = snap;
+  return ghostPlacement(record, armed, snap.x, snap.z, pendingYaw ?? undefined);
 }
 
 /**
@@ -723,7 +834,14 @@ function drawDressing(): void {
 
   // Solid pieces are FILLED and decorative ones hollow: whether a piece stops a
   // machine is the one thing about it that is not visible from its shape.
+  //
+  // The KEYS are written beside the pieces that have room for one. A zoom
+  // threshold alone stopped being enough the moment one gesture could lay a row:
+  // eleven lanterns eight yards apart are eleven labels on top of each other.
   const named = view.scale > PROP_LABEL_MIN_SCALE;
+  const labelled = named
+    ? labelledPieces(placements.props.map((prop) => ({ x: screenX(prop.x), y: screenY(prop.z) })))
+    : [];
   for (const [index, prop] of placements.props.entries()) {
     const chosen = dressing?.kind === 'prop' && dressing.index === placed[index];
     ctx.strokeStyle = chosen ? planPalette.pick : prop.solid ? '#e0a86f' : '#8fb2d8';
@@ -734,7 +852,7 @@ function drawDressing(): void {
       ctx.fill();
     }
     ctx.stroke();
-    if (!named) continue;
+    if (!labelled[index]) continue;
     ctx.fillStyle = planPalette.muted;
     ctx.font = '11px ui-monospace, Menlo, monospace';
     ctx.fillText(prop.asset, screenX(prop.x) + 6, screenY(prop.z) - 6);
@@ -754,19 +872,49 @@ function drawDressing(): void {
     }
   }
 
-  // The GHOST: what the next click will put down, where it will put it.
+  // The GHOST: what the next click will put down, where it will put it, and
+  // whether the readout will accept it. The verdict comes from the readout's own
+  // predicate, so a ghost that reads green cannot be a placement the panel then
+  // refuses.
   const ghost = cursorGhost();
   if (ghost) {
+    const legality = placementLegality(record, ghost);
+    const tint = legality && !legality.legal ? planPalette.bad : planPalette.pick;
     ctx.save();
     ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = planPalette.pick;
+    ctx.strokeStyle = tint;
     ctx.lineWidth = 1.5;
     traceFootprint(ghost);
     ctx.stroke();
+    if (legality && !legality.legal) {
+      ctx.fillStyle = withAlpha(planPalette.bad, 0.3);
+      ctx.fill();
+    }
     ctx.setLineDash([]);
-    ctx.fillStyle = planPalette.pick;
+    ctx.fillStyle = tint;
     ctx.font = '11px ui-monospace, Menlo, monospace';
-    ctx.fillText(ghost.asset, screenX(ghost.x) + 8, screenY(ghost.z) - 8);
+    const lines = [ghost.asset];
+    if (ghostSnap) lines.push(`snap: ${ghostSnap.label}`);
+    if (legality) lines.push(legality.label);
+    lines.forEach((line, i) => {
+      ctx.fillText(line, screenX(ghost.x) + 8, screenY(ghost.z) - 8 + i * 12);
+    });
+    ctx.restore();
+  }
+
+  // The row a drag along the road is laying, before it is committed. Resolved
+  // through the same one resolver as everything else here, so the preview is the
+  // row: a dozen dots worked out on the side would be the ghost's own defect
+  // class, twelve times over.
+  if (roadRunPreview.placed.length > 0) {
+    ctx.save();
+    ctx.setLineDash([2, 3]);
+    ctx.lineWidth = 1.5;
+    roadRunPreview.placed.forEach((piece, index) => {
+      ctx.strokeStyle = roadRunPreview.legal[index] ? planPalette.pick : planPalette.bad;
+      traceFootprint(piece);
+      ctx.stroke();
+    });
     ctx.restore();
   }
 
@@ -819,6 +967,43 @@ function draw(): void {
 
 /** Click tolerance in yards, so a bench is grabbable at any zoom. */
 const dressingTolerance = (): number => HIT_TOLERANCE_PIXELS.dressing / view.scale;
+
+/**
+ * The row an along-road drag is currently describing, and where its pieces land.
+ *
+ * Cached per POINTER MOVE rather than recomputed per repaint, which is what it
+ * logically is: the walk is up to a couple of thousand spline samples, the
+ * resolve rebuilds a whole placement set, and each previewed piece costs an
+ * unhinted projection to judge. Per frame that is a drag that stops answering on
+ * a big circuit; per move it is once per thing the operator actually did.
+ */
+let roadRunPreview: { props: RallyProp[]; placed: RallyPlacedProp[]; legal: boolean[] } = {
+  props: [],
+  placed: [],
+  legal: [],
+};
+
+function buildRoadRun(): RallyProp[] {
+  const armed = library.armed;
+  if (!roadRun || !hover || !armed || armed === POND_CHOICE) return [];
+  return alongRoadProps(record, roadRun.fromS, lapPositionAt(record, hover.x, hover.z), {
+    asset: armed,
+    spacing: placement.spacing,
+    offset: roadRun.offset,
+    alignToRoad: placement.alignToRoad,
+    solid: placement.solid,
+  }).props;
+}
+
+function refreshRoadRunPreview(): void {
+  const props = buildRoadRun();
+  const placed = props.length > 0 ? ghostRowPlacements(record, props) : [];
+  roadRunPreview = {
+    props,
+    placed,
+    legal: placed.map((piece) => placementLegality(record, piece)?.legal ?? true),
+  };
+}
 
 /** The record with one dressing list replaced, committed. */
 function commitDressing(next: Partial<RealmRacersCircuit>, remember = true): void {
@@ -881,26 +1066,76 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
     return;
   }
 
-  // Nothing under the pointer: this is a placement. A pond and a scatter are
-  // both dragged out over a box, a prop lands on the click.
-  const point = authored(raw);
-  if (rect || armed === POND_CHOICE) {
+  // Nothing under the pointer: this is a placement, and WHICH placement is the
+  // library's placement block. Water is always a box, whatever the mode says,
+  // because a pond has no other shape to be dragged out as.
+  const boxed = rect || armed === POND_CHOICE || placement.mode === 'scatter';
+  if (boxed) {
+    const point = authored(raw);
     dressingRect = { x0: point.x, z0: point.z, x1: point.x, z1: point.z };
     dressingDrag = 'rect';
     return;
   }
-  const placement = authorPlacement(record, point.x, point.z);
-  const props = [...(record.props ?? []), { asset: armed, at: placement.at }];
+  if (placement.mode === 'alongRoad') {
+    pushUndo();
+    // The offset the whole row inherits comes from the SNAPPED start, not from
+    // the raw pointer: a drag begun on the road would otherwise lay every piece
+    // of the row on the racing surface, which is eight identical errors out of
+    // one gesture. `alt` still overrules it, so a deliberate infield row is one
+    // key away.
+    const start = resolveSnap(record, raw.x, raw.z, { grid: layout.snap, free: altHeld });
+    roadRun = {
+      fromS: lapPositionAt(record, start.x, start.z),
+      offset: lateralAt(record, start.x, start.z),
+    };
+    dressingDrag = 'road';
+    return;
+  }
+  placeOne(raw);
+}
+
+/**
+ * One piece, where the pointer says and at the yaw the ghost was showing.
+ *
+ * Shared by the click, the tile drop and nothing else: the ghost's whole promise
+ * is that what it drew is what lands, so the snap and the yaw are resolved here
+ * exactly as `cursorGhost` resolves them.
+ */
+function placeOne(raw: RallyPoint): void {
+  const armed = library.armed;
+  if (!armed || armed === POND_CHOICE) return;
+  const snap = resolveSnap(record, raw.x, raw.z, { grid: layout.snap, free: altHeld });
+  const authoredAt = authorPlacement(record, snap.x, snap.z);
+  const piece: RallyProp = { asset: armed, at: authoredAt.at };
+  if (pendingYaw !== null) piece.yaw = pendingYaw;
+  if (!placement.solid) piece.collide = 'none';
+  const props = [...(record.props ?? []), piece];
   dressing = { kind: 'prop', index: props.length - 1 };
   dressingDrag = 'move';
-  dragHint = placement.hint;
+  dragHint = authoredAt.hint;
   commitDressing({ props });
   applySideTab();
-  setStatus(`placed ${armed} (${propFrameOf(props[props.length - 1])})`, 'ok');
+  const legality = placementLegality(
+    record,
+    ghostPlacement(record, armed, snap.x, snap.z, pendingYaw ?? undefined),
+  );
+  const verdict = legality && !legality.legal ? `, ${legality.label}` : '';
+  setStatus(
+    `placed ${armed} (${propFrameOf(piece)}, snap: ${snap.label}${verdict})`,
+    legality && !legality.legal ? 'err' : 'ok',
+  );
 }
 
 function moveDressingGesture(raw: RallyPoint): void {
   const point = authored(raw);
+  if (dressingDrag === 'road') {
+    // Nothing is committed until the release: the row is rebuilt from the two
+    // ends on every move, so dragging back over it shortens it rather than
+    // stacking a second row on the first.
+    refreshRoadRunPreview();
+    requestRedraw();
+    return;
+  }
   if (dressingDrag === 'rect' && dressingRect) {
     dressingRect = { ...dressingRect, x1: point.x, z1: point.z };
     requestRedraw();
@@ -949,6 +1184,32 @@ function moveDressingGesture(raw: RallyPoint): void {
 
 function endDressingGesture(): void {
   const armed = library.armed;
+  if (dressingDrag === 'road' && roadRun && armed) {
+    const row = roadRunPreview.props;
+    if (row.length === 0) {
+      setStatus('drag ALONG the road to lay a row', 'err');
+    } else {
+      const run = alongRoadProps(
+        record,
+        roadRun.fromS,
+        lapPositionAt(record, hover?.x ?? 0, hover?.z ?? 0),
+        {
+          asset: armed,
+          spacing: placement.spacing,
+          offset: roadRun.offset,
+          alignToRoad: placement.alignToRoad,
+          solid: placement.solid,
+        },
+      );
+      const props = [...(record.props ?? []), ...run.props];
+      dressing = { kind: 'prop', index: props.length - 1 };
+      // `false`: the undo snapshot was taken when the drag began, so the whole
+      // row is one step back rather than one per piece.
+      commitDressing({ props }, false);
+      applySideTab();
+      setStatus(`laid ${row.length} ${armed} at ${placement.spacing} yd`, 'ok');
+    }
+  }
   if (dressingDrag === 'rect' && dressingRect && armed) {
     const box = dressingRect;
     const dragged = Math.hypot(box.x1 - box.x0, box.z1 - box.z0);
@@ -963,7 +1224,7 @@ function endDressingGesture(): void {
       commitDressing({ ponds });
       setStatus(`placed a pond, ${ponds.length} on this circuit`, 'ok');
     } else {
-      const spacing = Number(shell.toolValueInput.value);
+      const spacing = placement.spacing;
       const scatter = scatterFromRect(record, box, armed, spacing, nextSeed(record));
       const scatters = [...(record.scatters ?? []), scatter];
       dressing = { kind: 'scatter', index: scatters.length - 1 };
@@ -977,6 +1238,8 @@ function endDressingGesture(): void {
   }
   dressingDrag = null;
   dressingRect = null;
+  roadRun = null;
+  roadRunPreview = { props: [], placed: [], legal: [] };
   pondHandle = null;
   dragHint = undefined;
   requestRedraw();
@@ -1083,8 +1346,8 @@ function applySideTab(): void {
     drawn,
     chosen: sideChoice,
     hasSelection: hasSelection(),
+    isPlacing: library.armed !== null,
     hasToolValue: field !== null,
-    toolValueIsProps: tool() === 'props',
   });
   shell.setSideTab(panel.tabs, panel.active);
   library.el.hidden = !panel.showLibrary;
@@ -1105,7 +1368,7 @@ function refreshChrome(): void {
   emptyEl.hidden = drawn;
   for (const id of CIRCUIT_ONLY_ACTIONS) shell.setEnabled(id, drawn);
   shell.setDocument(record.id, dirty);
-  shell.setBanner(railMode, drawn, redrawing);
+  shell.setBanner(railMode, drawn, redrawing, placement.mode);
   applySideTab();
   // A layout left with the dock open re-opens it the moment there is something
   // to show, which is what makes the stored flag mean anything: at boot there is
@@ -1132,7 +1395,7 @@ function setRailMode(next: RailModeId): void {
   selection = null;
   dressing = null;
   sideChoice = null;
-  shell.setMode(railMode, drawn, redrawing);
+  shell.setMode(railMode, drawn, redrawing, placement.mode);
   // Leaving props disarms: an arm that survived a trip through the width tool
   // would place a piece on the operator's first click back.
   library.arm(next === 'props' ? library.armed : null);
@@ -1536,7 +1799,7 @@ function runAction(id: ActionId): void {
       dressing = null;
       library.arm(null);
       applySideTab();
-      shell.setMode(railMode, drawn);
+      shell.setMode(railMode, drawn, false, placement.mode);
       return;
     case 'toggleDock':
       void togglePreview();
@@ -1620,6 +1883,63 @@ function runAction(id: ActionId): void {
   }
 }
 
+/**
+ * Dragging a tile out of the library and onto the plan.
+ *
+ * The primary gesture, and the reason it is pointer capture rather than HTML5
+ * drag-and-drop: the drop target is a CANVAS, so there is nothing to hit-test
+ * against and the ghost has to be drawn by the plan itself. Capturing on the
+ * tile keeps every move coming to one listener whatever the pointer crosses, and
+ * the plan simply treats the pointer as a hover it did not start.
+ *
+ * A drag that ends anywhere but the plan places nothing and leaves the piece
+ * ARMED, so the gesture degrades into the click-to-place one rather than into
+ * nothing at all.
+ */
+function beginTileDrag(asset: string, ev: PointerEvent): void {
+  if (!drawn || asset === POND_CHOICE) return;
+  const tile = ev.currentTarget;
+  if (!(tile instanceof HTMLElement)) return;
+  tile.setPointerCapture(ev.pointerId);
+  tileDrag = { asset, pointerId: ev.pointerId };
+
+  const move = (moveEv: PointerEvent): void => {
+    if (!tileDrag || moveEv.pointerId !== tileDrag.pointerId) return;
+    hover = overPlan(moveEv) ? toLocal(moveEv) : null;
+    requestRedraw();
+  };
+  const end = (upEv: PointerEvent): void => {
+    tile.releasePointerCapture?.(upEv.pointerId);
+    tile.removeEventListener('pointermove', move);
+    tile.removeEventListener('pointerup', end);
+    tile.removeEventListener('pointercancel', end);
+    const dropped = tileDrag !== null && overPlan(upEv);
+    tileDrag = null;
+    if (dropped) {
+      if (railMode !== 'props') setRailMode('props');
+      placeOne(toLocal(upEv));
+      dressingDrag = null;
+    } else {
+      hover = null;
+    }
+    requestRedraw();
+  };
+  tile.addEventListener('pointermove', move);
+  tile.addEventListener('pointerup', end);
+  tile.addEventListener('pointercancel', end);
+}
+
+/** Whether a pointer is over the plan's canvas, in viewport coordinates. */
+function overPlan(ev: { clientX: number; clientY: number }): boolean {
+  const rect = canvas.getBoundingClientRect();
+  return (
+    ev.clientX >= rect.left &&
+    ev.clientX <= rect.right &&
+    ev.clientY >= rect.top &&
+    ev.clientY <= rect.bottom
+  );
+}
+
 // ---- the shell ----
 
 const shell = new EditorShell(
@@ -1641,6 +1961,7 @@ const shell = new EditorShell(
       const field = TOOL_VALUE_FIELDS[tool()];
       if (field) setStatus(`${field.label}: ${shell.toolValueInput.value}`, '');
     },
+    onResume: takeResume,
   },
   platform,
 );
@@ -1713,7 +2034,18 @@ const panelHost: LibraryHost = {
   commit: (next) => commit(next),
   commitDressing: (next) => commitDressing(next),
   setStatus,
-  onArmed: announceArmed,
+  onArmed: (asset) => {
+    // A fresh arm starts at the catalog's own facing: carrying the last piece's
+    // rotation onto a different kind of thing is a yaw nobody chose.
+    pendingYaw = null;
+    announceArmed(asset);
+  },
+  onTileDrag: beginTileDrag,
+  onPlacement: (settings) => {
+    placement = settings;
+    shell.setBanner(railMode, drawn, redrawing, settings.mode);
+    requestRedraw();
+  },
 };
 
 const form = new RecordFormPanel(panelHost);
@@ -1843,6 +2175,16 @@ window.addEventListener('keydown', (ev) => {
   const selected = actionForSelectionShortcut(ev);
   if (selected) {
     if (tool() === 'props') {
+      // With a piece ARMED and nothing selected, the rotation chords aim at the
+      // GHOST: turning a lantern after dropping it means place, look, select,
+      // rotate, which is four gestures for a decision already made.
+      if (!dressing && library.armed && library.armed !== POND_CHOICE) {
+        if (selected === 'rotateProp' || selected === 'faceRacing') {
+          ev.preventDefault();
+          rotateGhost(selected === 'faceRacing');
+          return;
+        }
+      }
       if (!dressing) return;
       ev.preventDefault();
       runSelectionAction(selected);
@@ -1860,6 +2202,14 @@ window.addEventListener('keydown', (ev) => {
     }
   }
 });
+
+/** Turns the piece the cursor is carrying, before it is a piece. The rule is
+ *  `placement_core`'s; this hands it the step function and reports the answer. */
+function rotateGhost(faceRacing: boolean): void {
+  pendingYaw = rotatedPendingYaw(pendingYaw, faceRacing, rotateStep);
+  setStatus(pendingYawText(pendingYaw), '');
+  requestRedraw();
+}
 
 /** What a selection chord does to the armed dressing piece. */
 function runSelectionAction(id: ActionId): void {
@@ -1895,10 +2245,45 @@ function runSelectionAction(id: ActionId): void {
   }
 }
 
+// `alt` overrules every magnet, and the ghost has to say so the moment it is
+// held rather than on the next pointer move.
+window.addEventListener('keydown', (ev) => {
+  if (!ev.altKey || altHeld) return;
+  altHeld = true;
+  requestRedraw();
+});
+window.addEventListener('keyup', (ev) => {
+  if (ev.altKey || !altHeld) return;
+  altHeld = false;
+  requestRedraw();
+});
+window.addEventListener('blur', () => {
+  // A chord that tabbed away leaves the key stuck down otherwise, and every
+  // placement after it silently ignores the grid.
+  altHeld = false;
+});
+
 window.addEventListener('resize', () => {
   requestRedraw();
   dock.reflow(planArea());
   preview?.resize();
+});
+
+/**
+ * The last chance to say there is unsaved work.
+ *
+ * A guard rather than a save: the draft is already in `localStorage` by now, so
+ * what this catches is the operator who meant to press Save draft and would
+ * rather find out before the tab closes than after. Only while DIRTY, or a dev
+ * tool asks for confirmation on every reload, which is the fastest way to teach
+ * someone to click through it.
+ */
+window.addEventListener('beforeunload', (ev) => {
+  if (!shouldWarnOnUnload(dirty, drawn)) return;
+  ev.preventDefault();
+  // Browsers ignore custom text and show their own sentence; assigning it is
+  // still what arms the prompt in several of them.
+  ev.returnValue = '';
 });
 
 // The page's one teardown. A dev tool is left open for hours and reloaded often;
@@ -1907,6 +2292,7 @@ window.addEventListener('resize', () => {
 window.addEventListener('pagehide', () => {
   preview?.dispose();
   preview = null;
+  library.dispose();
 });
 
 // ---- boot ----
@@ -1916,6 +2302,9 @@ shell.showMetrics(layout.metricsOpen);
 syncToggles();
 shell.setPreviewReady('off');
 newBlank();
+// Offered AFTER the blank canvas, so the status line the operator reads is the
+// offer rather than "blank canvas: draw a closed loop" written over it.
+offerResume();
 // The stored zoom, applied after the blank canvas framed itself: the operator
 // left the plan at a zoom they were working at, and `newBlank` frames the room a
 // circuit has rather than the one they were looking at.

@@ -129,7 +129,7 @@ describe('the circuit editor page stylesheet', () => {
     '#toolOptions',
     '#toolValueLabel',
     '.field',
-    '#paletteAllLabel',
+    '#resumeOffer',
   ] as const;
 
   it('guards every hidden element whose rules set a display', () => {
@@ -223,7 +223,7 @@ describe('the circuit editor page stylesheet', () => {
         .replace(/(^|[^:])\/\/.*$/gm, '$1')
         .matchAll(/([A-Za-z][\w.]*)\.hidden\s*=/g),
     ]);
-    expect(assignments.length).toBe(23);
+    expect(assignments.length).toBe(25);
   });
 });
 

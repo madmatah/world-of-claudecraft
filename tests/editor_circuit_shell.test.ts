@@ -32,6 +32,7 @@ function mountShell(): { shell: EditorShell; host: ShellHost } {
     onSideTab: vi.fn(),
     onFocusProblem: vi.fn(),
     onToolValue: vi.fn(),
+    onResume: vi.fn(),
   };
   return { shell: new EditorShell(host, 'other'), host };
 }

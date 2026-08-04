@@ -12,6 +12,7 @@ import {
   MODE_ACTIONS,
   RAIL_MODES,
   sideTabsFor,
+  TOOL_VALUE_FIELDS,
 } from '../src/editor/circuit/layout_core';
 import {
   armStateText,
@@ -29,8 +30,8 @@ const inputs = (over: Partial<Parameters<typeof panelLayout>[0]> = {}) =>
     drawn: true,
     chosen: null,
     hasSelection: false,
+    isPlacing: false,
     hasToolValue: true,
-    toolValueIsProps: true,
     ...over,
   });
 
@@ -86,15 +87,35 @@ describe('the contextual panel', () => {
     }
   });
 
-  it('hangs the tool value over the panel it is a setting FOR, and nowhere else', () => {
-    // The props number is the scatter spacing: the library's business.
-    expect(inputs({ toolValueIsProps: true }).showToolValue).toBe(true);
-    expect(inputs({ toolValueIsProps: true, chosen: 'outliner' }).showToolValue).toBe(false);
-    expect(inputs({ toolValueIsProps: true, hasSelection: true }).showToolValue).toBe(false);
-    // The width number is the road's, and width has no tabs to follow.
-    expect(inputs({ mode: 'width', toolValueIsProps: false }).showToolValue).toBe(true);
-    // No field, nothing to show.
+  it('keeps the library up while a piece is armed, whatever got selected', () => {
+    // The rule the placing loop depends on. Without it the panel jumped to the
+    // inspector after every drop and the operator had to click back to place the
+    // next piece.
+    expect(inputs({ hasSelection: true }).active).toBe('inspector');
+    expect(inputs({ hasSelection: true, isPlacing: true }).active).toBe('library');
+    expect(inputs({ hasSelection: true, isPlacing: true }).showLibrary).toBe(true);
+    expect(inputs({ hasSelection: true, isPlacing: true }).showInspector).toBe(false);
+    // A tab the operator PICKED still wins over both: the rule is about the
+    // automatic choice, not about overriding them.
+    expect(inputs({ hasSelection: true, isPlacing: true, chosen: 'inspector' }).active).toBe(
+      'inspector',
+    );
+  });
+
+  it('shows the tool value wherever the active TOOL has one', () => {
+    // It used to have to dodge the props tabs, because the props number was the
+    // scatter spacing and belonged over the library alone. That number lives in
+    // the library's own placement block now, beside the mode and the toggles it
+    // only means anything with, so the strip follows the TOOL and nothing else.
+    expect(inputs({ mode: 'width' }).showToolValue).toBe(true);
+    expect(inputs({ mode: 'width', hasToolValue: false }).showToolValue).toBe(false);
+    // No field, nothing to show, whichever panel is up.
     expect(inputs({ hasToolValue: false }).showToolValue).toBe(false);
+    expect(inputs({ hasToolValue: false, chosen: 'outliner' }).showToolValue).toBe(false);
+    // And the props tool really is one with no field any more, or the case above
+    // would be pinning a shape nothing produces.
+    expect(TOOL_VALUE_FIELDS.props).toBeNull();
+    expect(TOOL_VALUE_FIELDS.width).not.toBeNull();
   });
 
   it('agrees with the tab table it is built on', () => {

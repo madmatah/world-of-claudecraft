@@ -16,6 +16,7 @@ import {
   REALM_RACERS_MIN_STRETCH_SEPARATION,
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
+  realmRacersPropStanding,
 } from '../src/sim/realm_racers_circuit_metrics';
 import {
   REALM_RACERS_BAND_X_MAX,
@@ -26,7 +27,12 @@ import {
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_ORIGIN,
 } from '../src/sim/realm_racers_layout';
-import { REALM_RACERS_PROJECTION_ENVELOPE } from '../src/sim/realm_racers_spline';
+import { rallyFootprintRadius, realmRacersPlacements } from '../src/sim/realm_racers_props_resolve';
+import {
+  REALM_RACERS_PROJECTION_ENVELOPE,
+  rallyGardenEdgeOffsetAt,
+  realmRacersTrack,
+} from '../src/sim/realm_racers_spline';
 
 /** Everything a record needs that is not the shape under test. Roomy enough
  *  that no fixture trips the containment checks by accident. */
@@ -415,5 +421,107 @@ describe('Realm Racers circuit metrics: the errors are the shippable gate', () =
     expect(realmRacersCircuitErrors(metrics)).toEqual([]);
     const folded = draft('metrics_errors_real', ring(9), 10);
     expect(realmRacersCircuitErrors(realmRacersCircuitMetrics(folded))).not.toEqual([]);
+  });
+});
+
+describe('where one placed piece stands', () => {
+  // `realmRacersPropStanding` was extracted out of the loop below so the circuit
+  // editor's placement ghost could tint from the SAME rule the readout raises
+  // `prop_blocks_racing_surface` from. A predicate with two readers earns a test
+  // of its own: the one thing a behaviour-preserving extraction cannot prove
+  // about itself is its boundary.
+
+  let fixtures = 0;
+  const withProp = (asset: string, x: number, z: number): RealmRacersCircuit => ({
+    ...GARDEN,
+    id: `standing_${fixtures++}`,
+    props: [{ asset, at: { x, z } }],
+    scatters: undefined,
+  });
+
+  /** The piece as the ONE resolver places it, which is what the predicate reads. */
+  const placedOn = (circuit: RealmRacersCircuit) => realmRacersPlacements(circuit).props[0];
+
+  it('measures the footprint against the garden edge at its own lap position', () => {
+    const circuit = withProp('bench', -60, -40);
+    const placed = placedOn(circuit);
+    const standing = realmRacersPropStanding(circuit, placed);
+    const track = realmRacersTrack(circuit);
+    const projection = track.project(
+      placed.x + REALM_RACERS_ORIGIN.x,
+      placed.z + REALM_RACERS_ORIGIN.z,
+    );
+    expect(standing.s).toBeCloseTo(projection.s, 6);
+    expect(standing.surface).toBeCloseTo(rallyGardenEdgeOffsetAt(circuit, projection.s), 6);
+    // The footprint's own radius comes off the clearance: a wide bench is closer
+    // to the surface than its centre is.
+    expect(standing.clear).toBeCloseTo(
+      Math.abs(projection.lateral) - rallyFootprintRadius(placed.footprint),
+      6,
+    );
+  });
+
+  it('puts the verdict exactly on the edge, and one hair either side of it', () => {
+    // The arm an extraction cannot prove about itself: flipping `>=` to `>`, or
+    // the sign of `clear`, passes every behavioural test in the suite.
+    const probe = withProp('bench', -60, -40);
+    const placed = placedOn(probe);
+    const track = realmRacersTrack(probe);
+    const projection = track.project(
+      placed.x + REALM_RACERS_ORIGIN.x,
+      placed.z + REALM_RACERS_ORIGIN.z,
+    );
+    const point = track.pointAt(projection.s);
+    const radius = rallyFootprintRadius(placed.footprint);
+    const side = projection.lateral >= 0 ? 1 : -1;
+    /** A bench whose near face sits exactly `slack` yards outside the edge. */
+    const at = (slack: number): RealmRacersCircuit => {
+      const offset = (rallyGardenEdgeOffsetAt(probe, projection.s) + radius + slack) * side;
+      return withProp(
+        'bench',
+        point.x - REALM_RACERS_ORIGIN.x - point.tz * offset,
+        point.z - REALM_RACERS_ORIGIN.z + point.tx * offset,
+      );
+    };
+    const verdict = (circuit: RealmRacersCircuit): boolean =>
+      realmRacersPropStanding(circuit, placedOn(circuit)).clearOfSurface;
+    expect(verdict(at(0.02))).toBe(true);
+    expect(verdict(at(-0.02))).toBe(false);
+    expect(verdict(at(4))).toBe(true);
+    expect(verdict(at(-4))).toBe(false);
+  });
+
+  it('cannot disagree with the problem the readout raises for the same record', () => {
+    // The whole reason it is one function. Both ways, over the same two records,
+    // so a predicate that drifted from the loop fails here rather than showing
+    // an editor ghost in a colour the panel contradicts.
+    //
+    // ON the road, taken off the curve rather than guessed: the garden's origin
+    // is its INFIELD, so (0, 0) is clear of everything.
+    const centre = realmRacersTrack(GARDEN).pointAt(100);
+    const onSurface = withProp(
+      'bench',
+      centre.x - REALM_RACERS_ORIGIN.x,
+      centre.z - REALM_RACERS_ORIGIN.z,
+    );
+    const raised = realmRacersCircuitMetrics(onSurface).problems.filter(
+      (problem) => problem.code === 'prop_blocks_racing_surface',
+    );
+    const standing = realmRacersPropStanding(onSurface, placedOn(onSurface));
+    expect(standing.clearOfSurface).toBe(false);
+    expect(raised).toHaveLength(1);
+    // The numbers the panel prints ARE the predicate's own.
+    expect(raised[0].value).toBeCloseTo(standing.clear, 6);
+    expect(raised[0].limit).toBeCloseTo(standing.surface, 6);
+    expect(raised[0].s).toBeCloseTo(standing.s, 6);
+
+    // ...and well OFF it: the garden's origin is the middle of its infield.
+    const clear = withProp('bench', 0, 0);
+    expect(realmRacersPropStanding(clear, placedOn(clear)).clearOfSurface).toBe(true);
+    expect(
+      realmRacersCircuitMetrics(clear).problems.some(
+        (problem) => problem.code === 'prop_blocks_racing_surface',
+      ),
+    ).toBe(false);
   });
 });

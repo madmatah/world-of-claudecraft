@@ -15,6 +15,7 @@ import {
   fitHalfExtent,
   fitScale,
   HIT_TOLERANCE_PIXELS,
+  labelledPieces,
   PLAN_PALETTE_FALLBACK,
   PLAN_PALETTE_VARS,
   PROP_LABEL_MIN_SCALE,
@@ -166,6 +167,38 @@ describe('what a gesture may miss by', () => {
     // here rather than sliding under a relative assertion that holds either way.
     expect(HIT_TOLERANCE_PIXELS).toEqual({ handle: 8, segment: 10, dressing: 7 });
     expect(PROP_LABEL_MIN_SCALE).toBe(1.6);
+  });
+
+  it('writes a key beside a piece only where there is room for one', () => {
+    // A zoom threshold alone stopped being enough the moment one gesture could
+    // lay a row: eleven lanterns eight yards apart are eleven labels on top of
+    // each other, which is less readable than none at all.
+    const row = Array.from({ length: 11 }, (_, i) => ({ x: 100 + i * 12, y: 200 }));
+    const granted = labelledPieces(row);
+    expect(granted[0]).toBe(true);
+    expect(granted.filter(Boolean).length).toBeLessThan(row.length);
+    expect(granted.filter(Boolean).length).toBeGreaterThan(0);
+    // Spread out, everyone gets one.
+    const spread = Array.from({ length: 5 }, (_, i) => ({ x: i * 400, y: 200 }));
+    expect(labelledPieces(spread).every(Boolean)).toBe(true);
+    // Stacked vertically they do not collide: the gap is mostly horizontal,
+    // because a label is a wide short thing.
+    const column = Array.from({ length: 5 }, (_, i) => ({ x: 100, y: i * 60 }));
+    expect(labelledPieces(column).every(Boolean)).toBe(true);
+  });
+
+  it('grants labels first-come, so a hover does not reshuffle them', () => {
+    // Stability matters more than optimality here: the pointer moves and the
+    // canvas repaints, and labels that swapped between pieces every frame would
+    // be unreadable however few of them there were.
+    const row = Array.from({ length: 8 }, (_, i) => ({ x: i * 20, y: 0 }));
+    expect(labelledPieces(row)).toEqual(labelledPieces(row));
+    expect(labelledPieces(row)[0]).toBe(true);
+    // A tighter gap grants fewer, a looser one grants more.
+    expect(labelledPieces(row, 200).filter(Boolean).length).toBeLessThan(
+      labelledPieces(row, 20).filter(Boolean).length,
+    );
+    expect(labelledPieces([])).toEqual([]);
   });
 
   it('zooms symmetrically about a notch, and stops at both bounds', () => {
