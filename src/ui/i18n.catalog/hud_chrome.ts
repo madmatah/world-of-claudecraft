@@ -1141,6 +1141,22 @@ export const hudChromeStrings = {
     offTrack: 'RETURN TO THE TRACK: {seconds}',
     cutReturned: 'Shortcut. Returned to where you left the track.',
     reset: 'Reset to track',
+    // What a pickup box just gave, floated over the machine that took it. One
+    // line per effect the sim can draw (`realm_racers_pickup_effects.ts`),
+    // resolved through `realm_racers_pickup_i18n.ts`. Short: it is read at
+    // racing speed, out of the corner of an eye, by somebody steering. Two of
+    // the four are HELD (they arrive on the action bar and the pilot spends
+    // them), so their lines say READY rather than announcing an effect that has
+    // not happened yet.
+    pickupCharge: 'Shells loaded',
+    pickupNitro: 'Nitro ready',
+    pickupWard: 'Ward up',
+    pickupSlick: 'Oil ready',
+    // The ward, on the two surfaces it needs: a standing pip on the race strip
+    // for as long as it is carried, and the moment it pays for itself, so a hit
+    // that does nothing reads as the ward working rather than the weapon failing.
+    wardHeld: 'WARD',
+    wardBroken: 'Ward broken',
     countdown: 'Engines locked. Start in {seconds}',
     go: 'GO!',
     finalLap: 'FINAL LAP',

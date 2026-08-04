@@ -18,8 +18,10 @@
 // split `realm_racers_track_limits.ts` keeps with the referee.
 //
 // Pure leaf: no SimContext, no rng, no clock, no DOM, no three. It draws NO
-// randomness at all, deliberately: what a box GIVES is a fixed charge of the
-// machine's own weapon, so nothing here can move the shared draw order.
+// randomness at all, and that is still true under 22b: WHAT a box gives is a
+// weighted draw, but the draw belongs to `realm_racers_pickup_effects.ts` and is
+// taken by the match module at the take. Nothing here can move the shared stream,
+// so this half stays a pure function of the circuit and the race's own state.
 
 import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import { memoizePerCircuit, realmRacersTrack } from './realm_racers_spline';
@@ -82,9 +84,16 @@ export function realmRacersPickupLaneGap(halfWidth: number): number {
  */
 export const REALM_RACERS_PICKUP_COOLDOWN_TICKS = TICK_RATE;
 
-/** Charges a box grants, added to whatever the machine already holds. There is
- *  no cap and no refusal: a box ALWAYS gives. */
-export const REALM_RACERS_PICKUP_CHARGE_GRANT = 1;
+/**
+ * Charges a refill grants, added to whatever the machine already holds. There is
+ * no cap and no refusal: a box that draws the refill ALWAYS gives.
+ *
+ * Three, on the operator's call (2026-08-04): one shell was a rounding error next
+ * to a race budget of three, so the common draw read as nothing happening. A full
+ * reload is worth driving through a row for, which is what makes the row a line
+ * a pilot chooses rather than scenery.
+ */
+export const REALM_RACERS_PICKUP_CHARGE_GRANT = 3;
 
 /**
  * One box, resolved onto the circuit.
@@ -170,6 +179,21 @@ export interface RallyPickupState {
  *  first respawn is the leader's first crossing of the line. */
 export function createRealmRacersPickupState(circuit: RealmRacersCircuit): RallyPickupState {
   return { taken: realmRacersPickupBoxes(circuit).map(() => false), leaderLap: 1 };
+}
+
+/**
+ * Take every box off the circuit for good, for a caller that needs a race with
+ * no pickups in it at all.
+ *
+ * It exists for the cut lab (`tests/helpers/realm_racers_cut_lab.ts`), which is a
+ * STOPWATCH over geometry: a box hands out a weighted draw whose nitro, oil and
+ * ward all move the clock it is reading, so leaving them in would time the dice.
+ * The respawn is parked on a lap no race reaches rather than merely emptied, so
+ * the leader's next crossing cannot put them back.
+ */
+export function realmRacersStripPickups(state: RallyPickupState): void {
+  state.taken.fill(true);
+  state.leaderLap = Number.MAX_SAFE_INTEGER;
 }
 
 /** Which boxes are taken right now, by index: the compact form the readout and

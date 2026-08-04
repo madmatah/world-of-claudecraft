@@ -203,6 +203,20 @@ export interface GroundBlastBody {
   drive: VehicleDrive;
 }
 
+/**
+ * How hard a blast at (x, z) catches a machine standing at (bx, bz): 1 at the
+ * centre, falling to 0 at the rim, and exactly 0 outside it.
+ *
+ * Split out of the impact resolver so a caller can ask WHETHER a shell caught a
+ * machine without the answer already having shoved it: the rally ward has to
+ * decide it absorbs the hit before anything is applied, and `resolveGroundBlastImpact`
+ * mutates the drive state on its way to returning the same number.
+ */
+export function groundBlastFalloff(bx: number, bz: number, x: number, z: number): number {
+  const dist = Math.hypot(bx - x, bz - z);
+  return dist >= GROUND_BLAST_RADIUS ? 0 : 1 - dist / GROUND_BLAST_RADIUS;
+}
+
 export interface GroundBlastResult {
   /** 1 at the centre, falling to 0 at the rim. Zero means untouched. */
   falloff: number;
@@ -227,8 +241,8 @@ export function resolveGroundBlastImpact(
   const dx = body.x - x;
   const dz = body.z - z;
   const dist = Math.hypot(dx, dz);
-  if (dist >= GROUND_BLAST_RADIUS) return { falloff: 0, pop: 0 };
-  const falloff = 1 - dist / GROUND_BLAST_RADIUS;
+  const falloff = groundBlastFalloff(body.x, body.z, x, z);
+  if (falloff <= 0) return { falloff: 0, pop: 0 };
 
   // Away from the blast. A machine sitting exactly on the impact point has no
   // direction to be thrown in, so it takes the pop alone: arbitrary is not an

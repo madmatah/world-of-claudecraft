@@ -1,0 +1,728 @@
+import { describe, expect, it } from 'vitest';
+import {
+  REALM_RACERS_ABILITY_ID,
+  REALM_RACERS_EFFECT_ABILITIES,
+  REALM_RACERS_NITRO_ABILITY_ID,
+  REALM_RACERS_SLICK_ABILITY_ID,
+  realmRacersHeldEffectOf,
+} from '../src/sim/content/realm_racers';
+import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
+import { vehicleProfile } from '../src/sim/content/vehicles';
+import {
+  GROUND_BLAST_RADIUS,
+  GROUND_BLAST_SHOCK_TICKS,
+} from '../src/sim/realm_racers_ground_blast';
+import {
+  drawRallyPickupEffect,
+  isRallyHeldEffect,
+  type RallyPickupBand,
+  type RallyPickupEffect,
+  REALM_RACERS_NITRO_KICK,
+  REALM_RACERS_NITRO_SPEED_MULT,
+  REALM_RACERS_NITRO_TICKS,
+  REALM_RACERS_PICKUP_TABLES,
+  rallyPickupBand,
+} from '../src/sim/realm_racers_pickup_effects';
+import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
+import { travelledFromArc } from '../src/sim/realm_racers_progress';
+import {
+  REALM_RACERS_SLICK_CAP,
+  REALM_RACERS_SLICK_GRIP,
+  REALM_RACERS_SLICK_GRIP_TICKS,
+  REALM_RACERS_SLICK_LIFETIME_TICKS,
+  REALM_RACERS_SLICK_RADIUS,
+} from '../src/sim/realm_racers_slicks';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import type { Sim } from '../src/sim/sim';
+import {
+  REALM_RACERS_COUNTDOWN_TICKS,
+  REALM_RACERS_VEHICLE_KEY,
+  realmRacersForfeit,
+  realmRacersResetPosition,
+  realmRacersToWorld,
+} from '../src/sim/social/realm_racers';
+import { type SimEvent, TICK_RATE } from '../src/sim/types';
+import { advanceVehicleDrive, vehicleMaxSpeed } from '../src/sim/vehicle_motion';
+import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
+import { addAt, makeWorld, teleport } from './vale_cup_util';
+
+/** The circuit a QUEUED race runs on, which is what every live case here seats. */
+const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
+
+const GRID = [
+  { cls: 'warrior', name: 'Aster', x: -5, z: -40 },
+  { cls: 'mage', name: 'Briar', x: 7, z: -42 },
+  { cls: 'rogue', name: 'Cass', x: -9, z: -38 },
+  { cls: 'priest', name: 'Dell', x: 11, z: -44 },
+] as const;
+
+function required<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) throw new Error(`Missing ${label}`);
+  return value;
+}
+
+function match(sim: Sim): NonNullable<Sim['realmRacers']['match']> {
+  return required(sim.realmRacers.match, 'Realm Racers match');
+}
+
+/** Four humans on the grid, past the lights, with nobody driving. */
+function racingGrid(): { sim: Sim; pids: number[] } {
+  const sim = makeWorld();
+  const pids = GRID.map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
+  for (const pid of pids) sim.realmRacersQueueJoin(pid);
+  sim.tick();
+  for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
+  expect(match(sim).phase).toBe('racing');
+  return { sim, pids };
+}
+
+/** Parks a machine on a circuit-local point, with the lap bookkeeping a machine
+ *  that DROVE there would carry (the twin of the 22a suite's helper). */
+function standAt(sim: Sim, pid: number, x: number, z: number): void {
+  const live = match(sim);
+  const world = realmRacersToWorld(live, x, z);
+  teleport(sim, pid, world.x, world.z);
+  const progress = required(live.progress.get(pid), `progress ${pid}`);
+  const projection = realmRacersTrack(RACE_CIRCUIT).project(x, z, progress.trackIndex);
+  progress.lastS = projection.s;
+  progress.trackIndex = projection.index;
+}
+
+function standOnBox(sim: Sim, pid: number, index: number): void {
+  const box = realmRacersPickupBoxes(RACE_CIRCUIT)[index];
+  standAt(sim, pid, box.x, box.z);
+}
+
+function progressOf(sim: Sim, pid: number) {
+  return required(match(sim).progress.get(pid), `progress ${pid}`);
+}
+
+/**
+ * Puts a machine at a lap fraction with the bookkeeping a machine that DROVE
+ * there would carry.
+ *
+ * `distanceSinceWrap` is the load-bearing half: without it the progress step
+ * reads the jump as a lap wrap the other way and hands the racer a NEGATIVE
+ * travelled, which silently reorders the field the band is read against.
+ */
+function placeOnLap(sim: Sim, pid: number, fraction: number): void {
+  const track = realmRacersTrack(RACE_CIRCUIT);
+  const point = track.pointAt(track.length * fraction);
+  standAt(sim, pid, point.x, point.z);
+  const progress = progressOf(sim, pid);
+  // The search hint is computed from the ARC rather than left to a hinted
+  // projection: `project` searches a local window around the hint, so a machine
+  // moved half a lap in one jump would otherwise lock onto a sample near where
+  // it used to be and read as having gone backwards.
+  progress.lastS = point.s;
+  progress.trackIndex = Math.round(point.s / track.step);
+  progress.distanceSinceWrap = point.s;
+  progress.travelled = travelledFromArc(progress.lap, point.s, track.length);
+  // Every caller stays in the FIRST half of lap one on purpose: past halfway,
+  // `travelledFromArc` reads a lap-one racer as sitting BEHIND the start line
+  // (the grid convention) and hands back a negative key, which would reorder the
+  // field these cases are about.
+  expect(progress.travelled).toBeGreaterThanOrEqual(0);
+}
+
+/**
+ * Take one box with a KNOWN outcome: the taker is alone at the front of the
+ * field (nobody has moved), so their band is the leader's and the roll is that
+ * table's.
+ */
+function takeWithEffect(sim: Sim, pid: number, box: number, effect: RallyPickupEffect): SimEvent[] {
+  const rng = installScriptedRng(sim);
+  rng.script(rallyPickupRollFor('leader', effect));
+  standOnBox(sim, pid, box);
+  const events = sim.tick();
+  // The scripted value really went to the take: without this, a roll consumed
+  // by some other system would leave the case asserting about whatever the
+  // stream happened to hand the boxes instead.
+  expect(rng.consumed).toBe(1);
+  return events;
+}
+
+describe('the pickup effect tables', () => {
+  it('opens every table with the refill', () => {
+    // The premise the 22a suite's `forceRefills(0)` rests on, and the design
+    // rule behind the tables: the common case is the FIRST row everywhere, so a
+    // roll of zero is a refill wherever the taker is running.
+    for (const band of Object.keys(REALM_RACERS_PICKUP_TABLES) as RallyPickupBand[]) {
+      expect(REALM_RACERS_PICKUP_TABLES[band][0].effect).toBe('charge');
+      expect(drawRallyPickupEffect(band, 0)).toBe('charge');
+    }
+  });
+
+  it('hands out each effect in proportion to its weight', () => {
+    // Driven, not sampled: 1200 evenly spaced rolls over [0, 1) land in each
+    // slice exactly as often as its weight says, so this fails on a broken
+    // cumulative walk. (The VALUES are pinned separately below: this assertion
+    // reads the table and compares it with itself, which is decisive about the
+    // walk and about nothing else.)
+    const draws = 1200;
+    for (const band of Object.keys(REALM_RACERS_PICKUP_TABLES) as RallyPickupBand[]) {
+      const table = REALM_RACERS_PICKUP_TABLES[band];
+      const total = table.reduce((sum, row) => sum + row.weight, 0);
+      const counts = new Map<RallyPickupEffect, number>();
+      for (let i = 0; i < draws; i++) {
+        const effect = drawRallyPickupEffect(band, i / draws);
+        counts.set(effect, (counts.get(effect) ?? 0) + 1);
+      }
+      for (const row of table) {
+        expect(counts.get(row.effect), `${band}/${row.effect}`).toBe((draws * row.weight) / total);
+      }
+    }
+  });
+
+  it('gives the backmarker a luckier table than the leader, not a better one', () => {
+    const share = (band: RallyPickupBand, effect: RallyPickupEffect) => {
+      const table = REALM_RACERS_PICKUP_TABLES[band];
+      const total = table.reduce((sum, row) => sum + row.weight, 0);
+      return (table.find((row) => row.effect === effect)?.weight ?? 0) / total;
+    };
+    // The leader refills; the tail of the field gets the two effects that close
+    // a gap (nitro) or survive one being closed (ward).
+    expect(share('leader', 'charge')).toBeGreaterThan(share('backmarker', 'charge'));
+    expect(share('backmarker', 'nitro')).toBeGreaterThan(share('leader', 'nitro'));
+    expect(share('backmarker', 'ward')).toBeGreaterThan(share('leader', 'ward'));
+    // The oil is the one thing worth MORE the further ahead you are, so it
+    // leans the other way.
+    expect(share('leader', 'slick')).toBeGreaterThan(share('backmarker', 'slick'));
+    // Luckier, never different: nothing is exclusive to a band, and the refill
+    // is still the single likeliest outcome wherever you are running.
+    for (const band of Object.keys(REALM_RACERS_PICKUP_TABLES) as RallyPickupBand[]) {
+      const table = REALM_RACERS_PICKUP_TABLES[band];
+      expect(table.map((row) => row.effect).sort()).toEqual(['charge', 'nitro', 'slick', 'ward']);
+      for (const row of table) expect(row.weight).toBeGreaterThan(0);
+      const best = table.reduce((top, row) => (row.weight > top.weight ? row : top));
+      expect(best.effect).toBe('charge');
+    }
+  });
+
+  it('pins the shipped weights and the shipped tuning to literals', () => {
+    // Every OTHER assertion about the tables reads them and compares them with
+    // themselves, so a typo in a weight (or a seat-tuning pass nobody meant to
+    // ship) would sail through all of them. These are the numbers, spelled out:
+    // changing the feel of the pickups should be a decision that lands here.
+    expect(REALM_RACERS_PICKUP_TABLES).toEqual({
+      leader: [
+        { effect: 'charge', weight: 7 },
+        { effect: 'nitro', weight: 1 },
+        { effect: 'ward', weight: 1 },
+        { effect: 'slick', weight: 3 },
+      ],
+      midfield: [
+        { effect: 'charge', weight: 6 },
+        { effect: 'nitro', weight: 2 },
+        { effect: 'ward', weight: 2 },
+        { effect: 'slick', weight: 2 },
+      ],
+      backmarker: [
+        { effect: 'charge', weight: 4 },
+        { effect: 'nitro', weight: 4 },
+        { effect: 'ward', weight: 3 },
+        { effect: 'slick', weight: 1 },
+      ],
+    });
+    // Two seconds of burst at 1.3x the ceiling, with a 6 yd/s kick to start it.
+    expect(REALM_RACERS_NITRO_TICKS).toBe(40);
+    expect(REALM_RACERS_NITRO_TICKS).toBe(2 * TICK_RATE);
+    expect(REALM_RACERS_NITRO_SPEED_MULT).toBe(1.3);
+    expect(REALM_RACERS_NITRO_KICK).toBe(6);
+    // And the oil: a patch a bit wider than a box's catch, twelve seconds on the
+    // road, a second and a half of sliding at 15 percent of the grip, and never
+    // more patches at once than the renderer has slots for.
+    expect(REALM_RACERS_SLICK_RADIUS).toBe(2.6);
+    expect(REALM_RACERS_SLICK_LIFETIME_TICKS).toBe(240);
+    expect(REALM_RACERS_SLICK_GRIP_TICKS).toBe(30);
+    expect(REALM_RACERS_SLICK_GRIP).toBe(0.15);
+    expect(REALM_RACERS_SLICK_CAP).toBe(16);
+  });
+
+  it('reads the band off where the taker is running', () => {
+    expect(rallyPickupBand(0, 4)).toBe('leader');
+    expect(rallyPickupBand(1, 4)).toBe('midfield');
+    expect(rallyPickupBand(2, 4)).toBe('midfield');
+    expect(rallyPickupBand(3, 4)).toBe('backmarker');
+    // A field of two has no midfield, and a solo practice lap is its own leader:
+    // practice must not quietly play the catch-up game. A field where NOBODY has
+    // moved yet (every machine tied on the grid) collapses to the leader band
+    // for the same reason: nobody is AHEAD of anybody, so every rank is 0.
+    expect(rallyPickupBand(1, 2)).toBe('backmarker');
+    expect(rallyPickupBand(0, 1)).toBe('leader');
+  });
+
+  it('clamps a roll that could not have come off the stream', () => {
+    expect(drawRallyPickupEffect('leader', -1)).toBe('charge');
+    expect(drawRallyPickupEffect('leader', 1)).toBe(
+      REALM_RACERS_PICKUP_TABLES.leader[REALM_RACERS_PICKUP_TABLES.leader.length - 1].effect,
+    );
+  });
+
+  it('names the two effects a racer HOLDS', () => {
+    expect(isRallyHeldEffect('nitro')).toBe(true);
+    expect(isRallyHeldEffect('slick')).toBe(true);
+    // The other two happen at the box: ammunition has nothing to decide, and a
+    // shield a pilot would arm immediately is not a decision either.
+    expect(isRallyHeldEffect('charge')).toBe(false);
+    expect(isRallyHeldEffect('ward')).toBe(false);
+    // And each held effect is spent through its own ability, both ways round.
+    expect(REALM_RACERS_EFFECT_ABILITIES).toEqual({
+      nitro: REALM_RACERS_NITRO_ABILITY_ID,
+      slick: REALM_RACERS_SLICK_ABILITY_ID,
+    });
+    expect(realmRacersHeldEffectOf(REALM_RACERS_NITRO_ABILITY_ID)).toBe('nitro');
+    expect(realmRacersHeldEffectOf(REALM_RACERS_SLICK_ABILITY_ID)).toBe('slick');
+    expect(realmRacersHeldEffectOf(REALM_RACERS_ABILITY_ID)).toBeNull();
+  });
+});
+
+describe('the drawn effect, in a race', () => {
+  it('ranks the taker among the racers still driving', () => {
+    const { sim, pids } = racingGrid();
+    const [leader, back] = pids;
+    // The leader well up the road, so the taker at the flag is genuinely last.
+    placeOnLap(sim, leader, 0.45);
+
+    // The SAME roll, read against two different tables. On the backmarker's it
+    // is a ward; on the leader's that number is oil, so a band read off
+    // anything but the standings fails this rather than passing by luck.
+    const roll = rallyPickupRollFor('backmarker', 'ward');
+    expect(drawRallyPickupEffect('backmarker', roll)).toBe('ward');
+    expect(drawRallyPickupEffect('leader', roll)).toBe('slick');
+    installScriptedRng(sim).script(roll);
+    standOnBox(sim, back, 0);
+    sim.tick();
+    expect(progressOf(sim, back).warded).toBe(true);
+  });
+
+  it('leaves a RETIRED racer out of the field the band is read against', () => {
+    // The arrangement is chosen so the bug WOULD show: a quitter parked BEHIND
+    // the taker. Counting them makes the taker no longer last (backmarker turns
+    // into midfield); a quitter parked between the leader and the taker cannot
+    // catch anything, because the taker is last with or without them.
+    const { sim, pids } = racingGrid();
+    const [leader, middle, taker, quitter] = pids;
+    placeOnLap(sim, leader, 0.45);
+    placeOnLap(sim, middle, 0.35);
+    placeOnLap(sim, taker, 0.25);
+    placeOnLap(sim, quitter, 0.05);
+    realmRacersForfeit(sim.ctx, quitter);
+    // The premises, asserted: the quitter is out of the race and really is
+    // behind the taker, so counting them would put a fourth machine in the
+    // field with the taker no longer at the back of it.
+    expect(progressOf(sim, quitter).retiredTick).not.toBeNull();
+    expect(progressOf(sim, quitter).travelled).toBeLessThan(progressOf(sim, taker).travelled);
+
+    // A roll that tells the two tables APART, which most do not: it sits inside
+    // the backmarker's nitro slice and inside the midfield's refill.
+    const roll = 5 / 12;
+    expect(drawRallyPickupEffect('backmarker', roll)).toBe('nitro');
+    expect(drawRallyPickupEffect('midfield', roll)).toBe('charge');
+    const rng = installScriptedRng(sim);
+    rng.script(roll);
+    standOnBox(sim, taker, 0);
+    sim.tick();
+    expect(rng.consumed).toBe(1);
+    expect(progressOf(sim, taker).heldEffect).toBe('nitro');
+  });
+
+  it('names the drawn effect to the taker', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    const events = takeWithEffect(sim, a, 0, 'nitro');
+    const named = events.filter((event) => event.type === 'realmRacersPickup');
+    expect(named).toHaveLength(1);
+    expect(named[0]).toMatchObject({ effect: 'nitro', pid: a });
+  });
+
+  it('refills the weapon on a charge draw and nothing else', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    const before = required(
+      sim.entities.get(a)?.abilityCharges?.[REALM_RACERS_ABILITY_ID],
+      'charge pool',
+    ).charges;
+    takeWithEffect(sim, a, 0, 'charge');
+    const progress = progressOf(sim, a);
+    expect(progress.heldWeapon?.charges).toBeGreaterThan(before);
+    expect(progress.warded).toBe(false);
+    expect(progress.heldEffect).toBeNull();
+    expect(progress.nitroUntilTick).toBe(0);
+    expect(match(sim).slicks).toEqual([]);
+  });
+});
+
+describe('the held effects', () => {
+  it('puts the drawn effect on the action bar instead of firing it', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'nitro');
+    const progress = progressOf(sim, a);
+    // Held, not spent: nothing has happened to the machine yet.
+    expect(progress.heldEffect).toBe('nitro');
+    expect(progress.nitroUntilTick).toBe(0);
+    expect(required(sim.entities.get(a)?.drive, 'drive').speedCap).toBe(1);
+    // And it is a real ability in the kit, which is what gives it a bar slot, a
+    // keybind, a gamepad button and a mobile control for free. The WEAPON stays
+    // first: the activity kit hands slot 0 to the first rally ability a racer
+    // knows, so an effect ahead of it would take the leftmost key.
+    const meta = required(sim.players.get(a), 'meta');
+    expect(meta.known.map((known) => known.def.id)).toEqual([
+      REALM_RACERS_ABILITY_ID,
+      REALM_RACERS_NITRO_ABILITY_ID,
+    ]);
+    expect(meta.known[1].charges).toBe(1);
+    const pool = required(
+      sim.entities.get(a)?.abilityCharges?.[REALM_RACERS_NITRO_ABILITY_ID],
+      'held pool',
+    );
+    expect(pool).toMatchObject({ charges: 1, maxCharges: 1, fixed: true });
+  });
+
+  it('falls back to the refill while a slot is already full', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'slick');
+    const progress = progressOf(sim, a);
+    expect(progress.heldEffect).toBe('slick');
+    const charges = required(progress.heldWeapon?.charges, 'charges');
+
+    // The pickup cooldown has to expire before a second box is takeable at all.
+    for (let i = 0; i < 21; i++) sim.tick();
+    // The DRAW still happens and still comes off the band's own table: the
+    // fallback is decided after it, so a full slot cannot change what the
+    // tables mean.
+    const rng = installScriptedRng(sim);
+    rng.script(rallyPickupRollFor('leader', 'nitro'));
+    standOnBox(sim, a, 1);
+    const events = sim.tick();
+    expect(rng.consumed).toBe(1);
+    expect(progress.heldEffect).toBe('slick');
+    expect(required(progress.heldWeapon?.charges, 'charges')).toBeGreaterThan(charges);
+    // And the pilot is told what they actually got, not what the dice said.
+    expect(events.filter((event) => event.type === 'realmRacersPickup')).toMatchObject([
+      { effect: 'charge', pid: a },
+    ]);
+  });
+
+  it('falls back to the refill for a ward on a racer already warded', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'ward');
+    const progress = progressOf(sim, a);
+    expect(progress.warded).toBe(true);
+    const charges = required(progress.heldWeapon?.charges, 'charges');
+
+    for (let i = 0; i < 21; i++) sim.tick();
+    const rng = installScriptedRng(sim);
+    rng.script(rallyPickupRollFor('leader', 'ward'));
+    standOnBox(sim, a, 1);
+    sim.tick();
+    expect(rng.consumed).toBe(1);
+    expect(progress.warded).toBe(true);
+    expect(required(progress.heldWeapon?.charges, 'charges')).toBeGreaterThan(charges);
+  });
+
+  it('raises the top speed for the burst when the pilot spends it, then decays', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'nitro');
+    const drive = required(sim.entities.get(a)?.drive, 'drive');
+    const profile = vehicleProfile(REALM_RACERS_VEHICLE_KEY);
+    const progress = progressOf(sim, a);
+    const speedBefore = drive.speed;
+
+    // Spent through the ORDINARY cast path, which is what the bar, the keybind,
+    // the gamepad button and the mobile control all reach.
+    sim.castAbility(REALM_RACERS_NITRO_ABILITY_ID, a);
+    expect(progress.heldEffect).toBeNull();
+    expect(progress.nitroUntilTick).toBe(sim.tickCount + REALM_RACERS_NITRO_TICKS);
+    // The ceiling is up the moment the button is pressed, not a tick later, and
+    // the kick is on top of it so the burst is felt rather than climbed toward.
+    expect(drive.speedCap).toBe(REALM_RACERS_NITRO_SPEED_MULT);
+    expect(vehicleMaxSpeed(profile, drive, 1)).toBeCloseTo(
+      profile.maxSpeed * REALM_RACERS_NITRO_SPEED_MULT,
+      9,
+    );
+    expect(drive.speed).toBeCloseTo(speedBefore + REALM_RACERS_NITRO_KICK, 6);
+    // The button goes with the charge: an empty slot never sits on the bar.
+    expect(required(sim.players.get(a), 'meta').known.map((known) => known.def.id)).toEqual([
+      REALM_RACERS_ABILITY_ID,
+    ]);
+    expect(sim.entities.get(a)?.abilityCharges?.[REALM_RACERS_NITRO_ABILITY_ID]).toBeUndefined();
+
+    // Still up in the middle of the burst, gone once it expires. The surface
+    // pass rewrites the ceiling every tick, so this is the real path.
+    for (let i = 0; i < REALM_RACERS_NITRO_TICKS / 2; i++) sim.tick();
+    expect(drive.speedCap).toBe(REALM_RACERS_NITRO_SPEED_MULT);
+    while (sim.tickCount <= progress.nitroUntilTick) sim.tick();
+    expect(drive.speedCap).toBe(1);
+    expect(vehicleMaxSpeed(profile, drive, 1)).toBe(profile.maxSpeed);
+
+    // And what happens to a machine still travelling above the ordinary ceiling
+    // is a DECAY, not a snap: the kernel sinks it at the profile's capDecel, so
+    // a burst that ends on a straight reads as the engine easing rather than as
+    // hitting something. (Driven through the kernel directly: the ceiling is the
+    // sim's business, the sinking is the kernel's.)
+    drive.speed = profile.maxSpeed * REALM_RACERS_NITRO_SPEED_MULT;
+    advanceVehicleDrive(drive, profile, {
+      throttle: 1,
+      steer: 0,
+      handbrake: false,
+      onGround: true,
+      auraMult: 1,
+    });
+    expect(drive.speed).toBeLessThan(profile.maxSpeed * REALM_RACERS_NITRO_SPEED_MULT);
+    expect(drive.speed).toBeGreaterThan(profile.maxSpeed);
+  });
+
+  it('drops the oil under the MACHINE when the pilot spends it', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    const box = realmRacersPickupBoxes(RACE_CIRCUIT)[0];
+    takeWithEffect(sim, a, 0, 'slick');
+    // Driven well away from the row before spending it: the patch goes where the
+    // pilot chose, which is the whole of what makes it a decision (22a dropped
+    // it at the row, and the operator's override moved it here).
+    const point = realmRacersTrack(RACE_CIRCUIT).pointAt(realmRacersTrack(RACE_CIRCUIT).length / 2);
+    standAt(sim, a, point.x, point.z);
+    const spentTick = sim.tickCount;
+    sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, a);
+
+    const slicks = match(sim).slicks;
+    expect(slicks).toHaveLength(1);
+    expect(slicks[0].x).toBeCloseTo(point.x, 3);
+    expect(slicks[0].z).toBeCloseTo(point.z, 3);
+    expect(Math.hypot(slicks[0].x - box.x, slicks[0].z - box.z)).toBeGreaterThan(20);
+    expect(slicks[0]).toMatchObject({ ownerPid: a });
+    expect(slicks[0].expiresTick).toBe(spentTick + REALM_RACERS_SLICK_LIFETIME_TICKS);
+    expect(progressOf(sim, a).heldEffect).toBeNull();
+    // And it reaches the readout every racer in the match mirrors, rounded to
+    // the hundredth of a yard the shared builder ships.
+    expect(sim.realmRacersInfoFor(pids[1]).match?.slicks).toEqual([
+      {
+        id: slicks[0].id,
+        x: Math.round(slicks[0].x * 100) / 100,
+        z: Math.round(slicks[0].z * 100) / 100,
+      },
+    ]);
+  });
+
+  it('refuses a cast for an effect the racer does not hold', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'nitro');
+    const progress = progressOf(sim, a);
+    // The SLOT is the authority, never the button: a stale bar (or a cheat
+    // client naming the other id) spends nothing.
+    sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, a);
+    expect(match(sim).slicks).toEqual([]);
+    expect(progress.heldEffect).toBe('nitro');
+
+    // And spending it twice is spending it once: the charge goes with the slot,
+    // so a second press does nothing at all.
+    sim.castAbility(REALM_RACERS_NITRO_ABILITY_ID, a);
+    const armed = progress.nitroUntilTick;
+    expect(armed).toBeGreaterThan(0);
+    sim.tick();
+    sim.castAbility(REALM_RACERS_NITRO_ABILITY_ID, a);
+    expect(progress.nitroUntilTick).toBe(armed);
+  });
+
+  it('draws no rng when a held effect is spent', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'slick');
+    const seen: number[] = [];
+    sim.rng.setObserver((value) => seen.push(value));
+    try {
+      sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, a);
+    } finally {
+      sim.rng.setObserver(null);
+    }
+    // The randomness was spent at the box. A draw here would put the shared
+    // stream on the player's trigger finger.
+    expect(seen).toEqual([]);
+    expect(match(sim).slicks).toHaveLength(1);
+  });
+});
+
+describe('the ward', () => {
+  /**
+   * Drops a shell centred `distance` yards from the racer, on a diagonal.
+   *
+   * The falloff helper is symmetric in its operands, so an axis-aligned case
+   * would pass just as happily with x and z swapped; the two legs are also
+   * deliberately unequal so neither is a special case of the other.
+   */
+  function shellNear(sim: Sim, victim: number, owner: number, distance: number): void {
+    const racer = required(sim.entities.get(victim), 'racer');
+    const leg = distance / Math.hypot(1, 0.999);
+    match(sim).groundBlasts.push({
+      ownerPid: owner,
+      x: racer.pos.x + leg,
+      z: racer.pos.z + leg * 0.999,
+      impactTick: sim.tickCount + 1,
+    });
+  }
+
+  it('absorbs exactly one Ground Blast, then breaks', () => {
+    const { sim, pids } = racingGrid();
+    const [a, shooter] = pids;
+    takeWithEffect(sim, a, 0, 'ward');
+    const progress = progressOf(sim, a);
+    expect(progress.warded).toBe(true);
+
+    const racer = required(sim.entities.get(a), 'racer');
+    shellNear(sim, a, shooter, GROUND_BLAST_RADIUS - 0.01);
+    const absorbed = sim.tick();
+    expect(progress.warded).toBe(false);
+    expect(progress.groundBlastShockUntilTick).toBe(0);
+    expect(racer.vy).toBe(0);
+    expect(absorbed.filter((event) => event.type === 'realmRacersWardBroken')).toMatchObject([
+      { pid: a },
+    ]);
+    // The shell that was eaten caught NOBODY: a warded machine is not the
+    // nearest hit, so the crater is announced as landing on empty track.
+    expect(absorbed.filter((event) => event.type === 'realmRacersGroundBlastHit')).toMatchObject([
+      { targetId: null },
+    ]);
+
+    // And the ward is spent: the next shell lands in full.
+    shellNear(sim, a, shooter, GROUND_BLAST_RADIUS - 0.01);
+    const landed = sim.tick();
+    expect(progress.groundBlastShockUntilTick).toBe(sim.tickCount + GROUND_BLAST_SHOCK_TICKS);
+    expect(landed.filter((event) => event.type === 'realmRacersWardBroken')).toEqual([]);
+    expect(landed.filter((event) => event.type === 'realmRacersGroundBlastHit')).toMatchObject([
+      { targetId: a },
+    ]);
+  });
+
+  it('is not spent by a shell that missed', () => {
+    const { sim, pids } = racingGrid();
+    const [a, shooter] = pids;
+    takeWithEffect(sim, a, 0, 'ward');
+    const progress = progressOf(sim, a);
+    // A hair OUTSIDE the blast: a one-shot shield eaten by a near miss would be
+    // worse than no shield at all.
+    shellNear(sim, a, shooter, GROUND_BLAST_RADIUS + 0.01);
+    const missed = sim.tick();
+    expect(progress.warded).toBe(true);
+    expect(missed.filter((event) => event.type === 'realmRacersWardBroken')).toEqual([]);
+    expect(progress.groundBlastShockUntilTick).toBe(0);
+  });
+
+  it('is swept off the circuit with the flag, along with the oil', () => {
+    const { sim, pids } = racingGrid();
+    const [a, b, c] = pids;
+    // A race with everything LIVE when the flag falls: a ward standing, a nitro
+    // mid-burst, oil well inside its lifetime, and a machine actually sliding in
+    // it. (Running the race out on its 180 s deadline instead, as the first
+    // version did, expires every one of those first and asserts about nothing.)
+    takeWithEffect(sim, a, 0, 'ward');
+    for (let i = 0; i < 21; i++) sim.tick();
+    takeWithEffect(sim, b, 4, 'slick');
+    sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, b);
+    const live = match(sim);
+    const slick = required(live.slicks[0], 'slick');
+    for (let i = 0; i < 21; i++) sim.tick();
+    takeWithEffect(sim, c, 8, 'nitro');
+    sim.castAbility(REALM_RACERS_NITRO_ABILITY_ID, c);
+    // And the warded machine into the puddle, so the grip clock is running too.
+    standAt(sim, a, slick.x, slick.z);
+    sim.tick();
+    progressOf(sim, a).warded = true;
+    progressOf(sim, a).slickGripUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+    progressOf(sim, a).slickContactUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+
+    // The premises, every one of them, so no assertion below is vacuous.
+    expect(progressOf(sim, a).warded).toBe(true);
+    expect(progressOf(sim, a).slickGripUntilTick).toBeGreaterThan(sim.tickCount);
+    expect(progressOf(sim, c).nitroUntilTick).toBeGreaterThan(sim.tickCount);
+    expect(required(sim.entities.get(c)?.drive, 'drive').speedCap).toBe(
+      REALM_RACERS_NITRO_SPEED_MULT,
+    );
+    expect(live.slicks.length).toBeGreaterThan(0);
+    expect(slick.expiresTick).toBeGreaterThan(sim.tickCount);
+
+    // The flag falls on all of it, deliberately rather than on the clock.
+    for (const pid of pids) realmRacersForfeit(sim.ctx, pid);
+    expect(live.phase).toBe('finished');
+    expect(live.slicks).toEqual([]);
+    for (const pid of pids) {
+      const progress = progressOf(sim, pid);
+      expect(progress.warded).toBe(false);
+      expect(progress.nitroUntilTick).toBe(0);
+      expect(progress.slickGripUntilTick).toBe(0);
+      expect(progress.slickContactUntilTick).toBe(0);
+      expect(progress.heldEffect).toBeNull();
+      // And the machine's ceiling comes back down with it: the surface pass
+      // stops running once the phase leaves `racing`, so a nitro live at the
+      // flag would otherwise stand through the whole tableau.
+      expect(required(sim.entities.get(pid)?.drive, 'drive').speedCap).toBe(1);
+    }
+  });
+});
+
+describe('a machine the referee puts back', () => {
+  it('keeps what it won and loses what the ground was doing to it', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'ward');
+    const progress = progressOf(sim, a);
+    // Everything live at once: a ward carried, a nitro burning, and the machine
+    // sliding through a rival's oil.
+    progress.nitroUntilTick = sim.tickCount + REALM_RACERS_NITRO_TICKS;
+    progress.slickGripUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+    progress.slickContactUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+    const drive = required(sim.entities.get(a)?.drive, 'drive');
+    drive.speedCap = REALM_RACERS_NITRO_SPEED_MULT;
+    expect(progress.warded).toBe(true);
+
+    expect(realmRacersResetPosition(sim.ctx, a)).toBeUndefined();
+
+    // The ward is a thing the pilot WON: a recovery does not confiscate it.
+    expect(progress.warded).toBe(true);
+    // Everything the ground was doing to the machine is behind it, and so is a
+    // burst it can no longer spend (the recovery stopped it dead).
+    expect(progress.nitroUntilTick).toBe(0);
+    expect(progress.slickGripUntilTick).toBe(0);
+    expect(progress.slickContactUntilTick).toBe(0);
+    expect(drive.speedCap).toBe(1);
+  });
+});
+
+describe('the pickups stay deterministic', () => {
+  it('gives the same race the same effects twice', () => {
+    // Two runs of one script on one seed, through the REAL stream (nothing is
+    // scripted here): the draw is the only new rng site in the phase, so a
+    // second run that disagreed would mean the take order, the ranking or the
+    // draw itself had picked up something outside the sim clock.
+    const run = () => {
+      const sim = makeWorld();
+      const pids = GRID.map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
+      for (const pid of pids) sim.realmRacersQueueJoin(pid);
+      sim.tick();
+      for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
+      const drawn: string[] = [];
+      for (let lane = 0; lane < 4; lane++) {
+        standOnBox(sim, pids[lane], lane);
+        for (const event of sim.tick()) {
+          if (event.type === 'realmRacersPickup') drawn.push(`${event.pid}:${event.effect}`);
+        }
+      }
+      const live = match(sim);
+      return {
+        drawn,
+        slicks: live.slicks.map((slick) => `${slick.id}@${slick.x.toFixed(4)}`),
+        held: pids.map((pid) => live.progress.get(pid)?.heldEffect ?? '-'),
+        warded: pids.map((pid) => live.progress.get(pid)?.warded),
+        charges: pids.map((pid) => live.progress.get(pid)?.heldWeapon?.charges),
+      };
+    };
+    const first = run();
+    expect(first.drawn).toHaveLength(4);
+    expect(run()).toEqual(first);
+  });
+});

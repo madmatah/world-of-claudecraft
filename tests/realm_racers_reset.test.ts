@@ -14,6 +14,7 @@ import {
 } from '../src/sim/realm_racers_track_limits';
 import type { Sim } from '../src/sim/sim';
 import {
+  REALM_RACERS_AUTO_RECOVERY_LOCK_TICKS,
   REALM_RACERS_RESET_LOCK_TICKS,
   REALM_RACERS_STUCK_TICKS,
   REALM_RACERS_VERGE_BAND,
@@ -187,7 +188,7 @@ describe('Realm Racers recovery', () => {
     expect(realmRacersMovementLocked(sim.ctx, a)).toBe(false);
   });
 
-  it('automatically recovers after three seconds stopped off track without another lock', () => {
+  it('automatically recovers after three seconds stopped off track with only the one-tick lock', () => {
     const { sim, a, match, racer } = racing();
     const progress = required(match.progress.get(a), 'progress');
     const track = realmRacersTrack(RACE_CIRCUIT);
@@ -202,7 +203,16 @@ describe('Realm Racers recovery', () => {
 
     expect(racer.pos.x).toBeCloseTo(road.x, 5);
     expect(racer.pos.z).toBeCloseTo(road.z, 5);
-    expect(progress.resetLockedUntilTick).toBe(0);
+    // Since 22b the automatic recovery takes a ONE-TICK lock, just long enough
+    // for the pickup and slick eligibility guard to refuse the landing tick,
+    // nothing like the manual reset's full control lock. The pilot is free on
+    // the next tick.
+    expect(REALM_RACERS_AUTO_RECOVERY_LOCK_TICKS).toBe(1);
+    expect(progress.resetLockedUntilTick).toBe(
+      sim.ctx.tickCount + REALM_RACERS_AUTO_RECOVERY_LOCK_TICKS + 1,
+    );
+    expect(racer.drive?.controlsLocked).toBe(true);
+    while (sim.ctx.tickCount < progress.resetLockedUntilTick) sim.tick();
     expect(racer.drive?.controlsLocked).toBe(false);
     expect(realmRacersMovementLocked(sim.ctx, a)).toBe(false);
     expect(racer.auras.some((aura) => aura.name === REALM_RACERS_VERGE_BAND.name)).toBe(false);

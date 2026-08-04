@@ -184,11 +184,25 @@ derived geometry, plus the per-race take/respawn step over a plain state the mat
 The take is the NEAREST box in reach with the lowest index on a tie, which is a rule
 rather than a tidy-up: on the narrowest shipped road two boxes of one row are closer
 together than the catch radius, so a pass down the middle really is inside both
-(`pickup_row_lanes_overlap` is the readout warning that names such a row). The PHASE
-draws no rng, so it appends to the tick without a parity regen; that is a claim about
-the phase, not about the world, since a granted charge changes whether a later cast
-happens at all. `social/realm_racers.ts` owns the consequences, this owns where the
-boxes are and which of them changed hands),
+(`pickup_row_lanes_overlap` is the readout warning that names such a row). Since 22b the
+phase draws EXACTLY ONE value per box that changes hands (the weighted effect draw, taken
+at the take), so a tick with no take still draws nothing; `social/realm_racers.ts` owns the
+consequences, this owns where the boxes are and which of them changed hands),
+`realm_racers_pickup_effects.ts` (what a box GIVES: the effect vocabulary, which two of the
+four a racer HOLDS rather than receives (nitro and oil are one-charge abilities in the kit,
+spent when the pilot chooses; the refill and the ward are instant), the three
+position-weighted tables a take draws from (leader / midfield / backmarker, ranked among
+the racers STILL DRIVING), and the nitro tuning. Plain data plus one cumulative walk over
+it; the draw takes a roll in [0, 1) rather than reaching for randomness, so the single
+`ctx.rng` draw stays at the one site in the rally tick that owns it, and the stacking
+fallback (a full slot draws the refill instead) is decided AFTER the draw so the tables
+keep their meaning),
+`realm_racers_slicks.ts` (the oil a spent `slick` leaves under the machine: the patch
+record, its lifetime, the concurrent-patch CAP the renderer's pool is sized from, and the
+per-tick step that sweeps the expired ones and reports who drove through one. It never
+catches the machine that dropped it, and it reports a machine standing in a
+patch every tick, because deciding what a REPEAT means (one event, one ward, one grip
+window) is the race's business and not the geometry's),
 `realm_racers_draft_registry.ts` (the session-only DRAFT circuit overlay: a table
 with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
 `realm_racers_layout.ts` consult it and either importing something that imported it

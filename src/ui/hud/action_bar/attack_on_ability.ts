@@ -117,6 +117,9 @@ const EFFECT_CLASS: Record<AbilityEffect['type'], AutoAttackClass> = {
   sportDash: 'other',
   sportShove: 'other',
   realmRacersGroundBlast: 'other',
+  // Spending a held pickup effect is not an attack: it is a burst of speed or a
+  // patch of oil, and neither starts a swing.
+  realmRacersPickupEffect: 'other',
 };
 
 /**

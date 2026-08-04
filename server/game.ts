@@ -14,6 +14,7 @@ import { damageTakenWithin } from '../src/sim/combat/damage_history';
 import { rewindHealAmount } from '../src/sim/combat/rewind';
 import { DEEDS } from '../src/sim/content/deeds';
 import { isFinderListingTag, isFinderRole } from '../src/sim/content/dungeon_finder';
+import { realmRacersHeldEffectOf } from '../src/sim/content/realm_racers';
 import { MECH_CHROMAS, mechChromaItemId, mechChromaSkinIndex } from '../src/sim/content/skins';
 import { SPORT_ROLES, VALE_CUP_BALL_TEMPLATE_ID, VC_NATION_IDS } from '../src/sim/content/vale_cup';
 import { withWeaponSkinApplied } from '../src/sim/content/weapon_skin_rules';
@@ -8267,10 +8268,21 @@ export class GameServer {
       // is holding. The live remaining count is not here: it rides `achg`, the
       // shared charge wire.
       const rallyWeapon = meta.realmRacersMatchId !== null ? meta.known[0] : undefined;
+      // `h` is the HELD pickup effect (22b), the second ability the kit grants
+      // while a racer is carrying one. It rides the kit flag rather than a field
+      // of its own because the mirror rebuilds the whole kit from this payload:
+      // sending the weapon alone would leave an online pilot holding an effect
+      // they have no button for.
+      const rallyHeld = rallyWeapon ? realmRacersHeldEffectOf(meta.known[1]?.def.id ?? '') : null;
       maybe(
         'rrkit',
         rallyWeapon
-          ? { active: true, w: rallyWeapon.def.id, c: rallyWeapon.charges ?? null }
+          ? {
+              active: true,
+              w: rallyWeapon.def.id,
+              c: rallyWeapon.charges ?? null,
+              ...(rallyHeld ? { h: rallyHeld } : {}),
+            }
           : null,
       );
     }

@@ -7,10 +7,24 @@
 // `src/sim/social/realm_racers_bots.ts`.
 
 import { GROUND_BLAST_MAX_RANGE, GROUND_BLAST_RADIUS } from '../realm_racers_ground_blast';
+import type { RallyHeldEffect } from '../realm_racers_pickup_effects';
 import type { AbilityDef, PlayerClass } from '../types';
 import type { KnownAbility } from './classes';
 
 export const REALM_RACERS_ABILITY_ID = 'rally_ground_blast';
+
+/**
+ * The two abilities a pickup box can put in a racer's hands (22b, after the
+ * operator's mid-review override): the draw fills a HELD slot and the pilot
+ * spends it when they want, rather than the effect happening to them at the row.
+ *
+ * They are ordinary `AbilityDef` records for one reason: the kit resolver below
+ * hands them to `meta.known`, and from there the action bar, the keybinds, the
+ * gamepad and the mobile bar all work exactly as they do for the signature
+ * weapon. A bespoke "held effect" input would have had to be built four times.
+ */
+export const REALM_RACERS_NITRO_ABILITY_ID = 'rally_nitro';
+export const REALM_RACERS_SLICK_ABILITY_ID = 'rally_oil_slick';
 
 export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
   [REALM_RACERS_ABILITY_ID]: {
@@ -38,6 +52,49 @@ export const REALM_RACERS_ABILITIES: Record<string, AbilityDef> = {
     description:
       'Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals.',
   },
+  // Both held effects are SELF casts with no cooldown and no cost: the whole
+  // limit is the single charge the pickup granted, so the decision a pilot makes
+  // is WHEN to spend it, never whether the button is ready. `offGcd` because a
+  // race has no global cooldown to speak of, and `usableWhileMounted` because
+  // every racer is on a machine.
+  [REALM_RACERS_NITRO_ABILITY_ID]: {
+    id: REALM_RACERS_NITRO_ABILITY_ID,
+    name: 'Nitro',
+    class: 'warrior',
+    learnLevel: 1,
+    cost: 0,
+    castTime: 0,
+    cooldown: 0,
+    range: 0,
+    school: 'physical',
+    requiresTarget: false,
+    offGcd: true,
+    usableWhileMounted: true,
+    effects: [{ type: 'realmRacersPickupEffect', effect: 'nitro' }],
+    description: 'Burns a nitro charge for a short burst of speed above your machine cap.',
+  },
+  [REALM_RACERS_SLICK_ABILITY_ID]: {
+    id: REALM_RACERS_SLICK_ABILITY_ID,
+    name: 'Oil Slick',
+    class: 'warrior',
+    learnLevel: 1,
+    cost: 0,
+    castTime: 0,
+    cooldown: 0,
+    range: 0,
+    school: 'physical',
+    requiresTarget: false,
+    offGcd: true,
+    usableWhileMounted: true,
+    effects: [{ type: 'realmRacersPickupEffect', effect: 'slick' }],
+    description: 'Dumps a slick of oil under your machine. Rivals who drive through it lose grip.',
+  },
+};
+
+/** The ability a held effect is spent through, by effect id. */
+export const REALM_RACERS_EFFECT_ABILITIES: Record<RallyHeldEffect, string> = {
+  nitro: REALM_RACERS_NITRO_ABILITY_ID,
+  slick: REALM_RACERS_SLICK_ABILITY_ID,
 };
 
 /**
@@ -118,10 +175,15 @@ export const REALM_RACERS_BOT_CLASSES: readonly PlayerClass[] = [
 export function resolveRealmRacersKit(
   weaponAbilityId: string,
   charges: number | null,
+  heldEffect: RallyHeldEffect | null = null,
 ): KnownAbility[] {
   const def = REALM_RACERS_ABILITIES[weaponAbilityId];
   if (!def) return [];
-  return [
+  // The weapon is FIRST, always. The action bar's activity kit gives slot 0 to
+  // the first rally ability a racer knows, so a held effect landing ahead of it
+  // would take the leftmost key off the machine's own weapon; everything else
+  // the kit grants auto-places into the assignable rows behind it.
+  const kit: KnownAbility[] = [
     {
       def,
       rank: 1,
@@ -134,4 +196,32 @@ export function resolveRealmRacersKit(
       ...(charges === null ? {} : { charges }),
     },
   ];
+  // The held effect, when the racer is carrying one: ONE charge, because that is
+  // the whole of what a pickup granted. Spending it takes the ability back out
+  // of the kit, so an empty slot never sits on the bar pretending to be ready.
+  const heldDef = heldEffect
+    ? REALM_RACERS_ABILITIES[REALM_RACERS_EFFECT_ABILITIES[heldEffect]]
+    : undefined;
+  if (heldDef) {
+    kit.push({
+      def: heldDef,
+      rank: 1,
+      cost: 0,
+      castTime: 0,
+      cooldown: heldDef.cooldown,
+      effects: heldDef.effects,
+      threatFlat: 0,
+      threatMult: 1,
+      charges: 1,
+    });
+  }
+  return kit;
+}
+
+/** Which held effect an ability id spends, or null for anything else (the
+ *  weapon, a class ability). The reverse of `REALM_RACERS_EFFECT_ABILITIES`. */
+export function realmRacersHeldEffectOf(abilityId: string): RallyHeldEffect | null {
+  if (abilityId === REALM_RACERS_NITRO_ABILITY_ID) return 'nitro';
+  if (abilityId === REALM_RACERS_SLICK_ABILITY_ID) return 'slick';
+  return null;
 }

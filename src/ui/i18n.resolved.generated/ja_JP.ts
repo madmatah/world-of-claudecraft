@@ -1234,6 +1234,12 @@ export const ja_JP: EnTranslations = {
       "offTrack": "コースに戻れ: {seconds}",
       "cutReturned": "ショートカット。コースを外れた地点に戻されました。",
       "reset": "コースに戻る",
+      "pickupCharge": "砲弾装填",
+      "pickupNitro": "ニトロ準備完了",
+      "pickupWard": "守護発動",
+      "pickupSlick": "オイル準備完了",
+      "wardHeld": "守護",
+      "wardBroken": "守護が砕けた",
       "countdown": "エンジン固定中。開始まで{seconds}秒",
       "go": "スタート！",
       "finalLap": "ファイナルラップ",
@@ -7520,6 +7526,14 @@ export const ja_JP: EnTranslations = {
       "rally_ground_blast": {
         "name": "グラウンドブラスト",
         "description": "重爆発弾を発射し、着弾と同時に爆発して地面を揺らし、周囲のライバルを吹き飛ばします。"
+      },
+      "rally_nitro": {
+        "name": "ニトロ",
+        "description": "ニトロを焚き、機体の速度上限を超える短い加速を得る。"
+      },
+      "rally_oil_slick": {
+        "name": "オイルスリック",
+        "description": "車体の下にオイルをまく。踏んだ相手はグリップを失う。"
       },
       "flamestrike": {
         "name": "フレイムストライク",

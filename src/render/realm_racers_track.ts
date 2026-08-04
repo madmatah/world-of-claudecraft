@@ -53,6 +53,7 @@ import {
 } from './realm_racers_grass_core';
 import { buildRealmRacersPickups } from './realm_racers_pickups';
 import { REALM_RACERS_PROP_URLS, REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
+import { buildRealmRacersSlicks } from './realm_racers_slicks';
 import {
   type RallyCircuitTheme,
   REALM_RACERS_THEME_ASSET_URLS,
@@ -856,6 +857,12 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   const pickups = buildRealmRacersPickups(circuit);
   group.add(pickups.group);
 
+  // --- and the oil a drawn pickup leaves behind, on the same group for the
+  // same reasons. It takes no circuit: where the patches are is a live fact of
+  // the race, not of the geometry ---
+  const slicks = buildRealmRacersSlicks();
+  group.add(slicks.group);
+
   // --- the perimeter, so the circuit sits in a walled garden ---
   const perimeter = rallyPerimeterPieces(circuit);
   const wallScale = theme.perimeter.scale;
@@ -914,6 +921,9 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
       // only against a race on THIS circuit. A match on another circuit is
       // another lane's, so its taken set says nothing about these boxes.
       pickups.update(time, match?.circuitId === circuit.id ? match : null);
+      // Same gate for the oil: a race on another circuit is another lane's, and
+      // its hazards are not standing on this road.
+      slicks.update(time, match?.circuitId === circuit.id ? match : null);
     },
   };
 }

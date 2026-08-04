@@ -244,6 +244,7 @@ const CALLBACK_KEYS = [
   'vcupSportDash',
   'vcupSportShove',
   'realmRacersFireGroundBlast',
+  'realmRacersSpendPickupEffect',
   'realmRacersDevRace',
 ] as const;
 
@@ -565,6 +566,7 @@ function makeFakeHost() {
     vcupSportDash: vi.fn(),
     vcupSportShove: vi.fn(),
     realmRacersFireGroundBlast: vi.fn(),
+    realmRacersSpendPickupEffect: vi.fn(),
     realmRacersDevRace: vi.fn(),
   };
   return { host, rng, entities, clock };

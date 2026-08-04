@@ -605,6 +605,18 @@ const classAbilityNamesEn = {
         'Ground Blast',
         'Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals.',
       ],
+      // The two held pickup effects (22b): a box puts one of these on the bar
+      // with a single charge, and the pilot spends it when it suits them.
+      [
+        'rally_nitro',
+        'Nitro',
+        'Burns a nitro charge for a short burst of speed above your machine cap.',
+      ],
+      [
+        'rally_oil_slick',
+        'Oil Slick',
+        'Dumps a slick of oil under your machine. Rivals who drive through it lose grip.',
+      ],
       [
         'flamestrike',
         'Flamestrike',

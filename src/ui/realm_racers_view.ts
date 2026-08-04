@@ -105,6 +105,14 @@ export interface RealmRacersHudView {
   trackLimit: 'none' | 'offTrack' | 'cutReturned';
   /** Seconds left before the off-track reset; only read for `offTrack`. */
   offTrackIn: number;
+  /**
+   * Whether the viewer is carrying a ward: the one-shot buff that eats the next
+   * Ground Blast or patch of oil. A pip on the strip rather than only the FCT
+   * that announced it, because a shield a pilot cannot see is a shield they
+   * cannot plan around. Out of the signature (like `resetLocked`): it toggles
+   * mid-race and must not rebuild the strip.
+   */
+  warded: boolean;
   /** Seconds left in the winner's chase window, 0 when it is not running. */
   chaseIn: number;
   /** Whether the RACE is over, which is when the podium takes the headline. */
@@ -138,6 +146,7 @@ const HUD_OFF: RealmRacersHudView = {
   wrongWay: false,
   trackLimit: 'none',
   offTrackIn: 0,
+  warded: false,
   chaseIn: 0,
   decided: false,
   result: null,
@@ -232,6 +241,7 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
     // the other has already happened and is only being explained.
     trackLimit: match.offTrackIn > 0 ? 'offTrack' : match.cutReturned ? 'cutReturned' : 'none',
     offTrackIn: match.offTrackIn,
+    warded: match.warded,
     chaseIn: match.chaseIn,
     decided: match.decided,
     result: match.result,

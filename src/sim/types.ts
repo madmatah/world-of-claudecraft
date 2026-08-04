@@ -5,6 +5,7 @@ import type { MountKey } from './content/mounts';
 import type { GatheringProfessionId, ToolEffectId } from './content/professions';
 import type { LockSession, LootTier, PickAction, StepResult, VisibleCell } from './lockpick';
 import type { HarvestYield } from './professions/harvest_yields';
+import type { RallyHeldEffect, RallyPickupEffect } from './realm_racers_pickup_effects';
 
 export const TICK_RATE = 20; // sim ticks per second
 export const DT = 1 / TICK_RATE;
@@ -2369,6 +2370,11 @@ export type AbilityEffect =
   // pilot aimed, and `radius` is the blast, carried on the effect so the aiming
   // reticle draws the exact circle the sim will resolve.
   | { type: 'realmRacersGroundBlast'; radius: number }
+  // Spending a HELD pickup effect (22b): the nitro burst, or dumping the oil
+  // under the machine. The effect id is on the record rather than read off the
+  // racer, so the ability a pilot pressed is the ability that fires and a stale
+  // held slot can never cast the other one.
+  | { type: 'realmRacersPickupEffect'; effect: RallyHeldEffect }
   | {
       type: 'consumeAura';
       auraIds?: string[];
@@ -4622,6 +4628,15 @@ export type SimEvent = { pid?: number } & (
   // no one died, but the online renderer must snap even for a short rewind.
   | { type: 'realmRacersReset' }
   | { type: 'realmRacersLap'; lap: number; totalLaps: number }
+  // A pickup box changed hands, and this is what it gave. Personal and
+  // TEXT-FREE: the sim decides the effect, the client owns the words for it
+  // (`src/ui/realm_racers_pickup_i18n.ts`), exactly like the Card Duel pair
+  // below and the gather/craft results above.
+  | { type: 'realmRacersPickup'; effect: RallyPickupEffect }
+  // A ward ate a hostile rally effect (a Ground Blast impact or an oil slick)
+  // and broke. Personal, text-free: without it a shell that lands on a warded
+  // machine and does nothing is a bug as far as the pilot can tell.
+  | { type: 'realmRacersWardBroken' }
   | {
       type: 'realmRacersResult';
       won: boolean;

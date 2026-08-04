@@ -32,6 +32,19 @@ export interface RealmRacersRacerInfo {
   retired: boolean;
 }
 
+/**
+ * One oil slick on the circuit: where it is, and who it is across snapshots.
+ *
+ * The id is what lets presentation animate a patch appearing and expiring
+ * without an animation jumping from a patch that has gone to the one that took
+ * its place in the list.
+ */
+export interface RealmRacersSlickInfo {
+  id: number;
+  x: number;
+  z: number;
+}
+
 export interface RealmRacersMatchInfo {
   id: number;
   /**
@@ -104,6 +117,24 @@ export interface RealmRacersMatchInfo {
    * box entering it pops, a box leaving it grows back.
    */
   pickupsTaken: number[];
+  /**
+   * The oil slicks standing on this race's circuit right now, in the SAME frame
+   * the pickup boxes resolve in (the circuit's own; the renderer's track group
+   * is already built in it). Empty on a clean circuit, which is most of a race.
+   *
+   * Everyone in the race sees every patch, including the one they dropped: a
+   * hazard is actionable information, so no viewer and no graphics tier may be
+   * shown fewer of them than another.
+   */
+  slicks: RealmRacersSlickInfo[];
+  /**
+   * Whether the VIEWER is carrying a ward right now: the one-shot buff that eats
+   * the next Ground Blast or patch of oil. Self-only, like `offTrackIn` and
+   * `cutReturned` beside it, because a rival's shield is not this pilot's
+   * business; the race strip shows it as a pip so a shield is something the
+   * player can plan around rather than a toast they may have missed.
+   */
+  warded: boolean;
   /** True for a private practice race on its own copy of the circuit. */
   practice: boolean;
   result: RealmRacersResult;

@@ -113,6 +113,7 @@ export class RealmRacersUi {
   private positionEl: HTMLElement | null = null;
   private timeEl: HTMLElement | null = null;
   private speedEl: HTMLElement | null = null;
+  private wardEl: HTMLElement | null = null;
   private wrongWayEl: HTMLElement | null = null;
   private limitsEl: HTMLElement | null = null;
   private phaseEl: HTMLElement | null = null;
@@ -459,6 +460,7 @@ export class RealmRacersUi {
           ? `<button type="button" class="rallyhud-forfeit" data-rally-hud-forfeit></button>`
           : '') +
         `</div>` +
+        `<div class="rallyhud-ward" role="status" aria-live="polite"></div>` +
         `<div class="rallyhud-wrong-way" role="alert" aria-live="assertive"></div>` +
         `<div class="rallyhud-limits" role="status" aria-live="polite"></div>` +
         `<div class="rallyhud-phase" aria-live="polite"></div>`;
@@ -466,6 +468,7 @@ export class RealmRacersUi {
       this.lapEl = root.querySelector('.rallyhud-lap');
       this.timeEl = root.querySelector('.rallyhud-time');
       this.speedEl = root.querySelector('.rallyhud-speed');
+      this.wardEl = root.querySelector('.rallyhud-ward');
       this.wrongWayEl = root.querySelector('.rallyhud-wrong-way');
       this.limitsEl = root.querySelector('.rallyhud-limits');
       this.phaseEl = root.querySelector('.rallyhud-phase');
@@ -510,6 +513,12 @@ export class RealmRacersUi {
     }
     if (this.speedEl)
       w.setText(this.speedEl, t('hudChrome.rally.speed', { speed: num(view.speed) }));
+    if (this.wardEl) {
+      // Written even while hidden, so the two writes elide independently and a
+      // locale flip lands on both (the same shape the limits line below uses).
+      w.setText(this.wardEl, t('hudChrome.rally.wardHeld'));
+      w.setDisplay(this.wardEl, view.warded ? 'block' : 'none');
+    }
     if (this.wrongWayEl) {
       w.setText(this.wrongWayEl, t('hudChrome.rally.wrongWay'));
       w.setDisplay(this.wrongWayEl, view.wrongWay ? 'block' : 'none');

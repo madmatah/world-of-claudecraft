@@ -21,7 +21,11 @@ import type {
   RealmRacersPhase,
   RealmRacersRacerInfo,
 } from '../../world_api/realm_racers';
-import { realmRacersWeaponCharges, resolveRealmRacersKit } from '../content/realm_racers';
+import {
+  REALM_RACERS_EFFECT_ABILITIES,
+  realmRacersWeaponCharges,
+  resolveRealmRacersKit,
+} from '../content/realm_racers';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT,
   type RealmRacersCircuit,
@@ -38,6 +42,7 @@ import {
   GROUND_BLAST_CONTROL_SPEED_MULT,
   GROUND_BLAST_SHOCK_GRIP,
   GROUND_BLAST_SHOCK_TICKS,
+  groundBlastFalloff,
   resolveGroundBlastAim,
   resolveGroundBlastImpact,
 } from '../realm_racers_ground_blast';
@@ -51,6 +56,16 @@ import {
   realmRacersPracticeLanes,
   realmRacersPublicLane,
 } from '../realm_racers_layout';
+import {
+  drawRallyPickupEffect,
+  isRallyHeldEffect,
+  type RallyHeldEffect,
+  type RallyPickupEffect,
+  REALM_RACERS_NITRO_KICK,
+  REALM_RACERS_NITRO_SPEED_MULT,
+  REALM_RACERS_NITRO_TICKS,
+  rallyPickupBand,
+} from '../realm_racers_pickup_effects';
 import {
   createRealmRacersPickupState,
   type RallyPickupRacer,
@@ -66,6 +81,15 @@ import {
   stepRealmRacersProgress,
   travelledFromArc,
 } from '../realm_racers_progress';
+import {
+  type RallySlick,
+  type RallySlickRacer,
+  REALM_RACERS_SLICK_CAP,
+  REALM_RACERS_SLICK_GRIP,
+  REALM_RACERS_SLICK_GRIP_TICKS,
+  REALM_RACERS_SLICK_LIFETIME_TICKS,
+  stepRealmRacersSlicks,
+} from '../realm_racers_slicks';
 import {
   type RallyProjection,
   rallyForwardDot,
@@ -115,6 +139,20 @@ export const REALM_RACERS_COUNTDOWN_TICKS = 9 * TICK_RATE;
 export const REALM_RACERS_CHASE_TICKS = 30 * TICK_RATE;
 export const REALM_RACERS_RETURN_TICKS = 6 * TICK_RATE;
 export const REALM_RACERS_RESET_LOCK_TICKS = 2 * TICK_RATE;
+/**
+ * The lock an AUTOMATIC recovery carries (the wedged-machine arm and the
+ * referee's loiter verdict), ticks.
+ *
+ * One tick, not two seconds: automatic recovery has already charged its stop and
+ * hands control straight back, so this is not a settle window. It exists because
+ * every "was this driven into or teleported onto" guard in the rally is written
+ * as `tickCount >= resetLockedUntilTick`, and a zero-tick lock leaves that field
+ * at 0, which is the guard reading TRUE. A machine dropped on a pickup box or in
+ * a patch of oil by a recovery would otherwise take it (or suffer it) on the next
+ * tick, which is the reward-for-going-off-road shape the manual arm already
+ * refuses.
+ */
+export const REALM_RACERS_AUTO_RECOVERY_LOCK_TICKS = 1;
 export const REALM_RACERS_STUCK_TICKS = 3 * TICK_RATE;
 export const REALM_RACERS_WRONG_WAY_TICKS = Math.ceil(TICK_RATE / 2);
 export const REALM_RACERS_STUCK_SPEED = 0.75;
@@ -254,6 +292,40 @@ export interface RealmRacersProgress {
    * same row (`realm_racers_pickups.ts`).
    */
   pickupCooldownUntilTick: number;
+  /**
+   * Tick this racer's nitro burst expires on; 0 when they are not boosting.
+   *
+   * It rides the vehicle kernel's OWN speed ceiling (`VehicleDrive.speedCap`,
+   * rewritten every tick by `applyVehicleSurface` like every other surface
+   * fact), so a burst is simply a run of ticks where the ceiling stands above
+   * the profile's maximum instead of on it.
+   */
+  nitroUntilTick: number;
+  /**
+   * The pickup effect this racer is HOLDING, or null with an empty slot.
+   *
+   * It is an ability on their action bar for as long as it sits here (the kit is
+   * republished whenever this moves), and casting it is what spends it. While it
+   * is full a box that draws another held effect falls back to the refill: no
+   * overwrite, no double stock.
+   */
+  heldEffect: RallyHeldEffect | null;
+  /**
+   * Whether this racer is carrying a ward: it absorbs the next hostile rally
+   * effect (a Ground Blast impact or an oil slick) and breaks. A boolean rather
+   * than a timer, because it lasts until it is spent or the race ends.
+   */
+  warded: boolean;
+  /**
+   * The two halves of driving through oil, both ticks, both 0 before the first
+   * patch. `slickContactUntilTick` is how long this racer's CONTACT is already
+   * resolved for (a machine takes two or three ticks to cross a patch and that
+   * is one event, one ward, one grip loss); `slickGripUntilTick` is how long the
+   * grip is actually gone for, which a ward can leave at 0 by absorbing the
+   * contact.
+   */
+  slickContactUntilTick: number;
+  slickGripUntilTick: number;
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
   groundBlastShockUntilTick: number;
@@ -327,6 +399,16 @@ export interface RealmRacersMatch {
    * geometry (it is memoized content) and share nothing else.
    */
   pickups: RallyPickupState;
+  /**
+   * The oil slicks standing on THIS copy of the circuit, in the order they were
+   * dropped (which is id order), plus the counter that names the next one.
+   *
+   * Per match for the same reason the boxes are: two practice lanes race two
+   * copies of one circuit and share nothing but its geometry. Cleared when the
+   * race ends, like the shells in flight.
+   */
+  slicks: RallySlick[];
+  nextSlickId: number;
   /** Last tick each racer PAIR announced a bump, keyed by pair index, so the
    *  throttle is per pair rather than per match and a bigger grid keeps one
    *  duel from silencing another. */
@@ -582,6 +664,48 @@ function publishWeaponCharges(e: Entity, held: RealmRacersWeaponSlot | null): vo
   };
 }
 
+/**
+ * Publish the HELD pickup effect as a one-charge ability, or take it away again.
+ *
+ * The whole of what makes a held effect castable: it rides the ordinary kit, so
+ * the action bar places it, the keybinds reach it, the gamepad and the mobile
+ * bar follow, and the cast goes down the same path the signature weapon's does.
+ * Spending it removes the ability from `meta.known` rather than leaving a spent
+ * button on the bar.
+ */
+function republishKit(ctx: SimContext, match: RealmRacersMatch, pid: number): void {
+  const meta = ctx.players.get(pid);
+  const e = ctx.entities.get(pid);
+  const progress = match.progress.get(pid);
+  if (!meta || !e || !progress) return;
+  const held = progress.heldWeapon;
+  meta.known = held ? resolveRealmRacersKit(held.abilityId, held.charges, progress.heldEffect) : [];
+  meta.wireRev++;
+  publishWeaponCharges(e, held);
+  publishHeldEffectCharge(e, progress.heldEffect);
+}
+
+/**
+ * The held effect's own charge pool: exactly one use, `fixed` so the recharge
+ * tick never refills it, and REMOVED the moment the slot empties, so a spent
+ * effect cannot be cast a second time even if a stale bar still points at it.
+ */
+function publishHeldEffectCharge(e: Entity, heldEffect: RallyHeldEffect | null): void {
+  for (const abilityId of Object.values(REALM_RACERS_EFFECT_ABILITIES)) {
+    if (heldEffect && REALM_RACERS_EFFECT_ABILITIES[heldEffect] === abilityId) continue;
+    if (e.abilityCharges) delete e.abilityCharges[abilityId];
+  }
+  if (!heldEffect) return;
+  e.abilityCharges ??= {};
+  e.abilityCharges[REALM_RACERS_EFFECT_ABILITIES[heldEffect]] = {
+    charges: 1,
+    maxCharges: 1,
+    recharge: 0,
+    rechargeLength: 0,
+    fixed: true,
+  };
+}
+
 function standardizeRacer(
   ctx: SimContext,
   match: RealmRacersMatch,
@@ -777,6 +901,11 @@ function startMatch(
             charges: realmRacersWeaponCharges(profile.weaponAbilityId),
           },
           pickupCooldownUntilTick: 0,
+          nitroUntilTick: 0,
+          heldEffect: null,
+          warded: false,
+          slickContactUntilTick: 0,
+          slickGripUntilTick: 0,
           groundBlastShockUntilTick: 0,
           lapStartTick: ctx.tickCount,
           hadOffTrackContact: false,
@@ -788,8 +917,11 @@ function startMatch(
     ),
     groundBlasts: [],
     bumpTicks: new Map(),
-    // Every box present at the flag, on every copy of the circuit.
+    // Every box present at the flag, on every copy of the circuit, and a clean
+    // circuit: no oil is down until somebody draws some.
     pickups: createRealmRacersPickupState(circuit),
+    slicks: [],
+    nextSlickId: 1,
     circuitId: circuit.id,
     // A practice race holds the private lane its caller claimed; a queued race
     // stands on its circuit's PUBLIC lane, which is lane 0 only while the
@@ -896,6 +1028,30 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   match.phase = 'finished';
   match.finishTick = ctx.tickCount;
   match.groundBlasts.length = 0;
+  // The circuit is swept with the flag: no shell in the air, no oil on the road,
+  // and nobody carrying a ward into a tableau where nothing can hit them. The
+  // whole rally kit belongs to the race, not to the six seconds after it.
+  match.slicks.length = 0;
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    if (!progress) continue;
+    progress.warded = false;
+    progress.nitroUntilTick = 0;
+    progress.slickGripUntilTick = 0;
+    progress.slickContactUntilTick = 0;
+    // The kit goes with it: an effect held at the flag is spent on nothing, and
+    // a button that stays on the bar through the tableau is a button that lies.
+    if (progress.heldEffect !== null) {
+      progress.heldEffect = null;
+      republishKit(ctx, match, pid);
+    }
+    // The surface pass stops running the moment the phase leaves `racing`, so a
+    // ceiling raised by a nitro would stand for the whole tableau (and be the
+    // state a `resetVehicleDrive` below does NOT clear: it zeroes the motion,
+    // never the multipliers).
+    const drive = ctx.entities.get(pid)?.drive;
+    if (drive) drive.speedCap = 1;
+  }
   const ranked = classify(match);
   match.finishOrder = ranked.map((entry) => entry.pid);
   // A dead heat is only ever for the LEAD, and only between two machines that
@@ -1082,6 +1238,13 @@ function resetRacerTo(
   progress.stuckTicks = 0;
   progress.wrongWayTicks = 0;
   progress.wrongWay = false;
+  // A machine put back on the racing line is put back CLEAN: whatever surface
+  // it was fighting is behind it, and a burst it can no longer spend (the
+  // recovery stopped it dead) is not a burst it keeps. The ward is untouched:
+  // it is a thing the pilot won, not a state of the ground under them.
+  progress.nitroUntilTick = 0;
+  progress.slickGripUntilTick = 0;
+  progress.slickContactUntilTick = 0;
   // A racer put back on the racing line is on it: whatever excursion carried
   // them here is over, and the odometer starts again from the next one.
   progress.excursion = noRallyExcursion();
@@ -1113,7 +1276,7 @@ function resetRacerToRecoveryAnchor(
     s: progress.resetS,
     lap: progress.resetLap,
     distanceSinceWrap: progress.resetDistanceSinceWrap,
-    lockTicks: manual ? REALM_RACERS_RESET_LOCK_TICKS : 0,
+    lockTicks: manual ? REALM_RACERS_RESET_LOCK_TICKS : REALM_RACERS_AUTO_RECOVERY_LOCK_TICKS,
   });
 }
 
@@ -1204,6 +1367,18 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
       if (!realmRacersStillRunning(match, pid)) continue;
       const racer = ctx.entities.get(pid);
       if (!racer?.drive || racer.dead) continue;
+      // Asked BEFORE the impact is resolved, because resolving it already shoves
+      // the machine: a ward has to be able to say no while there is still
+      // nothing to undo. It costs the shot its victim outright, so this racer is
+      // not the shell's nearest hit either.
+      if (groundBlastFalloff(racer.pos.x, racer.pos.z, shot.x, shot.z) > 0) {
+        const warded = match.progress.get(pid);
+        if (warded?.warded) {
+          warded.warded = false;
+          ctx.emit({ type: 'realmRacersWardBroken', pid });
+          continue;
+        }
+      }
       const blast = resolveGroundBlastImpact(
         { x: racer.pos.x, z: racer.pos.z, facing: racer.facing, drive: racer.drive },
         shot.x,
@@ -1286,8 +1461,9 @@ function settleContact(ctx: SimContext, racer: Entity, body: ContactBody): void 
  * per-player movement loop ran earlier in this same tick, so both machines have
  * already moved and this pass corrects their final positions. Unlike the
  * surface multipliers above there is no tick of lag, and unlike a new tick
- * phase there is no reordering: this draws zero rng, like the rest of the
- * module.
+ * phase there is no reordering: this pass itself draws zero rng. (The MODULE no
+ * longer does: since 22b a pickup take draws exactly one value, in
+ * `tickPickups`. This pass is upstream of it and unaffected.)
  *
  * The test is a discrete overlap, not a swept one, which is the right trade for
  * racers travelling the same way around a circuit (their closing speed is a few
@@ -1380,27 +1556,31 @@ export function realmRacersOnTrack(band: RealmRacersSlowBand | null): boolean {
 
 /**
  * Hand the driving model the surface under the machine. The road is the neutral
- * 1/1; every off-track band is looser and draggier than it, and a shell shock
- * cuts whatever grip is left on top of that.
+ * 1/1; every off-track band is looser and draggier than it, and a shell shock or
+ * a patch of oil cuts whatever grip is left on top of that.
  *
- * The shock rides the SURFACE seam rather than a mechanism of its own precisely
- * because this is already rewritten every tick: a shocked machine on the grass
- * is simply both, and the shock expires by the tick clock with nothing to clean
- * up.
+ * Both grip losses ride the SURFACE seam rather than a mechanism of their own
+ * precisely because this is already rewritten every tick: a shocked machine
+ * sliding through oil on the grass is simply all three, they multiply, and each
+ * expires by the tick clock with nothing to clean up.
+ *
+ * `speedBoost` is the same seam seen from the other side, and it is the whole of
+ * the nitro: the knob was already documented as the one for a surface that caps
+ * speed without a visible debuff, and a burst is that knob standing ABOVE 1.
  */
 function applyVehicleSurface(
   racer: Entity,
   band: RealmRacersSlowBand | null,
-  shocked: boolean,
+  gripPenalty: number,
+  speedBoost: number,
 ): void {
   if (!racer.drive) return;
-  racer.drive.gripMult = (band ? band.gripMult : 1) * (shocked ? GROUND_BLAST_SHOCK_GRIP : 1);
+  racer.drive.gripMult = (band ? band.gripMult : 1) * gripPenalty;
   racer.drive.dragMult = band ? band.dragMult : 1;
   // The band's speed loss rides its slow AURA, which the kernel already folds
-  // into the top speed, so the surface cap stays neutral and nothing is charged
-  // twice. The knob exists for a surface that should cap speed WITHOUT a
-  // visible debuff.
-  racer.drive.speedCap = 1;
+  // into the top speed, so the surface cap stays neutral off a nitro and nothing
+  // is charged twice.
+  racer.drive.speedCap = speedBoost;
 }
 
 /**
@@ -1497,8 +1677,14 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
       continue;
     }
 
-    const shockUntil = progress.groundBlastShockUntilTick;
-    applyVehicleSurface(racer, band, ctx.tickCount < shockUntil);
+    const shocked = ctx.tickCount < progress.groundBlastShockUntilTick;
+    const slicked = ctx.tickCount < progress.slickGripUntilTick;
+    applyVehicleSurface(
+      racer,
+      band,
+      (shocked ? GROUND_BLAST_SHOCK_GRIP : 1) * (slicked ? REALM_RACERS_SLICK_GRIP : 1),
+      ctx.tickCount < progress.nitroUntilTick ? REALM_RACERS_NITRO_SPEED_MULT : 1,
+    );
     const existing = racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
     if (!band) {
       if (existing) racer.auras = racer.auras.filter((aura) => aura !== existing);
@@ -1633,6 +1819,12 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
   if (anyFinished && raceIsDecided(ctx, match)) endMatch(ctx, match);
 }
 
+/** Hundredths of a yard: the precision the readout ships anything positional at.
+ *  See the note at the slick list in `matchInfoFor`. */
+function roundReadout(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /** The path a machine covered this tick, in the circuit's canonical frame. */
 function segmentOf(
   match: RealmRacersMatch,
@@ -1661,10 +1853,11 @@ function segmentOf(
  * biggest `travelled` for the rest of the race, so an unfiltered argmin would
  * freeze the boxes on a lap number nobody can advance any more.
  *
- * THE PHASE draws no rng, so it appends to the tick without moving the shared
- * stream. That is a claim about this phase only: a granted charge changes
- * whether a later `castAbility` happens at all, so the boxes are not neutral to
- * the world's draws the way a pure readout is.
+ * THE PHASE draws EXACTLY ONE value off the shared stream per box that changes
+ * hands (22b): what the box gives is a weighted draw, and it is taken here, at
+ * the take, so the count is a plain function of what happened on the circuit
+ * rather than of how many racers were offered a box. A tick with no take draws
+ * nothing, which is what keeps the boxes appendable to the tick at all.
  */
 function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
   const boxes = realmRacersPickupBoxes(realmRacersCircuitOf(match));
@@ -1672,13 +1865,21 @@ function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
   let leaderLap = 0;
   let leaderTravelled = Number.NEGATIVE_INFINITY;
   const racers: RallyPickupRacer[] = [];
+  // How far every racer STILL DRIVING has come. It is what a take is ranked
+  // against, and it is deliberately not `classify()`: the catch-up weighting is
+  // about the race still being run, and a classification sorts finishers and
+  // quitters into the order too.
+  const runningTravelled: number[] = [];
   for (const pid of match.pids) {
     const progress = match.progress.get(pid);
     if (!progress) continue;
-    const running = realmRacersStillRunning(match, pid);
-    if (running && progress.travelled > leaderTravelled) {
-      leaderTravelled = progress.travelled;
-      leaderLap = progress.lap;
+    const stillRunning = realmRacersStillRunning(match, pid);
+    if (stillRunning) {
+      runningTravelled.push(progress.travelled);
+      if (progress.travelled > leaderTravelled) {
+        leaderTravelled = progress.travelled;
+        leaderLap = progress.lap;
+      }
     }
     const e = ctx.entities.get(pid);
     if (!e) continue;
@@ -1697,7 +1898,7 @@ function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
       // Express Tour's own gate 6 sits 2.28 yd from a box, against a 2.3 yd
       // reach), and a box collected by being teleported onto it is a free
       // charge for driving off the road.
-      eligible: running && ctx.tickCount >= progress.resetLockedUntilTick,
+      eligible: stillRunning && ctx.tickCount >= progress.resetLockedUntilTick,
     });
   }
   const step = stepRealmRacersPickups(boxes, match.pickups, {
@@ -1709,15 +1910,203 @@ function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
     const progress = match.progress.get(take.pid);
     if (!progress) continue;
     progress.pickupCooldownUntilTick = ctx.tickCount + REALM_RACERS_PICKUP_COOLDOWN_TICKS;
-    const held = progress.heldWeapon;
-    // Unlimited fire (a null budget) has nothing to add to, and a machine with
-    // no weapon slot at all has nowhere to put it. Both still ARM the cooldown
-    // above and still take the box: what a box gives is the slot's business,
-    // and 22b hands out more than charges.
-    if (!held || held.charges === null) continue;
-    held.charges += REALM_RACERS_PICKUP_CHARGE_GRANT;
-    const racer = ctx.entities.get(take.pid);
-    if (racer) publishWeaponCharges(racer, held);
+    // ONE draw per take, here, and nowhere else in the phase. The rank is how
+    // many still-driving machines are ahead of this one, so the leader is 0 and
+    // the field's tail draws the catch-up table.
+    let ahead = 0;
+    for (const travelled of runningTravelled) {
+      if (travelled > progress.travelled) ahead++;
+    }
+    const band = rallyPickupBand(ahead, runningTravelled.length);
+    const effect = resolvePickupEffect(drawRallyPickupEffect(band, ctx.rng.next()), progress);
+    applyPickupEffect(ctx, match, take.pid, progress, effect);
+    // Named to the taker, in their own language: the event carries the EFFECT
+    // the box actually gave, never a sentence (`realm_racers_pickup_i18n.ts`
+    // owns the words, and whether that effect was applied or is now HELD is
+    // presentation's business).
+    ctx.emit({ type: 'realmRacersPickup', effect, pid: take.pid });
+  }
+}
+
+/**
+ * The stacking rule, applied AFTER the draw and never instead of it.
+ *
+ * A racer already holding an unused effect (or already warded) falls back to the
+ * refill rather than overwriting what they have or stocking a second one. It is
+ * deliberately a second step: the draw itself must stay one value off the shared
+ * stream from the band's own table, or the tables would silently mean something
+ * different for a racer whose slot happened to be full.
+ */
+function resolvePickupEffect(
+  drawn: RallyPickupEffect,
+  progress: RealmRacersProgress,
+): RallyPickupEffect {
+  if (isRallyHeldEffect(drawn)) return progress.heldEffect === null ? drawn : 'charge';
+  if (drawn === 'ward') return progress.warded ? 'charge' : drawn;
+  return drawn;
+}
+
+/** Compile-time exhaustiveness: a fifth effect is an error here (and in the
+ *  i18n `Record` that gives it words) until it has been handled. */
+function assertNever(value: never): never {
+  throw new Error(`unhandled pickup effect: ${String(value)}`);
+}
+
+/**
+ * What a resolved effect does at the moment the box is taken.
+ *
+ * Two of the four are INSTANT: the refill is ammunition (there is nothing to
+ * decide) and the ward is a shield a pilot would arm immediately anyway. The
+ * other two are HELD (the operator's mid-review override): they land in the
+ * racer's kit as a one-charge ability and happen when the pilot casts them.
+ */
+function applyPickupEffect(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  pid: number,
+  progress: RealmRacersProgress,
+  effect: RallyPickupEffect,
+): void {
+  switch (effect) {
+    case 'charge': {
+      const held = progress.heldWeapon;
+      // Unlimited fire (a null budget) has nothing to add to, and a machine with
+      // no weapon slot at all has nowhere to put it. Both still took the box and
+      // still armed the cooldown: what a box gives is the slot's business.
+      if (!held || held.charges === null) return;
+      held.charges += REALM_RACERS_PICKUP_CHARGE_GRANT;
+      const racer = ctx.entities.get(pid);
+      if (racer) publishWeaponCharges(racer, held);
+      return;
+    }
+    case 'ward':
+      progress.warded = true;
+      return;
+    case 'nitro':
+    case 'slick':
+      // Into the pilot's hands, not onto the machine: the kit republish is what
+      // puts the button on the bar (and the keybind, the gamepad and the mobile
+      // control behind it).
+      progress.heldEffect = effect;
+      republishKit(ctx, match, pid);
+      return;
+    default:
+      assertNever(effect);
+  }
+}
+
+/**
+ * Spend the held effect a pilot just cast.
+ *
+ * Reached through the ordinary ability path (`castAbility` -> the effect
+ * dispatcher -> `ctx.realmRacersSpendPickupEffect`), so the cost, the phase gate
+ * and the charge accounting are the ones every rally cast already obeys. It
+ * draws ZERO rng: the randomness was spent at the box.
+ */
+export function realmRacersSpendPickupEffect(
+  ctx: SimContext,
+  caster: Entity,
+  effect: RallyHeldEffect,
+): void {
+  const match = realmRacersMatchOf(ctx, caster.id);
+  if (!match || match.phase !== 'racing' || caster.dead) return;
+  const progress = match.progress.get(caster.id);
+  // The same gate the weapon takes: a pilot whose own race is over keeps their
+  // machine, but they are done spending anything on the field.
+  if (!progress || !realmRacersStillRunning(match, caster.id)) return;
+  // The slot is the authority, never the button: a stale bar (or a cheat client
+  // casting an id it no longer holds) spends nothing.
+  if (progress.heldEffect !== effect) return;
+  progress.heldEffect = null;
+  if (effect === 'nitro') {
+    progress.nitroUntilTick = ctx.tickCount + REALM_RACERS_NITRO_TICKS;
+    const drive = caster.drive;
+    if (drive) {
+      // The ceiling is rewritten by the surface pass at the END of every tick,
+      // so it is raised here too rather than waited for: a burst felt a tick
+      // after the button is a burst a pilot cannot place.
+      drive.speedCap = REALM_RACERS_NITRO_SPEED_MULT;
+      // Forward, whichever way the machine is travelling: a nitro spent in
+      // reverse is a shove toward where the nose points, not a faster crash.
+      drive.speed += REALM_RACERS_NITRO_KICK;
+    }
+  } else {
+    // Under the machine, in the circuit's own frame. Dropping it where the pilot
+    // IS (rather than at the row the box stood on) is what makes it a decision:
+    // the oil goes into the corner they choose, and the machine that laid it is
+    // already past it.
+    const here = realmRacersToCanonical(match, caster.pos.x, caster.pos.z);
+    dropRealmRacersSlick(ctx, match, caster.id, here.x, here.z);
+  }
+  republishKit(ctx, match, caster.id);
+}
+
+/**
+ * Put one patch of oil on this race's circuit, holding the field to the cap the
+ * renderer can actually draw.
+ *
+ * Past the cap the OLDEST patch is evicted, which is both the least surprising
+ * rule (the one that has been there longest goes first) and the one that keeps
+ * what bites identical to what is drawn: a slick nobody can see is a trap.
+ */
+function dropRealmRacersSlick(
+  ctx: SimContext,
+  match: RealmRacersMatch,
+  ownerPid: number,
+  x: number,
+  z: number,
+): void {
+  match.slicks.push({
+    id: match.nextSlickId++,
+    x,
+    z,
+    ownerPid,
+    expiresTick: ctx.tickCount + REALM_RACERS_SLICK_LIFETIME_TICKS,
+  });
+  while (match.slicks.length > REALM_RACERS_SLICK_CAP) match.slicks.shift();
+}
+
+/**
+ * The oil slicks, one tick: sweep the expired patches, then hand the grip loss
+ * to whoever drove through one.
+ *
+ * Runs BEFORE the boxes, so a slick dropped this tick cannot catch a rival on
+ * the same tick it appears: the oil is down where the taker just was, and a
+ * machine level with them has already driven that ground. It draws no rng.
+ */
+function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
+  if (match.slicks.length === 0) return;
+  const racers: RallySlickRacer[] = [];
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    const e = ctx.entities.get(pid);
+    if (!progress || !e) continue;
+    racers.push({
+      pid,
+      ...segmentOf(match, e),
+      // The same eligibility the boxes use, and for the same reason: a pilot
+      // whose race is over is not racing through anyone's hazard, and a machine
+      // the referee has just PUT somewhere did not drive into what it landed on.
+      eligible:
+        realmRacersStillRunning(match, pid) && ctx.tickCount >= progress.resetLockedUntilTick,
+    });
+  }
+  const step = stepRealmRacersSlicks(match.slicks, { tick: ctx.tickCount, racers });
+  for (const hit of step.hits) {
+    const progress = match.progress.get(hit.pid);
+    if (!progress) continue;
+    // Contact with the oil is resolved ONCE per window, not once per tick spent
+    // in the puddle: a machine crosses a patch over two or three ticks, and
+    // re-resolving it every one of them would announce twenty times a second and
+    // eat a ward the tick after it had already saved the pilot.
+    if (ctx.tickCount < progress.slickContactUntilTick) continue;
+    progress.slickContactUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+    if (progress.warded) {
+      progress.warded = false;
+      ctx.emit({ type: 'realmRacersWardBroken', pid: hit.pid });
+      continue;
+    }
+    progress.slickGripUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
   }
 }
 
@@ -1867,6 +2256,11 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // own guard beside it is not defensive, and one of the two silently not
   // applying to the other would be the next reader's trap.
   if (match.phase === 'racing') {
+    // Oil BEFORE the boxes, which is what stops a slick from catching a rival on
+    // the tick it is dropped (see `tickSlicks`), and neither pass may draw rng
+    // ahead of the take: the boxes' one draw per take is the whole of this
+    // phase's contribution to the shared stream.
+    tickSlicks(ctx, match);
     tickPickups(ctx, match);
     tickGroundBlasts(ctx, match);
   }
@@ -1962,6 +2356,24 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     // Which boxes are GONE, never which are there: on a full circuit this is an
     // empty array, and it is the shorter list at every moment of a race.
     pickupsTaken: realmRacersPickupTakenIndices(match.pickups),
+    // The oil on the road, in the circuit's own frame like the boxes. Every
+    // pilot in the race sees every patch, whoever dropped it: a hazard nobody
+    // could see coming would not be a decision, and hiding one from the machine
+    // that is about to hit it is exactly what the graphics-fairness rule forbids.
+    slicks: match.slicks.map((slick) => ({
+      id: slick.id,
+      // Rounded HERE, in the readout both hosts build, rather than at the wire:
+      // a patch is a fixed point on a 2.6 yard disk, so a hundredth of a yard is
+      // far below anything a player or the renderer can tell apart, and doing it
+      // in the shared builder halves the per-tick `rr` payload with no chance of
+      // the two hosts disagreeing about where the oil is.
+      x: roundReadout(slick.x),
+      z: roundReadout(slick.z),
+    })),
+    // Whether this pilot is carrying a ward. A live flag rather than the FCT
+    // that announced it: a one-shot shield the player cannot see is a shield
+    // they cannot plan around.
+    warded: me.warded,
     resetLocked: ctx.tickCount < me.resetLockedUntilTick,
     totalLaps: match.totalLaps,
     // A practice lap is a real race on a private copy of the circuit, and the

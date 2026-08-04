@@ -1234,6 +1234,12 @@ export const id_ID: EnTranslations = {
       "offTrack": "RETURN TO THE TRACK: {seconds}",
       "cutReturned": "Shortcut. Returned to where you left the track.",
       "reset": "Reset to track",
+      "pickupCharge": "Shells loaded",
+      "pickupNitro": "Nitro ready",
+      "pickupWard": "Ward up",
+      "pickupSlick": "Oil ready",
+      "wardHeld": "WARD",
+      "wardBroken": "Ward broken",
       "countdown": "Engines locked. Start in {seconds}",
       "go": "GO!",
       "finalLap": "FINAL LAP",
@@ -7520,6 +7526,14 @@ export const id_ID: EnTranslations = {
       "rally_ground_blast": {
         "name": "Ground Blast",
         "description": "Fires a heavy explosive shell that detonates on impact, shaking the ground and blasting nearby rivals."
+      },
+      "rally_nitro": {
+        "name": "Nitro",
+        "description": "Burns a nitro charge for a short burst of speed above your machine cap."
+      },
+      "rally_oil_slick": {
+        "name": "Oil Slick",
+        "description": "Dumps a slick of oil under your machine. Rivals who drive through it lose grip."
       },
       "flamestrike": {
         "name": "Hantaman Api",

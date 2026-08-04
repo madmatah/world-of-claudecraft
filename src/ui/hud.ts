@@ -551,6 +551,8 @@ import { questProgressEventText } from './quest_progress_text';
 import { lockoutParts, lockoutShape } from './raid_lockout';
 import { type RaidLockoutI18n, raidLockoutPanelHtml } from './raid_lockout_view';
 import { RealmRacersUi } from './realm_racers';
+import { realmRacersPickupEffectText } from './realm_racers_pickup_i18n';
+import { RealmRacersPickupSplash } from './realm_racers_pickup_splash_controller';
 import type { RallyControlAction } from './realm_racers_view';
 import { restView } from './rest_indicator';
 import { isTalentRowUnlockLevel } from './row_unlock_toast';
@@ -4376,6 +4378,19 @@ export class Hud {
     world: () => this.sim,
     closeOthers: () => this.closeOtherWindows('#valecup-window'),
     ...this.windowFocus('#valecup-window'),
+  });
+  /**
+   * The pickup splash: the big kart-racer flash of what a box just gave. Event
+   * driven (see the module header), so it costs the frame loop nothing; the FCT
+   * note beside it stays as the quiet line and the held-ability slot stays as
+   * the state.
+   */
+  private readonly realmRacersSplash = new RealmRacersPickupSplash({
+    layer: () => document.getElementById('ui'),
+    writers: this.writerFacet,
+    iconUrl: (icon) => iconDataUrl(icon.kind, icon.id, 128),
+    schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    cancel: (handle) => window.clearTimeout(handle),
   });
   private readonly realmRacersUi = new RealmRacersUi({
     root: () => $('#realm-racers-window'),
@@ -12054,6 +12069,22 @@ export class Hud {
             );
             audio.realmRacersLap();
           }
+          break;
+        // A box just gave this pilot something. It floats over their own machine
+        // rather than taking the banner: a take happens every few seconds, the
+        // pilot is steering while it lands, and the banner belongs to the three
+        // moments that stop a race (the flag, a lap, the result). The event
+        // carries the EFFECT and the words are resolved here.
+        case 'realmRacersPickup':
+          if (ev.pid === sim.playerId) {
+            this.showSelfNote(realmRacersPickupEffectText(ev.effect));
+            this.realmRacersSplash.show(ev.effect);
+          }
+          break;
+        // And the ward paying for itself, on the same surface: a shell that
+        // lands on a warded machine and does nothing has to say why.
+        case 'realmRacersWardBroken':
+          if (ev.pid === sim.playerId) this.showSelfNote(t('hudChrome.rally.wardBroken'));
           break;
         case 'realmRacersGroundBlastFired':
         case 'realmRacersGroundBlastHit':

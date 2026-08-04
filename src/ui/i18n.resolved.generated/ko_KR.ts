@@ -1234,6 +1234,12 @@ export const ko_KR: EnTranslations = {
       "offTrack": "트랙으로 복귀: {seconds}",
       "cutReturned": "지름길. 트랙을 벗어난 지점으로 되돌아갔습니다.",
       "reset": "트랙으로 복귀",
+      "pickupCharge": "포탄 장전",
+      "pickupNitro": "니트로 준비",
+      "pickupWard": "보호막 발동",
+      "pickupSlick": "기름 준비",
+      "wardHeld": "보호막",
+      "wardBroken": "보호막 파괴",
       "countdown": "엔진 잠금 중. {seconds}초 뒤 출발",
       "go": "출발!",
       "finalLap": "마지막 바퀴",
@@ -7520,6 +7526,14 @@ export const ko_KR: EnTranslations = {
       "rally_ground_blast": {
         "name": "그라운드 블래스트",
         "description": "무거운 폭발 포탄을 발사하여 착탄 시 폭발해 지면을 뒤흔들고 주변 경쟁자를 날려버립니다."
+      },
+      "rally_nitro": {
+        "name": "니트로",
+        "description": "니트로를 태워 기체 속도 상한을 잠시 넘어서는 가속을 얻습니다."
+      },
+      "rally_oil_slick": {
+        "name": "기름막",
+        "description": "기체 아래에 기름을 쏟습니다. 밟고 지나가는 경쟁자는 접지력을 잃습니다."
       },
       "flamestrike": {
         "name": "화염 폭발",

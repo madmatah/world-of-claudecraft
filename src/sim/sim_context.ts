@@ -22,6 +22,7 @@ import type { PendingLootRoll } from './loot/loot_roll';
 import type { MarketListing } from './market';
 import type { MobScanCounters } from './mob/scan_counters';
 import type { PendingProjectile } from './projectile_travel';
+import type { RallyHeldEffect } from './realm_racers_pickup_effects';
 import type { NaturalRiftPortal } from './rift/portals';
 import type { RiftEvent, RiftInstance } from './rift/types';
 import type { Rng } from './rng';
@@ -978,6 +979,9 @@ export interface SimContextCallbacks {
   vcupSportDash(caster: Entity, distance: number, catchBall: boolean): void;
   vcupSportShove(caster: Entity, target: Entity, distance: number): void;
   realmRacersFireGroundBlast(caster: Entity): void;
+  /** Spend the held pickup effect the racer just cast (22b): the nitro burst, or
+   *  the oil dumped under the machine. Draws no rng. */
+  realmRacersSpendPickupEffect(caster: Entity, effect: RallyHeldEffect): void;
   /** Dev only, gated by `devCommands` at the call site: seat `pid` on a named
    *  circuit against a full grid of house pilots, with no queue and no wait. */
   realmRacersDevRace(circuitId: string, tier: string, pid: number): boolean;
@@ -1485,6 +1489,7 @@ export function createSimContext(host: SimContextHost): SimContext {
     vcupSportDash: host.vcupSportDash,
     vcupSportShove: host.vcupSportShove,
     realmRacersFireGroundBlast: host.realmRacersFireGroundBlast,
+    realmRacersSpendPickupEffect: host.realmRacersSpendPickupEffect,
     realmRacersDevRace: host.realmRacersDevRace,
   };
 }

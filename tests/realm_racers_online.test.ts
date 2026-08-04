@@ -36,11 +36,13 @@ vi.mock('../server/db', () => ({
 
 import { type ClientSession, GameServer } from '../server/game';
 import { ClientWorld } from '../src/net/online';
+import { REALM_RACERS_SLICK_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import { bareClient } from './helpers/bare_client';
+import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
 
 setActiveWorldContent({
   ...BUILTIN_WORLD,
@@ -310,5 +312,79 @@ describe('Realm Racers online parity', () => {
       server.sim.realmRacersInfoFor(session.pid).match?.pickupsTaken,
     );
     expect(world.realmRacersInfo.match?.pickupsTaken).toContain(4);
+  });
+
+  it('mirrors the oil a drawn pickup left on the road', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+    advance(server);
+    const match = server.sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    match.phase = 'racing';
+    advance(server);
+    expect(selfFields(client, 'rr').at(-1)).toMatchObject({
+      match: { slicks: [], warded: false },
+    });
+
+    // Every take on this lane draws the OIL, whoever makes it: the three house
+    // pilots are driving the same circuit and a race is not a laboratory, so the
+    // stream is scripted rather than the field being frozen.
+    const rng = installScriptedRng(server.sim);
+    rng.script(...Array.from({ length: 12 }, () => rallyPickupRollFor('leader', 'slick')));
+    const box = realmRacersPickupBoxes(GARDEN_CIRCUIT)[4];
+    const racer = server.sim.entities.get(session.pid);
+    const progress = match.progress.get(session.pid);
+    if (!racer || !progress) throw new Error('missing racer');
+    racer.pos.x = match.origin.x + box.x;
+    racer.pos.z = match.origin.z + box.z;
+    racer.prevPos = { ...racer.pos };
+    const projection = realmRacersTrack(GARDEN_CIRCUIT).project(box.x, box.z);
+    progress.lastS = projection.s;
+    progress.trackIndex = projection.index;
+    advance(server);
+
+    // The box fills the HELD slot (the operator's mid-review override); the
+    // patch appears when the pilot spends it, under the machine.
+    const progressAfter = match.progress.get(session.pid);
+    if (!progressAfter) throw new Error('missing progress');
+    expect(rng.consumed).toBeGreaterThan(0);
+    expect(progressAfter.heldEffect).toBe('slick');
+    // The held effect rides the kit flag onto the mirror, or an online pilot
+    // would be holding something with no button to spend it.
+    expect(selfFields(client, 'rrkit').at(-1)).toMatchObject({ h: 'slick' });
+    command(server, session, 'cast', { ability: REALM_RACERS_SLICK_ABILITY_ID });
+    advance(server);
+
+    // The patch is on the road in the CIRCUIT's own frame, which is the frame
+    // the renderer's track group is built in.
+    const dropped = match.slicks.find((slick) => slick.ownerPid === session.pid);
+    if (!dropped) throw new Error('no slick dropped');
+    expect(Math.hypot(dropped.x - box.x, dropped.z - box.z)).toBeLessThan(1);
+
+    const world = bareClient(session.pid);
+    const snap = client.sent.filter((frame) => frame.t === 'snap').at(-1);
+    (world as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(snap);
+    // Both worlds hand presentation the same field, which is what the patches'
+    // renderer reads: the mirror is the offline readout, verbatim.
+    expect(world.realmRacersInfo.match?.slicks).toEqual(
+      server.sim.realmRacersInfoFor(session.pid).match?.slicks,
+    );
+    // The ward flag mirrors on the same blob, so the strip's pip is the same
+    // fact offline and online.
+    progressAfter.warded = true;
+    advance(server);
+    const wardedSnap = client.sent.filter((frame) => frame.t === 'snap').at(-1);
+    (world as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(wardedSnap);
+    expect(world.realmRacersInfo.match?.warded).toBe(true);
+    // Rounded to the hundredth of a yard by the shared readout builder, which is
+    // where BOTH hosts do it: the mirror carries exactly what the offline Sim
+    // would have handed presentation, to the byte.
+    expect(world.realmRacersInfo.match?.slicks).toContainEqual({
+      id: dropped.id,
+      x: Math.round(dropped.x * 100) / 100,
+      z: Math.round(dropped.z * 100) / 100,
+    });
   });
 });

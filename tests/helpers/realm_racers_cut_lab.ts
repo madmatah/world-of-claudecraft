@@ -15,6 +15,7 @@
 // share, which is exactly how the two would drift apart.
 
 import type { RealmRacersCircuit } from '../../src/sim/content/realm_racers_circuits';
+import { realmRacersStripPickups } from '../../src/sim/realm_racers_pickups';
 import { forwardArcDelta } from '../../src/sim/realm_racers_progress';
 import { realmRacersTrack } from '../../src/sim/realm_racers_spline';
 import { Sim } from '../../src/sim/sim';
@@ -35,6 +36,18 @@ function seat(circuit: RealmRacersCircuit, seed: number) {
   // lab seats a fresh world per line it times, and the countdown is pure cost.
   // Driven through the module so the phase transition is the real one (it hands
   // back the controls and starts the lap clocks), not a field poke.
+  // The circuit is stripped of its pickup boxes BEFORE the first tick, and that
+  // is not a convenience: this lab is a STOPWATCH over geometry, and a box hands
+  // out a weighted draw (22b) whose nitro, oil and ward all move the clock it is
+  // reading. Leaving them in would time the dice. Stripping runs above the tick
+  // because the flag drop below is a full racing tick in which the ace grid is
+  // already driving, and a box taken there is a draw this lab never sees.
+  //
+  // SCOPE, so no result read off this lab claims more than it measured: what it
+  // proves is that no cut pays on a CLEAN circuit. A lap under oil, or against a
+  // rival spending a nitro, is a different question and this says nothing about
+  // it.
+  realmRacersStripPickups(match.pickups);
   match.goTick = sim.ctx.tickCount;
   sim.tick();
   if (match.phase !== 'racing') throw new Error('the flag did not drop');

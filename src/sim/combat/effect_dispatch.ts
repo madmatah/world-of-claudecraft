@@ -2686,6 +2686,10 @@ export function runEffects(
         ctx.realmRacersFireGroundBlast(p);
         break;
       }
+      case 'realmRacersPickupEffect': {
+        ctx.realmRacersSpendPickupEffect(p, eff.effect);
+        break;
+      }
       case 'sunder': {
         if (!target || target.dead) break;
         // a sunder can miss like any melee attack (and Hit rating reduces it, via

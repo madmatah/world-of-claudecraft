@@ -14483,6 +14483,156 @@
   margin-top: 7px;
   pointer-events: none;
 }
+/* The pickup splash: the big kart-racer flash of what a box just gave.
+
+   Anchored UNDER the race strip (which sits at the top of the screen) and never
+   over the lower half, so on a touch HUD it can never cover the stick or the
+   on-screen buttons. Pointer-transparent for the same reason. It is feedback
+   every player gets, so nothing here is tiered or reduced by a graphics preset;
+   the only motion knob it honours is prefers-reduced-motion, which drops the
+   pop and leaves the fade. */
+#realm-racers-splash {
+  position: absolute;
+  z-index: 59;
+  top: 210px;
+  left: 50%;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  text-align: center;
+  filter: drop-shadow(0 6px 14px #000d);
+}
+.rally-splash-icon {
+  width: 108px;
+  height: 108px;
+  border: 2px solid #f0d78a;
+  border-radius: 16px;
+  background: #150f07cc;
+  box-shadow: 0 0 22px #0008;
+}
+.rally-splash-label {
+  padding: 4px 14px;
+  border: 1px solid #dfc36c99;
+  border-radius: 999px;
+  background: #122218ee;
+  color: #fff4cf;
+  font-family: var(--font-display, serif);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 4px #000;
+}
+/* One tone per effect, so the colour is a stylesheet decision and the module
+   holds none: the refill wears the readout gold, the nitro the speed blue, the
+   ward its shield blue, the oil its bruised violet. */
+.rally-splash-charge .rally-splash-icon {
+  border-color: #f0d78a;
+}
+.rally-splash-nitro .rally-splash-icon {
+  border-color: #79d8ff;
+}
+.rally-splash-ward .rally-splash-icon {
+  border-color: #9fd0ff;
+}
+.rally-splash-slick .rally-splash-icon {
+  border-color: #a98bff;
+}
+/* Two identical animations under two class names: showing the SAME effect twice
+   in a row would otherwise re-add a class that is already there, which restarts
+   nothing. The controller alternates them. */
+.rally-splash-a {
+  animation: rally-splash-pop-a 1.36s ease-out forwards;
+}
+.rally-splash-b {
+  animation: rally-splash-pop-b 1.36s ease-out forwards;
+}
+@keyframes rally-splash-pop-a {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+  }
+  10% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.12);
+  }
+  18% {
+    transform: translateX(-50%) scale(1);
+  }
+  76% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.04);
+  }
+}
+@keyframes rally-splash-pop-b {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.6);
+  }
+  10% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.12);
+  }
+  18% {
+    transform: translateX(-50%) scale(1);
+  }
+  76% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.04);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rally-splash-a,
+  .rally-splash-b {
+    animation-name: rally-splash-fade;
+  }
+  @keyframes rally-splash-fade {
+    0% {
+      opacity: 0;
+    }
+    10% {
+      opacity: 1;
+    }
+    76% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+/* The ward pip: the one-shot shield a pickup granted, standing until something
+   spends it. Deliberately the QUIETEST thing on the strip (no pulse, no alarm
+   colour, a smaller box than the referee's line): it is a state a pilot plans
+   around, not an event demanding a reaction. Cool blue, which nothing else in
+   the rally readout uses, so a glance separates it from the amber readouts and
+   the red forfeit. Sized to need no mobile override, like the limits line. */
+.rallyhud-ward {
+  width: max-content;
+  max-width: 100%;
+  margin: 8px auto 0;
+  padding: 3px 12px;
+  border: 1px solid #6fa8e0;
+  border-radius: 999px;
+  background: #0d1c2ce6;
+  color: #cfe6ff;
+  font-family: var(--font-display, serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+}
 .rallyhud-wrong-way {
   width: max-content;
   margin: 8px auto 0;

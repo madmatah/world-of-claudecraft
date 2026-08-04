@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RALLY_SLICK_POOL } from '../src/render/realm_racers_slicks_core';
 import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import {
   rallyBorderFlowerSpots,
@@ -28,8 +29,9 @@ import {
   realmRacersPlacedPonds,
   realmRacersPlacedProps,
 } from '../src/sim/realm_racers_props_resolve';
+import { REALM_RACERS_SLICK_CAP } from '../src/sim/realm_racers_slicks';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
-import type { RealmRacersMatchInfo } from '../src/world_api/realm_racers';
+import type { RealmRacersMatchInfo, RealmRacersSlickInfo } from '../src/world_api/realm_racers';
 
 // The circuit builder mints procedural canvas textures, so it needs the same
 // texture stub the other headless render suites use (terrain_chunk_geometry).
@@ -181,6 +183,8 @@ describe('Realm Racers procedural render', () => {
       offTrackIn: 0,
       cutReturned: false,
       pickupsTaken: [],
+      slicks: [],
+      warded: false,
       resetLocked: false,
       totalLaps: 3,
       practice: false,
@@ -217,6 +221,8 @@ describe('Realm Racers procedural render', () => {
         offTrackIn: 0,
         cutReturned: false,
         pickupsTaken: [],
+        slicks: [],
+        warded: false,
         resetLocked: false,
         totalLaps: 3,
         practice: false,
@@ -245,6 +251,8 @@ describe('Realm Racers procedural render', () => {
       offTrackIn: 0,
       cutReturned: false,
       pickupsTaken: [],
+      slicks: [],
+      warded: false,
       resetLocked: false,
       totalLaps: 3,
       practice: false,
@@ -1012,6 +1020,47 @@ describe('Realm Racers procedural render', () => {
   });
 });
 
+describe('race furniture is never tiered', () => {
+  it('names no graphics tier, governor or distance cull in the pickup or oil modules', () => {
+    // The fairness half of the graphics-neutrality invariant, as a source scan
+    // rather than a promise: a pickup box and a patch of oil are both things a
+    // pilot STEERS around, so no preset, no FPS governor and no distance cull
+    // may decide whether one is drawn. (The marker module next door is pinned by
+    // its import list for the same reason; these two import nothing that could
+    // reach a tier at all, so the token scan is the honest test for them.)
+    const files = [
+      'src/render/realm_racers_pickups.ts',
+      'src/render/realm_racers_pickups_core.ts',
+      'src/render/realm_racers_slicks.ts',
+      'src/render/realm_racers_slicks_core.ts',
+    ];
+    const FORBIDDEN = [
+      /\bfxTier\b/,
+      /\bgetFxTier\b/,
+      /\bgovernor\b/i,
+      /\bdata-fx-level\b/,
+      /\buiEffectsProfile\b/,
+      /\bqualityTier\b/,
+      /\bdrawDistance\b/,
+      /\blodBias\b/,
+    ];
+    for (const file of files) {
+      // COMMENTS STRIPPED FIRST, which is the trap the Ground Blast marker's
+      // own fairness pin hit and answered with an import list instead: these
+      // modules' headers explain that they read no tier and no governor, and a
+      // raw text scan cannot tell that sentence from a real read.
+      const source = readFileSync(`${process.cwd()}/${file}`, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
+      for (const pattern of FORBIDDEN) {
+        expect(pattern.test(source), `${file} names ${pattern}`).toBe(false);
+      }
+      // The scan is only worth anything over a file it really read.
+      expect(source.length).toBeGreaterThan(500);
+    }
+  });
+});
+
 describe('the pickup boxes, drawn', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -1042,6 +1091,8 @@ describe('the pickup boxes, drawn', () => {
     offTrackIn: 0,
     cutReturned: false,
     pickupsTaken,
+    slicks: [],
+    warded: false,
     resetLocked: false,
     totalLaps: 3,
     practice: false,
@@ -1137,5 +1188,124 @@ describe('the pickup boxes, drawn', () => {
       );
     }
     for (const mesh of boxes) expect(mesh.visible).toBe(true);
+  });
+
+  describe('and the oil they leave behind', () => {
+    /** The same readout, carrying a chosen set of patches. */
+    const matchWithSlicks = (slicks: RealmRacersSlickInfo[]): RealmRacersMatchInfo => ({
+      ...matchOn(GARDEN_CIRCUIT.id, []),
+      slicks,
+    });
+
+    async function slicksGroup(): Promise<{
+      view: {
+        update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
+      };
+      slots: THREE.Object3D[];
+    }> {
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      const view = buildRealmRacersTrack(GARDEN_CIRCUIT);
+      const group = view.group.getObjectByName('realm-racers-slicks') as THREE.Group;
+      expect(group).toBeDefined();
+      return { view, slots: group.children };
+    }
+
+    it('draws nothing on a clean circuit and a patch where the race says one is', async () => {
+      const { view, slots } = await slicksGroup();
+      const here = REALM_RACERS_ORIGIN;
+      // A fixed pool, minted at build time: the cost of the oil is the same
+      // whether or not any is down.
+      expect(slots).toHaveLength(RALLY_SLICK_POOL);
+      view.update(here.x, here.z, 1, matchWithSlicks([]));
+      for (const slot of slots) expect(slot.visible).toBe(false);
+
+      let time = 1;
+      const frames = (count: number, slicks: RealmRacersSlickInfo[]): void => {
+        for (let i = 0; i < count; i++) {
+          time += 0.05;
+          view.update(here.x, here.z, time, matchWithSlicks(slicks));
+        }
+      };
+      frames(1, [{ id: 4, x: 12, z: -7 }]);
+      const shown = slots.filter((slot) => slot.visible);
+      expect(shown).toHaveLength(1);
+      // At the coordinates the race reported, in the circuit's own frame: what a
+      // machine slides on is what a pilot sees.
+      expect(shown[0].position.x).toBeCloseTo(12, 6);
+      expect(shown[0].position.z).toBeCloseTo(-7, 6);
+      // FULL radius from the first frame, and it stays there: the sim can report a grip loss for a patch the tick it appears, so a disk still
+      // growing would be drawn smaller than it bites.
+      expect(shown[0].scale.x).toBeCloseTo(1, 6);
+      frames(10, [{ id: 4, x: 12, z: -7 }]);
+      expect(shown[0].scale.x).toBeCloseTo(1, 6);
+    });
+
+    it('soaks a patch away when it expires and gives the slot back', async () => {
+      const { view, slots } = await slicksGroup();
+      const here = REALM_RACERS_ORIGIN;
+      let time = 1;
+      const frames = (count: number, slicks: RealmRacersSlickInfo[]): void => {
+        for (let i = 0; i < count; i++) {
+          time += 0.05;
+          view.update(here.x, here.z, time, matchWithSlicks(slicks));
+        }
+      };
+      frames(12, [{ id: 4, x: 12, z: -7 }]);
+      const slot = slots.find((child) => child.visible) as THREE.Object3D;
+      expect(slot).toBeDefined();
+      // The frame the fade STARTS on carries no elapsed time, so the patch is
+      // still full size there; the frame after is when it shrinks.
+      frames(2, []);
+      expect(slot.visible).toBe(true);
+      expect(slot.scale.x).toBeLessThan(1);
+      frames(16, []);
+      expect(slot.visible).toBe(false);
+
+      // And the pool really recycles: a second patch takes the same slot back.
+      frames(1, [{ id: 5, x: -3, z: 9 }]);
+      expect(slot.visible).toBe(true);
+      expect(slot.position.x).toBeCloseTo(-3, 6);
+    });
+
+    it('draws every patch a race can hold at once', async () => {
+      const { view, slots } = await slicksGroup();
+      const here = REALM_RACERS_ORIGIN;
+      // The pool is at least the SIM's cap, so what bites is always what a pilot
+      // can see; the sim evicts its oldest patch past that number.
+      expect(RALLY_SLICK_POOL).toBeGreaterThanOrEqual(REALM_RACERS_SLICK_CAP);
+      // One more than the cap, which is the shape the sim can never produce:
+      // every id a race CAN hold still owns a visible slot, and the extra one
+      // simply goes undrawn rather than pushing a live patch off the road.
+      const live: RealmRacersSlickInfo[] = Array.from(
+        { length: REALM_RACERS_SLICK_CAP + 1 },
+        (_, i) => ({ id: i + 1, x: i * 3, z: -i * 2 }),
+      );
+      view.update(here.x, here.z, 1, matchWithSlicks(live));
+      const shown = slots.filter((slot) => slot.visible);
+      expect(shown).toHaveLength(RALLY_SLICK_POOL);
+      for (const slick of live.slice(0, REALM_RACERS_SLICK_CAP)) {
+        const owned = shown.find(
+          (slot) =>
+            Math.abs(slot.position.x - slick.x) < 1e-6 &&
+            Math.abs(slot.position.z - slick.z) < 1e-6,
+        );
+        expect(owned, `slick ${slick.id} owns a slot`).toBeDefined();
+        expect(owned?.scale.x).toBeCloseTo(1, 6);
+      }
+    });
+
+    it('ignores the oil on a race running on a DIFFERENT circuit', async () => {
+      const { view, slots } = await slicksGroup();
+      const here = REALM_RACERS_ORIGIN;
+      const other = REALM_RACERS_CIRCUIT_LIST.find((circuit) => circuit.id !== GARDEN_CIRCUIT.id);
+      expect(other).toBeDefined();
+      for (let i = 0; i < 12; i++) {
+        view.update(here.x, here.z, 1 + i * 0.05, {
+          ...matchOn((other as RealmRacersCircuit).id, []),
+          slicks: [{ id: 1, x: 0, z: 0 }],
+        });
+      }
+      for (const slot of slots) expect(slot.visible).toBe(false);
+    });
   });
 });

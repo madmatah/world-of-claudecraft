@@ -5250,6 +5250,8 @@ export class Sim {
         valeCupMod.vcupSportShove(sim.ctx, caster, target, distance),
       realmRacersFireGroundBlast: (caster) =>
         realmRacersMod.realmRacersFireGroundBlast(sim.ctx, caster),
+      realmRacersSpendPickupEffect: (caster, effect) =>
+        realmRacersMod.realmRacersSpendPickupEffect(sim.ctx, caster, effect),
       realmRacersDevRace: (circuitId, tier, pid) =>
         isRallyDriverTier(tier)
           ? realmRacersBotsMod.startRealmRacersDevRace(sim, circuitId, tier, pid)
@@ -5657,8 +5659,11 @@ export class Sim {
     // tick-staggered bots), so appending it here cannot fork the draw order.
     this.updateValeCup();
     lap?.('valecup');
-    // Rally checks both racers after all movement has completed, so same-tick
-    // finishes are independent of player insertion order. It draws zero RNG.
+    // Rally checks every racer after all movement has completed, so same-tick
+    // finishes are independent of player insertion order. It draws EXACTLY ONE
+    // value per pickup box that changes hands (the weighted effect draw, 22b),
+    // plus the one circuit draw a queued race takes when it seats a grid; a tick
+    // where nobody takes a box and nobody is seated draws nothing at all.
     this.updateRealmRacers();
     lap?.('realmRacers');
     // The Dungeon Finder phase draws ZERO rng (queue bookkeeping + role

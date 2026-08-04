@@ -11091,6 +11091,18 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.offTrack': '트랙으로 복귀: {seconds}',
   'hudChrome.rally.cutReturned': '지름길. 트랙을 벗어난 지점으로 되돌아갔습니다.',
   'hudChrome.rally.reset': '트랙으로 복귀',
+  'hudChrome.rally.pickupCharge': '포탄 장전',
+  'hudChrome.rally.pickupNitro': '니트로 준비',
+  'hudChrome.rally.pickupWard': '보호막 발동',
+  'hudChrome.rally.pickupSlick': '기름 준비',
+  'hudChrome.rally.wardHeld': '보호막',
+  'hudChrome.rally.wardBroken': '보호막 파괴',
+  'entities.abilities.rally_nitro.name': '니트로',
+  'entities.abilities.rally_nitro.description':
+    '니트로를 태워 기체 속도 상한을 잠시 넘어서는 가속을 얻습니다.',
+  'entities.abilities.rally_oil_slick.name': '기름막',
+  'entities.abilities.rally_oil_slick.description':
+    '기체 아래에 기름을 쏟습니다. 밟고 지나가는 경쟁자는 접지력을 잃습니다.',
   'hudChrome.rally.countdown': '엔진 잠금 중. {seconds}초 뒤 출발',
   'hudChrome.rally.go': '출발!',
   'hudChrome.rally.finalLap': '마지막 바퀴',

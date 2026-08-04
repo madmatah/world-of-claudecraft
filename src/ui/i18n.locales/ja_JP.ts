@@ -11100,6 +11100,18 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.offTrack': 'コースに戻れ: {seconds}',
   'hudChrome.rally.cutReturned': 'ショートカット。コースを外れた地点に戻されました。',
   'hudChrome.rally.reset': 'コースに戻る',
+  'hudChrome.rally.pickupCharge': '砲弾装填',
+  'hudChrome.rally.pickupNitro': 'ニトロ準備完了',
+  'hudChrome.rally.pickupWard': '守護発動',
+  'hudChrome.rally.pickupSlick': 'オイル準備完了',
+  'hudChrome.rally.wardHeld': '守護',
+  'hudChrome.rally.wardBroken': '守護が砕けた',
+  'entities.abilities.rally_nitro.name': 'ニトロ',
+  'entities.abilities.rally_nitro.description':
+    'ニトロを焚き、機体の速度上限を超える短い加速を得る。',
+  'entities.abilities.rally_oil_slick.name': 'オイルスリック',
+  'entities.abilities.rally_oil_slick.description':
+    '車体の下にオイルをまく。踏んだ相手はグリップを失う。',
   'hudChrome.rally.countdown': 'エンジン固定中。開始まで{seconds}秒',
   'hudChrome.rally.go': 'スタート！',
   'hudChrome.rally.finalLap': 'ファイナルラップ',

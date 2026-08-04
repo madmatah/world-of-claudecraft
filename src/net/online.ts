@@ -13,7 +13,11 @@ import {
 import { bagCapacity } from '../sim/bags';
 import { signChallenge } from '../sim/client_challenge';
 import { MOUNT_RACE_COURSE, type MountKey, normalizeMountKey } from '../sim/content/mounts';
-import { resolveRealmRacersKit } from '../sim/content/realm_racers';
+import {
+  REALM_RACERS_EFFECT_ABILITIES,
+  realmRacersHeldEffectOf,
+  resolveRealmRacersKit,
+} from '../sim/content/realm_racers';
 import { mechChromaItemId, mechChromaSkinIndex } from '../sim/content/skins';
 import {
   computeTalentModifiers,
@@ -46,6 +50,7 @@ import { normalizeMoveFacing, sanitizeMoveInput } from '../sim/move_input';
 import { getArchetypeTitle, getHobbyCraft } from '../sim/professions/archetype';
 import type { MaterialRarity } from '../sim/professions/gathering';
 import { emptyCraftSkills } from '../sim/professions/wheel';
+import type { RallyHeldEffect } from '../sim/realm_racers_pickup_effects';
 import type { ResolvedAbility } from '../sim/sim';
 import { parseTalentAllocation } from '../sim/talent_allocation_input';
 import { repairTalentLoadouts } from '../sim/talent_loadouts';
@@ -1496,7 +1501,11 @@ export class ClientWorld implements IWorld {
     match: null,
     practiceAvailable: true,
   };
-  private realmRacersKit: { abilityId: string; charges: number | null } | null = null;
+  private realmRacersKit: {
+    abilityId: string;
+    charges: number | null;
+    held: RallyHeldEffect | null;
+  } | null = null;
   // --- IWorldSocialGraph: persistent friends/blocks/guild, set ONLY by the
   // `social`/`socialpos` frames (there is no `s.social` snapshot field). ---
   socialInfo: SocialInfo | null = null;
@@ -3367,7 +3376,14 @@ export class ClientWorld implements IWorld {
       if (s.rrkit !== undefined) {
         this.realmRacersKit =
           s.rrkit && s.rrkit.active === true
-            ? { abilityId: String(s.rrkit.w ?? ''), charges: s.rrkit.c ?? null }
+            ? {
+                abilityId: String(s.rrkit.w ?? ''),
+                charges: s.rrkit.c ?? null,
+                // The HELD pickup effect (22b), or null with an empty slot. The
+                // mirror rebuilds the whole kit below, so without this an online
+                // pilot would carry an effect with no button to spend it.
+                held: realmRacersHeldEffectOf(String(s.rrkit.h ?? '')),
+              }
             : null;
       }
       const rallyKit = this.realmRacersKit;
@@ -3380,8 +3396,16 @@ export class ClientWorld implements IWorld {
       // aiming mode) off exactly this flag.
       const budget = rallyKit ? e?.abilityCharges?.[rallyKit.abilityId] : undefined;
       if (budget) budget.fixed = true;
+      // The held effect's own pool is the same shape and needs the same stamp:
+      // one charge, never recharging, so the HUD greys it the moment it is spent
+      // rather than showing a button on a cooldown that will not come back.
+      const heldBudget =
+        rallyKit?.held && e?.abilityCharges
+          ? e.abilityCharges[REALM_RACERS_EFFECT_ABILITIES[rallyKit.held]]
+          : undefined;
+      if (heldBudget) heldBudget.fixed = true;
       this.known = rallyKit
-        ? resolveRealmRacersKit(rallyKit.abilityId, rallyKit.charges)
+        ? resolveRealmRacersKit(rallyKit.abilityId, rallyKit.charges, rallyKit.held)
         : this.sportRole
           ? resolveSportKit(this.sportRole)
           : abilitiesKnownAt(this.cfg.playerClass, e.level, talentMods);

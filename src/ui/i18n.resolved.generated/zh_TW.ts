@@ -1234,6 +1234,12 @@ export const zh_TW: EnTranslations = {
       "offTrack": "返回賽道：{seconds}",
       "cutReturned": "抄近路。已把你送回離開賽道的位置。",
       "reset": "返回賽道",
+      "pickupCharge": "砲彈已裝填",
+      "pickupNitro": "氮氣就緒",
+      "pickupWard": "護盾就緒",
+      "pickupSlick": "油漬就緒",
+      "wardHeld": "護盾",
+      "wardBroken": "護盾破碎",
       "countdown": "引擎鎖定。{seconds} 秒後出發",
       "go": "出發！",
       "finalLap": "最後一圈",
@@ -7520,6 +7526,14 @@ export const zh_TW: EnTranslations = {
       "rally_ground_blast": {
         "name": "震地爆破",
         "description": "發射一枚重型爆破砲彈，落地即爆，震動地面並將附近的對手炸飛。"
+      },
+      "rally_nitro": {
+        "name": "氮氣加速",
+        "description": "點燃一管氮氣，讓機車短暫突破速度上限。"
+      },
+      "rally_oil_slick": {
+        "name": "油漬",
+        "description": "在車下潑灑一灘機油。駛過的對手會失去抓地力。"
       },
       "flamestrike": {
         "name": "烈焰風暴",

@@ -2414,6 +2414,9 @@ function r(
 const ABILITY_RECIPES: Record<string, IconRecipe> = {
   // Realm Racers temporary vehicle kit
   rally_ground_blast: r('storm', 'sky', ['bolt', { p: 'lightning', ...BR }], ['motion', 'arcs']),
+  // The two held pickup effects: a speed burst and a spill under the machine.
+  rally_nitro: r('storm', 'sky', ['arrow', { p: 'flame', ...BR }], ['motion']),
+  rally_oil_slick: r('shadow', 'venom', ['droplet', { p: 'droplet', ...BR }], ['drips']),
   // Talents 2.0 ground-targeted spells (each aimed AoE gets a distinct recipe;
   // grouped here so the family reads together, order within the map is cosmetic).
   flamestrike: r('fire', 'ember', ['meteor', { p: 'sunburst', ...BIG }], ['glow']),
@@ -3167,6 +3170,10 @@ const ITEM_RECIPES: Record<string, IconRecipe> = {
 
 // generic per-aura-kind fallbacks for auras not applied by a known ability
 const AURA_RECIPES: Record<string, IconRecipe> = {
+  // The rally ward: the one-shot shield a pickup box can grant. It is not an
+  // ability (nothing casts it), so it lives with the auras, which is where the
+  // pickup splash reaches for it.
+  rally_ward: r('holy', 'sky', ['shield', { p: 'sunburst', ...TR }], ['glow']),
   aura_dot: r('shadow', 'shadowPurple', ['skull'], ['drips']),
   aura_hot: r('nature', 'leafGreen', ['heart'], ['sparkle']),
   aura_slow: r('frost', 'ice', ['boot', { p: 'snowflake', ...TR }]),

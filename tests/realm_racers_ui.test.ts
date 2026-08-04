@@ -59,6 +59,8 @@ function match(over: Partial<RallyMatch> = {}): RallyMatch {
     offTrackIn: 0,
     cutReturned: false,
     pickupsTaken: [],
+    slicks: [],
+    warded: false,
     resetLocked: false,
     returnIn: 0,
     me,

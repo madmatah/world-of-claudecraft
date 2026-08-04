@@ -308,6 +308,7 @@ const UI_PURE_CORES = [
   'src/ui/vale_cup_briefing_view.ts',
   'src/ui/vale_cup_betting_view.ts',
   'src/ui/vale_cup_charge_view.ts',
+  'src/ui/realm_racers_pickup_splash_view.ts',
   'src/ui/realm_racers_view.ts',
   'src/ui/realm_racers_standings_view.ts',
   'src/ui/realm_racers_podium_view.ts',
@@ -409,6 +410,7 @@ const RENDER_PURE_CORES = [
   'src/render/realm_racers_audio_core.ts',
   'src/render/realm_racers_grass_core.ts',
   'src/render/realm_racers_pickups_core.ts',
+  'src/render/realm_racers_slicks_core.ts',
   // Data-as-code, but it is a purity DEPENDENCY of the two cores above, so it
   // is swept: a three import here would make both of them three-loading.
   'src/render/realm_racers_themes.ts',
@@ -1454,6 +1456,7 @@ const UI_DOM_MODULES = [
   'src/ui/focus_restore.ts',
   'src/ui/form_draft.ts',
   'src/ui/realm_racers.ts',
+  'src/ui/realm_racers_pickup_splash_controller.ts',
   'src/ui/realm_racers_standings_panel.ts',
   'src/ui/realm_racers_podium.ts',
   'src/ui/gather_node_tooltip_controller.ts',

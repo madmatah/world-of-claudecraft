@@ -65,6 +65,8 @@ function live(over: Partial<Match> = {}): Match {
     offTrackIn: 0,
     cutReturned: false,
     pickupsTaken: [],
+    slicks: [],
+    warded: false,
     resetLocked: false,
     returnIn: 0,
     me,
@@ -251,6 +253,20 @@ describe('Realm Racers pure views', () => {
     const unlocked = buildRealmRacersHudView(info({ match: live({ resetLocked: false }) }));
     const locked = buildRealmRacersHudView(info({ match: live({ resetLocked: true }) }));
     expect(locked.sig).toBe(unlocked.sig);
+  });
+
+  it('carries the ward as a live pip, out of the signature', () => {
+    // The ward is a one-shot shield a pickup granted, and the FCT that announced
+    // it is long gone by the time it matters: the strip carries a standing pip
+    // so a pilot can plan around it.
+    expect(buildRealmRacersHudView(info({ match: live({ warded: true }) })).warded).toBe(true);
+    expect(buildRealmRacersHudView(info({ match: live({}) })).warded).toBe(false);
+    // Out of the signature, like `resetLocked`: it flips mid-race and must not
+    // rebuild the strip (which would drop the forfeit control's armed state and
+    // any focus inside it).
+    const warded = buildRealmRacersHudView(info({ match: live({ warded: true }) }));
+    const bare = buildRealmRacersHudView(info({ match: live({ warded: false }) }));
+    expect(warded.sig).toBe(bare.sig);
   });
 
   it('resolves the track-limits banner to ONE line, countdown before notice', () => {

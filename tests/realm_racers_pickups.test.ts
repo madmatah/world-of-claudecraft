@@ -20,6 +20,7 @@ import {
 import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
 import {
   createRealmRacersPickupState,
+  REALM_RACERS_PICKUP_CHARGE_GRANT,
   REALM_RACERS_PICKUP_COOLDOWN_TICKS,
   REALM_RACERS_PICKUP_LANES,
   REALM_RACERS_PICKUP_REACH,
@@ -42,6 +43,7 @@ import {
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { TICK_RATE } from '../src/sim/types';
+import { installScriptedRng, type ScriptedRng } from './helpers/realm_racers_rng';
 import { addAt, makeWorld, teleport } from './vale_cup_util';
 
 /** The circuit a QUEUED race runs on, which is what every live case here seats. */
@@ -174,7 +176,36 @@ function takenOf(sim: Sim): number[] {
   return realmRacersPickupTakenIndices(match(sim).pickups);
 }
 
+/**
+ * Force the next `count` takes to draw the REFILL, whatever band the taker is
+ * running in.
+ *
+ * 22b turned the take into one weighted draw (`realm_racers_pickup_effects.ts`),
+ * so every case below that is about the CHARGE has to own the value the stream
+ * hands back or it is asserting about whichever effect the seed happened to
+ * pick. A roll of 0 is the refill in all three tables (`charge` is the first row
+ * of each, pinned in `realm_racers_pickup_effects.test.ts`), so one number
+ * covers a leader, a midfielder and a backmarker alike.
+ *
+ * Safe against the rest of the tick: this rig's world has no camps, npcs or
+ * ground objects, so a racing tick draws NOTHING outside the pickups, and the
+ * scripted values can only be consumed by the take.
+ */
+function forceRefills(sim: Sim, count: number): ScriptedRng {
+  const rng = installScriptedRng(sim);
+  rng.script(...Array.from({ length: count }, () => 0));
+  return rng;
+}
+
 describe('the pickup numbers themselves', () => {
+  it('locks the refill to a full reload', () => {
+    // A LITERAL, for the same reason the cooldown below is one: every other
+    // assertion about a refill is written in terms of this constant and would
+    // follow it anywhere. The operator raised it from 1 to 3 mid-review
+    // (2026-08-04): one shell was a rounding error next to a race budget of 3.
+    expect(REALM_RACERS_PICKUP_CHARGE_GRANT).toBe(3);
+  });
+
   it('locks the cooldown to one second of ticks', () => {
     // A LITERAL, because every other assertion about the cooldown is written in
     // terms of this constant and would follow it anywhere: at 2 ticks the whole
@@ -266,7 +297,7 @@ describe('Realm Racers pickup rows, resolved', () => {
 });
 
 describe('Realm Racers pickup boxes, in a race', () => {
-  it('grants exactly one charge and arms the cooldown', () => {
+  it('grants a full reload and arms the cooldown', () => {
     const { sim, pids } = racingGrid();
     const [a] = pids;
     const before = chargesOf(sim, a);
@@ -274,8 +305,12 @@ describe('Realm Racers pickup boxes, in a race', () => {
     // "one more" below is one more than a number this suite did not invent.
     expect(before).toBe(realmRacersWeaponCharges(REALM_RACERS_ABILITY_ID));
     standOnBox(sim, a, 0);
+    const rng = forceRefills(sim, 1);
     updateRealmRacers(sim.ctx);
-    expect(chargesOf(sim, a)).toBe(before + 1);
+    // The scripted roll really went to the take: a value stolen by another
+    // system would leave this asserting about whatever the stream drew instead.
+    expect(rng.consumed).toBe(1);
+    expect(chargesOf(sim, a)).toBe(before + REALM_RACERS_PICKUP_CHARGE_GRANT);
     expect(takenOf(sim)).toEqual([0]);
     const progress = required(match(sim).progress.get(a), `progress ${a}`);
     expect(progress.pickupCooldownUntilTick).toBe(
@@ -287,8 +322,8 @@ describe('Realm Racers pickup boxes, in a race', () => {
       sim.entities.get(a)?.abilityCharges?.[REALM_RACERS_ABILITY_ID],
       'charge pool',
     );
-    expect(pool.charges).toBe(before + 1);
-    expect(pool.maxCharges).toBe(before + 1);
+    expect(pool.charges).toBe(before + REALM_RACERS_PICKUP_CHARGE_GRANT);
+    expect(pool.maxCharges).toBe(before + REALM_RACERS_PICKUP_CHARGE_GRANT);
     expect(pool.fixed).toBe(true);
   });
 
@@ -296,17 +331,18 @@ describe('Realm Racers pickup boxes, in a race', () => {
     const { sim, pids } = racingGrid();
     const [a] = pids;
     const budget = required(realmRacersWeaponCharges(REALM_RACERS_ABILITY_ID), 'budget');
-    // Two shots spent, so the take below refills toward the budget rather than
-    // past it: this is the arm where `maxCharges` is the RACE's number.
+    // Spent OUT, so the reload below lands exactly on the race budget rather
+    // than past it: this is the arm where `maxCharges` is the RACE's number.
     const held = required(match(sim).progress.get(a)?.heldWeapon, 'weapon slot');
-    held.charges = budget - 2;
+    held.charges = budget - REALM_RACERS_PICKUP_CHARGE_GRANT;
     standOnBox(sim, a, 0);
+    forceRefills(sim, 1);
     updateRealmRacers(sim.ctx);
     const pool = required(
       sim.entities.get(a)?.abilityCharges?.[REALM_RACERS_ABILITY_ID],
       'charge pool',
     );
-    expect(pool.charges).toBe(budget - 1);
+    expect(pool.charges).toBe(budget);
     expect(pool.maxCharges).toBe(budget);
   });
 
@@ -323,6 +359,7 @@ describe('Realm Racers pickup boxes, in a race', () => {
     };
     standOnBox(sim, a, 0);
     standOnBox(sim, b, 1);
+    forceRefills(sim, 2);
     updateRealmRacers(sim.ctx);
     expect(takenOf(sim)).toEqual([0, 1]);
     for (const pid of [a, b]) {
@@ -340,13 +377,27 @@ describe('Realm Racers pickup boxes, in a race', () => {
     // Forty yards of travel in one tick, with neither endpoint inside the catch
     // radius: only the swept segment can see this box.
     sweepThroughBox(sim, a, 0);
+    forceRefills(sim, 1);
     updateRealmRacers(sim.ctx);
     expect(takenOf(sim)).toEqual([0]);
-    expect(chargesOf(sim, a)).toBe(before + 1);
+    expect(chargesOf(sim, a)).toBe(before + REALM_RACERS_PICKUP_CHARGE_GRANT);
   });
 
-  it('draws no rng at all while boxes are changing hands', () => {
+  it('draws exactly one value per box that changes hands, and none otherwise', () => {
     const { sim, pids } = racingGrid();
+    // A racing tick with NOBODY on a box: the phase is still free, which is what
+    // lets the boxes sit in the tick at all. (22a asserted this over a tick WITH
+    // takes; 22b moved the claim, and the zero arm is what is left of it.)
+    const quiet: number[] = [];
+    sim.rng.setObserver((value) => quiet.push(value));
+    try {
+      updateRealmRacers(sim.ctx);
+    } finally {
+      sim.rng.setObserver(null);
+    }
+    expect(takenOf(sim)).toEqual([]);
+    expect(quiet).toEqual([]);
+
     pids.forEach((pid, lane) => {
       standOnBox(sim, pid, lane);
     });
@@ -357,15 +408,20 @@ describe('Realm Racers pickup boxes, in a race', () => {
     } finally {
       sim.rng.setObserver(null);
     }
+    // Four boxes, four takes, FOUR draws: one per take, and the count is a
+    // function of what happened on the circuit rather than of how many racers
+    // were offered a box. A second draw per take (or one per racer offered)
+    // would fork every world downstream of a race.
     expect(takenOf(sim)).toEqual([0, 1, 2, 3]);
-    // Four takes, four charges granted, and not one value off the shared
-    // stream: 22a is the phase that may append without a parity regen.
-    expect(seen).toEqual([]);
+    expect(seen).toHaveLength(4);
   });
 
   it('refuses a second box of the same row until the cooldown expires', () => {
     const { sim, pids } = racingGrid();
     const [a] = pids;
+    // Two takes over the whole case, a tick apart at least: both refills, so the
+    // charge count is the thing under test rather than the draw.
+    forceRefills(sim, 2);
     standOnBox(sim, a, 0);
     updateRealmRacers(sim.ctx);
     const afterFirst = chargesOf(sim, a);
@@ -382,7 +438,7 @@ describe('Realm Racers pickup boxes, in a race', () => {
     // And the tick the cooldown runs out, the box it has been sitting on goes.
     sim.tick();
     expect(takenOf(sim)).toEqual([0, 1]);
-    expect(chargesOf(sim, a)).toBe(afterFirst + 1);
+    expect(chargesOf(sim, a)).toBe(afterFirst + REALM_RACERS_PICKUP_CHARGE_GRANT);
   });
 
   it('gives four machines crossing together four different boxes', () => {
@@ -391,10 +447,12 @@ describe('Realm Racers pickup boxes, in a race', () => {
     pids.forEach((pid, lane) => {
       standOnBox(sim, pid, lane);
     });
+    const rng = forceRefills(sim, 4);
     updateRealmRacers(sim.ctx);
+    expect(rng.consumed).toBe(4);
     expect(takenOf(sim)).toEqual([0, 1, 2, 3]);
     pids.forEach((pid, i) => {
-      expect(chargesOf(sim, pid)).toBe(before[i] + 1);
+      expect(chargesOf(sim, pid)).toBe(before[i] + REALM_RACERS_PICKUP_CHARGE_GRANT);
     });
   });
 
@@ -520,9 +578,10 @@ describe('Realm Racers pickup boxes, in a race', () => {
 
     // The moment the control lock ends it is driving again, and the box under it
     // is a box it is entitled to.
+    forceRefills(sim, 1);
     for (let i = 0; i < REALM_RACERS_RESET_LOCK_TICKS + 1; i++) sim.tick();
     expect(sim.tickCount).toBeGreaterThanOrEqual(progress.resetLockedUntilTick);
-    expect(chargesOf(sim, a)).toBe(before + 1);
+    expect(chargesOf(sim, a)).toBe(before + REALM_RACERS_PICKUP_CHARGE_GRANT);
     expect(takenOf(sim).length).toBe(1);
   });
 

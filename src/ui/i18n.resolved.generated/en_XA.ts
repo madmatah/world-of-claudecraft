@@ -1234,6 +1234,12 @@ export const en_XA: EnTranslations = {
       "offTrack": "[ŔÉŢÚŔÑ ŢÓ ŢĤÉ ŢŔÁÇĶ: {seconds}]",
       "cutReturned": "[Šĥóŕţçúţ. Ŕéţúŕñéð ţó ŵĥéŕé ýóú ļéƒţ ţĥé ţŕáçķ.]",
       "reset": "[Ŕéšéţ ţó ţŕáçķ]",
+      "pickupCharge": "[Šĥéļļš ļóáðéð]",
+      "pickupNitro": "[Ñíţŕó ŕéáðý]",
+      "pickupWard": "[Ŵáŕð úþ]",
+      "pickupSlick": "[Óíļ ŕéáðý]",
+      "wardHeld": "[ŴÁŔÐ]",
+      "wardBroken": "[Ŵáŕð ƀŕóķéñ]",
       "countdown": "[Éñĝíñéš ļóçķéð. Šţáŕţ íñ {seconds}]",
       "go": "[ĜÓ!]",
       "finalLap": "[ƑÍÑÁĻ ĻÁÞ]",
@@ -7520,6 +7526,14 @@ export const en_XA: EnTranslations = {
       "rally_ground_blast": {
         "name": "[Ĝŕóúñð Ɓļášţ]",
         "description": "[Ƒíŕéš á ĥéáʋý éẋþļóšíʋé šĥéļļ ţĥáţ ðéţóñáţéš óñ íɱþáçţ, šĥáķíñĝ ţĥé ĝŕóúñð áñð ƀļášţíñĝ ñéáŕƀý ŕíʋáļš.]"
+      },
+      "rally_nitro": {
+        "name": "[Ñíţŕó]",
+        "description": "[Ɓúŕñš á ñíţŕó çĥáŕĝé ƒóŕ á šĥóŕţ ƀúŕšţ óƒ šþééð áƀóʋé ýóúŕ ɱáçĥíñé çáþ.]"
+      },
+      "rally_oil_slick": {
+        "name": "[Óíļ Šļíçķ]",
+        "description": "[Ðúɱþš á šļíçķ óƒ óíļ úñðéŕ ýóúŕ ɱáçĥíñé. Ŕíʋáļš ŵĥó ðŕíʋé ţĥŕóúĝĥ íţ ļóšé ĝŕíþ.]"
       },
       "flamestrike": {
         "name": "[Ƒļáɱéšţŕíķé]",
