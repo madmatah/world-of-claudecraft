@@ -6286,8 +6286,8 @@ export class Hud {
       this.flashActionSlot(0);
       return;
     }
-    // The circuit needs no arm here: an activity kit takes slot 0 outright
-    // (ActionBarController.activityKitWeaponId), so the fixed attack slot does
+    // The circuit needs no arm here: an activity kit RESERVES slot 0 outright
+    // (ActionBarController.isActivityKitSlot), so the fixed attack slot does
     // not exist during a race and this method is never reached from one.
     if (this.sim.player.autoAttack) this.sim.stopAutoAttack();
     else this.sim.startAutoAttack();

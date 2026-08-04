@@ -382,17 +382,71 @@ describe('ActionBarController form persistence', () => {
 
   it('migrates a Rally page seeded by an earlier build off the duplicate row slot', () => {
     // Bars persisted before the weapon owned slot 0 carry it in row slot 1, so
-    // without the strip a returning pilot sees the same shell twice.
+    // without the strip a returning pilot sees the same shell twice. A pickup
+    // effect auto-placed by the pre-pin build is stripped for the same reason.
     const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
-    harness.state.known.push('rally_ground_blast');
+    harness.state.known.push('rally_ground_blast', 'rally_nitro');
     harness.state.inRally = true;
     harness.controller.syncActiveForm();
-    harness.controller.replaceActions(bar('rally_ground_blast'));
+    harness.controller.replaceActions(bar('rally_ground_blast', 'rally_nitro'));
     harness.controller.syncKnownAbilities();
     expect(harness.controller.actions).toEqual(bar());
     expect(harness.controller.actionForSlot(0)).toEqual({
       type: 'ability',
       id: 'rally_ground_blast',
+    });
+    expect(harness.controller.actionForSlot(2)).toEqual({ type: 'ability', id: 'rally_nitro' });
+  });
+
+  it('gives each pickup effect its own key instead of the first free slot', () => {
+    // The defect this pins: auto-placement fills the first EMPTY slot, so a
+    // nitro and an oil slick both answered to the key behind the weapon, one
+    // after the other, and which effect a key fired depended on the draw order.
+    const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
+    harness.state.known.push('rally_ground_blast');
+    harness.state.inRally = true;
+    harness.controller.syncActiveForm();
+    harness.controller.syncKnownAbilities();
+
+    harness.state.known.push('rally_nitro');
+    harness.controller.syncKnownAbilities();
+    expect(harness.controller.actionForSlot(2)).toEqual({ type: 'ability', id: 'rally_nitro' });
+    // The oil slick's key is RESERVED while nothing fills it: the nitro must not
+    // slide left into the gap ahead of it.
+    expect(harness.controller.actionForSlot(1)).toBeNull();
+    expect(harness.controller.actions).toEqual(bar());
+
+    harness.state.known = ['sinister_strike', 'rally_ground_blast', 'rally_oil_slick'];
+    harness.controller.syncKnownAbilities();
+    expect(harness.controller.actionForSlot(1)).toEqual({
+      type: 'ability',
+      id: 'rally_oil_slick',
+    });
+    expect(harness.controller.actionForSlot(2)).toBeNull();
+    expect(harness.controller.actions).toEqual(bar());
+  });
+
+  it('keeps a stored row shortcut off a reserved Rally key and gives it back afterward', () => {
+    // Rows 1 and 2 of the rally page are the effects' keys, so an item shortcut
+    // persisted there stays hidden for the race rather than firing under a key
+    // the pilot reads as nitro.
+    const harness = makeHarness('rogue', ['sinister_strike'], bar('sinister_strike'));
+    harness.state.known.push('rally_ground_blast');
+    const withPotion = bar();
+    withPotion[0] = { type: 'item', id: 'lesser_healing_potion' };
+    harness.controller.replaceActions(withPotion);
+
+    harness.state.inRally = true;
+    harness.controller.syncActiveForm();
+    harness.controller.replaceActions(withPotion);
+    expect(harness.controller.actionForSlot(1)).toBeNull();
+
+    harness.state.inRally = false;
+    harness.controller.syncActiveForm();
+    harness.controller.replaceActions(withPotion);
+    expect(harness.controller.actionForSlot(1)).toEqual({
+      type: 'item',
+      id: 'lesser_healing_potion',
     });
   });
 

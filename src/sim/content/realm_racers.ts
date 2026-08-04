@@ -98,6 +98,32 @@ export const REALM_RACERS_EFFECT_ABILITIES: Record<RallyHeldEffect, string> = {
 };
 
 /**
+ * The action-bar slot each rally ability is PINNED to while a racer is seated,
+ * as bar-slot indices (0 is the leftmost key, so this table reads 1 / 2 / 3 to
+ * the pilot).
+ *
+ * A pin, rather than the ordinary auto-placement, because the bar fills the
+ * FIRST EMPTY slot: with the rows behind the weapon empty, a nitro and an oil
+ * slick both landed under the same key, one after the other, and the key a
+ * pickup answers to changed with what the pilot happened to be holding. A racer
+ * has one hand on the wheel and no time to read an icon, so the position has to
+ * be a fact about the effect rather than about the order it was drawn in.
+ *
+ * A slot listed here is RESERVED on the rally page even while nothing fills it,
+ * which is the whole point: the gap keeps nitro on its key rather than letting
+ * the next pickup slide left. Every signature weapon takes slot 0 (the roster
+ * in workstream 09 is one record per machine, all of them the leftmost key).
+ * Pinning by ID also retires the ordering dependency the kit resolver used to
+ * carry: which ability owns the leftmost key no longer depends on where it sits
+ * in `meta.known`.
+ */
+export const REALM_RACERS_BAR_SLOTS: Record<string, number> = {
+  [REALM_RACERS_ABILITY_ID]: 0,
+  [REALM_RACERS_SLICK_ABILITY_ID]: 1,
+  [REALM_RACERS_NITRO_ABILITY_ID]: 2,
+};
+
+/**
  * Per-weapon rally metadata, keyed by the same ability id as the table above.
  * It is deliberately separate from the `AbilityDef`, which is the shared combat
  * shape every class ability wears: how many uses a race grants is a fact about
@@ -179,10 +205,10 @@ export function resolveRealmRacersKit(
 ): KnownAbility[] {
   const def = REALM_RACERS_ABILITIES[weaponAbilityId];
   if (!def) return [];
-  // The weapon is FIRST, always. The action bar's activity kit gives slot 0 to
-  // the first rally ability a racer knows, so a held effect landing ahead of it
-  // would take the leftmost key off the machine's own weapon; everything else
-  // the kit grants auto-places into the assignable rows behind it.
+  // The weapon is FIRST, always. Which key each of these answers to is decided
+  // by `REALM_RACERS_BAR_SLOTS` rather than by this order, so the order is now
+  // only what the spellbook and any list-shaped reader see; keeping the machine's
+  // own weapon at the head of it is what those readers should show first.
   const kit: KnownAbility[] = [
     {
       def,

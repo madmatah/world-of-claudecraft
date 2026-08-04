@@ -1,4 +1,4 @@
-import { REALM_RACERS_ABILITIES } from '../../../sim/content/realm_racers';
+import { REALM_RACERS_ABILITIES, REALM_RACERS_BAR_SLOTS } from '../../../sim/content/realm_racers';
 import { SPORT_ABILITIES } from '../../../sim/content/vale_cup';
 import { ABILITIES, ITEMS } from '../../../sim/data';
 import type { PlayerClass } from '../../../sim/types';
@@ -36,6 +36,11 @@ export { ACTION_BAR_ABILITY_SLOTS } from './action_bar_layout_core';
 export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'sport' | 'rally';
 
 const FORM_TOGGLE_IDS = new Set(['bear_form', 'cat_form', 'travel_form']);
+
+// The bar slots the rally kit reserves, derived once at import: `actionForSlot`
+// asks per slot and per frame, so the membership test must not rebuild a list
+// each time.
+const RALLY_PINNED_SLOTS: ReadonlySet<number> = new Set(Object.values(REALM_RACERS_BAR_SLOTS));
 
 export interface ActionBarControllerDeps {
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -190,10 +195,11 @@ export class ActionBarController {
       this.actionState,
       knownAbilityIds,
       autoPlaceAbilityIds,
-      // Also strips the slot-0 weapon out of the assignable rows, which is what
-      // MIGRATES a bar seeded by an earlier build: those put the rally weapon in
-      // row slot 1, and it would otherwise now appear twice.
-      (id) => !this.isAbilityPlacementAllowed(id) || id === this.activityKitWeaponId(),
+      // Also strips every PINNED kit ability out of the assignable rows, which is
+      // what MIGRATES a bar seeded by an earlier build: those put the rally
+      // weapon in row slot 1 and the drawn pickup effect in the first free slot
+      // behind it, and either would otherwise now appear twice.
+      (id) => !this.isAbilityPlacementAllowed(id) || this.activityKitSlotFor(id) !== null,
     );
     this.actionState = synced.actions;
     if (synced.changed) this.saveActions();
@@ -286,35 +292,55 @@ export class ActionBarController {
   }
 
   /**
-   * The weapon an ACTIVITY kit puts in the player's hands, or null when no
-   * activity owns the bar.
+   * The bar slot an ACTIVITY kit pins `id` to, or null when the id is not pinned
+   * or no activity owns the bar.
    *
-   * While one is set it OWNS slot 0. The auto-attack toggle has no meaning on
-   * the circuit (there is no target and no swing), so leaving it there cost the
-   * leftmost key twice over: pressing it answered "Invalid attack target.", and
-   * once the key was remapped to fire the weapon it still SHOWED an attack icon,
-   * which is a key that does one thing and says another.
+   * The weapon has owned slot 0 since the circuit shipped: the auto-attack
+   * toggle has no meaning there (no target, no swing), so leaving it on the
+   * leftmost key cost that key twice over, once answering "Invalid attack
+   * target." and once showing an attack icon over a key that fired the weapon.
+   * The pickup effects joined it as pins for a different reason, recorded with
+   * the table in `sim/content/realm_racers.ts`: auto-placement fills the first
+   * EMPTY slot, so every effect a pilot drew landed under the same key.
    *
    * Scope note: the Vale Cup's sport kit has exactly the same shape and is
    * deliberately NOT changed here, so its bar keeps the behavior it shipped
-   * with; extending this is a one-line change to the form check.
+   * with; extending this is a one-line change to the form check plus its own
+   * slot table.
    */
-  private activityKitWeaponId(form: HotbarForm = this.activeFormState): string | null {
+  private activityKitSlotFor(id: string, form: HotbarForm = this.activeFormState): number | null {
     if (form !== 'rally') return null;
-    return this.deps.knownAbilityIds().find((id) => REALM_RACERS_ABILITIES[id]) ?? null;
+    return REALM_RACERS_BAR_SLOTS[id] ?? null;
+  }
+
+  /** The kit ability pinned to `barSlot` and actually in the racer's hands, or
+   *  null when the slot is unpinned or its pin is empty right now. */
+  private activityKitAbilityForSlot(
+    barSlot: number,
+    form: HotbarForm = this.activeFormState,
+  ): string | null {
+    if (form !== 'rally') return null;
+    return this.deps.knownAbilityIds().find((id) => REALM_RACERS_BAR_SLOTS[id] === barSlot) ?? null;
+  }
+
+  /** Whether the kit RESERVES `barSlot`, held or not. A reserved slot stays
+   *  empty rather than falling through, which is what keeps each effect on its
+   *  own key instead of sliding left into the first gap. */
+  private isActivityKitSlot(barSlot: number, form: HotbarForm = this.activeFormState): boolean {
+    if (form !== 'rally') return false;
+    return RALLY_PINNED_SLOTS.has(barSlot);
   }
 
   isAttackSlotFixed(): boolean {
-    if (this.activityKitWeaponId() !== null) return false;
+    if (this.isActivityKitSlot(0)) return false;
     return this.deps.showAttackButton();
   }
 
   actionForSlot(barSlot: number): HotbarAction {
-    if (barSlot === 0) {
-      const weapon = this.activityKitWeaponId();
-      if (weapon !== null) return { type: 'ability', id: weapon };
-      return actionForAttackSlot(this.isAttackSlotFixed(), this.attackActionState);
-    }
+    const pinned = this.activityKitAbilityForSlot(barSlot);
+    if (pinned !== null) return { type: 'ability', id: pinned };
+    if (this.isActivityKitSlot(barSlot)) return null;
+    if (barSlot === 0) return actionForAttackSlot(this.isAttackSlotFixed(), this.attackActionState);
     return this.actionState[barSlot - 1] ?? null;
   }
 
@@ -347,10 +373,10 @@ export class ActionBarController {
   private shouldAutoPlaceOnForm(id: string, form: HotbarForm): boolean {
     // Passives never castable: keep them off every seeded/form kit bar too.
     if (!this.isAbilityPlacementAllowed(id)) return false;
-    // The weapon slot 0 already holds is not placed a second time in the
-    // assignable rows; anything else the kit grants (a later pickup) still is.
+    // An ability the kit already pins to its own key is not placed a second time
+    // in the assignable rows; anything else the kit grants still is.
     if (form === 'rally') {
-      return !!REALM_RACERS_ABILITIES[id] && id !== this.activityKitWeaponId(form);
+      return !!REALM_RACERS_ABILITIES[id] && this.activityKitSlotFor(id, form) === null;
     }
     if (form === 'sport') return !!SPORT_ABILITIES[id];
     if (SPORT_ABILITIES[id] || REALM_RACERS_ABILITIES[id]) return false;
