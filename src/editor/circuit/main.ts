@@ -74,6 +74,7 @@ import {
   clampScale,
   type DockGeometry,
   type EditorLayout,
+  gridRange,
   gridStepAt,
   headlineChips,
   LAYOUT_STORAGE_KEY,
@@ -444,9 +445,13 @@ function fitView(): void {
   const half = drawn
     ? Math.max(metrics.roadHalfX, metrics.roadHalfZ, 20) * 1.15
     : Math.max(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z) * 1.12;
+  // Measured HERE rather than trusted from the last frame: `fitView` runs at boot,
+  // before any frame has been drawn, and a plan still measuring zero produced a
+  // scale of zero, which is not a view anyone can draw at.
+  samplePlanSize();
   view.x = 0;
   view.z = 0;
-  view.scale = Math.min(plan.width, plan.height) / (2 * half);
+  view.scale = clampScale(Math.min(plan.width, plan.height) / (2 * half));
   rememberZoom();
   requestRedraw();
 }
@@ -494,22 +499,20 @@ function strokeRect(halfX: number, halfZ: number, color: string, dash: number[] 
  *  multiplies it up until the lines are far enough apart to read. */
 function drawGridLines(): void {
   if (!layout.grid) return;
+  const { width, height } = plan;
   const step = gridStepAt(view.scale);
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const left = view.x - width / (2 * view.scale);
-  const right = view.x + width / (2 * view.scale);
-  const top = view.z - height / (2 * view.scale);
-  const bottom = view.z + height / (2 * view.scale);
+  const across = gridRange(view.x, width, view.scale, step);
+  const down = gridRange(view.z, height, view.scale, step);
+  if (!across || !down) return;
   ctx.save();
   ctx.strokeStyle = '#1d212b';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let x = Math.ceil(left / step) * step; x <= right; x += step) {
+  for (let x = across.first; x <= across.last; x += step) {
     ctx.moveTo(screenX(x), 0);
     ctx.lineTo(screenX(x), height);
   }
-  for (let z = Math.ceil(top / step) * step; z <= bottom; z += step) {
+  for (let z = down.first; z <= down.last; z += step) {
     ctx.moveTo(0, screenY(z));
     ctx.lineTo(width, screenY(z));
   }

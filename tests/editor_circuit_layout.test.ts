@@ -27,10 +27,12 @@ import {
   editorAction,
   formatShortcut,
   GRID_YARDS,
+  gridRange,
   gridStepAt,
   headlineChips,
   LAYOUT_STORAGE_KEY,
   MAX_CANVAS_CALLOUTS,
+  MAX_GRID_LINES,
   MENU_ITEMS,
   MENUS,
   MODE_ACTIONS,
@@ -501,6 +503,44 @@ describe('zoom, grid and snap', () => {
     // Zoomed out, a 10 yard grid is a grey wash: the step steps up instead.
     expect(gridStepAt(0.4)).toBeGreaterThan(GRID_YARDS);
     expect(gridStepAt(0.4) * 0.4).toBeGreaterThanOrEqual(12);
+  });
+
+  it('refuses a grid it cannot draw, rather than looping on infinities', () => {
+    // The freeze this pins, and it really did lock the browser at 100% CPU on the
+    // first frame: the plan measures zero until the first animation frame, a view
+    // fitted against that has a scale of zero, and a zero scale makes the visible
+    // span infinite. `for (let x = -Infinity; x <= Infinity; x += step)` never
+    // advances.
+    expect(gridRange(0, 1200, 0, 10)).toBeNull();
+    expect(gridRange(0, 0, 2.4, 10)).toBeNull();
+    expect(gridRange(0, 1200, -1, 10)).toBeNull();
+    expect(gridRange(0, 1200, 2.4, 0)).toBeNull();
+    expect(gridRange(0, Number.POSITIVE_INFINITY, 2.4, 10)).toBeNull();
+    expect(gridRange(Number.NaN, 1200, 2.4, 10)).toBeNull();
+  });
+
+  it('walks a drawable grid from the first line to the last, and terminates', () => {
+    const range = gridRange(0, 1200, 2.4, 10);
+    expect(range).not.toBeNull();
+    if (!range) return;
+    // 1200 px at 2.4 px/yd is 500 yards across, so 50 lines at a 10 yard step.
+    let lines = 0;
+    for (let x = range.first; x <= range.last; x += 10) lines++;
+    expect(lines).toBeGreaterThan(40);
+    expect(lines).toBeLessThan(60);
+    expect(range.first % 10).toBeCloseTo(0, 10);
+  });
+
+  it('refuses a span that would draw more lines than a grid can be read at', () => {
+    // Past the cap the grid is a solid wash, and something upstream is wrong.
+    expect(gridRange(0, 100_000, 20, 1)).toBeNull();
+    expect(MAX_GRID_LINES).toBeGreaterThan(50);
+  });
+
+  it('hands back a usable step at a scale no grid can be drawn at', () => {
+    // It used to run its loop to the ceiling and return 10 000.
+    expect(gridStepAt(0)).toBe(GRID_YARDS);
+    expect(gridStepAt(-2)).toBe(GRID_YARDS);
   });
 
   it('rounds an authored coordinate only when snapping is on', () => {

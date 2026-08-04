@@ -1029,9 +1029,42 @@ export function snapPoint<T extends { x: number; z: number }>(
  * plan view uses; it is here so the canvas holds no arithmetic of its own.
  */
 export function gridStepAt(scale: number, minPixels = 12): number {
+  // A scale of zero makes `step * scale` zero forever, so the loop would only
+  // stop at its own ceiling and hand back a meaningless step. There is no grid to
+  // draw at that scale anyway; `gridRange` refuses it.
+  if (!(scale > 0)) return GRID_YARDS;
   let step = GRID_YARDS;
   while (step * scale < minPixels && step < GRID_YARDS * 1000) step *= 5;
   return step;
+}
+
+/** The most grid lines one axis will ever draw. A ceiling, not a design: past
+ *  this the grid is a solid wash and something upstream is wrong. */
+export const MAX_GRID_LINES = 400;
+
+/**
+ * Where the grid runs across one axis, or null when there is no grid to draw.
+ *
+ * Null rather than a best effort, and this is the whole point of the function.
+ * A zero scale makes the visible span infinite, and `for (let x = -Infinity; x <=
+ * Infinity; x += step)` never advances: it froze the page at 100 percent CPU on
+ * the first frame, because the plan's measured size is zero until the first
+ * animation frame and the view had already been fitted against it. A drawing
+ * routine must not be the thing that decides whether its own inputs are sane.
+ */
+export function gridRange(
+  centre: number,
+  sizePixels: number,
+  scale: number,
+  step: number,
+): { first: number; last: number } | null {
+  if (!(scale > 0) || !(sizePixels > 0) || !(step > 0)) return null;
+  const half = sizePixels / (2 * scale);
+  const first = Math.ceil((centre - half) / step) * step;
+  const last = centre + half;
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
+  if ((last - first) / step > MAX_GRID_LINES) return null;
+  return { first, last };
 }
 
 export type ChipTone = 'plain' | 'good' | 'warn' | 'bad';
