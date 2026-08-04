@@ -11,8 +11,9 @@
 // and the renderer-versus-collider case asserts that both consumers landed on
 // it unchanged.
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import * as THREE from 'three';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CAMERA_ZOOM_MAX } from '../src/game/input';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
@@ -20,11 +21,12 @@ import {
   cameraBoomDistance,
   REALM_RACERS_CAMERA_BOOM_PROFILE,
 } from '../src/render/camera_boom_core';
-import { PROP_ASSET_DEFS } from '../src/render/props';
+import { PROP_ASSET_DEFS, propPreloadInternalsForTest } from '../src/render/props';
 import {
   REALM_RACERS_PROP_URLS,
   REALM_RACERS_PROP_VISUALS,
 } from '../src/render/realm_racers_prop_visuals';
+import { REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
 import { resolvePosition } from '../src/sim/colliders';
 import {
@@ -54,9 +56,72 @@ import {
   realmRacersPlacements,
 } from '../src/sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { glbBounds } from './helpers/glb_bounds';
 
 const SEED = 42;
 const publicDir = path.join(process.cwd(), 'public');
+
+/**
+ * The rally catalog's models as they stood before the breadth pass promoted the
+ * rest of the world's already-loaded props into it.
+ *
+ * A frozen literal rather than a derivation, because it is the ONE arm of the
+ * zero-overhead guard below that is allowed to be historical: a url here is
+ * grandfathered whatever the world's preload lane does later. Nothing may be
+ * added to it.
+ */
+const RALLY_URLS_BEFORE_THE_PROMOTION: ReadonlySet<string> = new Set([
+  '/models/props/well.glb',
+  '/models/props/column.glb',
+  '/models/props/column_broken.glb',
+  '/models/props/statue_block.glb',
+  '/models/props/statue_head.glb',
+  '/models/props/garden_arch.glb',
+  '/models/props/garden_iron_fence.glb',
+  '/models/props/garden_iron_pillar.glb',
+  '/models/biome/kcas_bench.glb',
+  '/models/biome/kcas_torch.glb',
+  '/models/biome/hex_flag.glb',
+  '/models/biome/hex_haybale.glb',
+  '/models/props/leafy_fox_statue.glb',
+  '/models/props/golden_horse_statue.glb',
+  '/models/props/mushroom_giant_purple.glb',
+  '/models/props/crystal_amethyst_cluster.glb',
+  '/models/props/mushroom_glow_cluster.glb',
+  '/models/props/flower_glow.glb',
+  '/models/foliage/oak_4.glb',
+  '/models/props/shrub_flowering.glb',
+  '/models/props/flower_bed_round.glb',
+  '/models/props/flower_bed_square_a.glb',
+  '/models/props/flower_bed_square_b.glb',
+  '/models/props/reeds.glb',
+  '/models/props/fen_lilies.glb',
+]);
+
+/**
+ * World props the rally deliberately cannot author, because the draw path would
+ * seat them wrong.
+ *
+ * `realm_racers_prop_visuals.ts` seats a model at its own authored origin
+ * instead of re-basing it to its lowest vertex the way `propAsset` does. These
+ * are authored around a WALL a circuit does not have: the shelves, the plaque
+ * and the delve portal sink half to three quarters into the lawn, and the three
+ * castle banners hang from a fixing, so they float about half a yard above it.
+ * `kcasTorchMounted` is deliberately NOT here: it sinks about as far as
+ * `kcasTorch` does, and that one has shipped as `postLantern` since the
+ * catalog's first pass.
+ */
+const DRAW_PATH_WOULD_SEAT_WRONG: readonly string[] = [
+  'kcasShelfLarge',
+  'kcasShelfSmall',
+  'kcasShelfBooks',
+  'kcasShelfCandles',
+  'kcasSwordShield',
+  'kcasBannerRedA',
+  'kcasBannerRedShield',
+  'kcasBannerRedTriple',
+  'delveEntrance2',
+];
 
 /** A draft id nobody else uses, so the overlay's slots stay this file's. */
 function draft(id: string, extra: Partial<RealmRacersCircuit>): RealmRacersCircuit {
@@ -77,9 +142,9 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     );
   });
 
-  it('draws every model out of the world catalog, on disk, manifested and preloaded', () => {
+  it('draws every model out of the world catalog, on disk and manifested', () => {
     const known = new Set(Object.values(PROP_ASSET_DEFS).map((def) => def.url));
-    const preloaded = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+    expect(REALM_RACERS_PROP_URLS.length).toBeGreaterThan(150);
     for (const url of REALM_RACERS_PROP_URLS) {
       // Through the world's OWN registry, never a second one: that is what
       // keeps the manifest and preload guards covering it and what makes an
@@ -88,10 +153,177 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
       const rel = url.replace(/^\//, '');
       expect(existsSync(path.join(publicDir, rel)), `${url} should exist under public/`).toBe(true);
       expect(MEDIA_ASSETS[rel], `${url} should be in the media manifest`).toBeDefined();
-      // An authored prop whose url misses the rally's own preload lane draws
-      // NOTHING on a cold client and fails no test that does not look here.
-      expect(preloaded.has(url), `${url} should ride the rally preload lane`).toBe(true);
     }
+  });
+
+  it('keeps the dressing OUT of the rally boot lane and the theme kits in it', () => {
+    // The resident half of the zero-overhead promise. That lane's map never
+    // clears, so a url fed to it pins a parsed scene for the whole session;
+    // feeding it a catalog this wide would pin the better part of two hundred,
+    // against `props.ts`, which goes out of its way to RELEASE each parse once
+    // its geometry is extracted. So the dressing is fetched when a circuit
+    // places it and only the theme kits (wall, arch, grid banner: structure a
+    // circuit cannot draw late) ride the lane.
+    const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+    const themeKit = new Set(REALM_RACERS_THEME_ASSET_URLS);
+    // The lane is the theme kits and nothing else. Stated as an equality rather
+    // than as "no dressing url is in it", because a handful of models are BOTH
+    // (the garden's iron fence is the Evergarden's perimeter and an authorable
+    // piece), and the rule is about which door put a url in the lane.
+    expect([...lane].sort()).toEqual([...themeKit].sort());
+    expect(lane.size).toBeLessThan(20);
+
+    const dressingOnly = REALM_RACERS_PROP_URLS.filter((url) => !themeKit.has(url));
+    expect(dressingOnly.length).toBeGreaterThan(150);
+    for (const url of dressingOnly) {
+      expect(lane.has(url), `${url} should NOT be preloaded by the rally lane`).toBe(false);
+    }
+
+    // Hand-pinned, both ways, so neither half can quietly become the other: two
+    // theme kit pieces that must stay in the lane, and two dressing models that
+    // must stay out of it.
+    expect(lane.has('/models/props/course_arch.glb')).toBe(true);
+    expect(lane.has('/models/dungeon/banner_patterna_blue.glb')).toBe(true);
+    expect(lane.has('/models/biome/kcas_bench.glb')).toBe(false);
+    expect(lane.has('/models/props/well.glb')).toBe(false);
+  });
+
+  it('costs world entry nothing: every model is one the client already fetches', () => {
+    // THE promise the catalog's breadth rests on. `props.ts` registers its
+    // preload keys in the DEFERRED lane `startGame` opens, so every url below
+    // is already fetched once for every player before the Renderer exists: a
+    // rally entry pointing at one of them adds no download to world entry.
+    //
+    // The set is derived from the preload FUNCTION rather than from
+    // PROP_ASSET_DEFS on purpose, and that is the only part of this case that
+    // is a tripwire rather than a pin on today. The two agree right now
+    // (`preloadPropKeys` returns the whole catalog, which
+    // tests/render_asset_preload pins), so the loop below cannot fail while
+    // they do; the day someone scopes that function to a subset, it is this
+    // test that says the rally dressing started paying for its own fetches.
+    const worldEntryUrls = new Set(
+      [...propPreloadInternalsForTest.preloadPropKeys(false)].map(
+        (key) => propPreloadInternalsForTest.propAssetUrl[key],
+      ),
+    );
+    const alreadyLoaded = (url: string): boolean =>
+      RALLY_URLS_BEFORE_THE_PROMOTION.has(url) || worldEntryUrls.has(url);
+
+    expect(REALM_RACERS_PROP_URLS.length).toBeGreaterThan(150);
+    for (const url of REALM_RACERS_PROP_URLS) expect(alreadyLoaded(url), url).toBe(true);
+
+    // The teeth `tsc` cannot supply, and the one door left open: every entry is
+    // minted through the `gltf()` helper, which is typed against
+    // PROP_ASSET_DEFS. A hand-written url literal would compile, would pass the
+    // registry check above only by coincidence, and is how a model outside the
+    // world's own set gets in. Read off the source, since a value check cannot
+    // tell which door a url came through.
+    const visualsSource = readFileSync(
+      new URL('../src/render/realm_racers_prop_visuals.ts', import.meta.url),
+      'utf8',
+    );
+    const table = visualsSource.slice(
+      visualsSource.indexOf('export const REALM_RACERS_PROP_VISUALS'),
+      visualsSource.indexOf('export const REALM_RACERS_PROP_URLS'),
+    );
+    expect(table).not.toBe('');
+    expect(
+      table.match(/'\/models\//g),
+      'no hand-written model url in the visuals table',
+    ).toBeNull();
+
+    // Not vacuous, and the counter-example is a real one: the themes' start
+    // banner is a shipped, manifested model the rally itself preloads through
+    // the THEME lane, and it is still not something the world loads for every
+    // player. A catalog key pointing at it would be exactly the overhead this
+    // guard exists to refuse.
+    expect(alreadyLoaded('/models/dungeon/banner_patterna_blue.glb')).toBe(false);
+
+    // The grandfather arm is carrying nothing, which is the strongest form of
+    // the promise: every url the catalog shipped with before the promotion
+    // pass is itself part of the world's own entry set.
+    for (const url of RALLY_URLS_BEFORE_THE_PROMOTION) {
+      expect(worldEntryUrls.has(url), url).toBe(true);
+    }
+  });
+
+  it('holds back the keys the rally draw path would get wrong', () => {
+    // The catalog is SATURATED: everything the world preloads is in it except
+    // the exclusions, so what is worth asserting is no longer "is this key
+    // present" but "did one of the dangerous ones get promoted by a sweep".
+    //
+    // The yaw/strip arm is derived from PROP_ASSET_DEFS rather than listed, so
+    // a correction added to an EXISTING catalog key fails here too: the draw
+    // path applies neither, and a piece silently facing ninety degrees wrong is
+    // not something a screenshot review reliably catches.
+    const catalogUrls = new Set(REALM_RACERS_PROP_URLS);
+    let corrected = 0;
+    for (const [key, def] of Object.entries(PROP_ASSET_DEFS)) {
+      if (def.yaw === undefined && def.strip === undefined) continue;
+      corrected++;
+      expect(catalogUrls.has(def.url), `${key} carries a yaw/strip correction`).toBe(false);
+    }
+    expect(corrected).toBeGreaterThanOrEqual(6);
+
+    // The wall-mounted and origin-sunk arm is a literal list, because nothing
+    // in the data says a model was authored around a wall: it is a judgement
+    // made once, off the measured boxes, and this is where it is recorded. The
+    // rally seats a model at its authored origin instead of re-basing it, so a
+    // shelf draws three quarters buried and a hung banner floats.
+    for (const key of DRAW_PATH_WOULD_SEAT_WRONG) {
+      expect(PROP_ASSET_DEFS[key], `${key} should still be a world prop`).toBeDefined();
+      expect(REALM_RACERS_PROPS[key], `${key} should not be authorable`).toBeUndefined();
+      expect(catalogUrls.has(PROP_ASSET_DEFS[key].url), key).toBe(false);
+    }
+  });
+
+  it('commits the size every shipped GLB actually has, trimmed and never grown', () => {
+    // The measurement half of "SIZES ARE MEASURED, not guessed". Every literal
+    // in the catalog was read off the model once; without this, a later edit,
+    // a re-export of an asset, or a hand-typed digit drifts silently, and a
+    // footprint is what the collision set and the readout both believe.
+    //
+    // Height is pinned EXACTLY (to the centimetre it is rounded to) and the
+    // footprint is pinned as an INEQUALITY, because the two rules differ: a
+    // height is the box, and a radius is deliberately trimmed toward the visual
+    // trunk (the oak's 0.55 against a 1.9 yard crown). Trimmed down is the
+    // rule; grown is the bug, since a too-generous footprint reads as one.
+    // The literals are committed to the centimetre, so "never grown" is judged
+    // at that resolution: `column` is authored 0.15 against a measured 0.14998,
+    // which is the rounding, not a widened footprint.
+    const ROUNDING = 0.005;
+    let checked = 0;
+    for (const [key, visual] of Object.entries(REALM_RACERS_PROP_VISUALS)) {
+      if (visual.kind !== 'gltf') continue;
+      const def = REALM_RACERS_PROPS[key];
+      const size = glbBounds(visual.url).getSize(new THREE.Vector3());
+      checked++;
+      expect(def.height, `${key} height`).toBeCloseTo(size.y, 2);
+      if (def.footprint.kind === 'circle') {
+        expect(def.footprint.r, `${key} radius`).toBeLessThanOrEqual(
+          Math.max(size.x, size.z) / 2 + ROUNDING,
+        );
+      } else {
+        expect(def.footprint.hw, `${key} hw`).toBeLessThanOrEqual(size.x / 2 + ROUNDING);
+        expect(def.footprint.hd, `${key} hd`).toBeLessThanOrEqual(size.z / 2 + ROUNDING);
+      }
+    }
+    expect(checked).toBeGreaterThan(150);
+  });
+
+  it('never makes an ankle-high piece solid', () => {
+    // The collider builder applies no height threshold, so a solid piece a
+    // machine cannot see is a wall a pilot hits for no visible reason. The
+    // catalog's own rule (see `RallyPropDef.solid`) is the only thing enforcing
+    // it, which is why it is enforced here rather than trusted.
+    const low = Object.entries(REALM_RACERS_PROPS).filter(([, def]) => def.height <= 0.15);
+    // Not vacuous: the promoted set really does carry knee-and-under pieces.
+    expect(low.length).toBeGreaterThanOrEqual(6);
+    for (const [key, def] of low)
+      expect(def.solid, `${key} is ${def.height} yards tall`).toBe(false);
+    // ...and the rule is a FLOOR, not a blanket: the haybale is three
+    // centimetres over it and still stops a machine.
+    expect(REALM_RACERS_PROPS.haybale.solid).toBe(true);
   });
 
   it('gives every kind a footprint and a height it could actually have', () => {

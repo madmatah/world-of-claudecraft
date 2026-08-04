@@ -52,7 +52,7 @@ import {
   realmRacersGrassTint,
 } from './realm_racers_grass_core';
 import { buildRealmRacersPickups } from './realm_racers_pickups';
-import { REALM_RACERS_PROP_URLS, REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
+import { REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import { buildRealmRacersSlicks } from './realm_racers_slicks';
 import {
   type RallyCircuitTheme,
@@ -115,18 +115,28 @@ function preload(url: string): void {
   );
 }
 
-// EVERY theme's kit and the authored dressing's whole catalog ride in the same
-// lane, whether or not a shipped circuit uses them today. A model that is not
-// preloaded draws from nothing on a cold client, which is a failure no test
-// that does not check the lane can see; `tests/realm_racers_props.test.ts` and
-// `tests/realm_racers_themes.test.ts` check it. The models themselves are
-// already shipped and manifested (props.ts and garden_features.ts place the
-// same files elsewhere) and loadGltf caches per URL, so registering them here
-// costs one extra promise each, not one extra parse.
-const ASSET_URLS = [...new Set([...REALM_RACERS_THEME_ASSET_URLS, ...REALM_RACERS_PROP_URLS])];
+// EVERY theme's own kit rides the boot lane, whether or not a shipped circuit
+// wears that theme today: the perimeter wall, the start arch and the grid
+// banner are structure rather than dressing, and a circuit that drew them a
+// second late would be a circuit whose start line appeared after the lights.
+// Small and fixed (a handful of urls), and `tests/realm_racers_themes.test.ts`
+// pins that a theme's kit is in it.
+//
+// THE DRESSING CATALOG IS DELIBERATELY NOT HERE, and that is the resident half
+// of the catalog's zero-overhead promise. This map never clears, so every url
+// fed to it pins a parsed scene for the whole session; the catalog is now the
+// better part of two hundred models, against `props.ts`, which goes out of its
+// way to release each parse once its geometry is extracted (and eagerly so on
+// the iOS memory profile that has already killed a session once). Since every
+// dressing url is BY CONSTRUCTION one the world already fetches, preloading it
+// here bought nothing but retention. `instanceModel` fetches a dressing model
+// when a circuit is actually built instead, so what stays resident is what an
+// authored circuit places rather than what the catalog could offer.
+const ASSET_URLS = [...new Set(REALM_RACERS_THEME_ASSET_URLS)];
 for (const url of ASSET_URLS) preload(url);
 
-/** Test-only window onto the asset set (see tests/render_glb_replacement_assets). */
+/** Test-only window onto the boot-lane asset set (see
+ *  tests/render_glb_replacement_assets and tests/realm_racers_props). */
 export const realmRacersPreloadInternalsForTest = {
   assetUrls: ASSET_URLS,
 };
@@ -141,11 +151,40 @@ interface ModelSpot {
   sz: number;
 }
 
-/** One InstancedMesh per source mesh of a loaded model. A missing model (a
- *  headless host that never awaited the preload) simply draws nothing. */
+/**
+ * Draw a model at every spot, or fetch it and draw when it lands.
+ *
+ * The cached arm is what every theme kit takes, since those rode the boot lane.
+ * The DRESSING does not (see the lane comment above), so the first circuit to
+ * place a model pays for it: on a desktop client `loadGltf` usually answers off
+ * its own cache, and where it does not this is one bounded fetch at circuit
+ * build, for racers only, rather than a parse every player carries all session.
+ *
+ * A fill landing on a group a rebuild already gave back is harmless and
+ * deliberately unguarded: `disposeRealmRacersTrackGroup` detaches and clears
+ * the group, so the meshes added afterwards hang off an orphan nothing draws,
+ * upload no GPU buffer and are collected with it.
+ *
+ * A headless host (a Vitest importing the render stack) never fetches: the
+ * dressing simply draws nothing, exactly as it did when the lane was empty.
+ */
 function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpot[]): void {
+  if (spots.length === 0) return;
   const scene = loaded.get(url);
-  if (!scene || spots.length === 0) return;
+  if (!scene) {
+    if (typeof window === 'undefined') return;
+    void loadGltf(url)
+      .then((gltf) => {
+        loaded.set(url, gltf.scene);
+        drawInstances(group, gltf.scene, spots);
+      })
+      .catch(() => undefined);
+    return;
+  }
+  drawInstances(group, scene, spots);
+}
+
+function drawInstances(group: THREE.Group, scene: THREE.Group, spots: readonly ModelSpot[]): void {
   scene.updateMatrixWorld(true);
   scene.traverse((obj) => {
     const src = obj as THREE.Mesh;

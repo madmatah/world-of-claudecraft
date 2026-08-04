@@ -25,6 +25,7 @@ import {
   movedProp,
   nextSeed,
   nudgeKeyOf,
+  PALETTE_GROUPS,
   POND_CHOICE,
   POND_MIN_RADIUS,
   POND_ROTATE_HANDLE_GAP,
@@ -738,6 +739,21 @@ describe('circuit editor props: the palette', () => {
     const palette = propPalette(REALM_RACERS_PROPS, ['bench', 'notAThing', 'bench']);
     expect(palette.filter((entry) => entry.asset === 'bench')).toHaveLength(1);
     expect(palette.some((entry) => entry.asset === 'notAThing')).toBe(false);
+  });
+
+  it('files no key the catalog does not author', () => {
+    // The palette's forgiveness (an unfiled key still shows, under `other`) is
+    // what makes a TYPO here invisible: the misspelling files nothing and the
+    // real key quietly falls to `other`, which is legal, so nothing else can
+    // say so. Read the table directly, since that is the only place the
+    // misspelling exists.
+    const filed = PALETTE_GROUPS.flatMap((row) => row.assets);
+    expect(filed.length).toBeGreaterThan(150);
+    for (const asset of filed) {
+      expect(REALM_RACERS_PROPS[asset], `${asset} is filed but not authored`).toBeDefined();
+    }
+    // ...and no piece is filed twice, under two groups or the same one.
+    expect(new Set(filed).size).toBe(filed.length);
   });
 
   it('files a key the tool has never heard of rather than dropping it', () => {

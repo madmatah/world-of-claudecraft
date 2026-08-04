@@ -8,8 +8,6 @@
 // ids resolve both ways, nothing references a model the client cannot load,
 // every consumer really reads the record, and a theme cannot reach physics.
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
@@ -38,6 +36,7 @@ import {
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
 import { REALM_RACERS_ORIGIN, realmRacersLaneOffset } from '../src/sim/realm_racers_layout';
+import { glbSize } from './helpers/glb_bounds';
 
 // The builder mints procedural canvas textures, so the build cases below need
 // the same texture stub every other headless render suite uses.
@@ -106,72 +105,6 @@ function glbLongHorizontalAxis(url: string): 'x' | 'z' {
     `${url} is not a run`,
   ).toBeGreaterThan(2);
   return size.x >= size.z ? 'x' : 'z';
-}
-
-function glbSize(url: string): THREE.Vector3 {
-  const buf = readFileSync(path.join(__dirname, '..', 'public', url.replace(/^\//, '')));
-  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  let json: GlbJson | null = null;
-  for (let off = 12; off < buf.byteLength; ) {
-    const length = view.getUint32(off, true);
-    const type = view.getUint32(off + 4, true);
-    if (type === 0x4e4f534a) {
-      json = JSON.parse(new TextDecoder().decode(buf.subarray(off + 8, off + 8 + length)));
-      break;
-    }
-    off += 8 + length;
-  }
-  if (!json) throw new Error(`no JSON chunk in ${url}`);
-  const document = json;
-  const box = new THREE.Box3();
-  const point = new THREE.Vector3();
-  const walk = (nodeIndex: number, parent: THREE.Matrix4): void => {
-    const node = document.nodes[nodeIndex];
-    const local = new THREE.Matrix4();
-    if (node.matrix) local.fromArray(node.matrix);
-    else {
-      local.compose(
-        new THREE.Vector3().fromArray(node.translation ?? [0, 0, 0]),
-        new THREE.Quaternion().fromArray(node.rotation ?? [0, 0, 0, 1]),
-        new THREE.Vector3().fromArray(node.scale ?? [1, 1, 1]),
-      );
-    }
-    const world = new THREE.Matrix4().multiplyMatrices(parent, local);
-    if (node.mesh !== undefined) {
-      for (const primitive of document.meshes[node.mesh].primitives) {
-        const accessor = document.accessors[primitive.attributes.POSITION];
-        for (const x of [accessor.min[0], accessor.max[0]]) {
-          for (const y of [accessor.min[1], accessor.max[1]]) {
-            for (const z of [accessor.min[2], accessor.max[2]]) {
-              box.expandByPoint(point.set(x, y, z).applyMatrix4(world));
-            }
-          }
-        }
-      }
-    }
-    for (const child of node.children ?? []) walk(child, world);
-  };
-  for (const root of document.scenes[document.scene ?? 0].nodes) {
-    walk(root, new THREE.Matrix4());
-  }
-  return box.getSize(new THREE.Vector3());
-}
-
-interface GlbNode {
-  matrix?: number[];
-  translation?: number[];
-  rotation?: number[];
-  scale?: number[];
-  mesh?: number;
-  children?: number[];
-}
-
-interface GlbJson {
-  scene?: number;
-  scenes: { nodes: number[] }[];
-  nodes: GlbNode[];
-  meshes: { primitives: { attributes: Record<string, number> }[] }[];
-  accessors: { min: number[]; max: number[] }[];
 }
 
 /** Every model url a theme names, whatever the shape of the piece naming it. */

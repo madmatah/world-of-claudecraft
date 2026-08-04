@@ -18,13 +18,24 @@
 //    only ever be drawn through an `InstancedMesh`. Drawing one as a plain Mesh
 //    would let a disposed draft take every authored circuit's statues with it.
 //
+// Most of the table is one line per key because that is all a mirror should
+// be: the SIZE lives sim side and the URL lives in `PROP_ASSET_DEFS`, so an
+// entry here only says which of the world's models a catalog key wears. Every
+// entry is minted through `gltf()`, never a hand-written url: the helper is
+// typed against `PROP_ASSET_DEFS`, which is what makes "the client already
+// fetches this at world entry" true by construction rather than by review.
+//
 // A model is seated at its own authored origin, not re-based to its lowest
 // vertex the way `propAsset` re-bases the world's placed props, so a piece whose
 // GLB sinks below y = 0 (the torch does, by about four tenths of a yard) sits
-// that much low in the lawn. Several kit pieces are also authored near UNIT
-// size rather than at world scale, so a record places them with an explicit
-// `scale`; the sim catalog's heights and footprints are the same authored size,
-// so both scale together and the readout measures what is drawn.
+// that much low in the lawn. That is also the rule that decides what is NOT
+// authorable: a WALL-MOUNTED piece (a shelf, a plaque, a hung banner) is
+// authored around a wall that a circuit does not have, so it would draw half
+// buried or hanging in mid air. The sim catalog's header lists the ones held
+// back for it. Several kit pieces are also authored near UNIT size rather than
+// at world scale, so a record places them with an explicit `scale`; the sim
+// catalog's heights and footprints are the same authored size, so both scale
+// together and the readout measures what is drawn.
 
 import type * as THREE from 'three';
 import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
@@ -82,11 +93,196 @@ export const REALM_RACERS_PROP_VISUALS: Record<string, RallyPropVisual> = {
   bedSquareB: gltf('flowerBedSquareB'),
   reeds: gltf('marshReeds'),
   lilyRaft: gltf('fenLilies'),
+
+  // village
+  house1: gltf('house1'),
+  house3: gltf('house3'),
+  blacksmith: gltf('blacksmith'),
+  inn: gltf('inn'),
+  kmedHomeA: gltf('kmedHomeA'),
+  kmedHomeB: gltf('kmedHomeB'),
+  kmedTavern: gltf('kmedTavern'),
+  kmedChurch: gltf('kmedChurch'),
+  kmedBlacksmith: gltf('kmedBlacksmith'),
+  kmedMarket: gltf('kmedMarket'),
+  hexWindmill: gltf('hexWindmill'),
+  hexCastle: gltf('hexCastle'),
+  hexTower: gltf('hexTower'),
+  hexChurch: gltf('hexChurch'),
+  hexTavern: gltf('hexTavern'),
+  hexBlacksmith: gltf('hexBlacksmith'),
+  hexHomeA: gltf('hexHomeA'),
+  hexHomeB: gltf('hexHomeB'),
+  hexMarket: gltf('hexMarket'),
+  hexWatchtower: gltf('hexWatchtower'),
+  hexCannonTower: gltf('hexCannonTower'),
+  hexBarracks: gltf('hexBarracks'),
+  hexbHomeA: gltf('hexbHomeA'),
+  hexbHomeB: gltf('hexbHomeB'),
+  hexbTavern: gltf('hexbTavern'),
+  hexbTownhall: gltf('hexbTownhall'),
+  hexbWorkshop: gltf('hexbWorkshop'),
+  hexbMarket: gltf('hexbMarket'),
+  hexbShipyard: gltf('hexbShipyard'),
+  hexbStables: gltf('hexbStables'),
+  hexbTowerBase: gltf('hexbTowerBase'),
+  hexbTowerA: gltf('hexbTowerA'),
+  hexrTowerA: gltf('hexrTowerA'),
+  hexbTowerB: gltf('hexbTowerB'),
+  hexbWindmill: gltf('hexbWindmill'),
+  hexrTent: gltf('hexrTent'),
+  hexrWatchtower: gltf('hexrWatchtower'),
+  hexrCastle: gltf('hexrCastle'),
+  hexrTownhall: gltf('hexrTownhall'),
+  hexrBarracks: gltf('hexrBarracks'),
+  hexrChurch: gltf('hexrChurch'),
+  hexrTavern: gltf('hexrTavern'),
+  hexrStables: gltf('hexrStables'),
+  hexrHomeA: gltf('hexrHomeA'),
+  hexrHomeB: gltf('hexrHomeB'),
+  hexrMarket: gltf('hexrMarket'),
+  hexrBlacksmith: gltf('hexrBlacksmith'),
+  hexrWindmill: gltf('hexrWindmill'),
+  hexrArcheryrange: gltf('hexrArcheryrange'),
+  hexrTowerCatapult: gltf('hexrTowerCatapult'),
+  hexrTowerBase2: gltf('hexrTowerBase2'),
+
+  // walling
+  fence: gltf('fence'),
+  kkWall: gltf('kkWall'),
+  kkWallCracked: gltf('kkWallCracked'),
+  kkPillar: gltf('kkPillar'),
+  hexWall: gltf('hexWall'),
+  hexFenceStone: gltf('hexFenceStone'),
+  hexnPalisade: gltf('hexnPalisade'),
+  kcasWall: gltf('kcasWall'),
+  kcasWallHalf: gltf('kcasWallHalf'),
+  kcasWallCorner: gltf('kcasWallCorner'),
+  kcasWallGated: gltf('kcasWallGated'),
+  kcasWallDoorway: gltf('kcasWallDoorway'),
+  kcasWallBroken: gltf('kcasWallBroken'),
+  kcasWallCracked: gltf('kcasWallCracked'),
+  kcasWallWindow: gltf('kcasWallWindow'),
+  kcasWallPillar: gltf('kcasWallPillar'),
+  kcasBarrier: gltf('kcasBarrier'),
+  kcasBarrierHalf: gltf('kcasBarrierHalf'),
+  kcasBarrierCorner: gltf('kcasBarrierCorner'),
+
+  // stonework
+  timberPillar: gltf('timberPillar'),
+  kcasStairsWide: gltf('kcasStairsWide'),
+  kcasStairsWalled: gltf('kcasStairsWalled'),
+  kcasColumn: gltf('kcasColumn'),
+  kcasPillar: gltf('kcasPillar'),
+  kcasFoundation: gltf('kcasFoundation'),
+  kcasFloorLarge: gltf('kcasFloorLarge'),
+  kcasFloorWeeds: gltf('kcasFloorWeeds'),
+
+  // landmark
+  bellTower: gltf('bellTower'),
+  pixieMushroomHouse: gltf('pixieMushroomHouse'),
+  crystalMoundCave: gltf('crystalMoundCave'),
+  starHeartCrystal: gltf('starHeartCrystal'),
+  stagShrine: gltf('stagShrine'),
+  shipMonument: gltf('shipMonument'),
+  kcasShrine: gltf('kcasShrine'),
+
+  // ironwork
+  gardenIronGate: gltf('gardenIronGate'),
+
+  // fixture
+  courseArch: gltf('courseArch'),
+  jumpVertical: gltf('jumpVertical'),
+  jumpOxer: gltf('jumpOxer'),
+
+  // furniture
+  lanternWall: gltf('lanternWall'),
+  hexFlagRed: gltf('hexFlagRed'),
+  kcasTorchMounted: gltf('kcasTorchMounted'),
+  kcasChestGold: gltf('kcasChestGold'),
+  kcasTableLong: gltf('kcasTableLong'),
+  kcasTableCloth: gltf('kcasTableCloth'),
+  kcasTableRoundSmall: gltf('kcasTableRoundSmall'),
+  kcasTableRoundMedium: gltf('kcasTableRoundMedium'),
+  kcasBookcase: gltf('kcasBookcase'),
+  kcasKeg: gltf('kcasKeg'),
+  kcasBarrel: gltf('kcasBarrel'),
+  kcasBedRoyal: gltf('kcasBedRoyal'),
+  kcasBedDouble: gltf('kcasBedDouble'),
+  kcasBedSingle: gltf('kcasBedSingle'),
+  kcasBedBunk: gltf('kcasBedBunk'),
+  kcasBedCot: gltf('kcasBedCot'),
+  kcasBedroll: gltf('kcasBedroll'),
+  kcasChair: gltf('kcasChair'),
+  kcasStool: gltf('kcasStool'),
+  kcasBarA: gltf('kcasBarA'),
+  kcasBarB: gltf('kcasBarB'),
+  kcasBarC: gltf('kcasBarC'),
+  kcasBartopMedium: gltf('kcasBartopMedium'),
+  kcasCandleTriple: gltf('kcasCandleTriple'),
+
+  // clutter
+  bonfire: gltf('bonfire'),
+  crateWooden: gltf('crateWooden'),
+  farmCrate: gltf('farmCrate'),
+  barrel: gltf('barrel'),
+  anvil: gltf('anvil'),
+  weaponStand: gltf('weaponStand'),
+  hexCannonballs: gltf('hexCannonballs'),
+  hexLumber: gltf('hexLumber'),
+  hexWeaponRack: gltf('hexWeaponRack'),
+  hexWheelbarrow: gltf('hexWheelbarrow'),
+  hexSack: gltf('hexSack'),
+  hexCrateBig: gltf('hexCrateBig'),
+  hexCrateOpen: gltf('hexCrateOpen'),
+  hexTrough: gltf('hexTrough'),
+  hexBarrel: gltf('hexBarrel'),
+  hexTarget: gltf('hexTarget'),
+  hexCannon: gltf('hexCannon'),
+  kcasCrateLarge: gltf('kcasCrateLarge'),
+  kcasCrateSmall: gltf('kcasCrateSmall'),
+  kcasCratesStacked: gltf('kcasCratesStacked'),
+
+  // rocks
+  oreRocks: gltf('oreRocks'),
+  rockTallA: gltf('rockTallA'),
+  rockTallH: gltf('rockTallH'),
+  rockLargeD: gltf('rockLargeD'),
+  rockLargeF: gltf('rockLargeF'),
+  kcasRubbleLarge: gltf('kcasRubbleLarge'),
+  kcasRubbleHalf: gltf('kcasRubbleHalf'),
+  kcasRocks: gltf('kcasRocks'),
+
+  // graveyard
+  graveRound: gltf('graveRound'),
+  graveCross: gltf('graveCross'),
+  graveBevel: gltf('graveBevel'),
+  graveDecor: gltf('graveDecor'),
+
+  // harbour
+  dockPlatform: gltf('dockPlatform'),
+  rowboat: gltf('rowboat'),
+  hexShipBlue: gltf('hexShipBlue'),
+  hexShipRed: gltf('hexShipRed'),
+  hexShipGreen: gltf('hexShipGreen'),
+  hexBoat: gltf('hexBoat'),
+  hexBoatrack: gltf('hexBoatrack'),
+  hexAnchor: gltf('hexAnchor'),
+
+  // planting
+  mushroomRed: gltf('mushroomRed'),
+  mushroomTan: gltf('mushroomTan'),
 };
 
-/** Every model a circuit's dressing can ask for. The track builder preloads
- *  this whole set: an authored prop whose url misses the preload lane draws
- *  nothing at all on a cold client, and fails no test that does not look. */
+/**
+ * Every model a circuit's dressing can ask for.
+ *
+ * NOT a preload set, and it stopped being one on purpose: the track builder
+ * fetches a dressing model when a circuit places it, so this list is what MAY
+ * be asked for rather than what is resident. What keeps a cold client honest is
+ * upstream instead, that every url here is one `props.ts` already fetches at
+ * world entry (`tests/realm_racers_props.test.ts`).
+ */
 export const REALM_RACERS_PROP_URLS: readonly string[] = Object.values(REALM_RACERS_PROP_VISUALS)
   .filter((visual): visual is { kind: 'gltf'; url: string } => visual.kind === 'gltf')
   .map((visual) => visual.url);

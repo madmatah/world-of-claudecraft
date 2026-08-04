@@ -188,6 +188,19 @@ const EVERGARDEN: RallyCircuitTheme = {
     'statueBlock',
     'reeds',
     'lilyRaft',
+    // Hedgewick and the mill lawn: the buildings `evergarden.ts` itself places
+    // in the zone, so a circuit here can put a village behind the barrier
+    // rather than only a lawn. The gate is the exception and an aesthetic pick
+    // off the already-loaded registry: no zone places it, and it finishes the
+    // ironwork set the fence and the pillar start.
+    'gardenIronGate',
+    'hexWindmill',
+    'hexHomeA',
+    'hexHomeB',
+    'hexChurch',
+    'hexTavern',
+    'hexMarket',
+    'hexWall',
   ],
   sky: {
     // The public lane's own answer today, so the circuit everyone races on is
@@ -260,6 +273,29 @@ const GALECREST: RallyCircuitTheme = {
     'statueBlock',
     'bedRound',
     'reeds',
+    // Wickharbor's own quarter and its working harbour: the blue colourway,
+    // the moored fleet and the cargo on the quay, all keys `galecrest.ts`
+    // already places in the zone this theme wears. Three are aesthetic picks
+    // off the already-loaded registry instead: the coastal fence module (which
+    // this theme's own perimeter wall is built from, though no zone places it
+    // as a prop), the pier deck, and the rowboat, which belongs to Palmreach
+    // and is here because a harbour circuit wants a dinghy on the shingle.
+    'hexbHomeA',
+    'hexbHomeB',
+    'hexbTavern',
+    'hexbMarket',
+    'hexbWindmill',
+    'hexFenceStone',
+    'shipMonument',
+    'hexShipBlue',
+    'hexBoat',
+    'hexBoatrack',
+    'hexAnchor',
+    'hexCrateBig',
+    'hexCrateOpen',
+    'hexSack',
+    'dockPlatform',
+    'rowboat',
   ],
   water: { shallow: 0x3f7f92, deep: 0x123043 },
   sky: {
@@ -337,6 +373,23 @@ const NIGHTBLOOM: RallyCircuitTheme = {
     'statueBlock',
     'reeds',
     'lilyRaft',
+    // The Veiled Hollow's own landmarks, every one of them placed by
+    // `realm.ts`: the pixie village, the crystal mound, the fallen star, the
+    // stags' shrine and the dungeon stone its wall is built from. The last four
+    // are aesthetic picks off the already-loaded registry: the dusk-violet
+    // houses (the zone raises those through `BuildingDef` kinds rather than as
+    // props) and the two small fungi, which no zone places at all but which are
+    // the only knee-high growth in the catalog.
+    'pixieMushroomHouse',
+    'crystalMoundCave',
+    'starHeartCrystal',
+    'stagShrine',
+    'kkWall',
+    'kkPillar',
+    'kmedHomeA',
+    'kmedTavern',
+    'mushroomRed',
+    'mushroomTan',
   ],
   water: { shallow: 0x4a7fb0, deep: 0x171238 },
   sky: {

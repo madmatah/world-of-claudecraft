@@ -282,6 +282,7 @@ export {
   movedProp,
   nextSeed,
   nudgeKeyOf,
+  PALETTE_GROUPS,
   POND_CHOICE,
   POND_HANDLES,
   POND_MIN_RADIUS,
