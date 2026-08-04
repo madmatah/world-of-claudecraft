@@ -139,6 +139,41 @@ describe('the circuit editor page markup', () => {
     expect(input).toContain('editor.html');
   });
 
+  it('has an element for every class its stylesheet styles', () => {
+    // The regression this exists for: a restructure wrote the CSS for a new
+    // `.plan-head` wrapper and the markup edit silently did not apply, so three
+    // overlays lost the `position: absolute` those rules had replaced and fell
+    // behind a full-height canvas. Nothing was hidden, nothing failed to resolve,
+    // and every other test stayed green.
+    //
+    // A class earns its keep by appearing in the markup OR as a literal in the
+    // modules that build the chrome. Deliberately loose about WHERE in the module:
+    // the classes arrive through `el()`, `actionButton()`, `className =` and
+    // `classList.toggle`, and a regex per call shape would be the thing that rots.
+    // The failure it has to catch is a class that appears in NEITHER, which is
+    // exactly what `.plan-head` was.
+    const moduleText = sources.join('\n');
+    const styled = new Set(
+      rules()
+        .flatMap((rule) => [...rule.selector.matchAll(/\.([a-zA-Z][\w-]*)/g)])
+        .map((match) => match[1]),
+    );
+    const inMarkup = new Set(
+      [...html.matchAll(/class="([^"]+)"/g)].flatMap((match) => match[1].split(/\s+/)),
+    );
+    expect(styled.size).toBeGreaterThan(20);
+    for (const name of styled) {
+      const carried =
+        inMarkup.has(name) ||
+        moduleText.includes(`'${name}'`) ||
+        new RegExp(`'[^']*\\b${name}\\b[^']*'`).test(moduleText);
+      expect(
+        carried,
+        `.${name} is styled but no element in the markup or the modules ever carries it`,
+      ).toBe(true);
+    }
+  });
+
   it('resolves every element its modules look up', () => {
     // The other half of the same contract: a renamed container turns into a null
     // at boot, and the page throws before it draws anything.

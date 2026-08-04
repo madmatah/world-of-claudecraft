@@ -578,18 +578,24 @@
     <div id="plan">
       <canvas id="view"></canvas>
       <div id="empty" hidden>draw a closed loop to begin, or press Load</div>
-      <div class="plan-top">
-        <div id="banner" hidden><span id="bannerMode"></span><span id="bannerText"></span></div>
+      <!-- The plan's head: ONE row, so the banner, the mode repairs and the metric
+           chips share the band instead of landing on top of each other. All three
+           are flex children and carry no position of their own, so this wrapper is
+           load-bearing: without it they fall into the normal flow, behind a canvas
+           that is the full height of the plan, and go off screen. -->
+      <div class="plan-head">
+        <div class="plan-top">
+          <div id="banner" hidden><span id="bannerMode"></span><span id="bannerText"></span></div>
+        </div>
+        <!-- The active tool's own repairs, where the work is. In the Track menu
+             too, and the menu is where they were LOST. -->
+        <div id="modeActions" hidden></div>
+        <div id="headline" hidden></div>
       </div>
-      <!-- The active tool's own repairs, where the work is, centred clear of the
-           banner sentence on one side and the metric chips on the other. In the
-           Track menu too, and the menu is where they were LOST. -->
-      <div id="modeActions" hidden></div>
       <!-- The view toggles sit at the FOOT of the plan, away from the banner:
            beside it they read as part of the sentence explaining the tool, which
            is exactly how they were misread. -->
       <div id="viewChips"></div>
-      <div id="headline" hidden></div>
       <div id="callouts"></div>
       <div id="metricsDrawer" hidden>
         <div id="metricsHead"><h3>readout</h3></div>
