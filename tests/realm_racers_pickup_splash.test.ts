@@ -24,7 +24,7 @@ describe('the pickup splash view', () => {
       tone: 'nitro',
     });
     expect(rallyPickupSplashView('ward')).toEqual({
-      icon: { kind: 'aura', id: 'rally_ward' },
+      icon: { kind: 'aura', id: 'aura_rally_ward' },
       labelKey: 'hudChrome.rally.pickupWard',
       tone: 'ward',
     });

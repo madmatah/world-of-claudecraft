@@ -53,7 +53,7 @@ const SPLASHES: Record<RallyPickupEffect, RallyPickupSplashView> = {
     tone: 'nitro',
   },
   ward: {
-    icon: { kind: 'aura', id: 'rally_ward' },
+    icon: { kind: 'aura', id: 'aura_rally_ward' },
     labelKey: 'hudChrome.rally.pickupWard',
     tone: 'ward',
   },

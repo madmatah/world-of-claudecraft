@@ -3173,7 +3173,10 @@ const AURA_RECIPES: Record<string, IconRecipe> = {
   // The rally ward: the one-shot shield a pickup box can grant. It is not an
   // ability (nothing casts it), so it lives with the auras, which is where the
   // pickup splash reaches for it.
-  rally_ward: r('holy', 'sky', ['shield', { p: 'sunburst', ...TR }], ['glow']),
+  // Keyed `aura_<kind>`, which is how the buff bar resolves an aura with no
+  // ability record behind it; the pickup splash asks for the same id so the two
+  // surfaces can never draw different wards.
+  aura_rally_ward: r('holy', 'sky', ['shield', { p: 'sunburst', ...TR }], ['glow']),
   aura_dot: r('shadow', 'shadowPurple', ['skull'], ['drips']),
   aura_hot: r('nature', 'leafGreen', ['heart'], ['sparkle']),
   aura_slow: r('frost', 'ice', ['boot', { p: 'snowflake', ...TR }]),

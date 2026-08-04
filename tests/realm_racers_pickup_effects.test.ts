@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isDebuffAura } from '../src/sim/aura_classify';
 import {
   REALM_RACERS_ABILITY_ID,
   REALM_RACERS_EFFECT_ABILITIES,
@@ -36,13 +37,18 @@ import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
+  REALM_RACERS_OFF_TRACK_AURA,
   REALM_RACERS_VEHICLE_KEY,
+  REALM_RACERS_WARD_AURA,
+  REALM_RACERS_WARD_AURA_SECONDS,
   realmRacersForfeit,
   realmRacersResetPosition,
   realmRacersToWorld,
+  realmRacersWarded,
 } from '../src/sim/social/realm_racers';
 import { type SimEvent, TICK_RATE } from '../src/sim/types';
 import { advanceVehicleDrive, vehicleMaxSpeed } from '../src/sim/vehicle_motion';
+import { createAurasView, isAuraDebuff } from '../src/ui/auras_view';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
 import { addAt, makeWorld, teleport } from './vale_cup_util';
 
@@ -95,6 +101,16 @@ function standOnBox(sim: Sim, pid: number, index: number): void {
 
 function progressOf(sim: Sim, pid: number) {
   return required(match(sim).progress.get(pid), `progress ${pid}`);
+}
+
+/** Is this racer carrying the ward AURA, which is the source of truth for it? */
+function wardedOf(sim: Sim, pid: number): boolean {
+  return realmRacersWarded(sim.entities.get(pid));
+}
+
+/** The ward aura record itself, for the cases that assert what it looks like. */
+function wardAuraOf(sim: Sim, pid: number) {
+  return sim.entities.get(pid)?.auras.find((aura) => aura.id === REALM_RACERS_WARD_AURA);
 }
 
 /**
@@ -293,7 +309,7 @@ describe('the drawn effect, in a race', () => {
     installScriptedRng(sim).script(roll);
     standOnBox(sim, back, 0);
     sim.tick();
-    expect(progressOf(sim, back).warded).toBe(true);
+    expect(wardedOf(sim, back)).toBe(true);
   });
 
   it('leaves a RETIRED racer out of the field the band is read against', () => {
@@ -346,7 +362,7 @@ describe('the drawn effect, in a race', () => {
     takeWithEffect(sim, a, 0, 'charge');
     const progress = progressOf(sim, a);
     expect(progress.heldWeapon?.charges).toBeGreaterThan(before);
-    expect(progress.warded).toBe(false);
+    expect(wardedOf(sim, a)).toBe(false);
     expect(progress.heldEffect).toBeNull();
     expect(progress.nitroUntilTick).toBe(0);
     expect(match(sim).slicks).toEqual([]);
@@ -411,7 +427,7 @@ describe('the held effects', () => {
     const [a] = pids;
     takeWithEffect(sim, a, 0, 'ward');
     const progress = progressOf(sim, a);
-    expect(progress.warded).toBe(true);
+    expect(wardedOf(sim, a)).toBe(true);
     const charges = required(progress.heldWeapon?.charges, 'charges');
 
     for (let i = 0; i < 21; i++) sim.tick();
@@ -420,7 +436,12 @@ describe('the held effects', () => {
     standOnBox(sim, a, 1);
     sim.tick();
     expect(rng.consumed).toBe(1);
-    expect(progress.warded).toBe(true);
+    expect(wardedOf(sim, a)).toBe(true);
+    // ONE ward, never two: the fallback is what stops a second grant, and the
+    // aura is what the fallback reads.
+    expect(
+      sim.entities.get(a)?.auras.filter((aura) => aura.id === REALM_RACERS_WARD_AURA),
+    ).toHaveLength(1);
     expect(required(progress.heldWeapon?.charges, 'charges')).toBeGreaterThan(charges);
   });
 
@@ -567,17 +588,62 @@ describe('the ward', () => {
     });
   }
 
+  it('is a real AURA on the machine, classified as a buff and shown without a clock', () => {
+    const { sim, pids } = racingGrid();
+    const [a] = pids;
+    takeWithEffect(sim, a, 0, 'ward');
+    const aura = required(wardAuraOf(sim, a), 'ward aura');
+    // The shape, spelled out: a marker kind of its own (nothing borrowed that
+    // would drag mechanics in), no stat effect, physical so no dispel in the
+    // game can strip it, and the permanent-until-removed duration.
+    expect(aura).toMatchObject({
+      id: REALM_RACERS_WARD_AURA,
+      name: 'Racing Ward',
+      kind: 'rally_ward',
+      value: 0,
+      school: 'physical',
+      duration: REALM_RACERS_WARD_AURA_SECONDS,
+    });
+    expect(aura.remaining).toBeGreaterThan(60);
+    // BUFF, through the one classifier the HUD and the sim share.
+    expect(isDebuffAura(aura.kind, aura.value)).toBe(false);
+    expect(isAuraDebuff(aura)).toBe(false);
+
+    // And the buff bar shows it with NO countdown: it is not timed, it lasts
+    // until something spends it, so a clock ticking down from three hours would
+    // be telling a pilot about a number that decides nothing.
+    const units = { s: 's', m: 'm', h: 'h', d: 'd' };
+    const view = createAurasView('buffs', {
+      iconId: (input) => `aura_${input.kind}`,
+      auraName: (input) => input.name,
+      formatStacks: (n) => String(n),
+      auraEffectHtml: () => '',
+      durationUnits: () => units,
+      isOwn: () => true,
+    });
+    const painted = view.tick({ auras: [aura] });
+    expect(painted.count).toBe(1);
+    expect(painted.slots[0]).toMatchObject({
+      isDebuff: false,
+      durationText: '',
+      expiring: false,
+      // The icon the pickup splash asks for by name, so the two surfaces cannot
+      // draw different wards.
+      iconKey: 'aura_rally_ward',
+    });
+  });
+
   it('absorbs exactly one Ground Blast, then breaks', () => {
     const { sim, pids } = racingGrid();
     const [a, shooter] = pids;
     takeWithEffect(sim, a, 0, 'ward');
     const progress = progressOf(sim, a);
-    expect(progress.warded).toBe(true);
+    expect(wardedOf(sim, a)).toBe(true);
 
     const racer = required(sim.entities.get(a), 'racer');
     shellNear(sim, a, shooter, GROUND_BLAST_RADIUS - 0.01);
     const absorbed = sim.tick();
-    expect(progress.warded).toBe(false);
+    expect(wardedOf(sim, a)).toBe(false);
     expect(progress.groundBlastShockUntilTick).toBe(0);
     expect(racer.vy).toBe(0);
     expect(absorbed.filter((event) => event.type === 'realmRacersWardBroken')).toMatchObject([
@@ -608,18 +674,21 @@ describe('the ward', () => {
     // worse than no shield at all.
     shellNear(sim, a, shooter, GROUND_BLAST_RADIUS + 0.01);
     const missed = sim.tick();
-    expect(progress.warded).toBe(true);
+    expect(wardedOf(sim, a)).toBe(true);
     expect(missed.filter((event) => event.type === 'realmRacersWardBroken')).toEqual([]);
     expect(progress.groundBlastShockUntilTick).toBe(0);
   });
 
   it('is swept off the circuit with the flag, along with the oil', () => {
     const { sim, pids } = racingGrid();
-    const [a, b, c] = pids;
+    const [a, b, c, d] = pids;
     // A race with everything LIVE when the flag falls: a ward standing, a nitro
     // mid-burst, oil well inside its lifetime, and a machine actually sliding in
     // it. (Running the race out on its 180 s deadline instead, as the first
     // version did, expires every one of those first and asserts about nothing.)
+    // The machine in the oil is deliberately NOT the warded one: a ward absorbs
+    // oil, so driving the warded pilot into it would spend the very thing this
+    // case is about.
     takeWithEffect(sim, a, 0, 'ward');
     for (let i = 0; i < 21; i++) sim.tick();
     takeWithEffect(sim, b, 4, 'slick');
@@ -629,16 +698,14 @@ describe('the ward', () => {
     for (let i = 0; i < 21; i++) sim.tick();
     takeWithEffect(sim, c, 8, 'nitro');
     sim.castAbility(REALM_RACERS_NITRO_ABILITY_ID, c);
-    // And the warded machine into the puddle, so the grip clock is running too.
-    standAt(sim, a, slick.x, slick.z);
+    // And the fourth machine into the puddle, so a grip clock is running too.
+    standAt(sim, d, slick.x, slick.z);
     sim.tick();
-    progressOf(sim, a).warded = true;
-    progressOf(sim, a).slickGripUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
-    progressOf(sim, a).slickContactUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
 
     // The premises, every one of them, so no assertion below is vacuous.
-    expect(progressOf(sim, a).warded).toBe(true);
-    expect(progressOf(sim, a).slickGripUntilTick).toBeGreaterThan(sim.tickCount);
+    expect(wardedOf(sim, a)).toBe(true);
+    expect(wardAuraOf(sim, a)?.remaining).toBeGreaterThan(0);
+    expect(progressOf(sim, d).slickGripUntilTick).toBeGreaterThan(sim.tickCount);
     expect(progressOf(sim, c).nitroUntilTick).toBeGreaterThan(sim.tickCount);
     expect(required(sim.entities.get(c)?.drive, 'drive').speedCap).toBe(
       REALM_RACERS_NITRO_SPEED_MULT,
@@ -652,7 +719,7 @@ describe('the ward', () => {
     expect(live.slicks).toEqual([]);
     for (const pid of pids) {
       const progress = progressOf(sim, pid);
-      expect(progress.warded).toBe(false);
+      expect(wardedOf(sim, pid)).toBe(false);
       expect(progress.nitroUntilTick).toBe(0);
       expect(progress.slickGripUntilTick).toBe(0);
       expect(progress.slickContactUntilTick).toBe(0);
@@ -678,12 +745,17 @@ describe('a machine the referee puts back', () => {
     progress.slickContactUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
     const drive = required(sim.entities.get(a)?.drive, 'drive');
     drive.speedCap = REALM_RACERS_NITRO_SPEED_MULT;
-    expect(progress.warded).toBe(true);
+    expect(wardedOf(sim, a)).toBe(true);
 
     expect(realmRacersResetPosition(sim.ctx, a)).toBeUndefined();
 
-    // The ward is a thing the pilot WON: a recovery does not confiscate it.
-    expect(progress.warded).toBe(true);
+    // The ward is a thing the pilot WON: a recovery does not confiscate it, and
+    // it must not ride any of the aura cleanup the reset DOES do (the off-track
+    // band aura is stripped there, by id).
+    expect(wardedOf(sim, a)).toBe(true);
+    expect(sim.entities.get(a)?.auras.some((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA)).toBe(
+      false,
+    );
     // Everything the ground was doing to the machine is behind it, and so is a
     // burst it can no longer spend (the recovery stopped it dead).
     expect(progress.nitroUntilTick).toBe(0);
@@ -717,7 +789,7 @@ describe('the pickups stay deterministic', () => {
         drawn,
         slicks: live.slicks.map((slick) => `${slick.id}@${slick.x.toFixed(4)}`),
         held: pids.map((pid) => live.progress.get(pid)?.heldEffect ?? '-'),
-        warded: pids.map((pid) => live.progress.get(pid)?.warded),
+        warded: pids.map((pid) => realmRacersWarded(sim.entities.get(pid))),
         charges: pids.map((pid) => live.progress.get(pid)?.heldWeapon?.charges),
       };
     };

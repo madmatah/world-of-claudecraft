@@ -41,6 +41,7 @@ import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
 import { bareClient } from './helpers/bare_client';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
 
@@ -371,13 +372,50 @@ describe('Realm Racers online parity', () => {
     expect(world.realmRacersInfo.match?.slicks).toEqual(
       server.sim.realmRacersInfoFor(session.pid).match?.slicks,
     );
-    // The ward flag mirrors on the same blob, so the strip's pip is the same
-    // fact offline and online.
-    progressAfter.warded = true;
+    // The ward: an AURA on the racer (the operator's 2026-08-04 call), which is
+    // the source of truth the `warded` flag on the blob is derived from. Granted
+    // through the real path, a scripted ward draw at the next box.
+    const serverRacer = server.sim.entities.get(session.pid);
+    if (!serverRacer) throw new Error('missing racer');
+    for (let i = 0; i < 21; i++) advance(server);
+    // A FRESH scripted stream: the slick rolls queued above may not all have been
+    // spent (the three house pilots take boxes too), and a leftover would hand
+    // this take the wrong effect.
+    const wardRng = installScriptedRng(server.sim);
+    wardRng.script(rallyPickupRollFor('leader', 'ward'));
+    // Every box back on the circuit, so the one below is certainly there: which
+    // boxes the house pilots have collected is not what this case is about.
+    match.pickups.taken.fill(false);
+    const wardBox = realmRacersPickupBoxes(GARDEN_CIRCUIT)[5];
+    serverRacer.pos.x = match.origin.x + wardBox.x;
+    serverRacer.pos.z = match.origin.z + wardBox.z;
+    serverRacer.prevPos = { ...serverRacer.pos };
+    const wardProjection = realmRacersTrack(GARDEN_CIRCUIT).project(wardBox.x, wardBox.z);
+    progressAfter.lastS = wardProjection.s;
+    progressAfter.trackIndex = wardProjection.index;
     advance(server);
+    expect(wardRng.consumed).toBe(1);
+    expect(serverRacer.auras.some((aura) => aura.id === REALM_RACERS_WARD_AURA)).toBe(true);
+
     const wardedSnap = client.sent.filter((frame) => frame.t === 'snap').at(-1);
     (world as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(wardedSnap);
     expect(world.realmRacersInfo.match?.warded).toBe(true);
+    // And it rides the ORDINARY entity aura wire, so a rival who targets this
+    // racer sees the shield in their target frame rather than being surprised by
+    // a shell that does nothing. Read off the frame a SECOND session receives.
+    const rivalClient = fakeClient();
+    const rivalSession = join(server, rivalClient, 2, 'Briar');
+    const rivalEntity = server.sim.entities.get(rivalSession.pid);
+    if (!rivalEntity) throw new Error('missing rival');
+    rivalEntity.pos = { ...serverRacer.pos, x: serverRacer.pos.x + 3 };
+    rivalEntity.prevPos = { ...rivalEntity.pos };
+    advance(server);
+    const rivalFrames = rivalClient.sent.filter((frame) => frame.t === 'snap');
+    const seen = rivalFrames
+      .flatMap((frame) => (frame.ents as { id: number; auras?: { id: string }[] }[]) ?? [])
+      .filter((row) => row.id === session.pid)
+      .flatMap((row) => row.auras ?? []);
+    expect(seen.map((aura) => aura.id)).toContain(REALM_RACERS_WARD_AURA);
     // Rounded to the hundredth of a yard by the shared readout builder, which is
     // where BOTH hosts do it: the mirror carries exactly what the offline Sim
     // would have handed presentation, to the byte.

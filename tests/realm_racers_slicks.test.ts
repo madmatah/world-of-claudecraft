@@ -30,9 +30,12 @@ import {
   REALM_RACERS_AUTO_RECOVERY_LOCK_TICKS,
   REALM_RACERS_COUNTDOWN_TICKS,
   REALM_RACERS_STUCK_TICKS,
+  REALM_RACERS_WARD_AURA,
+  REALM_RACERS_WARD_AURA_SECONDS,
   realmRacersForfeit,
   realmRacersSpendPickupEffect,
   realmRacersToWorld,
+  realmRacersWarded,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
@@ -301,11 +304,22 @@ describe('oil slicks, in a race', () => {
     const point = track.pointAt(track.length * 0.25);
     const slick = dropSlickAt(sim, dropper, point.x, point.z);
     const rivalProgress = required(match(sim).progress.get(rival), 'rival progress');
-    rivalProgress.warded = true;
+    // Granted as the real AURA, which is the ward's source of truth.
+    const rivalRacer = required(sim.entities.get(rival), 'rival');
+    rivalRacer.auras.push({
+      id: REALM_RACERS_WARD_AURA,
+      name: 'Racing Ward',
+      kind: 'rally_ward',
+      remaining: REALM_RACERS_WARD_AURA_SECONDS,
+      duration: REALM_RACERS_WARD_AURA_SECONDS,
+      value: 0,
+      sourceId: rival,
+      school: 'physical',
+    });
 
     standAt(sim, rival, slick.x, slick.z);
     const absorbed = sim.tick();
-    expect(rivalProgress.warded).toBe(false);
+    expect(realmRacersWarded(rivalRacer)).toBe(false);
     expect(rivalProgress.slickGripUntilTick).toBe(0);
     expect(absorbed.filter((event) => event.type === 'realmRacersWardBroken')).toMatchObject([
       { pid: rival },

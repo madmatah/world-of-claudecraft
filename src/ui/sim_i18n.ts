@@ -407,6 +407,9 @@ const baseEnTable = {
   // The debuff a Ground Blast hit leaves behind. Its aura is not in ABILITIES,
   // so the HUD row resolves its label through here rather than through tEntity.
   'aura.rallyGroundBlast': 'Ground Blast',
+  // The one-shot shield a pickup box grants (22b). Same story as the line above:
+  // no ability record behind it, so its buff-bar label comes through here.
+  'aura.rallyWard': 'Racing Ward',
   'aura.elixirBear': 'Might of the Bear',
   // Crafted alchemy elixir auras (content/profession_items.ts): the
   // buff_sta aura name shown on the buff bar / combat log when the crafted elixir
@@ -3966,6 +3969,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'mechanic.bansheesWail': '女妖之嚎',
     'mechanic.crushingSweep': '粉碎横扫',
     'mechanic.rallyingBanner': '鼓舞战旗',
+    'aura.rallyWard': '赛道护盾',
     'mechanic.tectonicHeave': '地壳掀击',
     'mechanic.seismicStomp': '震地践踏',
     'mechanic.mountainhide': '山岩之肤',
@@ -4386,6 +4390,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'mechanic.bansheesWail': '女妖哀嚎',
     'mechanic.crushingSweep': '碎裂橫掃',
     'mechanic.rallyingBanner': '集結旗幟',
+    'aura.rallyWard': '賽道護盾',
     'mechanic.tectonicHeave': '地殼掀擊',
     'mechanic.seismicStomp': '震地踐踏',
     'mechanic.mountainhide': '山岩之膚',
@@ -4812,6 +4817,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'mechanic.bansheesWail': '밴시의 통곡',
     'mechanic.crushingSweep': '분쇄의 휩쓸기',
     'mechanic.rallyingBanner': '재집결 깃발',
+    'aura.rallyWard': '레이스 보호막',
     'mechanic.tectonicHeave': '지각 융기',
     'mechanic.seismicStomp': '지진 발구르기',
     'mechanic.mountainhide': '산의 가죽',
@@ -5249,6 +5255,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'mechanic.bansheesWail': 'バンシーの号哭',
     'mechanic.crushingSweep': '粉砕薙ぎ払い',
     'mechanic.rallyingBanner': '鼓舞の軍旗',
+    'aura.rallyWard': 'レースの守護',
     'mechanic.tectonicHeave': '地殻隆起',
     'mechanic.seismicStomp': '震地の踏みつけ',
     'mechanic.mountainhide': '山の外皮',
@@ -6122,6 +6129,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'mechanic.bansheesWail': 'Вопль банши',
     'mechanic.crushingSweep': 'Сокрушающий взмах',
     'mechanic.rallyingBanner': 'Знамя сплочения',
+    'aura.rallyWard': 'Гоночный щит',
     'mechanic.tectonicHeave': 'Тектонический сдвиг',
     'mechanic.seismicStomp': 'Сейсмический топот',
     'mechanic.mountainhide': 'Горная шкура',
@@ -8052,6 +8060,7 @@ const AURA_NAME_KEY: Record<string, SimMessageKey> = {
   'Garden Lawn': 'aura.rallyGardenLawn',
   Wading: 'aura.rallyWading',
   'Ground Blast': 'aura.rallyGroundBlast',
+  'Racing Ward': 'aura.rallyWard',
   'Temporal Exhaustion': 'aura.temporalExhaustion',
   'Cauterize Fatigue': 'aura.cauterizeFatigue',
   'Might of the Bear': 'aura.elixirBear',

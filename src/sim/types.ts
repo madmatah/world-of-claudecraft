@@ -270,6 +270,14 @@ export type AuraKind =
   // no stat effect. While it rides, a target cannot benefit from another group haste
   // burst (aoeAllyHaste with exhaust), so the effects can never be chained.
   | 'sated'
+  // The Realm Racers ward (social/realm_racers.ts): a pure BUFF marker granted by
+  // a pickup box, carrying no stat effect at all. While it rides, the next
+  // hostile rally effect (a Ground Blast impact or a patch of oil) is absorbed
+  // and the aura is consumed. Its own kind rather than a borrowed one because
+  // every alternative carries mechanics a race must not inherit (an `absorb`
+  // would be eaten by the first point of damage, a `buff_dr` would change how
+  // much a hit hurts), and because the buff bar keys an aura's icon off its kind.
+  | 'rally_ward'
   // Cauterize lockout (fire mage, combat/fire_mage.ts): a pure debuff marking that
   // the lethal save already fired. While worn, Cauterize cannot save again. It
   // SURVIVES death (resurrection.ts aurasSurvivingDeath) and pauses while dead, so

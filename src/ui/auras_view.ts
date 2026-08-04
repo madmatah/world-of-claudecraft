@@ -59,7 +59,12 @@ const TOGGLE_KINDS: ReadonlySet<AuraKind> = new Set([
 ]);
 // Ghost Wolf toggles too, but its aura rides the generic buff_speed kind (which
 // Sprint also uses, 15s and very much worth a countdown), so it hides by id.
-const TOGGLE_IDS: ReadonlySet<string> = new Set(['ghost_wolf']);
+// The Realm Racers ward hides its countdown for a different reason again: it is
+// not a mode and not timed, it lasts until something SPENDS it (or the race
+// ends), and the sim backs that with the long finite duration the aura system
+// uses for permanent effects. A countdown ticking down from three hours would be
+// telling a pilot about a clock that decides nothing.
+const TOGGLE_IDS: ReadonlySet<string> = new Set(['ghost_wolf', 'rally_ward']);
 // The inverse override: an aura that rides a TOGGLE_KIND but is a genuine timed
 // buff worth a countdown. Greater Invisibility reuses the rogue-stealth machinery
 // for its vanish (kind 'stealth' with full move speed), but it is a fixed 20s

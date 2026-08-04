@@ -190,6 +190,73 @@ export function realmRacersSpeedLoss(band: RealmRacersSlowBand): number {
 export const REALM_RACERS_OFF_TRACK_AURA = 'realm_racers_soft_verge';
 
 /**
+ * The WARD a pickup box can grant, as a real aura on the racer.
+ *
+ * It is an aura and not a flag on the race's own bookkeeping (operator call,
+ * 2026-08-04) for consistency with everything else the rally does to a machine:
+ * the off-track bands and the Ground Blast control are auras, so a pilot reads
+ * every state the race put on them in the same row of the same frame, a rival who
+ * TARGETS them sees it there too, and it rides the ordinary entity aura wire with
+ * no new field. `AuraKind` gains its own `rally_ward` marker rather than borrowing
+ * one, because every existing kind carries mechanics a race must not inherit.
+ *
+ * The aura is the SOURCE OF TRUTH: the readout's `warded` flag is derived from
+ * it, so the two can never disagree.
+ */
+export const REALM_RACERS_WARD_AURA = 'rally_ward';
+const REALM_RACERS_WARD_AURA_NAME = 'Racing Ward';
+/**
+ * How long the ward is written for, seconds.
+ *
+ * The permanent-until-removed arm the aura system already supports (the Drowned
+ * Litany's cantor shield is the precedent): the per-tick pass decrements
+ * `remaining` and drops an aura at zero, so "until something spends it" is spelled
+ * as a duration no race can outlive. The buff bar hides the countdown for this id
+ * (`TOGGLE_IDS` in `src/ui/auras_view.ts`), so nobody is shown a three-hour clock
+ * that decides nothing.
+ */
+export const REALM_RACERS_WARD_AURA_SECONDS = 9999;
+
+/** Is this machine carrying a ward right now? The one question every ward site
+ *  asks, so nothing re-implements the lookup. */
+export function realmRacersWarded(racer: Entity | undefined | null): boolean {
+  return !!racer?.auras.some((aura) => aura.id === REALM_RACERS_WARD_AURA);
+}
+
+/** Grant the ward. Refreshing an existing one is a no-op by construction: the
+ *  draw that would have granted a second falls back to the refill instead. */
+function applyRealmRacersWard(ctx: SimContext, racer: Entity): void {
+  ctx.applyAura(racer, {
+    id: REALM_RACERS_WARD_AURA,
+    name: REALM_RACERS_WARD_AURA_NAME,
+    kind: 'rally_ward',
+    remaining: REALM_RACERS_WARD_AURA_SECONDS,
+    duration: REALM_RACERS_WARD_AURA_SECONDS,
+    // No stat effect at all: the value is unread, and the kind is a marker.
+    value: 0,
+    sourceId: racer.id,
+    // Physical, so no dispel in the game can strip it (`isDispellableAura`
+    // refuses a physical aura outright) and nothing treats it as magic.
+    school: 'physical',
+  });
+}
+
+/**
+ * Spend the ward, if there is one. Returns whether it was there, which is the
+ * whole of "did this absorb happen": the caller emits the announcement.
+ */
+function consumeRealmRacersWard(ctx: SimContext, racer: Entity): boolean {
+  const index = racer.auras.findIndex((aura) => aura.id === REALM_RACERS_WARD_AURA);
+  if (index < 0) return false;
+  const name = racer.auras[index].name;
+  racer.auras.splice(index, 1);
+  // The fade event the buff bar and the aura log listen for, exactly as every
+  // other removed aura emits it.
+  ctx.emit({ type: 'aura', targetId: racer.id, name, gained: false });
+  return true;
+}
+
+/**
  * The off-track bands. Leaving the circuit costs time, in proportion to how far
  * out you are: the mown verge is a nudge and the garden beyond it is a real
  * price. Two knobs, and pure FEEL: they were the only thing making a cut across
@@ -310,12 +377,6 @@ export interface RealmRacersProgress {
    * overwrite, no double stock.
    */
   heldEffect: RallyHeldEffect | null;
-  /**
-   * Whether this racer is carrying a ward: it absorbs the next hostile rally
-   * effect (a Ground Blast impact or an oil slick) and breaks. A boolean rather
-   * than a timer, because it lasts until it is spent or the race ends.
-   */
-  warded: boolean;
   /**
    * The two halves of driving through oil, both ticks, both 0 before the first
    * patch. `slickContactUntilTick` is how long this racer's CONTACT is already
@@ -903,7 +964,6 @@ function startMatch(
           pickupCooldownUntilTick: 0,
           nitroUntilTick: 0,
           heldEffect: null,
-          warded: false,
           slickContactUntilTick: 0,
           slickGripUntilTick: 0,
           groundBlastShockUntilTick: 0,
@@ -1035,12 +1095,15 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   for (const pid of match.pids) {
     const progress = match.progress.get(pid);
     if (!progress) continue;
-    progress.warded = false;
     progress.nitroUntilTick = 0;
     progress.slickGripUntilTick = 0;
     progress.slickContactUntilTick = 0;
-    // The kit goes with it: an effect held at the flag is spent on nothing, and
-    // a button that stays on the bar through the tableau is a button that lies.
+    // The ward goes with the flag: it is a race effect, and a shield standing
+    // through a tableau where nothing can hit anyone is chrome.
+    const racer = ctx.entities.get(pid);
+    if (racer) consumeRealmRacersWard(ctx, racer);
+    // The kit goes with it too: an effect held at the flag is spent on nothing,
+    // and a button that stays on the bar through the tableau is a button that lies.
     if (progress.heldEffect !== null) {
       progress.heldEffect = null;
       republishKit(ctx, match, pid);
@@ -1371,13 +1434,12 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
       // the machine: a ward has to be able to say no while there is still
       // nothing to undo. It costs the shot its victim outright, so this racer is
       // not the shell's nearest hit either.
-      if (groundBlastFalloff(racer.pos.x, racer.pos.z, shot.x, shot.z) > 0) {
-        const warded = match.progress.get(pid);
-        if (warded?.warded) {
-          warded.warded = false;
-          ctx.emit({ type: 'realmRacersWardBroken', pid });
-          continue;
-        }
+      if (
+        groundBlastFalloff(racer.pos.x, racer.pos.z, shot.x, shot.z) > 0 &&
+        consumeRealmRacersWard(ctx, racer)
+      ) {
+        ctx.emit({ type: 'realmRacersWardBroken', pid });
+        continue;
       }
       const blast = resolveGroundBlastImpact(
         { x: racer.pos.x, z: racer.pos.z, facing: racer.facing, drive: racer.drive },
@@ -1918,7 +1980,11 @@ function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
       if (travelled > progress.travelled) ahead++;
     }
     const band = rallyPickupBand(ahead, runningTravelled.length);
-    const effect = resolvePickupEffect(drawRallyPickupEffect(band, ctx.rng.next()), progress);
+    const effect = resolvePickupEffect(
+      drawRallyPickupEffect(band, ctx.rng.next()),
+      progress,
+      realmRacersWarded(ctx.entities.get(take.pid)),
+    );
     applyPickupEffect(ctx, match, take.pid, progress, effect);
     // Named to the taker, in their own language: the event carries the EFFECT
     // the box actually gave, never a sentence (`realm_racers_pickup_i18n.ts`
@@ -1940,9 +2006,12 @@ function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
 function resolvePickupEffect(
   drawn: RallyPickupEffect,
   progress: RealmRacersProgress,
+  warded: boolean,
 ): RallyPickupEffect {
   if (isRallyHeldEffect(drawn)) return progress.heldEffect === null ? drawn : 'charge';
-  if (drawn === 'ward') return progress.warded ? 'charge' : drawn;
+  // `warded` is read off the AURA by the caller, which is the source of truth:
+  // a second ward would be a shield nobody could see they had two of.
+  if (drawn === 'ward') return warded ? 'charge' : drawn;
   return drawn;
 }
 
@@ -1979,9 +2048,11 @@ function applyPickupEffect(
       if (racer) publishWeaponCharges(racer, held);
       return;
     }
-    case 'ward':
-      progress.warded = true;
+    case 'ward': {
+      const racer = ctx.entities.get(pid);
+      if (racer) applyRealmRacersWard(ctx, racer);
       return;
+    }
     case 'nitro':
     case 'slick':
       // Into the pilot's hands, not onto the machine: the kit republish is what
@@ -2101,8 +2172,8 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
     // eat a ward the tick after it had already saved the pilot.
     if (ctx.tickCount < progress.slickContactUntilTick) continue;
     progress.slickContactUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
-    if (progress.warded) {
-      progress.warded = false;
+    const racer = ctx.entities.get(hit.pid);
+    if (racer && consumeRealmRacersWard(ctx, racer)) {
       ctx.emit({ type: 'realmRacersWardBroken', pid: hit.pid });
       continue;
     }
@@ -2370,10 +2441,11 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
       x: roundReadout(slick.x),
       z: roundReadout(slick.z),
     })),
-    // Whether this pilot is carrying a ward. A live flag rather than the FCT
-    // that announced it: a one-shot shield the player cannot see is a shield
-    // they cannot plan around.
-    warded: me.warded,
+    // Whether this pilot is carrying a ward, DERIVED from the aura that is the
+    // source of truth rather than tracked twice. The strip's pip reads this; the
+    // buff bar under the portrait (and a rival's target frame) get the aura
+    // itself off the ordinary entity wire.
+    warded: realmRacersWarded(ctx.entities.get(pid)),
     resetLocked: ctx.tickCount < me.resetLockedUntilTick,
     totalLaps: match.totalLaps,
     // A practice lap is a real race on a private copy of the circuit, and the
