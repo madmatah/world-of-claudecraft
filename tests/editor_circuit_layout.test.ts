@@ -265,9 +265,26 @@ describe('which tab a mode opens on', () => {
     expect(autoSideTab('props', true)).toBe('inspector');
     expect(autoSideTab('props', true, true)).toBe('library');
     expect(autoSideTab('props', false, true)).toBe('library');
+    // The RACE tool has a palette now, so the same loop holds there.
+    expect(autoSideTab('race', true, true)).toBe('library');
+    expect(autoSideTab('race', false, true)).toBe('library');
     // A mode with no tabs has nothing to open on, armed or not.
     expect(autoSideTab('width', true, true)).toBeNull();
-    expect(autoSideTab('race', false)).toBeNull();
+  });
+
+  it('opens on the library in every mode that HAS one, whatever else it offers', () => {
+    // The rule is spelled by NAME in `autoSideTab` rather than as `tabs[0]`.
+    // Both spellings agree on today's two orders, since the library leads both,
+    // so this cannot fail on the current table and is not claimed to: what it
+    // pins is the premise the positional form silently depended on. Break the
+    // order and the naming keeps the loop; break the naming and this is the row
+    // that says which mode stopped opening where the tiles are.
+    for (const mode of RAIL_MODES) {
+      const tabs = sideTabsFor(mode.id);
+      if (!tabs.includes('library')) continue;
+      expect(tabs[0], `${mode.id} leads with the library`).toBe('library');
+      expect(autoSideTab(mode.id, true, true), mode.id).toBe('library');
+    }
   });
 });
 
@@ -483,13 +500,32 @@ describe('the rail', () => {
     // The defect: all three tabs everywhere put two dead ones in front of the
     // operator in shape and width, where nothing arms a piece and nothing is
     // selectable.
-    // All three tabs arm or edit a piece of DRESSING, so all three are dead in a
-    // tool that places none. The regression this pins: shape and width kept the
+    // The props tabs arm or edit a piece of DRESSING, so they are dead in a tool
+    // that places none. The regression this pins: shape and width kept the
     // outliner, which listed props at an operator painting a road.
     expect(sideTabsFor('props')).toEqual(['library', 'inspector', 'outliner']);
     expect(sideTabsFor('shape')).toEqual([]);
     expect(sideTabsFor('width')).toEqual([]);
-    expect(sideTabsFor('race')).toEqual([]);
+    // RACE places furniture, so it has a palette and an inspector of its own,
+    // plus the record form as a tab: a tab owns the WHOLE column, and the form
+    // used to be the one panel here that sat outside the strip.
+    expect(sideTabsFor('race')).toEqual(['library', 'inspector', 'properties']);
+  });
+
+  it('keeps Library and Inspector in the same position in both placing tools', () => {
+    // Not cosmetic: the two tools are switched between constantly, and a tab
+    // that changes place between them is one the eye has to re-find every time.
+    // `properties` is appended for that reason rather than led with.
+    const props = sideTabsFor('props');
+    const race = sideTabsFor('race');
+    expect(race.indexOf('library')).toBe(props.indexOf('library'));
+    expect(race.indexOf('inspector')).toBe(props.indexOf('inspector'));
+  });
+
+  it('gives the record form a tab of its own and no other mode a Properties tab', () => {
+    for (const mode of RAIL_MODES) {
+      expect(sideTabsFor(mode.id).includes('properties'), mode.id).toBe(mode.id === 'race');
+    }
   });
 
   it('opens the panel on the library while placing and the inspector over a selection', () => {
@@ -500,9 +536,9 @@ describe('the rail', () => {
     expect(autoSideTab('shape', false)).toBeNull();
     expect(autoSideTab('shape', true)).toBeNull();
     expect(autoSideTab('width', true)).toBeNull();
-    // RACE mode IS the form; a tab strip over it decides nothing.
-    expect(autoSideTab('race', false)).toBeNull();
-    expect(autoSideTab('race', true)).toBeNull();
+    // RACE now has tabs of its own, and reads the same way PROPS does.
+    expect(autoSideTab('race', false)).toBe('library');
+    expect(autoSideTab('race', true)).toBe('inspector');
   });
 
   it('only ever auto-picks a tab the mode offers', () => {

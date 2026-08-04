@@ -9,6 +9,7 @@
 // may not do. Pure and DOM-free: the caller hands in a reader and turns what
 // comes back into pixels.
 
+import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
 import {
   REALM_RACERS_MAX_REGION_HALF_X,
@@ -36,6 +37,47 @@ export function starterControlPoints(): RallyPoint[] {
       z: Math.round(Math.sin(angle) * STARTER_OVAL.halfZ),
     };
   });
+}
+
+/**
+ * The valid record a BLANK canvas stands on, borrowed from a shipped circuit for
+ * the numbers a record cannot be well formed without and stripped of everything
+ * that circuit's author PLACED.
+ *
+ * A blank canvas is a state, not a shape: a circuit with no curve is not
+ * something the spline, the readout or the export can represent, so the page
+ * keeps this underneath and shows none of it until the first stroke.
+ *
+ * **Everything placed on the template is cleared, and that is the whole
+ * responsibility of this function.** Inheriting any of it is a defect that has
+ * now landed twice: first the practice circuit's infield fountain, which arrived
+ * on every new circuit and became a metrics error the operator did not author and
+ * could not see the source of; then its three PICKUP ROWS, which were added to
+ * the record after the fountain was fixed and were simply never added to the
+ * list, so drawing a fresh circuit laid twelve boxes nobody placed. The basin
+ * goes with the ponds because the record's rule is an IFF, and a basin with
+ * nothing to shade is a payload the save endpoint refuses.
+ *
+ * It lives here rather than in the page for that reason: a rule with a history
+ * of being forgotten needs somewhere a test can reach it.
+ */
+export function blankCircuit(template: RealmRacersCircuit): RealmRacersCircuit {
+  return {
+    ...template,
+    id: 'draft_circuit',
+    controlPoints: starterControlPoints(),
+    widthBands: [
+      { s: 0, halfWidth: 10 },
+      { s: 1, halfWidth: 10 },
+    ],
+    props: undefined,
+    scatters: undefined,
+    ponds: undefined,
+    basin: undefined,
+    pickupRows: undefined,
+    roles: ['competition'],
+    practiceCopies: 0,
+  };
 }
 
 // ---- framing ----

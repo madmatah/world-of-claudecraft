@@ -46,7 +46,8 @@ export type EditorIconId =
   | 'close'
   | 'warning'
   | 'orbit'
-  | 'fly';
+  | 'fly'
+  | 'pickupRow';
 
 const svg = (body: string): string =>
   `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
@@ -123,15 +124,24 @@ export const EDITOR_ICONS: Record<EditorIconId, string> = {
   warning: svg('<path d="M8 2.5 14 13H2z" /><path d="M8 6.5v3" /><path d="M8 11h.01" />'),
   orbit: svg('<circle cx="8" cy="8" r="2" /><ellipse cx="8" cy="8" rx="6" ry="2.6" />'),
   fly: svg('<path d="M2.5 12.5c4-1 6-4.5 11-9.5" /><path d="M9 3h4.5v4.5" />'),
+  // What the record actually is: four boxes spread across the road, with the
+  // clear strip either side that keeps shaving a border a way to dodge the row
+  // on purpose. Drawn as ticks rather than as little squares because at sixteen
+  // pixels a 1.5 stroke around a two-unit box is all stroke and no box.
+  pickupRow: svg(
+    '<path d="M3 2v12" /><path d="M13 2v12" /><path d="M4 8h1" /><path d="M6.4 8h1" /><path d="M8.8 8h1" /><path d="M11.2 8h1" />',
+  ),
 };
 
 /**
  * Icons the CHROME draws rather than an action: the two close buttons and the
  * problems badge have no row in the action table, so the completeness test would
- * call them dead without this list. Nothing else belongs here; an icon that is
- * neither referenced nor listed is dead weight, which is the whole check.
+ * call them dead without this list. `pickupRow` is here for the same reason from
+ * the other side: it faces a PALETTE tile, and what a palette offers is not an
+ * action any more than a library tile is. Nothing else belongs here; an icon that
+ * is neither referenced nor listed is dead weight, which is the whole check.
  */
-export const CHROME_ONLY_ICONS: readonly EditorIconId[] = ['warning'];
+export const CHROME_ONLY_ICONS: readonly EditorIconId[] = ['warning', 'pickupRow'];
 
 export function editorIcon(id: EditorIconId): string {
   return EDITOR_ICONS[id];

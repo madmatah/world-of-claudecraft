@@ -176,13 +176,20 @@ export {
   panelLayout,
   READOUT_SECTIONS,
   type ReadoutSection,
+  raceArmStateText,
 } from './panel_core';
 export {
   addPickupRow,
   MAX_PICKUP_ROWS,
+  movedPickupRow,
+  nudgedPickupFraction,
   PICKUP_ROW_MIN_GAP,
   type PickupRowAdd,
   type PickupRowAddOutcome,
+  type PickupRowMove,
+  type PickupRowMoveOutcome,
+  pickupDragFractionAt,
+  pickupNudgeDirection,
   pickupRowAtPoint,
   pickupRowFractionAt,
   removedPickupRow,
@@ -212,6 +219,7 @@ export {
   TILE_DRAG_SLOP,
 } from './placement_core';
 export {
+  blankCircuit,
   FIT_MARGIN_BLANK,
   FIT_MARGIN_DRAWN,
   fitHalfExtent,

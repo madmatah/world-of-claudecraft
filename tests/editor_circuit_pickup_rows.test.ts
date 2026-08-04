@@ -14,7 +14,10 @@ import {
 import {
   addPickupRow,
   MAX_PICKUP_ROWS,
+  movedPickupRow,
+  nudgedPickupFraction,
   PICKUP_ROW_MIN_GAP,
+  pickupNudgeDirection,
   pickupRowAtPoint,
   pickupRowFractionAt,
   removedPickupRow,
@@ -28,6 +31,13 @@ import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 
 const track = realmRacersTrack(GARDEN);
+
+/** The distance between two lap fractions the short way round, which is how
+ *  every gap in this tool is measured. */
+function gapOnLap(a: number, b: number): number {
+  const raw = Math.abs(a - b);
+  return Math.min(raw, 1 - raw);
+}
 
 /** A circuit-local point at a lap fraction, offset along the left normal. */
 function pointAt(fraction: number, lateral = 0): { x: number; z: number } {
@@ -129,6 +139,108 @@ describe('what a placement does to the list of rows', () => {
       { s: 0.2 },
       { s: 0.8 },
     ]);
+  });
+});
+
+describe('what a MOVE does to the list of rows', () => {
+  const rows = [{ s: 0.2 }, { s: 0.5 }, { s: 0.8 }];
+
+  it('takes a row to where it was asked for and reports where that is', () => {
+    const moved = movedPickupRow(rows, 1, 0.55);
+    expect(moved.outcome).toBe('moved');
+    expect(moved.rows).toEqual([{ s: 0.2 }, { s: 0.55 }, { s: 0.8 }]);
+    expect(moved.index).toBe(1);
+  });
+
+  it('holds the row by its VALUE, so crossing a neighbour renumbers both', () => {
+    // The whole reason the move cannot be an in-place write at `index`: past
+    // 0.2 the moved row is row 0 and the row it passed is row 1.
+    const moved = movedPickupRow(rows, 1, 0.1);
+    expect(moved.outcome).toBe('moved');
+    expect(moved.index).toBe(0);
+    expect(moved.rows.map((row) => row.s)).toEqual([0.1, 0.2, 0.8]);
+  });
+
+  it('never parks a row where a click could not have authored one', () => {
+    // Dropped right on top of its neighbour: it lands one whole gap away, on
+    // the side the pointer was, and `addPickupRow` agrees that spot is free.
+    const onTop = movedPickupRow(rows, 1, 0.2 + PICKUP_ROW_MIN_GAP / 3);
+    expect(onTop.outcome).toBe('moved');
+    const landed = onTop.rows[onTop.index].s;
+    expect(landed).toBeGreaterThan(0.2);
+    expect(landed - 0.2).toBeGreaterThanOrEqual(PICKUP_ROW_MIN_GAP);
+    expect(addPickupRow([{ s: 0.2 }, { s: 0.8 }], landed).outcome).toBe('added');
+  });
+
+  it('parks on the side the pointer is, and hops when it passes the neighbour', () => {
+    // The two halves of one rule, which is what makes a drag past a neighbour a
+    // SWAP rather than a wall. Approaching from below it stops short of 0.2...
+    const before = movedPickupRow(rows, 1, 0.2 - PICKUP_ROW_MIN_GAP / 4);
+    expect(before.rows[before.index].s).toBeLessThan(0.2);
+    expect(before.index).toBe(0);
+    // ...and one step past 0.2 it is on the far side, having changed places.
+    const after = movedPickupRow(rows, 1, 0.2 + PICKUP_ROW_MIN_GAP / 4);
+    expect(after.rows[after.index].s).toBeGreaterThan(0.2);
+    expect(after.index).toBe(1);
+  });
+
+  it('wraps across the start line, taking the row from last to first', () => {
+    const wrapped = movedPickupRow(rows, 2, 1.01);
+    expect(wrapped.outcome).toBe('moved');
+    expect(wrapped.index).toBe(0);
+    // Close rather than exact: the wrap is a modulo on a double, and the record
+    // rounds to `FRACTION_PLACES` on commit anyway.
+    expect(wrapped.rows[0].s).toBeCloseTo(0.01, 9);
+    expect(wrapped.rows.map((row) => row.s).slice(1)).toEqual([0.2, 0.5]);
+    // And the wrap is measured the short way round, so a row driven to just
+    // under the line still respects the one sitting just over it.
+    const crowded = movedPickupRow([{ s: 0.005 }, { s: 0.5 }], 1, 0.999);
+    expect(gapOnLap(crowded.rows[crowded.index].s, 0.005)).toBeGreaterThanOrEqual(
+      PICKUP_ROW_MIN_GAP,
+    );
+  });
+
+  it('refuses an index that is not a row', () => {
+    for (const index of [-1, rows.length]) {
+      const refused = movedPickupRow(rows, index, 0.3);
+      expect(refused.outcome).toBe('blocked');
+      expect(refused.rows).toBe(rows);
+    }
+  });
+});
+
+describe('how far an arrow key moves a row', () => {
+  it('steps a length in YARDS, so a nudge means the same on any circuit', () => {
+    // The rule a fraction-based step would break: the shipped circuits differ by
+    // nearly two to one in lap length, and an operator's arrow key has to mean
+    // one distance.
+    const short = 454;
+    const long = 829;
+    const onShort = nudgedPickupFraction(0.5, short, 1, false) - 0.5;
+    const onLong = nudgedPickupFraction(0.5, long, 1, false) - 0.5;
+    expect(onShort * short).toBeCloseTo(onLong * long, 9);
+    expect(onShort).toBeGreaterThan(onLong);
+  });
+
+  it('has a big step and a small one, and both directions', () => {
+    const small = nudgedPickupFraction(0.5, 454, 1, false) - 0.5;
+    const big = nudgedPickupFraction(0.5, 454, 1, true) - 0.5;
+    expect(big).toBeGreaterThan(small);
+    expect(nudgedPickupFraction(0.5, 454, -1, false) - 0.5).toBeCloseTo(-small, 12);
+  });
+
+  it('leaves a lap with no length alone rather than dividing by it', () => {
+    expect(nudgedPickupFraction(0.5, 0, 1, true)).toBe(0.5);
+  });
+
+  it('maps the two horizontal arrows along the lap and nothing else', () => {
+    expect(pickupNudgeDirection('ArrowRight')).toBe(1);
+    expect(pickupNudgeDirection('ArrowLeft')).toBe(-1);
+    // A row has one degree of freedom, so the vertical pair would have to invent
+    // a lateral the record cannot carry.
+    expect(pickupNudgeDirection('ArrowUp')).toBeNull();
+    expect(pickupNudgeDirection('ArrowDown')).toBeNull();
+    expect(pickupNudgeDirection('r')).toBeNull();
   });
 });
 

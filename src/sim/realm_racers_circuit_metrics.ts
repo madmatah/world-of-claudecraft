@@ -611,32 +611,16 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
   // on a tight corner that is what puts the outer box's leading corner past the
   // road edge while its centre is comfortably inside.
   const pickupBoxes = realmRacersPickupBoxes(circuit);
-  const worstByRow = new Map<number, { s: number; reach: number; road: number }>();
+  const rowBoxes = new Map<number, RallyPickupBox[]>();
   for (const box of pickupBoxes) {
-    const tangentX = Math.sin(box.yaw);
-    const tangentZ = Math.cos(box.yaw);
-    const half = REALM_RACERS_PICKUP_BOX_HALF;
-    for (const [along, across] of [
-      [1, 1],
-      [1, -1],
-      [-1, 1],
-      [-1, -1],
-    ] as const) {
-      const cornerX = box.x + tangentX * half * along - tangentZ * half * across;
-      const cornerZ = box.z + tangentZ * half * along + tangentX * half * across;
-      const projection = track.project(cornerX, cornerZ);
-      const reach = Math.abs(projection.lateral);
-      const road = track.halfWidthAt(projection.s);
-      const held = worstByRow.get(box.row);
-      // Worst = the corner with the least clearance, which is the one an
-      // operator has to move the row (or widen the road) for.
-      if (held && held.road - held.reach <= road - reach) continue;
-      worstByRow.set(box.row, { s: box.s, reach, road });
-    }
+    const held = rowBoxes.get(box.row);
+    if (held) held.push(box);
+    else rowBoxes.set(box.row, [box]);
   }
-  for (const worst of worstByRow.values()) {
-    if (worst.reach <= worst.road) continue;
-    problem('pickup_row_off_road', 'error', worst.reach, worst.road, worst.s);
+  for (const boxes of rowBoxes.values()) {
+    const fit = realmRacersPickupRowFit(circuit, boxes);
+    if (fit.fitsRoad) continue;
+    problem('pickup_row_off_road', 'error', fit.reach, fit.road, fit.s);
   }
   // And whether the four boxes are still four separate targets there. Measured
   // per ROW off the road's own width, since the gap follows from it: the value
@@ -690,6 +674,67 @@ export interface RealmRacersPropStanding {
   /** The garden edge there: road plus verge plus run-off, the one boundary. */
   surface: number;
   clearOfSurface: boolean;
+}
+
+/**
+ * How well one pickup ROW fits the road it stands on: its worst corner, and
+ * whether that corner is still on the tarmac.
+ *
+ * Extracted for the same reason `realmRacersPropStanding` was, and against the
+ * same failure: the circuit editor tints a row's ghost before the click, and a
+ * tint derived from the tool's own arithmetic would be a second copy of
+ * `pickup_row_off_road` free to say green about a row the readout then refuses.
+ * It takes the row's BOXES rather than a row index, because the ghost is judging
+ * a row that is not on the record yet.
+ *
+ * Every box is measured by its four CORNERS rather than by its centre: a box has
+ * depth, so a corner of it sits at a different lap position from the row, and on
+ * a tight corner that is what puts the outer box's leading corner past the road
+ * edge while its centre is comfortably inside.
+ */
+export interface RealmRacersPickupRowFit {
+  /** The row's own lap position, yards. */
+  s: number;
+  /** How far off the centerline the worst corner reaches, yards. */
+  reach: number;
+  /** The road's half-width where that corner projects to, yards. */
+  road: number;
+  fitsRoad: boolean;
+}
+
+export function realmRacersPickupRowFit(
+  circuit: RealmRacersCircuit,
+  boxes: readonly RallyPickupBox[],
+): RealmRacersPickupRowFit {
+  const track = realmRacersTrack(circuit);
+  let worst: { s: number; reach: number; road: number } | null = null;
+  for (const box of boxes) {
+    const tangentX = Math.sin(box.yaw);
+    const tangentZ = Math.cos(box.yaw);
+    const half = REALM_RACERS_PICKUP_BOX_HALF;
+    for (const [along, across] of [
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ] as const) {
+      const cornerX = box.x + tangentX * half * along - tangentZ * half * across;
+      const cornerZ = box.z + tangentZ * half * along + tangentX * half * across;
+      const projection = track.project(cornerX, cornerZ);
+      const reach = Math.abs(projection.lateral);
+      const road = track.halfWidthAt(projection.s);
+      // Worst = the corner with the least clearance, which is the one an
+      // operator has to move the row (or widen the road) for. First corner wins
+      // an exact tie, which is what keeps the reported numbers stable.
+      if (worst && worst.road - worst.reach <= road - reach) continue;
+      worst = { s: box.s, reach, road };
+    }
+  }
+  // A row with no boxes is not a row anything can refuse. It cannot arise from
+  // the resolver, which always emits `REALM_RACERS_PICKUP_LANES` of them, but a
+  // predicate that threw here would turn a caller's empty list into a crash.
+  if (!worst) return { s: 0, reach: 0, road: 0, fitsRoad: true };
+  return { ...worst, fitsRoad: worst.reach <= worst.road };
 }
 
 export function realmRacersPropStanding(

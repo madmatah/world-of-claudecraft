@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { ZOOM_MAX_SCALE, ZOOM_MIN_SCALE } from '../src/editor/circuit/layout_core';
 import {
+  blankCircuit,
   FIT_MARGIN_BLANK,
   FIT_MARGIN_DRAWN,
   fitHalfExtent,
@@ -232,6 +233,48 @@ describe('the colours the canvas borrows', () => {
   it('names a real custom property for every entry', () => {
     for (const property of Object.values(PLAN_PALETTE_VARS)) {
       expect(property.startsWith('--')).toBe(true);
+    }
+  });
+
+  it('opens a blank canvas on the template NUMBERS and none of its content', () => {
+    // The defect, twice over. The template is a shipped circuit, borrowed for the
+    // fields a record cannot be well formed without; everything its author PLACED
+    // on it belongs to its shape and not to the operator's. First the practice
+    // circuit's infield fountain came through, which on a circuit whose road runs
+    // through that point is a metrics error nobody authored. Then `pickupRows`
+    // was added to the record after that fix and never added to the clearing, so
+    // drawing a fresh circuit laid three rows of boxes, twelve crates, that the
+    // operator did not place and could not see the source of.
+    const blank = blankCircuit(REALM_RACERS_PRACTICE_CIRCUIT);
+    // The template really does carry all of it: without this the assertions
+    // below would pass over an empty source and prove nothing.
+    expect(REALM_RACERS_PRACTICE_CIRCUIT.props?.length ?? 0).toBeGreaterThan(0);
+    expect(REALM_RACERS_PRACTICE_CIRCUIT.ponds?.length ?? 0).toBeGreaterThan(0);
+    expect(REALM_RACERS_PRACTICE_CIRCUIT.pickupRows?.length ?? 0).toBeGreaterThan(0);
+    expect(REALM_RACERS_PRACTICE_CIRCUIT.basin).toBeDefined();
+    expect(blank.props).toBeUndefined();
+    expect(blank.scatters).toBeUndefined();
+    expect(blank.ponds).toBeUndefined();
+    expect(blank.basin).toBeUndefined();
+    expect(blank.pickupRows).toBeUndefined();
+    // And it did inherit the numbers, or it would be clearing the wrong thing.
+    expect(blank.perimeter).toEqual(REALM_RACERS_PRACTICE_CIRCUIT.perimeter);
+    expect(blank.laps).toBe(REALM_RACERS_PRACTICE_CIRCUIT.laps);
+  });
+
+  it('leaves NOTHING placed behind, whatever the record grows next', () => {
+    // The list above is exactly what rotted: it was written for the dressing and
+    // a later field walked straight past it. A structural sweep catches the next
+    // one without anybody remembering to come back here, because every kind of
+    // placed content on this record is a LIST. The three allowed are the geometry
+    // and the roles, which a blank record cannot be valid without.
+    const SHAPE_LISTS = ['controlPoints', 'widthBands', 'roles'];
+    const kept = Object.entries(blankCircuit(REALM_RACERS_PRACTICE_CIRCUIT))
+      .filter(([, value]) => Array.isArray(value))
+      .map(([key]) => key);
+    expect(kept.length).toBeGreaterThan(0);
+    for (const key of kept) {
+      expect(SHAPE_LISTS, `${key} is content a blank canvas kept from the template`).toContain(key);
     }
   });
 

@@ -290,6 +290,20 @@ offers none of it until the first stroke. Both buttons commit before moving the
 flag, so the undo stack snapshots the state being left and discarding a circuit
 is recoverable.
 
+**That placeholder borrows a shipped circuit's NUMBERS and none of what its
+author placed on it**, and forgetting one of those is a defect that has landed
+twice. First the practice circuit's infield fountain arrived on every new
+circuit, becoming a metrics error the operator did not author and could not see
+the source of; then `pickupRows`, added to the record after that fix and never
+added to the clearing, so drawing a fresh circuit laid three rows of boxes nobody
+placed. The rule therefore lives in `plan_core.ts` (`blankCircuit`) rather than in
+the page, where a test can hold it, and `tests/editor_circuit_plan.test.ts` pins
+it two ways: the named fields, and a STRUCTURAL sweep asserting a blank record
+carries no list at all beyond its geometry and roles, since every kind of placed
+content here is a list. The second is the one that catches the next field without
+anybody remembering this paragraph. Loading a SHIPPED circuit keeps its content,
+of course: that is the circuit being edited.
+
 ## The workbench shell (layout, not features)
 - **The plan IS the bench.** One full-bleed 2D canvas; a menu bar and an icon
   tool rail frame it and everything else floats over it. The 3D preview used to
@@ -300,20 +314,57 @@ is recoverable.
 - **The rail has four entries, and SHAPE is one intent over two gestures.** A
   blank canvas is drawn on, a drawn one is edited by its handles, and which of
   the two the operator gets was never a choice worth a button (`toolFor`). RACE
-  became a canvas tool the day the circuit had furniture worth placing: its
-  forms are still the panel, and its one gesture is laying a PICKUP ROW. A click
-  on the road authors one at that lap fraction (the lateral is thrown away: a row
-  spans the road, so where across it the click landed decides nothing), a click
-  on a row selects it and `del` removes it. Selecting comes BEFORE placing, which
-  is the props tool's lesson one tool over: a click that missed the row it meant
-  must not silently author a second one beside it. Both refusals (off the road,
-  on top of an existing row) are reported by name. Its boundary is the ROAD EDGE,
-  not the garden edge every DRESSING placement is judged against, and the two
-  questions are why: the dressing asks "may this piece stand here", whose answer
-  is the whole racing surface, and this asks "did the operator point at the
-  road", whose answer is the road. It also has to be the road because that is
-  what the readout measures a row against (`pickup_row_off_road`) and what the
-  status line says.
+  is the fourth, and it is read as ONE intent: everything about the race that is
+  not the road's shape. That is what lets the furniture and the record's own
+  numbers share a mode without it being a sack. A dedicated furniture MODE was
+  considered and turned down for a reason worth keeping: splitting leaves RACE a
+  rail entry with no canvas gesture at all, and the obvious remedy (let it move
+  the start line) is not a placement. The start line IS `s = 0`, the origin every
+  lap fraction on the record is expressed against (`widthBands`, track-space
+  `props`, `pickupRows`, plus the derived gates and recovery anchors), so moving
+  it means re-basing all of them. Splitting later costs one row in `RAIL_MODES`
+  and one case in `toolFor`, so the decision stays cheap to revisit.
+- **RACE has a POINTER state, and it is the default.** It used to be permanently
+  armed: a click on the road authored a pickup row, and a click that missed the
+  row an operator meant authored a second one beside it. It had a rule against
+  exactly that ("selecting comes before placing"), and the rule could not work,
+  because ordering the tests only helps INSIDE the click tolerance of a row that
+  is already there. Ten yards away there is nothing to hit. So the tool wears the
+  props grammar now: a palette in its own tab arms a kind, `esc` or a second click
+  on the tile gives the pointer back, an arm survives a placement so three rows
+  are three clicks, and with nothing armed a click that hits nothing deselects and
+  authors nothing at all. A click on an existing row picks that row up whether or
+  not anything is armed, which is the props tool's hit-test-first order.
+- **A row MOVES, three ways, and a move may reorder the lap.** Drag it along the
+  road, arrow it (the two horizontal keys only: a row has one degree of freedom,
+  and the step is a length in YARDS divided by the lap, or a nudge would mean 4.5
+  yards on the garden circuit and 8.3 on the Express Tour), or type its position
+  in the inspector. The list is sorted by lap position, so the move holds the row
+  by its VALUE and the selection follows the returned index: crossing a neighbour
+  renumbers both. It can never be parked inside `PICKUP_ROW_MIN_GAP` of another
+  row, because the pending fraction is pushed to the near EDGE of that band, which
+  is also what makes a drag past a neighbour a swap rather than a wall (approach
+  from behind and the near edge is in front of it; pass its own fraction and the
+  far edge becomes nearer). One undo step per drag: the snapshot is taken at the
+  press.
+- **Its boundary for PLACING is the ROAD EDGE, not the garden edge every DRESSING
+  placement is judged against**, and the two questions are why: the dressing asks
+  "may this piece stand here", whose answer is the whole racing surface, and this
+  asks "did the operator point at the road", whose answer is the road. It also has
+  to be the road because that is what the readout measures a row against
+  (`pickup_row_off_road`) and what the status line says. MOVING uses the
+  unconstrained projection instead (`pickupDragFractionAt`), and the difference is
+  the gesture: a drag whose row stopped following because the pointer strayed a
+  yard onto the verge reads as the tool having dropped it.
+- **The row ghost's tint is the READOUT's own verdict**, like the dressing
+  ghost's. Three things can refuse a row and only two belong to the gesture (off
+  the road, too near a neighbour); the third is `pickup_row_off_road`, raised from
+  `realmRacersPickupRowFit` in `src/sim/realm_racers_circuit_metrics.ts`, which
+  measures the resolved boxes' four CORNERS rather than their centres. That is the
+  one that catches a row looking central where the road changes width under it,
+  and a ghost drawn green over it would be the tool blessing a placement the panel
+  is about to refuse. The predicate takes the BOXES rather than a row index, so a
+  ghost can ask about a row the record does not carry yet.
 - **One action table, four surfaces.** `layout_core.ts` carries every action's
   label, detail, icon, chord and menu, and the menu bar, the rail, the status-bar
   chord hints and the `?` cheatsheet all render THAT. Four hand-kept lists of the
@@ -342,15 +393,27 @@ is recoverable.
   tests.** What is under the finger is under the finger; the grid only rounds the
   coordinate that lands on the record.
 - **A tab a mode cannot use is not offered, and a mode with no tabs shows its own
-  numbers.** `sideTabsFor` gives PROPS all three (library, inspector, outliner)
-  and every other mode NONE: the library arms a piece for the props tool and the
-  inspector edits a selected one, so both are dead in the tools that select
-  nothing, and the DRESSING outliner sitting in the width tool was listing props
-  at an operator painting a road. Shape and width get `MODE_READOUT` instead, the
+  numbers.** `sideTabsFor` gives PROPS `library`, `inspector`, `outliner` and RACE
+  `library`, `inspector`, `properties`; SHAPE and WIDTH get none. The props tabs
+  arm or edit a piece of DRESSING, so they are dead in a tool that places none,
+  and the dressing outliner sitting in the width tool was listing props at an
+  operator painting a road. Shape and width get `MODE_READOUT` instead, the
   readout sections their own tool is changing, built by the same `readoutSection`
   the drawer uses so the two can never quote a different number. The tool's one
   value field follows the same rule: the scatter spacing shows over the LIBRARY
   and nowhere else.
+- **A TAB OWNS THE WHOLE COLUMN.** The record form used to be the exception: it
+  showed under RACE whichever tab was active, which made it read as belonging to
+  none of them. It is the `properties` tab now, so `showForm` keys on the active
+  tab and not on the mode, and exactly one panel is ever up. Two panels share the
+  `library` id and two share `inspector`, one pair per placing tool, and the page
+  shows the active mode's: the props library arms a catalog asset and the race
+  palette arms a piece of furniture, which are two vocabularies rather than one
+  list with a filter. Library and Inspector sit at the SAME index in both placing
+  tools so the eye does not re-find them between the two, and `properties` is
+  appended rather than led with. A third `SideTabId` also moves `SIDE_TABS` (what
+  a stored layout is validated against) and `SIDE_TAB_LABELS`, off which the shell
+  now builds its buttons instead of a hardcoded list.
 - **A mode's repairs sit on the plan, beside its banner** (`railActions`). Both
   were reachable only through the Track menu, and that is where they were lost: an
   operator who has just finished a stroke wants Fit enclosure and Fix corners
@@ -487,7 +550,7 @@ is recoverable.
 | `panel_core.ts` | what the right column shows (`panelLayout`, one call for six interdependent rules), which readout sections a tabless mode carries, the props arm text, and which actions a blank canvas refuses (off the table's own `needsCircuit` flag) |
 | `history_core.ts` | the edit history: a capped undo stack with a forward branch that a new edit drops |
 | `layout_core.ts` | the shell: the action table (labels, chords, icons, menus, cheatsheet grouping), the rail modes and their tool resolution, chord matching and platform spelling, the persisted layout with its clamps, the zoom/grid/snap arithmetic, the headline chips, the callout spread and its edge flip, and the problem labels the chip, the callouts and the drawer all print |
-| `plan_core.ts` | the plan canvas's own numbers: the starter oval, what a fit frames, the two limit boxes and their sentences, the click tolerances, the wheel step, and the stylesheet tokens the canvas borrows |
+| `plan_core.ts` | the plan canvas's own numbers: the starter oval, the placeholder record a blank canvas stands on (template numbers, none of its placed content), what a fit frames, the two limit boxes and their sentences, the click tolerances, the wheel step, and the stylesheet tokens the canvas borrows |
 | `editor_icons.ts` | the icon set: one inline SVG per action and rail mode, plus the chrome-only list that keeps the completeness check honest |
 | `shell.ts` | the chrome as ELEMENTS: menu bar, rail, plan overlays, status bar, contextual right panel, metrics drawer, cheatsheet. Structure and listeners only, all of it rendered off the action table |
 | `panels.ts` | the `PanelHost` every right-column panel reads the document through, plus the element shapes all five of them repeat |
@@ -496,11 +559,12 @@ is recoverable.
 | `panel_outliner.ts` | what is standing on this circuit, entry by entry, and the way back to any of it: select, focus, delete, off two listeners on the panel rather than on the rows |
 | `panel_readout.ts` | one builder per readout section, plus the drawer and the tabless mode's own column |
 | `panel_library.ts` | what the props tool can put down, and which piece is armed |
+| `panel_race.ts` | the RACE tool's own two: the furniture palette (the table, its tiles, the pointer state and the arm grammar) and the selected row's numbers, editable. The palette has no tile DRAG on purpose: dressing is a hunt through 182 photographed assets and dragging is how you place the one you found, while a palette of one named kind is armed by clicking it, which gets the keyboard for free |
 | `dock.ts` | the floating 3D panel: move, resize, fullscreen, the camera tabs and the lap readout. Geometry rules come from `layout_core.ts` |
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
 | `library_core.ts` | what the library OFFERS: the category chips (theme first and by default), what a search matches, and what an empty grid says |
-| `pickup_rows_core.ts` | the RACE tool's one canvas gesture: which lap fraction a click on the road means, which row a click landed on, and what adding or removing one does to the list. Where the BOXES end up is not decided here: `src/sim/realm_racers_pickups.ts` resolves a row, and the plan draws what it returns |
+| `pickup_rows_core.ts` | the RACE tool's canvas gestures: which lap fraction a click on the road means (and the unconstrained twin a DRAG follows), which row a click landed on, and what adding, moving, nudging or removing one does to the list, gap band and reorder included. Where the BOXES end up is not decided here: `src/sim/realm_racers_pickups.ts` resolves a row, and the plan draws what it returns |
 | `placement_core.ts` | what the GESTURE meant: which snap a drop takes, whether the readout will have it, and what a drag along the road lays down |
 | `thumbnail_core.ts` | where the camera stands to photograph one catalog piece: one pose for every tile, framed on the axis that binds |
 | `draft_store_core.ts` | what survives a reload: the autosaved draft (versioned, validated, offered), the drafts on disk as the Load dialog lists them, and the tile cache |

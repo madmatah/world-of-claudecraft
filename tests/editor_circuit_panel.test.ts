@@ -74,9 +74,33 @@ describe('the contextual panel', () => {
   it('gives a tabless mode its own readout instead, but never the race form', () => {
     expect(inputs({ mode: 'shape' }).showModeReadout).toBe(true);
     expect(inputs({ mode: 'width' }).showModeReadout).toBe(true);
-    // RACE has no tabs either, and the form is what it shows.
+    // RACE has tabs of its own now, so it takes neither: the readout belongs to
+    // the modes with no tab strip, and the form is one of RACE's tabs.
     expect(inputs({ mode: 'race' }).showModeReadout).toBe(false);
-    expect(inputs({ mode: 'race' }).showForm).toBe(true);
+    expect(inputs({ mode: 'race' }).showForm).toBe(false);
+  });
+
+  it('shows the record form under its OWN tab and under no other', () => {
+    // The rule the operator asked for: a tab owns the whole column. The form was
+    // the one panel here that stayed visible whichever tab was active, which
+    // made it read as belonging to none of them.
+    expect(inputs({ mode: 'race', chosen: 'properties' }).showForm).toBe(true);
+    for (const chosen of ['library', 'inspector'] as const) {
+      const panel = inputs({ mode: 'race', chosen });
+      expect(panel.showForm, chosen).toBe(false);
+      // And exactly one panel is up at a time, which is what "a tab owns the
+      // column" means when it is asserted rather than described.
+      expect(
+        [panel.showLibrary, panel.showInspector, panel.showOutliner, panel.showForm].filter(Boolean)
+          .length,
+        chosen,
+      ).toBe(1);
+    }
+    // No other mode can reach it, even with the tab stored from a session in
+    // RACE: the stored choice is dropped by a mode that does not offer it.
+    for (const mode of ['shape', 'width', 'props'] as const) {
+      expect(inputs({ mode, chosen: 'properties' }).showForm, mode).toBe(false);
+    }
   });
 
   it('shows nothing at all on a blank canvas', () => {

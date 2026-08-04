@@ -30,6 +30,7 @@ import {
   type RealmRacersCircuitMetrics,
   type RealmRacersCircuitProblem,
   realmRacersCircuitMetrics,
+  realmRacersPickupRowFit,
 } from '../../sim/realm_racers_circuit_metrics';
 import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import {
@@ -95,7 +96,13 @@ import {
   toolFor,
   zoomScale,
 } from './layout_core';
-import { armStateText, CIRCUIT_ONLY_ACTIONS, needsCircuit, panelLayout } from './panel_core';
+import {
+  armStateText,
+  CIRCUIT_ONLY_ACTIONS,
+  needsCircuit,
+  panelLayout,
+  raceArmStateText,
+} from './panel_core';
 import { RecordFormPanel } from './panel_form';
 import { InspectorPanel } from './panel_inspector';
 import {
@@ -105,9 +112,14 @@ import {
   type PlacementSettings,
 } from './panel_library';
 import { type OutlinerHost, OutlinerPanel } from './panel_outliner';
+import { RaceInspectorPanel, RacePalettePanel, type RacePanelHost } from './panel_race';
 import { MetricsDrawerPanel, ModeReadoutPanel } from './panel_readout';
 import {
   addPickupRow,
+  movedPickupRow,
+  nudgedPickupFraction,
+  pickupDragFractionAt,
+  pickupNudgeDirection,
   pickupRowAtPoint,
   pickupRowFractionAt,
   removedPickupRow,
@@ -124,6 +136,7 @@ import {
   type SnapResult,
 } from './placement_core';
 import {
+  blankCircuit as blankCircuitFrom,
   fitHalfExtent,
   fitScale,
   HIT_TOLERANCE_PIXELS,
@@ -131,7 +144,6 @@ import {
   PROP_LABEL_MIN_SCALE,
   planLimits,
   resolvePlanPalette,
-  starterControlPoints,
   wheelZoomScale,
   withAlpha,
 } from './plan_core';
@@ -190,31 +202,10 @@ type Selection = { kind: 'point'; index: number } | null;
  */
 const PAINT_RAMP_YARDS = 25;
 
-function blankCircuit(): RealmRacersCircuit {
-  const template = REALM_RACERS_CIRCUIT_LIST[0];
-  return {
-    ...template,
-    id: 'draft_circuit',
-    controlPoints: starterControlPoints(),
-    widthBands: [
-      { s: 0, halfWidth: 10 },
-      { s: 1, halfWidth: 10 },
-    ],
-    // A blank canvas is UNDRESSED. The template's dressing belongs to the
-    // template's shape: inheriting it is how the practice circuit's infield
-    // fountain used to land on every new circuit, and on one whose road runs
-    // through that point it is now a metrics error the operator did not author
-    // and cannot see the source of. The basin goes with the ponds, because the
-    // record's rule is an IFF and a basin with nothing to shade is a payload
-    // the save endpoint refuses.
-    props: undefined,
-    scatters: undefined,
-    ponds: undefined,
-    basin: undefined,
-    roles: ['competition'],
-    practiceCopies: 0,
-  };
-}
+/** The placeholder record a blank canvas stands on. The rule (a blank canvas
+ *  inherits the template's NUMBERS and none of what its author placed on it)
+ *  lives in `plan_core.ts`, where a test can hold it. */
+const blankCircuit = (): RealmRacersCircuit => blankCircuitFrom(REALM_RACERS_CIRCUIT_LIST[0]);
 
 // ---- state ----
 
@@ -254,6 +245,9 @@ let selection: Selection = null;
  * of what it does.
  */
 let pickupSelection: number | null = null;
+/** Whether the pointer currently has hold of that row and is sliding it along
+ *  the lap. Armed at the press on a row, dropped on release. */
+let pickupDragging = false;
 /** The raw gesture, kept after the fit so the operator can see how far the
  *  closed centripetal Catmull-Rom sits off the line they drew. */
 let stroke: RallyPoint[] = [];
@@ -745,18 +739,62 @@ function drawGates(): void {
  * canvas has to be a box a machine can drive into.
  */
 function drawPickupRows(): void {
-  const half = REALM_RACERS_PICKUP_BOX_HALF;
   for (const box of realmRacersPickupBoxes(record)) {
     const chosen = pickupSelection === box.row;
-    const p = local(box);
-    const size = Math.max(3, half * 2 * view.scale);
-    const x = screenX(p.x) - size / 2;
-    const y = screenY(p.z) - size / 2;
-    ctx.fillStyle = chosen ? PICK_FILL : REALM_RACERS_PICKUP_FILL_CSS;
-    ctx.fillRect(x, y, size, size);
-    ctx.strokeStyle = chosen ? planPalette.pick : REALM_RACERS_PICKUP_COLOR_CSS;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, size, size);
+    drawPickupBox(
+      box,
+      chosen ? PICK_FILL : REALM_RACERS_PICKUP_FILL_CSS,
+      chosen ? planPalette.pick : REALM_RACERS_PICKUP_COLOR_CSS,
+    );
+  }
+}
+
+/** One box, in whatever colours the caller is drawing it for. */
+function drawPickupBox(
+  box: { x: number; z: number },
+  fill: string,
+  stroke: string,
+  dashed = false,
+): void {
+  const p = local(box);
+  const size = Math.max(3, REALM_RACERS_PICKUP_BOX_HALF * 2 * view.scale);
+  const x = screenX(p.x) - size / 2;
+  const y = screenY(p.z) - size / 2;
+  ctx.fillStyle = fill;
+  ctx.fillRect(x, y, size, size);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1;
+  ctx.setLineDash(dashed ? [3, 2] : []);
+  ctx.strokeRect(x, y, size, size);
+  ctx.setLineDash([]);
+}
+
+/**
+ * The row the armed palette would lay where the pointer is.
+ *
+ * It resolves a THROWAWAY record carrying the pending row and draws what came
+ * back, which is the same rule the dressing ghost keeps and for the same reason:
+ * the outline under the cursor has to be the one the sim will hold, never a
+ * second derivation of it.
+ *
+ * The tint is the READOUT's own verdict, not this tool's arithmetic. Three things
+ * can refuse a row and only two of them belong to the gesture (off the road, too
+ * near a neighbour); the third is `pickup_row_off_road`, which measures the
+ * resolved boxes' CORNERS against the road and is the one that catches a row that
+ * looks central on a tight corner. A ghost drawn green over that would be the
+ * tool blessing a placement the panel is about to refuse.
+ */
+function drawPickupGhost(): void {
+  if (!drawn || !hover || racePalette.armed === null) return;
+  const fraction = pickupRowFractionAt(record, hover.x, hover.z);
+  if (fraction === null) return;
+  const pending = { ...record, pickupRows: [{ s: fraction }] };
+  const boxes = realmRacersPickupBoxes(pending);
+  const clear =
+    realmRacersPickupRowFit(pending, boxes).fitsRoad &&
+    addPickupRow(record.pickupRows ?? [], fraction).outcome === 'added';
+  for (const box of boxes) {
+    drawPickupBox(box, 'transparent', clear ? planPalette.ok : planPalette.bad, true);
   }
 }
 
@@ -1054,6 +1092,7 @@ function draw(): void {
   drawGates();
   drawPickupRows();
   drawStroke();
+  if (tool() === 'race') drawPickupGhost();
   if (tool() === 'props') drawDressing();
   else drawHandles();
   drawProblemMarkers();
@@ -1062,21 +1101,38 @@ function draw(): void {
 // ---- the race furniture gesture ----
 
 /**
- * One click in the RACE tool: pick up the row under the pointer, or lay a new
- * one across the road there.
+ * One click in the RACE tool.
  *
- * Selecting BEFORE placing, and that order is the props tool's lesson applied
- * one tool over: a click that missed the row it meant must not silently author a
- * second one a few yards from it. The two refusals (off the road, too near an
- * existing row) are reported by name, because a gesture that does nothing and
- * says nothing reads as a broken tool.
+ * The row under the pointer is picked up FIRST, whether or not the palette is
+ * armed, exactly as the props tool hit tests before it places: clicking a row
+ * that is already there means that row, never a second one on top of it.
+ *
+ * With nothing under the pointer, what happens depends on the tool's STATE and
+ * that is the whole of this change. The pointer state authors nothing at all,
+ * because a click that hit nothing is a miss or a deliberate deselect and both
+ * used to lay a row a few yards from the one the operator meant. Only an armed
+ * palette places, and its two refusals (off the road, too near an existing row)
+ * are still reported by name.
  */
 function startRaceFurnitureGesture(raw: RallyPoint): void {
   if (!drawn) return;
   const hit = pickupRowAtPoint(record, raw.x, raw.z, dressingTolerance());
   if (hit >= 0) {
     pickupSelection = hit;
-    setStatus(`pickup row ${hit} selected: del removes it`, '');
+    // The undo snapshot is taken at the PRESS, so a drag that follows is one step
+    // back rather than one per pointermove. A press that turns out to be a plain
+    // click leaves a snapshot of a record nothing changed, which the history core
+    // is free to hold: it is a state the operator can return to.
+    pushUndo();
+    pickupDragging = true;
+    setStatus(`pickup row ${hit + 1} selected: drag or arrow it along the lap, del removes it`, '');
+    applySideTab();
+    requestRedraw();
+    return;
+  }
+  if (racePalette.armed === null) {
+    pickupSelection = null;
+    applySideTab();
     requestRedraw();
     return;
   }
@@ -1088,7 +1144,8 @@ function startRaceFurnitureGesture(raw: RallyPoint): void {
   const added = addPickupRow(record.pickupRows ?? [], fraction);
   if (added.outcome === 'tooClose') {
     pickupSelection = added.index;
-    setStatus(`there is already a pickup row here (row ${added.index})`, 'err');
+    setStatus(`there is already a pickup row here (row ${added.index + 1})`, 'err');
+    applySideTab();
     requestRedraw();
     return;
   }
@@ -1099,7 +1156,45 @@ function startRaceFurnitureGesture(raw: RallyPoint): void {
   commit({ ...record, pickupRows: added.rows });
   pickupSelection = added.index;
   setStatus(`pickup row at ${(fraction * track.length).toFixed(0)} yd`, 'ok');
+  applySideTab();
   requestRedraw();
+}
+
+/**
+ * Take the selected row to a lap fraction.
+ *
+ * The selection follows the RETURNED index rather than keeping the one it had:
+ * the list is sorted by lap position, so a move that carries a row past a
+ * neighbour renumbers both, and a selection that stayed put would be pointing at
+ * whichever row moved into the hole.
+ *
+ * `remember` is false for every step of a drag, because the press already
+ * snapshotted: one gesture is one step back.
+ */
+function movePickupRow(fraction: number, remember = true): void {
+  if (pickupSelection === null) return;
+  const moved = movedPickupRow(record.pickupRows ?? [], pickupSelection, fraction);
+  if (moved.outcome === 'blocked') {
+    setStatus('there is no room left on this lap to move that row to', 'err');
+    return;
+  }
+  commit({ ...record, pickupRows: moved.rows }, remember);
+  pickupSelection = moved.index;
+  const row = moved.rows[moved.index];
+  setStatus(`pickup row ${moved.index + 1} at ${(row.s * track.length).toFixed(0)} yd`, 'ok');
+  // No `applySideTab` here, unlike the sites that select or deselect: which tab
+  // is up cannot change during a move, and this runs once per pointermove. The
+  // inspector still follows, because every repaint paints it.
+  requestRedraw();
+}
+
+/** One arrow key on the selected row: a step in YARDS along the lap, which is
+ *  why it goes through the core rather than adding a fraction here. */
+function nudgePickupRow(direction: 1 | -1, big: boolean): void {
+  if (pickupSelection === null) return;
+  const row = (record.pickupRows ?? [])[pickupSelection];
+  if (!row) return;
+  movePickupRow(nudgedPickupFraction(row.s, track.length, direction, big));
 }
 
 /** Removes the selected row, and drops the selection with it: every index after
@@ -1109,6 +1204,7 @@ function deletePickupRow(): void {
   commit({ ...record, pickupRows: removedPickupRow(record.pickupRows ?? [], pickupSelection) });
   pickupSelection = null;
   setStatus('pickup row removed', 'ok');
+  applySideTab();
   requestRedraw();
 }
 
@@ -1645,8 +1741,24 @@ function fixCorners(): void {
 /** Which contextual panel is on screen. Null means the auto choice wins. */
 let sideChoice: SideTabId | null = layout.side;
 
+/** Whether the ACTIVE tool has something selected, which is what decides that
+ *  the panel opens on the inspector. Each tool selects its own kind of thing. */
 function hasSelection(): boolean {
-  return dressing !== null;
+  return railMode === 'race' ? pickupSelection !== null : dressing !== null;
+}
+
+/** What the ACTIVE tool's palette is armed with. Each placing tool has its own,
+ *  and a tool with no palette is never placing. */
+function activeArmed(): string | null {
+  if (railMode === 'props') return library.armed;
+  if (railMode === 'race') return racePalette.armed;
+  return null;
+}
+
+/** Whether a palette is armed, which is what keeps the panel on the library
+ *  through a placing loop instead of following each placement's selection. */
+function isPlacing(): boolean {
+  return activeArmed() !== null;
 }
 
 function applySideTab(): void {
@@ -1656,12 +1768,18 @@ function applySideTab(): void {
     drawn,
     chosen: sideChoice,
     hasSelection: hasSelection(),
-    isPlacing: library.armed !== null,
+    isPlacing: isPlacing(),
     hasToolValue: field !== null,
   });
   shell.setSideTab(panel.tabs, panel.active);
-  library.el.hidden = !panel.showLibrary;
-  inspector.el.hidden = !panel.showInspector;
+  // Two panels share the `library` tab and two share `inspector`, one pair per
+  // placing tool, and only the active mode's is ever shown: the props library
+  // arms a catalog asset and the race palette arms a piece of furniture, which
+  // are different vocabularies rather than one list with a filter.
+  library.el.hidden = !(panel.showLibrary && railMode === 'props');
+  racePalette.el.hidden = !(panel.showLibrary && railMode === 'race');
+  inspector.el.hidden = !(panel.showInspector && railMode === 'props');
+  raceInspector.el.hidden = !(panel.showInspector && railMode === 'race');
   outliner.el.hidden = !panel.showOutliner;
   form.el.hidden = !panel.showForm;
   modeReadout.el.hidden = !panel.showModeReadout;
@@ -1692,8 +1810,18 @@ function refreshChrome(): void {
 /** What a click on empty plan will now do. Three things say it, so none of them
  *  has to be read: the status bar, the cursor, and the ghost. */
 function announceArmed(asset: string | null): void {
-  shell.setArmed(railMode === 'props' ? armStateText(asset, POND_CHOICE) : '');
+  shell.setArmed(
+    railMode === 'props'
+      ? armStateText(asset, POND_CHOICE)
+      : railMode === 'race'
+        ? raceArmStateText(asset)
+        : '',
+  );
   canvas.style.cursor = asset === null ? 'crosshair' : 'copy';
+  // The banner's RACE arm says which of the two states the tool is in, so it has
+  // to be repainted here and not only on a mode change.
+  shell.setBanner(railMode, drawn, redrawing, placement.mode, isPlacing());
+  applySideTab();
   requestRedraw();
 }
 
@@ -1706,11 +1834,17 @@ function setRailMode(next: RailModeId): void {
   // something the width brush can act on.
   clearSelections();
   sideChoice = null;
-  shell.setMode(railMode, drawn, redrawing, placement.mode);
-  // Leaving props disarms: an arm that survived a trip through the width tool
-  // would place a piece on the operator's first click back.
-  library.arm(next === 'props' ? library.armed : null);
-  applySideTab();
+  // Leaving a placing tool disarms it: an arm that survived a trip through the
+  // width tool would place a piece on the operator's first click back. Both
+  // palettes are asked, because both can be armed and only one is ever on
+  // screen to say so.
+  if (library.armed !== null && next !== 'props') library.arm(null);
+  if (racePalette.armed !== null && next !== 'race') racePalette.arm(null);
+  shell.setMode(railMode, drawn, redrawing, placement.mode, isPlacing());
+  // Unconditionally, even when neither palette moved: the armed line and the
+  // canvas cursor belong to the mode now showing, and a tool entered with
+  // nothing armed must not inherit the last one's sentence.
+  announceArmed(activeArmed());
   requestRedraw();
 }
 
@@ -1741,6 +1875,7 @@ function paintChrome(): void {
   if (layout.metricsOpen) metricsDrawer.paint();
   outliner.paint();
   inspector.paint();
+  raceInspector.paint();
   modeReadout.paint();
 }
 
@@ -1882,6 +2017,9 @@ canvas.addEventListener('pointermove', (ev) => {
   // armed: a repaint per pointermove for nothing is a whole circuit redrawn to
   // show no change.
   if (tool() === 'props' && library.armed !== null && !dressingDrag) requestRedraw();
+  // The same rule for the row ghost: it follows the cursor, so it repaints on a
+  // hover, and only while something is armed.
+  if (tool() === 'race' && racePalette.armed !== null && !pickupDragging) requestRedraw();
   // The dock rides the pointer when asked to: hovering a corner on the plan is
   // then the gesture that looks at it in 3D, with no camera to fly.
   if (layout.followCursor && preview && drawn) {
@@ -1900,6 +2038,14 @@ canvas.addEventListener('pointermove', (ev) => {
   }
   if (dressingDrag) {
     moveDressingGesture(point, ev.shiftKey);
+    return;
+  }
+  if (pickupDragging) {
+    // The UNCONSTRAINED projection, unlike the one a placement is gated by: a
+    // drag whose row stopped following because the pointer strayed a yard onto
+    // the verge would read as the tool having dropped the gesture.
+    const fraction = pickupDragFractionAt(record, point.x, point.z);
+    if (fraction !== null) movePickupRow(fraction, false);
     return;
   }
   if (!dragging) return;
@@ -1941,6 +2087,7 @@ function endGesture(): void {
   paintOrigin = null;
   paintFractions = [];
   dragging = null;
+  pickupDragging = false;
 }
 
 canvas.addEventListener('pointerup', endGesture);
@@ -2111,9 +2258,12 @@ function runAction(id: ActionId): void {
       redrawing = false;
       dressing = null;
       pickupSelection = null;
+      // Both palettes: `esc` drops what the tools ARM, and each placing tool has
+      // one of its own.
       library.arm(null);
+      if (racePalette.armed !== null) racePalette.arm(null);
       applySideTab();
-      shell.setMode(railMode, drawn, false, placement.mode);
+      shell.setMode(railMode, drawn, false, placement.mode, isPlacing());
       return;
     case 'toggleDock':
       void togglePreview();
@@ -2338,16 +2488,22 @@ function syncDockChrome(): void {
 // host. None of them touches the canvas or the page's gesture state: they read
 // the document and commit edits, which is why none of them lives in here.
 
-const panelHost: LibraryHost & OutlinerHost = {
+/** The document, as every panel reads it. Shared so the two hosts below differ
+ *  only in the verbs their own tool needs. */
+const panelDocument = {
   record: () => record,
   metrics: () => metrics,
   track: () => track,
   drawn: () => drawn,
   mode: () => railMode,
   selection: () => dressing,
-  commit: (next) => commit(next),
-  commitDressing: (next) => commitDressing(next),
+  commit: (next: RealmRacersCircuit) => commit(next),
+  commitDressing: (next: Partial<RealmRacersCircuit>) => commitDressing(next),
   setStatus,
+};
+
+const panelHost: LibraryHost & OutlinerHost = {
+  ...panelDocument,
   select: (next) => {
     dressing = next;
     // Selecting from the outliner DISARMS: the panel keeps the library up while
@@ -2373,10 +2529,23 @@ const panelHost: LibraryHost & OutlinerHost = {
   },
 };
 
+const racePanelHost: RacePanelHost = {
+  ...panelDocument,
+  pickupSelection: () => pickupSelection,
+  // The field is in YARDS and the record is in lap fractions, which is the one
+  // conversion the panel is not asked to make: it edits a distance an operator
+  // can compare to the lap, and the page owns what the record is written in.
+  movePickupRowTo: (yards) => movePickupRow(track.length > 0 ? yards / track.length : 0),
+  removePickupRow: deletePickupRow,
+  onArmed: announceArmed,
+};
+
 const form = new RecordFormPanel(panelHost);
 const inspector = new InspectorPanel(panelHost);
 const outliner = new OutlinerPanel(panelHost);
 const library = new LibraryPanel(panelHost);
+const racePalette = new RacePalettePanel(racePanelHost);
+const raceInspector = new RaceInspectorPanel(racePanelHost);
 const modeReadout = new ModeReadoutPanel(panelHost);
 const metricsDrawer = new MetricsDrawerPanel(panelHost, shell.metricsBodyEl);
 
@@ -2514,6 +2683,15 @@ window.addEventListener('keydown', (ev) => {
   if (nudge && tool() === 'props' && dressing) {
     ev.preventDefault();
     nudgeDressing(nudge, ev.shiftKey);
+    return;
+  }
+  // A row has ONE degree of freedom, so only the horizontal pair means anything:
+  // left is back down the lap and right is on down it, the way a scrubber reads.
+  // The step is a length in yards, which is `pickup_rows_core`'s rule.
+  const alongLap = pickupNudgeDirection(ev.key);
+  if (alongLap && tool() === 'race' && pickupSelection !== null) {
+    ev.preventDefault();
+    nudgePickupRow(alongLap, ev.shiftKey);
     return;
   }
   // The SELECTION chords go through the same table as everything else. They were
@@ -2661,7 +2839,15 @@ window.addEventListener('pagehide', () => {
 
 // ---- boot ----
 
-shell.sideBodyEl.append(library.el, inspector.el, outliner.el, modeReadout.el, form.el);
+shell.sideBodyEl.append(
+  library.el,
+  racePalette.el,
+  inspector.el,
+  raceInspector.el,
+  outliner.el,
+  modeReadout.el,
+  form.el,
+);
 shell.showMetrics(layout.metricsOpen);
 syncToggles();
 shell.setPreviewReady('off');

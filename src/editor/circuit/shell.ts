@@ -328,10 +328,11 @@ export class EditorShell {
     drawn: boolean,
     redrawing = false,
     placement: PlacementMode = 'single',
+    placing = false,
   ): void {
     const def = RAIL_MODES.find((entry) => entry.id === mode);
     this.bannerModeEl.textContent = (def?.label ?? mode).toUpperCase();
-    this.bannerTextEl.textContent = railBanner(mode, drawn, redrawing, placement);
+    this.bannerTextEl.textContent = railBanner(mode, drawn, redrawing, placement, placing);
     this.bannerEl.hidden = false;
   }
 
@@ -340,12 +341,13 @@ export class EditorShell {
     drawn: boolean,
     redrawing = false,
     placement: PlacementMode = 'single',
+    placing = false,
   ): void {
     for (const [id, button] of this.modeButtons) {
       button.classList.toggle('on', id === mode);
       button.setAttribute('aria-checked', id === mode ? 'true' : 'false');
     }
-    this.setBanner(mode, drawn, redrawing, placement);
+    this.setBanner(mode, drawn, redrawing, placement, placing);
     // The mode's own repairs, beside its banner. Built once and shown or hidden,
     // never rebuilt: an action button is registered by id for its enabled state,
     // and rebuilding would leave the map holding buttons nothing can reach.
@@ -409,7 +411,10 @@ export class EditorShell {
   // ---- the contextual right panel ----
 
   private buildSideTabs(): void {
-    for (const tab of ['library', 'inspector', 'outliner'] as const) {
+    // Every tab any mode can offer, built once and shown per mode. Off the label
+    // table rather than a list spelled here, so a fourth tab cannot arrive with
+    // its button missing and no error anywhere.
+    for (const tab of Object.keys(SIDE_TAB_LABELS) as SideTabId[]) {
       const button = el('button', 'side-tab');
       button.type = 'button';
       button.textContent = SIDE_TAB_LABELS[tab];

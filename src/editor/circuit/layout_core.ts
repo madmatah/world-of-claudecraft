@@ -119,12 +119,17 @@ export function toolFor(mode: RailModeId, drawn: boolean, redrawing = false): Ci
  * library's placement block decides whether a drag places, sows or lays, and a
  * banner that went on describing all three at once would be the tool refusing to
  * say which one it is about to do.
+ *
+ * RACE takes the fifth for the same reason at one remove: it has a pointer state
+ * and an armed state, and a banner describing the placement while the tool is
+ * refusing to place is worse than no banner at all.
  */
 export function railBanner(
   mode: RailModeId,
   drawn: boolean,
   redrawing = false,
   placement: PlacementMode = 'single',
+  placing = false,
 ): string {
   switch (toolFor(mode, drawn, redrawing)) {
     case 'draw':
@@ -143,11 +148,15 @@ export function railBanner(
           : 'drag a tile from the library, or click to place the armed piece; R turns it, alt places it free';
     case 'race':
       // RACE became a canvas tool the day the circuit had furniture worth
-      // placing. Its forms are still the panel; what the plan offers is the one
-      // gesture the numbers cannot express.
-      return drawn
-        ? 'click the road to lay a pickup row across it, click a row to select it, del removes it'
-        : 'the numbers a circuit carries that nothing on the canvas can show';
+      // placing, and it has a POINTER state for the reason PROPS has one: with a
+      // row permanently armed, a click that missed the row it meant authored a
+      // second one a few yards away. So the banner says which of the two states
+      // the tool is in rather than describing one gesture that is only sometimes
+      // available.
+      if (!drawn) return 'the numbers a circuit carries that nothing on the canvas can show';
+      return placing
+        ? 'click the road to lay a pickup row across it; esc puts the pointer back'
+        : 'click a row to select it: drag or arrow it along the lap, del removes it. Arm a piece in the library to place one';
     default:
       return 'the numbers a circuit carries that nothing on the canvas can show';
   }
@@ -944,7 +953,7 @@ export const PREVIEW_READY_TITLES: Record<PreviewReadyState, string> = {
   off: 'the 3D preview is not open',
 };
 
-export type SideTabId = 'library' | 'inspector' | 'outliner';
+export type SideTabId = 'library' | 'inspector' | 'outliner' | 'properties';
 
 /** Below this the tab strip is not drawn at all: a single tab is a click that
  *  decides nothing, and the panel's own heading already says what is in it. */
@@ -980,7 +989,7 @@ export const DEFAULT_LAYOUT: EditorLayout = {
   side: 'library',
 };
 
-const SIDE_TABS: readonly SideTabId[] = ['library', 'inspector', 'outliner'];
+const SIDE_TABS: readonly SideTabId[] = ['library', 'inspector', 'outliner', 'properties'];
 
 const finite = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -1392,10 +1401,27 @@ export function spreadCallouts<T extends { x: number; y: number }>(
  * exists to show is a click that decides nothing.
  */
 export function sideTabsFor(mode: RailModeId): readonly SideTabId[] {
-  return mode === 'props' ? ['library', 'inspector', 'outliner'] : [];
+  if (mode === 'props') return ['library', 'inspector', 'outliner'];
+  // RACE keeps the two positions PROPS gives Library and Inspector, so the eye
+  // does not have to re-find them between the two placing tools, and appends its
+  // own. `properties` is the record form, which used to be the one panel on this
+  // page living OUTSIDE the tab strip: a tab owns the whole column, and an
+  // element that stayed visible under every tab read as belonging to none of
+  // them.
+  if (mode === 'race') return ['library', 'inspector', 'properties'];
+  return [];
 }
 
-/** Which tab the panel opens on when the operator has not picked one. */
+/**
+ * Which tab the panel opens on when the operator has not picked one.
+ *
+ * Both rules NAME their tab rather than trusting the order of the list. "A
+ * placing loop stays in the library" was spelled `tabs[0]`, which was only ever
+ * correct because the library happened to be first, and a mode whose tabs are
+ * ordered for any other reason would have sent an operator who just armed a piece
+ * to whatever sorted first instead. The fallback keeps the positional form,
+ * because THAT one genuinely means "the first tab this mode offers".
+ */
 export function autoSideTab(
   mode: RailModeId,
   hasSelection: boolean,
@@ -1404,6 +1430,7 @@ export function autoSideTab(
   const tabs = sideTabsFor(mode);
   if (tabs.length === 0) return null;
   if (hasSelection && !isPlacing && tabs.includes('inspector')) return 'inspector';
+  if (isPlacing && tabs.includes('library')) return 'library';
   return tabs[0];
 }
 
@@ -1411,4 +1438,5 @@ export const SIDE_TAB_LABELS: Record<SideTabId, string> = {
   library: 'Library',
   inspector: 'Inspector',
   outliner: 'Outliner',
+  properties: 'Properties',
 };

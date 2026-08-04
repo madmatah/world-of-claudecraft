@@ -100,14 +100,17 @@ export function panelLayout(inputs: PanelInputs): PanelState {
   // reachable while shaping a centerline.
   const kept = chosen && tabs.includes(chosen) ? chosen : null;
   const active = kept ?? autoTab(tabs, hasSelection, isPlacing);
-  const showForm = mode === 'race' && drawn;
   return {
     tabs,
     active,
     showLibrary: active === 'library',
     showInspector: active === 'inspector',
     showOutliner: active === 'outliner',
-    showForm,
+    // The record form is a TAB now, so it keys on the active tab and not on the
+    // mode. It was the one panel on this page that lived outside the tab strip,
+    // and an element that stays visible whichever tab is showing reads as
+    // belonging to none of them.
+    showForm: active === 'properties' && drawn,
     // Only where a mode has no tabs AND is not the form's own mode.
     showModeReadout: tabs.length === 0 && mode !== 'race' && drawn,
     // Whichever tool has one shows it. The props tool no longer does: its
@@ -125,6 +128,12 @@ export function panelLayout(inputs: PanelInputs): PanelState {
  * the selection took the library away after every single drop and put it back
  * only when the operator went looking. A placing loop stays in the library, and
  * the inspector is one click (or one `esc`, which disarms) away.
+ *
+ * Both rules NAME their tab. The placing rule used to be spelled `tabs[0]`,
+ * correct only for as long as the library happened to sort first, and a mode
+ * whose tabs are ordered for any other reason would silently have sent an
+ * operator who had just armed a piece somewhere else. Only the fallback stays
+ * positional, because it genuinely means "the first tab this mode offers".
  */
 function autoTab(
   tabs: readonly SideTabId[],
@@ -133,6 +142,7 @@ function autoTab(
 ): SideTabId | null {
   if (tabs.length === 0) return null;
   if (hasSelection && !isPlacing && tabs.includes('inspector')) return 'inspector';
+  if (isPlacing && tabs.includes('library')) return 'library';
   return tabs[0];
 }
 
@@ -145,6 +155,18 @@ function autoTab(
 export function armStateText(armed: string | null, pondKey: string): string {
   if (armed === null) return 'pointer: click a piece to select it';
   return armed === pondKey ? 'placing water: drag a box' : `placing ${armed}`;
+}
+
+/**
+ * The same sentence for the RACE tool, which has the same two states.
+ *
+ * Its own function rather than a second argument on the one above: the two
+ * palettes offer different things and neither is ever showing when the other is,
+ * so the only thing they would share is a branch on which tool is active.
+ */
+export function raceArmStateText(armed: string | null): string {
+  if (armed === null) return 'pointer: click a row to select it';
+  return `placing ${armed}`;
 }
 
 /**

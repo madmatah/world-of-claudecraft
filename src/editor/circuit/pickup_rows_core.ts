@@ -18,6 +18,7 @@ import type { RallyPickupRow, RealmRacersCircuit } from '../../sim/content/realm
 import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import { realmRacersPickupBoxes } from '../../sim/realm_racers_pickups';
 import { realmRacersTrack } from '../../sim/realm_racers_spline';
+import { NUDGE_STEP_BIG_YD, NUDGE_STEP_YD } from '../placement_transform_core';
 
 /**
  * How close two rows may be authored, as a lap fraction.
@@ -64,6 +65,29 @@ export function pickupRowFractionAt(
   const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z);
   if (Math.abs(projection.lateral) > track.halfWidthAt(projection.s)) return null;
   return track.length <= 0 ? null : projection.s / track.length;
+}
+
+/**
+ * Where along the lap a point is, whatever it is standing on.
+ *
+ * The unconstrained twin of `pickupRowFractionAt`, and the two answer two
+ * different questions on purpose. PLACING asks "did the operator point at the
+ * road", which the road edge answers and a miss has to be refused by. MOVING asks
+ * "where along the lap is the pointer now", and a drag whose row stopped
+ * following because the pointer strayed a yard onto the verge would read as the
+ * tool having dropped the gesture. The row itself still ends up on the road: it
+ * is authored by its lap position alone and the boxes are resolved across
+ * whatever road is there.
+ */
+export function pickupDragFractionAt(
+  circuit: RealmRacersCircuit,
+  x: number,
+  z: number,
+): number | null {
+  const track = realmRacersTrack(circuit);
+  if (track.length <= 0) return null;
+  const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z);
+  return projection.s / track.length;
 }
 
 /**
@@ -137,4 +161,142 @@ export function removedPickupRow(
   index: number,
 ): readonly RallyPickupRow[] {
   return rows.filter((_, i) => i !== index);
+}
+
+/**
+ * A lap fraction in [0, 1).
+ *
+ * Wrapped only where it has to be, for the reason `addPickupRow` spells out: the
+ * `((f % 1) + 1) % 1` round trip is not the identity on a fraction already in
+ * range, and these numbers go on the record.
+ */
+function wrapFraction(fraction: number): number {
+  return fraction >= 0 && fraction < 1 ? fraction : ((fraction % 1) + 1) % 1;
+}
+
+/** How far apart two lap fractions are the SHORT way round, so a row at 0.999
+ *  and one at 0.001 are two yards apart on a circuit rather than a whole lap. */
+function gapBetween(a: number, b: number): number {
+  const raw = Math.abs(a - b);
+  return Math.min(raw, 1 - raw);
+}
+
+/**
+ * Slack on the fraction a row is parked at when it is pushed clear of a
+ * neighbour, as a lap fraction.
+ *
+ * `neighbour + PICKUP_ROW_MIN_GAP` is not reliably one whole gap away from the
+ * neighbour once a double has rounded it (0.19 + 0.01 lands at
+ * 0.19999999999999998, which measures 0.00999999999999998 away), so the parked
+ * row would be refused by the very rule that put it there. Nudging outward by
+ * far more than a double's error and far less than anything the record keeps
+ * (`FRACTION_PLACES` rounds to 1e-4, and this is 1e-9 of a lap, under a
+ * micrometre) lets ONE definition of "clear" serve the placement and the move.
+ */
+const GAP_SLACK = 1e-9;
+
+/** Is `s` far enough from every row in `rows`? The same test `addPickupRow`
+ *  refuses a placement with, so a move cannot author what a click could not. */
+function isClearOf(rows: readonly RallyPickupRow[], s: number): boolean {
+  return rows.every((row) => gapBetween(row.s, s) >= PICKUP_ROW_MIN_GAP);
+}
+
+/**
+ * The legal fraction nearest `target`, or null when the lap is too crowded to
+ * hold one at all.
+ *
+ * The legal positions are the lap minus a band of `PICKUP_ROW_MIN_GAP` either
+ * side of every other row, so when the target is inside a band the answer is one
+ * of that band's two EDGES, whichever is nearer. That is what makes a drag past a
+ * neighbour a swap rather than a wall: approaching from behind, the near edge is
+ * the one in front of the neighbour, and the moment the pointer passes the
+ * neighbour's own fraction the far edge becomes the nearer one and the row hops
+ * across. Nothing in between is ever committed, so the record never holds two
+ * rows a click could not have authored.
+ */
+function nearestClearFraction(others: readonly RallyPickupRow[], target: number): number | null {
+  if (isClearOf(others, target)) return target;
+  let best: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const row of others) {
+    for (const side of [-1, 1] as const) {
+      const candidate = wrapFraction(row.s + side * (PICKUP_ROW_MIN_GAP + GAP_SLACK));
+      if (!isClearOf(others, candidate)) continue;
+      const distance = gapBetween(candidate, target);
+      // Strict, so the lower `others` index wins an exact tie and a drag dropped
+      // dead between two neighbours lands the same way on every run.
+      if (distance >= bestDistance) continue;
+      best = candidate;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+export type PickupRowMoveOutcome = 'moved' | 'blocked';
+
+export interface PickupRowMove {
+  outcome: PickupRowMoveOutcome;
+  /** The list to commit; the original array when nothing moved. */
+  rows: readonly RallyPickupRow[];
+  /** Where the row ended up, which is NOT where it started once a move has
+   *  carried it past a neighbour. */
+  index: number;
+}
+
+/**
+ * The row at `index`, moved to `fraction`.
+ *
+ * The row is held by its VALUE rather than by its index, because the list is
+ * sorted by lap position and a move that crosses a neighbour renumbers both: the
+ * caller's selection follows the returned index, exactly as it follows
+ * `addPickupRow`'s.
+ *
+ * `blocked` is very nearly unreachable (it needs a lap with no clear fraction
+ * left on it at all), and it is an outcome rather than a throw for the reason the
+ * placement refusals are: the caller has a status bar to say so with.
+ */
+export function movedPickupRow(
+  rows: readonly RallyPickupRow[],
+  index: number,
+  fraction: number,
+): PickupRowMove {
+  if (index < 0 || index >= rows.length) return { outcome: 'blocked', rows, index };
+  const others = rows.filter((_, i) => i !== index);
+  const s = nearestClearFraction(others, wrapFraction(fraction));
+  if (s === null) return { outcome: 'blocked', rows, index };
+  const out = [...others, { s }].sort((a, b) => a.s - b.s);
+  return { outcome: 'moved', rows: out, index: out.findIndex((row) => row.s === s) };
+}
+
+/** Which way along the LAP an arrow key moves a row, or null for a key that is
+ *  not one of the two. */
+export function pickupNudgeDirection(key: string): 1 | -1 | null {
+  if (key === 'ArrowRight') return 1;
+  if (key === 'ArrowLeft') return -1;
+  return null;
+}
+
+/**
+ * Where an arrow key takes a row, as a lap fraction.
+ *
+ * The step is a length in YARDS divided by the lap, never a fraction of a lap,
+ * which is the same rule the width tool's ramps follow: a fixed fraction would
+ * mean 4.5 yards on the garden circuit and 8.3 on the Express Tour, and a nudge
+ * has to mean one thing everywhere. The two step sizes are the map editor's own,
+ * so a nudge means the same in both tools.
+ *
+ * Only the two horizontal arrows are mapped, because a row has one degree of
+ * freedom: `left` is back down the lap and `right` is on down it, the way a
+ * scrubber reads. Up and down would have to invent a lateral the record cannot
+ * carry.
+ */
+export function nudgedPickupFraction(
+  s: number,
+  lapLength: number,
+  direction: 1 | -1,
+  big: boolean,
+): number {
+  const yards = big ? NUDGE_STEP_BIG_YD : NUDGE_STEP_YD;
+  return s + direction * (lapLength > 0 ? yards / lapLength : 0);
 }

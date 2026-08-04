@@ -19,6 +19,7 @@ import {
   REALM_RACERS_MIN_STRETCH_SEPARATION,
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
+  realmRacersPickupRowFit,
   realmRacersPropStanding,
 } from '../src/sim/realm_racers_circuit_metrics';
 import {
@@ -554,6 +555,45 @@ describe('Realm Racers circuit metrics: the pickup rows', () => {
 
   it('passes a row the road has room for', () => {
     expect(codesOf(rowed('metrics_pickup_wide', 10))).not.toContain('pickup_row_off_road');
+  });
+
+  it('answers for ONE row, so a tool can judge a placement before it is on the record', () => {
+    // `realmRacersPickupRowFit` is the predicate `pickup_row_off_road` is raised
+    // from, extracted for the reason `realmRacersPropStanding` was: the circuit
+    // editor tints a row's ghost before the click, and a tint derived from the
+    // tool's own arithmetic would be free to say green about a row the readout
+    // then refuses.
+    for (const [id, halfWidth, fits] of [
+      ['metrics_pickup_fit_wide', 10, true],
+      ['metrics_pickup_fit_narrow', 2, false],
+    ] as const) {
+      const circuit = rowed(id, halfWidth);
+      const fit = realmRacersPickupRowFit(circuit, realmRacersPickupBoxes(circuit));
+      expect(fit.fitsRoad, id).toBe(fits);
+      // And it agrees with the readout it was taken out of, which is the whole
+      // contract: one rule, one reader, both directions.
+      expect(codesOf(circuit).includes('pickup_row_off_road'), id).toBe(!fits);
+      // The numbers are the ones the panel prints, not a bare boolean.
+      expect(fit.road, id).toBeCloseTo(halfWidth, 6);
+      expect(fit.reach > fit.road, id).toBe(!fits);
+    }
+  });
+
+  it('judges the row it is HANDED rather than looking one up on the record', () => {
+    // What makes it usable on a pending row: the boxes come in, so a ghost can
+    // resolve a throwaway record and ask about a row the circuit does not carry.
+    const wide = rowed('metrics_pickup_fit_handed', 10);
+    const pending = { ...wide, pickupRows: [{ s: 0.6 }] };
+    const fit = realmRacersPickupRowFit(wide, realmRacersPickupBoxes(pending));
+    expect(fit.fitsRoad).toBe(true);
+    expect(fit.s).toBeGreaterThan(0);
+  });
+
+  it('calls an empty row fitting rather than throwing on it', () => {
+    // Unreachable through the resolver, which always emits four boxes. A
+    // predicate that threw here would turn a caller's empty list into a crash in
+    // a tool that is only ever asking a question.
+    expect(realmRacersPickupRowFit(rowed('metrics_pickup_fit_empty', 10), []).fitsRoad).toBe(true);
   });
 
   it('fails a row on a road too narrow to carry it', () => {
