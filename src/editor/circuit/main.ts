@@ -36,8 +36,9 @@ import {
   realmRacersStarts,
   realmRacersTrack,
 } from '../../sim/realm_racers_spline';
-import { rotateStep } from '../placement_transform_core';
+import { type NudgeKey, rotateStep } from '../placement_transform_core';
 import { CircuitDock } from './dock';
+import { DraftDialog } from './draft_dialog';
 import {
   DRAFT_SAVE_DEBOUNCE_MS,
   DRAFT_STORAGE_KEY,
@@ -95,7 +96,7 @@ import {
   LibraryPanel,
   type PlacementSettings,
 } from './panel_library';
-import { OutlinerPanel } from './panel_outliner';
+import { type OutlinerHost, OutlinerPanel } from './panel_outliner';
 import { MetricsDrawerPanel, ModeReadoutPanel } from './panel_readout';
 import {
   alongRoadProps,
@@ -124,27 +125,36 @@ import {
   authorPlacement,
   type DressingRect,
   type DressingSelection,
+  duplicatedPond,
+  duplicatedProp,
   ghostPlacement,
   ghostRowPlacements,
   hitTestPlaced,
   hitTestPondHandle,
   hitTestPonds,
+  hitTestPropHandle,
   movedProp,
   nextSeed,
+  nudgeKeyOf,
   POND_CHOICE,
   type PondHandle,
+  type PropHandle,
   placedPropIndices,
   placementIndexOf,
+  planNudge,
   pondFromDrag,
   pondHandlePoints,
   pondWithHandleAt,
   propFrameOf,
+  propHandlePoints,
   propProjectionHint,
+  propWithHandleAt,
   removedAt,
   replacedAt,
   rotatedProp,
   scaledProp,
   scatterFromRect,
+  selectionFocusPoint,
   tangentProp,
   toggledCollide,
 } from './props_core';
@@ -239,9 +249,11 @@ let paintOrigin: CircuitBand[] | null = null;
 let paintFractions: number[] = [];
 /** What the dressing gesture in flight is doing, and to which entry. */
 let dressing: DressingSelection | null = null;
-let dressingDrag: 'move' | 'rect' | 'pond' | 'road' | null = null;
+let dressingDrag: 'move' | 'rect' | 'pond' | 'prop' | 'road' | null = null;
 /** The pond handle under a resize/rotate drag. */
 let pondHandle: PondHandle | null = null;
+/** The selected prop's grip under a rotate/scale drag. */
+let propHandle: PropHandle | null = null;
 /** The projection index a track-space drag started from: without it a drag
  *  across a pinch re-anchors the piece to the facing stretch. */
 let dragHint: number | undefined;
@@ -858,6 +870,27 @@ function drawDressing(): void {
     ctx.fillText(prop.asset, screenX(prop.x) + 6, screenY(prop.z) - 6);
   }
 
+  // A selected prop gets its two grips: the corner that resizes it, and the ring
+  // beyond its outline that turns it. The ring sits on the piece's own facing,
+  // so it is also the only mark on the plan that says which way it points.
+  const selectedPlaced = selectedPlacedProp();
+  if (selectedPlaced) {
+    const grips = propHandlePoints(selectedPlaced);
+    ctx.save();
+    ctx.strokeStyle = planPalette.pick;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(screenX(selectedPlaced.x), screenY(selectedPlaced.z));
+    ctx.lineTo(screenX(grips.rotate.x), screenY(grips.rotate.z));
+    ctx.stroke();
+    ctx.fillStyle = planPalette.pick;
+    ctx.beginPath();
+    ctx.arc(screenX(grips.rotate.x), screenY(grips.rotate.z), 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(screenX(grips.scale.x) - 4, screenY(grips.scale.z) - 4, 8, 8);
+    ctx.restore();
+  }
+
   // A selected pond gets its handles; the outline itself is drawn with the
   // surfaces, because it is water whatever mode the tool is in.
   if (dressing?.kind === 'pond') {
@@ -1020,6 +1053,20 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
   const placements = realmRacersPlacements(record);
   const tolerance = dressingTolerance();
 
+  // A selected PROP's grips come first, for the reason the pond's do: the scale
+  // grip sits on the piece's own outline, so hit-testing the piece before it
+  // would turn every resize into a move.
+  if (dressing?.kind === 'prop') {
+    const placed = selectedPlacedProp();
+    const handle = placed && hitTestPropHandle(placed, raw.x, raw.z, tolerance);
+    if (placed && handle) {
+      pushUndo();
+      dressingDrag = 'prop';
+      propHandle = handle;
+      return;
+    }
+  }
+
   // A selected pond's handles come first: they sit ON the pond, so hit-testing
   // the shape before them would make a resize impossible.
   if (dressing?.kind === 'pond') {
@@ -1126,8 +1173,33 @@ function placeOne(raw: RallyPoint): void {
   );
 }
 
-function moveDressingGesture(raw: RallyPoint): void {
+/**
+ * Where a dressing drag has got to.
+ *
+ * `free` is the shift key AS OF THIS MOVE rather than as of the press, because
+ * what it means here is "do not step this rotation", which is a decision the
+ * operator makes while watching the piece turn.
+ */
+function moveDressingGesture(raw: RallyPoint, free = false): void {
   const point = authored(raw);
+  if (dressingDrag === 'prop' && propHandle && dressing?.kind === 'prop') {
+    const prop = selectedProp();
+    const placed = selectedPlacedProp();
+    if (!prop || !placed) return;
+    // The RAW pointer: a grip drag authors an angle or a ratio, and neither is a
+    // coordinate the grid has anything to say about.
+    commitDressing(
+      {
+        props: replacedAt(
+          record.props,
+          dressing.index,
+          propWithHandleAt(prop, placed, propHandle, raw.x, raw.z, free),
+        ),
+      },
+      false,
+    );
+    return;
+  }
   if (dressingDrag === 'road') {
     // Nothing is committed until the release: the row is rebuilt from the two
     // ends on every move, so dragging back over it shortens it rather than
@@ -1241,6 +1313,7 @@ function endDressingGesture(): void {
   roadRun = null;
   roadRunPreview = { props: [], placed: [], legal: [] };
   pondHandle = null;
+  propHandle = null;
   dragHint = undefined;
   requestRedraw();
 }
@@ -1251,22 +1324,143 @@ function selectedProp(): RallyProp | null {
   return (record.props ?? [])[dressing.index] ?? null;
 }
 
+/** The same piece as the RESOLVER placed it: where it stands, which way it
+ *  faces and how big its footprint came out. Every grip and every focus reads
+ *  this rather than the record, for the reason the whole tool does: the one
+ *  resolver decides where a piece is. */
+function selectedPlacedProp(): RallyPlacedProp | null {
+  if (dressing?.kind !== 'prop') return null;
+  const placedIndex = placementIndexOf(record.props, REALM_RACERS_PROPS, dressing.index);
+  return realmRacersPlacements(record).props[placedIndex] ?? null;
+}
+
 function transformSelectedProp(next: (prop: RallyProp) => RallyProp): void {
   const prop = selectedProp();
   if (!prop || dressing?.kind !== 'prop') return;
   commitDressing({ props: replacedAt(record.props, dressing.index, next(prop)) });
 }
 
-/** Deletes whatever is selected, and drops the selection with it. */
-function deleteDressing(): void {
+/**
+ * Moves whatever is selected by one arrow-key step.
+ *
+ * A prop goes back through `movedProp`, so a nudged track-space piece is
+ * re-framed by the same rule a dragged one is; a pond is a plain circuit-local
+ * pair and moves by the delta. Scatters have no position to nudge: what they
+ * have is a span, which the inspector owns.
+ */
+function nudgeDressing(key: NudgeKey, big: boolean): void {
   if (!dressing) return;
-  if (dressing.kind === 'prop') commitDressing({ props: removedAt(record.props, dressing.index) });
-  if (dressing.kind === 'scatter') {
-    commitDressing({ scatters: removedAt(record.scatters, dressing.index) });
+  const { dx, dz } = planNudge(key, big);
+  if (dressing.kind === 'prop') {
+    const prop = selectedProp();
+    const placed = selectedPlacedProp();
+    if (!prop || !placed) return;
+    commitDressing({
+      props: replacedAt(
+        record.props,
+        dressing.index,
+        movedProp(record, prop, placed.x + dx, placed.z + dz, propProjectionHint(record, prop)),
+      ),
+    });
+    setStatus(`nudged ${prop.asset} ${Math.hypot(dx, dz).toFixed(1)} yd`, '');
+    return;
   }
-  if (dressing.kind === 'pond') commitDressing({ ponds: removedAt(record.ponds, dressing.index) });
+  if (dressing.kind === 'pond') {
+    const pond = record.ponds?.[dressing.index];
+    if (!pond) return;
+    commitDressing({
+      ponds: replacedAt(record.ponds, dressing.index, { ...pond, x: pond.x + dx, z: pond.z + dz }),
+    });
+    return;
+  }
+  setStatus('a scatter is a stretch of lap, not a point: edit its span', 'err');
+}
+
+/**
+ * A second copy of the selection, beside it and selected.
+ *
+ * Selecting the COPY rather than leaving the original armed is what makes a run
+ * of them one gesture repeated: duplicate, nudge, duplicate, nudge. Leaving the
+ * original selected would put every copy in the same place.
+ */
+function duplicateDressing(): void {
+  if (!dressing) return;
+  if (dressing.kind === 'prop') {
+    const prop = selectedProp();
+    const placed = selectedPlacedProp();
+    if (!prop || !placed) return;
+    const props = [
+      ...(record.props ?? []),
+      duplicatedProp(record, prop, placed.x, placed.z, propProjectionHint(record, prop)),
+    ];
+    dressing = { kind: 'prop', index: props.length - 1 };
+    commitDressing({ props });
+    applySideTab();
+    setStatus(`duplicated ${prop.asset}`, 'ok');
+    return;
+  }
+  if (dressing.kind === 'pond') {
+    const pond = record.ponds?.[dressing.index];
+    if (!pond) return;
+    const ponds = [...(record.ponds ?? []), duplicatedPond(pond)];
+    dressing = { kind: 'pond', index: ponds.length - 1 };
+    commitDressing({ ponds });
+    applySideTab();
+    setStatus(`duplicated pond, ${ponds.length} on this circuit`, 'ok');
+    return;
+  }
+  setStatus('a scatter fills a stretch of road: drag another box instead', 'err');
+}
+
+/** Takes the plan, and the 3D dock with it, to a point on the circuit. The dock
+ *  only when it is OPEN: pointing a camera nobody can see is work for nothing,
+ *  and opening one uninvited is a half-megabyte rebuild the operator did not
+ *  ask for. */
+function lookAtPoint(point: RallyPoint): void {
+  view.x = point.x;
+  view.z = point.z;
+  requestRedraw();
+  if (preview && dock.open) {
+    preview.lookAt(point.x, point.z);
+    syncDockChrome();
+  }
+}
+
+/** Frames whatever is selected. The point is the resolver's, never the record's:
+ *  a track-space piece's own numbers are a lap fraction and an offset, which is
+ *  not somewhere the plan can be centred. */
+function focusDressing(selection: DressingSelection): void {
+  const point = selectionFocusPoint(record, selection);
+  if (!point) {
+    setStatus('nothing to look at: that entry places nothing', 'err');
+    return;
+  }
+  lookAtPoint(point);
+  setStatus(`looking at ${selection.kind} ${selection.index}`, '');
+}
+
+/**
+ * Deletes ONE entry, whether or not it is the selected one.
+ *
+ * The selection is dropped either way rather than kept and adjusted: removing an
+ * entry shifts every index after it, so a selection that survived would be
+ * pointing at the piece that moved up into the hole. That is the outliner's own
+ * bug class, since its rows are the only place a piece other than the selected
+ * one can be acted on.
+ */
+function removeDressing(target: DressingSelection): void {
+  if (target.kind === 'prop') commitDressing({ props: removedAt(record.props, target.index) });
+  if (target.kind === 'scatter') {
+    commitDressing({ scatters: removedAt(record.scatters, target.index) });
+  }
+  if (target.kind === 'pond') commitDressing({ ponds: removedAt(record.ponds, target.index) });
   dressing = null;
   applySideTab();
+}
+
+/** Deletes whatever is selected, and drops the selection with it. */
+function deleteDressing(): void {
+  if (dressing) removeDressing(dressing);
 }
 
 // ---- the two repairs ----
@@ -1585,7 +1779,7 @@ canvas.addEventListener('pointermove', (ev) => {
     return;
   }
   if (dressingDrag) {
-    moveDressingGesture(point);
+    moveDressingGesture(point, ev.shiftKey);
     return;
   }
   if (!dragging) return;
@@ -1773,6 +1967,7 @@ function runAction(id: ActionId): void {
       return;
     case 'load':
       loadDialog.showModal();
+      void draftDialog.refresh();
       return;
     case 'saveDraft':
       void saveDraft();
@@ -2024,7 +2219,7 @@ function syncDockChrome(): void {
 // host. None of them touches the canvas or the page's gesture state: they read
 // the document and commit edits, which is why none of them lives in here.
 
-const panelHost: LibraryHost = {
+const panelHost: LibraryHost & OutlinerHost = {
   record: () => record,
   metrics: () => metrics,
   track: () => track,
@@ -2034,6 +2229,17 @@ const panelHost: LibraryHost = {
   commit: (next) => commit(next),
   commitDressing: (next) => commitDressing(next),
   setStatus,
+  select: (next) => {
+    dressing = next;
+    // Selecting from the outliner DISARMS: the panel keeps the library up while
+    // a piece is armed, so an operator who went to the list to find something
+    // would pick a row and be shown the tiles again rather than its numbers.
+    library.arm(null);
+    applySideTab();
+    requestRedraw();
+  },
+  focus: focusDressing,
+  remove: removeDressing,
   onArmed: (asset) => {
     // A fresh arm starts at the catalog's own facing: carrying the last piece's
     // rotation onto a different kind of thing is a yaw nobody chose.
@@ -2087,6 +2293,21 @@ for (const choice of LOAD_CHOICES) {
 }
 
 (document.getElementById('loadCancel') as HTMLButtonElement).onclick = () => loadDialog.close();
+
+// ---- the drafts on disk ----
+//
+// The Load dialog's other half, and a sibling module rather than a block in
+// here: none of it needs the page's gesture state, which is this directory's own
+// test for which side of the seam something belongs on.
+
+const draftDialog = new DraftDialog(document.getElementById('draftList') as HTMLDivElement, {
+  load: (circuit, label) => {
+    loadDialog.close();
+    loadCircuit(circuit, label);
+  },
+  setStatus,
+  now: () => Date.now(),
+});
 
 // ---- the 3D dock's preview ----
 
@@ -2167,6 +2388,15 @@ window.addEventListener('keydown', (ev) => {
     runAction(action);
     return;
   }
+  // The arrows are matched off the key rather than off the table, and the table
+  // says so in `nudgeSelection`'s row: eight rows for one gesture ("arrows, and
+  // shift for a bigger step") is a cheatsheet block nobody finishes reading.
+  const nudge = nudgeKeyOf(ev.key);
+  if (nudge && tool() === 'props' && dressing) {
+    ev.preventDefault();
+    nudgeDressing(nudge, ev.shiftKey);
+    return;
+  }
   // The SELECTION chords go through the same table as everything else. They were
   // matched inline here against `ev.key` literals, which made them a fifth
   // hand-kept copy of the very list the table exists to be the only copy of:
@@ -2216,6 +2446,12 @@ function runSelectionAction(id: ActionId): void {
   switch (id) {
     case 'deleteSelection':
       deleteDressing();
+      return;
+    case 'duplicateSelection':
+      duplicateDressing();
+      return;
+    case 'focusSelection':
+      if (dressing) focusDressing(dressing);
       return;
     case 'faceRacing':
       // Facing the racing direction is a different thing from any angle: it

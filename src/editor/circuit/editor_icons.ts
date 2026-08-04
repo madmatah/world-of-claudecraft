@@ -35,6 +35,8 @@ export type EditorIconId =
   | 'props'
   | 'keyboard'
   | 'trash'
+  | 'duplicate'
+  | 'target'
   | 'rotate'
   | 'tangent'
   | 'plus'
@@ -100,6 +102,12 @@ export const EDITOR_ICONS: Record<EditorIconId, string> = {
   ),
   trash: svg(
     '<path d="M3.5 4.5h9" /><path d="M6 4.5V3h4v1.5" /><path d="M4.5 4.5 5 13.5h6l.5-9" />',
+  ),
+  duplicate: svg(
+    '<rect x="5.5" y="5.5" width="8" height="8" rx="1" /><path d="M10.5 5.5v-3h-8v8h3" />',
+  ),
+  target: svg(
+    '<circle cx="8" cy="8" r="4" /><path d="M8 1.5v2" /><path d="M8 12.5v2" /><path d="M1.5 8h2" /><path d="M12.5 8h2" />',
   ),
   rotate: svg('<path d="M13 8a5 5 0 1 1-1.8-3.85" /><path d="M13.5 2.5V5H11" />'),
   tangent: svg('<path d="M2.5 11.5c3.5 0 6-6 11-6" /><path d="M11 3.5l2.5 2-2.5 2" />'),

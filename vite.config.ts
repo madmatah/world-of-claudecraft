@@ -1,5 +1,13 @@
 import { execSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
@@ -13,6 +21,7 @@ import { templateModulepreload } from './scripts/i18n_modulepreload.mjs';
 import {
   type DraftEndpointResponse,
   type DraftReader,
+  draftDeleteDecision,
   draftListResponse,
   draftResponse,
 } from './src/editor/circuit/draft_endpoints_core';
@@ -317,26 +326,38 @@ function musicEditorSavePlugin() {
 //                                        hand-curated and its comments carry the
 //                                        reasoning behind every number, so the
 //                                        operator pastes the literal by hand.
-//  - GET  /__circuit_editor/drafts       the saved draft ids. No consumer yet:
-//                                        its planned one is the draft manager
-//                                        in packet 20, which offers the saved
-//                                        drafts instead of making the operator
-//                                        remember an id.
+//  - GET  /__circuit_editor/drafts       the saved drafts, id plus last write,
+//                                        newest first. The editor's Load dialog
+//                                        lists them so nobody has to remember an
+//                                        id.
 //  - GET  /__circuit_editor/draft/<id>   one draft, PARSED back into a record,
 //                                        which is what lets a running game race
 //                                        a draft with no source edit
 //                                        (`/dev rallydraft`).
+//  - DELETE /__circuit_editor/draft/<id> discards one scratch draft, so the list
+//                                        above is something an operator can keep
+//                                        rather than only add to.
 //
-// The two GETs decide nothing here: `draft_endpoints_core.ts` answers them from
-// a READER, so path-traversal handling and the parse are unit-tested and this
-// file stays the fs adapter. That core has no writer at all, which is what
-// makes "a GET never writes" structural rather than a promise.
+// None of the three decides anything here: `draft_endpoints_core.ts` answers
+// them from a READER, so path-traversal handling and the parse are unit-tested
+// and this file stays the fs adapter. That core has no writer at all, DELETE
+// included: it hands back the id the request is cleared to discard, and the
+// unlink below is the only thing in the pair that can touch the tree.
 function circuitEditorSavePlugin() {
   const draftDir = path.resolve(root, 'tmp/circuit-drafts');
+  const draftFile = (id: string): string => path.join(draftDir, `${id}.ts`);
   const reader: DraftReader = {
-    list: () => (existsSync(draftDir) ? readdirSync(draftDir) : []),
+    list: () =>
+      existsSync(draftDir)
+        ? readdirSync(draftDir).map((name) => ({
+            name,
+            // A file that vanished between the read and the stat is a race with
+            // the operator's own editor, not an error worth failing the list on.
+            mtimeMs: statSync(path.join(draftDir, name), { throwIfNoEntry: false })?.mtimeMs ?? 0,
+          }))
+        : [],
     read: (id) => {
-      const file = path.join(draftDir, `${id}.ts`);
+      const file = draftFile(id);
       return existsSync(file) ? readFileSync(file, 'utf8') : null;
     },
   };
@@ -379,6 +400,31 @@ function circuitEditorSavePlugin() {
       });
 
       server.middlewares.use('/__circuit_editor/draft', (req, res) => {
+        // Both verbs on ONE mount, because the mount is what owns the path: a
+        // second `use` for the same prefix would answer whichever was registered
+        // first and the other would never run.
+        if (req.method === 'DELETE') {
+          const decision = draftDeleteDecision(req.method, req.url, reader);
+          if (decision.id !== null) {
+            const file = draftFile(decision.id);
+            // The core already refused every id with a separator in it. This is
+            // the fs adapter refusing to unlink outside its own directory
+            // whatever reaches it, which is the guarantee that has to hold even
+            // if the id check upstream is ever loosened.
+            if (path.dirname(file) !== draftDir) {
+              answer(res, { status: 400, body: 'draft is not in the draft directory' });
+              return;
+            }
+            try {
+              rmSync(file);
+            } catch (err) {
+              answer(res, { status: 500, body: String(err) });
+              return;
+            }
+          }
+          answer(res, decision.response);
+          return;
+        }
         answer(res, draftResponse(req.method, req.url, reader));
       });
 

@@ -207,6 +207,9 @@ export type ActionId =
   | 'modeRace'
   | 'keys'
   | 'deleteSelection'
+  | 'duplicateSelection'
+  | 'nudgeSelection'
+  | 'focusSelection'
   | 'rotateProp'
   | 'faceRacing'
   | 'scaleUp'
@@ -522,6 +525,37 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     icon: 'trash',
     scope: 'selection',
     shortcut: 'delete',
+    group: 'selection',
+  },
+  {
+    id: 'duplicateSelection',
+    label: 'Duplicate',
+    detail: 'Put a second copy of the selected piece beside it, and select the copy',
+    icon: 'duplicate',
+    scope: 'selection',
+    shortcut: 'mod+d',
+    group: 'selection',
+  },
+  {
+    id: 'nudgeSelection',
+    label: 'Nudge',
+    // A GESTURE rather than a chord, and deliberately: four arrow rows plus four
+    // shifted ones is a cheatsheet block nobody reads to the end, and the page
+    // matches the keys off `nudgeKeyOf` instead. What the table owns here is the
+    // one line an operator has to be told.
+    detail: 'Move the selected piece a step, or a bigger step with shift held',
+    icon: 'move',
+    scope: 'selection',
+    gesture: 'arrows (shift: bigger)',
+    group: 'selection',
+  },
+  {
+    id: 'focusSelection',
+    label: 'Focus the selection',
+    detail: 'Centre the plan on the selected piece, and the 3D dock with it',
+    icon: 'target',
+    scope: 'selection',
+    shortcut: 'f',
     group: 'selection',
   },
   {

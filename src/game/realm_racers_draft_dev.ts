@@ -25,9 +25,10 @@ import { RALLY_DRIVER_TIERS } from '../sim/realm_racers_driver';
 /** Where the dev server answers. Kept beside the parser so the one place that
  *  knows the endpoint shape is the one place that knows the command. */
 export const CIRCUIT_DRAFT_ENDPOINT = '/__circuit_editor/draft';
-/** The draft LIST. No consumer yet: its planned one is the draft manager in
- *  packet 20, which offers the saved drafts instead of making the operator
- *  remember an id. Kept so the endpoint and its client name land together. */
+/** The draft LIST, read by the editor's own Load dialog so nobody has to
+ *  remember an id. Both constants live here rather than beside the dialog for
+ *  the same reason: the one place that knows the endpoint shape is the one place
+ *  that knows the command it was written for. */
 export const CIRCUIT_DRAFT_LIST_ENDPOINT = '/__circuit_editor/drafts';
 
 /**

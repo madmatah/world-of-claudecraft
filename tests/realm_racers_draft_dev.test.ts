@@ -256,7 +256,7 @@ describe('the default reader', () => {
  *  exercises the real reader rather than a hand-built object. */
 function parseSource(source: string): unknown {
   const response = draftResponse('GET', '/draft_one', {
-    list: () => ['draft_one.ts'],
+    list: () => [{ name: 'draft_one.ts', mtimeMs: 0 }],
     read: () => source,
   });
   return JSON.parse(response.body);

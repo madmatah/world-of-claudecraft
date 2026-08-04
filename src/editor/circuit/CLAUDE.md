@@ -16,18 +16,29 @@ to grow to one themed circuit per game zone.
   emits it. Open it under `npm run dev` at `http://localhost:5173/circuit_editor.html`.
 - English-only, the same dev-tool carve-out the music editor and the perf overlay
   take. No `t()`, no i18n catalog keys.
-- The three endpoints (`POST /__circuit_editor/save`, `GET /__circuit_editor/drafts`,
-  `GET /__circuit_editor/draft/<id>`) are registered in `configureServer` only,
-  which runs under the dev server and nowhere else. The save arm validates the
-  payload through `validateCircuitPayload` before writing, and it writes to
+- The four endpoints (`POST /__circuit_editor/save`, `GET /__circuit_editor/drafts`,
+  `GET /__circuit_editor/draft/<id>`, `DELETE /__circuit_editor/draft/<id>`) are
+  registered in `configureServer` only, which runs under the dev server and
+  nowhere else. The save arm validates the payload through
+  `validateCircuitPayload` before writing, and it writes to
   `tmp/circuit-drafts/<id>.ts` (gitignored scratch), NEVER to
   `src/sim/content/realm_racers_circuits.ts`: that module is hand-curated and its
-  comments carry the reasoning behind every number. The two GET arms decide
-  nothing in `vite.config.ts`: `draft_endpoints_core.ts` answers them, so the id
-  handling is unit-tested (`tests/editor_circuit_draft_endpoints.test.ts`). An id
-  arriving off a URL is checked against the same shape the save endpoint names its
-  files with BEFORE any read, so no request can resolve out of the draft
+  comments carry the reasoning behind every number. None of the three read arms
+  decides anything in `vite.config.ts`: `draft_endpoints_core.ts` answers them, so
+  the id handling is unit-tested (`tests/editor_circuit_draft_endpoints.test.ts`).
+  An id arriving off a URL is checked against the same shape the save endpoint
+  names its files with BEFORE any read, so no request can resolve out of the draft
   directory.
+- **The core has no writer, and the DELETE arm did not change that.** It DECIDES:
+  `draftDeleteDecision` hands back the id the request is cleared to unlink, or
+  null with the refusal to send, and the unlink lives in the plugin beside the
+  save. A core that could delete would be a core a future GET could delete
+  through. The two verbs share ONE middleware mount, because the mount owns the
+  path: a second `use` for the same prefix would answer whichever was registered
+  first and the other would never run. The plugin re-checks that the file it is
+  about to remove is in `tmp/circuit-drafts` even though the id already cannot
+  carry a separator, since that is the guarantee that has to hold if the check
+  upstream is ever loosened.
 
 ## Driving a draft: `/dev rallydraft <id> [tier]`
 The read endpoint exists so a running dev client can race a draft with no source
@@ -379,6 +390,54 @@ is recoverable.
   lays eleven lanterns eight yards apart makes eleven labels one unreadable
   smear. `labelledPieces` grants them greedily and FIRST-COME, so the set does
   not reshuffle while the pointer moves.
+- **A selected piece is shaped ON the plan, and the inspector is the numeric
+  truth beside it.** The pond has had handles since the water was placeable and
+  the props never did, so turning a bench meant tapping `r` and reading the
+  inspector to find out where it got to. `propHandlePoints` generalizes that
+  precedent: a rotate ring past the outline on the piece's own facing (which is
+  therefore also the only mark on the plan saying which way it points) and a
+  corner grip on the footprint. The NEAREST grip wins the hit test rather than the
+  first declared: a lantern is under a yard across, so at a working zoom the click
+  tolerance reaches both at once and "first in the list" would make one of them
+  unreachable. A rotate drag lands on the shared rotation step unless `shift` is
+  held, and a corner drag is read as a RATIO of the reach the grip already had,
+  which makes it the same gesture at every zoom and at every size the piece is
+  already at. Both read the placed piece off the RESOLVER, never the record: a
+  track-space piece's own numbers are a lap fraction and an offset, which is not
+  somewhere a grip can be drawn.
+- **The arrows nudge, `ctrl+D` duplicates, and the copy is what stays selected.**
+  Selecting the COPY is what makes a run of pieces one gesture repeated
+  (duplicate, nudge, duplicate, nudge); leaving the original selected would put
+  every copy in the same place. A duplicate goes through `movedProp`, so it is
+  re-framed by the rule every other placement is. The arrows are matched off
+  `nudgeKeyOf` rather than through the action table, and the table's
+  `nudgeSelection` row carries a GESTURE saying so: four chord rows, doubled for
+  the shifted step, is eight cheatsheet lines for one thing an operator reads
+  once. The step sizes are the map editor's own, so a nudge means the same in both
+  tools.
+- **The outliner is the way BACK to a piece, not a readout.** A row selects, a
+  double click takes the plan (and the 3D dock, when it is open) to it, and its
+  own button discards it. Both listeners are on the PANEL rather than on the rows,
+  and that is load-bearing: `paint()` rebuilds every row on every repaint, so the
+  row a double click begins on is a different element from the one it ends on, and
+  a `dblclick` bound to a row would be lost silently. Deleting an entry DROPS the
+  selection rather than adjusting it, because removing one shifts every index
+  after it and a selection that survived would be pointing at whatever moved up
+  into the hole. Selecting from the outliner also disarms the library, or the
+  panel's own "a placing loop stays in the library" rule would answer a row click
+  with the tiles again instead of the piece's numbers.
+- **The Load dialog lists the drafts on disk.** The dev server could list and
+  parse them from the day those endpoints were written and nothing read the list,
+  so the only way back into last week's circuit was to remember its id and type it
+  at `/dev rallydraft`. Rows come back NEWEST FIRST from the endpoint and are not
+  re-sorted on the page, because two orderings of one list is how the row an
+  operator clicked stops being the row they meant. A disk draft loads under its
+  OWN id, unlike a shipped circuit (which is renamed so editing it cannot hand the
+  memoized derivation of a live circuit a shape the game did not author): a draft
+  is already a draft, and renaming it would leave Save draft writing a SECOND file
+  while `/dev rallydraft <id>` went on racing the one it was opened from. The list
+  is re-read on every OPEN, since the directory is scratch space another window, a
+  shell, or this page's own Save draft all change under the dialog.
 - **The draft autosaves, and resuming is an OFFER.** The working record goes to
   `localStorage` on a debounce after every commit, and boot puts a chip in the
   status bar rather than opening a dialog: a dev tool whose first act every
@@ -421,7 +480,7 @@ is recoverable.
 | `panels.ts` | the `PanelHost` every right-column panel reads the document through, plus the element shapes all five of them repeat |
 | `panel_form.ts` | the record form: roles, race numbers, presentation ids and the enclosure, built once and only synced |
 | `panel_inspector.ts` | the numbers behind the selection, editable, every edit back through `commitDressing` |
-| `panel_outliner.ts` | what is standing on this circuit, entry by entry |
+| `panel_outliner.ts` | what is standing on this circuit, entry by entry, and the way back to any of it: select, focus, delete, off two listeners on the panel rather than on the rows |
 | `panel_readout.ts` | one builder per readout section, plus the drawer and the tabless mode's own column |
 | `panel_library.ts` | what the props tool can put down, and which piece is armed |
 | `dock.ts` | the floating 3D panel: move, resize, fullscreen, the camera tabs and the lap readout. Geometry rules come from `layout_core.ts` |
@@ -430,13 +489,13 @@ is recoverable.
 | `library_core.ts` | what the library OFFERS: the category chips (theme first and by default), what a search matches, and what an empty grid says |
 | `placement_core.ts` | what the GESTURE meant: which snap a drop takes, whether the readout will have it, and what a drag along the road lays down |
 | `thumbnail_core.ts` | where the camera stands to photograph one catalog piece: one pose for every tile, framed on the axis that binds |
-| `draft_store_core.ts` | what survives a reload: the autosaved draft (versioned, validated, offered) and the tile cache |
+| `draft_store_core.ts` | what survives a reload: the autosaved draft (versioned, validated, offered), the drafts on disk as the Load dialog lists them, and the tile cache |
 | `prop_thumbnails.ts` | the off-screen rig that takes the pictures. Lazily imported; never disposes what it borrowed from a shared cache |
-| `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
+| `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry (a grip drag, an arrow nudge, a duplicate included), where the view goes to look at a selection, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
 | `envelope_core.ts` | what perimeter wall and collision region fit a road of a given size, clamped to the band and the lane depth budget. A convenience, not a rule: the enclosure rules themselves are in the metrics core |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |
-| `draft_endpoints_core.ts` | what the dev server answers for the two READ endpoints: the draft list and one parsed draft. It is handed a READER and has no writer, which is what makes "a GET never writes" structural |
+| `draft_endpoints_core.ts` | what the dev server answers about a saved draft: the list (newest first, with its last write), one parsed draft, and whether a DELETE may go ahead. It is handed a READER and has no writer at all, which is what makes "a GET never writes" structural; the delete arm names an id and the plugin unlinks it |
 | `preview_camera_core.ts` | where the 3D preview's camera stands: the orbit rig's clamps, and the fly-through pose along the racing line |
 | `preview3d.ts` | the 3D preview itself: the scene, the light rig, the rebuild lifecycle and the camera modes. Loaded on demand, so the 2D tool still opens instantly |
 | `main.ts` | the page: canvas, pointer routing, and the wiring between the shell, the panels and the record. No formulas |

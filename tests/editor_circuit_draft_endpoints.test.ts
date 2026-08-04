@@ -1,4 +1,4 @@
-// The dev server's two draft GETs.
+// The dev server's draft endpoints: two GETs and the DELETE decision.
 //
 // They are the only path by which a file on disk becomes world geometry in a
 // running game, so the id handling is the load-bearing part: the id names a
@@ -9,7 +9,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   DRAFT_ID_RE,
+  type DraftFile,
   type DraftReader,
+  draftDeleteDecision,
   draftListResponse,
   draftResponse,
 } from '../src/editor/circuit/draft_endpoints_core';
@@ -27,13 +29,23 @@ import {
 
 const record = (id = 'draft_one'): RealmRacersCircuit => ({ ...GARDEN, id });
 
-/** A reader that REMEMBERS what it was asked for, so a test can assert that a
- *  refused id never reached the file system at all. */
-function reader(files: Record<string, string>): DraftReader & { asked: string[] } {
+/**
+ * A reader that REMEMBERS what it was asked for, so a test can assert that a
+ * refused id never reached the file system at all.
+ *
+ * Every file is stamped with a fixed mtime unless one is given, so the list's
+ * ordering is a property of the values under test and never of when the suite
+ * ran.
+ */
+function reader(
+  files: Record<string, string>,
+  mtimes: Record<string, number> = {},
+): DraftReader & { asked: string[] } {
   const asked: string[] = [];
   return {
     asked,
-    list: () => Object.keys(files),
+    list: (): DraftFile[] =>
+      Object.keys(files).map((name) => ({ name, mtimeMs: mtimes[name] ?? 1_000 })),
     read: (id) => {
       asked.push(id);
       return files[`${id}.ts`] ?? null;
@@ -42,23 +54,43 @@ function reader(files: Record<string, string>): DraftReader & { asked: string[] 
 }
 
 describe('the draft list endpoint', () => {
-  it('answers GET with the saved ids, sorted', () => {
+  it('answers GET with the saved drafts and when each was written', () => {
     const response = draftListResponse(
       'GET',
-      reader({ 'draft_b.ts': '', 'draft_a.ts': '', 'notes.md': '' }),
+      reader(
+        { 'draft_b.ts': '', 'draft_a.ts': '', 'notes.md': '' },
+        { 'draft_b.ts': 4_000, 'draft_a.ts': 9_000 },
+      ),
     );
     expect(response.status).toBe(200);
     expect(response.contentType).toBe('application/json');
-    expect(JSON.parse(response.body)).toEqual({ ids: ['draft_a', 'draft_b'] });
+    // Newest first, which is what the list is FOR: the draft an operator is
+    // reaching for is nearly always the one they were drawing last.
+    expect(JSON.parse(response.body)).toEqual({
+      drafts: [
+        { id: 'draft_a', mtimeMs: 9_000 },
+        { id: 'draft_b', mtimeMs: 4_000 },
+      ],
+    });
+  });
+
+  it('breaks a tie on the id, so two files written together still come back in one order', () => {
+    const same = { 'draft_b.ts': '', 'draft_c.ts': '', 'draft_a.ts': '' };
+    const ids = (
+      JSON.parse(draftListResponse('GET', reader(same)).body) as {
+        drafts: { id: string }[];
+      }
+    ).drafts.map((entry) => entry.id);
+    expect(ids).toEqual(['draft_a', 'draft_b', 'draft_c']);
   });
 
   it('answers an empty draft directory with an empty list, not an error', () => {
-    expect(JSON.parse(draftListResponse('GET', reader({})).body)).toEqual({ ids: [] });
+    expect(JSON.parse(draftListResponse('GET', reader({})).body)).toEqual({ drafts: [] });
   });
 
   it('drops a file whose name is not an id, so nothing unaddressable is offered', () => {
     const response = draftListResponse('GET', reader({ 'Draft_One.ts': '', '..ts': '' }));
-    expect(JSON.parse(response.body)).toEqual({ ids: [] });
+    expect(JSON.parse(response.body)).toEqual({ drafts: [] });
   });
 
   it('refuses every method but GET', () => {
@@ -150,6 +182,65 @@ describe('the one-draft endpoint', () => {
       const fs = reader(files);
       expect(draftResponse(method, '/draft_one', fs).status).toBe(405);
       expect(fs.asked).toEqual([]);
+    }
+  });
+});
+
+describe('the draft delete decision', () => {
+  const files = { 'draft_one.ts': draftFileContents(record()) };
+
+  it('names the id the plugin may unlink, and nothing else', () => {
+    const decision = draftDeleteDecision('DELETE', '/draft_one', reader(files));
+    expect(decision.id).toBe('draft_one');
+    expect(decision.response.status).toBe(200);
+    expect(JSON.parse(decision.response.body)).toEqual({ deleted: 'draft_one' });
+  });
+
+  it('refuses every method but DELETE, without reading', () => {
+    for (const method of ['GET', 'POST', 'PUT', undefined]) {
+      const fs = reader(files);
+      const decision = draftDeleteDecision(method, '/draft_one', fs);
+      expect(decision.id, String(method)).toBeNull();
+      expect(decision.response.status, String(method)).toBe(405);
+      expect(fs.asked, String(method)).toEqual([]);
+    }
+  });
+
+  it('refuses an id that could name a file outside the draft directory, without reading', () => {
+    // The same traversal table the read arm is held to, because the two take the
+    // id off the URL the same way and a delete is the arm where being wrong
+    // costs a file rather than a response.
+    for (const url of [
+      '/../../etc/passwd',
+      '/..',
+      '/../src/main.ts',
+      '/draft_one/../../secret',
+      '/%2e%2e%2fsecret',
+      '/draft_one.ts',
+      '/Draft_One',
+      '/',
+      undefined,
+    ]) {
+      const fs = reader(files);
+      const decision = draftDeleteDecision('DELETE', url, fs);
+      expect(decision.id, String(url)).toBeNull();
+      expect(decision.response.status, String(url)).toBe(400);
+      expect(decision.response.body).toBe('bad draft id');
+      expect(fs.asked, String(url)).toEqual([]);
+    }
+  });
+
+  it('names no id for a draft nobody saved, so a stale row deletes nothing', () => {
+    const decision = draftDeleteDecision('DELETE', '/draft_missing', reader(files));
+    expect(decision.id).toBeNull();
+    expect(decision.response.status).toBe(404);
+  });
+
+  it('never sets a content type on a refusal, so an error is not read as JSON', () => {
+    for (const url of ['/..', '/draft_missing']) {
+      expect(
+        draftDeleteDecision('DELETE', url, reader(files)).response.contentType,
+      ).toBeUndefined();
     }
   });
 });

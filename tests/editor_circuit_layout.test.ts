@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionChord,
+  actionForSelectionShortcut,
   actionForShortcut,
   actionTooltip,
   autoSideTab,
@@ -328,6 +329,41 @@ describe('shortcut matching', () => {
     expect(actionForShortcut({ key: 'c' })).toBeNull();
     expect(actionForShortcut({ key: 'Delete' })).toBeNull();
     expect(actionForShortcut({ key: 'q' })).toBeNull();
+  });
+
+  it('resolves the selection chords, and only when a selection is what is meant', () => {
+    expect(actionForSelectionShortcut({ key: 'r' })).toBe('rotateProp');
+    expect(actionForSelectionShortcut({ key: 'r', shiftKey: true })).toBe('faceRacing');
+    expect(actionForSelectionShortcut({ key: 'd', ctrlKey: true })).toBe('duplicateSelection');
+    expect(actionForSelectionShortcut({ key: 'd', metaKey: true })).toBe('duplicateSelection');
+    expect(actionForSelectionShortcut({ key: 'f' })).toBe('focusSelection');
+    // A bare `d` is not the duplicate: the chord carries the modifier.
+    expect(actionForSelectionShortcut({ key: 'd' })).toBeNull();
+    // And a global chord never comes back out of the selection resolver.
+    expect(actionForSelectionShortcut({ key: 's', ctrlKey: true })).toBeNull();
+  });
+
+  it('keeps focus and the dock fullscreen apart, which differ only by shift', () => {
+    // `f` focuses the selection, `shift+f` blows the dock up. The global
+    // resolver runs first in the page, so the two must not both answer.
+    expect(actionForShortcut({ key: 'f' })).toBeNull();
+    expect(actionForShortcut({ key: 'f', shiftKey: true })).toBe('dockFullscreen');
+    expect(actionForSelectionShortcut({ key: 'f', shiftKey: true })).toBeNull();
+  });
+
+  it('leaves the arrow nudge to the page, and says so with a gesture instead', () => {
+    // A chord row per arrow, doubled for the shifted step, is eight cheatsheet
+    // rows for one gesture; the page matches the keys off `nudgeKeyOf`. What the
+    // table owes is the ONE line an operator reads, and a row with no shortcut
+    // must not be resolvable as one.
+    const nudge = editorAction('nudgeSelection');
+    expect(nudge.shortcut).toBeUndefined();
+    expect(nudge.gesture).toBeTruthy();
+    expect(nudge.scope).toBe('selection');
+    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) {
+      expect(actionForSelectionShortcut({ key }), key).toBeNull();
+      expect(actionForShortcut({ key }), key).toBeNull();
+    }
   });
 
   it('names the space bar, which cannot be written as a chord character', () => {

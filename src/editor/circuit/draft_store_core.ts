@@ -17,6 +17,7 @@
 // Pure and DOM-free: the page hands in the raw string and the clock.
 
 import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
+import { DRAFT_ID_RE } from './draft_endpoints_core';
 import { validateCircuitPayload } from './export_core';
 
 export const DRAFT_STORAGE_KEY = 'woc_circuit_editor_draft';
@@ -97,6 +98,43 @@ export function shouldWarnOnUnload(dirty: boolean, drawn: boolean): boolean {
 /** The line the status bar carries at boot when there is work to come back to. */
 export function resumeOfferText(draft: StoredDraft, nowMs: number): string {
   return `${draft.record.id} ${draftAgeText(draft.savedAtMs, nowMs)} is still here: press Resume to take it back`;
+}
+
+// ---- the drafts on disk ----
+
+/** One row of the Load dialog's draft list. */
+export interface DiskDraftRow {
+  id: string;
+  /** How long ago it was written, in the same words the resume offer uses. */
+  detail: string;
+}
+
+/**
+ * The draft list, as the Load dialog shows it.
+ *
+ * The payload comes off a dev endpoint on the same origin, so this is not a
+ * trust boundary; what it IS is a shape that can go stale, because the endpoint
+ * and the page are edited on different days. Every row is checked rather than
+ * cast: an id that is not an id would end up in a URL the next click builds, and
+ * a missing timestamp would print `NaN min ago` beside a perfectly good draft.
+ *
+ * The order is the ENDPOINT's (newest first) and is not re-sorted here: two
+ * orderings of one list is how the row an operator clicked stops being the row
+ * they meant.
+ */
+export function diskDraftRows(payload: unknown, nowMs: number): DiskDraftRow[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const drafts = (payload as { drafts?: unknown }).drafts;
+  if (!Array.isArray(drafts)) return [];
+  const out: DiskDraftRow[] = [];
+  for (const entry of drafts) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { id, mtimeMs } = entry as { id?: unknown; mtimeMs?: unknown };
+    if (typeof id !== 'string' || !DRAFT_ID_RE.test(id)) continue;
+    const written = typeof mtimeMs === 'number' && Number.isFinite(mtimeMs) ? mtimeMs : 0;
+    out.push({ id, detail: draftAgeText(written, nowMs) });
+  }
+  return out;
 }
 
 // ---- the thumbnail cache ----

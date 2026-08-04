@@ -32,10 +32,17 @@ import {
   realmRacersTrack,
 } from '../../sim/realm_racers_spline';
 import {
+  NORTH_UP_YAW,
+  NUDGE_STEP_BIG_YD,
+  NUDGE_STEP_YD,
+  type NudgeKey,
+  nudgeDelta,
   PLACEMENT_SCALE_MAX,
   PLACEMENT_SCALE_MIN,
+  ROTATE_STEP_RAD,
   rotateStep,
   scaleStep,
+  wrapAngle,
 } from '../placement_transform_core';
 
 /** Which of the record's two placement frames a prop is authored in. */
@@ -220,6 +227,229 @@ export function scaledProp(prop: RallyProp, deltaY: number): RallyProp {
 /** Whether a scale is one the tool will author. */
 export function propScaleInRange(scale: number): boolean {
   return scale >= PLACEMENT_SCALE_MIN && scale <= PLACEMENT_SCALE_MAX;
+}
+
+/** A scale the tool will author, from one a gesture asked for. The same clamp
+ *  and the same two decimals `scaleStep` lands on, so a dragged corner and a
+ *  tapped `+` cannot leave the record in two different shapes. */
+export function clampPropScale(scale: number): number {
+  const clamped = Math.min(PLACEMENT_SCALE_MAX, Math.max(PLACEMENT_SCALE_MIN, scale));
+  return Math.round(clamped * 100) / 100;
+}
+
+// ---- the selected piece's own grips ----
+
+/**
+ * A selected prop's two grips: turn it, and resize it.
+ *
+ * The pond has had handles since the water was placeable and the props never
+ * did, so rotating a bench meant tapping `r` and reading the inspector to find
+ * out where it got to. This is that precedent generalized, and it is the same
+ * three functions: where they sit, which one a pointer is on, and what a drag
+ * to a point leaves behind.
+ */
+export type PropHandle = 'rotate' | 'scale';
+
+export const PROP_HANDLES: readonly PropHandle[] = ['rotate', 'scale'];
+
+/** Yards between the piece's own outline and the rotate ring beyond it, so the
+ *  ring is never sitting on top of the corner grip it shares an axis with. */
+export const PROP_ROTATE_HANDLE_GAP = 2.5;
+
+/** The corner of a footprint, in the piece's own frame: the box's own corner, or
+ *  the point of a circle at 45 degrees, which is the same distance out. */
+function propGripLocal(footprint: RallyPlacedProp['footprint']): RallyPoint {
+  if (footprint.kind === 'circle') {
+    const reach = footprint.r / Math.SQRT2;
+    return { x: reach, z: reach };
+  }
+  return { x: footprint.hw, z: footprint.hd };
+}
+
+/**
+ * Where the two grips sit, circuit-local.
+ *
+ * Both ride the piece's own YAW rather than the footprint's rotation, and the
+ * difference is not academic: a record may carry an explicit collision box with
+ * a rotation of its own, and a ring drawn on THAT would turn the wrong thing
+ * when dragged. The rotate ring on the facing axis doubles as the only mark on
+ * the plan that says which way a piece is pointing.
+ */
+export function propHandlePoints(placed: RallyPlacedProp): Record<PropHandle, RallyPoint> {
+  const cos = Math.cos(placed.yaw);
+  const sin = Math.sin(placed.yaw);
+  const at = (localX: number, localZ: number): RallyPoint => ({
+    x: placed.x + localX * cos - localZ * sin,
+    z: placed.z + localX * sin + localZ * cos,
+  });
+  const grip = propGripLocal(placed.footprint);
+  return {
+    rotate: at(rallyFootprintRadius(placed.footprint) + PROP_ROTATE_HANDLE_GAP, 0),
+    scale: at(grip.x, grip.z),
+  };
+}
+
+/**
+ * The grip a pointer is on, or null. The NEAREST one wins rather than the first
+ * in the list: on a lantern the whole piece is under a yard across, so at a
+ * working zoom the click tolerance reaches both grips at once and "whichever was
+ * declared first" would make one of them unreachable.
+ */
+export function hitTestPropHandle(
+  placed: RallyPlacedProp,
+  x: number,
+  z: number,
+  tolerance: number,
+): PropHandle | null {
+  const points = propHandlePoints(placed);
+  let best: PropHandle | null = null;
+  let bestDistance = tolerance;
+  for (const handle of PROP_HANDLES) {
+    const point = points[handle];
+    const distance = Math.hypot(point.x - x, point.z - z);
+    if (distance <= bestDistance) {
+      bestDistance = distance;
+      best = handle;
+    }
+  }
+  return best;
+}
+
+/**
+ * The piece a grip drag leaves behind.
+ *
+ * Rotation lands on the ROTATE STEP unless `free`, because a row of benches that
+ * each stopped at whatever angle the pointer happened to be at is the thing an
+ * author is trying to avoid; `shift` is the way out for the one piece that wants
+ * an angle nothing else has.
+ *
+ * Scale is read as a RATIO of the reach the grip already had, so it is the same
+ * gesture at every zoom and at every size the piece is already at: the grip
+ * follows the pointer because the piece grew to meet it.
+ */
+export function propWithHandleAt(
+  prop: RallyProp,
+  placed: RallyPlacedProp,
+  handle: PropHandle,
+  x: number,
+  z: number,
+  free = false,
+): RallyProp {
+  const dx = x - placed.x;
+  const dz = z - placed.z;
+  if (handle === 'rotate') {
+    const angle = Math.atan2(dz, dx);
+    return {
+      ...prop,
+      yaw: wrapAngle(free ? angle : Math.round(angle / ROTATE_STEP_RAD) * ROTATE_STEP_RAD),
+    };
+  }
+  const grip = propHandlePoints(placed).scale;
+  const reach = Math.hypot(grip.x - placed.x, grip.z - placed.z);
+  // A footprint with no extent has no ratio to read, and dividing by it would
+  // author a scale of Infinity that the clamp would silently turn into the max.
+  if (reach <= 0) return prop;
+  return { ...prop, scale: clampPropScale(placed.scale * (Math.hypot(dx, dz) / reach)) };
+}
+
+// ---- nudging, and the copy beside it ----
+
+/** The arrow key an event carries, or null. The four are matched by name rather
+ *  than through the action table because they are not a chord: one row saying
+ *  "arrows" is what an operator reads, and four (or eight, with the shifted
+ *  step) would be a cheatsheet nobody finishes. */
+export function nudgeKeyOf(key: string): NudgeKey | null {
+  if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
+    return key;
+  }
+  return null;
+}
+
+/**
+ * How far one arrow key moves a piece ON THE PLAN.
+ *
+ * The plan is a fixed top-down view, so the camera-relative nudge the map editor
+ * shares is read at the one yaw whose screen axes are the plan's own: up is -z
+ * and right is +x. The two step sizes are the map editor's too, which is what
+ * makes a nudge mean the same thing in both tools.
+ */
+export function planNudge(key: NudgeKey, big: boolean): { dx: number; dz: number } {
+  return nudgeDelta(key, NORTH_UP_YAW, big ? NUDGE_STEP_BIG_YD : NUDGE_STEP_YD);
+}
+
+/** How far a duplicate lands from its original, yards. Far enough to read as a
+ *  second piece at a working zoom, near enough that it is obviously the copy of
+ *  the one under the pointer rather than something dropped elsewhere. */
+export const DUPLICATE_OFFSET_YD = 2;
+
+/**
+ * The same piece again, beside itself.
+ *
+ * Through `movedProp`, so the copy is re-framed by the same rule every other
+ * placement is: a track-space bench duplicated along the verge stays track-space
+ * and follows the road, and one duplicated out past the projection envelope
+ * becomes circuit-local where it landed.
+ */
+export function duplicatedProp(
+  circuit: RealmRacersCircuit,
+  prop: RallyProp,
+  placedX: number,
+  placedZ: number,
+  hint?: number,
+): RallyProp {
+  return movedProp(
+    circuit,
+    prop,
+    placedX + DUPLICATE_OFFSET_YD,
+    placedZ + DUPLICATE_OFFSET_YD,
+    hint,
+  );
+}
+
+/** The same pond again, beside itself. Its own seed comes along: a copy that
+ *  reseeded itself would be a differently shaped piece of water, which is not
+ *  what "duplicate" says. */
+export function duplicatedPond(pond: RallyPond): RallyPond {
+  return { ...pond, x: pond.x + DUPLICATE_OFFSET_YD, z: pond.z + DUPLICATE_OFFSET_YD };
+}
+
+/**
+ * Where the view goes to look at a selection, circuit-local, or null.
+ *
+ * A prop and a pond each have one place. A SCATTER does not: it is a side of the
+ * road over a stretch of lap, so what is framed is the middle of that stretch on
+ * the centerline, taken the short way round so a fill straddling the start line
+ * frames the grid rather than the far side of the circuit. A scatter with no
+ * span covers the whole lap and genuinely has no one place; it frames the start
+ * line, which at least is on the circuit.
+ */
+export function selectionFocusPoint(
+  circuit: RealmRacersCircuit,
+  selection: DressingSelection,
+): RallyPoint | null {
+  if (selection.kind === 'pond') {
+    const pond = circuit.ponds?.[selection.index];
+    return pond ? { x: pond.x, z: pond.z } : null;
+  }
+  if (selection.kind === 'prop') {
+    const placed =
+      realmRacersPlacements(circuit).props[
+        placementIndexOf(circuit.props, REALM_RACERS_PROPS, selection.index)
+      ];
+    return placed ? { x: placed.x, z: placed.z } : null;
+  }
+  const scatter = circuit.scatters?.[selection.index];
+  if (!scatter) return null;
+  const track = realmRacersTrack(circuit);
+  const point = track.pointAt(spanMidpoint(scatter.span) * track.length);
+  return { x: point.x - REALM_RACERS_ORIGIN.x, z: point.z - REALM_RACERS_ORIGIN.z };
+}
+
+/** The middle of a lap window, the short way round. */
+function spanMidpoint(span: RallyScatter['span']): number {
+  if (!span) return 0;
+  const length = (((span.s1 - span.s0) % 1) + 1) % 1;
+  return (((span.s0 + length / 2) % 1) + 1) % 1;
 }
 
 /**

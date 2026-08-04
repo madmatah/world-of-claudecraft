@@ -555,8 +555,24 @@
       padding: 2px 0;
       color: var(--muted);
     }
-    .outline-row .n { flex: 1; color: var(--text); }
+    /* The name fills the row and is a BUTTON, so the list is walkable from the
+       keyboard; it sheds the boxed input look every other button here wears. */
+    .outline-row .n {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+      padding: 0;
+      background: none;
+      border: none;
+      color: var(--text);
+    }
+    .outline-row .n:hover { background: none; color: var(--pick); }
+    .outline-row.on .n { color: var(--pick); }
     .outline-row .solid { color: #e0a86f; }
+    .outline-row .outline-del { padding: 1px 3px; }
     .hint-line { color: var(--dim); }
     #inspector button { margin-bottom: 4px; width: 100%; }
     #inspector .d { color: var(--dim); margin-bottom: 5px; }
@@ -602,9 +618,13 @@
       letter-spacing: 0.08em;
       color: #7f8798;
     }
-    #loadList { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    #loadList, #draftList { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
     #loadList button { text-align: left; }
     #loadList .sub { color: var(--dim); }
+    /* The dialog's second heading: the first one carries the margin under it,
+       and a heading following a list needs the air above it too. */
+    dialog div + h3 { margin-top: 2px; }
+    #draftList { max-height: 40vh; overflow-y: auto; }
     #keysBody {
       display: grid;
       grid-template-columns: repeat(2, minmax(210px, 1fr));
@@ -727,6 +747,11 @@
   <dialog id="loadDialog">
     <h3>Load a circuit</h3>
     <div id="loadList"></div>
+    <!-- The scratch drafts the save endpoint has written, filled on every open
+         rather than at boot: another window, a shell, or this page's own Save
+         draft all change tmp/circuit-drafts under the dialog. -->
+    <h3>Drafts on disk</h3>
+    <div id="draftList"></div>
     <button type="button" id="loadCancel">Cancel</button>
   </dialog>
   <dialog id="keysDialog">

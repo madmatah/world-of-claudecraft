@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DRAFT_SAVE_DEBOUNCE_MS,
   DRAFT_STORAGE_KEY,
+  diskDraftRows,
   draftAgeText,
   parseDraft,
   parseThumbnailCache,
@@ -129,6 +130,68 @@ describe('the autosaved draft', () => {
     // A drag commits per pointermove; a synchronous storage write per move is a
     // stutter inside the one gesture that has to stay smooth.
     expect(DRAFT_SAVE_DEBOUNCE_MS).toBeGreaterThanOrEqual(500);
+  });
+});
+
+describe('the drafts on disk, as the Load dialog lists them', () => {
+  const payload = (drafts: unknown) => ({ drafts });
+
+  it('turns the endpoint answer into rows an operator can read', () => {
+    expect(
+      diskDraftRows(
+        payload([
+          { id: 'draft_one', mtimeMs: NOW - 60_000 },
+          { id: 'draft_two', mtimeMs: NOW - 7_200_000 },
+        ]),
+        NOW,
+      ),
+    ).toEqual([
+      { id: 'draft_one', detail: 'from a moment ago' },
+      { id: 'draft_two', detail: 'from 2 hours ago' },
+    ]);
+  });
+
+  it('keeps the ENDPOINT order rather than re-sorting, so the row clicked is the row meant', () => {
+    const rows = diskDraftRows(
+      payload([
+        { id: 'draft_zeta', mtimeMs: NOW },
+        { id: 'draft_alpha', mtimeMs: NOW - 1_000_000 },
+      ]),
+      NOW,
+    );
+    expect(rows.map((row) => row.id)).toEqual(['draft_zeta', 'draft_alpha']);
+  });
+
+  it('drops an entry whose id could not name a file, before it reaches a URL', () => {
+    const rows = diskDraftRows(
+      payload([
+        { id: '../secret', mtimeMs: NOW },
+        { id: 'Draft_One', mtimeMs: NOW },
+        { id: 42, mtimeMs: NOW },
+        { id: 'draft_ok', mtimeMs: NOW },
+      ]),
+      NOW,
+    );
+    expect(rows.map((row) => row.id)).toEqual(['draft_ok']);
+  });
+
+  it('prints a real sentence for an entry with no usable timestamp', () => {
+    // Rather than `NaN min ago` beside a perfectly good draft.
+    const rows = diskDraftRows(
+      payload([{ id: 'draft_one' }, { id: 'draft_two', mtimeMs: 'x' }]),
+      NOW,
+    );
+    expect(rows).toEqual([
+      { id: 'draft_one', detail: 'from an earlier session' },
+      { id: 'draft_two', detail: 'from an earlier session' },
+    ]);
+  });
+
+  it('comes back empty for every shape that is not a draft list', () => {
+    for (const bad of [null, undefined, 42, 'drafts', [], {}, payload(null), payload('one')]) {
+      expect(diskDraftRows(bad, NOW), JSON.stringify(bad) ?? 'undefined').toEqual([]);
+    }
+    expect(diskDraftRows(payload([null, 7, 'x']), NOW)).toEqual([]);
   });
 });
 

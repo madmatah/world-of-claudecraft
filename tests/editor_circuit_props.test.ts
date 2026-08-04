@@ -10,32 +10,44 @@
 import { describe, expect, it } from 'vitest';
 import {
   authorPlacement,
+  clampPropScale,
   convertedProp,
   type DressingRect,
+  DUPLICATE_OFFSET_YD,
+  duplicatedPond,
+  duplicatedProp,
   GHOST_ID_SUFFIX,
   ghostPlacement,
   hitTestPlaced,
   hitTestPondHandle,
   hitTestPonds,
+  hitTestPropHandle,
   movedProp,
   nextSeed,
+  nudgeKeyOf,
   POND_CHOICE,
   POND_MIN_RADIUS,
   POND_ROTATE_HANDLE_GAP,
+  PROP_HANDLES,
+  PROP_ROTATE_HANDLE_GAP,
   PROP_TRACK_SPACE_BAND,
   placedPropIndices,
   placementIndexOf,
+  planNudge,
   pondFromDrag,
   pondHandlePoints,
   pondWithHandleAt,
   propFrameOf,
+  propHandlePoints,
   propPalette,
   propProjectionHint,
+  propWithHandleAt,
   removedAt,
   replacedAt,
   rotatedProp,
   scaledProp,
   scatterFromRect,
+  selectionFocusPoint,
   tangentProp,
   toggledCollide,
 } from '../src/editor/circuit/props_core';
@@ -292,6 +304,249 @@ describe('circuit editor props: transforms', () => {
     // An empty dressing is an ABSENT field, not an empty array: the record's
     // own shape, and what the export omits.
     expect(removedAt([BENCH], 0)).toBeUndefined();
+  });
+});
+
+describe('circuit editor props: the selected piece own grips', () => {
+  const BENCH: RallyProp = { asset: 'bench', at: { x: 20, z: 30 }, yaw: 0 };
+  const { PI } = Math;
+  const STEP = PI / 12;
+
+  it('puts the rotate ring past the outline, on the piece own facing', () => {
+    const placed = placedOn(GARDEN, BENCH);
+    const grips = propHandlePoints(placed);
+    const reach = Math.hypot(grips.rotate.x - placed.x, grips.rotate.z - placed.z);
+    const radius =
+      placed.footprint.kind === 'circle'
+        ? placed.footprint.r
+        : Math.hypot(placed.footprint.hw, placed.footprint.hd);
+    expect(reach).toBeCloseTo(radius + PROP_ROTATE_HANDLE_GAP, 6);
+    // On the facing axis, which is what makes the ring double as the only mark
+    // on the plan saying which way a piece points.
+    expect(Math.atan2(grips.rotate.z - placed.z, grips.rotate.x - placed.x)).toBeCloseTo(0, 6);
+  });
+
+  it('turns both grips with the piece, so a rotated bench keeps its own corner', () => {
+    const placed = placedOn(GARDEN, { ...BENCH, yaw: PI / 2 });
+    const grips = propHandlePoints(placed);
+    expect(Math.atan2(grips.rotate.z - placed.z, grips.rotate.x - placed.x)).toBeCloseTo(PI / 2, 6);
+    // The corner grip is still on the footprint's own corner: the distance out
+    // is unchanged, only the direction turned.
+    const flat = placedOn(GARDEN, BENCH);
+    const flatGrips = propHandlePoints(flat);
+    expect(Math.hypot(grips.scale.x - placed.x, grips.scale.z - placed.z)).toBeCloseTo(
+      Math.hypot(flatGrips.scale.x - flat.x, flatGrips.scale.z - flat.z),
+      6,
+    );
+  });
+
+  it('picks the NEAREST grip, so neither is unreachable on a small piece', () => {
+    const placed = placedOn(GARDEN, { ...BENCH, asset: 'postLantern' });
+    const grips = propHandlePoints(placed);
+    // A tolerance wide enough to reach both at once, which is what a lantern at
+    // a working zoom really is.
+    const wide = 99;
+    expect(hitTestPropHandle(placed, grips.rotate.x, grips.rotate.z, wide)).toBe('rotate');
+    expect(hitTestPropHandle(placed, grips.scale.x, grips.scale.z, wide)).toBe('scale');
+    // Both handles exist to be picked; neither is shadowed by list order.
+    expect([...PROP_HANDLES].sort()).toEqual(['rotate', 'scale']);
+  });
+
+  it('misses when the pointer is outside the tolerance', () => {
+    const placed = placedOn(GARDEN, BENCH);
+    const grips = propHandlePoints(placed);
+    expect(hitTestPropHandle(placed, grips.rotate.x + 5, grips.rotate.z, 1)).toBeNull();
+    expect(hitTestPropHandle(placed, placed.x, placed.z, 0.01)).toBeNull();
+  });
+
+  it('steps a rotate drag to the shared rotation step, and shift lets it free', () => {
+    const placed = placedOn(GARDEN, BENCH);
+    // A pointer just past two steps comes back AT two steps.
+    const angle = 2 * STEP + STEP * 0.3;
+    const at = (a: number) => ({
+      x: placed.x + Math.cos(a) * 10,
+      z: placed.z + Math.sin(a) * 10,
+    });
+    const stepped = propWithHandleAt(BENCH, placed, 'rotate', at(angle).x, at(angle).z);
+    expect(stepped.yaw).toBeCloseTo(2 * STEP, 6);
+    const free = propWithHandleAt(BENCH, placed, 'rotate', at(angle).x, at(angle).z, true);
+    expect(free.yaw).toBeCloseTo(angle, 6);
+  });
+
+  it('wraps a rotation into one turn, so the record never carries a growing angle', () => {
+    const placed = placedOn(GARDEN, BENCH);
+    const behind = propWithHandleAt(BENCH, placed, 'rotate', placed.x - 10, placed.z - 0.0001);
+    expect(behind.yaw).toBeGreaterThanOrEqual(0);
+    expect(behind.yaw).toBeLessThan(2 * PI);
+  });
+
+  it('reads a corner drag as a RATIO, so the grip follows the pointer at any size', () => {
+    const placed = placedOn(GARDEN, BENCH);
+    const grips = propHandlePoints(placed);
+    const reach = Math.hypot(grips.scale.x - placed.x, grips.scale.z - placed.z);
+    /** The grip dragged out along its own axis, `factor` times its reach. */
+    const pull = (factor: number) =>
+      propWithHandleAt(
+        BENCH,
+        placed,
+        'scale',
+        placed.x + (grips.scale.x - placed.x) * factor,
+        placed.z + (grips.scale.z - placed.z) * factor,
+      );
+    expect(pull(2).scale).toBeCloseTo(2, 2);
+    expect(pull(0.5).scale).toBeCloseTo(0.5, 2);
+    expect(reach).toBeGreaterThan(0);
+
+    // And it is scale-invariant: the same gesture on a piece already at 2 lands
+    // on the same place, because the grip moved out with the footprint.
+    const big: RallyProp = { ...BENCH, scale: 2 };
+    const placedBig = placedOn(GARDEN, big);
+    const bigGrips = propHandlePoints(placedBig);
+    const doubled = propWithHandleAt(
+      big,
+      placedBig,
+      'scale',
+      placedBig.x + (bigGrips.scale.x - placedBig.x) * 2,
+      placedBig.z + (bigGrips.scale.z - placedBig.z) * 2,
+    );
+    expect(doubled.scale).toBeCloseTo(4, 2);
+  });
+
+  it('clamps a corner drag to the bounds the inspector and the keypress share', () => {
+    const placed = placedOn(GARDEN, BENCH);
+    expect(propWithHandleAt(BENCH, placed, 'scale', placed.x + 5_000, placed.z).scale).toBe(5);
+    expect(propWithHandleAt(BENCH, placed, 'scale', placed.x, placed.z).scale).toBe(0.2);
+    // Two decimals, the same tidying a `+` keypress lands on, so a dragged
+    // corner and a tapped key cannot leave the record in two different shapes.
+    expect(clampPropScale(1.2345)).toBe(1.23);
+    expect(clampPropScale(-4)).toBe(0.2);
+    expect(clampPropScale(400)).toBe(5);
+  });
+
+  it('leaves every other field of the piece alone', () => {
+    const solid: RallyProp = { asset: 'bench', at: { s: 0.25, offset: 9 }, scale: 1.4 };
+    const placed = placedOn(GARDEN, solid);
+    const turned = propWithHandleAt(solid, placed, 'rotate', placed.x + 3, placed.z + 3);
+    expect(turned.at).toEqual(solid.at);
+    expect(turned.scale).toBe(1.4);
+    const sized = propWithHandleAt(solid, placed, 'scale', placed.x + 3, placed.z + 3);
+    expect(sized.at).toEqual(solid.at);
+    // Nothing here mutates its input; the page's undo stack is the old value.
+    expect(solid.scale).toBe(1.4);
+  });
+});
+
+describe('circuit editor props: nudging, and the copy beside it', () => {
+  const BENCH: RallyProp = { asset: 'bench', at: { x: 20, z: 30 } };
+
+  it('matches the four arrow keys and nothing else', () => {
+    expect(nudgeKeyOf('ArrowUp')).toBe('ArrowUp');
+    expect(nudgeKeyOf('ArrowDown')).toBe('ArrowDown');
+    expect(nudgeKeyOf('ArrowLeft')).toBe('ArrowLeft');
+    expect(nudgeKeyOf('ArrowRight')).toBe('ArrowRight');
+    for (const key of ['arrowup', 'Up', 'w', 'Enter', ' ', '']) {
+      expect(nudgeKeyOf(key), key).toBeNull();
+    }
+  });
+
+  it('reads the plan the way the plan is drawn: up is -z, right is +x', () => {
+    expect(planNudge('ArrowUp', false).dz).toBeCloseTo(-0.5, 6);
+    expect(planNudge('ArrowUp', false).dx).toBeCloseTo(0, 6);
+    expect(planNudge('ArrowDown', false).dz).toBeCloseTo(0.5, 6);
+    expect(planNudge('ArrowRight', false).dx).toBeCloseTo(0.5, 6);
+    expect(planNudge('ArrowLeft', false).dx).toBeCloseTo(-0.5, 6);
+    expect(planNudge('ArrowRight', false).dz).toBeCloseTo(0, 6);
+  });
+
+  it('takes a bigger step with shift held', () => {
+    expect(planNudge('ArrowRight', true).dx).toBeCloseTo(2, 6);
+    expect(planNudge('ArrowUp', true).dz).toBeCloseTo(-2, 6);
+  });
+
+  it('duplicates a piece beside itself, through the one placement rule', () => {
+    const placed = placedOn(GARDEN, BENCH);
+    const copy = duplicatedProp(GARDEN, BENCH, placed.x, placed.z);
+    const copyPlaced = placedOn(GARDEN, copy);
+    expect(copyPlaced.x).toBeCloseTo(placed.x + DUPLICATE_OFFSET_YD, 4);
+    expect(copyPlaced.z).toBeCloseTo(placed.z + DUPLICATE_OFFSET_YD, 4);
+    expect(copy.asset).toBe('bench');
+  });
+
+  it('keeps a trackside copy in track-space, so it follows the road too', () => {
+    const roadside: RallyProp = { asset: 'postLantern', at: { s: 0.4, offset: 11 } };
+    const placed = placedOn(GARDEN, roadside);
+    const copy = duplicatedProp(
+      GARDEN,
+      roadside,
+      placed.x,
+      placed.z,
+      propProjectionHint(GARDEN, roadside),
+    );
+    expect(propFrameOf(copy)).toBe('track');
+    // A copy that landed on top of the original is a duplicate nobody can see.
+    const copyPlaced = placedOn(GARDEN, copy);
+    expect(Math.hypot(copyPlaced.x - placed.x, copyPlaced.z - placed.z)).toBeGreaterThan(1);
+  });
+
+  it('duplicates a pond with its own seed, so the copy is the same water', () => {
+    const pond = { x: 4, z: 6, rx: 10, rz: 7, seed: 33, rot: 0.4 };
+    const copy = duplicatedPond(pond);
+    expect(copy).toEqual({ ...pond, x: 4 + DUPLICATE_OFFSET_YD, z: 6 + DUPLICATE_OFFSET_YD });
+  });
+});
+
+describe('circuit editor props: where the view goes to look at a selection', () => {
+  it('frames a prop where the RESOLVER put it, not where the record says', () => {
+    const roadside: RallyProp = { asset: 'bench', at: { s: 0.2, offset: 12 } };
+    const circuit = withProps(GARDEN, [roadside]);
+    const placed = realmRacersPlacements(circuit).props[0];
+    expect(selectionFocusPoint(circuit, { kind: 'prop', index: 0 })).toEqual({
+      x: placed.x,
+      z: placed.z,
+    });
+  });
+
+  it('frames a pond on its own centre', () => {
+    const circuit = {
+      ...GARDEN,
+      id: `draft_focus_${drafts++}`,
+      ponds: [{ x: 12, z: -8, rx: 5, rz: 4 }],
+    };
+    expect(selectionFocusPoint(circuit, { kind: 'pond', index: 0 })).toEqual({ x: 12, z: -8 });
+  });
+
+  it('frames a scatter at the middle of the stretch it fills', () => {
+    const circuit: RealmRacersCircuit = {
+      ...GARDEN,
+      id: `draft_focus_${drafts++}`,
+      scatters: [
+        { asset: 'shrub', zone: 'infield', span: { s0: 0.2, s1: 0.4 }, spacing: 6, seed: 1 },
+      ],
+    };
+    const point = selectionFocusPoint(circuit, { kind: 'scatter', index: 0 });
+    const middle = pointAt(circuit, 0.3, 0);
+    expect(point?.x).toBeCloseTo(middle.x, 3);
+    expect(point?.z).toBeCloseTo(middle.z, 3);
+  });
+
+  it('takes a wrapping span the SHORT way, so a fill over the grid frames the grid', () => {
+    const circuit: RealmRacersCircuit = {
+      ...GARDEN,
+      id: `draft_focus_${drafts++}`,
+      scatters: [
+        { asset: 'shrub', zone: 'infield', span: { s0: 0.9, s1: 0.1 }, spacing: 6, seed: 1 },
+      ],
+    };
+    const point = selectionFocusPoint(circuit, { kind: 'scatter', index: 0 });
+    const grid = pointAt(circuit, 0, 0);
+    expect(point?.x).toBeCloseTo(grid.x, 3);
+    expect(point?.z).toBeCloseTo(grid.z, 3);
+  });
+
+  it('has nothing to frame for an entry that is not there', () => {
+    expect(selectionFocusPoint(GARDEN, { kind: 'prop', index: 999 })).toBeNull();
+    expect(selectionFocusPoint(GARDEN, { kind: 'pond', index: 999 })).toBeNull();
+    expect(selectionFocusPoint(GARDEN, { kind: 'scatter', index: 999 })).toBeNull();
   });
 });
 
