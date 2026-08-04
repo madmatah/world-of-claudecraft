@@ -15,6 +15,10 @@
 // Dev tool: English-only, absent from every production build. See CLAUDE.md.
 
 import {
+  REALM_RACERS_PICKUP_COLOR_CSS,
+  REALM_RACERS_PICKUP_FILL_CSS,
+} from '../../render/realm_racers_pickups_core';
+import {
   type RallyProp,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_PRACTICE_CIRCUIT,
@@ -28,6 +32,10 @@ import {
   realmRacersCircuitMetrics,
 } from '../../sim/realm_racers_circuit_metrics';
 import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
+import {
+  REALM_RACERS_PICKUP_BOX_HALF,
+  realmRacersPickupBoxes,
+} from '../../sim/realm_racers_pickups';
 import { type RallyPlacedProp, realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
 import {
   type RallyTrackModel,
@@ -98,6 +106,12 @@ import {
 } from './panel_library';
 import { type OutlinerHost, OutlinerPanel } from './panel_outliner';
 import { MetricsDrawerPanel, ModeReadoutPanel } from './panel_readout';
+import {
+  addPickupRow,
+  pickupRowAtPoint,
+  pickupRowFractionAt,
+  removedPickupRow,
+} from './pickup_rows_core';
 import {
   alongRoadProps,
   lapPositionAt,
@@ -231,6 +245,15 @@ let railMode: RailModeId = 'shape';
 let redrawing = false;
 const tool = (): CircuitTool => toolFor(railMode, drawn, redrawing);
 let selection: Selection = null;
+/**
+ * The pickup row the RACE tool has selected, or null.
+ *
+ * A state of its own rather than a third arm of `Selection` or of the dressing
+ * selection: a row is not a control point and it is not a piece of scenery, and
+ * the two chords it answers (delete, and the click that picks it) are the whole
+ * of what it does.
+ */
+let pickupSelection: number | null = null;
 /** The raw gesture, kept after the fit so the operator can see how far the
  *  closed centripetal Catmull-Rom sits off the line they drew. */
 let stroke: RallyPoint[] = [];
@@ -467,9 +490,24 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   if (drawn) preview?.show(record);
 }
 
-function restore(snapshot: EditSnapshot): void {
+/**
+ * Drop every selection the tools can hold: a control point, a dressing piece,
+ * a pickup row.
+ *
+ * One helper rather than three assignments repeated at each site, because they
+ * are one decision ("nothing is selected any more") and the sites that forgot
+ * the newest of the three would be pointing an index at a record that no longer
+ * has it. `disarmTool` keeps its own pair on purpose: `esc` drops what the tools
+ * ARM, and the control-point selection is not one of those.
+ */
+function clearSelections(): void {
   selection = null;
   dressing = null;
+  pickupSelection = null;
+}
+
+function restore(snapshot: EditSnapshot): void {
+  clearSelections();
   drawn = snapshot.drawn;
   commit(snapshot.record, false);
   form.sync();
@@ -695,6 +733,30 @@ function drawGates(): void {
     ctx.beginPath();
     ctx.arc(screenX(p.x), screenY(p.z), Math.max(2, 1.7 * view.scale), 0, Math.PI * 2);
     ctx.fill();
+  }
+}
+
+/**
+ * The pickup rows: the four boxes each one resolves to, drawn where the sim
+ * says they stand.
+ *
+ * Straight off `realmRacersPickupBoxes`, never from arithmetic here, for the
+ * same reason the dressing draws the resolver's own output: a square on this
+ * canvas has to be a box a machine can drive into.
+ */
+function drawPickupRows(): void {
+  const half = REALM_RACERS_PICKUP_BOX_HALF;
+  for (const box of realmRacersPickupBoxes(record)) {
+    const chosen = pickupSelection === box.row;
+    const p = local(box);
+    const size = Math.max(3, half * 2 * view.scale);
+    const x = screenX(p.x) - size / 2;
+    const y = screenY(p.z) - size / 2;
+    ctx.fillStyle = chosen ? PICK_FILL : REALM_RACERS_PICKUP_FILL_CSS;
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeStyle = chosen ? planPalette.pick : REALM_RACERS_PICKUP_COLOR_CSS;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, size, size);
   }
 }
 
@@ -990,10 +1052,64 @@ function draw(): void {
   strokeRect(record.perimeter.halfX, record.perimeter.halfZ, '#55607a');
   drawSurfaces();
   drawGates();
+  drawPickupRows();
   drawStroke();
   if (tool() === 'props') drawDressing();
   else drawHandles();
   drawProblemMarkers();
+}
+
+// ---- the race furniture gesture ----
+
+/**
+ * One click in the RACE tool: pick up the row under the pointer, or lay a new
+ * one across the road there.
+ *
+ * Selecting BEFORE placing, and that order is the props tool's lesson applied
+ * one tool over: a click that missed the row it meant must not silently author a
+ * second one a few yards from it. The two refusals (off the road, too near an
+ * existing row) are reported by name, because a gesture that does nothing and
+ * says nothing reads as a broken tool.
+ */
+function startRaceFurnitureGesture(raw: RallyPoint): void {
+  if (!drawn) return;
+  const hit = pickupRowAtPoint(record, raw.x, raw.z, dressingTolerance());
+  if (hit >= 0) {
+    pickupSelection = hit;
+    setStatus(`pickup row ${hit} selected: del removes it`, '');
+    requestRedraw();
+    return;
+  }
+  const fraction = pickupRowFractionAt(record, raw.x, raw.z);
+  if (fraction === null) {
+    setStatus('a pickup row is laid ON the road: click inside the road edge', 'err');
+    return;
+  }
+  const added = addPickupRow(record.pickupRows ?? [], fraction);
+  if (added.outcome === 'tooClose') {
+    pickupSelection = added.index;
+    setStatus(`there is already a pickup row here (row ${added.index})`, 'err');
+    requestRedraw();
+    return;
+  }
+  if (added.outcome === 'full') {
+    setStatus('this circuit already carries every pickup row it may', 'err');
+    return;
+  }
+  commit({ ...record, pickupRows: added.rows });
+  pickupSelection = added.index;
+  setStatus(`pickup row at ${(fraction * track.length).toFixed(0)} yd`, 'ok');
+  requestRedraw();
+}
+
+/** Removes the selected row, and drops the selection with it: every index after
+ *  it shifts, so a selection that survived would point at its neighbour. */
+function deletePickupRow(): void {
+  if (pickupSelection === null) return;
+  commit({ ...record, pickupRows: removedPickupRow(record.pickupRows ?? [], pickupSelection) });
+  pickupSelection = null;
+  setStatus('pickup row removed', 'ok');
+  requestRedraw();
 }
 
 // ---- the dressing gestures ----
@@ -1586,8 +1702,9 @@ function setRailMode(next: RailModeId): void {
   // another tool would eat the operator's next stroke.
   if (next !== 'shape') redrawing = false;
   railMode = next;
-  selection = null;
-  dressing = null;
+  // A selection belongs to the tool that made it: a row selected in RACE is not
+  // something the width brush can act on.
+  clearSelections();
   sideChoice = null;
   shell.setMode(railMode, drawn, redrawing, placement.mode);
   // Leaving props disarms: an arm that survived a trip through the width tool
@@ -1684,7 +1801,10 @@ canvas.addEventListener('pointerdown', (ev) => {
   }
   const raw = toLocal(ev);
   const active = tool();
-  if (active === 'race') return;
+  if (active === 'race') {
+    startRaceFurnitureGesture(raw);
+    return;
+  }
   if (active === 'draw') {
     drawing = true;
     stroke = [raw];
@@ -1738,7 +1858,7 @@ canvas.addEventListener('pointerdown', (ev) => {
 function reportCursor(point: RallyPoint): void {
   const parts = [`x ${point.x.toFixed(1)}`, `z ${point.z.toFixed(1)}`];
   const active = tool();
-  if (drawn && (active === 'width' || active === 'props')) {
+  if (drawn && (active === 'width' || active === 'props' || active === 'race')) {
     const projection = track.project(
       point.x + REALM_RACERS_ORIGIN.x,
       point.z + REALM_RACERS_ORIGIN.z,
@@ -1873,8 +1993,7 @@ function focusProblem(problem: RealmRacersCircuitProblem): void {
 
 function newBlank(): void {
   stroke = [];
-  selection = null;
-  dressing = null;
+  clearSelections();
   // Committed BEFORE the flag moves: `commit` snapshots the state it is
   // leaving, and clearing the flag first made that snapshot say the canvas was
   // already blank, so undoing a discard restored nothing.
@@ -1890,8 +2009,7 @@ function newBlank(): void {
 /** Starting from something: the starter oval, or any circuit the game ships. */
 function loadCircuit(circuit: RealmRacersCircuit, label: string): void {
   stroke = [];
-  selection = null;
-  dressing = null;
+  clearSelections();
   // A shipped record is loaded under a DRAFT id, so editing it can never hand
   // the memoized derivation of a live circuit a shape the game did not author.
   // Committed before the flag moves, for the same reason as `newBlank`.
@@ -1992,6 +2110,7 @@ function runAction(id: ActionId): void {
     case 'disarmTool':
       redrawing = false;
       dressing = null;
+      pickupSelection = null;
       library.arm(null);
       applySideTab();
       shell.setMode(railMode, drawn, false, placement.mode);
@@ -2418,6 +2537,15 @@ window.addEventListener('keydown', (ev) => {
       if (!dressing) return;
       ev.preventDefault();
       runSelectionAction(selected);
+      return;
+    }
+    // In RACE the delete chord acts on the pickup row, which is the only thing
+    // that tool selects.
+    if (tool() === 'race') {
+      if (selected === 'deleteSelection' && pickupSelection !== null) {
+        ev.preventDefault();
+        deletePickupRow();
+      }
       return;
     }
     // Outside props the only selection chord that means anything is delete, on a

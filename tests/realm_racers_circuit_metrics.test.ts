@@ -11,7 +11,10 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
+  REALM_RACERS_CIRCUIT_LIST,
+} from '../src/sim/content/realm_racers_circuits';
 import {
   REALM_RACERS_MIN_STRETCH_SEPARATION,
   realmRacersCircuitErrors,
@@ -27,6 +30,12 @@ import {
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_ORIGIN,
 } from '../src/sim/realm_racers_layout';
+import {
+  REALM_RACERS_PICKUP_BOX_HALF,
+  REALM_RACERS_PICKUP_REACH,
+  realmRacersPickupBoxes,
+  realmRacersPickupLaneGap,
+} from '../src/sim/realm_racers_pickups';
 import { rallyFootprintRadius, realmRacersPlacements } from '../src/sim/realm_racers_props_resolve';
 import {
   REALM_RACERS_PROJECTION_ENVELOPE,
@@ -524,4 +533,107 @@ describe('where one placed piece stands', () => {
       ),
     ).toBe(false);
   });
+});
+
+describe('Realm Racers circuit metrics: the pickup rows', () => {
+  // A row is DERIVED from the road at its own lap position, so the only thing
+  // it can get wrong is not fitting on the road it was derived from. The ring
+  // fixtures are what make that reachable: a circle's width is one number, so
+  // the check has a road narrow enough to fail and a road wide enough to pass
+  // with nothing else about the two circuits different.
+  const rowed = (id: string, halfWidth: number): RealmRacersCircuit =>
+    draft(id, ring(60), halfWidth, { pickupRows: [{ s: 0.25 }] });
+
+  it('counts the authored rows rather than the boxes they resolve to', () => {
+    const metrics = realmRacersCircuitMetrics(rowed('metrics_pickup_count', 10));
+    expect(metrics.pickupRowCount).toBe(1);
+    expect(
+      realmRacersCircuitMetrics(draft('metrics_pickup_none', ring(60), 10)).pickupRowCount,
+    ).toBe(0);
+  });
+
+  it('passes a row the road has room for', () => {
+    expect(codesOf(rowed('metrics_pickup_wide', 10))).not.toContain('pickup_row_off_road');
+  });
+
+  it('fails a row on a road too narrow to carry it', () => {
+    // At a 2 yard half-width the outermost box sits 1.6 yd off the centerline
+    // and is 0.6 yd across, so it reaches past the road edge: the row would
+    // stand where a machine holding the racing line does not go.
+    const circuit = rowed('metrics_pickup_narrow', 2);
+    const problems = realmRacersCircuitMetrics(circuit).problems.filter(
+      (problem) => problem.code === 'pickup_row_off_road',
+    );
+    // ONE problem, for a row of four boxes: the row is what is authored, and
+    // four callouts on one lap position is one unreadable callout.
+    expect(problems).toHaveLength(1);
+    expect(problems[0].severity).toBe('error');
+    expect(problems[0].limit).toBeCloseTo(2, 6);
+    // The VALUE is the worst corner's own reach, recomputed here off the
+    // resolver rather than copied off the readout: without this the assertion
+    // above would pass for a rule that reported the box CENTRE (1.6), which is
+    // a number that never fails on any road the tool can author.
+    const track = realmRacersTrack(circuit);
+    const worst = Math.max(
+      ...realmRacersPickupBoxes(circuit).flatMap((box) => {
+        const tx = Math.sin(box.yaw);
+        const tz = Math.cos(box.yaw);
+        const half = REALM_RACERS_PICKUP_BOX_HALF;
+        return [
+          [1, 1],
+          [1, -1],
+          [-1, 1],
+          [-1, -1],
+        ].map(([along, across]) =>
+          Math.abs(
+            track.project(
+              box.x + tx * half * along - tz * half * across,
+              box.z + tz * half * along + tx * half * across,
+            ).lateral,
+          ),
+        );
+      }),
+    );
+    expect(worst).toBeGreaterThan(1.6);
+    expect(problems[0].value).toBeCloseTo(worst, 6);
+    // Located, so the plan can pin a callout on the row rather than on the loop.
+    expect(problems[0].s).toBeGreaterThan(0);
+  });
+
+  it('says nothing about a circuit that authors no rows at all', () => {
+    const bare = codesOf(draft('metrics_pickup_bare', ring(60), 2));
+    expect(bare).not.toContain('pickup_row_off_road');
+    expect(bare).not.toContain('pickup_row_lanes_overlap');
+  });
+
+  it('warns where a row is narrow enough that its own boxes overlap', () => {
+    // A WARNING rather than an error, and it fires on shipped content: what it
+    // says is that a pass down the middle of two boxes is inside both, which
+    // the take rule resolves (nearest, lowest index) but the operator should
+    // see. The roomy ring is the other arm, so the check is not vacuous.
+    const tight = realmRacersCircuitMetrics(rowed('metrics_pickup_tight', 8)).problems.filter(
+      (problem) => problem.code === 'pickup_row_lanes_overlap',
+    );
+    expect(tight).toHaveLength(1);
+    expect(tight[0].severity).toBe('warning');
+    expect(tight[0].value).toBeCloseTo(realmRacersPickupLaneGap(8) / 2, 6);
+    expect(tight[0].limit).toBe(REALM_RACERS_PICKUP_REACH);
+    expect(tight[0].value).toBeLessThan(tight[0].limit);
+    expect(codesOf(rowed('metrics_pickup_roomy', 12))).not.toContain('pickup_row_lanes_overlap');
+  });
+
+  it.each(REALM_RACERS_CIRCUIT_LIST.map((circuit) => [circuit.id, circuit] as const))(
+    '%s authors pickup rows and the readout accepts every one of them',
+    (_id, circuit) => {
+      // The content criterion, self-enforcing: a circuit shipped without rows is
+      // a circuit whose races have no ammunition on them, and nothing else in
+      // the tree would say so.
+      expect(circuit.pickupRows?.length ?? 0).toBeGreaterThan(0);
+      const metrics = realmRacersCircuitMetrics(circuit);
+      expect(metrics.pickupRowCount).toBe(circuit.pickupRows?.length ?? 0);
+      expect(metrics.problems.filter((problem) => problem.code === 'pickup_row_off_road')).toEqual(
+        [],
+      );
+    },
+  );
 });

@@ -38,7 +38,9 @@ import { type ClientSession, GameServer } from '../server/game';
 import { ClientWorld } from '../src/net/online';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
+import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { bareClient } from './helpers/bare_client';
 
 setActiveWorldContent({
   ...BUILTIN_WORLD,
@@ -265,5 +267,48 @@ describe('Realm Racers online parity', () => {
     expect(events(client, 'realmRacersReset')).toHaveLength(1);
     expect(selfFields(client, 'rr').at(-1)).toMatchObject({ match: { resetLocked: true } });
     expect(selfFields(client, 'drv').at(-1)).toMatchObject({ lk: 1 });
+  });
+
+  it('mirrors the taken pickup boxes onto the online client', () => {
+    const server = new GameServer();
+    const client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+    advance(server);
+    const match = server.sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    match.phase = 'racing';
+    advance(server);
+    expect(selfFields(client, 'rr').at(-1)).toMatchObject({ match: { pickupsTaken: [] } });
+
+    // Onto a box of the second row, on this practice lane's own copy of the
+    // circuit. Taking one is a consequence of POSITION, so there is no command
+    // to send: the server decides it inside the tick.
+    const box = realmRacersPickupBoxes(GARDEN_CIRCUIT)[4];
+    const racer = server.sim.entities.get(session.pid);
+    const progress = match.progress.get(session.pid);
+    if (!racer || !progress) throw new Error('missing racer');
+    racer.pos.x = match.origin.x + box.x;
+    racer.pos.z = match.origin.z + box.z;
+    racer.prevPos = { ...racer.pos };
+    const projection = realmRacersTrack(GARDEN_CIRCUIT).project(box.x, box.z);
+    progress.lastS = projection.s;
+    progress.trackIndex = projection.index;
+    advance(server);
+
+    const mirrored = selfFields(client, 'rr').at(-1) as {
+      match: { pickupsTaken: number[] };
+    };
+    expect(mirrored.match.pickupsTaken).toContain(4);
+    // And the mirror really decodes it: the offline Sim and the online
+    // ClientWorld hand presentation the same field, which is what the boxes'
+    // renderer reads.
+    const world = bareClient(session.pid);
+    const snap = client.sent.filter((frame) => frame.t === 'snap').at(-1);
+    (world as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(snap);
+    expect(world.realmRacersInfo.match?.pickupsTaken).toEqual(
+      server.sim.realmRacersInfoFor(session.pid).match?.pickupsTaken,
+    );
+    expect(world.realmRacersInfo.match?.pickupsTaken).toContain(4);
   });
 });

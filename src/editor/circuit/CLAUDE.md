@@ -300,7 +300,20 @@ is recoverable.
 - **The rail has four entries, and SHAPE is one intent over two gestures.** A
   blank canvas is drawn on, a drawn one is edited by its handles, and which of
   the two the operator gets was never a choice worth a button (`toolFor`). RACE
-  is not a canvas tool: its "options" are the enclosure and race forms.
+  became a canvas tool the day the circuit had furniture worth placing: its
+  forms are still the panel, and its one gesture is laying a PICKUP ROW. A click
+  on the road authors one at that lap fraction (the lateral is thrown away: a row
+  spans the road, so where across it the click landed decides nothing), a click
+  on a row selects it and `del` removes it. Selecting comes BEFORE placing, which
+  is the props tool's lesson one tool over: a click that missed the row it meant
+  must not silently author a second one beside it. Both refusals (off the road,
+  on top of an existing row) are reported by name. Its boundary is the ROAD EDGE,
+  not the garden edge every DRESSING placement is judged against, and the two
+  questions are why: the dressing asks "may this piece stand here", whose answer
+  is the whole racing surface, and this asks "did the operator point at the
+  road", whose answer is the road. It also has to be the road because that is
+  what the readout measures a row against (`pickup_row_off_road`) and what the
+  status line says.
 - **One action table, four surfaces.** `layout_core.ts` carries every action's
   label, detail, icon, chord and menu, and the menu bar, the rail, the status-bar
   chord hints and the `?` cheatsheet all render THAT. Four hand-kept lists of the
@@ -487,6 +500,7 @@ is recoverable.
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
 | `library_core.ts` | what the library OFFERS: the category chips (theme first and by default), what a search matches, and what an empty grid says |
+| `pickup_rows_core.ts` | the RACE tool's one canvas gesture: which lap fraction a click on the road means, which row a click landed on, and what adding or removing one does to the list. Where the BOXES end up is not decided here: `src/sim/realm_racers_pickups.ts` resolves a row, and the plan draws what it returns |
 | `placement_core.ts` | what the GESTURE meant: which snap a drop takes, whether the readout will have it, and what a drag along the road lays down |
 | `thumbnail_core.ts` | where the camera stands to photograph one catalog piece: one pose for every tile, framed on the axis that binds |
 | `draft_store_core.ts` | what survives a reload: the autosaved draft (versioned, validated, offered), the drafts on disk as the Load dialog lists them, and the tile cache |

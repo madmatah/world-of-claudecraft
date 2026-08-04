@@ -51,6 +51,7 @@ import {
   realmRacersGrassTiles,
   realmRacersGrassTint,
 } from './realm_racers_grass_core';
+import { buildRealmRacersPickups } from './realm_racers_pickups';
 import { REALM_RACERS_PROP_URLS, REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import {
   type RallyCircuitTheme,
@@ -850,6 +851,11 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   // seeded fills, from the one resolver the collision set reads too ---
   const breathingProps = buildDressingProps(circuit, group);
 
+  // --- the pickup boxes, under THIS circuit's group so they inherit the lane
+  // transform and the "not my lane" hide the view already resolves ---
+  const pickups = buildRealmRacersPickups(circuit);
+  group.add(pickups.group);
+
   // --- the perimeter, so the circuit sits in a walled garden ---
   const perimeter = rallyPerimeterPieces(circuit);
   const wallScale = theme.perimeter.scale;
@@ -904,6 +910,10 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
       // The fountain's tiny breath is cosmetic and frame-time based.
       const breath = Math.sin(time * 1.7) * 0.006;
       for (const prop of breathingProps) prop.group.scale.setScalar(prop.scale + breath);
+      // The boxes: only ever ticked on the lane the viewer is standing on, and
+      // only against a race on THIS circuit. A match on another circuit is
+      // another lane's, so its taken set says nothing about these boxes.
+      pickups.update(time, match?.circuitId === circuit.id ? match : null);
     },
   };
 }

@@ -17,6 +17,7 @@
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
 import {
+  type RallyPickupRow,
   type RallyPond,
   type RallyProp,
   type RallyPropCollide,
@@ -27,6 +28,7 @@ import {
 } from '../../sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
+import { MAX_PICKUP_ROWS } from './pickup_rows_core';
 
 /** Yards, to a tenth: finer than an operator can aim and finer than the
  *  spline's own one-yard resample can show. */
@@ -65,6 +67,9 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
     ...(circuit.props ? { props: circuit.props.map(roundProp) } : {}),
     ...(circuit.scatters ? { scatters: circuit.scatters.map(roundScatter) } : {}),
     ...(circuit.ponds ? { ponds: circuit.ponds.map(roundPond) } : {}),
+    ...(circuit.pickupRows
+      ? { pickupRows: circuit.pickupRows.map((row) => ({ s: round(row.s, FRACTION_PLACES) })) }
+      : {}),
   };
 }
 
@@ -213,6 +218,14 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
   if (c.scatters) {
     lines.push('  scatters: [');
     for (const scatter of c.scatters) lines.push(`    ${scatterLiteral(scatter)},`);
+    lines.push('  ],');
+  }
+  // The race furniture, after the dressing and before the race numbers: a row is
+  // a placement on the circuit, but it is one the RACE reads rather than one the
+  // garden wears.
+  if (c.pickupRows) {
+    lines.push('  pickupRows: [');
+    for (const row of c.pickupRows) lines.push(`    { s: ${row.s} },`);
     lines.push('  ],');
   }
   lines.push(
@@ -401,6 +414,27 @@ function readPonds(raw: unknown): RallyPond[] | null {
 }
 
 /**
+ * The pickup rows off the wire: lap fractions, in range, and no more of them
+ * than the tool can lay.
+ *
+ * The ceiling is the TOOL's own (`MAX_PICKUP_ROWS`), imported rather than
+ * re-typed: a validator with a looser ceiling than the gesture accepts a draft
+ * the editor can neither have produced nor go on editing, which is a shape only
+ * a hand-written payload can reach and exactly the shape this runs before a
+ * write for.
+ */
+function readPickupRows(raw: unknown): RallyPickupRow[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_PICKUP_ROWS) return null;
+  const out: RallyPickupRow[] = [];
+  for (const item of raw) {
+    const row = item as Record<string, unknown>;
+    if (!inRange(row.s, 0, 1)) return null;
+    out.push({ s: row.s });
+  }
+  return out;
+}
+
+/**
  * Whether a payload is a circuit at all, and the normalized record if it is.
  *
  * Run by the dev-server save endpoint BEFORE it writes anything, on the
@@ -440,6 +474,8 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   if (c.scatters !== undefined && !scatters) return null;
   const ponds = c.ponds === undefined ? undefined : readPonds(c.ponds);
   if (c.ponds !== undefined && !ponds) return null;
+  const pickupRows = c.pickupRows === undefined ? undefined : readPickupRows(c.pickupRows);
+  if (c.pickupRows !== undefined && !pickupRows) return null;
 
   const basin = c.basin as Record<string, unknown> | undefined;
   // Water is optional, and required exactly where a pond is placed: the record's
@@ -490,6 +526,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     ...(props ? { props } : {}),
     ...(scatters ? { scatters } : {}),
     ...(ponds ? { ponds } : {}),
+    ...(pickupRows ? { pickupRows } : {}),
     regionHalfX: c.regionHalfX,
     regionHalfZ: c.regionHalfZ,
     perimeter: {

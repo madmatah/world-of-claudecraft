@@ -107,6 +107,10 @@ export function readoutSection(host: PanelHost, section: ReadoutSection): HTMLEl
       );
       row(table, 'width bands', String(record.widthBands.length));
       row(table, 'recovery anchors', String(realmRacersGates(record).length));
+      // Beside the anchors rather than with the dressing: both are race
+      // furniture the ROAD decides the shape of, and the width the operator is
+      // painting here is what a row spreads over.
+      row(table, 'pickup rows', String(metrics.pickupRowCount));
       break;
     }
     case 'dressing': {

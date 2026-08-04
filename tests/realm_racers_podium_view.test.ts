@@ -48,6 +48,7 @@ function match(over: Partial<Match> = {}, standings?: Racer[]): Match {
     wrongWay: false,
     offTrackIn: 0,
     cutReturned: false,
+    pickupsTaken: [],
     resetLocked: false,
     totalLaps: 3,
     practice: false,

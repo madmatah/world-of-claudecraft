@@ -94,6 +94,16 @@ export interface RealmRacersMatchInfo {
   resetLocked: boolean;
   /** How many laps this race runs (practice may differ from a queued race). */
   totalLaps: number;
+  /**
+   * The pickup boxes this race has already given away, as indices into the
+   * circuit's own box list (`realmRacersPickupBoxes`, resolved from the circuit
+   * id above). Empty while every box is standing.
+   *
+   * The TAKEN set rather than the present one, because it is the shorter list at
+   * every moment of a race and because presentation needs both transitions: a
+   * box entering it pops, a box leaving it grows back.
+   */
+  pickupsTaken: number[];
   /** True for a private practice race on its own copy of the circuit. */
   practice: boolean;
   result: RealmRacersResult;

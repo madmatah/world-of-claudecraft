@@ -956,6 +956,8 @@ describe('problems on the plan', () => {
       prop_outside_region: 'a prop stands outside the collision region',
       prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
       pond_on_racing_surface: 'a pond reaches onto the racing surface',
+      pickup_row_off_road: 'a pickup row does not fit on the road there',
+      pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',
     });
     // Distinct, or two different faults read as the same one on the plan.
     const labels = Object.values(PROBLEM_LABELS);

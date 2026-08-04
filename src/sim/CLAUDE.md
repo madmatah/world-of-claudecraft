@@ -178,6 +178,17 @@ re-derives a placement, which is the defect class the whole seam exists for. Eve
 point comes out of `hash2`, never `ctx.rng`: content resolves at import time on three
 hosts. Footprints and heights come from `content/realm_racers_props.ts`, the sim-side
 catalog whose keys `src/render/realm_racers_prop_visuals.ts` mirrors),
+`realm_racers_pickups.ts` (the pickup boxes: a circuit's authored `pickupRows` resolved
+into four boxes across the road at that arc, memoized per circuit like the rest of the
+derived geometry, plus the per-race take/respawn step over a plain state the match owns.
+The take is the NEAREST box in reach with the lowest index on a tie, which is a rule
+rather than a tidy-up: on the narrowest shipped road two boxes of one row are closer
+together than the catch radius, so a pass down the middle really is inside both
+(`pickup_row_lanes_overlap` is the readout warning that names such a row). The PHASE
+draws no rng, so it appends to the tick without a parity regen; that is a claim about
+the phase, not about the world, since a granted charge changes whether a later cast
+happens at all. `social/realm_racers.ts` owns the consequences, this owns where the
+boxes are and which of them changed hands),
 `realm_racers_draft_registry.ts` (the session-only DRAFT circuit overlay: a table
 with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
 `realm_racers_layout.ts` consult it and either importing something that imported it

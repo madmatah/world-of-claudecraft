@@ -15,6 +15,7 @@ import {
 } from '../src/render/realm_racers_track_core';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
+  REALM_RACERS_CIRCUIT_LIST,
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
 import {
@@ -22,11 +23,13 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
+import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import {
   realmRacersPlacedPonds,
   realmRacersPlacedProps,
 } from '../src/sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import type { RealmRacersMatchInfo } from '../src/world_api/realm_racers';
 
 // The circuit builder mints procedural canvas textures, so it needs the same
 // texture stub the other headless render suites use (terrain_chunk_geometry).
@@ -177,6 +180,7 @@ describe('Realm Racers procedural render', () => {
       wrongWay: false,
       offTrackIn: 0,
       cutReturned: false,
+      pickupsTaken: [],
       resetLocked: false,
       totalLaps: 3,
       practice: false,
@@ -212,6 +216,7 @@ describe('Realm Racers procedural render', () => {
         wrongWay: false,
         offTrackIn: 0,
         cutReturned: false,
+        pickupsTaken: [],
         resetLocked: false,
         totalLaps: 3,
         practice: false,
@@ -239,6 +244,7 @@ describe('Realm Racers procedural render', () => {
       wrongWay: false,
       offTrackIn: 0,
       cutReturned: false,
+      pickupsTaken: [],
       resetLocked: false,
       totalLaps: 3,
       practice: false,
@@ -380,13 +386,19 @@ describe('Realm Racers procedural render', () => {
     // a preview rebuild or a re-registered draft would otherwise either leak or
     // take the authored circuits down with it.
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
-    const geometriesOf = (group: THREE.Group, instanced: boolean): THREE.BufferGeometry[] =>
-      group.children
-        .filter(
-          (child): child is THREE.Mesh =>
-            child instanceof THREE.Mesh && child instanceof THREE.InstancedMesh === instanced,
-        )
-        .map((mesh) => mesh.geometry);
+    // RECURSIVE, because the builder composes sub-groups now (the pickup boxes
+    // hang under one of their own): a `children`-only walk would have quietly
+    // stopped covering every mesh added after the first nested group arrived,
+    // and this premise has to hold for the whole tree the dispose core traverses.
+    const geometriesOf = (group: THREE.Object3D, instanced: boolean): THREE.BufferGeometry[] => {
+      const out: THREE.BufferGeometry[] = [];
+      group.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+        if (child instanceof THREE.InstancedMesh !== instanced) return;
+        out.push(child.geometry);
+      });
+      return out;
+    };
 
     const first = buildRealmRacersTrack(GARDEN_CIRCUIT);
     const second = buildRealmRacersTrack(GARDEN_CIRCUIT);
@@ -997,5 +1009,133 @@ describe('Realm Racers procedural render', () => {
       expect(blasts.group.children.length).toBe(pooled);
       expect(pooled).toBeLessThanOrEqual(48);
     });
+  });
+});
+
+describe('the pickup boxes, drawn', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockTextures();
+  });
+  afterEach(() => {
+    vi.doUnmock('../src/render/textures');
+  });
+
+  /** One match readout on a chosen circuit, holding a chosen taken set. */
+  const matchOn = (circuitId: string, pickupsTaken: number[]): RealmRacersMatchInfo => ({
+    circuitId,
+    id: 7,
+    participantIds: [1],
+    phase: 'racing',
+    countdown: 0,
+    countdownTicks: 0,
+    elapsed: 0,
+    elapsedTicks: 0,
+    chaseIn: 0,
+    returnIn: 0,
+    me: RALLY_ME,
+    standings: [RALLY_ME],
+    gridSize: 4,
+    decided: false,
+    speed: 0,
+    wrongWay: false,
+    offTrackIn: 0,
+    cutReturned: false,
+    pickupsTaken,
+    resetLocked: false,
+    totalLaps: 3,
+    practice: false,
+    result: null,
+  });
+
+  async function pickupsGroup(): Promise<{
+    view: {
+      update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
+    };
+    boxes: THREE.Mesh[];
+  }> {
+    const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+    const view = buildRealmRacersTrack(GARDEN_CIRCUIT);
+    const group = view.group.getObjectByName('realm-racers-pickups') as THREE.Group;
+    expect(group).toBeDefined();
+    return { view, boxes: group.children as THREE.Mesh[] };
+  }
+
+  it('stands one mesh on every box the sim resolved', async () => {
+    const { boxes } = await pickupsGroup();
+    const resolved = realmRacersPickupBoxes(GARDEN_CIRCUIT);
+    expect(resolved.length).toBeGreaterThan(0);
+    expect(boxes).toHaveLength(resolved.length);
+    // At the resolver's own coordinates, so what a player drives at is what a
+    // player sees: the builder authors this group in the same origin frame.
+    boxes.forEach((mesh, i) => {
+      expect(mesh.position.x).toBeCloseTo(resolved[i].x, 6);
+      expect(mesh.position.z).toBeCloseTo(resolved[i].z, 6);
+    });
+  });
+
+  it('pops a taken box out and leaves its neighbours standing', async () => {
+    const { view, boxes } = await pickupsGroup();
+    const here = REALM_RACERS_ORIGIN;
+    view.update(here.x, here.z, 1, matchOn(GARDEN_CIRCUIT.id, []));
+    expect(boxes[0].visible).toBe(true);
+
+    // Past the whole pop, in FRAMES: a single long step would be clamped to one
+    // frame's worth of animation, which is the point of the clamp (a tab that
+    // was in the background must not fast-forward a pop into nothing).
+    let time = 1;
+    const frames = (count: number, taken: number[]): void => {
+      for (let i = 0; i < count; i++) {
+        time += 0.05;
+        view.update(here.x, here.z, time, matchOn(GARDEN_CIRCUIT.id, taken));
+      }
+    };
+    frames(10, [0]);
+    expect(boxes[0].visible).toBe(false);
+    expect(boxes[1].visible).toBe(true);
+
+    // And it grows back when the readout says it is there again.
+    frames(1, []);
+    expect(boxes[0].visible).toBe(true);
+    expect(boxes[0].scale.x).toBeLessThan(1);
+    frames(12, []);
+    expect(boxes[0].scale.x).toBeCloseTo(1, 6);
+  });
+
+  it('writes no scale on a frame where nothing about the boxes changed', async () => {
+    const { view, boxes } = await pickupsGroup();
+    const here = REALM_RACERS_ORIGIN;
+    view.update(here.x, here.z, 1, matchOn(GARDEN_CIRCUIT.id, []));
+    view.update(here.x, here.z, 1.05, matchOn(GARDEN_CIRCUIT.id, []));
+    const spies = boxes.map((mesh) => vi.spyOn(mesh.scale, 'setScalar'));
+    // A second identical frame: the clock moved (so the spin and the bob DO
+    // write, by design) and nothing else did. Write elision is what keeps a
+    // dozen resting boxes from re-stamping an identical scale forever.
+    view.update(here.x, here.z, 1.1, matchOn(GARDEN_CIRCUIT.id, []));
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    // The spin and the bob are the deliberate exception, and they really do run.
+    const before = boxes[0].rotation.y;
+    view.update(here.x, here.z, 1.15, matchOn(GARDEN_CIRCUIT.id, []));
+    expect(boxes[0].rotation.y).not.toBe(before);
+    for (const spy of spies) spy.mockRestore();
+  });
+
+  it('ignores a race running on a DIFFERENT circuit', async () => {
+    const { view, boxes } = await pickupsGroup();
+    const here = REALM_RACERS_ORIGIN;
+    const other = REALM_RACERS_CIRCUIT_LIST.find((circuit) => circuit.id !== GARDEN_CIRCUIT.id);
+    expect(other).toBeDefined();
+    // Another lane's race says nothing about these boxes: its taken indices
+    // belong to its own circuit's box list, so reading them here would loot a
+    // circuit nobody is racing on.
+    for (let i = 0; i < 12; i++) {
+      view.update(
+        here.x,
+        here.z,
+        1 + i * 0.05,
+        matchOn((other as RealmRacersCircuit).id, [0, 1, 2, 3]),
+      );
+    }
+    for (const mesh of boxes) expect(mesh.visible).toBe(true);
   });
 });

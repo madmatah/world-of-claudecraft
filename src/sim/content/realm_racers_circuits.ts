@@ -190,6 +190,22 @@ export interface RallyPond {
   seed?: number;
 }
 
+/**
+ * One ROW of pickup boxes across the road, authored as a lap fraction and
+ * nothing else.
+ *
+ * The record is the ROW because the row is the design: how many boxes it holds,
+ * how wide they are spread and where each one lands all follow from the road at
+ * that arc, so authoring four points would be authoring four chances to put one
+ * of them off the track. `realm_racers_pickups.ts` resolves it, the way
+ * `realm_racers_props_resolve.ts` resolves the dressing, and the readout checks
+ * that what comes back fits on the road (`pickup_row_off_road`).
+ */
+export interface RallyPickupRow {
+  /** Lap fraction, 0 at the start line. */
+  s: number;
+}
+
 export interface RealmRacersCircuit {
   /** Stable id: the cache key for every derived geometry, the wire token, and
    *  the suffix of this circuit's i18n name and blurb keys. */
@@ -239,6 +255,11 @@ export interface RealmRacersCircuit {
   scatters?: readonly RallyScatter[];
   /** Decorative water, placed. */
   ponds?: readonly RallyPond[];
+  /**
+   * Where the pickup boxes stand, one entry per ROW across the road. A circuit
+   * with none authored simply has no boxes on it.
+   */
+  pickupRows?: readonly RallyPickupRow[];
   /** How far behind the start line the row of machines sits. */
   startBack: number;
   /** Centre-to-centre spacing of the grid slots, yards. Per circuit, so a
@@ -386,6 +407,16 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
    * pass, and it is one line when it is taken.
    */
   props: [{ asset: 'fountain', at: { x: -4, z: 4 }, scale: 2.2, collide: 'none' }],
+  /**
+   * Three rows over a 455 yard lap, one for each part of the circuit a pilot
+   * arrives at with a decision already made: the end of the start straight
+   * before the fast sweeper, the middle of the north straight, and the entry to
+   * the parabolic. All three sit on road wide enough to take the whole row with
+   * a clear strip either side, none of them is on the start line, and the
+   * spacing means a lap always offers a refill without a lap ever being a
+   * shopping trip.
+   */
+  pickupRows: [{ s: 0.19 }, { s: 0.44 }, { s: 0.7 }],
   startBack: 7.0,
   /**
    * The row is symmetric about the centerline, so the arithmetic that has to
@@ -528,6 +559,14 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
     { x: 21, z: 46, rx: 15.5, rz: 14.5, wobble: 0.16, seed: 11 },
     { x: -147, z: -17, rx: 13, rz: 12, wobble: 0.15, seed: 12 },
   ],
+  /**
+   * Three rows over an 829 yard lap, so a competition lap offers the same
+   * refills per lap as the practice circuit does on a lap half its length. They
+   * are spread around the loop rather than bunched near the pinch: the strip is
+   * where a shot is TAKEN, and a row on the way to it is what a pilot arrives
+   * with something to take it with.
+   */
+  pickupRows: [{ s: 0.12 }, { s: 0.42 }, { s: 0.68 }],
   startBack: 7,
   startSpacing: 5,
   /**

@@ -31,6 +31,13 @@ import {
   REALM_RACERS_VERGE_MARGIN,
 } from './realm_racers_layout';
 import {
+  type RallyPickupBox,
+  REALM_RACERS_PICKUP_BOX_HALF,
+  REALM_RACERS_PICKUP_REACH,
+  realmRacersPickupBoxes,
+  realmRacersPickupLaneGap,
+} from './realm_racers_pickups';
+import {
   type RallyPlacedProp,
   rallyFootprintRadius,
   realmRacersPlacedPonds,
@@ -192,7 +199,37 @@ export type RealmRacersCircuitProblemCode =
    * run on. Past that line a machine drives through a pond exactly as it drives
    * over the lawn around it.
    */
-  | 'pond_on_racing_surface';
+  | 'pond_on_racing_surface'
+  /**
+   * A pickup row does not fit on the ROAD where it stands: one of its boxes
+   * reaches past the road edge.
+   *
+   * Measured against the road rather than against the garden edge every other
+   * placement is judged by, and that is the whole content of the rule. A row is
+   * DERIVED from the road at its own lap position, so a check against the garden
+   * edge (road plus verge plus run-off) could never come back false, and a check
+   * that cannot come back false is not a check. What can come back false is a
+   * road too narrow for the row it is carrying: the boxes are spread over a
+   * fixed fraction of the local width, so at some width their own size eats the
+   * strip that fraction leaves. Then a box is standing where a machine holding
+   * the racing line does not go, and the row is decoration.
+   */
+  | 'pickup_row_off_road'
+  /**
+   * A row's boxes stand close enough together that their catch zones overlap: a
+   * machine passing between two of them is inside both.
+   *
+   * A WARNING, and it fires on shipped content today (the Express Tour's two 8
+   * yard rows put neighbours 4.27 yards apart against a 2.3 yard reach). It
+   * changes nothing about what HAPPENS, because the take is the nearest box with
+   * the lowest index on an exact tie and the cooldown covers the rest of the
+   * row, so the outcome stays deterministic on all three hosts. What it says is
+   * that the row has stopped being four separate targets: the narrower the road,
+   * the more a pass down the middle is a coin toss the pilot did not mean to
+   * flip. It exists so a future circuit drawn narrower meets that while it is
+   * being drawn rather than in a seat.
+   */
+  | 'pickup_row_lanes_overlap';
 
 export interface RealmRacersCircuitProblem {
   code: RealmRacersCircuitProblemCode;
@@ -248,6 +285,8 @@ export interface RealmRacersCircuitMetrics {
   scatterCount: number;
   solidPropCount: number;
   pondCount: number;
+  /** Authored pickup ROWS, not boxes: the row is what a designer places. */
+  pickupRowCount: number;
   problems: readonly RealmRacersCircuitProblem[];
 }
 
@@ -563,6 +602,53 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     if (onSurface) problem('pond_on_racing_surface', 'error', 0, 0);
   }
 
+  // --- the pickup rows: does the row the road derived actually fit on it? ---
+  //
+  // One problem per ROW, not per box: the row is what is authored, and four
+  // callouts on one lap position is one unreadable callout. Every box is
+  // measured by its own four CORNERS rather than by its centre, because a box
+  // has depth and a corner of it sits at a different lap position from the row:
+  // on a tight corner that is what puts the outer box's leading corner past the
+  // road edge while its centre is comfortably inside.
+  const pickupBoxes = realmRacersPickupBoxes(circuit);
+  const worstByRow = new Map<number, { s: number; reach: number; road: number }>();
+  for (const box of pickupBoxes) {
+    const tangentX = Math.sin(box.yaw);
+    const tangentZ = Math.cos(box.yaw);
+    const half = REALM_RACERS_PICKUP_BOX_HALF;
+    for (const [along, across] of [
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ] as const) {
+      const cornerX = box.x + tangentX * half * along - tangentZ * half * across;
+      const cornerZ = box.z + tangentZ * half * along + tangentX * half * across;
+      const projection = track.project(cornerX, cornerZ);
+      const reach = Math.abs(projection.lateral);
+      const road = track.halfWidthAt(projection.s);
+      const held = worstByRow.get(box.row);
+      // Worst = the corner with the least clearance, which is the one an
+      // operator has to move the row (or widen the road) for.
+      if (held && held.road - held.reach <= road - reach) continue;
+      worstByRow.set(box.row, { s: box.s, reach, road });
+    }
+  }
+  for (const worst of worstByRow.values()) {
+    if (worst.reach <= worst.road) continue;
+    problem('pickup_row_off_road', 'error', worst.reach, worst.road, worst.s);
+  }
+  // And whether the four boxes are still four separate targets there. Measured
+  // per ROW off the road's own width, since the gap follows from it: the value
+  // is the half-gap a machine has to thread and the limit is the catch radius
+  // it has to stay outside of to be inside one box only.
+  for (const row of new Set(pickupBoxes.map((box) => box.row))) {
+    const box = pickupBoxes.find((candidate) => candidate.row === row) as RallyPickupBox;
+    const halfGap = realmRacersPickupLaneGap(track.halfWidthAt(box.s)) / 2;
+    if (halfGap >= REALM_RACERS_PICKUP_REACH) continue;
+    problem('pickup_row_lanes_overlap', 'warning', halfGap, REALM_RACERS_PICKUP_REACH, box.s);
+  }
+
   return {
     lapLength: track.length,
     sampleCount: count,
@@ -580,6 +666,7 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     scatterCount: placements.scattered.length,
     solidPropCount: placements.props.filter((prop) => prop.solid).length,
     pondCount: placements.ponds.length,
+    pickupRowCount: circuit.pickupRows?.length ?? 0,
     problems,
   };
 }

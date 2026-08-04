@@ -52,6 +52,16 @@ import {
   realmRacersPublicLane,
 } from '../realm_racers_layout';
 import {
+  createRealmRacersPickupState,
+  type RallyPickupRacer,
+  type RallyPickupState,
+  REALM_RACERS_PICKUP_CHARGE_GRANT,
+  REALM_RACERS_PICKUP_COOLDOWN_TICKS,
+  realmRacersPickupBoxes,
+  realmRacersPickupTakenIndices,
+  stepRealmRacersPickups,
+} from '../realm_racers_pickups';
+import {
   forwardArcDelta,
   stepRealmRacersProgress,
   travelledFromArc,
@@ -236,6 +246,14 @@ export interface RealmRacersProgress {
   wrongWayTicks: number;
   wrongWay: boolean;
   heldWeapon: RealmRacersWeaponSlot | null;
+  /**
+   * Tick this racer may take another pickup box on; 0 before the first one.
+   *
+   * The whole of the "one box per pass" rule: a row is crossed in well under a
+   * second, so a machine that just took one cannot reach a second box of the
+   * same row (`realm_racers_pickups.ts`).
+   */
+  pickupCooldownUntilTick: number;
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
   groundBlastShockUntilTick: number;
@@ -300,6 +318,15 @@ export interface RealmRacersMatch {
   preMatchPools: Map<number, ArenaReturnPools>;
   progress: Map<number, RealmRacersProgress>;
   groundBlasts: RealmRacersGroundBlast[];
+  /**
+   * The pickup boxes on THIS copy of the circuit: which of them have been taken
+   * and which lap the leader was on when they were last put back.
+   *
+   * Per match rather than per circuit, which is what makes a practice lane's
+   * boxes its own: two races on two copies of the same circuit share the
+   * geometry (it is memoized content) and share nothing else.
+   */
+  pickups: RallyPickupState;
   /** Last tick each racer PAIR announced a bump, keyed by pair index, so the
    *  throttle is per pair rather than per match and a bigger grid keeps one
    *  duel from silencing another. */
@@ -543,7 +570,12 @@ function publishWeaponCharges(e: Entity, held: RealmRacersWeaponSlot | null): vo
   e.abilityCharges ??= {};
   e.abilityCharges[held.abilityId] = {
     charges: held.charges,
-    maxCharges: realmRacersWeaponCharges(held.abilityId) ?? held.charges,
+    // The pool's own ceiling, which nothing renders: the action bar draws its
+    // denominator off the `KnownAbility` the kit resolver built, never off this
+    // field. It is kept honest anyway (a pickup box adds charges with no cap, so
+    // the race's budget can be exceeded) because a pool whose count sits above
+    // its own max is a shape every future reader would have to special-case.
+    maxCharges: Math.max(realmRacersWeaponCharges(held.abilityId) ?? held.charges, held.charges),
     recharge: 0,
     rechargeLength: 0,
     fixed: true,
@@ -744,6 +776,7 @@ function startMatch(
             abilityId: profile.weaponAbilityId,
             charges: realmRacersWeaponCharges(profile.weaponAbilityId),
           },
+          pickupCooldownUntilTick: 0,
           groundBlastShockUntilTick: 0,
           lapStartTick: ctx.tickCount,
           hadOffTrackContact: false,
@@ -755,6 +788,8 @@ function startMatch(
     ),
     groundBlasts: [],
     bumpTicks: new Map(),
+    // Every box present at the flag, on every copy of the circuit.
+    pickups: createRealmRacersPickupState(circuit),
     circuitId: circuit.id,
     // A practice race holds the private lane its caller claimed; a queued race
     // stands on its circuit's PUBLIC lane, which is lane 0 only while the
@@ -1598,6 +1633,94 @@ function tickProgress(ctx: SimContext, match: RealmRacersMatch): void {
   if (anyFinished && raceIsDecided(ctx, match)) endMatch(ctx, match);
 }
 
+/** The path a machine covered this tick, in the circuit's canonical frame. */
+function segmentOf(
+  match: RealmRacersMatch,
+  e: Entity,
+): { fromX: number; fromZ: number; toX: number; toZ: number } {
+  const from = realmRacersToCanonical(match, e.prevPos.x, e.prevPos.z);
+  const to = realmRacersToCanonical(match, e.pos.x, e.pos.z);
+  return { fromX: from.x, fromZ: from.z, toX: to.x, toZ: to.z };
+}
+
+/**
+ * The pickup boxes, one tick.
+ *
+ * Everything it decides is in `realm_racers_pickups.ts`; what lives here is the
+ * three facts only a race knows: which machines are allowed to take (the ones
+ * still driving), which lap the LEADER is on, and what a take does to the
+ * weapon slot.
+ *
+ * The leader is the most TRAVELLED racer STILL DRIVING, the same monotonic key
+ * and the same restriction the dead-last tracking above uses, and their lap
+ * going up is the crossing that puts every taken box back. Reading the lap
+ * rather than watching for a line crossing is what makes the rule survive a
+ * leader change: the number only ever goes up, so a new leader on the same lap
+ * respawns nothing. Restricting it to racers still driving is what makes the
+ * rule survive a leader LEAVING: a pilot who forfeits from the front keeps the
+ * biggest `travelled` for the rest of the race, so an unfiltered argmin would
+ * freeze the boxes on a lap number nobody can advance any more.
+ *
+ * THE PHASE draws no rng, so it appends to the tick without moving the shared
+ * stream. That is a claim about this phase only: a granted charge changes
+ * whether a later `castAbility` happens at all, so the boxes are not neutral to
+ * the world's draws the way a pure readout is.
+ */
+function tickPickups(ctx: SimContext, match: RealmRacersMatch): void {
+  const boxes = realmRacersPickupBoxes(realmRacersCircuitOf(match));
+  if (boxes.length === 0) return;
+  let leaderLap = 0;
+  let leaderTravelled = Number.NEGATIVE_INFINITY;
+  const racers: RallyPickupRacer[] = [];
+  for (const pid of match.pids) {
+    const progress = match.progress.get(pid);
+    if (!progress) continue;
+    const running = realmRacersStillRunning(match, pid);
+    if (running && progress.travelled > leaderTravelled) {
+      leaderTravelled = progress.travelled;
+      leaderLap = progress.lap;
+    }
+    const e = ctx.entities.get(pid);
+    if (!e) continue;
+    racers.push({
+      pid,
+      // The whole SEGMENT this machine covered, so a box is taken by the path
+      // rather than by the two endpoints: at race speed a tick is about three
+      // yards, which steps clean over a catch zone.
+      ...segmentOf(match, e),
+      cooldownUntilTick: progress.pickupCooldownUntilTick,
+      // A pilot who has crossed the line or pulled off keeps their machine and
+      // may drive it anywhere; they are not collecting ammunition for a race
+      // they are no longer in. Nor is a machine under the control lock, which
+      // is the tick or two after the referee or the recovery control PUT it
+      // somewhere: a recovery anchor can stand inside a box's catch radius (the
+      // Express Tour's own gate 6 sits 2.28 yd from a box, against a 2.3 yd
+      // reach), and a box collected by being teleported onto it is a free
+      // charge for driving off the road.
+      eligible: running && ctx.tickCount >= progress.resetLockedUntilTick,
+    });
+  }
+  const step = stepRealmRacersPickups(boxes, match.pickups, {
+    tick: ctx.tickCount,
+    leaderLap,
+    racers,
+  });
+  for (const take of step.takes) {
+    const progress = match.progress.get(take.pid);
+    if (!progress) continue;
+    progress.pickupCooldownUntilTick = ctx.tickCount + REALM_RACERS_PICKUP_COOLDOWN_TICKS;
+    const held = progress.heldWeapon;
+    // Unlimited fire (a null budget) has nothing to add to, and a machine with
+    // no weapon slot at all has nowhere to put it. Both still ARM the cooldown
+    // above and still take the box: what a box gives is the slot's business,
+    // and 22b hands out more than charges.
+    if (!held || held.charges === null) continue;
+    held.charges += REALM_RACERS_PICKUP_CHARGE_GRANT;
+    const racer = ctx.entities.get(take.pid);
+    if (racer) publishWeaponCharges(racer, held);
+  }
+}
+
 function pruneQueue(ctx: SimContext): void {
   const seen = new Set<number>();
   ctx.realmRacers.queue = ctx.realmRacers.queue.filter((pid) => {
@@ -1732,9 +1855,21 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // Neither pass draws rng, so the shared stream is unmoved by the order.
   tickTrackLimits(ctx, match);
   tickProgress(ctx, match);
-  // `tickProgress` can END the race (the last racer home), and a shell must not
-  // land into a classification that is already closed.
-  if (match.phase === 'racing') tickGroundBlasts(ctx, match);
+  // `tickProgress` can END the race (the last racer home), and neither a shell
+  // nor a pickup may land into a classification that is already closed. The
+  // boxes go AFTER progress for the same reason the referee goes before it: the
+  // leader's lap is what puts them back, and that number is written there.
+  //
+  // For the BOXES this guard is belt and braces rather than a rule with a test
+  // behind it: the countdown and finished arms return above, and a race decided
+  // inside `tickProgress` leaves every racer either finished or retired, so the
+  // eligibility test already refuses all of them. It is kept because the shell's
+  // own guard beside it is not defensive, and one of the two silently not
+  // applying to the other would be the next reader's trap.
+  if (match.phase === 'racing') {
+    tickPickups(ctx, match);
+    tickGroundBlasts(ctx, match);
+  }
 }
 
 function racerInfo(
@@ -1824,6 +1959,9 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     // because the whole info object already rides `rr`.
     offTrackIn: Math.ceil(rallyLoiterCountdownTicks(me.excursion) / TICK_RATE),
     cutReturned: ctx.tickCount < me.cutReturnUntilTick,
+    // Which boxes are GONE, never which are there: on a full circuit this is an
+    // empty array, and it is the shorter list at every moment of a race.
+    pickupsTaken: realmRacersPickupTakenIndices(match.pickups),
     resetLocked: ctx.tickCount < me.resetLockedUntilTick,
     totalLaps: match.totalLaps,
     // A practice lap is a real race on a private copy of the circuit, and the

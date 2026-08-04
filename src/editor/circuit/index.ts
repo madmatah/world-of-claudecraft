@@ -178,6 +178,16 @@ export {
   type ReadoutSection,
 } from './panel_core';
 export {
+  addPickupRow,
+  MAX_PICKUP_ROWS,
+  PICKUP_ROW_MIN_GAP,
+  type PickupRowAdd,
+  type PickupRowAddOutcome,
+  pickupRowAtPoint,
+  pickupRowFractionAt,
+  removedPickupRow,
+} from './pickup_rows_core';
+export {
   ALONG_ROAD_MAX_PIECES,
   ALONG_ROAD_MIN_SPACING,
   type AlongRoadOptions,

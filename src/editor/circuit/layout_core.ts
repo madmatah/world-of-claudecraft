@@ -92,7 +92,7 @@ export const RAIL_MODES: readonly RailModeDef[] = [
     label: 'Race',
     icon: 'flag',
     shortcut: '4',
-    detail: 'The enclosure and the race settings this circuit carries',
+    detail: 'The race furniture on the road, plus the enclosure and the race settings',
   },
 ];
 
@@ -141,6 +141,13 @@ export function railBanner(
         : placement === 'alongRoad'
           ? 'drag ALONG the road to lay a row at the spacing, from the offset the drag started at'
           : 'drag a tile from the library, or click to place the armed piece; R turns it, alt places it free';
+    case 'race':
+      // RACE became a canvas tool the day the circuit had furniture worth
+      // placing. Its forms are still the panel; what the plan offers is the one
+      // gesture the numbers cannot express.
+      return drawn
+        ? 'click the road to lay a pickup row across it, click a row to select it, del removes it'
+        : 'the numbers a circuit carries that nothing on the canvas can show';
     default:
       return 'the numbers a circuit carries that nothing on the canvas can show';
   }
@@ -502,7 +509,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     id: 'modeRace',
     needsCircuit: true,
     label: 'Race',
-    detail: 'The enclosure and the race settings',
+    detail: 'Lay the pickup rows, and edit the enclosure and the race settings',
     icon: 'flag',
     scope: 'global',
     shortcut: '4',
@@ -1235,6 +1242,8 @@ export const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   prop_outside_region: 'a prop stands outside the collision region',
   prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
   pond_on_racing_surface: 'a pond reaches onto the racing surface',
+  pickup_row_off_road: 'a pickup row does not fit on the road there',
+  pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',
 };
 
 export function problemHeadline(problem: RealmRacersCircuitProblem): string {
