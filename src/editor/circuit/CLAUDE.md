@@ -329,23 +329,41 @@ is recoverable.
 |---|---|
 | `panel_core.ts` | what the right column shows (`panelLayout`, one call for six interdependent rules), which readout sections a tabless mode carries, the props arm text, and which actions a blank canvas refuses (off the table's own `needsCircuit` flag) |
 | `history_core.ts` | the edit history: a capped undo stack with a forward branch that a new edit drops |
-| `layout_core.ts` | the shell: the action table (labels, chords, icons, menus, cheatsheet grouping), the rail modes and their tool resolution, chord matching and platform spelling, the persisted layout with its clamps, the zoom/grid/snap arithmetic, the headline chips, and the problem labels the chip, the callouts and the drawer all print |
+| `layout_core.ts` | the shell: the action table (labels, chords, icons, menus, cheatsheet grouping), the rail modes and their tool resolution, chord matching and platform spelling, the persisted layout with its clamps, the zoom/grid/snap arithmetic, the headline chips, the callout spread and its edge flip, and the problem labels the chip, the callouts and the drawer all print |
+| `plan_core.ts` | the plan canvas's own numbers: the starter oval, what a fit frames, the two limit boxes and their sentences, the click tolerances, the wheel step, and the stylesheet tokens the canvas borrows |
 | `editor_icons.ts` | the icon set: one inline SVG per action and rail mode, plus the chrome-only list that keeps the completeness check honest |
 | `shell.ts` | the chrome as ELEMENTS: menu bar, rail, plan overlays, status bar, contextual right panel, metrics drawer, cheatsheet. Structure and listeners only, all of it rendered off the action table |
+| `panels.ts` | the `PanelHost` every right-column panel reads the document through, plus the element shapes all five of them repeat |
+| `panel_form.ts` | the record form: roles, race numbers, presentation ids and the enclosure, built once and only synced |
+| `panel_inspector.ts` | the numbers behind the selection, editable, every edit back through `commitDressing` |
+| `panel_outliner.ts` | what is standing on this circuit, entry by entry |
+| `panel_readout.ts` | one builder per readout section, plus the drawer and the tabless mode's own column |
+| `panel_library.ts` | what the props tool can put down, and which piece is armed |
 | `dock.ts` | the floating 3D panel: move, resize, fullscreen, the camera tabs and the lap readout. Geometry rules come from `layout_core.ts` |
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
-| `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS and never resolves; where a piece ends up is `src/sim/realm_racers_props_resolve.ts` and the page reads the placements back off it |
+| `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
 | `envelope_core.ts` | what perimeter wall and collision region fit a road of a given size, clamped to the band and the lane depth budget. A convenience, not a rule: the enclosure rules themselves are in the metrics core |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |
 | `draft_endpoints_core.ts` | what the dev server answers for the two READ endpoints: the draft list and one parsed draft. It is handed a READER and has no writer, which is what makes "a GET never writes" structural |
 | `preview_camera_core.ts` | where the 3D preview's camera stands: the orbit rig's clamps, and the fly-through pose along the racing line |
 | `preview3d.ts` | the 3D preview itself: the scene, the light rig, the rebuild lifecycle and the camera modes. Loaded on demand, so the 2D tool still opens instantly |
-| `main.ts` | the page: canvas, pointer routing, and the wiring between the shell and the record. No formulas |
+| `main.ts` | the page: canvas, pointer routing, and the wiring between the shell, the panels and the record. No formulas |
 
 New tool logic lands as another `*_core.ts` here (DOM-free, deterministic, its
 own `tests/editor_circuit_<name>.test.ts`), never appended to `main.ts`. Note
 that `tests/architecture.test.ts` sweeps `*_core.ts` for registration under
 `src/ui` and `src/render` only, so an `src/editor/**` core registers nowhere;
 that is the same treatment `undo_core.ts` and `stamp_core.ts` already get.
+
+**New ELEMENT construction is a `panel_*` module, not a block in `main.ts`.** The
+workbench pass moved four decision clusters out and the coordinator still came out
+BIGGER, which is the one thing the root CLAUDE.md says never to do to a
+coordinator: about 770 lines of it were pure element construction with no canvas
+coupling at all. The test for which side of the seam a block belongs on is one
+question: does it need the page's private gesture state (the live pointer, the
+view transform, the undo stack)? If not, it takes a `PanelHost` and lives beside
+`shell.ts`. `index.ts` re-exports every core IN FULL and no DOM module at all, and
+`tests/editor_circuit_index.test.ts` pins both directions, so a new core export
+that never reaches the declared public surface fails rather than going unnoticed.

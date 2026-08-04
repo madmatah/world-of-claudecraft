@@ -15,6 +15,7 @@ import {
   clampDock,
   DOCK_MIN_HEIGHT,
   DOCK_MIN_WIDTH,
+  DOCK_SCRUB_STEPS,
   type DockGeometry,
   defaultDock,
   formatShortcut,
@@ -92,7 +93,12 @@ export class CircuitDock {
 
     this.speedEl.onchange = () =>
       this.host.onFlySpeed(this.speedEl.value === 'scenic' ? 'scenic' : 'race');
-    this.rangeEl.oninput = () => this.host.onFlyFraction(Number(this.rangeEl.value) / 1000);
+    // The scrubber's resolution is written ONCE: it was the markup's `max`, the
+    // divisor here and the multiplier in `setAt`, and a lap silently rescales if
+    // any two of those three disagree.
+    this.rangeEl.max = String(DOCK_SCRUB_STEPS);
+    this.rangeEl.oninput = () =>
+      this.host.onFlyFraction(Number(this.rangeEl.value) / DOCK_SCRUB_STEPS);
 
     this.hintEl.textContent = `${formatShortcut('shift+f', platform)} fullscreen`;
 
@@ -218,7 +224,7 @@ export class CircuitDock {
   setAt(yards: number | null, fraction: number): void {
     this.atEl.textContent = yards === null ? 'no circuit yet' : `at ${yards.toFixed(0)} yd`;
     if (document.activeElement !== this.rangeEl) {
-      this.rangeEl.value = String(Math.round(fraction * 1000));
+      this.rangeEl.value = String(Math.round(fraction * DOCK_SCRUB_STEPS));
     }
   }
 }

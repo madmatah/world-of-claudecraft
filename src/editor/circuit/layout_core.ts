@@ -128,6 +128,13 @@ export interface ToolValueField {
   max: number;
 }
 
+/** The field's own range, applied to whatever the box currently holds. The shell
+ *  was re-deriving this clamp beside the range the table already gives it. */
+export function clampToolValue(field: ToolValueField, raw: number): number {
+  if (!Number.isFinite(raw)) return field.min;
+  return Math.min(field.max, Math.max(field.min, raw));
+}
+
 export const TOOL_VALUE_FIELDS: Record<CircuitTool, ToolValueField | null> = {
   draw: null,
   handles: null,
@@ -849,7 +856,26 @@ export const DOCK_MIN_HEIGHT = 160;
 /** How far from the plan's bottom-right corner an unplaced dock opens. */
 const DOCK_MARGIN = 14;
 
+/** How many steps the fly-through scrubber divides a lap into. It is the range
+ *  input's `max` AND the divisor its value is read back through, and those two
+ *  disagreeing silently rescales the lap, so both come from here. */
+export const DOCK_SCRUB_STEPS = 1000;
+
+/** What the menu-bar dot says about the 3D preview. Here rather than in the
+ *  shell because a state's NAME and its sentence are one fact. */
+export type PreviewReadyState = 'off' | 'ready' | 'error';
+
+export const PREVIEW_READY_TITLES: Record<PreviewReadyState, string> = {
+  ready: 'the 3D preview is live on this record',
+  error: 'the 3D preview could not start',
+  off: 'the 3D preview is not open',
+};
+
 export type SideTabId = 'library' | 'inspector' | 'outliner';
+
+/** Below this the tab strip is not drawn at all: a single tab is a click that
+ *  decides nothing, and the panel's own heading already says what is in it. */
+export const SIDE_TABS_MIN = 2;
 
 export interface EditorLayout {
   /** Null until the operator has moved it: an unplaced dock opens bottom-right,
@@ -1213,29 +1239,65 @@ export function calloutProblems(
 export const CALLOUT_MIN_GAP = 40;
 
 /**
- * Callout anchors nudged apart so two nearby problems stay readable.
+ * How far right of its anchor a callout box reaches, pixels: the offset the
+ * sheet translates it by plus its own max width.
+ *
+ * A number rather than a measurement, because the decision has to be made
+ * BEFORE the box exists and measuring one would be a forced reflow inside the
+ * paint. It is the sheet's `button.callout` geometry, and the sheet says so.
+ */
+export const CALLOUT_REACH = 274;
+
+/** Where a callout box sits, and which side of its anchor it opens on. */
+export interface CalloutAnchor {
+  x: number;
+  y: number;
+  /** True when the box opens to the LEFT because it would run off the plan. */
+  flip: boolean;
+}
+
+export interface CalloutSpreadOptions {
+  gap?: number;
+  /** The plan's pixel width, or 0 to never flip (nothing to run off). */
+  planWidth?: number;
+}
+
+/**
+ * Callout anchors nudged apart, and flipped to the near side at the edge.
  *
  * Two faults a few yards apart project to nearly the same pixel, and two boxes
  * on the same pixel are one unreadable box: the second corner of a chicane hid
  * behind the first. The canvas marker still rings the true spot, so the box is
  * the thing allowed to move. Nulls (off-plan) pass through untouched, and the
  * order of the input is preserved: the caller's list is worst-first.
+ *
+ * The flip is the other half of the same idea. Boxes only ever opened rightward,
+ * so a problem near the plan's right edge wrote its explanation off the screen:
+ * the ONE case where a callout says nothing at all. Deciding it here rather than
+ * in the shell keeps it testable, which the y nudge already was.
  */
 export function spreadCallouts<T extends { x: number; y: number }>(
   anchors: readonly (T | null)[],
-  gap = CALLOUT_MIN_GAP,
-): ({ x: number; y: number } | null)[] {
-  const out = anchors.map((anchor) => (anchor ? { x: anchor.x, y: anchor.y } : null));
+  options: CalloutSpreadOptions = {},
+): (CalloutAnchor | null)[] {
+  const gap = options.gap ?? CALLOUT_MIN_GAP;
+  const planWidth = options.planWidth ?? 0;
+  // Flipped only when it HELPS: the box runs off the right AND there is room for
+  // it on the left. On a plan narrower than one box, both sides overflow and the
+  // near edge is the one the marker is on, so flipping there would trade the
+  // right-edge defect for its mirror.
+  const flips = (x: number): boolean =>
+    planWidth > 0 && x + CALLOUT_REACH > planWidth && x >= CALLOUT_REACH;
+  const out: (CalloutAnchor | null)[] = anchors.map((anchor) =>
+    anchor ? { x: anchor.x, y: anchor.y, flip: flips(anchor.x) } : null,
+  );
   const order = out
-    .map((anchor, index) => ({ anchor, index }))
-    .filter((entry): entry is { anchor: { x: number; y: number }; index: number } =>
-      Boolean(entry.anchor),
-    )
-    .sort((a, b) => a.anchor.y - b.anchor.y);
+    .filter((anchor): anchor is CalloutAnchor => anchor !== null)
+    .sort((a, b) => a.y - b.y);
   let floor = Number.NEGATIVE_INFINITY;
-  for (const entry of order) {
-    entry.anchor.y = Math.max(entry.anchor.y, floor);
-    floor = entry.anchor.y + gap;
+  for (const anchor of order) {
+    anchor.y = Math.max(anchor.y, floor);
+    floor = anchor.y + gap;
   }
   return out;
 }

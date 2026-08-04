@@ -12,13 +12,19 @@ import {
   authorPlacement,
   convertedProp,
   type DressingRect,
+  GHOST_ID_SUFFIX,
+  ghostPlacement,
   hitTestPlaced,
   hitTestPondHandle,
   hitTestPonds,
   movedProp,
+  nextSeed,
+  POND_CHOICE,
   POND_MIN_RADIUS,
   POND_ROTATE_HANDLE_GAP,
   PROP_TRACK_SPACE_BAND,
+  placedPropIndices,
+  placementIndexOf,
   pondFromDrag,
   pondHandlePoints,
   pondWithHandleAt,
@@ -484,5 +490,105 @@ describe('circuit editor props: the palette', () => {
     const entry = palette.find((row) => row.asset === 'brandNewThing');
     expect(entry).toBeDefined();
     expect(entry?.group).toBe('other');
+  });
+});
+
+describe('the cursor ghost', () => {
+  it('draws the outline the collision set will hold, not one of its own', () => {
+    // The whole reason the ghost goes through the resolver: a footprint worked
+    // out here would be a SECOND derivation of a placement, which is the defect
+    // class the one resolver exists to prevent. So the ghost at a point and the
+    // piece actually committed at that point have to agree exactly.
+    const ghost = ghostPlacement(withProps(GARDEN, []), 'bench', 40, 30);
+    expect(ghost).not.toBeNull();
+    const committed = placedOn(GARDEN, { asset: 'bench', at: authorPlacement(GARDEN, 40, 30).at });
+    expect(ghost?.x).toBeCloseTo(committed.x, 6);
+    expect(ghost?.z).toBeCloseTo(committed.z, 6);
+    expect(ghost?.yaw).toBeCloseTo(committed.yaw, 6);
+    expect(ghost?.solid).toBe(committed.solid);
+    expect(ghost?.footprint).toEqual(committed.footprint);
+  });
+
+  it('is the PENDING piece, never the last one already standing there', () => {
+    const circuit = withProps(GARDEN, [{ asset: 'fountain', at: { x: -60, z: -40 } }]);
+    const ghost = ghostPlacement(circuit, 'postLantern', 40, 30);
+    expect(ghost?.asset).toBe('postLantern');
+    // The record it was resolved on is untouched: a ghost that committed itself
+    // would author a piece per repaint.
+    expect(circuit.props).toHaveLength(1);
+  });
+
+  it('resolves under its own id, so it cannot evict the real circuit memo', () => {
+    // Not cosmetic. `memoizePerCircuit` keeps one entry per id, so a throwaway
+    // wearing the real id rebuilt the spline model twice per pointermove: once
+    // for the ghost and once for the circuit it had just displaced.
+    expect(GHOST_ID_SUFFIX.length).toBeGreaterThan(0);
+    const circuit = withProps(GARDEN, []);
+    const before = realmRacersTrack(circuit);
+    ghostPlacement(circuit, 'bench', 40, 30);
+    expect(realmRacersTrack(circuit)).toBe(before);
+  });
+
+  it('draws nothing for a key the catalog does not author', () => {
+    // Rather than silently drawing the previous piece's outline, which is what
+    // taking the last placement unconditionally would do.
+    expect(ghostPlacement(withProps(GARDEN, []), 'notAThing', 40, 30)).toBeNull();
+    const standing = withProps(GARDEN, [{ asset: 'bench', at: { x: 10, z: 10 } }]);
+    expect(ghostPlacement(standing, 'notAThing', 40, 30)).toBeNull();
+  });
+});
+
+describe('mapping a record entry to the piece the resolver placed', () => {
+  const catalog = REALM_RACERS_PROPS;
+
+  it('skips the keys the resolver skips, so a selection never edits its neighbour', () => {
+    // The resolver drops a catalog key nothing authors rather than throwing, so
+    // a hand-pasted draft hands back a SHORTER list than it was given. Without
+    // this map, clicking the third piece edited the fourth record entry.
+    const props: RallyProp[] = [
+      { asset: 'bench', at: { x: 0, z: 0 } },
+      { asset: 'notAThing', at: { x: 5, z: 5 } },
+      { asset: 'postLantern', at: { x: 10, z: 10 } },
+    ];
+    expect(placedPropIndices(props, catalog)).toEqual([0, 2]);
+    expect(placementIndexOf(props, catalog, 2)).toBe(1);
+    expect(placementIndexOf(props, catalog, 1)).toBe(-1);
+    // And it really is the resolver's own order: the second placement is the
+    // lantern, not the unknown key.
+    expect(realmRacersPlacements(withProps(GARDEN, props)).props[1].asset).toBe('postLantern');
+  });
+
+  it('answers for a record with no props at all', () => {
+    expect(placedPropIndices(undefined, catalog)).toEqual([]);
+    expect(placementIndexOf(undefined, catalog, 0)).toBe(-1);
+  });
+});
+
+describe('the seed a new fill gets', () => {
+  it('comes off the record rather than off a clock, so the page reloads the same', () => {
+    const circuit = { ...withProps(GARDEN, []), scatters: undefined, ponds: undefined };
+    expect(nextSeed(circuit)).toBe(nextSeed(circuit));
+    expect(nextSeed(circuit)).toBe(circuit.id.length);
+  });
+
+  it('moves as the dressing grows, so two fills in a row are not twins', () => {
+    const base = { ...withProps(GARDEN, []), scatters: undefined, ponds: undefined };
+    const one = {
+      ...base,
+      scatters: [{ asset: 'shrub', zone: 'infield' as const, spacing: 8, seed: 1 }],
+    };
+    expect(nextSeed(one)).toBe(nextSeed(base) + 1);
+    // Counts BOTH lists: a circuit with a pond and no scatter must not hand the
+    // next fill the same seed as a circuit with a scatter and no pond would...
+    expect(nextSeed({ ...one, ponds: GARDEN.ponds })).toBe(
+      nextSeed(one) + (GARDEN.ponds?.length ?? 0),
+    );
+  });
+});
+
+describe('the pond entry in the palette', () => {
+  it('is not a catalog key, because it authors water rather than a prop', () => {
+    expect(POND_CHOICE in REALM_RACERS_PROPS).toBe(false);
+    expect(POND_CHOICE).toBe('pond');
   });
 });

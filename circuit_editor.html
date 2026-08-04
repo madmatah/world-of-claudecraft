@@ -277,10 +277,16 @@
     .metric.bad .metric-value { color: var(--bad); }
 
     #callouts { position: absolute; inset: 0; pointer-events: none; }
+    /* The 14px offset plus this max-width IS `CALLOUT_REACH` in layout_core.ts,
+       which is what decides when a box has to open the other way, and
+       tests/editor_circuit_page.test.ts fails if the three numbers stop adding
+       up. In PX rather than the `30ch` it used to be: a font-relative ceiling
+       and a pixel constant cannot be kept in step by inspection, and a later
+       type-size change would have invalidated the coupling silently. */
     button.callout {
       position: absolute;
       transform: translate(14px, -50%);
-      max-width: 30ch;
+      max-width: 260px;
       text-align: left;
       pointer-events: auto;
       padding: 4px 8px;
@@ -289,7 +295,16 @@
       border-left: 3px solid var(--bad);
       border-radius: 0 4px 4px 0;
     }
+    /* Near the plan's right edge the box opens LEFT instead, or its explanation
+       is written off the screen: the one case where a callout says nothing. */
+    button.callout.flip {
+      transform: translate(calc(-100% - 14px), -50%);
+      border-left: 1px solid var(--line);
+      border-right: 3px solid var(--bad);
+      border-radius: 4px 0 0 4px;
+    }
     button.callout.warning { border-left-color: var(--warn); }
+    button.callout.flip.warning { border-right-color: var(--warn); }
     button.callout:hover { background: var(--input); }
     .callout-title { color: var(--bad); font-size: 11px; }
     button.callout.warning .callout-title { color: var(--warn); }
@@ -427,7 +442,8 @@
     }
     button.side-tab:hover { color: var(--text); }
     button.side-tab.on { color: var(--pick); border-bottom-color: var(--accent-line); }
-    #toolOptions { flex: none; padding: 8px 10px 0; }
+    #toolOptions { flex: none; display: block; padding: 8px 10px 0; }
+    #toolOptions[hidden] { display: none; }
     #toolValueLabel { display: flex; gap: 6px; align-items: center; color: var(--muted); }
     #toolValueLabel[hidden] { display: none; }
     #toolValueLabel input { width: 84px; }
@@ -620,11 +636,13 @@
             <option value="race">race pace</option>
             <option value="scenic">scenic</option>
           </select>
+          <!-- No max here on purpose: DOCK_SCRUB_STEPS in layout_core.ts owns the
+               scrubber's resolution and dock.ts writes it, so the range, the
+               divisor and the multiplier cannot disagree about how long a lap is. -->
           <input
             type="range"
             id="dockRange"
             min="0"
-            max="1000"
             value="0"
             title="Where on the lap the fly-through sits"
           />

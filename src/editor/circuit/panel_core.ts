@@ -2,11 +2,16 @@
 // may reach.
 //
 // Both were rules living in the page as composite boolean expressions, which is
-// the shape the local CLAUDE.md forbids: `formEl.hidden = railMode !== 'race' ||
-// !drawn` is a decision, not wiring, and it was untestable beside its own sibling
-// `sideTabsFor`, which is in a core with two tests. The tell that they belonged
-// together: "which tabs a mode has" and "what a mode with no tabs shows instead"
-// answer one question, and they were on opposite sides of the seam.
+// the shape the local CLAUDE.md forbids: hiding the record form on a composite
+// of the rail mode and the drawn flag is a decision, not wiring, and it was
+// untestable beside its own sibling `sideTabsFor`, which is in a core with two
+// tests. The tell that they belonged together: "which tabs a mode has" and "what
+// a mode with no tabs shows instead" answer one question, and they were on
+// opposite sides of the seam.
+//
+// (That sentence used to quote the expression verbatim, which put a literal
+// `.hidden =` in a core and drove the page guard's assignment count one over the
+// real number. A comment must not be countable as code.)
 //
 // Pure and DOM-free. Dev tool, so English lives here.
 

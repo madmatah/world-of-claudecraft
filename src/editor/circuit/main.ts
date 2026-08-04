@@ -1,31 +1,25 @@
 // The circuit editor page: the plan canvas, pointer routing, and the workbench
 // chrome hung off it.
 //
-// Every decision lives in a core (`stroke_fit_core`, `handles_core`,
-// `export_core`, `layout_core`) or in the sim (`realmRacersTrack` for the
-// geometry, `realmRacersCircuitMetrics` for the readout). Nothing here computes
-// anything about a circuit or about the shell: this file turns pointers into
-// calls and returned numbers into pixels, which is the only reason a page is
-// allowed to be this long.
+// Every decision lives in a core (`plan_core`, `stroke_fit_core`, `handles_core`,
+// `props_core`, `export_core`, `layout_core`) or in the sim (`realmRacersTrack`
+// for the geometry, `realmRacersCircuitMetrics` for the readout). Nothing here
+// computes anything about a circuit or about the shell: this file turns pointers
+// into calls and returned numbers into pixels.
 //
-// The chrome itself is `shell.ts` (menu bar, rail, plan overlays, status bar,
-// contextual panel) and `dock.ts` (the floating 3D panel). Both are structure
-// over the same action table, so what this file wires is behavior.
+// The chrome itself is `shell.ts` (menu bar, rail, plan overlays, status bar),
+// `dock.ts` (the floating 3D panel) and the `panel_*` modules (the right column
+// and the readout drawer). All of them are structure over the same cores, so what
+// this file wires is behavior.
 //
 // Dev tool: English-only, absent from every production build. See CLAUDE.md.
 
-import { AREA_TRACK_URLS } from '../../game/music_tracks';
-import { realmRacersTheme } from '../../render/realm_racers_themes';
 import {
-  type RallyPond,
   type RallyProp,
-  type RallyScatter,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_PRACTICE_CIRCUIT,
-  REALM_RACERS_THEME_IDS,
   type RealmRacersBasin,
   type RealmRacersCircuit,
-  type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import {
@@ -33,14 +27,7 @@ import {
   type RealmRacersCircuitProblem,
   realmRacersCircuitMetrics,
 } from '../../sim/realm_racers_circuit_metrics';
-import {
-  type RallyPoint,
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-  REALM_RACERS_ORIGIN,
-  REALM_RACERS_RUNOFF_WIDTH,
-  REALM_RACERS_VERGE_MARGIN,
-} from '../../sim/realm_racers_layout';
+import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import { type RallyPlacedProp, realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
 import {
   type RallyTrackModel,
@@ -51,7 +38,7 @@ import {
 } from '../../sim/realm_racers_spline';
 import { CircuitDock } from './dock';
 import { suggestEnvelope } from './envelope_core';
-import { circuitToTypeScript, roundCircuit, validateCircuitPayload } from './export_core';
+import { circuitToTypeScript, roundCircuit } from './export_core';
 import {
   type CircuitBand,
   deleteControlPoint,
@@ -71,7 +58,6 @@ import {
   actionForShortcut,
   type CircuitTool,
   calloutProblems,
-  clampScale,
   type DockGeometry,
   type EditorLayout,
   gridRange,
@@ -90,31 +76,41 @@ import {
   toolFor,
   zoomScale,
 } from './layout_core';
+import { armStateText, CIRCUIT_ONLY_ACTIONS, needsCircuit, panelLayout } from './panel_core';
+import { RecordFormPanel } from './panel_form';
+import { InspectorPanel } from './panel_inspector';
+import { type LibraryHost, LibraryPanel } from './panel_library';
+import { OutlinerPanel } from './panel_outliner';
+import { MetricsDrawerPanel, ModeReadoutPanel } from './panel_readout';
 import {
-  armStateText,
-  CIRCUIT_ONLY_ACTIONS,
-  MAX_LISTED_PROBLEMS,
-  MODE_READOUT,
-  needsCircuit,
-  panelLayout,
-  READOUT_SECTIONS,
-  type ReadoutSection,
-} from './panel_core';
+  fitHalfExtent,
+  fitScale,
+  HIT_TOLERANCE_PIXELS,
+  PROP_LABEL_MIN_SCALE,
+  planLimits,
+  resolvePlanPalette,
+  starterControlPoints,
+  wheelZoomScale,
+  withAlpha,
+} from './plan_core';
 import {
   authorPlacement,
-  convertedProp,
   type DressingRect,
   type DressingSelection,
+  ghostPlacement,
   hitTestPlaced,
   hitTestPondHandle,
   hitTestPonds,
   movedProp,
+  nextSeed,
+  POND_CHOICE,
   type PondHandle,
+  placedPropIndices,
+  placementIndexOf,
   pondFromDrag,
   pondHandlePoints,
   pondWithHandleAt,
   propFrameOf,
-  propPalette,
   propProjectionHint,
   removedAt,
   replacedAt,
@@ -124,21 +120,11 @@ import {
   tangentProp,
   toggledCollide,
 } from './props_core';
-import { detectPlatform, EditorShell } from './shell';
+import { detectPlatform, EditorShell, type MessageTone } from './shell';
 import { fitStrokeToControlPoints } from './stroke_fit_core';
 import { suggestWidthBands } from './width_fix_core';
 
 type Selection = { kind: 'point'; index: number } | null;
-
-/**
- * The music a circuit may name.
- *
- * The area-track table is the set the game can actually stream for a lane, so it
- * is the honest vocabulary; a circuit naming anything else would play silence. Read
- * off that table rather than re-listed here, so a new track appears in the picker
- * the moment the game can play it.
- */
-const MUSIC_TRACK_IDS: readonly string[] = Object.keys(AREA_TRACK_URLS);
 
 /**
  * How much lap a painted transition runs over, YARDS. In yards rather than in
@@ -152,25 +138,12 @@ const MUSIC_TRACK_IDS: readonly string[] = Object.keys(AREA_TRACK_URLS);
  */
 const PAINT_RAMP_YARDS = 25;
 
-/**
- * An oval a new circuit opens on, so the tool never starts on geometry the
- * spline cannot read. Local yards, counter-clockwise, and sized to clear the
- * template's perimeter wall with its road on: a tool that opens on a circuit
- * its own panel is complaining about teaches the operator to ignore the panel.
- */
-function blankControlPoints(): RallyPoint[] {
-  return Array.from({ length: 12 }, (_, i) => {
-    const angle = (i / 12) * Math.PI * 2;
-    return { x: Math.round(Math.cos(angle) * 95), z: Math.round(Math.sin(angle) * 55) };
-  });
-}
-
 function blankCircuit(): RealmRacersCircuit {
   const template = REALM_RACERS_CIRCUIT_LIST[0];
   return {
     ...template,
     id: 'draft_circuit',
-    controlPoints: blankControlPoints(),
+    controlPoints: starterControlPoints(),
     widthBands: [
       { s: 0, halfWidth: 10 },
       { s: 1, halfWidth: 10 },
@@ -246,17 +219,6 @@ let pondHandle: PondHandle | null = null;
 let dragHint: number | undefined;
 /** The live rectangle a scatter or a pond is being dragged out over. */
 let dressingRect: DressingRect | null = null;
-/**
- * What a click on empty plan PLACES: a catalog asset, the pond, or nothing.
- *
- * Null is the pointer, and it is the default. With something permanently armed,
- * a click that missed the bench the operator meant to grab silently authored a
- * second bench, which is the worst kind of edit: one nobody asked for, at a place
- * nobody chose. Arming is now a deliberate act with a visible state in the status
- * bar, and `esc` puts the pointer back.
- */
-let paletteChoice: string | null = null;
-let paletteShowAll = false;
 /** Where the pointer last was on the plan, which is where the armed piece's
  *  ghost stands. Null once the pointer leaves. */
 let hover: RallyPoint | null = null;
@@ -282,7 +244,21 @@ const emptyEl = document.getElementById('empty') as HTMLDivElement;
 const loadDialog = document.getElementById('loadDialog') as HTMLDialogElement;
 const loadListEl = document.getElementById('loadList') as HTMLDivElement;
 const previewCanvas = document.getElementById('preview3d') as HTMLCanvasElement;
+/** Detected ONCE and handed to both consumers: it is a UA sniff, and running it
+ *  twice is two answers to a question with one. */
 const platform = detectPlatform();
+
+/**
+ * The colours the canvas shares with the stylesheet, read once at boot.
+ *
+ * Five of the sheet's tokens used to exist twice, as a custom property and as a
+ * hex literal in here, with nothing keeping the copies in step. `getComputedStyle`
+ * is a layout read, so it happens once rather than per colour per frame.
+ */
+const rootStyle = getComputedStyle(document.documentElement);
+const planPalette = resolvePlanPalette((property) => rootStyle.getPropertyValue(property));
+/** The wash a selected piece is filled with: the same token, translucent. */
+const PICK_FILL = withAlpha(planPalette.pick, 0.35);
 
 /**
  * The last basin the record carried, so deleting the final pond and then
@@ -329,8 +305,8 @@ function saveLayout(): void {
   }, 400);
 }
 
-function setStatus(text: string, cls: '' | 'ok' | 'err' = ''): void {
-  shell.setMessage(text, cls);
+function setStatus(text: string, tone: MessageTone = ''): void {
+  shell.setMessage(text, tone);
 }
 
 // ---- the record ----
@@ -347,14 +323,14 @@ let preview: import('./preview3d').CircuitPreview | null = null;
  *  there is a circuit to show, and never asks again. */
 let dockRestored = false;
 
-/** Every edit lands here: it rounds to what the export carries, re-derives the
- *  geometry and the readout, and schedules a repaint. */
 /** Every edit records the state it is LEAVING through here, so no site can
  *  forget that a new edit drops the forward branch. */
 function pushUndo(): void {
   history.push({ record, drawn });
 }
 
+/** Every edit lands here: it rounds to what the export carries, re-derives the
+ *  geometry and the readout, and schedules a repaint. */
 function commit(next: RealmRacersCircuit, remember = true): void {
   if (remember) pushUndo();
   record = roundCircuit(next);
@@ -365,10 +341,7 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   requestRedraw();
   // The palette follows the theme, so retyping the theme field re-offers the
   // zone's own vocabulary rather than the one the circuit opened on.
-  if (record.theme !== paletteTheme) {
-    paletteTheme = record.theme;
-    buildPalette();
-  }
+  library.syncTheme();
   // The preview debounces this itself: a drag lands one build on release, never
   // one per pointermove.
   if (drawn) preview?.show(record);
@@ -379,7 +352,7 @@ function restore(snapshot: EditSnapshot): void {
   dressing = null;
   drawn = snapshot.drawn;
   commit(snapshot.record, false);
-  syncForm();
+  form.sync();
   refreshChrome();
 }
 
@@ -440,18 +413,14 @@ function fractionAt(point: RallyPoint): number {
 const authored = (point: RallyPoint): RallyPoint => snapPoint(point, layout.snap);
 
 function fitView(): void {
-  // A blank canvas frames the room a circuit HAS; the placeholder record's own
-  // extents would be framing a shape nobody drew.
-  const half = drawn
-    ? Math.max(metrics.roadHalfX, metrics.roadHalfZ, 20) * 1.15
-    : Math.max(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z) * 1.12;
+  const half = fitHalfExtent(drawn, metrics.roadHalfX, metrics.roadHalfZ);
   // Measured HERE rather than trusted from the last frame: `fitView` runs at boot,
   // before any frame has been drawn, and a plan still measuring zero produced a
   // scale of zero, which is not a view anyone can draw at.
   samplePlanSize();
   view.x = 0;
   view.z = 0;
-  view.scale = clampScale(Math.min(plan.width, plan.height) / (2 * half));
+  view.scale = fitScale(plan.width, plan.height, half);
   rememberZoom();
   requestRedraw();
 }
@@ -612,7 +581,7 @@ function drawGates(): void {
 function drawHandles(): void {
   record.controlPoints.forEach((point, index) => {
     const chosen = selection?.kind === 'point' && selection.index === index;
-    ctx.fillStyle = chosen ? '#ffd479' : index === 0 ? '#7fd48a' : '#7fb2e8';
+    ctx.fillStyle = chosen ? planPalette.pick : index === 0 ? planPalette.ok : '#7fb2e8';
     ctx.beginPath();
     ctx.arc(screenX(point.x), screenY(point.z), chosen ? 6 : 4, 0, Math.PI * 2);
     ctx.fill();
@@ -623,38 +592,23 @@ function drawHandles(): void {
  * The room a circuit has, drawn on a blank canvas.
  *
  * On a blank canvas the readout is hidden, so the two ceilings a circuit lives
- * under (`REALM_RACERS_MAX_REGION_HALF_X`, set by the instance band, and
- * `REALM_RACERS_MAX_REGION_HALF_Z`, set by the gap between two lanes) are
- * nowhere on screen at the exact moment they matter most: before the first
- * stroke. The inner box is what an operator actually aims at, since the line
- * they draw carries a road and a garden either side of it and only the
- * CENTERLINE is under the pen.
+ * under are nowhere on screen at the exact moment they matter most: before the
+ * first stroke. The inner box is what an operator actually aims at, since the
+ * line they draw carries a road and a garden either side of it and only the
+ * CENTERLINE is under the pen. Both boxes and both sentences come from the core.
  */
 function drawLimits(): void {
-  const road = Math.max(...record.widthBands.map((band) => band.halfWidth));
-  const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
-  // The wall has to sit strictly inside the region, and the road inside the
-  // wall, so a yard comes off before the garden either side does.
-  const halfX = REALM_RACERS_MAX_REGION_HALF_X - 1;
-  const halfZ = REALM_RACERS_MAX_REGION_HALF_Z - 1;
-  strokeRect(halfX, halfZ, '#3a4054', [8, 6]);
-  strokeRect(halfX - gardenEdge, halfZ - gardenEdge, '#55607a', [3, 3]);
+  const limits = planLimits(record.widthBands.map((band) => band.halfWidth));
+  strokeRect(limits.outer.halfX, limits.outer.halfZ, planPalette.line, [8, 6]);
+  strokeRect(limits.inner.halfX, limits.inner.halfZ, '#55607a', [3, 3]);
 
-  ctx.fillStyle = '#6f7890';
+  ctx.fillStyle = planPalette.dim;
   ctx.font = '12px ui-monospace, Menlo, monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(
-    `widest a circuit may be: ${halfX * 2} x ${halfZ * 2} yd`,
-    screenX(0),
-    screenY(-halfZ) - 8,
-  );
+  ctx.fillText(limits.outerLabel, screenX(0), screenY(-limits.outer.halfZ) - 8);
   // Inside its own box rather than under it: sat on the outer frame it read as
   // a label for the wrong rectangle.
-  ctx.fillText(
-    `keep the line you draw inside ${Math.round((halfX - gardenEdge) * 2)} x ${Math.round((halfZ - gardenEdge) * 2)} yd`,
-    screenX(0),
-    screenY(halfZ - gardenEdge) - 8,
-  );
+  ctx.fillText(limits.innerLabel, screenX(0), screenY(limits.inner.halfZ) - 8);
   ctx.textAlign = 'left';
 }
 
@@ -679,7 +633,7 @@ function drawProblemMarkers(): void {
   for (const problem of metrics.problems) {
     if (problem.s < 0) continue;
     const p = local(track.pointAt(problem.s));
-    ctx.strokeStyle = problem.severity === 'error' ? '#e08a8a' : '#e0c48a';
+    ctx.strokeStyle = problem.severity === 'error' ? planPalette.bad : planPalette.warn;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(screenX(p.x), screenY(p.z), 11, 0, Math.PI * 2);
@@ -691,7 +645,7 @@ function drawProblemMarkers(): void {
     const b = local(track.pointAt(nearest.otherS));
     ctx.save();
     ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = '#e08a8a';
+    ctx.strokeStyle = planPalette.bad;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(screenX(a.x), screenY(a.z));
@@ -699,6 +653,22 @@ function drawProblemMarkers(): void {
     ctx.stroke();
     ctx.restore();
   }
+}
+
+/**
+ * The piece the cursor is carrying, placed where a click would place it.
+ *
+ * Null unless the props tool is armed and the pointer is over the plan. The
+ * placement itself is `props_core`'s, which resolves a throwaway record through
+ * the ONE resolver, so the outline under the cursor is the outline the collision
+ * set will hold.
+ */
+function cursorGhost(): RallyPlacedProp | null {
+  const armed = library.armed;
+  if (!drawn || tool() !== 'props' || armed === null) return null;
+  if (armed === POND_CHOICE || !hover || dressingDrag) return null;
+  const point = authored(hover);
+  return ghostPlacement(record, armed, point.x, point.z);
 }
 
 /**
@@ -711,7 +681,7 @@ function drawProblemMarkers(): void {
  */
 function drawDressing(): void {
   const placements = realmRacersPlacements(record);
-  const placed = placedPropIndices();
+  const placed = placedPropIndices(record.props, REALM_RACERS_PROPS);
   const traceFootprint = (prop: RallyPlacedProp): void => {
     ctx.beginPath();
     if (prop.footprint.kind === 'circle') {
@@ -753,19 +723,19 @@ function drawDressing(): void {
 
   // Solid pieces are FILLED and decorative ones hollow: whether a piece stops a
   // machine is the one thing about it that is not visible from its shape.
-  const named = view.scale > 1.6;
+  const named = view.scale > PROP_LABEL_MIN_SCALE;
   for (const [index, prop] of placements.props.entries()) {
     const chosen = dressing?.kind === 'prop' && dressing.index === placed[index];
-    ctx.strokeStyle = chosen ? '#ffd479' : prop.solid ? '#e0a86f' : '#8fb2d8';
+    ctx.strokeStyle = chosen ? planPalette.pick : prop.solid ? '#e0a86f' : '#8fb2d8';
     ctx.lineWidth = chosen ? 2 : 1;
     traceFootprint(prop);
     if (prop.solid) {
-      ctx.fillStyle = chosen ? 'rgba(255, 212, 121, 0.35)' : 'rgba(224, 168, 111, 0.25)';
+      ctx.fillStyle = chosen ? PICK_FILL : 'rgba(224, 168, 111, 0.25)';
       ctx.fill();
     }
     ctx.stroke();
     if (!named) continue;
-    ctx.fillStyle = '#9aa3b5';
+    ctx.fillStyle = planPalette.muted;
     ctx.font = '11px ui-monospace, Menlo, monospace';
     ctx.fillText(prop.asset, screenX(prop.x) + 6, screenY(prop.z) - 6);
   }
@@ -775,7 +745,7 @@ function drawDressing(): void {
   if (dressing?.kind === 'pond') {
     const pond = record.ponds?.[dressing.index];
     if (pond) {
-      ctx.fillStyle = '#ffd479';
+      ctx.fillStyle = planPalette.pick;
       for (const handle of Object.values(pondHandlePoints(pond))) {
         ctx.beginPath();
         ctx.arc(screenX(handle.x), screenY(handle.z), 5, 0, Math.PI * 2);
@@ -785,22 +755,16 @@ function drawDressing(): void {
   }
 
   // The GHOST: what the next click will put down, where it will put it.
-  //
-  // Resolved through `realmRacersPlacements` on a record carrying the pending
-  // piece, never worked out here: a ghost that drew its own footprint would be a
-  // second derivation of a placement, which is the exact class of bug the one
-  // resolver exists to make impossible. So the outline under the cursor is the
-  // outline the collision set will hold.
-  const ghost = ghostPlacement();
+  const ghost = cursorGhost();
   if (ghost) {
     ctx.save();
     ctx.setLineDash([3, 3]);
-    ctx.strokeStyle = '#ffd479';
+    ctx.strokeStyle = planPalette.pick;
     ctx.lineWidth = 1.5;
     traceFootprint(ghost);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = '#ffd479';
+    ctx.fillStyle = planPalette.pick;
     ctx.font = '11px ui-monospace, Menlo, monospace';
     ctx.fillText(ghost.asset, screenX(ghost.x) + 8, screenY(ghost.z) - 8);
     ctx.restore();
@@ -809,7 +773,7 @@ function drawDressing(): void {
   if (dressingRect) {
     ctx.save();
     ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = '#e0c48a';
+    ctx.strokeStyle = planPalette.warn;
     ctx.lineWidth = 1;
     ctx.strokeRect(
       screenX(Math.min(dressingRect.x0, dressingRect.x1)),
@@ -829,7 +793,7 @@ function draw(): void {
     canvas.height = Math.round(height * dpr);
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#14161c';
+  ctx.fillStyle = planPalette.bg;
   ctx.fillRect(0, 0, width, height);
   drawGridLines();
 
@@ -841,7 +805,7 @@ function draw(): void {
     drawStroke();
     return;
   }
-  strokeRect(record.regionHalfX, record.regionHalfZ, '#3a4054', [8, 6]);
+  strokeRect(record.regionHalfX, record.regionHalfZ, planPalette.line, [8, 6]);
   strokeRect(record.perimeter.halfX, record.perimeter.halfZ, '#55607a');
   drawSurfaces();
   drawGates();
@@ -854,62 +818,7 @@ function draw(): void {
 // ---- the dressing gestures ----
 
 /** Click tolerance in yards, so a bench is grabbable at any zoom. */
-const dressingTolerance = (): number => 7 / view.scale;
-
-/**
- * The piece the cursor is carrying, placed where a click would place it.
- *
- * Null unless the props tool is armed and the pointer is over the plan. It goes
- * through the resolver on a throwaway record, which costs one resolve per
- * repaint: `drawDressing` already resolves once per repaint, so this is the same
- * order, and it is the only way for the ghost's footprint, yaw and solidity to be
- * the ones the game will use.
- */
-function ghostPlacement(): RallyPlacedProp | null {
-  if (!drawn || tool() !== 'props' || paletteChoice === null) return null;
-  if (paletteChoice === POND_CHOICE || !hover || dressingDrag) return null;
-  const point = authored(hover);
-  const pending: RallyProp = {
-    asset: paletteChoice,
-    at: authorPlacement(record, point.x, point.z).at,
-  };
-  const props = [...(record.props ?? []), pending];
-  // Its OWN id, and this is not cosmetic. `memoizePerCircuit` keeps one entry
-  // per id and only while the record behind it is the same object, so a
-  // throwaway wearing the real id EVICTS the real entry on every frame: the
-  // spline model was being rebuilt twice per pointermove, once for the ghost and
-  // once for the circuit it had just displaced.
-  const placed = realmRacersPlacements({ ...record, props, id: `${record.id}__ghost` }).props;
-  return placed[placed.length - 1] ?? null;
-}
-
-/**
- * Record indices of the props the resolver actually placed, in its own order.
- *
- * The resolver SKIPS a catalog key nothing authors rather than throwing, so a
- * record carrying one (a hand-pasted draft can) hands back a shorter list than
- * it was given. Without this map every selection past the unknown key would
- * edit the entry after the one the operator clicked.
- */
-function placedPropIndices(): number[] {
-  const out: number[] = [];
-  (record.props ?? []).forEach((prop, index) => {
-    if (prop.asset in REALM_RACERS_PROPS) out.push(index);
-  });
-  return out;
-}
-
-/** Where a record prop sits in the resolver's list, or -1. */
-function placementIndexOf(recordIndex: number): number {
-  return placedPropIndices().indexOf(recordIndex);
-}
-
-/** A seed a new scatter or pond gets. Taken off the record's own size rather
- *  than off a clock: the page must stay reloadable to the same circuit, and a
- *  seed nobody chose is still a number the operator can edit afterwards. */
-function nextSeed(): number {
-  return (record.scatters?.length ?? 0) + (record.ponds?.length ?? 0) + record.id.length;
-}
+const dressingTolerance = (): number => HIT_TOLERANCE_PIXELS.dressing / view.scale;
 
 /** The record with one dressing list replaced, committed. */
 function commitDressing(next: Partial<RealmRacersCircuit>, remember = true): void {
@@ -943,7 +852,7 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
   // finger whether or not the next placement will be rounded to the grid.
   const hitProp = hitTestPlaced(placements.props, raw.x, raw.z, tolerance);
   if (hitProp >= 0) {
-    const index = placedPropIndices()[hitProp];
+    const index = placedPropIndices(record.props, REALM_RACERS_PROPS)[hitProp];
     dressing = { kind: 'prop', index };
     pushUndo();
     dressingDrag = 'move';
@@ -964,7 +873,8 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
 
   // Nothing under the pointer, and nothing armed: the click was a miss, or a
   // deliberate deselect. Either way it must not author anything.
-  if (paletteChoice === null) {
+  const armed = library.armed;
+  if (armed === null) {
     dressing = null;
     applySideTab();
     requestRedraw();
@@ -974,19 +884,19 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
   // Nothing under the pointer: this is a placement. A pond and a scatter are
   // both dragged out over a box, a prop lands on the click.
   const point = authored(raw);
-  if (rect || paletteChoice === POND_CHOICE) {
+  if (rect || armed === POND_CHOICE) {
     dressingRect = { x0: point.x, z0: point.z, x1: point.x, z1: point.z };
     dressingDrag = 'rect';
     return;
   }
   const placement = authorPlacement(record, point.x, point.z);
-  const props = [...(record.props ?? []), { asset: paletteChoice, at: placement.at }];
+  const props = [...(record.props ?? []), { asset: armed, at: placement.at }];
   dressing = { kind: 'prop', index: props.length - 1 };
   dressingDrag = 'move';
   dragHint = placement.hint;
   commitDressing({ props });
   applySideTab();
-  setStatus(`placed ${paletteChoice} (${propFrameOf(props[props.length - 1])})`, 'ok');
+  setStatus(`placed ${armed} (${propFrameOf(props[props.length - 1])})`, 'ok');
 }
 
 function moveDressingGesture(raw: RallyPoint): void {
@@ -1038,7 +948,7 @@ function moveDressingGesture(raw: RallyPoint): void {
 }
 
 function endDressingGesture(): void {
-  const armed = paletteChoice;
+  const armed = library.armed;
   if (dressingDrag === 'rect' && dressingRect && armed) {
     const box = dressingRect;
     const dragged = Math.hypot(box.x1 - box.x0, box.z1 - box.z0);
@@ -1047,14 +957,14 @@ function endDressingGesture(): void {
     } else if (armed === POND_CHOICE) {
       const ponds = [
         ...(record.ponds ?? []),
-        pondFromDrag(box.x0, box.z0, box.x1, box.z1, nextSeed()),
+        pondFromDrag(box.x0, box.z0, box.x1, box.z1, nextSeed(record)),
       ];
       dressing = { kind: 'pond', index: ponds.length - 1 };
       commitDressing({ ponds });
       setStatus(`placed a pond, ${ponds.length} on this circuit`, 'ok');
     } else {
       const spacing = Number(shell.toolValueInput.value);
-      const scatter = scatterFromRect(record, box, armed, spacing, nextSeed());
+      const scatter = scatterFromRect(record, box, armed, spacing, nextSeed(record));
       const scatters = [...(record.scatters ?? []), scatter];
       dressing = { kind: 'scatter', index: scatters.length - 1 };
       commitDressing({ scatters });
@@ -1096,896 +1006,8 @@ function deleteDressing(): void {
   applySideTab();
 }
 
-// ---- the library ----
+// ---- the two repairs ----
 
-/** The palette entry that places WATER rather than a catalog piece. Ponds live
- *  in the same list because placing one is the same gesture, and a mode of
- *  their own is what the deleted water paint already was. */
-const POND_CHOICE = 'pond';
-
-/** Which theme the palette on screen was built for. */
-let paletteTheme = '';
-
-const libraryEl = document.createElement('div');
-const paletteListEl = document.createElement('div');
-paletteListEl.className = 'palette-list';
-const pointerButton = document.createElement('button');
-pointerButton.type = 'button';
-pointerButton.className = 'pointer-mode';
-pointerButton.title =
-  'Select and edit what is already there. A click on empty plan places nothing (esc)';
-pointerButton.onclick = () => armPalette(null);
-const paletteAllLabel = document.createElement('label');
-paletteAllLabel.id = 'paletteAllLabel';
-const paletteAllEl = document.createElement('input');
-paletteAllEl.type = 'checkbox';
-paletteAllLabel.append(paletteAllEl, ' show the whole catalog');
-
-/** What the status bar says a click will do, and what the palette highlights. */
-function armPalette(key: string | null): void {
-  paletteChoice = key;
-  buildPalette();
-  shell.setArmed(railMode === 'props' ? armStateText(paletteChoice, POND_CHOICE) : '');
-  // The pointer itself says which of the two states the tool is in, before the
-  // operator has read anything: a crosshair selects, a copy cursor places.
-  canvas.style.cursor = key === null ? 'crosshair' : 'copy';
-  requestRedraw();
-}
-
-function buildPalette(): void {
-  libraryEl.replaceChildren();
-  const heading = document.createElement('h2');
-  heading.textContent = 'library';
-  paletteListEl.replaceChildren();
-  const entries = propPalette(REALM_RACERS_PROPS, realmRacersTheme(record).props);
-  const shown = paletteShowAll ? entries : entries.filter((entry) => entry.featured);
-  const choose = (key: string, label: string, detail: string): void => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = label;
-    button.title = detail;
-    button.classList.toggle('on', paletteChoice === key);
-    // Clicking the armed piece again disarms it, so the pointer is always one
-    // click away from wherever the operator's hand already is.
-    button.onclick = () => armPalette(paletteChoice === key ? null : key);
-    paletteListEl.append(button);
-  };
-  choose(POND_CHOICE, 'pond', 'Drag a box: decorative water, no slow and no mechanic');
-  for (const entry of shown) choose(entry.asset, entry.asset, entry.group);
-  // The pointer is a MODE, not a piece, so it gets its own row above the pieces.
-  // Sat inside the list as the first tile it read as "the first asset is armed",
-  // which is the opposite of what it means.
-  pointerButton.classList.toggle('on', paletteChoice === null);
-  pointerButton.textContent =
-    paletteChoice === null ? 'pointer (armed)' : `pointer (esc) - placing ${paletteChoice}`;
-  const hint = document.createElement('div');
-  hint.className = 'hint-line';
-  hint.textContent =
-    railMode === 'props'
-      ? paletteChoice === null
-        ? 'arm a piece above, then click the plan to place one'
-        : 'click the plan to place one; shift+drag a box to sow a whole patch of them at the spacing above'
-      : 'arm a piece here, then switch to the PROPS tool to place it';
-  libraryEl.append(heading, pointerButton, paletteListEl, paletteAllLabel, hint);
-}
-
-paletteAllEl.onchange = () => {
-  paletteShowAll = paletteAllEl.checked;
-  buildPalette();
-};
-
-// ---- the outliner ----
-//
-// What is STANDING on this circuit, entry by entry. The drawer counts the
-// dressing in aggregate, which answers "how much" and never "which one", and on
-// a dressed circuit the fourth lantern is the thing an operator is looking for.
-
-const outlinerEl = document.createElement('div');
-
-function outlinerRow(name: string, detail: string, solid = false): HTMLDivElement {
-  const row = document.createElement('div');
-  row.className = 'outline-row';
-  const label = document.createElement('span');
-  label.className = 'n';
-  label.textContent = name;
-  const note = document.createElement('span');
-  note.textContent = detail;
-  row.append(label, note);
-  if (solid) {
-    const mark = document.createElement('span');
-    mark.className = 'solid';
-    mark.textContent = 'solid';
-    row.append(mark);
-  }
-  return row;
-}
-
-function paintOutliner(): void {
-  if (outlinerEl.hidden) return;
-  outlinerEl.replaceChildren();
-  if (!drawn) return;
-  const placements = realmRacersPlacements(record);
-  const props = record.props ?? [];
-  // Hoisted: called per prop it walks the whole list per prop, which is
-  // quadratic and allocates an array each time, on a path that runs per frame.
-  const placed = placedPropIndices();
-  const heading = (text: string): void => {
-    const h = document.createElement('h2');
-    h.textContent = text;
-    outlinerEl.append(h);
-  };
-
-  heading(`props (${props.length})`);
-  if (props.length === 0) outlinerEl.append(outlinerRow('nothing placed', ''));
-  props.forEach((prop, index) => {
-    const at = placements.props[placed.indexOf(index)];
-    const where = at ? `${at.x.toFixed(0)}, ${at.z.toFixed(0)}` : 'not drawn';
-    outlinerEl.append(outlinerRow(prop.asset, where, Boolean(at?.solid)));
-  });
-
-  const scatters = record.scatters ?? [];
-  heading(`scatters (${scatters.length}, ${metrics.scatterCount} pieces)`);
-  for (const scatter of scatters) {
-    outlinerEl.append(outlinerRow(scatter.asset, `${scatter.zone}, ${scatter.spacing} yd`));
-  }
-
-  const ponds = record.ponds ?? [];
-  heading(`ponds (${ponds.length})`);
-  ponds.forEach((pond, index) => {
-    outlinerEl.append(
-      outlinerRow(`pond ${index}`, `${(pond.rx * 2).toFixed(0)} x ${(pond.rz * 2).toFixed(0)} yd`),
-    );
-  });
-
-  const hint = document.createElement('div');
-  hint.className = 'hint-line';
-  hint.textContent = 'click a piece on the plan to edit its numbers';
-  outlinerEl.append(hint);
-}
-
-// ---- the inspector ----
-//
-// The numbers behind the selection, editable. Rebuilt with the readout, EXCEPT
-// while one of its own inputs has the caret: a drag repaints the panel, and
-// rebuilding under a half-typed number would take the focus out of it.
-
-const inspectorEl = document.createElement('div');
-inspectorEl.id = 'inspector';
-
-function inspectorRow(
-  label: string,
-  value: string,
-  write: (raw: string) => void,
-  attrs: Partial<HTMLInputElement> = {},
-): void {
-  const wrap = document.createElement('div');
-  wrap.className = 'field';
-  const name = document.createElement('label');
-  name.textContent = label;
-  const input = document.createElement('input');
-  input.type = attrs.type ?? 'number';
-  Object.assign(input, attrs);
-  input.value = value;
-  input.onchange = () => write(input.value);
-  name.append(input);
-  wrap.append(name);
-  inspectorEl.append(wrap);
-}
-
-function inspectorButton(label: string, onClick: () => void): void {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.textContent = label;
-  button.onclick = onClick;
-  inspectorEl.append(button);
-}
-
-function paintInspector(): void {
-  if (inspectorEl.hidden || inspectorEl.contains(document.activeElement)) return;
-  inspectorEl.replaceChildren();
-  if (!dressing) {
-    const hint = document.createElement('div');
-    hint.className = 'hint-line';
-    hint.textContent =
-      railMode === 'props'
-        ? 'click a prop, a scatter or a pond on the plan'
-        : 'the PROPS tool is where a piece is selected';
-    inspectorEl.append(hint);
-    return;
-  }
-  const title = document.createElement('h2');
-  title.textContent = `${dressing.kind} ${dressing.index}`;
-  inspectorEl.append(title);
-  const number = (raw: string, fallback: number): number =>
-    Number.isFinite(Number(raw)) ? Number(raw) : fallback;
-
-  if (dressing.kind === 'prop') {
-    const prop = selectedProp();
-    if (!prop) return;
-    const index = dressing.index;
-    const placed = realmRacersPlacements(record).props[placementIndexOf(index)];
-    const edit = (next: RallyProp): void =>
-      commitDressing({ props: replacedAt(record.props, index, next) });
-    if ('s' in prop.at) {
-      inspectorRow(
-        'lap fraction',
-        String(prop.at.s),
-        (raw) => {
-          const at = prop.at as { s: number; offset: number };
-          edit({ ...prop, at: { s: number(raw, at.s), offset: at.offset } });
-        },
-        { step: '0.001', min: '0', max: '1' },
-      );
-      inspectorRow(
-        'offset (yd)',
-        String(prop.at.offset),
-        (raw) => {
-          const at = prop.at as { s: number; offset: number };
-          edit({ ...prop, at: { s: at.s, offset: number(raw, at.offset) } });
-        },
-        { step: '0.5' },
-      );
-    } else {
-      inspectorRow(
-        'x',
-        String(prop.at.x),
-        (raw) => {
-          const at = prop.at as { x: number; z: number };
-          edit({ ...prop, at: { x: number(raw, at.x), z: at.z } });
-        },
-        { step: '0.5' },
-      );
-      inspectorRow(
-        'z',
-        String(prop.at.z),
-        (raw) => {
-          const at = prop.at as { x: number; z: number };
-          edit({ ...prop, at: { x: at.x, z: number(raw, at.z) } });
-        },
-        { step: '0.5' },
-      );
-    }
-    inspectorRow(
-      'yaw (rad)',
-      prop.yaw === 'tangent' ? '' : String(prop.yaw ?? 0),
-      (raw) => {
-        edit({ ...prop, yaw: number(raw, 0) });
-      },
-      { step: '0.05' },
-    );
-    inspectorRow(
-      'scale',
-      String(prop.scale ?? 1),
-      (raw) => {
-        edit({ ...prop, scale: number(raw, 1) });
-      },
-      { step: '0.05', min: '0.05', max: '50' },
-    );
-    if (placed) {
-      const detail = document.createElement('div');
-      detail.className = 'd';
-      detail.textContent = `${propFrameOf(prop)}, ${placed.solid ? 'solid' : 'decor'}, stands at ${placed.x.toFixed(1)}, ${placed.z.toFixed(1)}`;
-      inspectorEl.append(detail);
-      inspectorButton('to the other frame', () => {
-        edit(convertedProp(record, prop, placed.x, placed.z));
-      });
-    }
-    inspectorButton(prop.collide === 'none' ? 'make it solid again' : 'stop it colliding', () => {
-      edit(toggledCollide(prop));
-    });
-    return;
-  }
-
-  if (dressing.kind === 'scatter') {
-    const scatter = (record.scatters ?? [])[dressing.index];
-    if (!scatter) return;
-    const index = dressing.index;
-    const edit = (next: RallyScatter): void =>
-      commitDressing({ scatters: replacedAt(record.scatters, index, next) });
-    inspectorRow(
-      'spacing (yd)',
-      String(scatter.spacing),
-      (raw) => {
-        edit({ ...scatter, spacing: number(raw, scatter.spacing) });
-      },
-      { step: '0.5', min: '1', max: '200' },
-    );
-    inspectorRow(
-      'seed',
-      String(scatter.seed),
-      (raw) => {
-        edit({ ...scatter, seed: Math.round(number(raw, scatter.seed)) });
-      },
-      { step: '1' },
-    );
-    if (scatter.span) {
-      const span = scatter.span;
-      inspectorRow(
-        'span from',
-        String(span.s0),
-        (raw) => {
-          edit({ ...scatter, span: { s0: number(raw, span.s0), s1: span.s1 } });
-        },
-        { step: '0.01', min: '0', max: '1' },
-      );
-      inspectorRow(
-        'span to',
-        String(span.s1),
-        (raw) => {
-          edit({ ...scatter, span: { s0: span.s0, s1: number(raw, span.s1) } });
-        },
-        { step: '0.01', min: '0', max: '1' },
-      );
-    }
-    const detail = document.createElement('div');
-    detail.className = 'd';
-    detail.textContent = `${scatter.asset}, ${scatter.zone}`;
-    inspectorEl.append(detail);
-    inspectorButton(
-      scatter.zone === 'infield' ? 'move to the outfield' : 'move to the infield',
-      () => {
-        edit({ ...scatter, zone: scatter.zone === 'infield' ? 'outfield' : 'infield' });
-      },
-    );
-    return;
-  }
-
-  const pond = (record.ponds ?? [])[dressing.index];
-  if (!pond) return;
-  const index = dressing.index;
-  const edit = (next: RallyPond): void =>
-    commitDressing({ ponds: replacedAt(record.ponds, index, next) });
-  inspectorRow('x', String(pond.x), (raw) => edit({ ...pond, x: number(raw, pond.x) }), {
-    step: '0.5',
-  });
-  inspectorRow('z', String(pond.z), (raw) => edit({ ...pond, z: number(raw, pond.z) }), {
-    step: '0.5',
-  });
-  inspectorRow('radius x', String(pond.rx), (raw) => edit({ ...pond, rx: number(raw, pond.rx) }), {
-    step: '0.5',
-    min: '0.5',
-  });
-  inspectorRow('radius z', String(pond.rz), (raw) => edit({ ...pond, rz: number(raw, pond.rz) }), {
-    step: '0.5',
-    min: '0.5',
-  });
-  inspectorRow('rotation', String(pond.rot ?? 0), (raw) => edit({ ...pond, rot: number(raw, 0) }), {
-    step: '0.05',
-  });
-  inspectorRow(
-    'wobble',
-    String(pond.wobble ?? 0.15),
-    (raw) => edit({ ...pond, wobble: number(raw, 0.15) }),
-    {
-      step: '0.01',
-      min: '0',
-      max: '0.35',
-    },
-  );
-  inspectorRow(
-    'seed',
-    String(pond.seed ?? 0),
-    (raw) => edit({ ...pond, seed: Math.round(number(raw, 0)) }),
-    {
-      step: '1',
-    },
-  );
-}
-
-// ---- the readout drawer ----
-
-function row(table: HTMLTableElement, key: string, value: string, cls = ''): void {
-  const tr = table.insertRow();
-  const k = tr.insertCell();
-  k.className = 'k';
-  k.textContent = key;
-  const v = tr.insertCell();
-  v.className = `v ${cls}`.trim();
-  v.textContent = value;
-}
-
-function heading(text: string): HTMLHeadingElement {
-  const h = document.createElement('h2');
-  h.textContent = text;
-  return h;
-}
-
-function problemLine(problem: RealmRacersCircuitProblem): HTMLDivElement {
-  const div = document.createElement('div');
-  div.className = `problem ${problem.severity}`;
-  const label = document.createElement('div');
-  label.className = 'c';
-  label.textContent = problemHeadline(problem);
-  const detail = document.createElement('div');
-  detail.className = 'd';
-  detail.textContent = problemDetail(problem);
-  div.append(label, detail);
-  return div;
-}
-
-/**
- * The readout, section by section, each one an element.
- *
- * Sections rather than one paint, because two surfaces show them: the drawer
- * shows every one, and the right panel shows the SECTIONS THE ACTIVE TOOL IS
- * ABOUT (shape's geometry while shaping, the road profile while painting it).
- * One builder each, so the two can never quote a different number for the same
- * measurement.
- */
-function readoutSection(section: ReadoutSection): HTMLElement[] {
-  const table = document.createElement('table');
-  switch (section) {
-    case 'shape':
-      row(table, 'lap', `${metrics.lapLength.toFixed(1)} yd`);
-      row(table, 'samples', String(metrics.sampleCount));
-      row(
-        table,
-        'total turning',
-        `${metrics.turningDegrees.toFixed(1)} deg`,
-        Math.abs(Math.abs(metrics.turningDegrees) - 360) > 5 ? 'bad' : 'good',
-      );
-      row(
-        table,
-        'winding',
-        metrics.winding > 0 ? 'counter-clockwise' : 'clockwise',
-        metrics.winding > 0 ? 'good' : 'bad',
-      );
-      row(table, 'control points', String(record.controlPoints.length));
-      break;
-    case 'corners':
-      row(table, 'tightest corner', `${metrics.tightestRadius.toFixed(1)} yd`);
-      row(
-        table,
-        'radius / road',
-        metrics.minRadiusOverWidth.toFixed(2),
-        metrics.minRadiusOverWidth < 1 ? 'bad' : metrics.minRadiusOverWidth < 1.5 ? 'warn' : 'good',
-      );
-      row(table, 'at', `${metrics.minRadiusOverWidthAtS.toFixed(0)} yd`);
-      break;
-    case 'stretches': {
-      const nearest = metrics.nearestApproach;
-      row(
-        table,
-        'nearest approach',
-        Number.isFinite(nearest.distance) ? `${nearest.distance.toFixed(1)} yd` : 'none',
-        Number.isFinite(nearest.distance) && nearest.distance < 48 ? 'bad' : 'good',
-      );
-      row(table, 'tangent dot', nearest.tangentDot.toFixed(2));
-      row(table, 'between', `${nearest.s.toFixed(0)} and ${nearest.otherS.toFixed(0)} yd`);
-      row(table, 'shooting corridor', `${metrics.shootingCorridorYards.toFixed(0)} yd`);
-      break;
-    }
-    case 'surface': {
-      // What the brush actually left on the circuit, read back off the derived
-      // samples rather than off the band table: the table is breakpoints and the
-      // road is samples, and only the second one is what a racer meets.
-      const halfWidths = track.samples.map((sample) => sample.halfWidth);
-      row(
-        table,
-        'road half-width',
-        `${Math.min(...halfWidths).toFixed(1)} to ${Math.max(...halfWidths).toFixed(1)} yd`,
-      );
-      row(table, 'width bands', String(record.widthBands.length));
-      row(table, 'recovery anchors', String(realmRacersGates(record).length));
-      break;
-    }
-    case 'dressing': {
-      // What is STANDING on the circuit, counted off the resolver rather than off
-      // the record: a scatter is a handful of rows and hundreds of pieces, and
-      // the pieces are what the operator is looking at.
-      row(table, 'props', String(metrics.propCount));
-      row(table, 'solid props', String(metrics.solidPropCount));
-      row(table, 'scatters', `${record.scatters?.length ?? 0} (${metrics.scatterCount} pieces)`);
-      row(table, 'ponds', String(metrics.pondCount));
-      row(table, 'water authored', record.basin ? 'yes' : 'no');
-      const unknown = realmRacersPlacements(record).unknownAssets;
-      if (unknown.length > 0) row(table, 'unknown keys', unknown.join(', '), 'bad');
-      break;
-    }
-    default:
-      row(table, 'road half-extent x', `${metrics.roadHalfX.toFixed(0)} yd`);
-      row(table, 'road half-extent z', `${metrics.roadHalfZ.toFixed(0)} yd`);
-      // The two ceilings, so a circuit that cannot fit the band says so BEFORE
-      // the operator has drawn a lap around it.
-      row(
-        table,
-        'widest region',
-        `${REALM_RACERS_MAX_REGION_HALF_X} yd`,
-        record.regionHalfX > REALM_RACERS_MAX_REGION_HALF_X ? 'bad' : '',
-      );
-      row(
-        table,
-        'deepest region',
-        `${REALM_RACERS_MAX_REGION_HALF_Z} yd`,
-        record.regionHalfZ > REALM_RACERS_MAX_REGION_HALF_Z ? 'bad' : '',
-      );
-      break;
-  }
-  return [heading(section), table];
-}
-
-function problemsBlock(): HTMLElement[] {
-  const out: HTMLElement[] = [heading('problems')];
-  if (metrics.problems.length === 0) {
-    const clean = document.createElement('div');
-    clean.className = 'clean';
-    clean.textContent = 'none: this is drivable geometry';
-    out.push(clean);
-    return out;
-  }
-  // Capped, and the cap SAYS so: a list that silently stopped at ten would read
-  // as "ten problems" when there are thirty.
-  for (const problem of metrics.problems.slice(0, MAX_LISTED_PROBLEMS)) {
-    out.push(problemLine(problem));
-  }
-  if (metrics.problems.length > MAX_LISTED_PROBLEMS) {
-    const more = document.createElement('div');
-    more.className = 'd';
-    more.textContent = `and ${metrics.problems.length - MAX_LISTED_PROBLEMS} more`;
-    out.push(more);
-  }
-  return out;
-}
-
-function paintReadout(): void {
-  const body = shell.metricsBodyEl;
-  body.replaceChildren();
-  if (!drawn) return;
-  for (const section of READOUT_SECTIONS) body.append(...readoutSection(section));
-  body.append(...problemsBlock());
-}
-
-const modeReadoutEl = document.createElement('div');
-
-function paintModeReadout(): void {
-  if (modeReadoutEl.hidden) return;
-  modeReadoutEl.replaceChildren();
-  if (!drawn) return;
-  for (const section of MODE_READOUT[railMode]) modeReadoutEl.append(...readoutSection(section));
-  const hint = document.createElement('div');
-  hint.className = 'hint-line';
-  hint.textContent = 'the whole readout is under View > metrics detail';
-  modeReadoutEl.append(hint);
-}
-
-// ---- the record form ----
-//
-// Everything a circuit holds that is NOT drawn: the id, the enclosure, and the
-// race. Built once and only synced, because rebuilding it on every drag would
-// take the focus out of an input the operator is still typing in.
-
-interface FormField {
-  input: HTMLInputElement | HTMLSelectElement;
-  read: () => string;
-  /**
-   * How this control re-reads the record, when assigning `value` is not enough.
-   *
-   * A `<select>` given a value no option carries goes BLANK, silently. Every
-   * commit the control did not make itself lands here (an undo, a Load, a fresh
-   * draft), so a select whose options were built for the previous record has to
-   * rebuild them rather than take the assignment.
-   */
-  sync?: () => void;
-}
-
-const formEl = document.createElement('div');
-const formFields: FormField[] = [];
-/** The rows only a PRACTICE circuit has, hidden when it is not one. */
-const practiceRows: HTMLElement[] = [];
-/** The role checkboxes, synced from the record rather than trusted. */
-const roleBoxes = new Map<RealmRacersCircuitRole, HTMLInputElement>();
-
-/**
- * One edit, validated the way the SAVE endpoint validates.
- *
- * Checked through `validateCircuitPayload` rather than against a second copy of
- * every field's range here: a value the form accepts that the endpoint would
- * refuse is a draft the operator cannot save, found out one step too late. A
- * value that is merely unwise (a region deeper than the lane budget) still lands,
- * because the readout is what says so.
- */
-function applyEdit(label: string, next: RealmRacersCircuit | null, refusal?: string): boolean {
-  const valid = next && validateCircuitPayload(next);
-  if (!valid) {
-    setStatus(refusal ?? `${label}: not a value a circuit can carry`, 'err');
-    return false;
-  }
-  commit(valid);
-  return true;
-}
-
-function fieldRow(label: string): { wrap: HTMLDivElement; name: HTMLLabelElement } {
-  const wrap = document.createElement('div');
-  wrap.className = 'field';
-  const name = document.createElement('label');
-  name.textContent = label;
-  wrap.append(name);
-  return { wrap, name };
-}
-
-function field(
-  parent: HTMLElement,
-  label: string,
-  read: () => string,
-  write: (raw: string) => RealmRacersCircuit | null,
-  attrs: Partial<HTMLInputElement> = {},
-): HTMLDivElement {
-  const { wrap, name } = fieldRow(label);
-  const input = document.createElement('input');
-  input.type = attrs.type ?? 'number';
-  Object.assign(input, attrs);
-  input.value = read();
-  input.onchange = () => {
-    // Written back HERE on a refusal rather than through syncForm, which
-    // deliberately skips the focused input: a refused edit is the one case where
-    // the field still holds the caret and must be overwritten anyway, or the
-    // panel shows a number the record does not carry.
-    if (!applyEdit(`${label}: ${input.value}`, write(input.value))) input.value = read();
-    syncForm();
-  };
-  name.append(input);
-  parent.append(wrap);
-  formFields.push({ input, read });
-  return wrap;
-}
-
-/** The option value that means "not one of the above". */
-const CUSTOM_OPTION = '__custom__';
-
-/**
- * A real `<select>` over a known set, with a way out.
- *
- * It replaced a datalist, which only ever worked as a SEARCH: there was no way to
- * see what the themes even were, which is the first thing anyone wants from a
- * fixed vocabulary. The way out matters too, and it is why this is not a plain
- * select: an id being written in the same change is legally typeable, and the
- * readout is what says whether a registry authors it (`unknown_theme`). A value
- * already on the record that is not in the list is added as an option, so the
- * control always shows the truth.
- */
-function selectField(
-  parent: HTMLElement,
-  label: string,
-  read: () => string,
-  write: (raw: string) => RealmRacersCircuit | null,
-  choices: readonly string[],
-): HTMLDivElement {
-  const { wrap, name } = fieldRow(label);
-  const select = document.createElement('select');
-  const custom = document.createElement('input');
-  custom.type = 'text';
-  custom.placeholder = 'id not in the list';
-  custom.hidden = true;
-
-  const fill = (): void => {
-    const current = read();
-    const known = [...choices, ...(choices.includes(current) || !current ? [] : [current])];
-    select.replaceChildren();
-    for (const choice of known) {
-      const option = document.createElement('option');
-      option.value = choice;
-      option.textContent = choices.includes(choice) ? choice : `${choice} (not in the list)`;
-      select.append(option);
-    }
-    const other = document.createElement('option');
-    other.value = CUSTOM_OPTION;
-    other.textContent = 'other, type it';
-    select.append(other);
-    select.value = current;
-  };
-  fill();
-
-  select.onchange = () => {
-    if (select.value === CUSTOM_OPTION) {
-      custom.hidden = false;
-      custom.value = read();
-      custom.focus();
-      select.value = read();
-      return;
-    }
-    custom.hidden = true;
-    if (!applyEdit(`${label}: ${select.value}`, write(select.value))) fill();
-    syncForm();
-  };
-  custom.onchange = () => {
-    if (applyEdit(`${label}: ${custom.value}`, write(custom.value))) {
-      custom.hidden = true;
-      fill();
-    }
-    syncForm();
-  };
-
-  name.append(select);
-  wrap.append(custom);
-  parent.append(wrap);
-  formFields.push({ input: select, read, sync: fill });
-  return wrap;
-}
-
-/**
- * A role, on or off.
- *
- * The record needs at least one, so unchecking the last is REFUSED by name rather
- * than silently ignored: a checkbox that springs back with no explanation reads as
- * a broken control. Turning practice off also zeroes the copy count, because a
- * circuit nobody practises on has nothing to copy.
- */
-function roleBox(parent: HTMLElement, role: RealmRacersCircuitRole, detail: string): void {
-  const wrap = document.createElement('div');
-  wrap.className = 'field';
-  const name = document.createElement('label');
-  const box = document.createElement('input');
-  box.type = 'checkbox';
-  box.checked = record.roles.includes(role);
-  name.append(box, ` ${role}`);
-  name.title = detail;
-  box.onchange = () => {
-    const wanted = new Set(record.roles);
-    if (box.checked) wanted.add(role);
-    else wanted.delete(role);
-    const roles = ROLE_ORDER.filter((entry) => wanted.has(entry));
-    const next =
-      roles.length === 0
-        ? null
-        : {
-            ...record,
-            roles,
-            practiceCopies: roles.includes('practice') ? record.practiceCopies : 0,
-          };
-    applyEdit(
-      role,
-      next,
-      'a circuit has to be at least one of competition or practice, so the last one cannot come off',
-    );
-    syncForm();
-  };
-  wrap.append(name);
-  parent.append(wrap);
-  roleBoxes.set(role, box);
-}
-
-const ROLE_ORDER: readonly RealmRacersCircuitRole[] = ['competition', 'practice'];
-
-const asNumber = (raw: string, fallback: number): number => {
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
-};
-
-function buildForm(): void {
-  formEl.replaceChildren();
-  formFields.length = 0;
-  practiceRows.length = 0;
-  roleBoxes.clear();
-
-  formEl.append(heading('roles'));
-  const roles = document.createElement('div');
-  roleBox(roles, 'competition', 'Drawn from the competition pool when a four-pilot roster fills');
-  roleBox(roles, 'practice', 'Offered as practice, with one lane copy per practising player');
-  formEl.append(roles);
-
-  formEl.append(heading('race'));
-  const race = document.createElement('div');
-  field(
-    race,
-    'id',
-    () => record.id,
-    (raw) => ({ ...record, id: raw.trim() }),
-    { type: 'text' },
-  );
-  field(
-    race,
-    'laps',
-    () => String(record.laps),
-    (raw) => ({ ...record, laps: Math.round(asNumber(raw, record.laps)) }),
-    { min: '1', max: '20', step: '1' },
-  );
-  field(
-    race,
-    'time limit (s)',
-    () => String(record.timeLimitSeconds),
-    (raw) => ({ ...record, timeLimitSeconds: asNumber(raw, record.timeLimitSeconds) }),
-    { min: '10', max: '3600', step: '10' },
-  );
-  field(
-    race,
-    'start back',
-    () => String(record.startBack),
-    (raw) => ({ ...record, startBack: asNumber(raw, record.startBack) }),
-    { step: '0.5' },
-  );
-  field(
-    race,
-    'start spacing',
-    () => String(record.startSpacing),
-    (raw) => ({ ...record, startSpacing: asNumber(raw, record.startSpacing) }),
-    { step: '0.5' },
-  );
-  practiceRows.push(
-    field(
-      race,
-      'practice laps',
-      () => String(record.practiceLaps),
-      (raw) => ({ ...record, practiceLaps: Math.round(asNumber(raw, record.practiceLaps)) }),
-      { min: '1', max: '20', step: '1' },
-    ),
-    field(
-      race,
-      'practice copies',
-      () => String(record.practiceCopies),
-      (raw) => ({ ...record, practiceCopies: Math.round(asNumber(raw, record.practiceCopies)) }),
-      { min: '0', max: '32', step: '1' },
-    ),
-  );
-  formEl.append(race);
-
-  formEl.append(heading('presentation'));
-  const art = document.createElement('div');
-  selectField(
-    art,
-    'music track',
-    () => record.musicTrack,
-    (raw) => ({ ...record, musicTrack: raw.trim() }),
-    MUSIC_TRACK_IDS,
-  );
-  selectField(
-    art,
-    'theme',
-    () => record.theme,
-    (raw) => ({ ...record, theme: raw.trim() }),
-    REALM_RACERS_THEME_IDS,
-  );
-  formEl.append(art);
-
-  formEl.append(heading('enclosure'));
-  const box = document.createElement('div');
-  field(
-    box,
-    'perimeter half x',
-    () => String(record.perimeter.halfX),
-    (raw) => ({
-      ...record,
-      perimeter: { ...record.perimeter, halfX: asNumber(raw, record.perimeter.halfX) },
-    }),
-  );
-  field(
-    box,
-    'perimeter half z',
-    () => String(record.perimeter.halfZ),
-    (raw) => ({
-      ...record,
-      perimeter: { ...record.perimeter, halfZ: asNumber(raw, record.perimeter.halfZ) },
-    }),
-  );
-  field(
-    box,
-    'region half x',
-    () => String(record.regionHalfX),
-    (raw) => ({ ...record, regionHalfX: asNumber(raw, record.regionHalfX) }),
-    { max: String(REALM_RACERS_MAX_REGION_HALF_X) },
-  );
-  field(
-    box,
-    'region half z',
-    () => String(record.regionHalfZ),
-    (raw) => ({ ...record, regionHalfZ: asNumber(raw, record.regionHalfZ) }),
-    { max: String(REALM_RACERS_MAX_REGION_HALF_Z) },
-  );
-  formEl.append(box);
-}
-
-function syncForm(): void {
-  for (const { input, read, sync } of formFields) {
-    if (input === document.activeElement) continue;
-    if (sync) sync();
-    else input.value = read();
-  }
-  for (const [role, box] of roleBoxes) box.checked = record.roles.includes(role);
-  // A circuit nobody practises on has no practice numbers worth showing. The lap
-  // count STAYS on the record while hidden, because the validator holds it to 1
-  // to 20 and a zero there is a draft that cannot be saved.
-  const practises = record.roles.includes('practice');
-  for (const wrap of practiceRows) wrap.hidden = !practises;
-}
 /** Sizes the wall and the region to the road, clamped to the band and the lane
  *  depth budget. What makes a big circuit drawable at all: the enclosure follows
  *  the drawing rather than the drawing being trapped inside the enclosure. */
@@ -1997,7 +1019,7 @@ function fitEnclosure(): void {
     regionHalfX: suggestion.regionHalfX,
     regionHalfZ: suggestion.regionHalfZ,
   });
-  syncForm();
+  form.sync();
   const fitted = `wall ${suggestion.perimeter.halfX} x ${suggestion.perimeter.halfZ}, region ${suggestion.regionHalfX} x ${suggestion.regionHalfZ}`;
   // Whether a clamp MATTERED is not whether it happened: a clamp that only ate
   // into the dressing margin leaves a perfectly drivable circuit, and saying
@@ -2025,7 +1047,7 @@ function fixCorners(): void {
   const fix = suggestWidthBands(record);
   if (fix.narrowedYards > 0) {
     commit({ ...record, widthBands: fix.widthBands });
-    syncForm();
+    form.sync();
   }
   const narrowed =
     fix.narrowedYards > 0
@@ -2065,11 +1087,11 @@ function applySideTab(): void {
     toolValueIsProps: tool() === 'props',
   });
   shell.setSideTab(panel.tabs, panel.active);
-  libraryEl.hidden = !panel.showLibrary;
-  inspectorEl.hidden = !panel.showInspector;
-  outlinerEl.hidden = !panel.showOutliner;
-  formEl.hidden = !panel.showForm;
-  modeReadoutEl.hidden = !panel.showModeReadout;
+  library.el.hidden = !panel.showLibrary;
+  inspector.el.hidden = !panel.showInspector;
+  outliner.el.hidden = !panel.showOutliner;
+  form.el.hidden = !panel.showForm;
+  modeReadout.el.hidden = !panel.showModeReadout;
   shell.setToolValueField(field, panel.showToolValue);
   requestRedraw();
 }
@@ -2094,6 +1116,14 @@ function refreshChrome(): void {
   }
 }
 
+/** What a click on empty plan will now do. Three things say it, so none of them
+ *  has to be read: the status bar, the cursor, and the ghost. */
+function announceArmed(asset: string | null): void {
+  shell.setArmed(railMode === 'props' ? armStateText(asset, POND_CHOICE) : '');
+  canvas.style.cursor = asset === null ? 'crosshair' : 'copy';
+  requestRedraw();
+}
+
 function setRailMode(next: RailModeId): void {
   // Leaving SHAPE cancels a pending redraw: an arm that survived a trip through
   // another tool would eat the operator's next stroke.
@@ -2105,8 +1135,7 @@ function setRailMode(next: RailModeId): void {
   shell.setMode(railMode, drawn, redrawing);
   // Leaving props disarms: an arm that survived a trip through the width tool
   // would place a piece on the operator's first click back.
-  if (next !== 'props') paletteChoice = null;
-  armPalette(paletteChoice);
+  library.arm(next === 'props' ? library.armed : null);
   applySideTab();
   requestRedraw();
 }
@@ -2128,16 +1157,17 @@ function paintChrome(): void {
     drawn ? metrics.problems : [],
     drawn ? calloutProblems(metrics.problems) : [],
     planPointAt,
+    plan.width,
   );
   shell.setDocument(record.id, dirty);
   // The undo stack moves on every commit, which is far more often than the
   // chrome is refreshed, so its button state is read here rather than there.
   shell.setEnabled('undo', history.canUndo);
   shell.setEnabled('redo', history.canRedo);
-  if (layout.metricsOpen) paintReadout();
-  paintOutliner();
-  paintInspector();
-  paintModeReadout();
+  if (layout.metricsOpen) metricsDrawer.paint();
+  outliner.paint();
+  inspector.paint();
+  modeReadout.paint();
 }
 
 // ---- pointer routing ----
@@ -2217,7 +1247,12 @@ canvas.addEventListener('pointerdown', (ev) => {
     return;
   }
   const point = authored(raw);
-  const hit = hitTestControlPoint(record.controlPoints, raw.x, raw.z, 8 / view.scale);
+  const hit = hitTestControlPoint(
+    record.controlPoints,
+    raw.x,
+    raw.z,
+    HIT_TOLERANCE_PIXELS.handle / view.scale,
+  );
   if (hit >= 0) {
     selection = { kind: 'point', index: hit };
     dragging = selection;
@@ -2226,7 +1261,7 @@ canvas.addEventListener('pointerdown', (ev) => {
     return;
   }
   const segment = nearestSegment(record.controlPoints, raw.x, raw.z);
-  if (segment.distance <= 10 / view.scale) {
+  if (segment.distance <= HIT_TOLERANCE_PIXELS.segment / view.scale) {
     commit({
       ...record,
       controlPoints: insertControlPoint(record.controlPoints, segment.index, point),
@@ -2269,7 +1304,7 @@ canvas.addEventListener('pointermove', (ev) => {
   // An armed piece has a ghost to move, so a plain hover repaints. Only while
   // armed: a repaint per pointermove for nothing is a whole circuit redrawn to
   // show no change.
-  if (tool() === 'props' && paletteChoice !== null && !dressingDrag) requestRedraw();
+  if (tool() === 'props' && library.armed !== null && !dressingDrag) requestRedraw();
   // The dock rides the pointer when asked to: hovering a corner on the plan is
   // then the gesture that looks at it in 3D, with no camera to fly.
   if (layout.followCursor && preview && drawn) {
@@ -2354,7 +1389,7 @@ canvas.addEventListener('dblclick', (ev) => {
 canvas.addEventListener('wheel', (ev) => {
   ev.preventDefault();
   const before = toLocal(ev);
-  view.scale = clampScale(view.scale * (ev.deltaY < 0 ? 1.12 : 1 / 1.12));
+  view.scale = wheelZoomScale(view.scale, ev.deltaY);
   const after = toLocal(ev);
   view.x += before.x - after.x;
   view.z += before.z - after.z;
@@ -2408,7 +1443,7 @@ function loadCircuit(circuit: RealmRacersCircuit, label: string): void {
   dirty = false;
   setRailMode('shape');
   refreshChrome();
-  syncForm();
+  form.sync();
   fitView();
   setStatus(`loaded ${label}`, 'ok');
 }
@@ -2499,7 +1534,7 @@ function runAction(id: ActionId): void {
     case 'disarmTool':
       redrawing = false;
       dressing = null;
-      armPalette(null);
+      library.arm(null);
       applySideTab();
       shell.setMode(railMode, drawn);
       return;
@@ -2587,25 +1622,28 @@ function runAction(id: ActionId): void {
 
 // ---- the shell ----
 
-const shell = new EditorShell({
-  onAction: runAction,
-  onMode: (mode) => {
-    if (!drawn && needsCircuit(MODE_ACTIONS[mode])) return;
-    setRailMode(mode);
+const shell = new EditorShell(
+  {
+    onAction: runAction,
+    onMode: (mode) => {
+      if (!drawn && needsCircuit(MODE_ACTIONS[mode])) return;
+      setRailMode(mode);
+    },
+    onSideTab: (tab) => {
+      sideChoice = tab;
+      setLayout({ side: tab });
+      applySideTab();
+    },
+    onFocusProblem: focusProblem,
+    onToolValue: () => {
+      // Nothing to recompute: the field is read at the start of the next stroke.
+      // Reported so a change the operator made is visibly the tool's now.
+      const field = TOOL_VALUE_FIELDS[tool()];
+      if (field) setStatus(`${field.label}: ${shell.toolValueInput.value}`, '');
+    },
   },
-  onSideTab: (tab) => {
-    sideChoice = tab;
-    setLayout({ side: tab });
-    applySideTab();
-  },
-  onFocusProblem: focusProblem,
-  onToolValue: () => {
-    // Nothing to recompute: the field is read at the start of the next stroke.
-    // Reported so a change the operator made is visibly the tool's now.
-    const field = TOOL_VALUE_FIELDS[tool()];
-    if (field) setStatus(`${field.label}: ${shell.toolValueInput.value}`, '');
-  },
-});
+  platform,
+);
 
 const planArea = (): { width: number; height: number } => ({
   width: shell.planEl.clientWidth,
@@ -2658,6 +1696,32 @@ const dock = new CircuitDock(
 function syncDockChrome(): void {
   dock.setCameraMode(preview?.cameraMode === 'fly' ? 'fly' : 'orbit', preview?.playing ?? false);
 }
+
+// ---- the panels ----
+//
+// The right column and the readout drawer, each a sibling module behind one
+// host. None of them touches the canvas or the page's gesture state: they read
+// the document and commit edits, which is why none of them lives in here.
+
+const panelHost: LibraryHost = {
+  record: () => record,
+  metrics: () => metrics,
+  track: () => track,
+  drawn: () => drawn,
+  mode: () => railMode,
+  selection: () => dressing,
+  commit: (next) => commit(next),
+  commitDressing: (next) => commitDressing(next),
+  setStatus,
+  onArmed: announceArmed,
+};
+
+const form = new RecordFormPanel(panelHost);
+const inspector = new InspectorPanel(panelHost);
+const outliner = new OutlinerPanel(panelHost);
+const library = new LibraryPanel(panelHost);
+const modeReadout = new ModeReadoutPanel(panelHost);
+const metricsDrawer = new MetricsDrawerPanel(panelHost, shell.metricsBodyEl);
 
 // ---- the load dialog ----
 
@@ -2759,7 +1823,8 @@ window.addEventListener('keydown', (ev) => {
   if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLSelectElement) return;
   // A modal owns the keyboard while it is up. Without this, `g`, `s`, `m` and
   // `ctrl+S` all acted on the page behind the Load dialog, and `?` opened a
-  // second nested modal.
+  // second nested modal. An open MENU takes escape before this runs, in the
+  // shell's own document listener.
   if (loadDialog.open || shell.keysOpen) return;
   const action = actionForShortcut(ev);
   if (action) {
@@ -2809,7 +1874,10 @@ function runSelectionAction(id: ActionId): void {
       return;
     case 'rotateProp': {
       if (dressing?.kind !== 'prop') return;
-      const placed = realmRacersPlacements(record).props[placementIndexOf(dressing.index)];
+      const placed =
+        realmRacersPlacements(record).props[
+          placementIndexOf(record.props, REALM_RACERS_PROPS, dressing.index)
+        ];
       transformSelectedProp((prop) => rotatedProp(prop, placed?.yaw ?? 0, 1));
       return;
     }
@@ -2843,9 +1911,7 @@ window.addEventListener('pagehide', () => {
 
 // ---- boot ----
 
-buildForm();
-buildPalette();
-shell.sideBodyEl.append(libraryEl, inspectorEl, outlinerEl, modeReadoutEl, formEl);
+shell.sideBodyEl.append(library.el, inspector.el, outliner.el, modeReadout.el, form.el);
 shell.showMetrics(layout.metricsOpen);
 syncToggles();
 shell.setPreviewReady('off');

@@ -24,7 +24,7 @@ import { polygonContainsPoint } from '../../sim/geometry2d';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
 import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import type { RallyPlacedPond, RallyPlacedProp } from '../../sim/realm_racers_props_resolve';
-import { rallyFootprintRadius } from '../../sim/realm_racers_props_resolve';
+import { rallyFootprintRadius, realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
 import {
   REALM_RACERS_PROJECTION_ENVELOPE,
   REALM_RACERS_PROJECTION_WINDOW,
@@ -54,6 +54,15 @@ export type PropFrame = 'track' | 'absolute';
  * exactly where the projection stops being an answer.
  */
 export const PROP_TRACK_SPACE_BAND = REALM_RACERS_PROJECTION_ENVELOPE;
+
+/**
+ * The palette entry that places WATER rather than a catalog piece.
+ *
+ * Ponds live in the same list because placing one is the same gesture, and a
+ * mode of their own is what the deleted water paint already was. It is not a
+ * catalog key and never reaches a record: the pond gesture authors a `RallyPond`.
+ */
+export const POND_CHOICE = 'pond';
 
 /** Smallest pond radius the tool will author, yards: under this it is a puddle
  *  nothing reads as water and the shore ring degenerates. */
@@ -228,6 +237,82 @@ export function toggledCollide(prop: RallyProp): RallyProp {
     ...(prop.yaw === undefined ? {} : { yaw: prop.yaw }),
     ...(prop.scale === undefined ? {} : { scale: prop.scale }),
   };
+}
+
+/**
+ * Record indices of the props the resolver actually places, in its own order.
+ *
+ * The resolver SKIPS a catalog key nothing authors rather than throwing, so a
+ * record carrying one (a hand-pasted draft can) hands back a shorter list than
+ * it was given. Without this map every selection past the unknown key would edit
+ * the entry after the one the operator clicked.
+ */
+export function placedPropIndices(
+  props: readonly RallyProp[] | undefined,
+  catalog: Readonly<Record<string, unknown>>,
+): number[] {
+  const out: number[] = [];
+  (props ?? []).forEach((prop, index) => {
+    if (prop.asset in catalog) out.push(index);
+  });
+  return out;
+}
+
+/** Where a record prop sits in the resolver's list, or -1. */
+export function placementIndexOf(
+  props: readonly RallyProp[] | undefined,
+  catalog: Readonly<Record<string, unknown>>,
+  recordIndex: number,
+): number {
+  return placedPropIndices(props, catalog).indexOf(recordIndex);
+}
+
+/**
+ * The suffix a throwaway record wears, and it is not cosmetic.
+ *
+ * `memoizePerCircuit` keeps one entry per id and only while the record behind it
+ * is the same object, so a throwaway wearing the REAL id evicts the real entry on
+ * every frame: the spline model was being rebuilt twice per pointermove, once for
+ * the ghost and once for the circuit it had just displaced.
+ */
+export const GHOST_ID_SUFFIX = '__ghost';
+
+/**
+ * The piece the cursor is carrying, placed where a click would place it.
+ *
+ * It goes through the RESOLVER on a throwaway record rather than working out its
+ * own footprint, because the outline under the cursor has to be the outline the
+ * collision set will hold: a ghost drawing its own footprint would be a second
+ * derivation of a placement, which is the exact bug class the one resolver exists
+ * to prevent. Null for a key the catalog does not author, since there is nothing
+ * honest to draw for it.
+ */
+export function ghostPlacement(
+  circuit: RealmRacersCircuit,
+  asset: string,
+  x: number,
+  z: number,
+): RallyPlacedProp | null {
+  const pending: RallyProp = { asset, at: authorPlacement(circuit, x, z).at };
+  const props = [...(circuit.props ?? []), pending];
+  const resolved = realmRacersPlacements({
+    ...circuit,
+    props,
+    id: `${circuit.id}${GHOST_ID_SUFFIX}`,
+  });
+  if (resolved.unknownAssets.includes(asset)) return null;
+  return resolved.props[resolved.props.length - 1] ?? null;
+}
+
+/**
+ * The seed a new scatter or pond gets.
+ *
+ * Taken off the record's own size rather than off a clock: the page must stay
+ * reloadable to the same circuit, and a seed nobody chose is still a number the
+ * operator can edit afterwards.
+ */
+export function nextSeed(circuit: RealmRacersCircuit): number {
+  return (circuit.scatters?.length ?? 0) + (circuit.ponds?.length ?? 0) + circuit.id.length;
 }
 
 /** A list with one entry replaced, and one with an entry removed: the two edits

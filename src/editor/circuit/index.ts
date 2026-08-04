@@ -1,8 +1,15 @@
-// The circuit editor's public surface: the pure cores it is built from. The page
-// (`main.ts`, loaded by `circuit_editor.html`) is deliberately NOT re-exported:
-// it is an entry point, not a module anything imports. Nor are its two DOM
-// consumers (`shell.ts`, `dock.ts`), which are structure over the cores below
-// and have nothing a test or another module wants.
+// The circuit editor's public surface: the pure cores it is built from, in full.
+//
+// The page (`main.ts`, loaded by `circuit_editor.html`) is deliberately NOT
+// re-exported: it is an entry point, not a module anything imports. Nor are its
+// DOM consumers (`shell.ts`, `dock.ts`, `preview3d.ts` and the `panel_*`
+// family), which are structure over the cores below and have nothing a test or
+// another module wants.
+//
+// It is re-exported IN FULL on purpose, and `tests/editor_circuit_index.test.ts`
+// pins that both ways: a core export missing here is a piece of the declared
+// public surface nothing can reach, and a DOM module leaking in here would make
+// the split above a comment rather than a contract.
 //
 // The readout every drag is measured against is not here either. It lives in
 // `src/sim/realm_racers_circuit_metrics.ts`, because it is the same validation a
@@ -55,6 +62,9 @@ export {
   actionTooltip,
   autoSideTab,
   CALLOUT_MIN_GAP,
+  CALLOUT_REACH,
+  type CalloutAnchor,
+  type CalloutSpreadOptions,
   type CheatBlock,
   type ChipTone,
   type CircuitTool,
@@ -63,10 +73,12 @@ export {
   chordHints,
   clampDock,
   clampScale,
+  clampToolValue,
   clampZoom,
   DEFAULT_LAYOUT,
   DOCK_MIN_HEIGHT,
   DOCK_MIN_WIDTH,
+  DOCK_SCRUB_STEPS,
   type DockGeometry,
   defaultDock,
   EDITOR_ACTIONS,
@@ -75,18 +87,22 @@ export {
   editorAction,
   formatShortcut,
   GRID_YARDS,
+  gridRange,
   gridStepAt,
   type HeadlineChip,
   headlineChips,
   LAYOUT_STORAGE_KEY,
   MAX_CANVAS_CALLOUTS,
+  MAX_GRID_LINES,
   MENU_ITEMS,
   MENUS,
   type MenuId,
   MODE_ACTIONS,
   menuActions,
   type PlanArea,
+  PREVIEW_READY_TITLES,
   PROBLEM_LABELS,
+  type PreviewReadyState,
   type ProblemsChip,
   parseLayout,
   problemDetail,
@@ -98,8 +114,10 @@ export {
   type RailModeId,
   railActions,
   railBanner,
+  type ShortcutEvent,
   type ShortcutPlatform,
   SIDE_TAB_LABELS,
+  SIDE_TABS_MIN,
   type SideTabId,
   serializeLayout,
   shortcutMatches,
@@ -129,6 +147,25 @@ export {
   type ReadoutSection,
 } from './panel_core';
 export {
+  FIT_MARGIN_BLANK,
+  FIT_MARGIN_DRAWN,
+  fitHalfExtent,
+  fitScale,
+  HIT_TOLERANCE_PIXELS,
+  PLAN_PALETTE_FALLBACK,
+  PLAN_PALETTE_VARS,
+  type PlanLimits,
+  type PlanPaletteId,
+  PROP_LABEL_MIN_SCALE,
+  planLimits,
+  resolvePlanPalette,
+  STARTER_OVAL,
+  starterControlPoints,
+  WHEEL_ZOOM_STEP,
+  wheelZoomScale,
+  withAlpha,
+} from './plan_core';
+export {
   advanceFlyThrough,
   circuitLocalSample,
   createFlyLook,
@@ -154,24 +191,33 @@ export {
   type PreviewFlyLook,
   type PreviewFlySpeed,
   type PreviewOrbitState,
+  type PreviewPoint,
   type PreviewPose,
   type PreviewTrackSampler,
 } from './preview_camera_core';
 export {
+  type AuthoredPlacement,
   authorPlacement,
   convertedProp,
   type DressingRect,
   type DressingSelection,
+  GHOST_ID_SUFFIX,
+  ghostPlacement,
   hitTestPlaced,
   hitTestPondHandle,
   hitTestPonds,
   movedProp,
+  nextSeed,
+  POND_CHOICE,
+  POND_HANDLES,
   POND_MIN_RADIUS,
   POND_ROTATE_HANDLE_GAP,
   type PondHandle,
   PROP_TRACK_SPACE_BAND,
   type PropFrame,
   type PropPaletteEntry,
+  placedPropIndices,
+  placementIndexOf,
   pondFromDrag,
   pondHandlePoints,
   pondWithHandleAt,

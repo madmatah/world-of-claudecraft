@@ -15,6 +15,7 @@ import {
   autoSideTab,
   cheatBlocks,
   chordHints,
+  clampToolValue,
   editorAction,
   formatShortcut,
   GRID_YARDS,
@@ -22,6 +23,8 @@ import {
   MENUS,
   MODE_ACTIONS,
   menuActions,
+  PREVIEW_READY_TITLES,
+  type PreviewReadyState,
   problemDetail,
   problemHeadline,
   problemsChip,
@@ -32,6 +35,7 @@ import {
   railBanner,
   type ShortcutPlatform,
   SIDE_TAB_LABELS,
+  SIDE_TABS_MIN,
   type SideTabId,
   spreadCallouts,
   type ToolValueField,
@@ -68,12 +72,18 @@ function withIcon(node: HTMLElement, id: EditorIconId): HTMLElement {
   return node;
 }
 
+/**
+ * Which platform spelling the chords take.
+ *
+ * Detected ONCE by the page and injected into both consumers: it was a UA sniff
+ * run twice, once here and once for the dock, which is two answers to a question
+ * with one.
+ */
 export function detectPlatform(): ShortcutPlatform {
   return /mac/i.test(navigator.userAgent) ? 'mac' : 'other';
 }
 
 export class EditorShell {
-  private readonly platform = detectPlatform();
   /** Every button bound to an action, so enabling and checking is by id. */
   private readonly actionButtons = new Map<ActionId, HTMLButtonElement[]>();
   private readonly modeButtons = new Map<RailModeId, HTMLButtonElement>();
@@ -103,6 +113,7 @@ export class EditorShell {
   private readonly calloutsEl = document.getElementById('callouts') as HTMLDivElement;
   private readonly metricsEl = document.getElementById('metricsDrawer') as HTMLDivElement;
   private readonly sideTabsEl = document.getElementById('sideTabs') as HTMLDivElement;
+  private readonly toolOptionsEl = document.getElementById('toolOptions') as HTMLDivElement;
   private readonly toolValueLabel = document.getElementById('toolValueLabel') as HTMLLabelElement;
   private readonly problemChipEl = document.getElementById('problemChip') as HTMLButtonElement;
   private readonly cursorEl = document.getElementById('cursorReadout') as HTMLSpanElement;
@@ -118,7 +129,10 @@ export class EditorShell {
   private gridChip!: HTMLButtonElement;
   private snapChip!: HTMLButtonElement;
 
-  constructor(private readonly host: ShellHost) {
+  constructor(
+    private readonly host: ShellHost,
+    private readonly platform: ShortcutPlatform,
+  ) {
     this.buildMenus();
     this.buildQuickActions();
     this.buildRail();
@@ -177,8 +191,36 @@ export class EditorShell {
     document.addEventListener('pointerdown', (ev) => {
       if (!this.openMenu) return;
       if (ev.target instanceof Node && this.openMenu.contains(ev.target)) return;
-      this.openMenu.open = false;
+      this.closeMenu();
     });
+    // `<details>` does not close on escape the way a dialog does, so the one key
+    // everybody presses to back out of a menu did nothing at all here, and the
+    // page's own escape (pointer, drop the selection) fired underneath it. Taken
+    // on DOCUMENT so it runs before the page's window listener, and the focus
+    // goes back to the summary the menu was opened from rather than being left
+    // on a button that has just been hidden.
+    document.addEventListener('keydown', (ev) => {
+      const menu = this.openMenu;
+      if (ev.key !== 'Escape' || !menu) return;
+      this.closeMenu();
+      menu.querySelector('summary')?.focus();
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+  }
+
+  /**
+   * Shut the open menu AND forget it, in one place.
+   *
+   * Clearing the field here rather than leaving it to the `toggle` listener: a
+   * browser does fire `toggle` when `open` is assigned, but it fires it LATE, so
+   * between the escape and the next frame this shell still believed a menu was
+   * open and went on swallowing escapes the page needed.
+   */
+  private closeMenu(): void {
+    const menu = this.openMenu;
+    this.openMenu = null;
+    if (menu) menu.open = false;
   }
 
   private buildQuickActions(): void {
@@ -313,6 +355,7 @@ export class EditorShell {
     problems: readonly RealmRacersCircuitProblem[],
     callouts: readonly RealmRacersCircuitProblem[],
     project: PlanProjector,
+    planWidth: number,
   ): void {
     const chip = problemsChip(problems);
     this.problemChipEl.className = `chip problems ${chip.tone}`;
@@ -327,11 +370,14 @@ export class EditorShell {
     this.problemChipEl.disabled = chip.focus === null;
 
     this.calloutsEl.replaceChildren();
-    const anchors = spreadCallouts(callouts.map((problem) => project(problem.s)));
+    const anchors = spreadCallouts(
+      callouts.map((problem) => project(problem.s)),
+      { planWidth },
+    );
     for (const [index, problem] of callouts.entries()) {
       const at = anchors[index];
       if (!at) continue;
-      const node = el('button', `callout ${problem.severity}`);
+      const node = el('button', `callout ${problem.severity}${at.flip ? ' flip' : ''}`);
       node.type = 'button';
       const title = el('div', 'callout-title');
       title.textContent = problemHeadline(problem);
@@ -366,7 +412,7 @@ export class EditorShell {
    * is in it.
    */
   setSideTab(tabs: readonly SideTabId[], active: SideTabId | null): void {
-    this.sideTabsEl.hidden = tabs.length < 2;
+    this.sideTabsEl.hidden = tabs.length < SIDE_TABS_MIN;
     for (const [id, button] of this.sideTabButtons) {
       button.hidden = !tabs.includes(id);
       button.classList.toggle('on', id === active);
@@ -388,14 +434,17 @@ export class EditorShell {
    * the inspector and the outliner, which is exactly where it was showing.
    */
   setToolValueField(field: ToolValueField | null, shown = true): void {
-    this.toolValueLabel.hidden = field === null || !shown;
+    const hidden = field === null || !shown;
+    this.toolValueLabel.hidden = hidden;
+    // The STRIP goes with it. Kept open it left an empty padded band above the
+    // panel body in shape, handles and race, which reads as a control that failed
+    // to render rather than as a tool with no options.
+    this.toolOptionsEl.hidden = hidden;
     if (!field) return;
     this.toolValueLabel.firstChild?.replaceWith(`${field.label} `);
     this.toolValueInput.min = String(field.min);
     this.toolValueInput.max = String(field.max);
-    this.toolValueInput.value = String(
-      Math.min(field.max, Math.max(field.min, Number(this.toolValueInput.value))),
-    );
+    this.toolValueInput.value = String(clampToolValue(field, Number(this.toolValueInput.value)));
   }
 
   // ---- the metrics drawer ----
@@ -463,14 +512,9 @@ export class EditorShell {
     this.messageEl.className = tone;
   }
 
-  setPreviewReady(state: 'off' | 'ready' | 'error'): void {
+  setPreviewReady(state: PreviewReadyState): void {
     this.readyDotEl.className = `dot ${state}`;
-    this.readyDotEl.title =
-      state === 'ready'
-        ? 'the 3D preview is live on this record'
-        : state === 'error'
-          ? 'the 3D preview could not start'
-          : 'the 3D preview is not open';
+    this.readyDotEl.title = PREVIEW_READY_TITLES[state];
   }
 
   // ---- action plumbing ----

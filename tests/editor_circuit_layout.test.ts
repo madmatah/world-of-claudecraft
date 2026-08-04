@@ -14,14 +14,17 @@ import {
   actionTooltip,
   autoSideTab,
   CALLOUT_MIN_GAP,
+  CALLOUT_REACH,
   calloutProblems,
   cheatBlocks,
   chordHints,
   clampDock,
+  clampToolValue,
   clampZoom,
   DEFAULT_LAYOUT,
   DOCK_MIN_HEIGHT,
   DOCK_MIN_WIDTH,
+  DOCK_SCRUB_STEPS,
   defaultDock,
   EDITOR_ACTIONS,
   editorAction,
@@ -37,6 +40,7 @@ import {
   MENUS,
   MODE_ACTIONS,
   menuActions,
+  PREVIEW_READY_TITLES,
   PROBLEM_LABELS,
   parseLayout,
   problemDetail,
@@ -47,6 +51,7 @@ import {
   railActions,
   railBanner,
   SIDE_TAB_LABELS,
+  SIDE_TABS_MIN,
   serializeLayout,
   shortcutMatches,
   sideTabsFor,
@@ -144,12 +149,53 @@ describe('the action table', () => {
     }
   });
 
-  it('prints the status-bar hints as chord plus verb', () => {
+  it('opens the cheatsheet on the blocks an operator reaches for, in that order', () => {
+    // Membership was pinned and ORDER was not, so the overlay could have opened
+    // on File while the tools an operator is actually hunting for sat last. The
+    // order is the design: what the hands are doing, then the document.
+    const blocks = cheatBlocks('other');
+    expect(blocks.map((block) => block.group)).toEqual([
+      'tools',
+      'selection',
+      'canvas',
+      'file',
+      'edit',
+      'view',
+    ]);
+    expect(blocks.map((block) => block.label)).toEqual([
+      'Tools',
+      'Selection',
+      'Canvas',
+      'File',
+      'Edit',
+      'View',
+    ]);
+    // TRACK is absent, and that is the filter working rather than a gap: every
+    // repair is a menu entry and a plan chip with no chord at all, so a Track
+    // heading would sit over nothing. Pinned, so giving one a shortcut has to
+    // come back through here.
+    expect(EDITOR_ACTIONS.filter((action) => action.group === 'track').length).toBeGreaterThan(0);
+    expect(
+      EDITOR_ACTIONS.some(
+        (action) => action.group === 'track' && (action.shortcut || action.gesture),
+      ),
+    ).toBe(false);
+    // Every block that survives the filter has rows: an empty titled block is a
+    // heading over nothing.
+    for (const block of blocks) expect(block.rows.length, block.group).toBeGreaterThan(0);
+  });
+
+  it('prints the status-bar hints as chord plus verb, one per hinted row', () => {
     const hints = chordHints('other');
     expect(hints).toContain('ctrl+Z undo');
+    expect(hints).toContain('R rotate');
     expect(hints).toContain('wheel zoom');
     expect(hints).toContain('middle-drag pan');
     expect(hints).toContain('shift+R flip direction');
+    // Length pinned against the table's own `hint` rows: a hint added without a
+    // line here would be an unasserted string on screen.
+    expect(hints).toHaveLength(EDITOR_ACTIONS.filter((action) => action.hint).length);
+    expect(hints).toHaveLength(5);
     expect(chordHints('mac')).toContain('cmd+Z undo');
   });
 
@@ -159,6 +205,53 @@ describe('the action table', () => {
     expect(tooltip).toContain('ctrl+Z');
     // A pointer gesture prints its gesture, not an empty chord.
     expect(actionChord(editorAction('panView'), 'mac')).toBe('middle-drag');
+  });
+
+  it('drops the parentheses for an action with no way to reach it but the menu', () => {
+    // The uncovered arm: `New blank` carries neither a chord nor a gesture, and
+    // the tooltip has to read as a sentence rather than as "New blank (): ...".
+    const action = editorAction('newBlank');
+    expect(action.shortcut).toBeUndefined();
+    expect(action.gesture).toBeUndefined();
+    expect(actionChord(action, 'other')).toBe('');
+    expect(actionTooltip(action, 'other')).toBe(`${action.label}: ${action.detail}`);
+    expect(actionTooltip(action, 'other')).not.toContain('(');
+  });
+});
+
+describe('the constants the chrome reads back', () => {
+  it('clamps the tool value into the active field range, and refuses a non-number', () => {
+    // Not a pure extraction: the shell's old inline expression let an emptied
+    // box reach `Math.max(min, NaN)` and write the string "NaN" into the input.
+    const field = TOOL_VALUE_FIELDS.width;
+    expect(field).not.toBeNull();
+    if (!field) return;
+    expect(clampToolValue(field, field.min - 5)).toBe(field.min);
+    expect(clampToolValue(field, field.max + 5)).toBe(field.max);
+    expect(clampToolValue(field, field.min + 1)).toBe(field.min + 1);
+    expect(clampToolValue(field, Number.NaN)).toBe(field.min);
+    expect(clampToolValue(field, Number.POSITIVE_INFINITY)).toBe(field.min);
+  });
+
+  it('divides the lap into the scrubber steps the markup no longer names', () => {
+    expect(DOCK_SCRUB_STEPS).toBe(1000);
+  });
+
+  it('drops the tab strip below two tabs rather than showing a click that decides nothing', () => {
+    expect(SIDE_TABS_MIN).toBe(2);
+    // And the one mode that has tabs really does clear the bar, or the constant
+    // would be pinning a strip nothing ever shows.
+    expect(sideTabsFor('props').length).toBeGreaterThanOrEqual(SIDE_TABS_MIN);
+  });
+
+  it('gives the preview dot one sentence per state, and never the wrong one', () => {
+    // Three operator-visible strings that moved out of the shell into a core; the
+    // regression the table exists to stop is `error` and `off` drifting apart.
+    expect(PREVIEW_READY_TITLES).toEqual({
+      ready: 'the 3D preview is live on this record',
+      error: 'the 3D preview could not start',
+      off: 'the 3D preview is not open',
+    });
   });
 });
 
@@ -559,7 +652,27 @@ describe('the headline chips', () => {
     const chips = headlineChips(metrics);
     expect(chips.map((chip) => chip.id)).toEqual(['lap', 'tightest', 'props']);
     expect(chips[0].value).toBe(metrics.lapLength.toFixed(1));
+    // The one value that was never asserted, which is the one the tone is about.
+    expect(chips[1].value).toBe(metrics.minRadiusOverWidth.toFixed(2));
     expect(chips[2].value).toBe(String(metrics.propCount));
+    expect(chips.map((chip) => chip.unit)).toEqual(['yd', 'r/w', '']);
+  });
+
+  it('says what each chip is counting in its own title', () => {
+    // Every title was unasserted, so a chip could have carried another chip's
+    // explanation, which is the one thing a hover is for.
+    const chips = headlineChips(metrics);
+    const title = (id: string): string => chips.find((chip) => chip.id === id)?.title ?? '';
+    expect(title('lap')).toBe(`${metrics.sampleCount} samples around the lap`);
+    // The whole sentence, like the other two: `toContain('1')` for the floor was
+    // satisfied by the 1.5 beside it and by almost any title, so the two
+    // thresholds could swap places unnoticed.
+    expect(title('tightest')).toBe(
+      `corner radius over road half-width, at ${metrics.minRadiusOverWidthAtS.toFixed(0)} yd; under ${REALM_RACERS_RADIUS_OVER_WIDTH_WARN} is tight, under ${REALM_RACERS_RADIUS_OVER_WIDTH_FLOOR} folds the road`,
+    );
+    expect(title('props')).toBe(
+      `${metrics.propCount} placed, ${metrics.scatterCount} scattered, ${metrics.pondCount} pond(s)`,
+    );
   });
 
   it('tints the corner ratio against the SIM own thresholds, not a copy of them', () => {
@@ -640,13 +753,75 @@ describe('problems on the plan', () => {
       { x: 140, y: 205 },
       { x: 180, y: 600 },
     ]);
-    expect(spread[0]).toEqual({ x: 100, y: 200 });
+    expect(spread[0]).toEqual({ x: 100, y: 200, flip: false });
     // Pushed DOWN to clear the first, and its x is untouched: the canvas marker
     // still rings the true spot.
     expect(spread[1]?.x).toBe(140);
     expect((spread[1]?.y ?? 0) - 200).toBeGreaterThanOrEqual(CALLOUT_MIN_GAP);
     // Far enough apart already: left where it was.
-    expect(spread[2]).toEqual({ x: 180, y: 600 });
+    expect(spread[2]).toEqual({ x: 180, y: 600, flip: false });
+  });
+
+  it('takes a gap of its own, and never writes on the anchors it was handed', () => {
+    const anchors = [
+      { x: 0, y: 0 },
+      { x: 0, y: 1 },
+    ];
+    const spread = spreadCallouts(anchors, { gap: 120 });
+    expect((spread[1]?.y ?? 0) - (spread[0]?.y ?? 0)).toBe(120);
+    // The caller's list is the canvas markers' own list: nudging a box must not
+    // move the ring it points at.
+    expect(anchors).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 1 },
+    ]);
+  });
+
+  it('opens a callout the OTHER way when its box would run off the plan', () => {
+    // The defect: boxes only ever opened rightward, so a problem near the plan's
+    // right edge wrote its explanation off the screen, which is the one case
+    // where a callout says nothing at all.
+    const width = 1000;
+    const spread = spreadCallouts(
+      [
+        { x: 100, y: 10 },
+        { x: width - 20, y: 400 },
+      ],
+      {
+        planWidth: width,
+      },
+    );
+    expect(spread[0]?.flip).toBe(false);
+    expect(spread[1]?.flip).toBe(true);
+    // Exactly at the reach it still fits; one pixel past it does not.
+    expect(
+      spreadCallouts([{ x: width - CALLOUT_REACH, y: 0 }], { planWidth: width })[0]?.flip,
+    ).toBe(false);
+    expect(
+      spreadCallouts([{ x: width - CALLOUT_REACH + 1, y: 0 }], { planWidth: width })[0]?.flip,
+    ).toBe(true);
+    // No plan width (nothing measured yet) is nothing to run off.
+    expect(spreadCallouts([{ x: 99999, y: 0 }])[0]?.flip).toBe(false);
+    // The reach is a LITERAL here, not `width - CALLOUT_REACH` alone: the
+    // boundary cases above compute both sides from the same constant, so it
+    // could be 27 or 2740 and every one of them would still hold while every
+    // callout flipped, or none did. It is the sheet's own geometry (a 14px
+    // translate plus a 30ch box), which `editor_circuit_page.test.ts` pins from
+    // the other side.
+    expect(CALLOUT_REACH).toBe(274);
+  });
+
+  it('does not flip on a plan too narrow for the box either way', () => {
+    // The mirror of the defect the flip was added for: `x + reach > width` alone
+    // flips an anchor at x = 0 on a narrow plan, and the box then runs off the
+    // LEFT instead. Flipping has to actually help.
+    const narrow = 300;
+    expect(spreadCallouts([{ x: 0, y: 0 }], { planWidth: narrow })[0]?.flip).toBe(false);
+    expect(spreadCallouts([{ x: 200, y: 0 }], { planWidth: narrow })[0]?.flip).toBe(false);
+    // Room on the left is what licenses it.
+    expect(
+      spreadCallouts([{ x: CALLOUT_REACH, y: 0 }], { planWidth: CALLOUT_REACH + 1 })[0]?.flip,
+    ).toBe(true);
   });
 
   it('resolves the collisions top down, whatever order the callouts arrive in', () => {
@@ -665,7 +840,11 @@ describe('problems on the plan', () => {
   });
 
   it('passes an off-plan callout straight through as null', () => {
-    expect(spreadCallouts([null, { x: 5, y: 5 }, null])).toEqual([null, { x: 5, y: 5 }, null]);
+    expect(spreadCallouts([null, { x: 5, y: 5 }, null])).toEqual([
+      null,
+      { x: 5, y: 5, flip: false },
+      null,
+    ]);
   });
 
   it('says where and against what, in one line each', () => {
@@ -684,5 +863,31 @@ describe('problems on the plan', () => {
     for (const [code, label] of Object.entries(PROBLEM_LABELS)) {
       expect(label.length, code).toBeGreaterThan(0);
     }
+    // Against LITERALS, not against itself: every assertion above and every use
+    // elsewhere in this file quotes the table back at the table, so a label
+    // rewritten into nonsense stayed green. The WHOLE table rather than a
+    // handful of it, because three quarters pinned only to themselves is the
+    // same defect in a smaller box.
+    expect(PROBLEM_LABELS).toEqual({
+      self_crossing: 'the loop crosses itself',
+      reversed_winding: 'the loop runs clockwise',
+      corner_folds_road: 'a corner is tighter than its own road',
+      corner_near_road_width: 'a corner is close to its own road width',
+      stretches_too_close: 'two stretches run close enough to break the projection',
+      road_outside_perimeter: 'the road runs outside the perimeter wall',
+      perimeter_outside_region: 'the perimeter wall is outside the collision region',
+      region_outside_band: 'the region is wider than the instance band',
+      region_deeper_than_lane_budget: 'the region is deeper than the gap between two lanes',
+      pond_requires_basin: 'a pond on a circuit with no water authored',
+      unknown_theme: 'the theme is not one the game authors',
+      unknown_prop_asset: 'a prop names a catalog key nothing draws',
+      prop_blocks_racing_surface: 'a prop stands on the racing surface',
+      prop_outside_region: 'a prop stands outside the collision region',
+      prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
+      pond_on_racing_surface: 'a pond reaches onto the racing surface',
+    });
+    // Distinct, or two different faults read as the same one on the plan.
+    const labels = Object.values(PROBLEM_LABELS);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });
