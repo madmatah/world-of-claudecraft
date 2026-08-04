@@ -16,6 +16,7 @@ import {
 import {
   drawRallyPickupEffect,
   isRallyHeldEffect,
+  rallyHeldEffectFromWire,
   type RallyPickupBand,
   type RallyPickupEffect,
   REALM_RACERS_NITRO_KICK,
@@ -290,6 +291,19 @@ describe('the pickup effect tables', () => {
     expect(realmRacersHeldEffectOf(REALM_RACERS_NITRO_ABILITY_ID)).toBe('nitro');
     expect(realmRacersHeldEffectOf(REALM_RACERS_SLICK_ABILITY_ID)).toBe('slick');
     expect(realmRacersHeldEffectOf(REALM_RACERS_ABILITY_ID)).toBeNull();
+  });
+
+  it('reads a held effect off the wire by NAME, never through the id mapper', () => {
+    // The wire carries the effect name the server already converted; the decode
+    // validates that string. Feeding the name to the id mapper answered null,
+    // which is the exact defect that left an online pilot with no button for
+    // the effect they were holding (seat report, 2026-08-04).
+    expect(rallyHeldEffectFromWire('nitro')).toBe('nitro');
+    expect(rallyHeldEffectFromWire('slick')).toBe('slick');
+    expect(rallyHeldEffectFromWire(REALM_RACERS_SLICK_ABILITY_ID)).toBeNull();
+    expect(rallyHeldEffectFromWire('charge')).toBeNull();
+    expect(rallyHeldEffectFromWire('')).toBeNull();
+    expect(realmRacersHeldEffectOf('slick')).toBeNull();
   });
 });
 

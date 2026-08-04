@@ -13,11 +13,7 @@ import {
 import { bagCapacity } from '../sim/bags';
 import { signChallenge } from '../sim/client_challenge';
 import { MOUNT_RACE_COURSE, type MountKey, normalizeMountKey } from '../sim/content/mounts';
-import {
-  REALM_RACERS_EFFECT_ABILITIES,
-  realmRacersHeldEffectOf,
-  resolveRealmRacersKit,
-} from '../sim/content/realm_racers';
+import { REALM_RACERS_EFFECT_ABILITIES, resolveRealmRacersKit } from '../sim/content/realm_racers';
 import { mechChromaItemId, mechChromaSkinIndex } from '../sim/content/skins';
 import {
   computeTalentModifiers,
@@ -50,7 +46,7 @@ import { normalizeMoveFacing, sanitizeMoveInput } from '../sim/move_input';
 import { getArchetypeTitle, getHobbyCraft } from '../sim/professions/archetype';
 import type { MaterialRarity } from '../sim/professions/gathering';
 import { emptyCraftSkills } from '../sim/professions/wheel';
-import type { RallyHeldEffect } from '../sim/realm_racers_pickup_effects';
+import { type RallyHeldEffect, rallyHeldEffectFromWire } from '../sim/realm_racers_pickup_effects';
 import type { ResolvedAbility } from '../sim/sim';
 import { parseTalentAllocation } from '../sim/talent_allocation_input';
 import { repairTalentLoadouts } from '../sim/talent_loadouts';
@@ -3382,7 +3378,7 @@ export class ClientWorld implements IWorld {
                 // The HELD pickup effect (22b), or null with an empty slot. The
                 // mirror rebuilds the whole kit below, so without this an online
                 // pilot would carry an effect with no button to spend it.
-                held: realmRacersHeldEffectOf(String(s.rrkit.h ?? '')),
+                held: rallyHeldEffectFromWire(String(s.rrkit.h ?? '')),
               }
             : null;
       }

@@ -355,6 +355,17 @@ describe('Realm Racers online parity', () => {
     // The held effect rides the kit flag onto the mirror, or an online pilot
     // would be holding something with no button to spend it.
     expect(selfFields(client, 'rrkit').at(-1)).toMatchObject({ h: 'slick' });
+    // The seat report of 2026-08-04: the wire carried `h` and the button never
+    // appeared, because the decode re-fed the EFFECT NAME to a mapper whose
+    // domain is ability ids and rebuilt the kit with `held: null`. While the
+    // effect is held, the held ability must be in the mirror's OWN kit surface
+    // (`known`, exactly what the action bar reads), which means replaying every
+    // frame the session received so far, including the one carrying `rrkit.h`.
+    const heldMirror = bareClient(session.pid);
+    for (const frame of client.sent.filter((sent) => sent.t === 'snap')) {
+      (heldMirror as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(frame);
+    }
+    expect(heldMirror.known.map((known) => known.def.id)).toContain(REALM_RACERS_SLICK_ABILITY_ID);
     command(server, session, 'cast', { ability: REALM_RACERS_SLICK_ABILITY_ID });
     advance(server);
 

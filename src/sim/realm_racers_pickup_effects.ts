@@ -50,6 +50,18 @@ export function isRallyHeldEffect(effect: RallyPickupEffect): effect is RallyHel
   return effect === 'nitro' || effect === 'slick';
 }
 
+/**
+ * A held effect off the WIRE, or null. The wire carries the effect NAME (the
+ * server converts the kit's ability id before sending), so the decode must
+ * validate a plain string against this union and never re-run the id-to-effect
+ * mapper: feeding 'slick' to a mapper whose domain is ability ids answers null,
+ * which is exactly the bug that left an online pilot holding an effect with no
+ * button (seat report, 2026-08-04).
+ */
+export function rallyHeldEffectFromWire(value: string): RallyHeldEffect | null {
+  return value === 'nitro' || value === 'slick' ? value : null;
+}
+
 /** Which table a take draws from, decided by where the taker is running. */
 export type RallyPickupBand = 'leader' | 'midfield' | 'backmarker';
 
