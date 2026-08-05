@@ -12,6 +12,13 @@
 // outline is, and which slow band a racer standing somewhere is charged.
 
 import { describe, expect, it } from 'vitest';
+import { suggestGroundOutline } from '../src/editor/circuit/envelope_core';
+import {
+  REALM_RACERS_SEA_BASIN,
+  rallySeaBasin,
+  rallySeaMesh,
+  rallyShoreSpots,
+} from '../src/render/realm_racers_track_core';
 import { resolvePosition } from '../src/sim/colliders';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
@@ -20,7 +27,9 @@ import {
   realmRacersCompetitionCircuits,
 } from '../src/sim/content/realm_racers_circuits';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
+import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
 import {
+  REALM_RACERS_LAWN_OVERSHOOT,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
@@ -210,6 +219,159 @@ describe('Realm Racers water: what a placed pond derives', () => {
       basin: undefined,
     };
     expect(realmRacersPlacedPonds(DRY)).toEqual([]);
+  });
+});
+
+describe('Realm Racers water: the sea outside an authored shore', () => {
+  const ISLAND: RealmRacersCircuit = {
+    ...GARDEN,
+    id: 'water_island',
+    groundOutline: suggestGroundOutline(GARDEN),
+  };
+
+  it('draws none at all where the land is the rectangle it has always been', () => {
+    // The default ground covers the region and then some, so there is no shore
+    // for a sea to lap at: every shipped circuit keeps exactly its two pools.
+    for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+      expect(circuit.groundOutline, circuit.id).toBeUndefined();
+      expect(rallySeaMesh(circuit), circuit.id).toBeNull();
+      expect(rallyShoreSpots(circuit), circuit.id).toEqual([]);
+    }
+  });
+
+  it('covers the ground from the shore out to the edge of the region', () => {
+    const sea = rallySeaMesh(ISLAND);
+    if (!sea) throw new Error('an authored shore has a sea outside it');
+    const outline = realmRacersGroundShape(ISLAND).outline;
+    const reach = {
+      x: ISLAND.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
+      z: ISLAND.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
+    };
+    let onShore = 0;
+    let atTheEdge = 0;
+    for (let i = 0; i < sea.depths.length; i++) {
+      const x = sea.positions[i * 2] - REALM_RACERS_ORIGIN.x;
+      const z = sea.positions[i * 2 + 1] - REALM_RACERS_ORIGIN.z;
+      // Nothing reaches past the region, which is exactly as far as the lawn
+      // used to run: a sea drawn wider would be water over empty band.
+      expect(Math.abs(x), 'sea x').toBeLessThanOrEqual(reach.x + 1e-6);
+      expect(Math.abs(z), 'sea z').toBeLessThanOrEqual(reach.z + 1e-6);
+      if (sea.depths[i] === 0) onShore++;
+      if (Math.abs(Math.abs(x) - reach.x) < 1e-6 || Math.abs(Math.abs(z) - reach.z) < 1e-6) {
+        atTheEdge++;
+      }
+    }
+    // The innermost ring IS the shore (a vertex per column at zero depth), and
+    // the outermost really does reach the region: both ends present, or the
+    // sheet is a band floating between them.
+    expect(onShore).toBe(sea.columns);
+    expect(atTheEdge).toBeGreaterThanOrEqual(sea.columns);
+    // Every column sits ON the outline at the shore, so the water meets the land
+    // rather than starting a few yards off it.
+    for (let col = 0; col < sea.columns; col++) {
+      const x = sea.positions[col * 2] - REALM_RACERS_ORIGIN.x;
+      const z = sea.positions[col * 2 + 1] - REALM_RACERS_ORIGIN.z;
+      const on = outline.some((point) => Math.hypot(point.x - x, point.z - z) < 1e-9);
+      expect(on, `sea column ${col} is on the shore`).toBe(true);
+    }
+  });
+
+  it('ramps the shore down the basin the circuit authored, to the depth it authored', () => {
+    const sea = rallySeaMesh(ISLAND);
+    if (!sea) throw new Error('an authored shore has a sea outside it');
+    const basin = GARDEN.basin;
+    if (!basin) throw new Error('the garden circuit authors its basin');
+    expect(rallySeaBasin(ISLAND)).toBe(basin);
+    const depths = Array.from(sea.depths);
+    expect(Math.min(...depths)).toBe(0);
+    // The floor is the basin's, never deeper: the same clamp a pond takes.
+    expect(Math.max(...depths)).toBeCloseTo(basin.depthMax, 6);
+    // And the ramp is the authored SLOPE rather than a shape of its own: a
+    // vertex a yard off the shore is a yard's worth of bank under it.
+    for (let col = 0; col < sea.columns; col++) {
+      const shoreX = sea.positions[col * 2];
+      const shoreZ = sea.positions[col * 2 + 1];
+      for (let ring = 1; ring <= sea.rings; ring++) {
+        const v = ring * sea.columns + col;
+        const out = Math.hypot(sea.positions[v * 2] - shoreX, sea.positions[v * 2 + 1] - shoreZ);
+        expect(sea.depths[v], `column ${col} ring ${ring}`).toBeCloseTo(
+          Math.min(basin.depthMax, basin.bankSlope * out),
+          6,
+        );
+      }
+    }
+  });
+
+  it('falls back to a bank profile on an island that authors no pond at all', () => {
+    // The record's basin rule is an iff with the PONDS, so a circuit may draw a
+    // shore and author no basin. The water still has to be shaded by something,
+    // and the fallback is the profile every pond in the game already uses rather
+    // than a number invented for the case.
+    const dry: RealmRacersCircuit = {
+      ...ISLAND,
+      id: 'water_island_dry',
+      ponds: undefined,
+      basin: undefined,
+    };
+    expect(rallySeaBasin(dry)).toBe(REALM_RACERS_SEA_BASIN);
+    expect(REALM_RACERS_SEA_BASIN).toEqual(GARDEN.basin);
+    const sea = rallySeaMesh(dry);
+    if (!sea) throw new Error('a shore has a sea whether or not a pond does');
+    expect(Math.max(...Array.from(sea.depths))).toBeCloseTo(REALM_RACERS_SEA_BASIN.depthMax, 6);
+  });
+
+  it('plants the shore with scattered clumps rather than a tiled line', () => {
+    const spots = rallyShoreSpots(ISLAND);
+    expect(spots.length).toBeGreaterThan(20);
+    const outline = realmRacersGroundShape(ISLAND).outline;
+    const offsets = spots.map((spot) => {
+      let best = Number.POSITIVE_INFINITY;
+      for (const point of outline) {
+        best = Math.min(
+          best,
+          Math.hypot(
+            point.x - (spot.x - REALM_RACERS_ORIGIN.x),
+            point.z - (spot.z - REALM_RACERS_ORIGIN.z),
+          ),
+        );
+      }
+      return best;
+    });
+    // Off the line, by different amounts: a straight module cannot follow a
+    // curve, which is the whole reason a shore is scattered and a fence is not.
+    expect(Math.max(...offsets)).toBeGreaterThan(0.5);
+    expect(new Set(offsets.map((offset) => offset.toFixed(3))).size).toBeGreaterThan(5);
+    // Off it on the WATER side only. A clump is anchored at the water's own
+    // height, half a yard under the lawn, so one jittered inland stands sunk in
+    // the grass: a reed bed grows at the waterline and out into the shallows.
+    let inland = 0;
+    for (const spot of spots) {
+      if (
+        polygonContainsPoint(
+          outline,
+          spot.x - REALM_RACERS_ORIGIN.x,
+          spot.z - REALM_RACERS_ORIGIN.z,
+        )
+      ) {
+        inland++;
+      }
+    }
+    // Not zero: a clump ON the line is inside by an even-odd hair, and a bay
+    // narrower than the jitter can put one back over the land. A quarter is far
+    // under the half a two-sided jitter produced.
+    expect(inland).toBeLessThan(spots.length / 4);
+    // ...and the spacing is kept over a LONG segment rather than one clump per
+    // segment however long: the shore of an island this size carries about its
+    // own perimeter divided by the spacing.
+    let perimeter = 0;
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i];
+      const b = outline[(i + 1) % outline.length];
+      perimeter += Math.hypot(b.x - a.x, b.z - a.z);
+    }
+    expect(spots.length).toBeGreaterThan((perimeter / 11) * 0.9);
+    // Deterministic: the same shore plants the same clumps, on every host.
+    expect(rallyShoreSpots({ ...ISLAND, id: 'water_island_twin' })).toEqual(spots);
   });
 });
 

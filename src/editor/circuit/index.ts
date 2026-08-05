@@ -47,7 +47,11 @@ export {
   type EditorIconId,
   editorIcon,
 } from './editor_icons';
-export { type EnvelopeSuggestion, suggestEnvelope } from './envelope_core';
+export {
+  type EnvelopeSuggestion,
+  suggestEnvelope,
+  suggestGroundOutline,
+} from './envelope_core';
 export {
   circuitFromTypeScript,
   circuitToTypeScript,
@@ -79,6 +83,12 @@ export {
   removeFencePoint,
   setFenceScale,
 } from './fences_core';
+export {
+  type GroundHit,
+  groundHitAt,
+  groundPointRemoved,
+  MIN_GROUND_POINTS,
+} from './ground_core';
 export {
   type CircuitBand,
   deleteControlPoint,

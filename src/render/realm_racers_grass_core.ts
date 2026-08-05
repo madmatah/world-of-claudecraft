@@ -32,6 +32,7 @@ import {
   realmRacersCircuitById,
 } from '../sim/content/realm_racers_circuits';
 import { polygonContainsPoint } from '../sim/geometry2d';
+import { realmRacersGroundShape, realmRacersGroundSpansAt } from '../sim/realm_racers_ground';
 import { REALM_RACERS_ORIGIN } from '../sim/realm_racers_layout';
 import { realmRacersPlacedPonds } from '../sim/realm_racers_props_resolve';
 import {
@@ -66,10 +67,11 @@ export const REALM_RACERS_GRASS_Y = -0.12;
  * A circuit's grass mask: one byte per square yard of the perimeter box, 1
  * where a blade may NOT stand.
  *
- * Blocked cells are the racing surface (road, verge and run-off) and the ponds,
- * for the same two reasons the flowers keep off them: grass on the tarmac reads
- * as a bug, and a blade in a pond stands on water, since the lawn is cut open
- * under one.
+ * Blocked cells are everything off the authored LAND, the racing surface (road,
+ * verge and run-off) and the ponds. The last two are the same reason twice:
+ * grass on the tarmac reads as a bug, and a blade in a pond stands on water,
+ * since the lawn is cut open under one. The first is that reason at the scale of
+ * a circuit: this grid covers the perimeter BOX, and an island is not a box.
  */
 export interface RealmRacersGrassMask {
   /** Half-extents of the covered box, circuit-local yards. */
@@ -92,6 +94,59 @@ function buildMask(circuit: RealmRacersCircuit): RealmRacersGrassMask {
     if (col < 0 || row < 0 || col >= columns || row >= rows) return;
     blocked[row * columns + col] = 1;
   };
+
+  // Everything off the authored LAND is blocked outright, and this comes first
+  // because it is the only thing here that bounds the fill rather than punching
+  // a hole in it. The box this grid covers is the perimeter's, which is a
+  // rectangle; an island is not, so without this pass a circuit that authored a
+  // shore grew a rectangle of meadow out over the sea around it. Row by row
+  // rather than cell by cell: the spans come from one walk of the outline per
+  // row, against a walk per cell.
+  //
+  // Held back from the shore by about the margin the road keeps, and for the
+  // same reason: a cluster is jittered anywhere inside its own cell, so blades
+  // on the last cell of the land stand in the surf. Approximately, because the
+  // erosion works on CELL CENTRES over a Chebyshev grid rather than on the
+  // polygon: a diagonal shore is held back further than a square-on one, and a
+  // cell can survive a little nearer the line than the margin says.
+  if (realmRacersGroundShape(circuit).authored) {
+    const land = new Uint8Array(columns * rows);
+    for (let row = 0; row < rows; row++) {
+      const spans = realmRacersGroundSpansAt(circuit, row * MASK_CELL - halfZ) ?? [];
+      for (let col = 0; col < columns; col++) {
+        const x = col * MASK_CELL - halfX;
+        land[row * columns + col] = spans.some((span) => x >= span.x0 && x <= span.x1) ? 1 : 0;
+      }
+    }
+    // Then eaten back from the shore by the margin, in BOTH axes: the spans
+    // above answer for a line of constant z, so trimming them would only hold a
+    // cluster off a shore that runs across the rows, and a beach on the other
+    // tack would still be planted. Separable, and clamped at the box edge rather
+    // than eroded there, because outside this grid is not water: it is simply
+    // ground the mask has never had an opinion about.
+    const reach = Math.max(1, Math.round(MASK_MARGIN / MASK_CELL));
+    const inland = new Uint8Array(columns * rows);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < columns; col++) {
+        let keep = 1;
+        for (let d = -reach; d <= reach && keep === 1; d++) {
+          const c = Math.min(columns - 1, Math.max(0, col + d));
+          keep = land[row * columns + c];
+        }
+        inland[row * columns + col] = keep;
+      }
+    }
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < columns; col++) {
+        let keep = 1;
+        for (let d = -reach; d <= reach && keep === 1; d++) {
+          const r = Math.min(rows - 1, Math.max(0, row + d));
+          keep = inland[r * columns + col];
+        }
+        if (keep === 0) blocked[row * columns + col] = 1;
+      }
+    }
+  }
 
   // The racing surface, stamped by walking the centerline rather than by
   // projecting every cell: one pass over the samples the road is swept from,

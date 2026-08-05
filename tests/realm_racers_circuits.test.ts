@@ -24,6 +24,7 @@ import {
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
+import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
 import {
   REALM_RACERS_GATE_SNAP_FRACTION,
   REALM_RACERS_GATE_SPACING,
@@ -31,6 +32,7 @@ import {
   REALM_RACERS_LANE_CLEARANCE,
   REALM_RACERS_LANE_DZ,
   REALM_RACERS_LANES,
+  REALM_RACERS_LAWN_OVERSHOOT,
   REALM_RACERS_MIN_GATES,
   REALM_RACERS_MIN_HALF_WIDTH,
   REALM_RACERS_ORIGIN,
@@ -202,6 +204,36 @@ describe('Realm Racers circuits: every record is well formed', () => {
       // outer edge crosses the road without crossing the gate.
       for (const gate of realmRacersGates(circuit)) {
         expect(gate.halfWidth).toBeGreaterThan(track.halfWidthAt(gate.s));
+      }
+    },
+  );
+});
+
+describe('Realm Racers circuits: the ground under them', () => {
+  it.each(REALM_RACERS_CIRCUIT_LIST.map((c) => [c.id, c] as const))(
+    '%s authors no ground shape, so its land is exactly the rectangle it always was',
+    (_id, circuit) => {
+      // The whole promise of the authored ground: a field the shipped records do
+      // not carry changes nothing about them. Against the LITERAL rectangle the
+      // renderer used to build from `regionHalf*` plus its own overshoot, not
+      // against the resolver read back at itself.
+      expect(circuit.groundOutline).toBeUndefined();
+      const shape = realmRacersGroundShape(circuit);
+      expect(shape.authored).toBe(false);
+      const halfX = circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT;
+      const halfZ = circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT;
+      expect([...shape.outline]).toEqual([
+        { x: -halfX, z: -halfZ },
+        { x: halfX, z: -halfZ },
+        { x: halfX, z: halfZ },
+        { x: -halfX, z: halfZ },
+      ]);
+      // And it really does cover the circuit: the rule that measures a road
+      // against this shape can never fire on a record that authors none.
+      const track = realmRacersTrack(circuit);
+      for (const sample of track.samples) {
+        expect(Math.abs(sample.x - REALM_RACERS_ORIGIN.x)).toBeLessThan(halfX);
+        expect(Math.abs(sample.z - REALM_RACERS_ORIGIN.z)).toBeLessThan(halfZ);
       }
     },
   );

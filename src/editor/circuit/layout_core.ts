@@ -99,7 +99,7 @@ export const RAIL_MODES: readonly RailModeDef[] = [
     label: 'Terrain',
     icon: 'terrain',
     shortcut: '5',
-    detail: 'Draw the barriers that make a circuit an enclosure rather than a rectangle',
+    detail: 'Shape the land, and draw the barriers that enclose it',
   },
 ];
 
@@ -137,7 +137,15 @@ export function railBanner(
   redrawing = false,
   placement: PlacementMode = 'single',
   placing = false,
+  groundArmed = false,
 ): string {
+  // TERRAIN has two drawing gestures rather than one, and they are nothing
+  // alike: a barrier is dropped point by point and the ground is one closed
+  // stroke. One sentence with the other as a tail clause is the banner refusing
+  // to say which of the two is about to happen.
+  if (groundArmed && toolFor(mode, drawn, redrawing) === 'terrain') {
+    return 'drag one closed loop to shape the land; the release fits it to handles, esc cancels';
+  }
   switch (toolFor(mode, drawn, redrawing)) {
     case 'draw':
       return redrawing
@@ -171,7 +179,7 @@ export function railBanner(
       // cannot find the way out of a drawing gesture is stuck in it.
       return placing
         ? 'click to drop each point of the run; click the first point to close the ring, enter to finish it open, esc to cancel'
-        : 'click a barrier to select it: drag a point to move it, del removes the run. Arm a kit in the library to draw one';
+        : 'click a barrier or a ground handle to select it: drag it to move it, del removes it. Arm a kit in the library, or Draw ground shape above';
     default:
       return 'the numbers a circuit carries that nothing on the canvas can show';
   }
@@ -235,6 +243,9 @@ export type ActionId =
   | 'disarmTool'
   | 'fitEnclosure'
   | 'centerCircuit'
+  | 'fitGround'
+  | 'drawGround'
+  | 'deleteGround'
   | 'fixCorners'
   | 'raceSettings'
   | 'modeShape'
@@ -497,6 +508,36 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     group: 'track',
   },
   {
+    id: 'drawGround',
+    needsCircuit: true,
+    label: 'Draw ground shape',
+    detail: 'Drag one closed loop to shape the land itself. Stays on until the loop lands, or esc',
+    icon: 'terrain',
+    scope: 'global',
+    menu: 'track',
+    group: 'track',
+  },
+  {
+    id: 'deleteGround',
+    needsCircuit: true,
+    label: 'Delete ground shape',
+    detail: 'Discard the shape, and put the land back to the rectangle covering the whole region',
+    icon: 'trash',
+    scope: 'global',
+    menu: 'track',
+    group: 'track',
+  },
+  {
+    id: 'fitGround',
+    needsCircuit: true,
+    label: 'Fit ground',
+    detail: 'Propose the shape of the land around the road, which the sea then fills in around',
+    icon: 'terrain',
+    scope: 'global',
+    menu: 'track',
+    group: 'track',
+  },
+  {
     id: 'fixCorners',
     needsCircuit: true,
     label: 'Fix corners',
@@ -559,7 +600,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     id: 'modeTerrain',
     needsCircuit: true,
     label: 'Terrain',
-    detail: 'Draw the barriers a circuit is enclosed by, and size that enclosure',
+    detail: 'Shape the land a race sits on: its own outline, its barriers, its enclosure',
     icon: 'terrain',
     scope: 'global',
     shortcut: '5',
@@ -753,7 +794,16 @@ export const MENU_ITEMS: Record<MenuId, readonly ActionId[]> = {
     'zoomIn',
     'keys',
   ],
-  track: ['redrawCenterline', 'fitEnclosure', 'centerCircuit', 'fixCorners', 'raceSettings'],
+  track: [
+    'redrawCenterline',
+    'drawGround',
+    'fitGround',
+    'deleteGround',
+    'fitEnclosure',
+    'centerCircuit',
+    'fixCorners',
+    'raceSettings',
+  ],
 };
 
 export function menuActions(menu: MenuId): EditorActionDef[] {
@@ -781,8 +831,13 @@ export const MODE_ACTIONS: Record<RailModeId, ActionId> = {
  * it narrows the ROAD (width's table) to clear a corner the CURVE made (shape's
  * geometry), and whichever of the two the operator is in is where they meet it.
  *
- * The two ENCLOSURE actions belong to TERRAIN, which is the tool about the land
- * a race sits on. `fitEnclosure` also stays on SHAPE, and that is deliberate
+ * The three GROUND actions and the two ENCLOSURE ones belong to TERRAIN, which
+ * is the tool about the land a race sits on. `Draw ground shape` is the odd one
+ * in this table: every other repair here acts once and is done, and that one
+ * arms a MODE, so the chrome holds it lit (`setChecked`) for as long as it is
+ * true. It is on the banner rather than in the palette beside the barrier kits
+ * because a circuit has ONE ground and any number of barriers: a palette is for
+ * picking one of many, and the land is not one of many. `fitEnclosure` also stays on SHAPE, and that is deliberate
  * rather than a leftover: an operator who has just finished a stroke wants it
  * immediately, which is the whole reason it was pulled out of the menu bar in
  * the first place. An action may appear on two modes' banners; it is one row in
@@ -797,7 +852,10 @@ export function railActions(mode: RailModeId): readonly ActionId[] {
     case 'race':
       return ['fitEnclosure'];
     case 'terrain':
-      return ['fitEnclosure', 'centerCircuit'];
+      // The LAND first and the enclosure after, which is the order the mode is
+      // read in: the shape of the ground is what a circuit sits on, and the two
+      // boxes around it are what bounds it.
+      return ['drawGround', 'fitGround', 'deleteGround', 'fitEnclosure', 'centerCircuit'];
     default:
       return [];
   }
@@ -1305,6 +1363,8 @@ export const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   fence_blocks_racing_surface: 'a fence crosses the racing surface',
   fence_outside_region: 'a fence leaves the collision region',
   pond_on_racing_surface: 'a pond reaches onto the racing surface',
+  road_outside_ground_outline: 'the road runs off the ground you drew',
+  ground_outline_folds: 'the ground you drew crosses itself',
   pickup_row_off_road: 'a pickup row does not fit on the road there',
   pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',
 };

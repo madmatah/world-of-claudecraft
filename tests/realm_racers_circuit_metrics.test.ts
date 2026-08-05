@@ -15,6 +15,7 @@ import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
   REALM_RACERS_CIRCUIT_LIST,
 } from '../src/sim/content/realm_racers_circuits';
+import { polygonContainsPoint } from '../src/sim/geometry2d';
 import {
   REALM_RACERS_MIN_STRETCH_SEPARATION,
   realmRacersCircuitErrors,
@@ -22,6 +23,7 @@ import {
   realmRacersPickupRowFit,
   realmRacersPropStanding,
 } from '../src/sim/realm_racers_circuit_metrics';
+import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
 import {
   REALM_RACERS_BAND_X_MAX,
   REALM_RACERS_BAND_X_MIN,
@@ -340,6 +342,140 @@ describe('Realm Racers circuit metrics: the water a circuit places', () => {
       ponds: [{ x: 0, z: 0, rx: 8, rz: 6, seed: 1 }],
     });
     expect(codesOf(proper)).not.toContain('pond_requires_basin');
+  });
+});
+
+describe('Realm Racers circuit metrics: the ground the road stands on', () => {
+  // A ring road of radius 60 with a 10 yard half-width: its garden edge reaches
+  // about 74 yards out, so a ground outline at 90 clears it and one at 50 is
+  // under it. Both are hand-written rings rather than fitted shapes, so the
+  // margins in play are readable rather than whatever a fit produced.
+  const ROAD = ring(60, 16);
+
+  it('says nothing at all about a circuit that authors no ground shape', () => {
+    // The default is the rectangle covering the whole region, so this rule can
+    // never fire on either shipped circuit: the case is here because a rule that
+    // fired on the default would have been caught in the seat, not in a readout.
+    const plain = draft('metrics_ground_default', ROAD, 10);
+    expect(plain.groundOutline).toBeUndefined();
+    expect(codesOf(plain)).not.toContain('road_outside_ground_outline');
+  });
+
+  it('passes a road that stays on its island, garden edge and all', () => {
+    const island = draft('metrics_ground_island', ROAD, 10, { groundOutline: ring(90, 12) });
+    expect(codesOf(island)).not.toContain('road_outside_ground_outline');
+    expect(realmRacersCircuitErrors(realmRacersCircuitMetrics(island))).toEqual([]);
+  });
+
+  it('reports a road running off the ground, as an error, at the lap position', () => {
+    const drowned = draft('metrics_ground_drowned', ROAD, 10, { groundOutline: ring(50, 12) });
+    const problems = realmRacersCircuitMetrics(drowned).problems.filter(
+      (problem) => problem.code === 'road_outside_ground_outline',
+    );
+    expect(problems.length).toBeGreaterThan(0);
+    for (const problem of problems) {
+      expect(problem.severity).toBe('error');
+      // The value is how much LAP the run covers, against a limit of zero: a
+      // yard of road over water is the whole fault.
+      expect(problem.limit).toBe(0);
+      expect(problem.value).toBeGreaterThan(0);
+      expect(problem.s).toBeGreaterThanOrEqual(0);
+    }
+    // The whole lap is off this island, so it is reported as ONE run rather than
+    // as one callout per sample: the corner checks' own rule, and what keeps a
+    // shore drawn a yard too tight from filling the plan with markers.
+    expect(problems).toHaveLength(1);
+    expect(problems[0].value).toBeCloseTo(realmRacersCircuitMetrics(drowned).lapLength, 0);
+    expect(realmRacersCircuitErrors(realmRacersCircuitMetrics(drowned)).length).toBeGreaterThan(0);
+  });
+
+  it('catches a shore cut across ONE side, and leaves the rest of the lap alone', () => {
+    // The island covers the road everywhere except a bite taken out of the +x
+    // side, which is the case an endpoint test or a whole-lap verdict would both
+    // miss: most of the circuit is perfectly fine.
+    const bitten = ring(90, 24).map((point) =>
+      point.x > 40 ? { x: point.x * 0.55, z: point.z * 0.55 } : point,
+    );
+    const circuit = draft('metrics_ground_bite', ROAD, 10, { groundOutline: bitten });
+    const problems = realmRacersCircuitMetrics(circuit).problems.filter(
+      (problem) => problem.code === 'road_outside_ground_outline',
+    );
+    expect(problems).toHaveLength(1);
+    // A bite, not the lap: comfortably under a quarter of a 380 yard ring.
+    const lap = realmRacersCircuitMetrics(circuit).lapLength;
+    expect(problems[0].value).toBeGreaterThan(10);
+    expect(problems[0].value).toBeLessThan(lap / 2);
+  });
+
+  it('reports one problem per RUN, at the lap position each one starts at', () => {
+    // The rule says runS, and one bite cannot tell a per-run report from a
+    // per-circuit verdict: an implementation that collapsed every off-ground
+    // sample into a single problem passes the case above. Two bites, on
+    // opposite sides, is the case that cannot.
+    const bitten = ring(90, 24).map((point) =>
+      Math.abs(point.x) > 40 ? { x: point.x * 0.5, z: point.z * 0.5 } : point,
+    );
+    const circuit = draft('metrics_ground_two_bites', ROAD, 10, { groundOutline: bitten });
+    const metrics = realmRacersCircuitMetrics(circuit);
+    const problems = metrics.problems.filter(
+      (problem) => problem.code === 'road_outside_ground_outline',
+    );
+    expect(problems).toHaveLength(2);
+    // Half a lap apart, which is where the two bites are: a pair reported at the
+    // same place would be one fault counted twice.
+    const [first, second] = problems.map((problem) => problem.s).sort((a, b) => a - b);
+    expect(second - first).toBeGreaterThan(metrics.lapLength / 4);
+    for (const problem of problems) {
+      expect(problem.value).toBeGreaterThan(10);
+      expect(problem.value).toBeLessThan(metrics.lapLength / 2);
+    }
+  });
+
+  it('calls a ground outline that crosses itself an error', () => {
+    // Even-odd is what every reader of this shape uses, so a fold is not a
+    // cosmetic tangle: the loop reads as a HOLE, and the meadow, the beds and
+    // the scatters are punched out over ground the lawn is drawn on.
+    const bowtie = draft('metrics_ground_bowtie', ROAD, 10, {
+      // Deliberately ASYMMETRIC: a perfectly balanced bowtie crosses exactly on
+      // a sampled vertex, and a segment-pair test that (rightly) wants a strict
+      // interior crossing misses that one measure-zero case.
+      groundOutline: [
+        { x: -140, z: -110 },
+        { x: 120, z: 96 },
+        { x: 150, z: -104 },
+        { x: -128, z: 118 },
+      ],
+    });
+    const problem = realmRacersCircuitMetrics(bowtie).problems.find(
+      (entry) => entry.code === 'ground_outline_folds',
+    );
+    expect(problem).toBeDefined();
+    expect(problem?.severity).toBe('error');
+    expect([problem?.value, problem?.limit]).toEqual([1, 0]);
+    // ...and a simple ring of the same size is not reported, so the check is
+    // about the crossing rather than about authoring a shape at all.
+    const clean = draft('metrics_ground_simple', ROAD, 10, { groundOutline: ring(90, 12) });
+    expect(codesOf(clean)).not.toContain('ground_outline_folds');
+  });
+
+  it('measures the GARDEN EDGE, not the centerline', () => {
+    // An outline drawn between the two: it holds every centerline sample and
+    // cuts into the run-off either side of it. A centerline test would bless it,
+    // which is the whole reason the probes are taken at the road's own edge.
+    const centerlineOnly = draft('metrics_ground_edge', ROAD, 10, {
+      groundOutline: ring(66, 16),
+    });
+    const track = realmRacersTrack(centerlineOnly);
+    const outline = realmRacersGroundShape(centerlineOnly).outline;
+    for (const sample of track.samples) {
+      const inside = polygonContainsPoint(
+        outline,
+        sample.x - REALM_RACERS_ORIGIN.x,
+        sample.z - REALM_RACERS_ORIGIN.z,
+      );
+      expect(inside, `centerline at ${sample.s.toFixed(0)} is on the island`).toBe(true);
+    }
+    expect(codesOf(centerlineOnly)).toContain('road_outside_ground_outline');
   });
 });
 

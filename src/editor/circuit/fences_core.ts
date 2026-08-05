@@ -365,6 +365,12 @@ export function moveCircuitContent(
       points: fence.points.map((point) => ({ x: point.x + dx, z: point.z + dz })),
     }));
   }
+  if (circuit.groundOutline) {
+    out.groundOutline = circuit.groundOutline.map((point) => ({
+      x: point.x + dx,
+      z: point.z + dz,
+    }));
+  }
   // `scatters` are authored as a span of LAP and a side, and `pickupRows` as a
   // lap fraction: both follow the centerline for free, like a track-space prop.
   return out;

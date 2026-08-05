@@ -217,7 +217,9 @@ describe('what a blank canvas refuses', () => {
 
 describe('the props arm state', () => {
   it('says what the next click will do, for as long as it is true', () => {
-    expect(armStateText(null, 'pond')).toContain('pointer');
+    // The idle half says what a click WILL do rather than naming the row that
+    // used to announce it, since that row is gone from all three palettes.
+    expect(armStateText(null, 'pond')).toContain('click a piece to select it');
     expect(armStateText('postLantern', 'pond')).toBe('placing postLantern');
     // Water is dragged out over a box, not clicked, so it says so.
     expect(armStateText('pond', 'pond')).toContain('drag a box');

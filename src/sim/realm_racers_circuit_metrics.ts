@@ -15,12 +15,13 @@
 // Pure leaf: no SimContext, no rng, no clock, no DOM, no three.
 
 import { REALM_RACERS_THEME_IDS, type RealmRacersCircuit } from './content/realm_racers_circuits';
-import { polygonContainsPoint } from './geometry2d';
+import { polygonContainsPoint, polygonSelfIntersects } from './geometry2d';
 import {
   rallyFenceRunSamples,
   realmRacersFencePlacements,
   realmRacersFenceRuns,
 } from './realm_racers_fences';
+import { realmRacersGroundShape } from './realm_racers_ground';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_MAX_RANGE,
@@ -232,6 +233,33 @@ export type RealmRacersCircuitProblemCode =
    * over the lawn around it.
    */
   | 'pond_on_racing_surface'
+  /**
+   * The road leaves the ground the circuit authored: a stretch of it, or of the
+   * garden either side of it, stands over open water.
+   *
+   * An ERROR rather than a warning, because an island whose road runs off the
+   * edge of it is not a design: the machine drives on over the sea (water costs
+   * nothing and stops nobody) and the lap is run on a surface that is not drawn.
+   * It is measured over CONTIGUOUS runs like the corner checks, and reported at
+   * the lap position where it happens, so the operator meets the place rather
+   * than a verdict about the circuit.
+   *
+   * It can never fire on a circuit that authors no outline: the derived
+   * rectangle covers the whole collision region and then some.
+   */
+  | 'road_outside_ground_outline'
+  /**
+   * The authored ground outline crosses itself.
+   *
+   * An ERROR, and not a cosmetic one, because every reader of the shape is
+   * even-odd: a loop that folds through itself reads as a HOLE, so the meadow,
+   * the flower beds and the seeded scatters are all punched out over ground the
+   * lawn is drawn on, and the road-off-ground rule reports a stretch of open
+   * water where there is grass. The freehand gesture invites it (a stroke that
+   * doubles back), and so did the `Fit ground` repair until it learned to cut
+   * its own folds out.
+   */
+  | 'ground_outline_folds'
   /**
    * A pickup row does not fit on the ROAD where it stands: one of its boxes
    * reaches past the road edge.
@@ -684,6 +712,54 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
       }
     }
     if (onSurface) problem('pond_on_racing_surface', 'error', 0, 0);
+  }
+
+  // --- the land: does the road stay on the ground the circuit authored? ---
+  //
+  // Measured at the GARDEN EDGE on both sides rather than at the centerline,
+  // because the garden either side of the road is where a machine running wide
+  // ends up: a centerline test would bless a shore cut so close that half the
+  // run-off is open water. The three probes are the same shape the pond check
+  // uses for the same reason.
+  //
+  // Skipped outright when nothing is authored: the derived rectangle covers the
+  // region plus the overshoot, so every probe is inside it by construction and
+  // the walk would be a lap of point-in-polygon tests to prove it.
+  const ground = realmRacersGroundShape(circuit);
+  if (ground.authored && polygonSelfIntersects(ground.outline)) {
+    // (1, 0), the shape every count-against-a-ceiling-of-zero problem here
+    // uses: one of these, and none is allowed.
+    problem('ground_outline_folds', 'error', 1, 0);
+  }
+  if (ground.authored) {
+    const offGround = (index: number): boolean => {
+      const sample = samples[index];
+      const localX = sample.x - REALM_RACERS_ORIGIN.x;
+      const localZ = sample.z - REALM_RACERS_ORIGIN.z;
+      const span = rallyGardenEdgeOffsetAt(circuit, sample.s);
+      // A probe that is not a point raises NOTHING, which is this file's own
+      // doctrine (see the fence run above) and needs saying HERE because the
+      // test below is a NEGATED containment: without this line a malformed
+      // width table or centerline would read as "off the ground" at every
+      // sample and flag the entire lap, where its neighbour raises nothing at
+      // all on the same draft. Whatever put a NaN in the road is a defect other
+      // rules own.
+      if (![localX, localZ, span].every(Number.isFinite)) return false;
+      const probes: [number, number][] = [
+        [localX, localZ],
+        [localX - sample.tz * span, localZ + sample.tx * span],
+        [localX + sample.tz * span, localZ - sample.tx * span],
+      ];
+      return probes.some(([x, z]) => !polygonContainsPoint(ground.outline, x, z));
+    };
+    for (const run of contiguousRuns(count, offGround, () => 0)) {
+      // The VALUE is how much lap the run covers and the limit is zero, because
+      // there is no margin to report: a yard of road over water is the whole
+      // fault, and what an operator wants to know beside the place is how much
+      // of the lap is standing on nothing.
+      const length = (run.start <= run.end ? run.end - run.start : count - run.start + run.end) + 1;
+      problem('road_outside_ground_outline', 'error', length * step, 0, samples[run.start].s);
+    }
   }
 
   // --- the pickup rows: does the row the road derived actually fit on it? ---

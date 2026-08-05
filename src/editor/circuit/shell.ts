@@ -329,10 +329,18 @@ export class EditorShell {
     redrawing = false,
     placement: PlacementMode = 'single',
     placing = false,
+    groundArmed = false,
   ): void {
     const def = RAIL_MODES.find((entry) => entry.id === mode);
     this.bannerModeEl.textContent = (def?.label ?? mode).toUpperCase();
-    this.bannerTextEl.textContent = railBanner(mode, drawn, redrawing, placement, placing);
+    this.bannerTextEl.textContent = railBanner(
+      mode,
+      drawn,
+      redrawing,
+      placement,
+      placing,
+      groundArmed,
+    );
     this.bannerEl.hidden = false;
   }
 
@@ -342,17 +350,41 @@ export class EditorShell {
     redrawing = false,
     placement: PlacementMode = 'single',
     placing = false,
+    groundArmed = false,
   ): void {
     for (const [id, button] of this.modeButtons) {
       button.classList.toggle('on', id === mode);
       button.setAttribute('aria-checked', id === mode ? 'true' : 'false');
     }
-    this.setBanner(mode, drawn, redrawing, placement, placing);
-    // The mode's own repairs, beside its banner. Built once and shown or hidden,
-    // never rebuilt: an action button is registered by id for its enabled state,
-    // and rebuilding would leave the map holding buttons nothing can reach.
+    this.setBanner(mode, drawn, redrawing, placement, placing, groundArmed);
+    // The mode's own repairs, beside its banner. Built once and shown, hidden or
+    // MOVED, never rebuilt: an action button is registered by id for its enabled
+    // and checked states, and rebuilding would leave those maps holding buttons
+    // nothing can reach. Re-appending an existing node moves it, so the order is
+    // the MODE's own rather than the union of every mode's, which is what
+    // `railActions` is written in and what the operator is told to expect
+    // (TERRAIN reads land first, enclosure after; the union put `Fit enclosure`
+    // in front of both because SHAPE happens to be declared first).
     const offered = railActions(mode);
     for (const [id, button] of this.railActionButtons) button.hidden = !offered.includes(id);
+    const wanted = offered
+      .map((id) => this.railActionButtons.get(id))
+      .filter((button): button is HTMLButtonElement => Boolean(button));
+    // Only when the order actually differs, and with the focus put back: moving
+    // a node is a detach and an insert, so a chip that is offered by both the
+    // mode being left and the one being entered (`Fit enclosure` is on three)
+    // would lose the keyboard to `<body>` on every mode digit, which the
+    // hide-only version it replaced never did.
+    const shown = [...this.modeActionsEl.children].filter(
+      (child) => !(child as HTMLElement).hidden,
+    );
+    if (shown.length !== wanted.length || wanted.some((button, i) => shown[i] !== button)) {
+      const focused = document.activeElement;
+      for (const button of wanted) this.modeActionsEl.append(button);
+      if (focused instanceof HTMLElement && wanted.includes(focused as HTMLButtonElement)) {
+        focused.focus();
+      }
+    }
     this.modeActionsEl.hidden = offered.length === 0;
   }
 

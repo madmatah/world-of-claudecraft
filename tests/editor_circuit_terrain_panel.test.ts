@@ -54,8 +54,10 @@ function mount(overrides: Partial<TerrainPanelHost> = {}): {
     setStatus: vi.fn(),
     fenceSelection: () => null,
     draftPointCount: () => null,
+    groundArmed: () => false,
     setFenceScale: vi.fn(),
     removeFence: vi.fn(),
+    groundSelection: () => null,
     finishDraft: vi.fn(),
     onArmed: vi.fn(),
     themeBarriers: () => ZONE_KITS,
@@ -70,8 +72,6 @@ function mount(overrides: Partial<TerrainPanelHost> = {}): {
 const tile = (kit: string): HTMLElement =>
   document.querySelector(`button.lib-tile[data-kit="${kit}"]`) as HTMLElement;
 
-const pointerRow = (): HTMLElement => document.querySelector('button.pointer-mode') as HTMLElement;
-
 beforeEach(() => {
   document.body.innerHTML = '';
 });
@@ -80,11 +80,17 @@ describe('the terrain palette', () => {
   it('opens on the POINTER, which is the whole point of it', () => {
     // With a kit permanently armed, a click that hit nothing would start a run
     // nobody asked for at a place nobody chose. That is the props tool's lesson
-    // and the race tool's, and this is the third tool to take it.
+    // and the race tool's, and this is the third tool to take it. The STATE is
+    // what does that work; the row that used to announce it is gone, because it
+    // was a third way to say what the lit tile and `esc` already say, and what
+    // it said while nothing was armed was that nothing was armed.
     const { palette } = mount();
     expect(palette.armed).toBeNull();
-    expect(pointerRow().classList.contains('on')).toBe(true);
+    expect(document.querySelector('button.pointer-mode')).toBeNull();
     expect(tile('ironwork').classList.contains('on')).toBe(false);
+    // The hint line is what carries the idle state now, and it says what a click
+    // will do rather than what it will not.
+    expect(document.querySelector('.hint-line')?.textContent).toContain('select it');
   });
 
   it('arms a kit, and a second click on the armed tile gives the pointer back', () => {
@@ -92,15 +98,14 @@ describe('the terrain palette', () => {
     tile('hedge').click();
     expect(palette.armed).toBe('hedge');
     expect(tile('hedge').classList.contains('on')).toBe(true);
-    expect(pointerRow().classList.contains('on')).toBe(false);
     expect(host.onArmed).toHaveBeenLastCalledWith('hedge');
 
     tile('hedge').click();
     expect(palette.armed).toBeNull();
     // The tile has to go dark too: an arm that is off in state and lit on screen
-    // is the failure this panel is watched for.
+    // is the failure this panel is watched for, and with the pointer row gone
+    // the tile IS the state.
     expect(tile('hedge').classList.contains('on')).toBe(false);
-    expect(pointerRow().classList.contains('on')).toBe(true);
     expect(host.onArmed).toHaveBeenLastCalledWith(null);
   });
 
@@ -111,6 +116,23 @@ describe('the terrain palette', () => {
     expect(palette.armed).toBe('stoneWall');
     expect(tile('ironwork').classList.contains('on')).toBe(false);
     expect(tile('stoneWall').classList.contains('on')).toBe(true);
+  });
+
+  it('offers KITS and nothing else, the land having left it', () => {
+    // A palette is for picking one of many. A circuit has ONE ground, drawn with
+    // a gesture that is not a barrier's, so it arms from the mode's action bar
+    // and this panel is kits from top to bottom.
+    mount();
+    const buttons = [...document.querySelectorAll<HTMLElement>('button')];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.classList.contains('lib-tile'), button.textContent ?? '').toBe(true);
+    }
+    // No ENTRY offers the land. The hint line still mentions a ground handle,
+    // and it should: the pointer selects one.
+    for (const button of buttons) {
+      expect(button.textContent?.toLowerCase() ?? '').not.toContain('ground');
+    }
   });
 
   it('offers this zone’s kits first and hides none of the others', () => {
@@ -152,7 +174,11 @@ describe('the terrain palette', () => {
 
 describe('what the tool says it is doing', () => {
   it('names the pointer state for as long as it is true', () => {
-    expect(terrainArmStateText(null, null)).toContain('pointer');
+    // It says what a click WILL do rather than naming the state after the row
+    // that used to announce it: with nothing armed, a click selects.
+    const idle = terrainArmStateText(null, null);
+    expect(idle).toContain('select it');
+    expect(idle).toContain('drag it to move it');
   });
 
   it('names the two exits at the point counts that make each one available', () => {
@@ -167,6 +193,40 @@ describe('what the tool says it is doing', () => {
     const three = terrainArmStateText('ironwork', 3);
     expect(three).toContain('close');
     expect(three).toContain('enter');
+  });
+
+  it('says the GROUND is what the next drag shapes, in the palette, not only in the status bar', () => {
+    // The right column stays pinned to this palette for the whole gesture (the
+    // page counts an armed ground as placing), so a hint line still reading
+    // "click a barrier to select it" is the panel in front of the operator
+    // contradicting the tool.
+    const { palette } = mount({ groundArmed: () => true });
+    palette.paint();
+    expect(palette.el.textContent).toContain('shaping the ground');
+    expect(palette.el.textContent).not.toContain('click a barrier or a ground handle');
+  });
+
+  it('says how a RUN in progress ends, even with no kit in hand', () => {
+    // The inspector asks with `kit = null` while a draft is open, and the idle
+    // sentence is not an answer to "how do I finish this run".
+    expect(terrainArmStateText(null, 2)).toContain('enter finishes the run');
+    expect(terrainArmStateText(null, 4)).toContain('close the ring');
+    expect(terrainArmStateText(null, null)).toContain('select it');
+  });
+
+  it('says the ground is drawn in ONE gesture, not point by point', () => {
+    // The two gestures of this tool end differently: a run is finished or closed
+    // by a click, and a ground shape is one stroke that ends on the release. The
+    // held line has to say which of the two the operator is in the middle of,
+    // and the ground wins outright: it is armed from the bar, so an armed kit
+    // and an armed ground cannot both be true.
+    const armed = terrainArmStateText(null, null, true);
+    expect(armed).toContain('drag');
+    expect(armed).toContain('closed');
+    // Nothing about points: a count would be a barrier's question asked of a
+    // freehand loop.
+    expect(armed).not.toContain('click to drop');
+    expect(terrainArmStateText('hedge', 2, true)).toBe(armed);
   });
 
   it('reads a catalog key as words', () => {
@@ -195,6 +255,74 @@ describe('the terrain inspector', () => {
     inspector.paint();
     expect(inspector.el.textContent).toContain('click a barrier');
     expect(inspector.el.textContent).toContain('colliders');
+  });
+
+  it('shows TWO permanent groups, the land then the barriers on it', () => {
+    // The defect this closes was a reading one: the land's lines and the
+    // barriers' ran into each other as one column, so nothing on screen said
+    // which of the two a number belonged to. Both titles are always there, in
+    // this order, whether or not either has anything selected.
+    const { inspector } = mount({ record: () => walled });
+    inspector.paint();
+    const titles = (panel: TerrainInspectorPanel) =>
+      [...panel.el.querySelectorAll('h2')].map((node) => node.textContent);
+    expect(titles(inspector)).toEqual(['the land', 'barriers']);
+    // WITH a barrier selected too, which is the state the source edit was made
+    // for: the selected barrier's own name used to be a third `h2`, so a test
+    // that only ever mounted the empty state would stay green over a panel that
+    // grew its title back.
+    const selected = mount({ record: () => walled, fenceSelection: () => 0 });
+    selected.inspector.paint();
+    expect(titles(selected.inspector)).toEqual(['the land', 'barriers']);
+    expect(selected.inspector.el.textContent).toContain('ironwork 1 of 1');
+  });
+
+  it('names the land as a state, whether or not a shape has been drawn', () => {
+    // "There is no shape here" is the NORMAL answer (both shipped circuits give
+    // it), so an operator has to be able to tell it apart from a shape that
+    // failed to draw, and from one whose handles are simply off screen.
+    const { inspector } = mount({ record: () => walled });
+    inspector.paint();
+    expect(inspector.el.textContent).toContain('no shape drawn');
+    // ...and it points at the bar, which is where both ways to make one live.
+    expect(inspector.el.textContent).toContain('Draw ground shape');
+
+    const island: RealmRacersCircuit = {
+      ...walled,
+      id: 'terrain_panel_island',
+      groundOutline: [
+        { x: -100, z: -80 },
+        { x: 100, z: -80 },
+        { x: 100, z: 80 },
+        { x: -100, z: 80 },
+      ],
+    };
+    const drawn = mount({ record: () => island });
+    drawn.inspector.paint();
+    expect(drawn.inspector.el.textContent).toContain('4 handles');
+
+    const held = mount({ record: () => island, groundSelection: () => 2 });
+    held.inspector.paint();
+    expect(held.inspector.el.textContent).toContain('handle 3 of 4');
+  });
+
+  it('offers no button of its own on the land, since both act on the whole terrain', () => {
+    // Drawing a shape and discarding one are not selection edits: there is one
+    // ground, so they belong on the mode's action bar. What stays here is the
+    // barrier's own delete, which acts on one of many.
+    const island: RealmRacersCircuit = {
+      ...walled,
+      id: 'terrain_panel_island_buttons',
+      groundOutline: [
+        { x: -100, z: -80 },
+        { x: 100, z: -80 },
+        { x: 0, z: 80 },
+      ],
+    };
+    const { inspector } = mount({ record: () => island, fenceSelection: () => 0 });
+    inspector.paint();
+    const labels = [...inspector.el.querySelectorAll('button')].map((el) => el.textContent);
+    expect(labels).toEqual(['delete barrier']);
   });
 
   it('reports the selected barrier by its kit, its runs and its size', () => {

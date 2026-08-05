@@ -191,6 +191,36 @@ outright without `ctx.devCommands`.
   typed in and previewed. Drawing a draft against a theme no circuit ships is
   the intended way to look at one: set the field, and the 3D preview rebuilds
   through the real track builder wearing it.
+- **The LAND is authored too, and it is a different object from the barriers.**
+  `groundOutline` is one closed SMOOTHED curve drawn with the circuit's own
+  gesture (freehand stroke, RDP fit, then handles through `handles_core.ts`), and
+  a fence is an angular chain of straight modules; a shore is not a hedge, and
+  both "an island with no fence" and "a fence out in the lawn" are shapes an
+  author wants. Absent means the rectangle the ground has always been
+  (`regionHalf*` plus the overshoot), which is what keeps both shipped circuits
+  byte-identical, and outside it is the theme's water, which is decoration and
+  stops nobody. Where the shape ends up is `src/sim/realm_racers_ground.ts`, the
+  one resolver; the plan draws the SAMPLED curve rather than the record's points,
+  because a closed centripetal Catmull-Rom does not pass through the polygon
+  between them. `Fit ground` proposes one around the road the way `Fit enclosure`
+  proposes a box, and the readout is what judges it
+  (`road_outside_ground_outline`, measured at the garden edge either side of the
+  road rather than at the centerline). **Every DERIVED fill is clipped to it**,
+  and that is not a detail: the meadow, the flower beds and the seeded scatters
+  are all generated over the perimeter BOX, so an island came ringed by a
+  rectangle of grass and flowers standing on the sea. A box is not a shape. Each
+  of them asks `realmRacersOnGround` with the margin its own piece needs (a
+  scatter passes its footprint radius: what has to fit on the land is the piece,
+  not the point it is centred on), and a circuit that authors no outline pays
+  nothing at all for the rule. What an author PLACES by hand stays their own
+  call: nothing moves a bench they put on a beach. Two known limits, named so the
+  next author meets them here rather than in the seat: the SEA is built as rings
+  cast outward from the outline's own centroid, so a strongly concave island (a C
+  or a horseshoe, both shapes a freehand stroke invites) draws water over its own
+  lawn where a ray crosses the land, which is cosmetic because the sea stops
+  nobody; and `road_outside_ground_outline` probes three points per sample (the
+  centerline and both garden edges), so an inlet narrow enough to reach between
+  two probes without crossing either is not reported.
 - **The water is PLACED.** A pond is an entry in the Props palette: drag a box,
   then drag its handles. Deleting the last one leaves a circuit with no water at
   all, which is a shape the tool has to be able to reach, and the basin follows
@@ -316,8 +346,18 @@ of course: that is the circuit being edited.
   the two the operator gets was never a choice worth a button (`toolFor`). RACE
   is the fourth, and it is read as ONE intent: everything about the race that is
   not the road's shape. TERRAIN is the fifth, read the same way: the land the
-  race sits on, which is the authored BARRIERS plus the two actions that size
-  and centre the enclosure they stand in. `Fit enclosure` is on SHAPE's banner
+  race sits on. Its palette holds the barrier KITS and nothing else, and the five
+  actions about the land itself are on its banner, the ground first and the
+  enclosure after (`Draw ground shape`, `Fit ground`, `Delete ground shape`, then
+  `Fit enclosure` and `Center circuit`). The ground is not in the palette because
+  a palette is for picking one of many and a circuit has ONE ground, drawn with a
+  gesture that is not a barrier's. `Draw ground shape` is the only action in the
+  table that arms a MODE rather than acting once, so the chrome holds it lit
+  through `setChecked`; `Delete ground shape` is the only one whose enabled state
+  follows the RECORD, so the page re-reads it on every commit rather than at load
+  (`syncGroundActions`). The chips are built once for every mode and MOVED into
+  the active mode's order, never rebuilt: they are registered by id for those two
+  states. `Fit enclosure` is on SHAPE's banner
   too, deliberately: an operator who has just finished a stroke wants it
   immediately, which is why it left the menu bar in the first place. That is what lets the furniture and the record's own
   numbers share a mode without it being a sack. A dedicated furniture MODE was
@@ -335,7 +375,7 @@ of course: that is the circuit being edited.
   because ordering the tests only helps INSIDE the click tolerance of a row that
   is already there. Ten yards away there is nothing to hit. So the tool wears the
   props grammar now: a palette in its own tab arms a kind, `esc` or a second click
-  on the tile gives the pointer back, an arm survives a placement so three rows
+  on the lit tile gives the pointer back, an arm survives a placement so three rows
   are three clicks, and with nothing armed a click that hits nothing deselects and
   authors nothing at all. A click on an existing row picks that row up whether or
   not anything is armed, which is the props tool's hit-test-first order.
@@ -444,12 +484,23 @@ of course: that is the circuit being edited.
   permanently armed, a click that missed the bench the operator meant to grab
   silently authored a second bench: an edit nobody asked for, at a place nobody
   chose. Arming is deliberate (`armPalette`), clicking the armed tile again
-  disarms, `esc` disarms, and the status bar holds "placing postLantern" or
-  "pointer" for as long as it is true, because a transient message cannot answer
-  "am I still placing lanterns". Three things say which state the tool is in, so
-  none of them has to be read: the pointer entry is its own row above the pieces
-  rather than the first tile (as a tile it read as "the first asset is armed"), the
-  canvas cursor is a crosshair or a copy cursor, and the armed piece has a GHOST.
+  disarms, `esc` disarms, and the status bar holds "placing postLantern" or the
+  idle sentence for as long as it is true, because a transient message cannot
+  answer "am I still placing lanterns". Three things say which state the tool is
+  in, so none of them has to be read: the LIT TILE, the canvas cursor (crosshair
+  or copy), and the armed piece's GHOST.
+- **There is no POINTER ROW, in any of the three palettes.** There was one, above
+  the pieces, and it went on the operator's verdict that it is not intuitive: it
+  is a third way to say what the lit tile and `esc` already say, it sat in the
+  panel's most prominent slot, and what it said while nothing was armed was that
+  nothing was armed (spelled "pointer (armed)", which reads as its own opposite
+  in a tree where "armed" means a piece is on the cursor). The pointer STATE is
+  untouched, and it is the thing that fixed the defect above; what is gone is one
+  of its three announcements. What replaces it as the way BACK: `esc`, a second
+  click on the lit tile, and the hint line under the tiles, which carries the
+  idle sentence in both states rather than only in one. Cost paid: in PROPS the
+  lit tile can be scrolled out of view in a grid of 182, and `esc` is then the
+  only way back that is on screen.
 - **The ghost goes through the resolver, like every other placement here.**
   `ghostPlacement` resolves a throwaway record carrying the pending piece and
   draws what came back, so the outline under the cursor is the outline the
@@ -563,7 +614,8 @@ of course: that is the circuit being edited.
 | `panel_outliner.ts` | what is standing on this circuit, entry by entry, and the way back to any of it: select, focus, delete, off two listeners on the panel rather than on the rows |
 | `panel_readout.ts` | one builder per readout section, plus the drawer and the tabless mode's own column |
 | `panel_library.ts` | what the props tool can put down, and which piece is armed |
-| `panel_race.ts` | the RACE tool's own two: the furniture palette (the table, its tiles, the pointer state and the arm grammar) and the selected row's numbers, editable. The palette has no tile DRAG on purpose: dressing is a hunt through 182 photographed assets and dragging is how you place the one you found, while a palette of one named kind is armed by clicking it, which gets the keyboard for free |
+| `panel_race.ts` | the RACE tool's own two: the furniture palette (the table, its tiles and the arm grammar) and the selected row's numbers, editable. The palette has no tile DRAG on purpose: dressing is a hunt through 182 photographed assets and dragging is how you place the one you found, while a palette of one named kind is armed by clicking it, which gets the keyboard for free |
+| `panel_terrain.ts` | the TERRAIN tool's own two: the barrier-kit palette (folded by the theme, photographed like the props library, kits and nothing else) and the mode's inspector, which is two permanent groups, the LAND then the BARRIERS on it. Neither owns a ground button: drawing a shape and discarding one act on the whole terrain, so they are actions on the banner |
 | `dock.ts` | the floating 3D panel: move, resize, fullscreen, the camera tabs and the lap readout. Geometry rules come from `layout_core.ts` |
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |

@@ -169,6 +169,80 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(validateCircuitPayload(payload(bare))?.fences).toBeUndefined();
   });
 
+  it('carries the authored GROUND SHAPE through both directions', () => {
+    // The third field with this rule, and it is the one with the most to lose by
+    // being dropped: the outline decides where the land STOPS, so a validator
+    // that swallowed it would race a draft whose road runs over open water while
+    // the editor's own preview showed an island.
+    const island: RealmRacersCircuit = {
+      ...DRAFT,
+      id: 'draft_island_fixture',
+      groundOutline: [
+        { x: -120, z: -90 },
+        { x: 0, z: -110 },
+        { x: 120, z: -90 },
+        { x: 140, z: 0 },
+        { x: 120, z: 90 },
+        { x: 0, z: 110 },
+        { x: -120, z: 90 },
+        { x: -140, z: 0 },
+      ],
+    };
+    const text = circuitToTypeScript(island);
+    expect(text).toContain('groundOutline: [');
+    expect(text).toContain('{ x: -120, z: -90 }');
+    expect(circuitFromTypeScript(text)).toEqual(roundCircuit(island));
+    expect(validateCircuitPayload(payload(island))).toEqual(roundCircuit(island));
+
+    const bare = { ...DRAFT, id: 'draft_no_island_fixture', groundOutline: undefined };
+    expect(circuitToTypeScript(bare)).not.toContain('groundOutline: [');
+    expect(validateCircuitPayload(payload(bare))?.groundOutline).toBeUndefined();
+  });
+
+  it('refuses a ground shape that is not a closed ring of real points', () => {
+    const base = { ...DRAFT, id: 'draft_bad_ground' };
+    const withOutline = (groundOutline: unknown) =>
+      validateCircuitPayload(payload({ ...base, groundOutline } as RealmRacersCircuit));
+    expect(
+      withOutline([
+        { x: -10, z: -10 },
+        { x: 10, z: -10 },
+        { x: 0, z: 10 },
+      ]),
+    ).not.toBeNull();
+    // Two points enclose nothing, which is the same floor the control ring keeps.
+    expect(
+      withOutline([
+        { x: 0, z: 0 },
+        { x: 10, z: 0 },
+      ]),
+    ).toBeNull();
+    expect(withOutline('an island')).toBeNull();
+    // Both axes and a non-finite, one case each: the reader guards x and z in
+    // one `||`, so an arm tested on one side only is an arm nobody tested.
+    expect(
+      withOutline([
+        { x: 0, z: 0 },
+        { x: 10, z: 0 },
+        { x: 0, z: 1e9 },
+      ]),
+    ).toBeNull();
+    expect(
+      withOutline([
+        { x: 0, z: 0 },
+        { x: 1e9, z: 0 },
+        { x: 0, z: 10 },
+      ]),
+    ).toBeNull();
+    expect(
+      withOutline([
+        { x: 0, z: 0 },
+        { x: Number.NaN, z: 0 },
+        { x: 0, z: 10 },
+      ]),
+    ).toBeNull();
+  });
+
   it('refuses a barrier the game could not build, one field at a time', () => {
     const base = { ...DRAFT, id: 'draft_bad_fence' };
     const withFence = (fence: unknown) =>

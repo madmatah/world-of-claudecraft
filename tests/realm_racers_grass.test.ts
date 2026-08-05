@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { suggestGroundOutline } from '../src/editor/circuit/envelope_core';
 import { biomeGrassTint, GRASS_BIOME_DENSITY } from '../src/render/foliage_core';
 import {
   REALM_RACERS_GRASS_TILE_RADIUS,
@@ -24,6 +25,7 @@ import {
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
+import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
 import {
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
@@ -111,6 +113,55 @@ describe('Realm Racers grass', () => {
         const z = point.z + (pond.z - point.z) * 0.1;
         expect(realmRacersGrassAllowed(GARDEN_CIRCUIT, x, z)).toBe(false);
       }
+    }
+  });
+
+  it('stops at the SHORE on a circuit that authored one', () => {
+    // The defect this closes, and it was seen in the seat before it was seen
+    // here: the mask covers the perimeter BOX, so an island grew a rectangle of
+    // meadow out over the sea around it. A box is not a shape.
+    const island: RealmRacersCircuit = {
+      ...probe('nightbloom'),
+      id: 'grass_probe_island',
+      groundOutline: suggestGroundOutline(GARDEN_CIRCUIT),
+    };
+    const clusters = realmRacersGrassTiles(island).flatMap((tile) => tile.clusters);
+    // Non-vacuity first: a theme that grows nothing would pass everything below
+    // by having no blades at all, which is exactly how this defect could come
+    // back unnoticed.
+    expect(clusters.length).toBeGreaterThan(5000);
+    const outline = realmRacersGroundShape(island).outline;
+    for (const cluster of clusters) {
+      expect(
+        polygonContainsPoint(outline, cluster.x, cluster.z),
+        `cluster at ${cluster.x.toFixed(1)}, ${cluster.z.toFixed(1)}`,
+      ).toBe(true);
+    }
+    // ...and it really was a CLIP rather than the meadow being switched off: the
+    // same theme on the same curve with no shore drawn grows more.
+    const unclipped = realmRacersGrassTiles(probe('nightbloom')).flatMap((tile) => tile.clusters);
+    expect(unclipped.length).toBeGreaterThan(clusters.length);
+    // The mask says so directly too, on both sides of one shore point.
+    const shore = outline[0];
+    expect(realmRacersGrassAllowed(island, shore.x * 1.1, shore.z * 1.1)).toBe(false);
+  });
+
+  it('leaves a circuit with no shore drawn exactly the meadow it always had', () => {
+    // The other half of the clip: a record that authors no outline must not lose
+    // a single blade to it, which is what makes the two shipped circuits safe.
+    const plain = probe('nightbloom');
+    const clusters = realmRacersGrassTiles(plain).flatMap((tile) => tile.clusters);
+    expect(clusters.length).toBeGreaterThan(5000);
+    const { halfX, halfZ } = plain.perimeter;
+    // Every corner of the perimeter box is still fair game, which an island
+    // would have eaten.
+    for (const [x, z] of [
+      [halfX - 3, halfZ - 3],
+      [-(halfX - 3), halfZ - 3],
+      [halfX - 3, -(halfZ - 3)],
+      [-(halfX - 3), -(halfZ - 3)],
+    ]) {
+      expect(realmRacersGrassAllowed(plain, x, z), `${x}, ${z}`).toBe(true);
     }
   });
 

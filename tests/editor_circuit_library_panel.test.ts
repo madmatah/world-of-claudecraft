@@ -73,6 +73,10 @@ describe('the prop library panel', () => {
     // The floor: a panel that built nothing would pass every case below.
     const { panel } = mount();
     expect(panel.armed).toBeNull();
+    // And no POINTER ROW: it went from all three palettes, and this is the one
+    // of the three whose suite never named it. What says the tool is in pointer
+    // state is the unlit grid plus the hint line under it.
+    expect(document.querySelector('button.pointer-mode')).toBeNull();
     const tiles = [...document.querySelectorAll('button.lib-tile')];
     expect(tiles.length).toBeGreaterThan(4);
     for (const node of tiles) expect((node as HTMLElement).dataset.asset).toBeTruthy();

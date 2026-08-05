@@ -319,6 +319,23 @@ export interface RealmRacersCircuit {
    */
   fences?: readonly RallyFence[];
   /**
+   * The shape of the LAND itself: control points of a closed, SMOOTHED curve
+   * (the same centripetal Catmull-Rom the centerline is read as), circuit-local.
+   *
+   * Absent means the rectangle the ground has always been, `regionHalf*` plus
+   * `REALM_RACERS_LAWN_OVERSHOOT`, so a circuit that authors none is drawn
+   * exactly as it was before the field existed. Outside the shape is the theme's
+   * water, which is decoration: nothing here stops a machine, and the perimeter
+   * box goes on being the one thing that does.
+   *
+   * SMOOTHED, unlike a `fences` run, and the two are separate records for that
+   * reason: a shore is a curve and a barrier is made of straight modules, so the
+   * one shape a kit cannot follow is exactly the one the land wants. Both "an
+   * island with no fence on it" and "a fence out in the middle of the lawn" are
+   * shapes an author may want.
+   */
+  groundOutline?: readonly RallyPoint[];
+  /**
    * Where the pickup boxes stand, one entry per ROW across the road. A circuit
    * with none authored simply has no boxes on it.
    */

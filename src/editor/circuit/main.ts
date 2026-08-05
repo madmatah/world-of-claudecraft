@@ -36,6 +36,7 @@ import {
   realmRacersPickupRowFit,
 } from '../../sim/realm_racers_circuit_metrics';
 import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
+import { realmRacersGroundShape } from '../../sim/realm_racers_ground';
 import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import {
   REALM_RACERS_PICKUP_BOX_HALF,
@@ -61,7 +62,7 @@ import {
   serializeDraft,
   shouldWarnOnUnload,
 } from './draft_store_core';
-import { suggestEnvelope } from './envelope_core';
+import { suggestEnvelope, suggestGroundOutline } from './envelope_core';
 import { circuitToTypeScript, roundCircuit } from './export_core';
 import {
   addFence,
@@ -79,6 +80,7 @@ import {
   removeFencePoint,
   setFenceScale,
 } from './fences_core';
+import { groundHitAt, groundPointRemoved, MIN_GROUND_POINTS } from './ground_core';
 import {
   type CircuitBand,
   deleteControlPoint,
@@ -305,6 +307,30 @@ let fenceDragging = false;
  * one commit, which is also what makes the whole gesture one step back.
  */
 let fenceDraft: FenceDraft | null = null;
+/**
+ * The GROUND shape's selected handle, and whether the pointer has hold of it.
+ *
+ * Its own pair rather than a third arm on the barrier selection, because the two
+ * are different objects in the same tool: a circuit carries any number of
+ * barriers and at most one ground shape, so "which one" is a question only the
+ * first has.
+ */
+let groundPoint: number | null = null;
+let groundDragging = false;
+/**
+ * Whether the next drag on the plan shapes the LAND.
+ *
+ * A page state rather than a palette entry, and that is the whole shape of this
+ * tool: a circuit has ONE ground and any number of barriers, so the ground
+ * belongs with the actions about the terrain and not in a palette, which exists
+ * to pick one of many. It is armed from the banner (`drawGround`), it holds the
+ * chip lit while it is true, and it is mutually exclusive with an armed kit.
+ */
+let groundArmed = false;
+/** The freehand loop being drawn for the ground, kept off the record until the
+ *  release fits it, exactly as the centerline's own stroke is. */
+let groundStroke: RallyPoint[] = [];
+let groundDrawing = false;
 /** The raw gesture, kept after the fit so the operator can see how far the
  *  closed centripetal Catmull-Rom sits off the line they drew. */
 let stroke: RallyPoint[] = [];
@@ -536,6 +562,11 @@ function commit(next: RealmRacersCircuit, remember = true): void {
   // The palette follows the theme, so retyping the theme field re-offers the
   // zone's own vocabulary rather than the one the circuit opened on.
   library.syncTheme();
+  // `Delete ground shape` acts on a field that appears and disappears with an
+  // edit, so its enabled state is re-read HERE rather than only at load: a chip
+  // that stayed live over a shape nobody has any more is a button whose refusal
+  // the operator meets after clicking it.
+  syncGroundActions();
   // The preview debounces this itself: a drag lands one build on release, never
   // one per pointermove.
   if (drawn) preview?.show(record);
@@ -558,6 +589,11 @@ function clearSelections(): void {
   fenceSelection = null;
   fencePoint = null;
   fenceDragging = false;
+  groundPoint = null;
+  groundDragging = false;
+  groundStroke = [];
+  groundDrawing = false;
+  groundArmed = false;
   // The draft goes with them: it holds points in the coordinates of the record
   // being left, so carrying it into an undo or a load would drop a run onto a
   // circuit nobody drew it on.
@@ -1200,6 +1236,51 @@ function drawDressing(): void {
   }
 }
 
+/**
+ * The land's own edge, and the handles that shape it.
+ *
+ * The SAMPLED curve rather than the authored points, for the reason every view
+ * on this page draws what the resolver returned: a closed centripetal
+ * Catmull-Rom does not pass through its control points, so a plan drawing the
+ * polygon would show a shore the game does not cut. The handles are drawn on
+ * top, because they are what a drag grabs.
+ *
+ * Nothing at all on a circuit that authors no shape: its land is the rectangle
+ * that covers the whole region and then some, which is off the plan at any zoom
+ * a road is legible at and would read as a second enclosure if it were not.
+ */
+function drawGroundOutline(): void {
+  const authored = record.groundOutline;
+  if (authored?.length) {
+    ctx.strokeStyle = '#4d7fa0';
+    ctx.lineWidth = 2;
+    tracePolygon(realmRacersGroundShape(record).outline);
+    ctx.stroke();
+    if (tool() === 'terrain') {
+      authored.forEach((point, i) => {
+        ctx.fillStyle = i === groundPoint ? planPalette.pick : '#8fc0dc';
+        ctx.beginPath();
+        ctx.arc(screenX(point.x), screenY(point.z), i === groundPoint ? 5 : 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  }
+  if (groundStroke.length < 2) return;
+  // The raw loop, faint, under the fit that will replace it: the same pairing
+  // the centerline stroke draws, and for the same reason.
+  ctx.strokeStyle = '#8fc0dc';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  groundStroke.forEach((point, i) => {
+    const x = screenX(point.x);
+    const y = screenY(point.z);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.stroke();
+}
+
 function draw(): void {
   const dpr = window.devicePixelRatio || 1;
   const { width, height } = plan;
@@ -1222,6 +1303,8 @@ function draw(): void {
   }
   strokeRect(record.regionHalfX, record.regionHalfZ, planPalette.line, [8, 6]);
   strokeRect(record.perimeter.halfX, record.perimeter.halfZ, '#55607a');
+  // The land first, under everything standing on it.
+  drawGroundOutline();
   drawSurfaces();
   drawGates();
   drawPickupRows();
@@ -1368,6 +1451,13 @@ const fenceTolerance = (): number => FENCE_POINT_TOLERANCE_YD;
  */
 function startTerrainGesture(raw: RallyPoint): void {
   if (!drawn) return;
+  // The GROUND is armed with one gesture and one only: a freehand loop. It is
+  // tested before the barriers for the reason a drawing run is: a stroke that
+  // began on top of a fence is still a stroke.
+  if (groundArmed) {
+    startGroundStroke(raw);
+    return;
+  }
   if (fenceDraft) {
     const step = fenceDraftClick(fenceDraft, raw.x, raw.z, fenceTolerance());
     if (step.kind === 'ignored') {
@@ -1390,6 +1480,9 @@ function startTerrainGesture(raw: RallyPoint): void {
     fenceSelection = hit.fence;
     fencePoint = hit.point;
     fenceDragging = hit.point !== null;
+    // One selection at a time in this tool: a ground handle left selected under
+    // a barrier would answer `del` with whichever branch ran first.
+    groundPoint = null;
     // The undo snapshot is taken at the PRESS, so a drag that follows is one
     // step back rather than one per pointermove.
     if (hit.point !== null) pushUndo();
@@ -1404,14 +1497,20 @@ function startTerrainGesture(raw: RallyPoint): void {
     return;
   }
   const kit = terrainPalette.armed;
+  // With nothing armed, the land's own handles are the second thing a click can
+  // mean. After the barriers, because a barrier is small and a ground handle is
+  // one of eight around a whole circuit: the near thing wins the near click.
+  if (kit === null && startGroundGesture(raw)) return;
   if (kit === null) {
     fenceSelection = null;
+    groundPoint = null;
     applySideTab();
     requestRedraw();
     return;
   }
   fenceDraft = { kit, points: [{ x: raw.x, z: raw.z }] };
   fenceSelection = null;
+  groundPoint = null;
   announceArmed(kit);
 }
 
@@ -1530,6 +1629,176 @@ function centerCircuit(): void {
   }
   commit(moveCircuitContent(record, offset.dx, offset.dz));
   setStatus(`circuit moved ${offset.dx.toFixed(1)}, ${offset.dz.toFixed(1)} yd to centre it`, 'ok');
+  requestRedraw();
+}
+
+// ---- the ground shape gesture ----
+
+/**
+ * One click in TERRAIN with the GROUND armed: the start of a freehand loop.
+ *
+ * The circuit's own gesture, deliberately, down to the module it fits with: the
+ * land is a closed smoothed curve exactly as the centerline is, so an operator
+ * who has drawn one has drawn both. What follows the release is the same known
+ * behaviour too: a closed centripetal Catmull-Rom does not pass through the
+ * stroke, so the plan draws the raw loop faint under the derived one.
+ */
+function startGroundStroke(raw: RallyPoint): void {
+  groundStroke = [raw];
+  groundDrawing = true;
+  groundPoint = null;
+}
+
+/**
+ * Arm or disarm the ground, and say so everywhere it is said.
+ *
+ * Mutually exclusive with the kit palette by construction rather than by
+ * discipline: two armed gestures would make the next click ambiguous, and a run
+ * left half drawn under a stroke is a thing on screen no gesture can finish.
+ */
+function setGroundArmed(on: boolean): void {
+  groundArmed = on;
+  if (on) {
+    if (terrainPalette.armed !== null) terrainPalette.arm(null);
+    fenceDraft = null;
+    groundPoint = null;
+  } else if (groundDrawing) {
+    groundDrawing = false;
+    groundStroke = [];
+  }
+  shell.setChecked('drawGround', on);
+  announceArmed(terrainPalette.armed);
+  requestRedraw();
+}
+
+/** The release: fit the loop, put it on the record, and hand the pointer back so
+ *  the handles it just made are editable without a trip to the palette. */
+function finishGroundStroke(): void {
+  groundDrawing = false;
+  const fitted = fitStrokeToControlPoints(groundStroke);
+  groundStroke = [];
+  if (fitted.length < MIN_CONTROL_POINTS) {
+    setStatus('stroke too short to shape the ground: draw a bigger loop', 'err');
+    requestRedraw();
+    return;
+  }
+  commit({ ...record, groundOutline: fitted });
+  groundPoint = null;
+  // The arm is spent: the shape now has handles, and editing them is what an
+  // operator does next. Re-arming is one click on the same chip.
+  setGroundArmed(false);
+  setStatus(`ground shape fitted to ${fitted.length} handles`, 'ok');
+  applySideTab();
+  requestRedraw();
+}
+
+/**
+ * A click on the ground shape, with nothing armed: its handles, and the curve
+ * between two of them.
+ *
+ * The control ring's own grammar and the control ring's own core
+ * (`handles_core.ts`), because it is the same object: a click on a handle grabs
+ * it, a click on the line inserts one there, `del` removes one. Returns whether
+ * the click was the ground's, so the caller can go on to deselect.
+ */
+function startGroundGesture(raw: RallyPoint): boolean {
+  const outline = record.groundOutline;
+  if (!outline || outline.length === 0) return false;
+  const hit = hitTestControlPoint(outline, raw.x, raw.z, HIT_TOLERANCE_PIXELS.handle / view.scale);
+  if (hit >= 0) {
+    groundPoint = hit;
+    groundDragging = true;
+    // The undo snapshot is taken at the PRESS, so the drag that follows is one
+    // step back rather than one per pointermove.
+    pushUndo();
+    fenceSelection = null;
+    fencePoint = null;
+    setStatus(`ground handle ${hit + 1}: drag to move it, del removes it`, '');
+    applySideTab();
+    requestRedraw();
+    return true;
+  }
+  const segment = nearestSegment(outline, raw.x, raw.z);
+  if (segment.distance > HIT_TOLERANCE_PIXELS.segment / view.scale) return false;
+  commit({
+    ...record,
+    groundOutline: insertControlPoint(outline, segment.index, authored(raw)),
+  });
+  groundPoint = segment.index + 1;
+  groundDragging = true;
+  fenceSelection = null;
+  fencePoint = null;
+  setStatus('ground handle inserted', 'ok');
+  applySideTab();
+  requestRedraw();
+  return true;
+}
+
+/** Drag one handle. `remember` is false through the drag: the press already
+ *  snapshotted, so one gesture is one step back. */
+function moveGroundPointTo(x: number, z: number): void {
+  const outline = record.groundOutline;
+  if (!outline || groundPoint === null) return;
+  commit({ ...record, groundOutline: moveControlPoint(outline, groundPoint, { x, z }) }, false);
+  requestRedraw();
+}
+
+/**
+ * `del` on a ground handle.
+ *
+ * It goes through `deleteControlPoint`, so it refuses below the same floor the
+ * centerline keeps: a closed loop with fewer handles than that is not a shape
+ * the curve can be read from, and the way to get rid of a ground shape is to
+ * discard the whole thing rather than to whittle it down to nothing.
+ */
+function deleteGroundPoint(): void {
+  const outline = record.groundOutline;
+  if (!outline || groundPoint === null) return;
+  const next = groundPointRemoved(outline, groundPoint);
+  if (!next) {
+    setStatus(
+      `a ground shape needs ${MIN_GROUND_POINTS} handles: delete the whole shape instead`,
+      'err',
+    );
+    return;
+  }
+  commit({ ...record, groundOutline: next });
+  groundPoint = null;
+  setStatus('ground handle removed', 'ok');
+  applySideTab();
+  requestRedraw();
+}
+
+/** Discard the shape: the land goes back to the rectangle that covers the whole
+ *  region, which is what a circuit authoring none has always had. */
+function removeGroundShape(): void {
+  if (!record.groundOutline) return;
+  const next = { ...record };
+  delete (next as { groundOutline?: readonly RallyPoint[] }).groundOutline;
+  commit(next);
+  groundPoint = null;
+  setStatus('ground shape removed: the land covers the whole region again', 'ok');
+  applySideTab();
+  requestRedraw();
+}
+
+/**
+ * `Fit ground`: propose a shape around the road.
+ *
+ * The repair beside `Fit enclosure`, and the same kind of thing: it answers the
+ * question an operator would otherwise answer by drawing, and the answer is then
+ * dragged. It replaces whatever shape is there, so it is one undo step.
+ */
+function fitGround(): void {
+  const outline = suggestGroundOutline(record);
+  if (outline.length < MIN_CONTROL_POINTS) {
+    setStatus('this road is too small to fit a ground shape around', 'err');
+    return;
+  }
+  commit({ ...record, groundOutline: outline });
+  groundPoint = null;
+  setStatus(`ground fitted to the road: ${outline.length} handles`, 'ok');
+  applySideTab();
   requestRedraw();
 }
 
@@ -2070,7 +2339,10 @@ let sideChoice: SideTabId | null = layout.side;
  *  the panel opens on the inspector. Each tool selects its own kind of thing. */
 function hasSelection(): boolean {
   if (railMode === 'race') return pickupSelection !== null;
-  if (railMode === 'terrain') return fenceSelection !== null;
+  // A ground handle counts: it is what the inspector's land rows report, and
+  // without it the auto-tab rule falls back to the palette and the numbers the
+  // selection just made are on a tab nobody opened.
+  if (railMode === 'terrain') return fenceSelection !== null || groundPoint !== null;
   return dressing !== null;
 }
 
@@ -2086,7 +2358,11 @@ function activeArmed(): string | null {
 /** Whether a palette is armed, which is what keeps the panel on the library
  *  through a placing loop instead of following each placement's selection. */
 function isPlacing(): boolean {
-  return activeArmed() !== null;
+  // The ground counts as placing even though it arms from the banner rather
+  // than from a palette: what this decides is whether the right column stays on
+  // the library instead of jumping to a selection nobody asked to see, and a
+  // gesture in progress is a gesture in progress wherever it was armed.
+  return activeArmed() !== null || groundArmed;
 }
 
 function applySideTab(): void {
@@ -2118,6 +2394,13 @@ function applySideTab(): void {
 }
 
 /** Everything whose availability depends on there being a circuit at all. */
+/** What the two ground chips say about the record: one is a toggle the page
+ *  owns, the other is live exactly while there is a shape to discard. */
+function syncGroundActions(): void {
+  shell.setEnabled('deleteGround', drawn && Boolean(record.groundOutline?.length));
+  shell.setChecked('drawGround', groundArmed);
+}
+
 function refreshChrome(): void {
   // A blank canvas has exactly one thing to do, so it says so rather than
   // leaving whatever mode the last circuit was being edited in selected under a
@@ -2125,8 +2408,9 @@ function refreshChrome(): void {
   if (!drawn && railMode !== 'shape') setRailMode('shape');
   emptyEl.hidden = drawn;
   for (const id of CIRCUIT_ONLY_ACTIONS) shell.setEnabled(id, drawn);
+  syncGroundActions();
   shell.setDocument(record.id, dirty);
-  shell.setBanner(railMode, drawn, redrawing, placement.mode);
+  shell.setBanner(railMode, drawn, redrawing, placement.mode, isPlacing(), groundArmed);
   applySideTab();
   // A layout left with the dock open re-opens it the moment there is something
   // to show, which is what makes the stored flag mean anything: at boot there is
@@ -2149,13 +2433,15 @@ function announceArmed(asset: string | null): void {
           ? // The point count comes with it, because the two ways out of a
             // drawing gesture become available at different counts, and "am I
             // still drawing" is a question about state rather than a message.
-            terrainArmStateText(asset, fenceDraft?.points.length ?? null)
+            terrainArmStateText(asset, fenceDraft?.points.length ?? null, groundArmed)
           : '',
   );
+  // The GROUND is drawn rather than dropped, so it keeps the crosshair: a copy
+  // cursor over a freehand stroke says the wrong thing about the gesture.
   canvas.style.cursor = asset === null ? 'crosshair' : 'copy';
   // The banner's RACE arm says which of the two states the tool is in, so it has
   // to be repainted here and not only on a mode change.
-  shell.setBanner(railMode, drawn, redrawing, placement.mode, isPlacing());
+  shell.setBanner(railMode, drawn, redrawing, placement.mode, isPlacing(), groundArmed);
   applySideTab();
   requestRedraw();
 }
@@ -2179,7 +2465,12 @@ function setRailMode(next: RailModeId): void {
   // A run left half drawn in another mode is a run nothing on screen explains,
   // so leaving TERRAIN cancels it rather than parking it.
   if (next !== 'terrain') fenceDraft = null;
-  shell.setMode(railMode, drawn, redrawing, placement.mode, isPlacing());
+  // The ground's arm went with the selections above, whatever mode this is, so
+  // its chip is re-read here rather than only on the way OUT of TERRAIN: the
+  // rail answers a click on the mode it is already in, and that path used to
+  // drop the arm while leaving the chip lit and the banner mid-sentence.
+  syncGroundActions();
+  shell.setMode(railMode, drawn, redrawing, placement.mode, isPlacing(), groundArmed);
   // Unconditionally, even when neither palette moved: the armed line and the
   // canvas cursor belong to the mode now showing, and a tool entered with
   // nothing armed must not inherit the last one's sentence.
@@ -2400,6 +2691,16 @@ canvas.addEventListener('pointermove', (ev) => {
     if (fraction !== null) movePickupRow(fraction, false);
     return;
   }
+  if (groundDrawing) {
+    groundStroke.push(point);
+    requestRedraw();
+    return;
+  }
+  if (groundDragging && tool() === 'terrain') {
+    const snap = resolveSnap(record, point.x, point.z, { grid: layout.snap, free: altHeld });
+    moveGroundPointTo(snap.x, snap.z);
+    return;
+  }
   if (fenceDragging && tool() === 'terrain' && !fenceDraft) {
     const snap = resolveSnap(record, point.x, point.z, { grid: layout.snap, free: altHeld });
     moveFencePointTo(snap.x, snap.z);
@@ -2435,6 +2736,11 @@ function endGesture(): void {
     } else {
       setStatus('stroke too short to fit a loop: draw a bigger one', 'err');
     }
+  }
+  if (groundDrawing) finishGroundStroke();
+  if (groundDragging) {
+    groundDragging = false;
+    requestRedraw();
   }
   if (painting) reportStroke();
   if (dressingDrag) endDressingGesture();
@@ -2625,6 +2931,17 @@ function runAction(id: ActionId): void {
       // that run gone, not the whole tool disarmed and the kit to re-find. A
       // second `esc` then does what it always did.
       if (cancelFenceDrawing()) return;
+      // A stroke in progress takes the first `esc` on its own, and the arm
+      // survives it: an operator who started the loop in the wrong place wants
+      // that loop gone, not the tool disarmed and the chip to find again.
+      if (groundDrawing) {
+        groundDrawing = false;
+        groundStroke = [];
+        setStatus('ground stroke cancelled', '');
+        requestRedraw();
+        return;
+      }
+      if (groundArmed) setGroundArmed(false);
       redrawing = false;
       dressing = null;
       pickupSelection = null;
@@ -2636,7 +2953,7 @@ function runAction(id: ActionId): void {
       if (racePalette.armed !== null) racePalette.arm(null);
       if (terrainPalette.armed !== null) terrainPalette.arm(null);
       applySideTab();
-      shell.setMode(railMode, drawn, false, placement.mode, isPlacing());
+      shell.setMode(railMode, drawn, false, placement.mode, isPlacing(), groundArmed);
       return;
     case 'toggleDock':
       void togglePreview();
@@ -2678,6 +2995,25 @@ function runAction(id: ActionId): void {
       return;
     case 'centerCircuit':
       centerCircuit();
+      return;
+    case 'fitGround':
+      fitGround();
+      return;
+    case 'drawGround':
+      // Reachable from the Track menu in any mode, so it takes the operator to
+      // the tool it belongs to rather than arming a gesture the canvas is not
+      // routing: `raceSettings` does the same.
+      if (railMode !== 'terrain') setRailMode('terrain');
+      setGroundArmed(!groundArmed);
+      setStatus(
+        groundArmed
+          ? 'drag one closed loop to shape the land; esc puts the pointer back'
+          : 'pointer',
+        '',
+      );
+      return;
+    case 'deleteGround':
+      removeGroundShape();
       return;
     case 'fixCorners':
       fixCorners();
@@ -2900,7 +3236,7 @@ const panelHost: LibraryHost & OutlinerHost = {
   onTileDrag: beginTileDrag,
   onPlacement: (settings) => {
     placement = settings;
-    shell.setBanner(railMode, drawn, redrawing, settings.mode);
+    shell.setBanner(railMode, drawn, redrawing, settings.mode, isPlacing(), groundArmed);
     requestRedraw();
   },
 };
@@ -2920,14 +3256,21 @@ const terrainPanelHost: TerrainPanelHost = {
   ...panelDocument,
   fenceSelection: () => fenceSelection,
   draftPointCount: () => fenceDraft?.points.length ?? null,
+  groundArmed: () => groundArmed,
   setFenceScale: (scale) => {
     if (fenceSelection === null) return;
     commit({ ...record, fences: setFenceScale(record.fences ?? [], fenceSelection, scale) });
     requestRedraw();
   },
   removeFence: deleteFenceSelection,
+  groundSelection: () => groundPoint,
   finishDraft: finishFenceDrawing,
-  onArmed: announceArmed,
+  onArmed: (kit) => {
+    // Arming a KIT drops the ground's own arm, the other half of the exclusion
+    // `setGroundArmed` keeps: two armed gestures make the next click ambiguous.
+    if (kit !== null && groundArmed) setGroundArmed(false);
+    announceArmed(kit);
+  },
   // The theme's own vocabulary, off the RENDER registry, which is where a
   // theme's art lives. An unknown theme id falls back the same way every other
   // consumer does rather than leaving the palette empty: an operator drawing a
@@ -3147,6 +3490,11 @@ window.addEventListener('keydown', (ev) => {
       if (selected === 'deleteSelection' && fenceSelection !== null) {
         ev.preventDefault();
         deleteFenceSelection();
+        return;
+      }
+      if (selected === 'deleteSelection' && groundPoint !== null) {
+        ev.preventDefault();
+        deleteGroundPoint();
       }
       return;
     }

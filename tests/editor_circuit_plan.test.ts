@@ -28,7 +28,10 @@ import {
   wheelZoomScale,
   withAlpha,
 } from '../src/editor/circuit/plan_core';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_PRACTICE_CIRCUIT,
+  type RealmRacersCircuit,
+} from '../src/sim/content/realm_racers_circuits';
 import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
 import {
   REALM_RACERS_MAX_REGION_HALF_X,
@@ -245,7 +248,20 @@ describe('the colours the canvas borrows', () => {
     // was added to the record after that fix and never added to the clearing, so
     // drawing a fresh circuit laid three rows of boxes, twelve crates, that the
     // operator did not place and could not see the source of.
-    const blank = blankCircuit(REALM_RACERS_PRACTICE_CIRCUIT);
+    // The template is the shipped practice circuit PLUS a ground shape, because
+    // that field is the one thing the shipped records do not carry: run over the
+    // record alone, every assertion about it passes with the clearing deleted,
+    // which is exactly how the two defects above got in.
+    const template: RealmRacersCircuit = {
+      ...REALM_RACERS_PRACTICE_CIRCUIT,
+      groundOutline: [
+        { x: -100, z: -80 },
+        { x: 100, z: -80 },
+        { x: 100, z: 80 },
+        { x: -100, z: 80 },
+      ],
+    };
+    const blank = blankCircuit(template);
     // The template really does carry all of it: without this the assertions
     // below would pass over an empty source and prove nothing.
     expect(REALM_RACERS_PRACTICE_CIRCUIT.props?.length ?? 0).toBeGreaterThan(0);
@@ -257,6 +273,7 @@ describe('the colours the canvas borrows', () => {
     expect(blank.ponds).toBeUndefined();
     expect(blank.basin).toBeUndefined();
     expect(blank.pickupRows).toBeUndefined();
+    expect(blank.groundOutline).toBeUndefined();
     // And it did inherit the numbers, or it would be clearing the wrong thing.
     expect(blank.perimeter).toEqual(REALM_RACERS_PRACTICE_CIRCUIT.perimeter);
     expect(blank.laps).toBe(REALM_RACERS_PRACTICE_CIRCUIT.laps);
@@ -269,7 +286,16 @@ describe('the colours the canvas borrows', () => {
     // placed content on this record is a LIST. The three allowed are the geometry
     // and the roles, which a blank record cannot be valid without.
     const SHAPE_LISTS = ['controlPoints', 'widthBands', 'roles'];
-    const kept = Object.entries(blankCircuit(REALM_RACERS_PRACTICE_CIRCUIT))
+    const kept = Object.entries(
+      blankCircuit({
+        ...REALM_RACERS_PRACTICE_CIRCUIT,
+        groundOutline: [
+          { x: -10, z: -10 },
+          { x: 10, z: -10 },
+          { x: 0, z: 10 },
+        ],
+      }),
+    )
       .filter(([, value]) => Array.isArray(value))
       .map(([key]) => key);
     expect(kept.length).toBeGreaterThan(0);

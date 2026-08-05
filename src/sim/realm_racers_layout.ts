@@ -113,6 +113,18 @@ export const REALM_RACERS_VERGE_MARGIN = 0.75;
 export const REALM_RACERS_RUNOFF_WIDTH = 3.5;
 
 /**
+ * How far past the collision region the ground runs, yards.
+ *
+ * It keeps the horizon lawn rather than empty instance band, so it started life
+ * as a renderer's own number. It is shared now because a circuit that authors no
+ * `groundOutline` gets exactly this rectangle derived for it
+ * (`realm_racers_ground.ts`), and that default is what the readout measures a
+ * road against: the same number on both sides, or the game would judge a road
+ * against one shape and draw it standing on another.
+ */
+export const REALM_RACERS_LAWN_OVERSHOOT = 160;
+
+/**
  * The road edge is marked the way an Evergarden walk is: a sown line of flowers
  * and low shrubs, not a built border. Nothing here collides; a racer drives
  * straight through it into the garden.

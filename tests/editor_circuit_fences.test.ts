@@ -388,6 +388,12 @@ describe('centring a circuit in its enclosure', () => {
       basin: { waterY: -0.5, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
       scatters: [{ asset: 'bench', zone: 'outfield', spacing: 20, seed: 1 }],
       pickupRows: [{ s: 0.25 }],
+      groundOutline: [
+        { x: -100, z: -80 },
+        { x: 100, z: -80 },
+        { x: 100, z: 80 },
+        { x: -100, z: 80 },
+      ],
     };
     const after = moveCircuitContent(before, 7, -3);
 
@@ -401,6 +407,10 @@ describe('centring a circuit in its enclosure', () => {
     ]);
     expect(after.props?.[0].at).toEqual({ x: 17, z: 17 });
     expect(after.ponds?.[0]).toMatchObject({ x: 2, z: -9 });
+    // The LAND moves with the road too: an island left behind is the same defect
+    // as a fountain left behind, one shape bigger.
+    expect(after.groundOutline?.[0]).toEqual({ x: -93, z: -83 });
+    expect(after.groundOutline?.[2]).toEqual({ x: 107, z: 77 });
     // Track space follows the centerline for free, so it must NOT be moved a
     // second time: doing so would slide the piece along its own road.
     expect(after.props?.[1].at).toEqual({ s: 0.5, offset: 14 });
@@ -427,7 +437,7 @@ describe('centring a circuit in its enclosure', () => {
     // and the version it replaced: `withFences` nulls four of the five lists, so
     // `Array.isArray` never saw them and the sweep silently covered a third of
     // the surface it claimed to.
-    const LOCAL_LISTS = ['controlPoints', 'props', 'ponds', 'fences'] as const;
+    const LOCAL_LISTS = ['controlPoints', 'props', 'ponds', 'fences', 'groundOutline'] as const;
     const FOLLOWS_THE_ROAD = ['scatters', 'pickupRows', 'widthBands'] as const;
     const record: RealmRacersCircuit = {
       ...withFences([
@@ -444,6 +454,12 @@ describe('centring a circuit in its enclosure', () => {
       basin: { waterY: -0.5, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
       scatters: [{ asset: 'bench', zone: 'outfield', spacing: 20, seed: 1 }],
       pickupRows: [{ s: 0.25 }],
+      groundOutline: [
+        { x: -50, z: -40 },
+        { x: 50, z: -40 },
+        { x: 50, z: 40 },
+        { x: -50, z: 40 },
+      ],
     };
     const listFields = Object.entries(record)
       .filter(([, value]) => Array.isArray(value))

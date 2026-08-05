@@ -25,6 +25,7 @@ import type {
   RealmRacersCircuit,
 } from './content/realm_racers_circuits';
 import { type RallyPropDef, realmRacersPropDef } from './content/realm_racers_props';
+import { realmRacersOnGround } from './realm_racers_ground';
 import type { RallyPoint } from './realm_racers_layout';
 import { REALM_RACERS_ORIGIN } from './realm_racers_layout';
 import {
@@ -82,7 +83,7 @@ export interface RallyPlacements {
 /** Clear yards a seeded piece leaves between itself and the racing surface, on
  *  top of its own footprint: a scatter that grazes the run-off reads as sown on
  *  the track even when nothing collides. */
-const SCATTER_SURFACE_CLEARANCE = 1.5;
+export const SCATTER_SURFACE_CLEARANCE = 1.5;
 /** Points on a pond outline. Enough that the shore ring the renderer lerps
  *  inward from is smooth at the scale a pond is actually seen from, and few
  *  enough that a big infield of them is not a mesh budget. */
@@ -215,6 +216,18 @@ function resolveScatter(
       if (Math.sign(projection.lateral) !== side) continue;
       if (Math.abs(projection.lateral) - radius < rallyGardenEdgeOffsetAt(circuit, projection.s))
         continue;
+      // The piece has to FIT on the land, not merely start on it: the box this
+      // grid walks is the perimeter's, and a circuit that authored a shore is not
+      // a box. The margin is the same `radius` the two rejects above use, which
+      // is the piece's own footprint PLUS the surface clearance: a scatter that
+      // grazes the waterline reads as sown in it for the same reason one that
+      // grazes the run-off reads as sown on the track.
+      //
+      // Tested AFTER the projection rather than before it, cheap as it would be
+      // to bail earlier: the walk carries a projection HINT from cell to cell, so
+      // an early return would change which stretch a later cell projects onto and
+      // the clip would MOVE pieces instead of only removing them.
+      if (!realmRacersOnGround(circuit, x, z, radius)) continue;
       if (scatter.span) {
         const fraction = projection.s / track.length;
         const { s0, s1 } = scatter.span;

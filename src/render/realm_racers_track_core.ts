@@ -18,11 +18,13 @@
 // circuit's THEME (`realm_racers_themes.ts`) and never to this file: the
 // decisions here are geometric and the same on every circuit in every zone.
 
-import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
+import type { RealmRacersBasin, RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { realmRacersFencePlacements } from '../sim/realm_racers_fences';
+import { realmRacersGroundShape, realmRacersOnGround } from '../sim/realm_racers_ground';
 import {
   REALM_RACERS_BORDER_OFFSET,
   REALM_RACERS_BORDER_SPACING,
+  REALM_RACERS_LAWN_OVERSHOOT,
   REALM_RACERS_ORIGIN,
 } from '../sim/realm_racers_layout';
 import { realmRacersPlacedPonds } from '../sim/realm_racers_props_resolve';
@@ -264,9 +266,21 @@ export function rallyBorderFlowerSpots(circuit: RealmRacersCircuit): RallyFlower
       // where the gentle band ends than where the road does.
       const offset =
         rallyGardenEdgeOffsetAt(circuit, point.s) + REALM_RACERS_BORDER_OFFSET + roll * 1.1;
+      const x = point.x - point.tz * offset * side;
+      const z = point.z + point.tx * offset * side;
+      // Off the authored land, nothing is sown. The border follows the ROAD, so
+      // it mostly bites where the road itself is running out of island, which the
+      // readout calls an error. Not only there, though, and the difference is
+      // worth knowing: the border sits up to a couple of yards PAST the garden
+      // edge the rule probes at, so a shore cut that fine clips flowers while
+      // the readout stays clean. The line stops rather than being planted over
+      // the water, which is the right way round.
+      if (!realmRacersOnGround(circuit, x - REALM_RACERS_ORIGIN.x, z - REALM_RACERS_ORIGIN.z)) {
+        continue;
+      }
       out.push({
-        x: point.x - point.tz * offset * side,
-        z: point.z + point.tx * offset * side,
+        x,
+        z,
         rot: roll * Math.PI * 2,
         scale: 0.7 + roll * 0.5,
         colour,
@@ -339,16 +353,28 @@ const PATCH_SPREAD = 3.4;
 /** Clear grass a patch leaves beyond the border line before it starts. */
 const FLOWER_BORDER_CLEARANCE = 1.6;
 
+/** Bare ground a bed keeps from the shore, yards: a card is about a yard across
+ *  and the sampled outline is a chord of the real curve, so a bed sown right on
+ *  the line reads as flowers floating on the surf. */
+const FLOWER_SHORE_CLEARANCE = 2;
+
 /** Spacing of the reed clumps around the water's edge, yards. */
 const REED_SPACING = 7;
+
+/** Target spacing of the clumps along an authored shore, yards, and how far off
+ *  the bank one may wander. Wider than a pond's rim because a shore is a hundred
+ *  times longer, and a rim's density around a whole island reads as a hedge. */
+const SHORE_SPACING = 11;
+const SHORE_JITTER = 4;
 
 /** Shore points per water ring, and how many rings run in to the middle. */
 const BASIN_RING_STRIDE = 4;
 const BASIN_RINGS = 10;
 
 export interface RallyBasinMesh {
-  /** Ring-major xz positions, `rings + 1` rings of `columns` points, then the
-   *  single middle point last. Float64 on purpose: the band sits at
+  /** Ring-major xz positions, `rings + 1` rings of `columns` points, plus a
+   *  single middle point last for a pond (the sea walks OUTWARD and has no
+   *  middle, so it emits the rings alone). Float64 on purpose: the band sits at
    *  x = 113_700, where a float32 resolves about 7mm, and near a spot where two
    *  parts of the shore compete for "nearest" that is enough to flip which one
    *  wins and step the depth. The painter narrows to float32 for the GPU, where
@@ -488,6 +514,224 @@ function basinMeshOf(
 }
 
 /**
+ * Twice the signed area of a closed ring, in whatever plane it is given.
+ *
+ * The sign is the only thing anyone here wants: two surfaces built off the
+ * ground outline take their triangle orientation from the order of its points,
+ * and an operator's hand decides that order. One helper rather than a shoelace
+ * per site, because the two sites disagree about the plane (the lawn contour
+ * lives in the shape's own `(x, -z)`, the sea's columns in `(x, z)`) and reading
+ * two hand-written loops to notice that is how one of them ends up culled.
+ */
+export function rallyRingSignedArea(ring: readonly { x: number; z: number }[]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    sum += a.x * b.z - b.x * a.z;
+  }
+  return sum;
+}
+
+/**
+ * The lawn's outline as a flat contour, region-local, wound so the surface built
+ * from it faces UP.
+ *
+ * A DECISION rather than a drawing, which is why it is here and not in the
+ * painter: an outline is drawn in whichever direction the operator's hand went,
+ * where the centerline has an authored winding the readout enforces, so the
+ * ORDER of these points is not something the rest of the build can assume.
+ *
+ * What depends on it is the SEA, whose ring index is hand built from the same
+ * outline and does face down when the columns run the other way (proven by
+ * building both windings). The lawn itself would survive either: three's own
+ * `ShapeGeometry` normalizes a contour before it triangulates, which is worth
+ * writing down so the next reader does not take this helper for the thing
+ * holding the lawn up. It is here so the two surfaces are cut from one
+ * orientation rather than from two conventions that happen to agree.
+ *
+ * The `y` of each point is the world `-z`, which is where a ShapeGeometry
+ * rotated -PI/2 about X puts it. The derived rectangle passes through unchanged
+ * from the contour the builder used before an outline could be authored.
+ */
+export function rallyLawnContour(circuit: RealmRacersCircuit): { x: number; y: number }[] {
+  const outline = realmRacersGroundShape(circuit).outline;
+  const contour = outline.map((point) => ({ x: point.x, y: -point.z }));
+  // Read in the contour's OWN plane, where `y` plays the part `z` plays on the
+  // plan, which is exactly the flip that makes this necessary.
+  const area = rallyRingSignedArea(contour.map((point) => ({ x: point.x, z: point.y })));
+  return area < 0 ? contour.reverse() : contour;
+}
+
+/**
+ * The bank profile the SEA is shaded with.
+ *
+ * A circuit's own `basin` whenever it has one, so an island's shore and its
+ * ponds are the same water read the same way. A circuit may author a ground
+ * shape and no pond at all, though (the record's basin rule is an iff with the
+ * ponds), and then there is no authored profile to read: the fallback is the
+ * garden circuit's own, which is the profile every pond in the game is already
+ * shaded with rather than a number invented here.
+ */
+export const REALM_RACERS_SEA_BASIN: RealmRacersBasin = {
+  waterY: -0.55,
+  bankSlope: 0.8,
+  depthMax: 6,
+  wadeYards: 4,
+};
+
+export function rallySeaBasin(circuit: RealmRacersCircuit): RealmRacersBasin {
+  return circuit.basin ?? REALM_RACERS_SEA_BASIN;
+}
+
+/** Where the sea stops: the region, plus the same overshoot the derived ground
+ *  rectangle uses, so the water reaches exactly as far as the lawn used to. */
+function seaHalfExtents(circuit: RealmRacersCircuit): { halfX: number; halfZ: number } {
+  return {
+    halfX: circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
+    halfZ: circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
+  };
+}
+
+/**
+ * The sea around an authored island, as rings walking OUTWARD from the shore to
+ * the edge of the region.
+ *
+ * The mirror of `rallyPondMeshes`, and rings for the same reason: the water
+ * shader reads a per-vertex shore depth, so a plain rectangle with the island
+ * punched out of it would carry real depth only at its four far corners and
+ * would ramp from the shore to them across a hundred and sixty yards, smearing
+ * the whole shallow band and its foam over the horizon. Rings put vertices where
+ * the depth actually changes, which is the first few yards off the beach.
+ *
+ * Null on a circuit that authored no ground shape: its ground is the rectangle
+ * the region has always been, so there is no shore for water to lap at and
+ * nothing to draw.
+ */
+export function rallySeaMesh(circuit: RealmRacersCircuit): RallyBasinMesh | null {
+  const ground = realmRacersGroundShape(circuit);
+  if (!ground.authored) return null;
+  const basin = rallySeaBasin(circuit);
+  const { halfX, halfZ } = seaHalfExtents(circuit);
+  const stride = Math.min(BASIN_RING_STRIDE, Math.max(1, Math.floor(ground.outline.length / 8)));
+  const shore: { x: number; z: number }[] = [];
+  for (let i = 0; i < ground.outline.length; i += stride) shore.push(ground.outline[i]);
+  const columns = shore.length;
+  if (columns < 3) return null;
+  // The columns are walked in a KNOWN direction, because the triangle winding
+  // below follows them: an outline drawn the other way round the plan would
+  // build the whole sea face-down and it would be culled away in silence, which
+  // is the same defect the mirrored road ribbons shipped with once. The lawn's
+  // own contour is normalized the same way, off the same helper.
+  if (rallyRingSignedArea(shore) < 0) shore.reverse();
+  let cx = 0;
+  let cz = 0;
+  for (const point of shore) {
+    cx += point.x / columns;
+    cz += point.z / columns;
+  }
+  // Where the ray from the middle of the island through this shore point leaves
+  // the region: the slab intersection, held at the shore itself so an outline
+  // drawn wider than its own region collapses the water rather than folding it
+  // back inside the island.
+  const outward = (point: { x: number; z: number }): { x: number; z: number; reach: number } => {
+    const dx = point.x - cx;
+    const dz = point.z - cz;
+    // A shore point sitting exactly on the middle has no outward direction, and
+    // the slab arithmetic below would answer `0 * Infinity`, which is NaN in
+    // every position of the column and a NaN bounding sphere for the sheet.
+    if (dx === 0 && dz === 0) return { x: point.x, z: point.z, reach: 0 };
+    const tx = dx > 0 ? (halfX - cx) / dx : dx < 0 ? (-halfX - cx) / dx : Number.POSITIVE_INFINITY;
+    const tz = dz > 0 ? (halfZ - cz) / dz : dz < 0 ? (-halfZ - cz) / dz : Number.POSITIVE_INFINITY;
+    const t = Math.max(1, Math.min(tx, tz));
+    return { x: cx + dx * t, z: cz + dz * t, reach: Math.hypot(dx, dz) * (t - 1) };
+  };
+  const count = columns * (BASIN_RINGS + 1);
+  const positions = new Float64Array(count * 2);
+  const depths = new Float64Array(count);
+  for (let col = 0; col < columns; col++) {
+    const point = shore[col];
+    const far = outward(point);
+    for (let ring = 0; ring <= BASIN_RINGS; ring++) {
+      // Squared, so the rings CROWD the shore, exactly as a pond's do: every
+      // thing the shader varies happens within a few yards of the waterline.
+      const t = (ring / BASIN_RINGS) ** 2;
+      const v = ring * columns + col;
+      positions[v * 2] = point.x + (far.x - point.x) * t + REALM_RACERS_ORIGIN.x;
+      positions[v * 2 + 1] = point.z + (far.z - point.z) * t + REALM_RACERS_ORIGIN.z;
+      depths[v] = Math.min(basin.depthMax, basin.bankSlope * t * far.reach);
+    }
+  }
+  const index: number[] = [];
+  for (let ring = 0; ring < BASIN_RINGS; ring++) {
+    for (let col = 0; col < columns; col++) {
+      const next = (col + 1) % columns;
+      const a = ring * columns + col;
+      const b = ring * columns + next;
+      const c = (ring + 1) * columns + col;
+      const d = (ring + 1) * columns + next;
+      // Wound the other way round from a pond's, because the rings run outward
+      // rather than inward: the same order would face this surface down, and a
+      // water sheet wound the wrong way is culled exactly as silently as a kerb.
+      index.push(a, b, c, b, d, c);
+    }
+  }
+  return { positions, depths, index, columns, rings: BASIN_RINGS };
+}
+
+/**
+ * The shore's own dressing: clumps along the authored outline.
+ *
+ * SCATTERED rather than tiled, and that is the whole difference between this and
+ * a fence: a straight module cannot follow a curve, which is exactly why a
+ * barrier run is angular and the land's own edge is not. So the pieces are
+ * jittered off the outline by a hash rather than laid end to end, and a gap
+ * between two of them reads as a beach rather than as a missing panel.
+ */
+export function rallyShoreSpots(
+  circuit: RealmRacersCircuit,
+): { x: number; z: number; rot: number; scale: number }[] {
+  const ground = realmRacersGroundShape(circuit);
+  const out: { x: number; z: number; rot: number; scale: number }[] = [];
+  if (!ground.authored) return out;
+  const points = ground.outline;
+  // Which side of an edge the WATER is on. For a ring of positive signed area
+  // the interior lies on the LEFT normal, which is the one taken below, so the
+  // water is the other way; a ring drawn the other way round flips both.
+  const water = rallyRingSignedArea(points) >= 0 ? -1 : 1;
+  let walked = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 0) continue;
+    walked += length;
+    // The remainder is CARRIED rather than dropped: resetting it laid one clump
+    // on a segment however long it was, so an authored span longer than the
+    // spacing thinned the shore by however much longer it was.
+    while (walked >= SHORE_SPACING) {
+      walked -= SHORE_SPACING;
+      const along = Math.max(0, Math.min(1, (length - walked) / length));
+      // Out into the WATER, never inland: a clump is anchored at the water's own
+      // height, so one jittered onto the lawn stands sunk in it. A reed bed grows
+      // at the waterline and out into the shallows.
+      const across = hash2(i, Math.round(walked), 0x51a3) * SHORE_JITTER * water;
+      const nx = -dz / length;
+      const nz = dx / length;
+      out.push({
+        x: a.x + dx * along + nx * across + REALM_RACERS_ORIGIN.x,
+        z: a.z + dz * along + nz * across + REALM_RACERS_ORIGIN.z,
+        rot: Math.atan2(dx, dz),
+        scale: 0.8 + hash2(i, 2, 0x51a3) * 0.6,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * The garden's flower beds, sown in single-colour patches. Grass tufts used to
  * be scattered here too; they are not part of the Evergarden's own language and
  * read as clutter, so the lawn carries flowers and nothing else.
@@ -532,6 +776,26 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
         // The infield is apron all the way to the water, so nothing is sown on
         // that side at all; outward, the outer garden starts past the border.
         if (projection.lateral > 0) continue;
+        // The land, by the piece rather than by the patch: a bed straddling a
+        // shore would otherwise put half its cards in the sea. This grid covers
+        // the perimeter BOX, and an island is not a box.
+        //
+        // Tested AFTER the projection, cheap as an earlier bail would be, and
+        // for the reason the seeded scatter keeps the same order: the walk
+        // carries a projection HINT from cell to cell, so a candidate that
+        // returned early would leave the next one hinted from somewhere else,
+        // and the clip would change which beds are SOWN rather than only which
+        // are dropped.
+        if (
+          !realmRacersOnGround(
+            circuit,
+            x - REALM_RACERS_ORIGIN.x,
+            z - REALM_RACERS_ORIGIN.z,
+            FLOWER_SHORE_CLEARANCE,
+          )
+        ) {
+          continue;
+        }
         if (
           -projection.lateral <
           rallyGardenEdgeOffsetAt(circuit, projection.s) + FLOWER_BORDER_CLEARANCE

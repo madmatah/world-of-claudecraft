@@ -29,6 +29,14 @@ Everything else is a sibling module in one of these families:
   colours) and the kit of the one piece a record cannot place by hand (the start
   arch); SCENERY and BARRIERS are authored, and a theme only names the
   vocabulary the editor should offer for its zone (`props`, `barriers`). The
+  LAWN follows the circuit's own `groundOutline` when it authors one (an island,
+  with the theme's water outside it and clumps scattered along the shore) and is
+  the region-sized rectangle it has always been when it does not; the sea is
+  decoration in the same sense a pond is, and the shore reads the basin's
+  authored bank profile. Every DERIVED fill (the blade meadow's mask, the flower
+  beds, the road border, and the sim-side seeded scatters) is clipped to that
+  same outline, because all of them are generated over the perimeter BOX and a
+  box is not a shape. The
   perimeter box draws NOTHING and has not since the barriers arrived: it was the
   last derived thing standing on a circuit, so it wore one kit around a rectangle
   and made every circuit read as a box. It survives as collision only, and what

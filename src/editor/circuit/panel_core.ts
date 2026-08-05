@@ -158,7 +158,7 @@ function autoTab(
  * "am I still placing lanterns" is a question about state.
  */
 export function armStateText(armed: string | null, pondKey: string): string {
-  if (armed === null) return 'pointer: click a piece to select it';
+  if (armed === null) return 'click a piece to select it, or arm one below to place it';
   return armed === pondKey ? 'placing water: drag a box' : `placing ${armed}`;
 }
 
@@ -170,7 +170,7 @@ export function armStateText(armed: string | null, pondKey: string): string {
  * so the only thing they would share is a branch on which tool is active.
  */
 export function raceArmStateText(armed: string | null): string {
-  if (armed === null) return 'pointer: click a row to select it';
+  if (armed === null) return 'click a row to select it, or arm one below to place it';
   return `placing ${armed}`;
 }
 

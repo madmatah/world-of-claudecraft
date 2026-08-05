@@ -86,7 +86,6 @@ export interface RacePanelHost extends PanelHost {
  */
 export class RacePalettePanel {
   readonly el = document.createElement('div');
-  private readonly pointerEl = document.createElement('button');
   private readonly gridEl = document.createElement('div');
   private readonly hintEl = hintLine('');
   /**
@@ -96,11 +95,6 @@ export class RacePalettePanel {
   private choice: string | null = null;
 
   constructor(private readonly host: RacePanelHost) {
-    this.pointerEl.type = 'button';
-    this.pointerEl.className = 'pointer-mode';
-    this.pointerEl.title =
-      'Select and edit what is already on the circuit. A click on empty road places nothing (esc)';
-    this.pointerEl.onclick = () => this.arm(null);
     this.gridEl.className = 'lib-grid';
     this.paint();
   }
@@ -121,9 +115,6 @@ export class RacePalettePanel {
     for (const tile of this.gridEl.querySelectorAll<HTMLElement>('button.lib-tile')) {
       tile.classList.toggle('on', tile.dataset.furniture === this.choice);
     }
-    this.pointerEl.classList.toggle('on', this.choice === null);
-    this.pointerEl.textContent =
-      this.choice === null ? 'pointer (armed)' : `pointer (esc) - placing ${this.choice}`;
     this.hintEl.textContent = raceArmStateText(this.choice);
   }
 
@@ -145,7 +136,7 @@ export class RacePalettePanel {
       tile.onclick = () => this.arm(entry.id);
       this.gridEl.append(tile);
     }
-    this.el.replaceChildren(heading('place'), this.pointerEl, this.gridEl, this.hintEl);
+    this.el.replaceChildren(heading('place'), this.gridEl, this.hintEl);
     this.markArmed();
   }
 }

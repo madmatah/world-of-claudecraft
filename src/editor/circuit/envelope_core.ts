@@ -15,11 +15,18 @@
 //
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
-import type { RealmRacersPerimeter } from '../../sim/content/realm_racers_circuits';
+import type {
+  RealmRacersCircuit,
+  RealmRacersPerimeter,
+} from '../../sim/content/realm_racers_circuits';
 import {
+  type RallyPoint,
   REALM_RACERS_MAX_REGION_HALF_X,
   REALM_RACERS_MAX_REGION_HALF_Z,
+  REALM_RACERS_ORIGIN,
 } from '../../sim/realm_racers_layout';
+import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../../sim/realm_racers_spline';
+import { fitStrokeToControlPoints } from './stroke_fit_core';
 
 /**
  * Lawn between the garden edge and the wrought-iron wall, yards. Taken from the
@@ -90,4 +97,81 @@ export function suggestEnvelope(
     regionHalfZ,
     clampedBy,
   };
+}
+
+/**
+ * Lawn between the garden edge and the water, yards.
+ *
+ * A little more than the wall's own margin, because what stands between a road
+ * and a shore is the whole of a circuit's dressing: benches, a barrier run, the
+ * clumps the shore itself is planted with. At the wall's 20 the water lapped the
+ * run-off on the garden circuit's hairpin.
+ */
+const GROUND_MARGIN = 26;
+
+/** How far inside the offset a point may sit and still be read as ON it rather
+ *  than in a fold, yards. It absorbs the centerline's own one-yard resample; a
+ *  fold is deeper than this by a wide margin, since it is as deep as the corner
+ *  is tight. */
+const FOLD_TOLERANCE = 0.5;
+
+/**
+ * An outline around the road, for `Fit ground` to propose.
+ *
+ * The road's own OUTER offset curve: every centerline sample pushed out past the
+ * garden edge, which gives an island holding the road, its infield and a margin
+ * of lawn either side. It is a proposal in exactly the sense `suggestEnvelope`
+ * is one, and the operator drags it afterwards.
+ *
+ * The side is decided by AREA rather than by winding, and that is not
+ * defensiveness for its own sake: the inner offset of a loop folds through
+ * itself at any corner tighter than the offset, and picking the bigger of the
+ * two rings is the one test that cannot be got the wrong way round by a circuit
+ * drawn clockwise.
+ *
+ * The ring then goes through the CIRCUIT's own stroke fit, so a proposed outline
+ * is the same kind of object a drawn one is: a handful of draggable control
+ * points, not a thousand samples nobody can edit.
+ */
+export function suggestGroundOutline(circuit: RealmRacersCircuit): RallyPoint[] {
+  const samples = realmRacersTrack(circuit).samples;
+  const sides: RallyPoint[][] = [[], []];
+  for (const sample of samples) {
+    const offset = rallyGardenEdgeOffsetAt(circuit, sample.s) + GROUND_MARGIN;
+    const x = sample.x - REALM_RACERS_ORIGIN.x;
+    const z = sample.z - REALM_RACERS_ORIGIN.z;
+    sides[0].push({ x: x - sample.tz * offset, z: z + sample.tx * offset });
+    sides[1].push({ x: x + sample.tz * offset, z: z - sample.tx * offset });
+  }
+  const area = (ring: readonly RallyPoint[]): number => {
+    let sum = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      sum += a.x * b.z - b.x * a.z;
+    }
+    return Math.abs(sum) / 2;
+  };
+  const outer = area(sides[0]) >= area(sides[1]) ? sides[0] : sides[1];
+  // Then the FOLDS are cut out, and this is the half without which the repair
+  // hands back a shape nobody can use: an offset curve crosses itself at every
+  // corner tighter than the offset, and the garden circuit's hairpin is tighter
+  // than 26 yards. A self-intersecting ring is not a cosmetic problem, because
+  // point-in-polygon is even-odd: the loop reads as a HOLE, so the meadow, the
+  // beds and the scatters all get punched out over ground that is drawn as lawn.
+  //
+  // A point is in a fold exactly when it is nearer the road than the offset it
+  // was built at, which the real projection answers: no geometry of its own, and
+  // it drops a point that strayed within the margin of ANOTHER stretch too,
+  // which is the same defect one bend further round.
+  const track = realmRacersTrack(circuit);
+  const kept = outer.filter((point) => {
+    const projection = track.project(
+      point.x + REALM_RACERS_ORIGIN.x,
+      point.z + REALM_RACERS_ORIGIN.z,
+    );
+    const offset = rallyGardenEdgeOffsetAt(circuit, projection.s) + GROUND_MARGIN;
+    return Math.abs(projection.lateral) >= offset - FOLD_TOLERANCE;
+  });
+  return fitStrokeToControlPoints(kept.length >= 8 ? kept : outer);
 }

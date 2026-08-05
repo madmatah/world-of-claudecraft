@@ -60,8 +60,6 @@ function mount(overrides: Partial<RacePanelHost> = {}): {
 const tile = (id: string): HTMLElement =>
   document.querySelector(`button.lib-tile[data-furniture="${id}"]`) as HTMLElement;
 
-const pointerRow = (): HTMLElement => document.querySelector('button.pointer-mode') as HTMLElement;
-
 const PICKUP_ROW = RACE_FURNITURE[0].id;
 
 beforeEach(() => {
@@ -72,9 +70,12 @@ describe('the race palette', () => {
   it('opens on the POINTER, which is the whole point of it', () => {
     // The defect this panel exists for: with a piece permanently armed, a click
     // that hit nothing authored a row nobody asked for at a place nobody chose.
+    // The STATE is what does that work. The row that used to announce it is
+    // gone: it was a third way to say what the lit tile and `esc` already say,
+    // and while nothing was armed it said that nothing was armed.
     const { palette } = mount();
     expect(palette.armed).toBeNull();
-    expect(pointerRow().classList.contains('on')).toBe(true);
+    expect(document.querySelector('button.pointer-mode')).toBeNull();
     expect(tile(PICKUP_ROW).classList.contains('on')).toBe(false);
   });
 
@@ -84,7 +85,6 @@ describe('the race palette', () => {
     expect(palette.armed).toBe(PICKUP_ROW);
     expect(host.onArmed).toHaveBeenCalledWith(PICKUP_ROW);
     expect(tile(PICKUP_ROW).classList.contains('on')).toBe(true);
-    expect(pointerRow().classList.contains('on')).toBe(false);
   });
 
   it('gives the pointer back when the armed tile is clicked again', () => {
@@ -95,24 +95,18 @@ describe('the race palette', () => {
     tile(PICKUP_ROW).click();
     expect(palette.armed).toBeNull();
     expect(host.onArmed).toHaveBeenLastCalledWith(null);
-    expect(pointerRow().classList.contains('on')).toBe(true);
-  });
-
-  it('gives it back through the pointer row too', () => {
-    const { palette } = mount();
-    tile(PICKUP_ROW).click();
-    pointerRow().click();
-    expect(palette.armed).toBeNull();
+    // The tile IS the state now, so it has to go dark with it.
     expect(tile(PICKUP_ROW).classList.contains('on')).toBe(false);
   });
 
   it('holds the state in words for as long as it is true', () => {
     // A transient status message cannot answer "am I still placing rows", which
-    // is a question about state. Both halves are on screen, not toasted.
+    // is a question about state. The hint line under the tiles is where that
+    // sentence lives now, and it is on screen in both states rather than only
+    // in one.
     const { palette } = mount();
-    expect(pointerRow().textContent).toContain('pointer (armed)');
+    expect(palette.el.textContent).toContain('click a row to select it');
     palette.arm(PICKUP_ROW);
-    expect(pointerRow().textContent).toContain(PICKUP_ROW);
     expect(palette.el.textContent).toContain(`placing ${PICKUP_ROW}`);
   });
 

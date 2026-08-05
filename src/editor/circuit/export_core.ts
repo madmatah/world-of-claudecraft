@@ -70,6 +70,14 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
     ...(circuit.scatters ? { scatters: circuit.scatters.map(roundScatter) } : {}),
     ...(circuit.ponds ? { ponds: circuit.ponds.map(roundPond) } : {}),
     ...(circuit.fences ? { fences: circuit.fences.map(roundFence) } : {}),
+    ...(circuit.groundOutline
+      ? {
+          groundOutline: circuit.groundOutline.map((point) => ({
+            x: round(point.x, POINT_PLACES),
+            z: round(point.z, POINT_PLACES),
+          })),
+        }
+      : {}),
     ...(circuit.pickupRows
       ? { pickupRows: circuit.pickupRows.map((row) => ({ s: round(row.s, FRACTION_PLACES) })) }
       : {}),
@@ -247,6 +255,12 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
   if (c.fences) {
     lines.push('  fences: [');
     for (const fence of c.fences) lines.push(`    ${fenceLiteral(fence)},`);
+    lines.push('  ],');
+  }
+  // The land itself, last of all the shapes: everything above stands ON it.
+  if (c.groundOutline) {
+    lines.push('  groundOutline: [');
+    for (const point of c.groundOutline) lines.push(`    ${pointLiteral(point)},`);
     lines.push('  ],');
   }
   // The race furniture, after the dressing and before the race numbers: a row is
@@ -546,6 +560,13 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   if (c.fences !== undefined && !fences) return null;
   const pickupRows = c.pickupRows === undefined ? undefined : readPickupRows(c.pickupRows);
   if (c.pickupRows !== undefined && !pickupRows) return null;
+  // The ground outline is read by `readPoints`, the control ring's own reader:
+  // it is the same kind of thing (a closed ring of circuit-local points read as
+  // a smoothed curve), so it inherits the same floor of three points and the
+  // same coordinate bounds. A field the validator silently dropped is what made
+  // the editor's preview draw an island the raced draft did not have.
+  const groundOutline = c.groundOutline === undefined ? undefined : readPoints(c.groundOutline);
+  if (c.groundOutline !== undefined && !groundOutline) return null;
 
   const basin = c.basin as Record<string, unknown> | undefined;
   // Water is optional, and required exactly where a pond is placed: the record's
@@ -598,6 +619,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     ...(ponds ? { ponds } : {}),
     ...(fences ? { fences } : {}),
     ...(pickupRows ? { pickupRows } : {}),
+    ...(groundOutline ? { groundOutline } : {}),
     regionHalfX: c.regionHalfX,
     regionHalfZ: c.regionHalfZ,
     perimeter: {

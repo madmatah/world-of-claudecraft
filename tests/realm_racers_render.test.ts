@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { suggestGroundOutline } from '../src/editor/circuit/envelope_core';
 import { RALLY_SLICK_POOL } from '../src/render/realm_racers_slicks_core';
 import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import {
@@ -8,8 +9,10 @@ import {
   rallyFencePieces,
   rallyFlowerSpots,
   rallyKerbRuns,
+  rallyLawnContour,
   rallyPondMeshes,
   rallyPondReedSpots,
+  rallyRingSignedArea,
   rallyStartArchPlacement,
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
@@ -20,8 +23,11 @@ import {
   REALM_RACERS_CIRCUIT_LIST,
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
+import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
 import { realmRacersColliders } from '../src/sim/realm_racers_colliders';
+import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
 import {
+  REALM_RACERS_LAWN_OVERSHOOT,
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
@@ -93,6 +99,79 @@ const RALLY_ME = {
   finishSeconds: null,
   retired: false,
 } as const;
+
+/** The water sheets of a build. The shore-depth attribute is the one thing
+ *  only the water writes, so counting them counts the pools. */
+const waterMeshes = (group: THREE.Group): THREE.Mesh[] =>
+  group.children.filter(
+    (child): child is THREE.Mesh =>
+      child instanceof THREE.Mesh && child.geometry.getAttribute('aShoreDepth') !== undefined,
+  );
+
+/** The lawn: the ground surface that covers the whole region, so the widest
+ *  of them. Identified by extent rather than by child order, which the
+ *  builder is free to change. */
+const lawnMesh = (group: THREE.Group): THREE.Mesh => {
+  const ground = group.children.filter(
+    (child): child is THREE.Mesh =>
+      child instanceof THREE.Mesh && child.geometry.getAttribute('aSplat') !== undefined,
+  );
+  let widest = ground[0];
+  for (const mesh of ground) {
+    mesh.geometry.computeBoundingBox();
+    widest.geometry.computeBoundingBox();
+    const box = mesh.geometry.boundingBox;
+    const best = widest.geometry.boundingBox;
+    if (box && best && box.max.x - box.min.x > best.max.x - best.min.x) widest = mesh;
+  }
+  if (!widest) throw new Error('the build has no ground surface');
+  return widest;
+};
+
+/** Even-odd ray cast, the same rule a ShapeGeometry hole is punched by. */
+const pointInPolygon = (
+  x: number,
+  z: number,
+  polygon: readonly (readonly [number, number])[],
+): boolean => {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, zi] = polygon[i];
+    const [xj, zj] = polygon[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+};
+
+/** A circuit's pond outlines in WORLD coordinates, which is the frame the
+ *  lawn and the water meshes are built in. */
+/** How far a point sits from a polygon's boundary, yards: what tells a triangle
+ *  that is genuinely somewhere else from a sliver on a curved edge. */
+const distanceToPolygon = (
+  x: number,
+  z: number,
+  polygon: readonly (readonly [number, number])[],
+): number => {
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < polygon.length; i++) {
+    const [ax, az] = polygon[i];
+    const [bx, bz] = polygon[(i + 1) % polygon.length];
+    const dx = bx - ax;
+    const dz = bz - az;
+    const length2 = dx * dx + dz * dz;
+    const t =
+      length2 <= 0 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / length2));
+    best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
+  }
+  return best;
+};
+
+const worldOutlines = (circuit: RealmRacersCircuit) =>
+  realmRacersPlacedPonds(circuit).map((pond) =>
+    pond.outline.map(
+      (point) => [point.x + REALM_RACERS_ORIGIN.x, point.z + REALM_RACERS_ORIGIN.z] as const,
+    ),
+  );
 
 describe('Realm Racers procedural render', () => {
   beforeEach(() => {
@@ -665,58 +744,6 @@ describe('Realm Racers procedural render', () => {
       basin: undefined,
     };
 
-    /** The water sheets of a build. The shore-depth attribute is the one thing
-     *  only the water writes, so counting them counts the pools. */
-    const waterMeshes = (group: THREE.Group): THREE.Mesh[] =>
-      group.children.filter(
-        (child): child is THREE.Mesh =>
-          child instanceof THREE.Mesh && child.geometry.getAttribute('aShoreDepth') !== undefined,
-      );
-
-    /** The lawn: the ground surface that covers the whole region, so the widest
-     *  of them. Identified by extent rather than by child order, which the
-     *  builder is free to change. */
-    const lawnMesh = (group: THREE.Group): THREE.Mesh => {
-      const ground = group.children.filter(
-        (child): child is THREE.Mesh =>
-          child instanceof THREE.Mesh && child.geometry.getAttribute('aSplat') !== undefined,
-      );
-      let widest = ground[0];
-      for (const mesh of ground) {
-        mesh.geometry.computeBoundingBox();
-        widest.geometry.computeBoundingBox();
-        const box = mesh.geometry.boundingBox;
-        const best = widest.geometry.boundingBox;
-        if (box && best && box.max.x - box.min.x > best.max.x - best.min.x) widest = mesh;
-      }
-      if (!widest) throw new Error('the build has no ground surface');
-      return widest;
-    };
-
-    /** Even-odd ray cast, the same rule a ShapeGeometry hole is punched by. */
-    const pointInPolygon = (
-      x: number,
-      z: number,
-      polygon: readonly (readonly [number, number])[],
-    ): boolean => {
-      let inside = false;
-      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-        const [xi, zi] = polygon[i];
-        const [xj, zj] = polygon[j];
-        if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-      }
-      return inside;
-    };
-
-    /** A circuit's pond outlines in WORLD coordinates, which is the frame the
-     *  lawn and the water meshes are built in. */
-    const worldOutlines = (circuit: RealmRacersCircuit) =>
-      realmRacersPlacedPonds(circuit).map((pond) =>
-        pond.outline.map(
-          (point) => [point.x + REALM_RACERS_ORIGIN.x, point.z + REALM_RACERS_ORIGIN.z] as const,
-        ),
-      );
-
     it('plants every rim and leaves a circuit with no water bare', () => {
       // Reeds mark a waterline, so they exist per pond and nowhere else.
       expect(rallyPondReedSpots(DRY)).toEqual([]);
@@ -846,6 +873,254 @@ describe('Realm Racers procedural render', () => {
       instancedOf(second.group).forEach((geometry, i) => {
         expect(geometry, `instanced geometry ${i}`).toBe(instancedA[i]);
       });
+    });
+  });
+
+  describe('the ground the circuit is drawn on', () => {
+    /** The practice circuit on an authored ISLAND: a rounded shape drawn around
+     *  its own road by the editor's own repair, so the fixture is a shape an
+     *  operator could actually have made. */
+    const ISLAND: RealmRacersCircuit = {
+      ...GARDEN_CIRCUIT,
+      id: 'render_ground_island',
+      groundOutline: suggestGroundOutline(GARDEN_CIRCUIT),
+    };
+
+    /** The sampled outline in WORLD coordinates, which is the frame the lawn is
+     *  built in. */
+    const islandOutline = realmRacersGroundShape(ISLAND).outline.map(
+      (point) => [point.x + REALM_RACERS_ORIGIN.x, point.z + REALM_RACERS_ORIGIN.z] as const,
+    );
+
+    it('cuts the lawn along the authored outline instead of the region rectangle', async () => {
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      const plain = lawnMesh(buildRealmRacersTrack(GARDEN_CIRCUIT).group).geometry;
+      const island = lawnMesh(buildRealmRacersTrack(ISLAND).group).geometry;
+      plain.computeBoundingBox();
+      island.computeBoundingBox();
+      const plainBox = plain.boundingBox;
+      const islandBox = island.boundingBox;
+      if (!plainBox || !islandBox) throw new Error('both lawns are real geometry');
+      // The rectangle runs to the region plus the overshoot; the island stops at
+      // the shape that was drawn, which is a fraction of it.
+      const plainWidth = plainBox.max.x - plainBox.min.x;
+      const islandWidth = islandBox.max.x - islandBox.min.x;
+      expect(plainWidth).toBeCloseTo(
+        (GARDEN_CIRCUIT.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT) * 2,
+        6,
+      );
+      expect(islandWidth).toBeLessThan(plainWidth / 2);
+      // ...and it is not a shrunken rectangle either: it holds the road it was
+      // fitted around, with the shore margin the repair leaves.
+      expect(islandWidth).toBeGreaterThan(2 * realmRacersCircuitMetrics(ISLAND).roadHalfX);
+      // Every lawn triangle is ON the island: a shape built from the wrong
+      // points, or from the points in the wrong frame, still has a bounding box.
+      //
+      // Measured with a tolerance rather than against zero, and the tolerance is
+      // the reason: the boundary is CONCAVE in places, so a triangle genuinely
+      // inside the shape can have its centroid a hair outside it, and a sliver
+      // on a curved edge lands either side of an even-odd test. Two yards is
+      // comfortably under anything a wrong shape could produce (the rectangle
+      // this replaces is 660 yards across) and the worst real one measured 0.51.
+      const position = island.getAttribute('position');
+      const index = island.getIndex();
+      if (!index) throw new Error('the lawn is an indexed ShapeGeometry');
+      let over = 0;
+      for (let t = 0; t < index.count; t += 3) {
+        let cx = 0;
+        let cz = 0;
+        for (let k = 0; k < 3; k++) {
+          cx += position.getX(index.getX(t + k)) / 3;
+          cz += position.getZ(index.getX(t + k)) / 3;
+        }
+        if (pointInPolygon(cx, cz, islandOutline)) continue;
+        if (distanceToPolygon(cx, cz, islandOutline) > 2) over++;
+      }
+      expect(over, 'lawn triangles off the island').toBe(0);
+      // ...and it is not a vacuous count: the lawn really is triangulated.
+      expect(index.count).toBeGreaterThan(3 * islandOutline.length);
+    });
+
+    it('still punches the pools out of an island, and counts the same way', async () => {
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      // Earcut triangulates a polygon of n vertices with h holes into
+      // n + 2h - 2 triangles: the identity the rectangle's own case pins, now
+      // over an outline of ninety-odd points instead of four corners. The holes
+      // survive the outer path changing, which is the one thing an island could
+      // quietly have broken.
+      const holes = worldOutlines(ISLAND);
+      expect(holes).toHaveLength(2);
+      const points = holes.reduce((sum, hole) => sum + hole.length, islandOutline.length);
+      const geo = lawnMesh(buildRealmRacersTrack(ISLAND).group).geometry;
+      expect(geo.getIndex()?.count).toBe(3 * (points + 2 * holes.length - 2));
+    });
+
+    it('winds the lawn contour up, in the core, without building anything', () => {
+      // The winding decision is a CORE one now, so it is pinned here in plain
+      // numbers rather than only through a full Three build: the contour comes
+      // back counter-clockwise in its own plane whichever way the ring was
+      // drawn, and the derived rectangle passes through in the exact order the
+      // builder used before an outline could be authored.
+      const rectangle = rallyLawnContour(GARDEN_CIRCUIT);
+      const halfX = GARDEN_CIRCUIT.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT;
+      const halfZ = GARDEN_CIRCUIT.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT;
+      expect(rectangle).toEqual([
+        { x: -halfX, y: -halfZ },
+        { x: halfX, y: -halfZ },
+        { x: halfX, y: halfZ },
+        { x: -halfX, y: halfZ },
+      ]);
+      const forward = rallyLawnContour(ISLAND);
+      const backwards = rallyLawnContour({
+        ...ISLAND,
+        id: 'render_ground_contour_cw',
+        groundOutline: [...(ISLAND.groundOutline ?? [])].reverse(),
+      });
+      const area = (ring: readonly { x: number; y: number }[]) =>
+        rallyRingSignedArea(ring.map((point) => ({ x: point.x, z: point.y })));
+      expect(area(rectangle)).toBeGreaterThan(0);
+      expect(area(forward)).toBeGreaterThan(0);
+      expect(area(backwards)).toBeGreaterThan(0);
+      // ...and it is the same ring either way, not a different shape.
+      expect(Math.abs(area(backwards) - area(forward))).toBeLessThan(1e-6);
+    });
+
+    it('faces the island lawn and its sea UP, whichever way the loop was drawn', async () => {
+      // The -PI/2 rotation that lays a ShapeGeometry down flips handedness, so a
+      // ring read straight off the record comes out clockwise and the whole lawn
+      // is culled from above. Both windings of the SAME shape are built, because
+      // an operator's hand decides which one a drawn outline has.
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      const reversed: RealmRacersCircuit = {
+        ...ISLAND,
+        id: 'render_ground_island_cw',
+        groundOutline: [...(ISLAND.groundOutline ?? [])].reverse(),
+      };
+      const worldNormal = new THREE.Vector3();
+      for (const circuit of [ISLAND, reversed]) {
+        const group = buildRealmRacersTrack(circuit).group;
+        // The sea is IN this build, both ways round: without it the floor below
+        // is satisfied by the lawn alone and the ring winding goes unpinned.
+        expect(waterMeshes(group), `${circuit.id} water`).toHaveLength(3);
+        let flat = 0;
+        for (const child of group.children) {
+          const mesh = child as THREE.Mesh;
+          if (!mesh.isMesh) continue;
+          const normal = mesh.geometry?.getAttribute?.('normal');
+          if (!normal) continue;
+          worldNormal
+            .set(normal.getX(0), normal.getY(0), normal.getZ(0))
+            .applyQuaternion(mesh.quaternion);
+          if (Math.abs(worldNormal.y) < 0.9) continue;
+          flat++;
+          expect(worldNormal.y, `${circuit.id} flat surface`).toBeGreaterThan(0);
+        }
+        expect(flat, `${circuit.id} flat surfaces`).toBeGreaterThan(10);
+      }
+    });
+
+    it('sows nothing at all off the land, beds and border alike', () => {
+      // The defect the operator met in the seat: every DERIVED fill on a circuit
+      // is generated over the perimeter BOX, so an island was ringed by a
+      // rectangle of flowers standing on the sea. A box is not a shape, and this
+      // is the rule for all of them.
+      const beds = rallyFlowerSpots(ISLAND);
+      const border = rallyBorderFlowerSpots(ISLAND);
+      // Non-vacuity first, because a clip that switched the beds off entirely
+      // would pass every assertion below.
+      expect(beds.length).toBeGreaterThan(200);
+      expect(border.length).toBeGreaterThan(200);
+      for (const spot of [...beds, ...border]) {
+        expect(
+          pointInPolygon(spot.x, spot.z, islandOutline),
+          `${spot.x - REALM_RACERS_ORIGIN.x}, ${spot.z - REALM_RACERS_ORIGIN.z}`,
+        ).toBe(true);
+      }
+      // ...and the clip did not cost the beds the rule they already kept: the
+      // outer garden starts past the border line, on an island as on a
+      // rectangle. This is what pins the ground test's PLACE in the walk, since
+      // the acceptance it must not disturb is the projection's.
+      const track = realmRacersTrack(ISLAND);
+      for (const spot of beds) {
+        const projection = track.project(spot.x, spot.z);
+        expect(projection.lateral, `bed at ${spot.x}, ${spot.z}`).toBeLessThan(0);
+        expect(-projection.lateral).toBeGreaterThan(rallyGardenEdgeOffsetAt(ISLAND, projection.s));
+      }
+      // ...and the same circuit with no shore drawn keeps every one it had: the
+      // clip costs a record that authors nothing exactly nothing.
+      //
+      // Against COUNTS taken off the unclipped build, not against the same call
+      // repeated: comparing a circuit with itself pins determinism, which is
+      // true with the whole feature reverted and true with the clip firing on
+      // every record. What "loses none" means is a number.
+      expect(rallyFlowerSpots(GARDEN_CIRCUIT)).toHaveLength(1349);
+      expect(rallyBorderFlowerSpots(GARDEN_CIRCUIT)).toHaveLength(790);
+      expect(beds.length).toBeLessThan(1349);
+    });
+
+    it('MINTS the sea and BORROWS the shore, which is what the dispose core rests on', async () => {
+      // The dispose core frees a plain mesh's geometry and never an instanced
+      // one's, so which side of that line a new object falls on is a fact about
+      // the BUILDER. Its own suite drives a hand-built fake group, so nothing
+      // pinned that a real island build puts the sea on the mint side and the
+      // shore on the borrow side; a later refactor that instanced the sea, or
+      // merged the shore into one mesh, would flip both and stay green.
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      const { disposeRealmRacersTrackGroup } = await import(
+        '../src/render/realm_racers_track_dispose_core'
+      );
+      const group = buildRealmRacersTrack(ISLAND).group;
+      const sea = waterMeshes(group).reduce((widest, mesh) => {
+        mesh.geometry.computeBoundingBox();
+        widest.geometry.computeBoundingBox();
+        const box = mesh.geometry.boundingBox;
+        const best = widest.geometry.boundingBox;
+        return box && best && box.max.x - box.min.x > best.max.x - best.min.x ? mesh : widest;
+      });
+      expect(sea).toBeInstanceOf(THREE.Mesh);
+      expect(sea instanceof THREE.InstancedMesh).toBe(false);
+      const instanced = group.children.filter(
+        (child): child is THREE.InstancedMesh => child instanceof THREE.InstancedMesh,
+      );
+      expect(instanced.length).toBeGreaterThan(0);
+      const seaFreed = vi.spyOn(sea.geometry, 'dispose');
+      const borrowedFreed = instanced.map((mesh) => vi.spyOn(mesh.geometry, 'dispose'));
+      disposeRealmRacersTrackGroup(group);
+      expect(seaFreed).toHaveBeenCalledTimes(1);
+      for (const [i, spy] of borrowedFreed.entries()) {
+        expect(spy, `instanced geometry ${i} is the shared cache's`).not.toHaveBeenCalled();
+      }
+    });
+
+    it('lays the sea outside the island, and none at all on a circuit with no shape', async () => {
+      const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+      // Two pools on the plain circuit; the same two plus the sea on the island.
+      expect(waterMeshes(buildRealmRacersTrack(GARDEN_CIRCUIT).group)).toHaveLength(2);
+      const sheets = waterMeshes(buildRealmRacersTrack(ISLAND).group);
+      expect(sheets).toHaveLength(3);
+      // Still ONE material across the build, pools and sea alike: it is a
+      // ShaderMaterial with its own compiled program, and the two callers that
+      // rebuild a circuit over and over are the ones a second one multiplies
+      // against.
+      expect(new Set(sheets.map((mesh) => mesh.material)).size).toBe(1);
+      // The sea is the one that reaches past the island, and every vertex of it
+      // is off the land: water drawn over the lawn is a sheet on the grass.
+      const sea = sheets.reduce((widest, mesh) => {
+        mesh.geometry.computeBoundingBox();
+        widest.geometry.computeBoundingBox();
+        const box = mesh.geometry.boundingBox;
+        const best = widest.geometry.boundingBox;
+        return box && best && box.max.x - box.min.x > best.max.x - best.min.x ? mesh : widest;
+      });
+      const position = sea.geometry.getAttribute('position');
+      let onLand = 0;
+      for (let i = 0; i < position.count; i++) {
+        if (pointInPolygon(position.getX(i), position.getZ(i), islandOutline)) onLand++;
+      }
+      // The shore ring itself sits ON the outline, where an even-odd test can go
+      // either way, so the count is against the rest of the sheet rather than
+      // against zero: a sea drawn inside out would put most of it on the land.
+      expect(onLand).toBeLessThan(position.count / 4);
     });
   });
 

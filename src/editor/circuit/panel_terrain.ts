@@ -1,12 +1,17 @@
 // The TERRAIN tool's two panels: which barrier kit the next run is drawn in, and
-// the numbers behind the run it has selected.
+// the numbers behind what it has selected.
 //
-// The palette carries the pointer state, for the third time on this page and for
-// the third time for the same reason: a tool that is permanently armed answers a
-// click that missed the thing an operator meant to grab by authoring a second one
-// beside it. What is different here is that a barrier is drawn point by point
-// rather than dropped, so the armed state has a RUN IN PROGRESS in it, and the
-// panel has to say how that run ends as well as what it is made of.
+// The palette offers KITS and nothing else. The land's own shape is not in it,
+// and that is a decision rather than an omission: a palette is for picking one
+// of many, a circuit has ONE ground, and the gesture is not the same either (a
+// barrier is dropped point by point, the ground is one closed stroke). It arms
+// from the banner instead, beside the other actions about the terrain.
+//
+// There is no POINTER ROW either, in any of the three palettes any more. It was
+// a third way to say what the lit tile and `esc` already say, in the panel's
+// most prominent slot, and what it said while nothing was armed was that
+// nothing was armed. The pointer STATE is untouched: it is what stops a click
+// that missed from authoring a piece nobody asked for.
 //
 // The library is folded by the THEME, like the props library: a theme's
 // `barriers` list is the two or three kits that look like its zone, and every
@@ -40,8 +45,15 @@ import { BARRIER_PREFIX, barrierThumbnailKey } from './thumbnail_core';
 export interface TerrainPanelHost extends PanelHost {
   /** Which barrier is selected, by index into the record's list. */
   fenceSelection(): number | null;
+  /** Which point of the GROUND outline is selected, if any. */
+  groundSelection(): number | null;
   /** How many points the run being drawn holds, or null when none is. */
   draftPointCount(): number | null;
+  /** Whether the LAND is armed, which is a state this palette does not own (the
+   *  banner does) and still has to describe: the right column stays pinned here
+   *  for the whole gesture, so a hint line reading "click a barrier" while the
+   *  next drag shapes the ground is the panel contradicting the tool. */
+  groundArmed(): boolean;
   setFenceScale(scale: number): void;
   removeFence(): void;
   /** Finish the run being drawn as an open one. */
@@ -60,7 +72,7 @@ export function barrierKitLabel(kit: string): string {
 }
 
 /**
- * The palette: the pointer row, then this theme's kits, then everything else.
+ * The palette: this theme's kits, then everything else.
  *
  * Two groups rather than a chip strip, because thirteen kits is a list an eye
  * reads at once and the props library's chip machinery exists for a catalog of a
@@ -69,7 +81,6 @@ export function barrierKitLabel(kit: string): string {
  */
 export class TerrainPalettePanel {
   readonly el = document.createElement('div');
-  private readonly pointerEl = document.createElement('button');
   private readonly gridEl = document.createElement('div');
   private readonly hintEl = hintLine('');
   private choice: string | null = null;
@@ -93,11 +104,6 @@ export class TerrainPalettePanel {
   private builtFor: string | null = null;
 
   constructor(private readonly host: TerrainPanelHost) {
-    this.pointerEl.type = 'button';
-    this.pointerEl.className = 'pointer-mode';
-    this.pointerEl.title =
-      'Select and edit the barriers already on the circuit. A click on empty plan draws nothing (esc)';
-    this.pointerEl.onclick = () => this.arm(null);
     this.gridEl.className = 'lib-grid';
     this.readCache();
     this.paint();
@@ -120,8 +126,8 @@ export class TerrainPalettePanel {
    * The GRID is rebuilt only when the fold actually changed, which is the props
    * library's own hard-won rule at one remove: this runs on every repaint, and a
    * grid rebuilt under the pointer is a click that lands on an element that no
-   * longer exists. Everything else here (the armed marks, the hint, the pointer
-   * row) is a write onto elements that stay put.
+   * longer exists. Everything else here (the armed marks, the hint line) is a
+   * write onto elements that stay put.
    */
   paint(): void {
     const own = this.host.themeBarriers().filter((kit) => REALM_RACERS_BARRIERS[kit]);
@@ -156,7 +162,7 @@ export class TerrainPalettePanel {
     }
     this.gridEl.append(heading(own.length > 0 ? 'every kit' : 'kits'));
     for (const kit of rest) addTile(kit);
-    this.el.replaceChildren(heading('draw'), this.pointerEl, this.gridEl, this.hintEl);
+    this.el.replaceChildren(heading('barrier kits'), this.gridEl, this.hintEl);
     this.markArmed();
     void this.fillShots([...own, ...rest]);
   }
@@ -262,12 +268,11 @@ export class TerrainPalettePanel {
     for (const tile of this.gridEl.querySelectorAll<HTMLElement>('button.lib-tile')) {
       tile.classList.toggle('on', tile.dataset.kit === this.choice);
     }
-    this.pointerEl.classList.toggle('on', this.choice === null);
-    this.pointerEl.textContent =
-      this.choice === null
-        ? 'pointer (armed)'
-        : `pointer (esc) - drawing ${barrierKitLabel(this.choice)}`;
-    this.hintEl.textContent = terrainArmStateText(this.choice, this.host.draftPointCount());
+    this.hintEl.textContent = terrainArmStateText(
+      this.choice,
+      this.host.draftPointCount(),
+      this.host.groundArmed(),
+    );
   }
 }
 
@@ -279,11 +284,33 @@ export class TerrainPalettePanel {
  * because the two ways out of a drawing gesture become available at different
  * counts: two points can be finished open, three can be closed into a ring.
  */
-export function terrainArmStateText(kit: string | null, points: number | null): string {
-  if (!kit) return 'pointer: click a barrier to select it, drag one of its points to move it';
+export function terrainArmStateText(
+  kit: string | null,
+  points: number | null,
+  groundArmed = false,
+): string {
+  // The ground first: it is armed from the banner rather than from this palette,
+  // so an armed kit and an armed ground cannot both be true, and the one the
+  // operator is holding is the one the line has to describe.
+  if (groundArmed) {
+    return 'shaping the ground: drag one closed loop around the circuit, esc to stop';
+  }
+  // The point COUNT comes before the armed kit, because a run in progress is
+  // described by how far along it is: the inspector asks about a draft with no
+  // kit in hand, and the idle sentence is not an answer to that.
+  if (points !== null && points > 0) return runInProgressText(points);
+  if (!kit) {
+    return 'click a barrier or a ground handle to select it, drag it to move it';
+  }
   if (points === null || points === 0) {
     return `drawing ${barrierKitLabel(kit)}: click to drop the first point`;
   }
+  return runInProgressText(points);
+}
+
+/** How a run in progress ENDS, which changes with its point count: two points
+ *  can be finished open, three can be closed into a ring. */
+function runInProgressText(points: number): string {
   if (points === 1) return '1 point: click again to make it a run, esc to cancel';
   if (points === 2) return '2 points: enter finishes the run, or keep clicking. Esc cancels';
   return `${points} points: click the first point to close the ring, enter to finish it open`;
@@ -311,29 +338,74 @@ export class TerrainInspectorPanel {
   paint(): void {
     if (this.el.hidden || this.el.contains(document.activeElement)) return;
     this.el.replaceChildren();
+    // Two permanent groups, the LAND then the BARRIERS standing on it, each with
+    // its own title whether or not it has a selection to report. They used to
+    // run into each other as one column of lines, so nothing on screen said
+    // which of the two a number belonged to; and a group that appears only when
+    // it has something to say is a group an operator cannot learn the position
+    // of.
+    this.el.append(...this.landRows());
+    this.el.append(...this.barrierRows());
+  }
+
+  /**
+   * What the record says about the land.
+   *
+   * READ ONLY, deliberately: the two things one can do to a ground shape (draw
+   * one, discard it) act on the whole terrain rather than on a selection, so
+   * they live on the mode's action bar. An absent outline is a STATE worth
+   * naming rather than an empty section: the rectangle a circuit falls back to
+   * is what both shipped circuits wear, so "there is no shape here" is the
+   * normal answer and it has to be legible as one.
+   */
+  private landRows(): HTMLElement[] {
+    const outline = this.host.record().groundOutline;
+    if (!outline || outline.length === 0) {
+      return [
+        heading('the land'),
+        hintLine('no shape drawn: the land is the rectangle covering the whole region'),
+        detailLine('Draw ground shape, or Fit ground, on the bar above the plan'),
+      ];
+    }
+    const point = this.host.groundSelection();
+    return [
+      heading('the land'),
+      detailLine(
+        point === null
+          ? `an island on ${outline.length} handles: click one to move it, click the curve to insert one`
+          : `handle ${point + 1} of ${outline.length}: drag it, del removes it`,
+      ),
+      detailLine('outside it is the theme water, which stops nobody'),
+    ];
+  }
+
+  /** What the record says about the barriers, and what the selected one can be
+   *  edited to. */
+  private barrierRows(): HTMLElement[] {
+    const out: HTMLElement[] = [heading('barriers')];
     const index = this.host.fenceSelection();
     const record = this.host.record();
     const fences = record.fences ?? [];
     const fence = index === null ? undefined : fences[index];
     // The way OUT of a drawing gesture comes first, before the no-selection
-    // early return, because starting a run CLEARS the selection: a finish button
+    // return, because starting a run CLEARS the selection: a finish button
     // inside the selected branch is a button that never renders during the one
     // state it exists for.
     const drafting = this.host.draftPointCount();
     if (drafting !== null) {
-      this.el.append(hintLine(terrainArmStateText(null, drafting).replace('pointer: ', '')));
-      this.el.append(panelButton('finish the run', () => this.host.finishDraft()));
+      out.push(hintLine(terrainArmStateText(null, drafting)));
+      out.push(panelButton('finish the run', () => this.host.finishDraft()));
     }
     if (index === null || !fence) {
-      this.el.append(
+      out.push(
         hintLine(
           fences.length === 0
-            ? 'no barriers on this circuit: arm a kit in the library and click to draw one'
+            ? 'none on this circuit: arm a kit in the library and click to draw one'
             : 'click a barrier on the plan to select it',
         ),
       );
-      this.el.append(detailLine(`${fenceColliderCount(record)} colliders from barriers`));
-      return;
+      out.push(detailLine(`${fenceColliderCount(record)} colliders from barriers`));
+      return out;
     }
     const def = REALM_RACERS_BARRIERS[fence.kit];
     // Found by the record index it carries, not by its position: the resolver
@@ -343,7 +415,7 @@ export class TerrainInspectorPanel {
     const runs = placed.find((entry) => entry.index === index)?.runs ?? [];
     const length = runs.reduce((total, run) => total + run.length, 0);
 
-    this.el.append(heading(`${barrierKitLabel(fence.kit)} ${index + 1} of ${fences.length}`));
+    out.push(detailLine(`${barrierKitLabel(fence.kit)} ${index + 1} of ${fences.length}`));
     const { wrap, name } = fieldRow('scale');
     const input = document.createElement('input');
     input.type = 'number';
@@ -353,22 +425,23 @@ export class TerrainInspectorPanel {
     input.value = (fence.scale ?? 1).toFixed(2);
     input.onchange = () => this.host.setFenceScale(numberOr(input.value, fence.scale ?? 1));
     name.append(input);
-    this.el.append(wrap);
-    this.el.append(
+    out.push(wrap);
+    out.push(
       detailLine(
         `${fence.points.length} points, ${runs.length} runs, ${length.toFixed(1)} yd total`,
       ),
     );
-    this.el.append(detailLine(fence.closed ? 'a closed ring' : 'an open run'));
+    out.push(detailLine(fence.closed ? 'a closed ring' : 'an open run'));
     if (def) {
       const scale = fence.scale ?? 1;
-      this.el.append(
+      out.push(
         detailLine(
           `stands ${(def.height * scale).toFixed(2)} yd, ${(def.halfThickness * 2 * scale).toFixed(2)} yd thick`,
         ),
       );
     }
-    this.el.append(detailLine(`${fenceColliderCount(record)} colliders from barriers in all`));
-    this.el.append(panelButton('delete barrier', () => this.host.removeFence()));
+    out.push(detailLine(`${fenceColliderCount(record)} colliders from barriers in all`));
+    out.push(panelButton('delete barrier', () => this.host.removeFence()));
+    return out;
   }
 }

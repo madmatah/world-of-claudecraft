@@ -15,6 +15,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import * as THREE from 'three';
 import { afterAll, describe, expect, it } from 'vitest';
+import { suggestGroundOutline } from '../src/editor/circuit/envelope_core';
 import { CAMERA_ZOOM_MAX } from '../src/game/input';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
 import {
@@ -35,6 +36,7 @@ import {
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
+import { polygonContainsPoint } from '../src/sim/geometry2d';
 import {
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
@@ -44,6 +46,7 @@ import {
   clearRealmRacersDraftCircuits,
   putRealmRacersDraftCircuit,
 } from '../src/sim/realm_racers_draft_registry';
+import { realmRacersGroundShape, realmRacersOnGround } from '../src/sim/realm_racers_ground';
 import {
   REALM_RACERS_CAMERA_REACH,
   REALM_RACERS_LANES,
@@ -51,9 +54,11 @@ import {
   realmRacersLaneOffset,
 } from '../src/sim/realm_racers_layout';
 import {
+  rallyFootprintRadius,
   realmRacersPlacedPonds,
   realmRacersPlacedProps,
   realmRacersPlacements,
+  SCATTER_SURFACE_CLEARANCE,
 } from '../src/sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import { glbBounds } from './helpers/glb_bounds';
@@ -528,6 +533,62 @@ describe('Realm Racers props: a seeded scatter', () => {
       }
       // ...and the readout agrees that nothing was sown anywhere it should not be.
       expect(realmRacersCircuitErrors(realmRacersCircuitMetrics(circuit))).toEqual([]);
+    }
+  });
+
+  it('sows nothing off the authored land, and fits the whole piece on it', () => {
+    // A seeded fill walks the perimeter BOX, so on a circuit with a shore it
+    // sowed shrubs out over the sea. The margin is the piece's own radius rather
+    // than a constant: what has to fit on the land is the footprint, not the
+    // point it is centred on.
+    const bare = draft('scatter_island_bare', {
+      scatters: [{ asset: 'shrub', zone: 'outfield', spacing: 9, seed: 41 }],
+    });
+    const island = draft('scatter_island', {
+      scatters: [{ asset: 'shrub', zone: 'outfield', spacing: 9, seed: 41 }],
+      groundOutline: suggestGroundOutline(GARDEN),
+    });
+    const spots = realmRacersPlacements(island).scattered;
+    expect(spots.length).toBeGreaterThan(20);
+    const outline = realmRacersGroundShape(island).outline;
+    for (const spot of spots) {
+      expect(polygonContainsPoint(outline, spot.x, spot.z), `${spot.x}, ${spot.z}`).toBe(true);
+      expect(
+        realmRacersOnGround(island, spot.x, spot.z, rallyFootprintRadius(spot.footprint)),
+      ).toBe(true);
+    }
+    // A clip, not a switch, and a clip that only ever REMOVES: the same fill
+    // with no shore drawn sows more, and every piece the island keeps stands at
+    // a position the unclipped run also produced.
+    //
+    // The subset half is the one that bites. The walk carries a projection HINT
+    // from cell to cell, so a ground test placed before the projection would
+    // leave the next cell hinted from somewhere else and could change which
+    // pieces are SOWN rather than only which are dropped; a count and a
+    // dropped-piece check would both survive that, because the moved piece is
+    // still in one list and still off the land at the position it left.
+    const unclipped = realmRacersPlacements(bare).scattered;
+    expect(unclipped.length).toBeGreaterThan(spots.length);
+    const key = (spot: { x: number; z: number }) => `${spot.x.toFixed(4)},${spot.z.toFixed(4)}`;
+    const sown = new Set(unclipped.map(key));
+    for (const spot of spots) expect(sown.has(key(spot)), `kept ${key(spot)}`).toBe(true);
+    const kept = new Set(spots.map((spot) => `${spot.x.toFixed(4)},${spot.z.toFixed(4)}`));
+    for (const spot of unclipped) {
+      const key = `${spot.x.toFixed(4)},${spot.z.toFixed(4)}`;
+      if (!kept.has(key)) {
+        // Dropped for one reason only: it did not FIT on the land, by the same
+        // margin the fill rejects against the racing surface with. A piece
+        // dropped while its whole footprint sat well inland fails here.
+        expect(
+          realmRacersOnGround(
+            island,
+            spot.x,
+            spot.z,
+            rallyFootprintRadius(spot.footprint) + SCATTER_SURFACE_CLEARANCE,
+          ),
+          `dropped ${key}`,
+        ).toBe(false);
+      }
     }
   });
 

@@ -170,6 +170,18 @@ re-entrant shape are the same call and neither needs a barrier. It replaced a wh
 family of derived containment devices, which is why the Realm Racers garden is open
 and drivable to the perimeter on both sides; `social/realm_racers.ts` owns the
 consequences, this owns the verdict),
+`realm_racers_ground.ts` (the shape of the LAND: a circuit's authored `groundOutline`
+read as the same closed centripetal Catmull-Rom the centerline is, memoized per record
+identity. Absent means the rectangle the ground has always been (`regionHalf*` plus
+`REALM_RACERS_LAWN_OVERSHOOT`), which is what keeps both shipped circuits identical to
+what they were before the field existed; the renderer cuts its lawn along what this
+returns and puts the theme's water outside it, and the readout measures the road against
+it (`road_outside_ground_outline`). It also answers `realmRacersOnGround`, which every
+DERIVED fill on a circuit asks before it places a piece (the seeded scatters here, the
+meadow mask and the flower beds render-side): all of them are generated over the perimeter
+BOX, and a box is not a shape, so without it an island wore a rectangle of grass standing
+on the sea. The water outside is DECORATION: it stops nobody, and the perimeter box is
+still the one thing that does),
 `realm_racers_props_resolve.ts` (the ONE place a circuit's hand-placed scenery turns
 into positions: authored `props` in either track-space or circuit-local coordinates,
 seeded `scatters`, and the free-form `ponds` outline. The renderer instances what it

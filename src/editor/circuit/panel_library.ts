@@ -84,7 +84,6 @@ export class LibraryPanel {
   private readonly searchEl = document.createElement('input');
   private readonly chipsEl = document.createElement('div');
   private readonly gridEl = document.createElement('div');
-  private readonly pointerEl = document.createElement('button');
   private readonly placementEl = document.createElement('div');
   private readonly hintEl = hintLine('');
 
@@ -141,11 +140,6 @@ export class LibraryPanel {
     };
     this.chipsEl.className = 'lib-chips';
     this.gridEl.className = 'lib-grid';
-    this.pointerEl.type = 'button';
-    this.pointerEl.className = 'pointer-mode';
-    this.pointerEl.title =
-      'Select and edit what is already there. A click on empty plan places nothing (esc)';
-    this.pointerEl.onclick = () => this.arm(null);
     this.placementEl.className = 'lib-placement';
     this.readCache();
     this.paint();
@@ -181,9 +175,6 @@ export class LibraryPanel {
     for (const tile of this.gridEl.querySelectorAll<HTMLElement>('button.lib-tile')) {
       tile.classList.toggle('on', tile.dataset.asset === this.choice);
     }
-    this.pointerEl.classList.toggle('on', this.choice === null);
-    this.pointerEl.textContent =
-      this.choice === null ? 'pointer (armed)' : `pointer (esc) - placing ${this.choice}`;
     this.hintEl.textContent = this.hint();
   }
 
@@ -205,7 +196,7 @@ export class LibraryPanel {
     this.builtFor = record.theme;
     this.searchEl.placeholder = librarySearchPlaceholder(this.entries().length);
     this.el.replaceChildren();
-    this.el.append(heading('library'), this.searchEl, this.chipsEl, this.pointerEl, this.gridEl);
+    this.el.append(heading('library'), this.searchEl, this.chipsEl, this.gridEl);
     this.el.append(this.placementEl, this.hintEl);
     this.paintChips();
     this.paintGrid();

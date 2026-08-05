@@ -156,6 +156,52 @@ describe('the circuit editor shell, on the real markup', () => {
     expect(el('sideTabs').hidden).toBe(true);
   });
 
+  it('shows TERRAIN’s five chips, and holds the drawing one lit while it is armed', () => {
+    // `Draw ground shape` is the odd action in the table: every other repair on
+    // a banner acts once and is done, and this one arms a MODE, so the chip has
+    // to stay lit for as long as that is true. And `Delete ground shape` is live
+    // exactly while there is a shape, which is a state the page re-reads on
+    // every edit rather than only at load.
+    const { shell } = mountShell();
+    shell.setMode('terrain', true);
+    const chips = [...el('modeActions').querySelectorAll('button')].filter(
+      (button) => !button.hidden,
+    );
+    expect(chips.map((button) => button.title.split(':')[0])).toEqual([
+      'Draw ground shape',
+      'Fit ground',
+      'Delete ground shape',
+      'Fit enclosure',
+      'Center circuit',
+    ]);
+    // The order is the MODE's, not the union of every mode's: the buttons are
+    // built once for all five modes and MOVED into place, so a chip cannot be
+    // re-registered under a stale identity.
+    const draw = chips[0];
+    const remove = chips[2];
+    expect(draw.classList.contains('on')).toBe(false);
+    expect(draw.getAttribute('aria-pressed')).toBe(null);
+    shell.setChecked('drawGround', true);
+    expect(draw.classList.contains('on')).toBe(true);
+    expect(draw.getAttribute('aria-pressed')).toBe('true');
+    shell.setChecked('drawGround', false);
+    expect(draw.classList.contains('on')).toBe(false);
+
+    shell.setEnabled('deleteGround', false);
+    expect(remove.disabled).toBe(true);
+    shell.setEnabled('deleteGround', true);
+    expect(remove.disabled).toBe(false);
+
+    // Moving them keeps their identity, which is what the two state maps hold.
+    shell.setMode('shape', true);
+    shell.setMode('terrain', true);
+    const again = [...el('modeActions').querySelectorAll('button')].filter(
+      (button) => !button.hidden,
+    );
+    expect(again[0]).toBe(draw);
+    expect(again[2]).toBe(remove);
+  });
+
   it('says one sentence per preview state on the dot', () => {
     const { shell } = mountShell();
     shell.setPreviewReady('ready');

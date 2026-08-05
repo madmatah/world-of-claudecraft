@@ -443,6 +443,25 @@ describe('the rail', () => {
     expect(railBanner('width', true, false, 'alongRoad')).toBe(railBanner('width', true));
   });
 
+  it('says which of TERRAIN’s two gestures is armed, one sentence each', () => {
+    // The tool has two drawing gestures and they are nothing alike: a barrier is
+    // dropped point by point and the ground is one closed stroke. The banner
+    // carried the barrier sentence with the ground as a tail clause, which is
+    // the banner refusing to say what the next drag will do.
+    const pointer = railBanner('terrain', true);
+    const drawingFence = railBanner('terrain', true, false, 'single', true);
+    const drawingGround = railBanner('terrain', true, false, 'single', false, true);
+    expect(new Set([pointer, drawingFence, drawingGround]).size).toBe(3);
+    expect(drawingGround).toContain('closed loop');
+    expect(drawingGround).not.toContain('point');
+    expect(drawingFence).toContain('close the ring');
+    // The ground wins over an armed kit, because arming one disarms the other:
+    // a sentence describing both would describe a state the tool cannot be in.
+    expect(railBanner('terrain', true, false, 'single', true, true)).toBe(drawingGround);
+    // ...and it says nothing at all in another tool, where no ground is armed.
+    expect(railBanner('props', true, false, 'single', false, true)).toBe(railBanner('props', true));
+  });
+
   it('says something different while re-stroking a drawn circuit', () => {
     expect(railBanner('shape', true, true)).not.toBe(railBanner('shape', true));
     expect(railBanner('shape', true, true)).toContain('stay');
@@ -474,6 +493,19 @@ describe('the rail', () => {
     // shaping tools' business.
     expect(railActions('width')).toEqual(['fixCorners']);
     expect(railActions('props')).toEqual([]);
+    // TERRAIN is read as one intent, the land the race sits on, so every action
+    // about that land is on its banner, the GROUND first and the enclosure
+    // after: draw the shape, fit one to the road, discard it, then size and
+    // centre the boxes around it. `fitEnclosure` is on SHAPE as well,
+    // deliberately, and an action appearing on two banners is still one row in
+    // the table.
+    expect(railActions('terrain')).toEqual([
+      'drawGround',
+      'fitGround',
+      'deleteGround',
+      'fitEnclosure',
+      'centerCircuit',
+    ]);
     for (const mode of RAIL_MODES) {
       for (const id of railActions(mode.id)) {
         // Every one is a real action, with a menu home as well as a plan button.
@@ -995,6 +1027,8 @@ describe('problems on the plan', () => {
       fence_blocks_racing_surface: 'a fence crosses the racing surface',
       fence_outside_region: 'a fence leaves the collision region',
       pond_on_racing_surface: 'a pond reaches onto the racing surface',
+      road_outside_ground_outline: 'the road runs off the ground you drew',
+      ground_outline_folds: 'the ground you drew crosses itself',
       pickup_row_off_road: 'a pickup row does not fit on the road there',
       pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',
     });

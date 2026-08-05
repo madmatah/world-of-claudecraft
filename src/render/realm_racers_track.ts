@@ -64,12 +64,17 @@ import {
   realmRacersTheme,
 } from './realm_racers_themes';
 import {
+  type RallyBasinMesh,
   rallyBorderFlowerSpots,
   rallyFencePieces,
   rallyFlowerSpots,
   rallyKerbRuns,
+  rallyLawnContour,
   rallyPondMeshes,
   rallyPondReedSpots,
+  rallySeaBasin,
+  rallySeaMesh,
+  rallyShoreSpots,
   rallyStartArchPlacement,
   rallyStartLightPlacements,
   realmRacersStartLightSignal,
@@ -103,8 +108,6 @@ const START_LINE_Y = 0.02;
 const KERB_WIDTH = 1.1;
 /** Yards of road covered by the chequered start/finish band. */
 const START_LINE_LENGTH = 3;
-/** How far the lawn runs past the region envelope, yards. */
-const LAWN_OVERSHOOT = 160;
 /** A flower card's size at scale 1, yards. */
 const FLOWER_WIDTH = 0.95;
 const FLOWER_HEIGHT = 0.7;
@@ -518,10 +521,55 @@ function basinShapes(circuit: RealmRacersCircuit): THREE.Shape[] {
 }
 
 /**
- * The infield basin: the world's OWN water shader, not a flat translucent
- * plane. It carries the same scrolling ripple normals, fresnel sky tint, sun
- * glints and shoreline foam as the Evergarden's ponds, because it is the same
- * material (`water_surface_material.ts`).
+ * One water surface: a triangulated ring mesh, its per-vertex shore depth, and
+ * the height it sits at.
+ *
+ * Shared by the ponds and the sea because they are the same water: a shore is a
+ * shore whether the land is inside it or outside it, and two builders would be
+ * two answers to how deep the water is a yard off the bank.
+ */
+function waterSheet(
+  mesh: RallyBasinMesh,
+  waterY: number,
+  bankSlope: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const count = mesh.depths.length;
+  const positions = new Float32Array(count * 3);
+  const shoreDepth = new Float32Array(count);
+  const shoreSlope = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    positions[i * 3] = mesh.positions[i * 2];
+    positions[i * 3 + 1] = 0;
+    positions[i * 3 + 2] = mesh.positions[i * 2 + 1];
+    shoreDepth[i] = mesh.depths[i];
+    // Foam is depth over slope, i.e. distance to the waterline. The bank has
+    // ONE authored slope, so hand the shader that rather than a finite
+    // difference of a profile we already know in closed form.
+    shoreSlope[i] = bankSlope;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('aShoreDepth', new THREE.BufferAttribute(shoreDepth, 1));
+  geo.setAttribute('aShoreSlope', new THREE.BufferAttribute(shoreSlope, 1));
+  geo.setIndex(mesh.index);
+  // The shader derives its own normal from the ripple maps and never reads
+  // this one. It is here so the surface is COVERED by the face-down guard: a
+  // water sheet wound the wrong way is culled exactly as silently as a kerb.
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  const water = new THREE.Mesh(geo, material);
+  water.position.y = waterY;
+  return water;
+}
+
+/**
+ * The circuit's water: the placed ponds, and the sea around an authored island.
+ *
+ * The world's OWN water shader, not a flat translucent plane. It carries the
+ * same scrolling ripple normals, fresnel sky tint, sun glints and shoreline foam
+ * as the Evergarden's ponds, because it is the same material
+ * (`water_surface_material.ts`).
  *
  * The wave field is left off: `water_simulation.ts` anchors ONE camera-local
  * window in the world, and the band is nowhere near it. The shader's
@@ -534,9 +582,9 @@ function buildBasin(
   group: THREE.Group,
 ): void {
   const basin = circuit.basin;
-  if (!basin) return;
-  const meshes = rallyPondMeshes(circuit);
-  if (meshes.length === 0) return;
+  const meshes = basin ? rallyPondMeshes(circuit) : [];
+  const sea = rallySeaMesh(circuit);
+  if (meshes.length === 0 && !sea) return;
   // ONE material for every pond of this build. It is a ShaderMaterial with its
   // own uniform block and its own compiled program, and the two callers that
   // rebuild a circuit over and over (the editor preview per edit, a dev draft
@@ -556,43 +604,28 @@ function buildBasin(
         }
       : {}),
   });
-  for (const mesh of meshes) {
-    const count = mesh.depths.length;
-    const positions = new Float32Array(count * 3);
-    const shoreDepth = new Float32Array(count);
-    const shoreSlope = new Float32Array(count);
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = mesh.positions[i * 2];
-      positions[i * 3 + 1] = 0;
-      positions[i * 3 + 2] = mesh.positions[i * 2 + 1];
-      shoreDepth[i] = mesh.depths[i];
-      // Foam is depth over slope, i.e. distance to the waterline. The basin's
-      // bank has ONE authored slope, so hand the shader that rather than a
-      // finite difference of a profile we already know in closed form.
-      shoreSlope[i] = basin.bankSlope;
+  if (basin) {
+    for (const mesh of meshes) {
+      group.add(waterSheet(mesh, basin.waterY, basin.bankSlope, material));
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('aShoreDepth', new THREE.BufferAttribute(shoreDepth, 1));
-    geo.setAttribute('aShoreSlope', new THREE.BufferAttribute(shoreSlope, 1));
-    geo.setIndex(mesh.index);
-    // The shader derives its own normal from the ripple maps and never reads
-    // this one. It is here so the surface is COVERED by the face-down guard: a
-    // water sheet wound the wrong way is culled exactly as silently as a kerb.
-    geo.computeVertexNormals();
-    geo.computeBoundingSphere();
-    const water = new THREE.Mesh(geo, material);
-    water.position.y = basin.waterY;
-    group.add(water);
   }
+  const seaBasin = rallySeaBasin(circuit);
+  if (sea) group.add(waterSheet(sea, seaBasin.waterY, seaBasin.bankSlope, material));
 
-  // Reeds around the rim, so the water's edge is planted rather than kerbed.
+  // Reeds around the rim, so the water's edge is planted rather than kerbed,
+  // and the same clumps scattered along an authored shore. One instanced draw
+  // for both: it is one model, and a shore and a pond rim are the same waterline
+  // seen from opposite sides.
+  const planted = [
+    ...(basin ? rallyPondReedSpots(circuit).map((spot) => ({ ...spot, y: basin.waterY })) : []),
+    ...rallyShoreSpots(circuit).map((spot) => ({ ...spot, y: seaBasin.waterY })),
+  ];
   instanceModel(
     group,
     theme.reedUrl,
-    rallyPondReedSpots(circuit).map((spot) => ({
+    planted.map((spot) => ({
       x: spot.x,
-      y: basin.waterY,
+      y: spot.y,
       z: spot.z,
       yaw: spot.rot,
       sx: spot.scale,
@@ -830,27 +863,28 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   // geometry is the same on every circuit in every zone; the skin is not.
   const theme = realmRacersTheme(circuit);
 
-  // --- the lawn the whole circuit sits on. It runs well past the region so the
-  // horizon beyond the perimeter fence stays lawn instead of the empty instance
-  // band's void; nothing else is drawn out there, so there is nothing to fight.
-  const lawnX = (circuit.regionHalfX + LAWN_OVERSHOOT) * 2;
-  const lawnZ = (circuit.regionHalfZ + LAWN_OVERSHOOT) * 2;
+  // --- the lawn the whole circuit sits on: the SHAPE of the land, off the one
+  // resolver. A circuit that authors no outline gets the rectangle it has always
+  // had, running well past the region so the horizon stays lawn instead of the
+  // empty instance band's void; one that authors an island gets its own edge,
+  // with the theme's water outside it.
   // The world's OWN ground material, not a lookalike: six-layer PBR splat,
   // detail normals, macro breakup, the lot. One material serves every ground
   // surface here, because which layer a surface is made of is a per-vertex
   // weight, not a material (see instance_surface.ts).
   const ground = buildInstanceGroundMaterial(REALM_RACERS_ORIGIN);
   const tint = biomeGroundTint(theme.ground);
-  // The lawn is a rectangle with the basin punched out of it, so the water sits
-  // in a hole in the ground instead of floating over it. Rotated and placed at
-  // BUILD time: the ground material reads object space as world space, so a
-  // surface rotated at draw time would hand it a sideways normal.
-  const lawnShape = new THREE.Shape([
-    new THREE.Vector2(-lawnX / 2, -lawnZ / 2),
-    new THREE.Vector2(lawnX / 2, -lawnZ / 2),
-    new THREE.Vector2(lawnX / 2, lawnZ / 2),
-    new THREE.Vector2(-lawnX / 2, lawnZ / 2),
-  ]);
+  // The ponds are punched out of it as holes, so a pool sits in a hole in the
+  // ground instead of floating over it: an island is the same mechanism with a
+  // different outer path. Rotated and placed at BUILD time: the ground material
+  // reads object space as world space, so a surface rotated at draw time would
+  // hand it a sideways normal.
+  //
+  // The z is negated for the same reason the pond holes' is: a ShapeGeometry
+  // rotated -PI/2 about X maps the shape's y to world -z.
+  const lawnShape = new THREE.Shape(
+    rallyLawnContour(circuit).map((point) => new THREE.Vector2(point.x, point.y)),
+  );
   for (const hole of basinShapes(circuit)) lawnShape.holes.push(hole);
   const lawnGeo = new THREE.ShapeGeometry(lawnShape)
     .rotateX(-Math.PI / 2)

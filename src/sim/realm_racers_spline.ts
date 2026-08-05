@@ -28,6 +28,7 @@
 import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import {
   type RallyGate,
+  type RallyPoint,
   REALM_RACERS_GATE_MARGIN,
   REALM_RACERS_GATE_SNAP_FRACTION,
   REALM_RACERS_GATE_SPACING,
@@ -179,6 +180,40 @@ function catmullRom(
   const b1 = lerp(a1, a2, t0, t2);
   const b2 = lerp(a2, a3, t1, t3);
   return lerp(b1, b2, t1, t2);
+}
+
+/**
+ * A CLOSED centripetal Catmull-Rom through `points`, sampled `perSpan` times
+ * per authored span.
+ *
+ * Exported because the centerline is no longer the only closed smooth curve a
+ * circuit authors: the ground's own outline is drawn with the same gesture and
+ * read as the same curve class (`realm_racers_ground.ts`). Two implementations
+ * of one curve would mean the shape an operator drew and the shape the game
+ * cuts the land along could differ by a fit nobody chose.
+ *
+ * Not arc-length uniform, unlike the centerline's own resample: what reads a
+ * ground outline wants the shape, never a lap position on it.
+ */
+export function sampleClosedCatmullRom(
+  points: readonly RallyPoint[],
+  perSpan: number,
+): RallyPoint[] {
+  const n = points.length;
+  const steps = Math.max(1, Math.floor(perSpan));
+  if (n < 3) return points.map((point) => ({ x: point.x, z: point.z }));
+  const pt = (i: number): [number, number] => {
+    const p = points[((i % n) + n) % n];
+    return [p.x, p.z];
+  };
+  const out: RallyPoint[] = [];
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < steps; k++) {
+      const [x, z] = catmullRom(pt(i - 1), pt(i), pt(i + 1), pt(i + 2), k / steps);
+      out.push({ x, z });
+    }
+  }
+  return out;
 }
 
 function buildModel(circuit: RealmRacersCircuit): RallyTrackModel {
