@@ -33,6 +33,8 @@ import {
   REALM_RACERS_LANE_DZ,
   REALM_RACERS_LANES,
   REALM_RACERS_LAWN_OVERSHOOT,
+  REALM_RACERS_MAX_REGION_HALF_X,
+  REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_MIN_GATES,
   REALM_RACERS_MIN_HALF_WIDTH,
   REALM_RACERS_ORIGIN,
@@ -147,12 +149,29 @@ describe('Realm Racers circuits: every record is well formed', () => {
         }
       }
 
-      // The race has to be finishable, and the region has to contain the wall.
+      // The race has to be finishable, and the instance volume has to contain
+      // the wall. Strictly, and that is the load-bearing half: the volume is
+      // where the ground is flat and the world's colliders are off, and the
+      // wall is the only thing keeping a pilot inside it.
       expect(circuit.laps).toBeGreaterThan(0);
       expect(circuit.practiceLaps).toBeGreaterThan(0);
       expect(circuit.timeLimitSeconds).toBeGreaterThan(0);
       expect(circuit.regionHalfX).toBeGreaterThan(circuit.perimeter.halfX);
       expect(circuit.regionHalfZ).toBeGreaterThan(circuit.perimeter.halfZ);
+
+      // EVERY circuit carries the volume at its CEILING, and the record says so
+      // in literals only because `realm_racers_layout.ts` imports the records
+      // and importing it back would be a cycle. This is what makes it a rule
+      // rather than a coincidence two authors happened to agree on.
+      //
+      // It is not authored because it carries no design decision: the gap it
+      // used to leave to the wall was one constant in the editor's fit. It is
+      // safe at the ceiling by construction rather than by luck, since the depth
+      // ceiling IS half the lane spacing less the clearance, so two lanes both
+      // at it still keep the air the layout was designed around (the test above
+      // this file derives that floor independently).
+      expect(circuit.regionHalfX, `${circuit.id} volume x`).toBe(REALM_RACERS_MAX_REGION_HALF_X);
+      expect(circuit.regionHalfZ, `${circuit.id} volume z`).toBe(REALM_RACERS_MAX_REGION_HALF_Z);
     },
   );
 

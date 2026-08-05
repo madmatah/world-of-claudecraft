@@ -1029,6 +1029,7 @@ describe('problems on the plan', () => {
       pond_on_racing_surface: 'a pond reaches onto the racing surface',
       road_outside_ground_outline: 'the road runs off the ground you drew',
       ground_outline_folds: 'the ground you drew crosses itself',
+      ground_outside_region: 'the ground you drew leaves the flat floor',
       pickup_row_off_road: 'a pickup row does not fit on the road there',
       pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',
     });

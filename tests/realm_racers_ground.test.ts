@@ -45,16 +45,17 @@ describe('the ground shape: what a circuit that authors none gets', () => {
     const shape = realmRacersGroundShape(GARDEN);
     expect(shape.authored).toBe(false);
     // The literal numbers, not the constants read back at themselves: the whole
-    // promise of the default is that it is the SAME rectangle the renderer used
-    // to build from `regionHalf*` plus its own overshoot.
-    expect(GARDEN.regionHalfX).toBe(170);
-    expect(GARDEN.regionHalfZ).toBe(140);
+    // promise of the default is that it is the rectangle the renderer builds
+    // from `regionHalf*` plus its own overshoot, and nothing derived from the
+    // shape a later author draws.
+    expect(GARDEN.regionHalfX).toBe(300);
+    expect(GARDEN.regionHalfZ).toBe(150);
     expect(REALM_RACERS_LAWN_OVERSHOOT).toBe(160);
     expect([...shape.outline]).toEqual([
-      { x: -330, z: -300 },
-      { x: 330, z: -300 },
-      { x: 330, z: 300 },
-      { x: -330, z: 300 },
+      { x: -460, z: -310 },
+      { x: 460, z: -310 },
+      { x: 460, z: 310 },
+      { x: -460, z: 310 },
     ]);
   });
 

@@ -49,6 +49,8 @@ export {
 } from './editor_icons';
 export {
   type EnvelopeSuggestion,
+  MAX_PERIMETER_HALF_X,
+  MAX_PERIMETER_HALF_Z,
   suggestEnvelope,
   suggestGroundOutline,
 } from './envelope_core';

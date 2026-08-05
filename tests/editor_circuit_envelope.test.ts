@@ -1,13 +1,24 @@
-// The enclosure suggester: what perimeter wall and collision region fit a road
-// of a given size. It exists so a big circuit can be DRAWN at all, rather than
-// the operator meeting the previous circuit's wall as a complaint.
+// The enclosure suggester: what perimeter WALL fits a road of a given size. It
+// exists so a big circuit can be DRAWN at all, rather than the operator meeting
+// the previous circuit's wall as a complaint.
 //
-// The property that matters is that it never suggests an envelope the readout
-// would then reject: the two ceilings it clamps to are the same ones
-// `realmRacersCircuitMetrics` checks against.
+// The property that matters is that it never suggests a wall the readout would
+// then reject: the ceilings it clamps to are the instance volume's own, less the
+// yard that keeps the wall strictly inside it, and every circuit carries that
+// volume at its ceiling.
+//
+// It stopped proposing the REGION with the wall, and that is the packet-28
+// finding rather than a tidy-up: the gap it used to leave was a constant, so it
+// carried no design decision, and a per-circuit instance volume bought an author
+// nothing but a fifth rectangle to understand.
 
 import { describe, expect, it } from 'vitest';
-import { suggestEnvelope, suggestGroundOutline } from '../src/editor/circuit/envelope_core';
+import {
+  MAX_PERIMETER_HALF_X,
+  MAX_PERIMETER_HALF_Z,
+  suggestEnvelope,
+  suggestGroundOutline,
+} from '../src/editor/circuit/envelope_core';
 import type { RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
@@ -66,13 +77,7 @@ function fitted(id: string, controlPoints: readonly { x: number; z: number }[]) 
   };
   const before = realmRacersCircuitMetrics(drawn);
   const suggestion = suggestEnvelope(before.roadHalfX, before.roadHalfZ, drawn.perimeter);
-  const after: RealmRacersCircuit = {
-    ...drawn,
-    id,
-    perimeter: suggestion.perimeter,
-    regionHalfX: suggestion.regionHalfX,
-    regionHalfZ: suggestion.regionHalfZ,
-  };
+  const after: RealmRacersCircuit = { ...drawn, id, perimeter: suggestion.perimeter };
   return { before, suggestion, after, metrics: realmRacersCircuitMetrics(after) };
 }
 
@@ -88,16 +93,23 @@ describe('circuit editor enclosure', () => {
     expect(metrics.problems.map((p) => p.code)).not.toContain('perimeter_outside_region');
     expect(metrics.problems.map((p) => p.code)).not.toContain('region_outside_band');
     expect(metrics.problems.map((p) => p.code)).not.toContain('region_deeper_than_lane_budget');
-    // ...and the enclosure really did have to grow past the garden's.
+    // ...and the wall really did have to grow past the garden's, on the axis
+    // the big lap is bigger on.
     expect(after.perimeter.halfX).toBeGreaterThan(GARDEN.perimeter.halfX);
-    expect(after.regionHalfX).toBeGreaterThan(GARDEN.regionHalfX);
+    // The instance volume was NOT touched, and could not have been: it is the
+    // ceiling on every circuit, and this fit is about one box.
+    expect(after.regionHalfX).toBe(GARDEN.regionHalfX);
+    expect(after.regionHalfZ).toBe(GARDEN.regionHalfZ);
   });
 
-  it('leaves room for the wall and then for the dressing beyond it', () => {
+  it('leaves room for the road inside the wall, and for the wall inside the volume', () => {
     const { before, after } = fitted('envelope_ordering', BIG_LAP_CONTROL_POINTS);
     expect(after.perimeter.halfX).toBeGreaterThan(before.roadHalfX);
-    expect(after.regionHalfX).toBeGreaterThan(after.perimeter.halfX);
     expect(after.perimeter.halfZ).toBeGreaterThan(before.roadHalfZ);
+    // Strictly inside, both axes, because the wall is the only thing keeping a
+    // pilot on the flat floor: a wall ON the volume's edge is a machine that
+    // leans against it and meets world terrain.
+    expect(after.regionHalfX).toBeGreaterThan(after.perimeter.halfX);
     expect(after.regionHalfZ).toBeGreaterThan(after.perimeter.halfZ);
   });
 
@@ -117,19 +129,37 @@ describe('circuit editor enclosure', () => {
     // an envelope that fits it anyway would be the tool blessing a circuit the
     // sim's own region test rejects.
     const suggestion = suggestEnvelope(2000, 20);
-    expect(suggestion.regionHalfX).toBe(REALM_RACERS_MAX_REGION_HALF_X);
+    expect(suggestion.perimeter.halfX).toBe(MAX_PERIMETER_HALF_X);
     expect(suggestion.clampedBy).toContain('band');
     expect(suggestion.clampedBy).not.toContain('lane');
   });
 
   it('clamps to the lane depth budget on the other axis', () => {
     const suggestion = suggestEnvelope(20, 2000);
-    expect(suggestion.regionHalfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z);
+    expect(suggestion.perimeter.halfZ).toBe(MAX_PERIMETER_HALF_Z);
     expect(suggestion.clampedBy).toContain('lane');
     expect(suggestion.clampedBy).not.toContain('band');
   });
 
-  it('never suggests an envelope its own readout would reject', () => {
+  it('clamps a yard under the volume, not level with it', () => {
+    // The one yard IS the rule `perimeter_outside_region` enforces, so a clamp
+    // landing level with the ceiling would be the repair authoring the error.
+    // Asserted against the volume's own constants rather than against the
+    // exported ceilings, or the check would be the implementation restated.
+    expect(MAX_PERIMETER_HALF_X).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_X);
+    expect(MAX_PERIMETER_HALF_Z).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_Z);
+    const clamped = suggestEnvelope(2000, 2000);
+    const circuit: RealmRacersCircuit = {
+      ...GARDEN,
+      id: 'envelope_clamp_ceiling',
+      perimeter: clamped.perimeter,
+    };
+    expect(
+      realmRacersCircuitMetrics(circuit).problems.map((problem) => problem.code),
+    ).not.toContain('perimeter_outside_region');
+  });
+
+  it('never suggests a wall its own readout would reject', () => {
     for (const [halfX, halfZ] of [
       [40, 30],
       [99, 69],
@@ -137,14 +167,12 @@ describe('circuit editor enclosure', () => {
       [400, 400],
     ]) {
       const suggestion = suggestEnvelope(halfX, halfZ);
-      expect(suggestion.regionHalfX, `x at ${halfX}`).toBeLessThanOrEqual(
-        REALM_RACERS_MAX_REGION_HALF_X,
-      );
-      expect(suggestion.regionHalfZ, `z at ${halfZ}`).toBeLessThanOrEqual(
-        REALM_RACERS_MAX_REGION_HALF_Z,
-      );
-      expect(suggestion.regionHalfX).toBeGreaterThan(suggestion.perimeter.halfX);
-      expect(suggestion.regionHalfZ).toBeGreaterThan(suggestion.perimeter.halfZ);
+      expect(suggestion.perimeter.halfX, `x at ${halfX}`).toBeLessThanOrEqual(MAX_PERIMETER_HALF_X);
+      expect(suggestion.perimeter.halfZ, `z at ${halfZ}`).toBeLessThanOrEqual(MAX_PERIMETER_HALF_Z);
+      // Every circuit carries the volume at its ceiling, so the wall clearing
+      // the exported bound IS the wall clearing the volume it will stand in.
+      expect(REALM_RACERS_MAX_REGION_HALF_X).toBeGreaterThan(suggestion.perimeter.halfX);
+      expect(REALM_RACERS_MAX_REGION_HALF_Z).toBeGreaterThan(suggestion.perimeter.halfZ);
     }
   });
 

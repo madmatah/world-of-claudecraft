@@ -458,6 +458,51 @@ describe('Realm Racers circuit metrics: the ground the road stands on', () => {
     expect(codesOf(clean)).not.toContain('ground_outline_folds');
   });
 
+  it('calls a ground outline that leaves the instance volume an error, per axis', () => {
+    // The rule that says what the region IS. Inside it the ground is flat and
+    // the world's colliders are off; outside it the world resumes, so lawn drawn
+    // out there is lawn over unflattened terrain with the world's rocks still
+    // live under it. The wall normally stops anyone reaching it, which is
+    // exactly why this has to be a readout rule rather than a seat discovery.
+    //
+    // The fixture is a SIX-handle ring, and that is the whole point of it: every
+    // handle sits 11 yards inside the volume's depth (138.56 against 150) and
+    // the smoothed curve bulges nearly 6 yards OUTSIDE it (155.88), because a
+    // centripetal Catmull-Rom leaves its control points on the outside of a
+    // bend. A rule reading the authored handles would bless this shape.
+    const bulging = draft('metrics_ground_volume', ROAD, 10, { groundOutline: ring(160, 6) });
+    const handles = bulging.groundOutline ?? [];
+    expect(Math.max(...handles.map((point) => Math.abs(point.z)))).toBeLessThan(
+      bulging.regionHalfZ,
+    );
+    const problems = realmRacersCircuitMetrics(bulging).problems.filter(
+      (entry) => entry.code === 'ground_outside_region',
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0].severity).toBe('error');
+    expect(problems[0].axis).toBe('z');
+    // The value is how far the LAND actually reaches, against the volume it had
+    // to stay in, so the callout says how much to pull the shore back by.
+    expect(problems[0].limit).toBe(bulging.regionHalfZ);
+    expect(problems[0].value).toBeGreaterThan(bulging.regionHalfZ);
+    expect(problems[0].value).toBeCloseTo(155.88, 1);
+    // The x axis is silent on this one, so the two are reported separately
+    // rather than as one verdict about the shape.
+    expect(Math.max(...handles.map((point) => Math.abs(point.x)))).toBeLessThan(
+      bulging.regionHalfX,
+    );
+
+    // ...and the same ring drawn small enough to stay inside is not reported, so
+    // the check is about leaving the volume rather than about authoring a shape.
+    const inside = draft('metrics_ground_volume_ok', ROAD, 10, { groundOutline: ring(130, 6) });
+    expect(codesOf(inside)).not.toContain('ground_outside_region');
+    // Nor is a circuit that authors nothing: its land is the derived rectangle,
+    // which is the region PLUS an overshoot and would otherwise report itself.
+    expect(codesOf(draft('metrics_ground_volume_none', ROAD, 10))).not.toContain(
+      'ground_outside_region',
+    );
+  });
+
   it('measures the GARDEN EDGE, not the centerline', () => {
     // An outline drawn between the two: it holds every centerline sample and
     // cuts into the run-off either side of it. A centerline test would bless it,

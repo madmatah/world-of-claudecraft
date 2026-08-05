@@ -36,23 +36,19 @@ import { fitStrokeToControlPoints } from './stroke_fit_core';
  */
 const WALL_MARGIN = 20;
 
-/**
- * Dressing ring beyond the wall that the collision region still has to cover,
- * yards. Also the garden's (a 118 yd wall inside a 170 yd region): everything
- * built out there is inside the rally, and a region that stopped at the wall
- * would drop it through to interior collision.
- */
-const DRESSING_MARGIN = 48;
-
-/** Whatever else, the region has to be strictly wider than the wall. */
+/** Whatever else, the region has to be strictly wider than the wall, so the
+ *  ceiling a WALL may reach is one yard under the region's own. */
 const REGION_OVER_PERIMETER = 1;
+
+/** The widest and deepest a wall may be: the instance volume's ceiling, less the
+ *  yard that keeps the wall strictly inside it. */
+export const MAX_PERIMETER_HALF_X = REALM_RACERS_MAX_REGION_HALF_X - REGION_OVER_PERIMETER;
+export const MAX_PERIMETER_HALF_Z = REALM_RACERS_MAX_REGION_HALF_Z - REGION_OVER_PERIMETER;
 
 export interface EnvelopeSuggestion {
   perimeter: RealmRacersPerimeter;
-  regionHalfX: number;
-  regionHalfZ: number;
   /**
-   * Which limit clamped the suggestion, if any. `band` is the x window between
+   * Which ceiling clamped the suggestion, if any. `band` is the x window between
    * the neighbouring instance bands; `lane` is the depth budget between two
    * copies of a circuit. A clamped suggestion may leave the road outside its own
    * wall, which the readout then reports: that is the honest answer, and the fix
@@ -62,9 +58,15 @@ export interface EnvelopeSuggestion {
 }
 
 /**
- * The enclosure for a road of this measured footprint (`roadHalfX` / `roadHalfZ`
- * from the metrics readout: out to the garden edge, both sides, from the
- * circuit's origin).
+ * The WALL for a road of this measured footprint (`roadHalfX` / `roadHalfZ` from
+ * the metrics readout: out to the garden edge, both sides, from the circuit's
+ * origin).
+ *
+ * It used to propose the collision region too, out of a constant margin past the
+ * wall, and that margin is exactly why the region stopped being authored at all:
+ * a number nobody chooses is not a decision, and a second box on the plan cost
+ * an author more than it ever bought. Every circuit carries the region's
+ * ceiling now, so the only box a fit has an opinion about is this one.
  */
 export function suggestEnvelope(
   roadHalfX: number,
@@ -73,14 +75,14 @@ export function suggestEnvelope(
 ): EnvelopeSuggestion {
   const clampedBy: ('band' | 'lane')[] = [];
 
-  let regionHalfX = Math.ceil(roadHalfX + WALL_MARGIN + DRESSING_MARGIN);
-  if (regionHalfX > REALM_RACERS_MAX_REGION_HALF_X) {
-    regionHalfX = REALM_RACERS_MAX_REGION_HALF_X;
+  let halfX = Math.ceil(roadHalfX + WALL_MARGIN);
+  if (halfX > MAX_PERIMETER_HALF_X) {
+    halfX = MAX_PERIMETER_HALF_X;
     clampedBy.push('band');
   }
-  let regionHalfZ = Math.ceil(roadHalfZ + WALL_MARGIN + DRESSING_MARGIN);
-  if (regionHalfZ > REALM_RACERS_MAX_REGION_HALF_Z) {
-    regionHalfZ = REALM_RACERS_MAX_REGION_HALF_Z;
+  let halfZ = Math.ceil(roadHalfZ + WALL_MARGIN);
+  if (halfZ > MAX_PERIMETER_HALF_Z) {
+    halfZ = MAX_PERIMETER_HALF_Z;
     clampedBy.push('lane');
   }
 
@@ -90,11 +92,9 @@ export function suggestEnvelope(
       // authored: those are dressing, and nothing here has an opinion on them.
       halfThickness: existing?.halfThickness ?? 0.4,
       height: existing?.height ?? 2.2,
-      halfX: Math.min(Math.ceil(roadHalfX + WALL_MARGIN), regionHalfX - REGION_OVER_PERIMETER),
-      halfZ: Math.min(Math.ceil(roadHalfZ + WALL_MARGIN), regionHalfZ - REGION_OVER_PERIMETER),
+      halfX,
+      halfZ,
     },
-    regionHalfX,
-    regionHalfZ,
     clampedBy,
   };
 }

@@ -271,13 +271,27 @@ export interface RealmRacersCircuit {
    *  `REALM_RACERS_MIN_HALF_WIDTH`. */
   widthBands: readonly { s: number; halfWidth: number }[];
   /**
-   * Region envelope, half-extents from the circuit's origin. It must cover the
-   * circuit, the drivable garden, the perimeter wall AND the dressing ring
-   * beyond it, because every collision short-circuit in `colliders.ts` keys on
-   * it: anything inside is the rally, anything outside past the dungeon
-   * threshold falls through to interior collision. `regionHalfZ` is also what
-   * bounds the lane spacing, so a deeper circuit must not silently let two
-   * lanes see each other (`tests/realm_racers_layout.test.ts` derives it).
+   * The INSTANCE VOLUME, half-extents from the circuit's origin: where the world
+   * stops being the world. It is not a wall and it stops nobody. It answers
+   * `realmRacersLaneAt`, and that answer is what flattens the ground
+   * (`world.ts` `terrainHeight` returns `DUNGEON_FLOOR_Y` inside it), switches
+   * off the world's colliders and mantling (`colliders.ts`), and picks the sky,
+   * the theme's art and the music. The one thing that STOPS a machine is
+   * `perimeter`, and the rule that the wall stays strictly inside this box is
+   * load-bearing for exactly that reason: the wall is the only thing keeping a
+   * pilot on the flat floor.
+   *
+   * **Every circuit carries the CEILING, and that is not a coincidence to be
+   * preserved by hand.** The gap this used to leave to the wall was a constant
+   * (the editor's dressing margin), so it carried no design decision, and a
+   * per-circuit value bought nothing but a fifth rectangle for an author to
+   * understand. The ceiling is safe by construction rather than by luck:
+   * `REALM_RACERS_MAX_REGION_HALF_Z` IS `(LANE_DZ - LANE_CLEARANCE) / 2`, so two
+   * lanes both at it still keep the designed clear air, and the x ceiling is the
+   * instance band's own window, which nothing else lives in.
+   * `tests/realm_racers_circuits.test.ts` pins both numbers against the
+   * constants; they are literals here only because `realm_racers_layout.ts`
+   * imports this module and importing it back would be a cycle.
    */
   regionHalfX: number;
   regionHalfZ: number;
@@ -448,8 +462,9 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
     { s: 0.95, halfWidth: 10.5 },
     { s: 1.0, halfWidth: 10.5 },
   ],
-  regionHalfX: 170,
-  regionHalfZ: 140,
+  // The ceiling, like every circuit: see the field's own comment.
+  regionHalfX: 300,
+  regionHalfZ: 150,
   perimeter: { halfX: 118, halfZ: 92, halfThickness: 0.4, height: 2.2 },
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4.0 },
   /**
@@ -613,7 +628,8 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
     { s: 0.955, halfWidth: 10 },
     { s: 1, halfWidth: 10 },
   ],
-  regionHalfX: 265,
+  // The ceiling, like every circuit: see the field's own comment.
+  regionHalfX: 300,
   regionHalfZ: 150,
   perimeter: { halfX: 217, halfZ: 124, halfThickness: 0.4, height: 2.2 },
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },

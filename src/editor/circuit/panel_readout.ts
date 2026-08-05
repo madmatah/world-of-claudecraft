@@ -12,12 +12,9 @@
 // computed in this file.
 
 import type { RealmRacersCircuitProblem } from '../../sim/realm_racers_circuit_metrics';
-import {
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-} from '../../sim/realm_racers_layout';
 import { realmRacersPlacements } from '../../sim/realm_racers_props_resolve';
 import { realmRacersGates } from '../../sim/realm_racers_spline';
+import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { problemDetail, problemHeadline } from './layout_core';
 import {
   MAX_LISTED_PROBLEMS,
@@ -129,19 +126,21 @@ export function readoutSection(host: PanelHost, section: ReadoutSection): HTMLEl
     default:
       row(table, 'road half-extent x', `${metrics.roadHalfX.toFixed(0)} yd`);
       row(table, 'road half-extent z', `${metrics.roadHalfZ.toFixed(0)} yd`);
-      // The two ceilings, so a circuit that cannot fit the band says so BEFORE
-      // the operator has drawn a lap around it.
+      // The two ceilings a WALL lives under, so a circuit that cannot fit the
+      // band says so BEFORE the operator has drawn a lap around it. They are the
+      // instance volume's own ceilings less the yard that keeps the wall inside
+      // it, because the volume itself is no longer a number anybody authors.
       row(
         table,
-        'widest region',
-        `${REALM_RACERS_MAX_REGION_HALF_X} yd`,
-        record.regionHalfX > REALM_RACERS_MAX_REGION_HALF_X ? 'bad' : '',
+        'widest wall',
+        `${MAX_PERIMETER_HALF_X} yd`,
+        record.perimeter.halfX > MAX_PERIMETER_HALF_X ? 'bad' : '',
       );
       row(
         table,
-        'deepest region',
-        `${REALM_RACERS_MAX_REGION_HALF_Z} yd`,
-        record.regionHalfZ > REALM_RACERS_MAX_REGION_HALF_Z ? 'bad' : '',
+        'deepest wall',
+        `${MAX_PERIMETER_HALF_Z} yd`,
+        record.perimeter.halfZ > MAX_PERIMETER_HALF_Z ? 'bad' : '',
       );
       break;
   }

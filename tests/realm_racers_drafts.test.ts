@@ -262,9 +262,12 @@ describe('refusing a drawing the game cannot drive', () => {
   });
 
   it('names WHICH axis failed, so the operator knows which box to widen', () => {
-    // Both arms of a two-axis check: a wall wider than its region on x AND on z.
+    // Both arms of a two-axis check: a wall wider than its instance volume on x
+    // AND on z. The numbers are past the volume's CEILING on each axis, which is
+    // what every circuit carries: a wall that clears one axis and not the other
+    // would exercise one arm and read as exercising both.
     const boxed = draft('draft_boxed', {
-      perimeter: { ...GARDEN.perimeter, halfX: 200, halfZ: 200 },
+      perimeter: { ...GARDEN.perimeter, halfX: 320, halfZ: 160 },
     });
     const registration = realmRacersRegisterDraftCircuit(devCtx(), boxed);
     const perimeterProblems = registration.problems.filter((problem) =>

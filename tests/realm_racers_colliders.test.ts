@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePosition } from '../src/sim/colliders';
 import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
-import { DUNGEON_OVERFLOW_X_BASE, YUMI_BAND_X_MAX } from '../src/sim/data';
+import {
+  DUNGEON_OVERFLOW_X_BASE,
+  isYumiMazePos,
+  YUMI_BAND_X_MAX,
+  YUMI_MAZE_X,
+} from '../src/sim/data';
 import { realmRacersColliders } from '../src/sim/realm_racers_colliders';
 import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
@@ -106,7 +111,18 @@ describe('Realm Racers boundaries', () => {
   });
 
   it('keeps the region envelope strictly inside its reserved instance band', () => {
-    expect(REALM_RACERS_ORIGIN.x - GARDEN_CIRCUIT.regionHalfX).toBeGreaterThan(YUMI_BAND_X_MAX);
+    // The volume FILLS its reserved window on the west side exactly, and has
+    // since packet 28 put every circuit's instance volume at its ceiling: the
+    // ceiling IS the distance from the origin to the band's own west edge, and
+    // that edge IS `YUMI_BAND_X_MAX`. Touching it is exact rather than tight,
+    // and the two lines below are why, both checked rather than asserted in
+    // prose: the neighbouring band's membership test is half-open, so no yard
+    // is ever claimed by both, and the maze CONTENT sits thousands of yards
+    // further west than the edge of the window reserved around it.
+    const westEdge = REALM_RACERS_ORIGIN.x - GARDEN_CIRCUIT.regionHalfX;
+    expect(westEdge).toBeGreaterThanOrEqual(YUMI_BAND_X_MAX);
+    expect(isYumiMazePos(westEdge)).toBe(false);
+    expect(YUMI_MAZE_X).toBeLessThan(westEdge - 1000);
     expect(REALM_RACERS_ORIGIN.x + GARDEN_CIRCUIT.regionHalfX).toBeLessThan(
       DUNGEON_OVERFLOW_X_BASE - 300,
     );

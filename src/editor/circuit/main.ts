@@ -37,7 +37,12 @@ import {
 } from '../../sim/realm_racers_circuit_metrics';
 import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
 import { realmRacersGroundShape } from '../../sim/realm_racers_ground';
-import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
+import {
+  type RallyPoint,
+  REALM_RACERS_MAX_REGION_HALF_X,
+  REALM_RACERS_MAX_REGION_HALF_Z,
+  REALM_RACERS_ORIGIN,
+} from '../../sim/realm_racers_layout';
 import {
   REALM_RACERS_PICKUP_BOX_HALF,
   realmRacersPickupBoxes,
@@ -1704,27 +1709,36 @@ function finishGroundStroke(): void {
 function startGroundGesture(raw: RallyPoint): boolean {
   const outline = record.groundOutline;
   if (!outline || outline.length === 0) return false;
-  const hit = hitTestControlPoint(outline, raw.x, raw.z, HIT_TOLERANCE_PIXELS.handle / view.scale);
-  if (hit >= 0) {
-    groundPoint = hit;
+  // Which of the two it was is `ground_core.ts`'s call, not the page's. It was
+  // decided twice until packet 28: the core carried the order a test could
+  // reach, and this function carried a second copy of it that is what actually
+  // ran, which is the one arrangement where a green test proves nothing.
+  const hit = groundHitAt(
+    outline,
+    raw.x,
+    raw.z,
+    HIT_TOLERANCE_PIXELS.handle / view.scale,
+    HIT_TOLERANCE_PIXELS.segment / view.scale,
+  );
+  if (!hit) return false;
+  if (hit.kind === 'handle') {
+    groundPoint = hit.index;
     groundDragging = true;
     // The undo snapshot is taken at the PRESS, so the drag that follows is one
     // step back rather than one per pointermove.
     pushUndo();
     fenceSelection = null;
     fencePoint = null;
-    setStatus(`ground handle ${hit + 1}: drag to move it, del removes it`, '');
+    setStatus(`ground handle ${hit.index + 1}: drag to move it, del removes it`, '');
     applySideTab();
     requestRedraw();
     return true;
   }
-  const segment = nearestSegment(outline, raw.x, raw.z);
-  if (segment.distance > HIT_TOLERANCE_PIXELS.segment / view.scale) return false;
   commit({
     ...record,
-    groundOutline: insertControlPoint(outline, segment.index, authored(raw)),
+    groundOutline: insertControlPoint(outline, hit.index, authored(hit.at)),
   });
-  groundPoint = segment.index + 1;
+  groundPoint = hit.index + 1;
   groundDragging = true;
   fenceSelection = null;
   fencePoint = null;
@@ -2271,19 +2285,26 @@ function deleteDressing(): void {
 
 // ---- the two repairs ----
 
-/** Sizes the wall and the region to the road, clamped to the band and the lane
- *  depth budget. What makes a big circuit drawable at all: the enclosure follows
- *  the drawing rather than the drawing being trapped inside the enclosure. */
+/**
+ * Sizes the WALL to the road, clamped to the band and the lane depth budget.
+ * What makes a big circuit drawable at all: the wall follows the drawing rather
+ * than the drawing being trapped inside the wall.
+ *
+ * It writes the instance volume too, and that is normalization rather than a
+ * second decision: the region has exactly one legal value now (the ceiling), so
+ * this is what brings a draft authored before that rule up to it. Nothing here
+ * chooses the number, which is why the status line talks about the wall.
+ */
 function fitEnclosure(): void {
   const suggestion = suggestEnvelope(metrics.roadHalfX, metrics.roadHalfZ, record.perimeter);
   commit({
     ...record,
     perimeter: suggestion.perimeter,
-    regionHalfX: suggestion.regionHalfX,
-    regionHalfZ: suggestion.regionHalfZ,
+    regionHalfX: REALM_RACERS_MAX_REGION_HALF_X,
+    regionHalfZ: REALM_RACERS_MAX_REGION_HALF_Z,
   });
   form.sync();
-  const fitted = `wall ${suggestion.perimeter.halfX} x ${suggestion.perimeter.halfZ}, region ${suggestion.regionHalfX} x ${suggestion.regionHalfZ}`;
+  const fitted = `wall ${suggestion.perimeter.halfX} x ${suggestion.perimeter.halfZ}`;
   // Whether a clamp MATTERED is not whether it happened: a clamp that only ate
   // into the dressing margin leaves a perfectly drivable circuit, and saying
   // "the circuit has to shrink" there would send the operator redrawing a

@@ -261,6 +261,24 @@ export type RealmRacersCircuitProblemCode =
    */
   | 'ground_outline_folds'
   /**
+   * The authored ground outline leaves the instance volume.
+   *
+   * An ERROR, and the one rule that says what the region IS: inside it the
+   * ground is flat (`world.ts` returns the interior floor) and the world's own
+   * colliders are switched off; outside it the world resumes. So an outline
+   * drawn past the region is lawn drawn over unflattened world terrain, with the
+   * world's rocks and slopes still live under it, and a machine that reached it
+   * would meet a floor nobody authored. The wall normally stops anyone getting
+   * there, which is exactly why this has to be a readout rule and not a thing
+   * the seat discovers.
+   *
+   * Measured on the SAMPLED curve rather than on the authored handles, because
+   * the curve is the shape: a centripetal Catmull-Rom bulges past its control
+   * points on the outside of a bend, so a ring of handles all inside the box can
+   * still draw a shore outside it. One problem per axis, like the fence rule.
+   */
+  | 'ground_outside_region'
+  /**
    * A pickup row does not fit on the ROAD where it stands: one of its boxes
    * reaches past the road edge.
    *
@@ -730,6 +748,23 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     // (1, 0), the shape every count-against-a-ceiling-of-zero problem here
     // uses: one of these, and none is allowed.
     problem('ground_outline_folds', 'error', 1, 0);
+  }
+  if (ground.authored) {
+    // The worst reach on each axis, the shape the fence rule already uses: an
+    // outline is one object, so two callouts (one per axis) is what an author
+    // can act on, where one per stray vertex would be a wall of them.
+    let worstX = 0;
+    let worstZ = 0;
+    for (const point of ground.outline) {
+      worstX = Math.max(worstX, Math.abs(point.x));
+      worstZ = Math.max(worstZ, Math.abs(point.z));
+    }
+    if (worstX > circuit.regionHalfX) {
+      problem('ground_outside_region', 'error', worstX, circuit.regionHalfX, -1, 'x');
+    }
+    if (worstZ > circuit.regionHalfZ) {
+      problem('ground_outside_region', 'error', worstZ, circuit.regionHalfZ, -1, 'z');
+    }
   }
   if (ground.authored) {
     const offGround = (index: number): boolean => {

@@ -12,10 +12,7 @@ import {
   type RealmRacersCircuit,
   type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
-import {
-  REALM_RACERS_MAX_REGION_HALF_X,
-  REALM_RACERS_MAX_REGION_HALF_Z,
-} from '../../sim/realm_racers_layout';
+import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { validateCircuitPayload } from './export_core';
 import { fieldRow, heading, numberOr, type PanelHost } from './panels';
 
@@ -327,6 +324,7 @@ export class RecordFormPanel {
         ...record(),
         perimeter: { ...record().perimeter, halfX: numberOr(raw, record().perimeter.halfX) },
       }),
+      { max: String(MAX_PERIMETER_HALF_X) },
     );
     this.field(
       box,
@@ -336,20 +334,7 @@ export class RecordFormPanel {
         ...record(),
         perimeter: { ...record().perimeter, halfZ: numberOr(raw, record().perimeter.halfZ) },
       }),
-    );
-    this.field(
-      box,
-      'region half x',
-      () => String(record().regionHalfX),
-      (raw) => ({ ...record(), regionHalfX: numberOr(raw, record().regionHalfX) }),
-      { max: String(REALM_RACERS_MAX_REGION_HALF_X) },
-    );
-    this.field(
-      box,
-      'region half z',
-      () => String(record().regionHalfZ),
-      (raw) => ({ ...record(), regionHalfZ: numberOr(raw, record().regionHalfZ) }),
-      { max: String(REALM_RACERS_MAX_REGION_HALF_Z) },
+      { max: String(MAX_PERIMETER_HALF_Z) },
     );
     this.el.append(box);
   }
