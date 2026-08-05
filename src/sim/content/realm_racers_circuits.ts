@@ -33,8 +33,32 @@ export type RealmRacersCircuitRole = 'practice' | 'competition';
  * ids resolve to live in `src/render/realm_racers_themes.ts`, and
  * `tests/realm_racers_themes.test.ts` pins the two against each other BOTH
  * ways, so an id here with no record (or a record with no id) fails.
+ *
+ * ONE ID PER WORLD-MAP ZONE, in the order `data.ts` lists the zones: a circuit
+ * drawn anywhere wears the art of the realm it is meant to be in, and adding a
+ * realm's circuit is adding a `theme:` string to its record rather than a
+ * render change. The ids are the ZONE ids with their articles dropped
+ * (`veiled_hollow` for `veiled_hollow`, `eastbrook` for `eastbrook_vale`,
+ * `mirefen` for `mirefen_marsh`, `thornpeak` for `thornpeak_heights`,
+ * `farshore` for `farshore_isle`); `tests/realm_racers_themes.test.ts` pins the
+ * mapping against the zone table so a fifteenth realm cannot ship without one.
  */
-export const REALM_RACERS_THEME_IDS: readonly string[] = ['evergarden', 'galecrest', 'nightbloom'];
+export const REALM_RACERS_THEME_IDS: readonly string[] = [
+  'eastbrook',
+  'mirefen',
+  'thornpeak',
+  'veiled_hollow',
+  'drakelands',
+  'frostveil',
+  'amberfall',
+  'willowfen',
+  'nightbloom',
+  'wraithwood',
+  'palmreach',
+  'evergarden',
+  'galecrest',
+  'farshore',
+];
 
 /** The theme a circuit wears unless it says otherwise, and what a bad id falls
  *  back to at draw time. */

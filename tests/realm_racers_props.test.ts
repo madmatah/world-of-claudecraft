@@ -166,11 +166,15 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     // circuit cannot draw late) ride the lane.
     const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
     const themeKit = new Set(REALM_RACERS_THEME_ASSET_URLS);
-    // The lane is the theme kits and nothing else. Stated as an equality rather
-    // than as "no dressing url is in it", because a handful of models are BOTH
-    // (the garden's iron fence is the Evergarden's perimeter and an authorable
-    // piece), and the rule is about which door put a url in the lane.
-    expect([...lane].sort()).toEqual([...themeKit].sort());
+    // The lane is theme-kit urls and nothing else. Stated as a subset rather
+    // than an equality, because the lane is now scoped to the kits a SHIPPED
+    // circuit wears (`tests/realm_racers_themes.test.ts` owns that half, and
+    // pins the unworn ones OUT); what this case owns is the other direction,
+    // that no DRESSING url got in. A subset rather than "no dressing url is in
+    // it" because a handful of models are BOTH (the garden's iron fence is the
+    // Evergarden's perimeter and an authorable piece), and the rule is about
+    // which door put a url in the lane.
+    expect([...lane].filter((url) => !themeKit.has(url))).toEqual([]);
     expect(lane.size).toBeLessThan(20);
 
     const dressingOnly = REALM_RACERS_PROP_URLS.filter((url) => !themeKit.has(url));
@@ -180,10 +184,10 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     }
 
     // Hand-pinned, both ways, so neither half can quietly become the other: two
-    // theme kit pieces that must stay in the lane, and two dressing models that
-    // must stay out of it.
+    // pieces of the raced circuit's own kit that must stay in the lane, and two
+    // dressing models that must stay out of it.
     expect(lane.has('/models/props/course_arch.glb')).toBe(true);
-    expect(lane.has('/models/dungeon/banner_patterna_blue.glb')).toBe(true);
+    expect(lane.has('/models/dungeon/banner_patterna_white.glb')).toBe(true);
     expect(lane.has('/models/biome/kcas_bench.glb')).toBe(false);
     expect(lane.has('/models/props/well.glb')).toBe(false);
   });
@@ -232,12 +236,12 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
       'no hand-written model url in the visuals table',
     ).toBeNull();
 
-    // Not vacuous, and the counter-example is a real one: the themes' start
-    // banner is a shipped, manifested model the rally itself preloads through
-    // the THEME lane, and it is still not something the world loads for every
-    // player. A catalog key pointing at it would be exactly the overhead this
-    // guard exists to refuse.
-    expect(alreadyLoaded('/models/dungeon/banner_patterna_blue.glb')).toBe(false);
+    // Not vacuous, and the counter-example is a real one: the raced circuit's
+    // start banner is a shipped, manifested model the rally itself preloads
+    // through the THEME lane, and it is still not something the world loads for
+    // every player. A catalog key pointing at it would be exactly the overhead
+    // this guard exists to refuse.
+    expect(alreadyLoaded('/models/dungeon/banner_patterna_white.glb')).toBe(false);
 
     // The grandfather arm is carrying nothing, which is the strongest form of
     // the promise: every url the catalog shipped with before the promotion

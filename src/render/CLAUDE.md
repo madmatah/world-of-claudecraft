@@ -29,7 +29,14 @@ Everything else is a sibling module in one of these families:
   colours) and the kits of the pieces a record cannot place by hand (the
   perimeter wall, the start arch); SCENERY is authored, and a theme only names
   the vocabulary the editor should offer for its zone. A theme is VISUALS ONLY,
-  never a handling or track-limits knob. Rift
+  never a handling or track-limits knob. There is now one record per world-map
+  ZONE, which is what makes the boot lane scoped rather than complete: only the
+  kits a SHIPPED circuit wears are preloaded (`REALM_RACERS_THEME_BOOT_URLS`,
+  against the whole-registry `REALM_RACERS_THEME_ASSET_URLS` the manifest guard
+  walks), because the rally lane's map never clears and fourteen kits would pin
+  parsed scenes all session for a player who may never race. A theme written a
+  zone ahead of its circuit reaches the draw path through `instanceModel`'s
+  fetch-and-fill arm. Rift
   portals: `door_portal.ts` also builds the bespoke world-rift gate GLB with
   its rank-tinted energy membrane (`buildRiftGateBody`), and `rift_rank.ts` is
   the floating C/B/A/S rank badge above a world rift portal.

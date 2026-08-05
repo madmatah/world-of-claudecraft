@@ -310,7 +310,7 @@ import {
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
-import { realmRacersThemeAt } from './realm_racers_themes';
+import { type RallySkyKey, rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
 import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
 import {
   isOutsideRealmRacersDrawRange,
@@ -1698,7 +1698,7 @@ export class Renderer {
   // per bout, camera-centred, only shown while the local player is practicing).
   private valeCupSky = new ValeCupPracticeSky();
   /** Which circuit sky has already been fetched this session, if any. */
-  private realmRacersSkyReady: BiomeId | null = null;
+  private realmRacersSkyReady: RallySkyKey | null = null;
   private valeCupTeamRings: ValeCupTeamRingsView;
   private realmRacersTrack: RealmRacersTracksView;
   private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
@@ -3015,7 +3015,7 @@ export class Renderer {
     };
   }
 
-  private ensureEnvironmentBiome(biome: BiomeId): THREE.WebGLRenderTarget | null {
+  private ensureEnvironmentBiome(biome: SkyKey): THREE.WebGLRenderTarget | null {
     if (this.lowGfx) return null;
     const existing = this.envRTs.get(biome);
     if (existing) return existing;
@@ -7754,7 +7754,7 @@ export class Renderer {
    * its PMREM), and remembered here as well so a per-frame call is one map
    * lookup once the sky is up.
    */
-  private ensureRealmRacersSky(biome: BiomeId): void {
+  private ensureRealmRacersSky(biome: RallySkyKey): void {
     if (this.realmRacersSkyReady === biome) return;
     this.realmRacersSkyReady = biome;
     void ensureSkyBiomeAssets([biome])
@@ -7803,7 +7803,13 @@ export class Renderer {
     // jungle, night, amber, ember), so a practice lap was lit by a different
     // sky than the race it practises for.
     const rallyTheme = inRally ? realmRacersThemeAt(this.sim.player.pos.x, pz) : null;
-    const biome = rallyTheme ? rallyTheme.sky.biome : zoneBiomeAt(this.sim.player.pos.x, pz);
+    // The DOME and the day/night GRADE are two questions, and the Farshore is
+    // where they stop having one answer: its sky is place-keyed rather than
+    // biome-keyed, so the grade tables (which are keyed by biome) take the
+    // realm under that dome instead.
+    const biome = rallyTheme
+      ? rallySkyDayNightBiome(rallyTheme.sky.biome)
+      : zoneBiomeAt(this.sim.player.pos.x, pz);
     if (rallyTheme) this.ensureRealmRacersSky(rallyTheme.sky.biome);
     const phaseOverride = dayNightPhaseOverride();
     if (this.lowGfx && DAY_ONLY && phaseOverride === null) {

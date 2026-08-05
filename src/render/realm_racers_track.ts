@@ -56,7 +56,7 @@ import { REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import { buildRealmRacersSlicks } from './realm_racers_slicks';
 import {
   type RallyCircuitTheme,
-  REALM_RACERS_THEME_ASSET_URLS,
+  REALM_RACERS_THEME_BOOT_URLS,
   realmRacersTheme,
 } from './realm_racers_themes';
 import {
@@ -115,12 +115,19 @@ function preload(url: string): void {
   );
 }
 
-// EVERY theme's own kit rides the boot lane, whether or not a shipped circuit
-// wears that theme today: the perimeter wall, the start arch and the grid
-// banner are structure rather than dressing, and a circuit that drew them a
-// second late would be a circuit whose start line appeared after the lights.
-// Small and fixed (a handful of urls), and `tests/realm_racers_themes.test.ts`
-// pins that a theme's kit is in it.
+// The kit of every theme a SHIPPED circuit wears rides the boot lane: the
+// perimeter wall, the start arch and the grid banner are structure rather than
+// dressing, and a circuit that drew them a second late would be a circuit whose
+// start line appeared after the lights.
+//
+// It used to be every theme's kit, worn or not. That stopped being tenable at
+// one theme per world zone: fourteen kits is about forty parsed scenes pinned
+// on the never-clearing map below, for the whole session, for a player who may
+// never race at all, which is the same retention the dressing catalog is kept
+// out of this lane to avoid. `REALM_RACERS_THEME_BOOT_URLS` decides the scope;
+// an unworn theme's wall takes `instanceModel`'s fetch-and-fill arm instead,
+// which is what the dev preview and `/dev rallydraft` already rely on for every
+// piece of dressing.
 //
 // THE DRESSING CATALOG IS DELIBERATELY NOT HERE, and that is the resident half
 // of the catalog's zero-overhead promise. This map never clears, so every url
@@ -132,7 +139,7 @@ function preload(url: string): void {
 // here bought nothing but retention. `instanceModel` fetches a dressing model
 // when a circuit is actually built instead, so what stays resident is what an
 // authored circuit places rather than what the catalog could offer.
-const ASSET_URLS = [...new Set(REALM_RACERS_THEME_ASSET_URLS)];
+const ASSET_URLS = [...new Set(REALM_RACERS_THEME_BOOT_URLS)];
 for (const url of ASSET_URLS) preload(url);
 
 /** Test-only window onto the boot-lane asset set (see
@@ -178,7 +185,17 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
         loaded.set(url, gltf.scene);
         drawInstances(group, gltf.scene, spots);
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        // Named rather than swallowed, and that changed with the boot lane's
+        // scoping: this arm used to carry only optional DRESSING, where a
+        // missing piece is a thinner lawn. It now also carries the perimeter
+        // wall, the start arch and the grid banner of any theme no shipped
+        // circuit wears, which is exactly what the editor preview and
+        // `/dev rallydraft` exist to look at. Silent there means a circuit
+        // drawn with no wall and no start gate and no reason given.
+        // Dev-channel English, per the render i18n carve-out.
+        console.warn('Realm Racers: circuit model failed to load', url, err);
+      });
     return;
   }
   drawInstances(group, scene, spots);

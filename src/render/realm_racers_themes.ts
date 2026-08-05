@@ -21,12 +21,39 @@
 // code; `tests/realm_racers_themes.test.ts` pins the whole contract.
 
 import {
+  REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_DEFAULT_THEME_ID,
   type RealmRacersCircuit,
 } from '../sim/content/realm_racers_circuits';
 import { realmRacersLaneAt } from '../sim/realm_racers_layout';
 import type { BiomeId } from '../sim/types';
 import type { FlowerKind } from './textures';
+
+/**
+ * Which dome a theme flies.
+ *
+ * A `BiomeId` for thirteen of the fourteen realms, because a realm's sky IS its
+ * biome's. The Farshore is the exception the world already carries: its isle
+ * flies a PLACE-keyed dome (`sky.ts` overrides the biome pick inside the isle's
+ * rect), so the only honest answer for a Farshore circuit is that same key, and
+ * the biome under it (`vale`) is a different question.
+ *
+ * Deliberately narrower than `sky.ts`'s own `SkyKey`, which also carries the
+ * Vale Cup's practice sky: a circuit may never fly the boarball dome, and a
+ * union that could say so would be a knob nobody wants. It is a SUBSET of
+ * `SkyKey`, so every consumer over there takes it unchanged.
+ */
+export type RallySkyKey = BiomeId | 'farshore';
+
+/**
+ * The realm whose day/night grade a theme's sky borrows.
+ *
+ * Only the place-keyed dome needs an answer at all: the grade tables are keyed
+ * by biome, and the Farshore isle's own biome is the vale it sits in.
+ */
+export function rallySkyDayNightBiome(key: RallySkyKey): BiomeId {
+  return key === 'farshore' ? 'vale' : key;
+}
 
 /** The red/white stripe pair the kerb texture is drawn from. */
 export interface RallyThemeKerb {
@@ -122,7 +149,7 @@ export interface RallyCircuitTheme {
    * that genuinely wants another one changes it out loud rather than through
    * its art. `tests/realm_racers_themes.test.ts` holds every theme to it.
    */
-  sky: { biome: BiomeId; fog: { color: number; near: number; far: number } };
+  sky: { biome: RallySkyKey; fog: { color: number; near: number; far: number } };
 }
 
 const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
@@ -131,6 +158,9 @@ const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
  *  Highwatch show-jumping start gate, so a rally start line inherits a fixture
  *  the world has established rather than inventing one. */
 const COURSE_ARCH_URL = '/models/props/course_arch.glb';
+/** Reeds are reeds: every theme plants the same rim, by design, and the suite
+ *  holds the exemption open so it stays auditable rather than accidental. */
+const REEDS_URL = '/models/props/reeds.glb';
 
 /**
  * The Evergarden: the theme both shipped circuits wear, and the one every
@@ -165,7 +195,7 @@ const EVERGARDEN: RallyCircuitTheme = {
       0xf3a973, // apricot
     ],
   },
-  reedUrl: '/models/props/reeds.glb',
+  reedUrl: REEDS_URL,
   // The garden's own vocabulary: stonework, ironwork, beds and specimen trees.
   props: [
     'oak',
@@ -203,9 +233,14 @@ const EVERGARDEN: RallyCircuitTheme = {
     'hexWall',
   ],
   sky: {
-    // The public lane's own answer today, so the circuit everyone races on is
-    // lit exactly as it shipped and only the private practice copies change.
-    biome: 'vale',
+    // The Evergarden's OWN dome (`/env/evergarden_day_2k.hdr`), which is what a
+    // circuit wearing this zone's art should always have flown. It used to name
+    // `vale` instead, to keep the shipped circuit lit byte for byte as it was
+    // the day the theme seam was extracted; that was conservatism rather than a
+    // design call, and it stopped being tenable when the vale became Eastbrook's
+    // own theme. The fog under it is unchanged, so the dominant haze a pilot
+    // reads has not moved.
+    biome: 'garden',
     fog: { color: 0xa7c995, near: 85, far: 430 },
   },
 };
@@ -256,7 +291,7 @@ const GALECREST: RallyCircuitTheme = {
       0xa8c4d8, // harbour blue
     ],
   },
-  reedUrl: '/models/props/reeds.glb',
+  reedUrl: REEDS_URL,
   // A working coast: the harbour's own furniture, the golden horse, and the
   // planting that survives salt wind.
   props: [
@@ -354,7 +389,7 @@ const NIGHTBLOOM: RallyCircuitTheme = {
       0xa0ffd8, // witch green
     ],
   },
-  reedUrl: '/models/props/reeds.glb',
+  reedUrl: REEDS_URL,
   // Still water under a violet sky: dark to nearly black at depth, with a cold
   // moonlit shallow.
   // The dream wood's own growth, plus the little civic furniture a night
@@ -398,10 +433,839 @@ const NIGHTBLOOM: RallyCircuitTheme = {
   },
 };
 
+/**
+ * The Veiled Hollow: pink-and-violet dusk under the Hollow's own ruin masonry.
+ *
+ * The zone's landmark set is the reason this record is short: `realm.ts` seats
+ * the pixie village, the crystal mound, the fallen star and the stags' shrine
+ * itself, so the vocabulary is the Hollow's own furniture rather than a
+ * borrowed one. The four GLOWING kinds are deliberately absent: the Nightbloom
+ * owns those, and a Hollow circuit lit by them would read as the dream wood.
+ */
+const VEILED_HOLLOW: RallyCircuitTheme = {
+  ground: 'dusk',
+  // Pale violet stone against heather: the kerb reads by hue here, not by the
+  // garden's red, which would sit dead against a mauve meadow.
+  kerb: { base: 0xece4f2, stripe: 0x7a4a86 },
+  startGrid: { light: 0xece4f2, dark: 0x2a2038 },
+  perimeter: {
+    // The dungeon kit's ruin masonry, the same stone the zone's broken walls
+    // are built from, with its own matching pier at the corners. Both measured
+    // at 4 yards long and 4 tall, so the run needs no scale at all.
+    fenceUrl: '/models/dungeon/wall.glb',
+    pillarUrl: '/models/dungeon/pillar.glb',
+    panelYards: 4,
+    scale: 1,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    // Pattern B in moon white: the pale cloth a violet dusk carries, in a
+    // different cut from the Evergarden's pattern A so no two grids read alike.
+    bannerUrl: '/models/dungeon/banner_patternb_white.glb',
+  },
+  flowers: {
+    // The Hollow's own card, copied byte for byte from `FLOWER_PALETTES.dusk`
+    // in `foliage.ts`: pinks, purples and whites.
+    card: [
+      { p: [238, 150, 190], c: [180, 90, 40] },
+      { p: [190, 150, 235], c: [240, 220, 120] },
+      { p: [246, 242, 250], c: [244, 200, 70] },
+    ],
+    // DUSK_BLOOM_TINTS, the palette the zone's own flowering bushes take.
+    colours: [0x9e94ba, 0xd88fb0, 0xe8d8a0, 0x8fb8d8, 0xc88fd8],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'pixieMushroomHouse',
+    'crystalMoundCave',
+    'starHeartCrystal',
+    'stagShrine',
+    'kkWall',
+    'kkPillar',
+    'kmedHomeA',
+    'kmedHomeB',
+    'kmedTavern',
+    'kmedChurch',
+    'mushroomRed',
+    'mushroomTan',
+    'shrub',
+    'oak',
+    'postLantern',
+    'bench',
+    'statueBlock',
+    'reeds',
+  ],
+  water: { shallow: 0x5a7fb8, deep: 0x1d1c3a },
+  sky: {
+    biome: 'dusk',
+    fog: { color: 0x9c86bc, near: 85, far: 430 },
+  },
+};
+
+/**
+ * Thornpeak Heights: bare mountain stone, and the one theme whose vocabulary
+ * is already a racing fixture.
+ *
+ * Highwatch runs the world's show-jumping course, so the vertical and the oxer
+ * are the zone's OWN furniture and read instantly as a circuit rather than as
+ * scenery that happens to be there. The rest is what a quarry road carries:
+ * ore, boulders, cut timber and crates.
+ */
+const THORNPEAK: RallyCircuitTheme = {
+  ground: 'peaks',
+  // Snow-bleached stone and slate: cold where the garden's pair is warm.
+  kerb: { base: 0xdfe4e2, stripe: 0x4f6b78 },
+  startGrid: { light: 0xe6eae8, dark: 0x24302f },
+  perimeter: {
+    // The world's mountain masonry, a 2 yard module drawn at 1.8 for a 3.6
+    // yard run and the same 3.6 in height. The corner takes the same piece
+    // rather than the kit's 4 yard pier, which would stand half again as tall
+    // as the wall it caps.
+    fenceUrl: '/models/biome/dungeon_wall_stone.glb',
+    pillarUrl: '/models/biome/dungeon_wall_stone.glb',
+    panelYards: 3.6,
+    scale: 1.8,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    // Highland leather brown, the one warm colour on a grey mountain.
+    bannerUrl: '/models/dungeon/banner_patterna_brown.glb',
+  },
+  flowers: {
+    // AUTHORED: the peaks have no zone card of their own. Alpine planting,
+    // which is small, pale and blue: snow saxifrage, gentian, moss campion.
+    card: [
+      { p: [236, 240, 248], c: [240, 206, 96] },
+      { p: [124, 152, 214], c: [232, 238, 250] },
+      { p: [228, 158, 182], c: [176, 96, 120] },
+    ],
+    colours: [
+      0xe8eef4, // snow white
+      0x7f9ad2, // gentian blue
+      0xdca8bc, // moss campion
+      0xc8cfae, // lichen
+      0xe0c878, // alpine gold
+    ],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'jumpVertical',
+    'jumpOxer',
+    'courseArch',
+    'oreRocks',
+    'rockTallA',
+    'rockTallH',
+    'rockLargeD',
+    'rockLargeF',
+    'kcasRocks',
+    'crateWooden',
+    'hexLumber',
+    'hexWheelbarrow',
+    'column',
+    'columnBroken',
+    'statueBlock',
+    'bonfire',
+    'oak',
+    'shrub',
+  ],
+  water: { shallow: 0x6fa8b4, deep: 0x163040 },
+  sky: {
+    biome: 'peaks',
+    fog: { color: 0xb6c2c4, near: 85, far: 430 },
+  },
+};
+
+/**
+ * The Drakelands: scorched basalt under an ember storm, walled by a battlement.
+ *
+ * The one theme with no grass at all, and not by omission:
+ * `GRASS_BIOME_DENSITY.ember` is zero because the Drakelands are cinders, so
+ * the circuit's lawn is bare ash and every blade of green a pilot sees out
+ * there would be a lie about the zone.
+ */
+const DRAKELANDS: RallyCircuitTheme = {
+  ground: 'ember',
+  // Basalt under molten orange: the darkest kerb base in the registry, because
+  // a bone-pale block on black ash reads as a hole rather than an edge.
+  kerb: { base: 0x2e2622, stripe: 0xe06030 },
+  startGrid: { light: 0xefe0cc, dark: 0x1c1512 },
+  perimeter: {
+    // The castle kit's BATTLEMENT rather than its curtain wall: 1.1 yards tall
+    // at scale 1, so at 1.5 it stands 1.65, a crenellated parapet a pilot sees
+    // over instead of a four yard wall that would box the circuit in.
+    //
+    // The corner takes the same piece, NOT the kit's own `kcas_barrier_corner`,
+    // and that is a measurement rather than a preference: that module is an L,
+    // with arms reaching to -2.00 on its local x and +2.00 on its local z. The
+    // builder seats a corner centred on the corner point under the OUTGOING
+    // edge's yaw, which is the one thing an L cannot take: one arm would stand
+    // outside the perimeter while the wall leaving the corner went uncapped. It
+    // also stands 1.40 against the parapet's 1.10, the same quarter-again
+    // mismatch the Thornpeak record rejects its own kit's pier for.
+    fenceUrl: '/models/biome/kcas_barrier.glb',
+    pillarUrl: '/models/biome/kcas_barrier.glb',
+    panelYards: 6,
+    scale: 1.5,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    // Drakelands red, the colourway the zone's own hexr town flies.
+    bannerUrl: '/models/dungeon/banner_patterna_red.glb',
+  },
+  flowers: {
+    // The zone's own card, copied byte for byte from `FLOWER_PALETTES.ember`:
+    // firebloom reds and oranges, which is what the meadows round Wyrmwatch
+    // read as at a distance.
+    card: [
+      { p: [244, 70, 48], c: [130, 28, 16] },
+      { p: [250, 142, 46], c: [150, 72, 20] },
+      { p: [238, 96, 60], c: [125, 40, 22] },
+    ],
+    // AUTHORED off that card: the Drakelands have no bloom-tint table of their
+    // own, so the border takes the card's own three hues plus a sulphur gold.
+    colours: [0xf44630, 0xfa8e2e, 0xee603c, 0xd8b04a],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'kcasRubbleLarge',
+    'kcasRubbleHalf',
+    'kcasRocks',
+    'kcasTorchMounted',
+    'kcasColumn',
+    'kcasWall',
+    'kcasWallBroken',
+    'kcasWallCracked',
+    'kcasBarrier',
+    'kcasFoundation',
+    'kcasShrine',
+    'hexFlagRed',
+    'hexrCastle',
+    'hexrTownhall',
+    'hexrBarracks',
+    'hexrTent',
+    'hexrWatchtower',
+    'oreRocks',
+  ],
+  sky: {
+    biome: 'ember',
+    fog: { color: 0xc07a4a, near: 85, far: 430 },
+  },
+};
+
+/**
+ * The Wraithwood: a graveyard circuit under a green gloom.
+ *
+ * The four headstones are separate catalog kinds precisely so a record can lay
+ * a real burial ground rather than one repeated silhouette, and this is the
+ * theme they exist for. The wall is the ruin kit's CRACKED panel, drawn a
+ * tenth over size so it sags where the Hollow's stands square.
+ */
+const WRAITHWOOD: RallyCircuitTheme = {
+  ground: 'haunt',
+  // Bone against mildew: the zone's own sickly pale grass is the reason the
+  // stripe is green rather than red, which would read as fresh paint here.
+  kerb: { base: 0xd8dcc8, stripe: 0x4c5a3e },
+  startGrid: { light: 0xdfe3d2, dark: 0x1e2419 },
+  perimeter: {
+    fenceUrl: '/models/dungeon/wall_cracked.glb',
+    pillarUrl: '/models/dungeon/pillar.glb',
+    panelYards: 4.4,
+    scale: 1.1,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    // Pattern C in brown: rotted cloth, the one colourway that reads as having
+    // hung there a long time.
+    bannerUrl: '/models/dungeon/banner_patternc_brown.glb',
+  },
+  flowers: {
+    // AUTHORED: the haunt has no zone card. Grave planting, which is pale and
+    // half dead: bone-white lilies, a bruised violet, fungal grey-green.
+    card: [
+      { p: [228, 232, 214], c: [168, 176, 120] },
+      { p: [186, 170, 204], c: [120, 108, 140] },
+      { p: [206, 214, 190], c: [150, 158, 110] },
+    ],
+    colours: [
+      0xd8dcc4, // bone white
+      0xa8b08c, // mildew
+      0xb49ec8, // bruise violet
+      0x8fa0a8, // mist grey
+    ],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'graveRound',
+    'graveCross',
+    'graveBevel',
+    'graveDecor',
+    'kkWallCracked',
+    'kkWall',
+    'kkPillar',
+    'kcasRubbleHalf',
+    'column',
+    'columnBroken',
+    'statueHead',
+    'bellTower',
+    'postLantern',
+    'bonfire',
+    'banner',
+    'oak',
+    'shrub',
+    'mushroomTan',
+  ],
+  water: { shallow: 0x4d6053, deep: 0x121a14 },
+  sky: {
+    biome: 'haunt',
+    fog: { color: 0x8c9a86, near: 85, far: 430 },
+  },
+};
+
+/**
+ * Eastbrook Vale: the starting valley, and the one circuit a new player would
+ * recognise before they had raced anything.
+ *
+ * Deliberately the plainest record in the registry. Eastbrook is a working
+ * farming village, so the vocabulary is its yard clutter and its buildings and
+ * the wall is its own wooden rail, and nothing here reaches for a landmark:
+ * the zone's identity is that it has none.
+ */
+const EASTBROOK: RallyCircuitTheme = {
+  ground: 'vale',
+  // Limewash and barn ochre, the two colours the village paints with.
+  kerb: { base: 0xf0e8d2, stripe: 0x9c5a2c },
+  startGrid: { light: 0xf4eeda, dark: 0x2c2419 },
+  perimeter: {
+    // Eastbrook's OWN rail: the village fence `props.ts` runs along the zone's
+    // paddocks, a 0.79 yard module drawn at 3 for a 2.37 yard panel just under
+    // a yard tall. The corner takes the same piece rather than the timber post,
+    // which at this scale would stand three times the rail's height.
+    fenceUrl: '/models/props/fence.glb',
+    pillarUrl: '/models/props/fence.glb',
+    panelYards: 2.35,
+    scale: 3,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    bannerUrl: '/models/dungeon/banner_patterna_green.glb',
+  },
+  flowers: {
+    // AUTHORED: the vale has no zone card, which is the oldest gap in the
+    // world's flower tables rather than a decision. Hedgerow planting, which
+    // is white and butter and clover pink.
+    card: [
+      { p: [246, 246, 250], c: [244, 200, 70] },
+      { p: [245, 195, 60], c: [150, 90, 20] },
+      { p: [238, 150, 190], c: [180, 90, 40] },
+    ],
+    colours: [
+      0xf4f2e8, // daisy white
+      0xf2d264, // buttercup
+      0xe8a8bc, // clover pink
+      0xbcd08c, // meadow green
+    ],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'well',
+    'fence',
+    'timberPillar',
+    'farmCrate',
+    'crateWooden',
+    'barrel',
+    'haybale',
+    'bonfire',
+    'house1',
+    'house3',
+    'blacksmith',
+    'inn',
+    'bellTower',
+    'graveRound',
+    'bench',
+    'postLantern',
+    'oak',
+    'shrub',
+  ],
+  sky: {
+    biome: 'vale',
+    fog: { color: 0xb8cba0, near: 85, far: 430 },
+  },
+};
+
+/**
+ * Mirefen Marsh: peat, reeds and standing water under an overcast.
+ *
+ * The honest limitation, recorded because it is the only thing about this
+ * record worth arguing with: the marsh delve's own dressing (the dead tree,
+ * the sluice post, the corpse candle, the bell gallows) is NOT reachable from
+ * here. Those models load on delve entry rather than at world entry, so
+ * promoting them into the rally catalog would break the promise that a
+ * circuit's scenery costs world entry nothing. The vocabulary below is what
+ * the marsh reads as out of the already-loaded set: waterside planting, a
+ * palisade, and the fen village's own timber. If a seat pass calls it thin,
+ * the fix is a preload split for non-resident kits, not a change here.
+ */
+const MIREFEN: RallyCircuitTheme = {
+  ground: 'marsh',
+  // Bog-bleached wood over peat: the wettest, brownest pair in the registry.
+  kerb: { base: 0xcfd4b2, stripe: 0x5c4a2e },
+  startGrid: { light: 0xd8dcbc, dark: 0x231d13 },
+  perimeter: {
+    // A rough wooden paling. `marsh_root_wall.glb`, the piece a marsh circuit
+    // would obviously want, is 1.42 by 1.50 and so is not a RUN at all: laid
+    // end to end it reads as a row of stumps, and the suite's own is-not-a-run
+    // ratio gate refuses it.
+    fenceUrl: '/models/biome/city_fence_wood.glb',
+    pillarUrl: '/models/biome/city_fence_wood.glb',
+    panelYards: 3.3,
+    scale: 1.6,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    bannerUrl: '/models/dungeon/banner_patternb_brown.glb',
+  },
+  flowers: {
+    // AUTHORED: the marsh has no zone card. Wetland planting: bog cotton,
+    // marsh orchid, kingcup.
+    card: [
+      { p: [214, 222, 186], c: [168, 150, 86] },
+      { p: [186, 168, 208], c: [120, 100, 150] },
+      { p: [236, 228, 178], c: [176, 150, 72] },
+    ],
+    colours: [
+      0xd2dcae, // bog cotton
+      0xb49cc8, // marsh orchid
+      0xe4d488, // kingcup
+      0x8ca878, // sedge green
+    ],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'reeds',
+    'lilyRaft',
+    'hexnPalisade',
+    'timberPillar',
+    'fence',
+    'crateWooden',
+    'barrel',
+    'hexTrough',
+    'hexSack',
+    'bonfire',
+    'postLantern',
+    'graveBevel',
+    'rockLargeD',
+    'rockLargeF',
+    'mushroomRed',
+    'mushroomTan',
+    'oak',
+    'shrub',
+  ],
+  water: { shallow: 0x5c6b3e, deep: 0x1e2413 },
+  sky: {
+    biome: 'marsh',
+    fog: { color: 0xa6ae86, near: 85, far: 430 },
+  },
+};
+
+/**
+ * The Willowfen: still green water, lily rafts and a living hedge.
+ *
+ * The only theme walled in something that GROWS. The Great Maze's hedge module
+ * is a yard long and half a yard tall, so at scale 3 it runs just under three
+ * yards and stands over one and a half, and the maze's own arch caps the
+ * corners: a wetland circuit fenced in cut stone would read as anywhere else.
+ */
+const WILLOWFEN: RallyCircuitTheme = {
+  ground: 'fen',
+  // River chalk against willow: pale and green, where the garden is bone and
+  // red.
+  kerb: { base: 0xe4eedc, stripe: 0x3f7a58 },
+  startGrid: { light: 0xe8f0e2, dark: 0x1b2b22 },
+  perimeter: {
+    fenceUrl: '/models/props/maze_hedge_wall.glb',
+    pillarUrl: '/models/props/maze_hedge_arch.glb',
+    panelYards: 2.9,
+    scale: 3,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    bannerUrl: '/models/dungeon/banner_patternc_blue.glb',
+  },
+  flowers: {
+    // The zone's own card, copied byte for byte from `FLOWER_PALETTES.fen`: a
+    // mixed wildflower field, which the world builds in BALANCED mode so its
+    // blue and orange heads are guaranteed a place among the pastels.
+    card: [
+      { p: [130, 160, 235], c: [230, 236, 250] },
+      { p: [250, 245, 210], c: [210, 170, 60] },
+      { p: [242, 150, 110], c: [180, 90, 50] },
+      { p: [200, 170, 230], c: [160, 120, 200] },
+      { p: [245, 250, 255], c: [220, 220, 150] },
+      { p: [244, 168, 200], c: [200, 110, 150] },
+    ],
+    // FEN_BLOOM_TINTS.
+    colours: [0xf2a8c8, 0xf2e0a0, 0xffffff, 0xa8d8f2, 0xf2a88f],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'lilyRaft',
+    'reeds',
+    'rowboat',
+    'dockPlatform',
+    'hexBoat',
+    'hexBoatrack',
+    'hexTrough',
+    'fence',
+    'timberPillar',
+    'kmedHomeB',
+    'bench',
+    'postLantern',
+    'bonfire',
+    'bedRound',
+    'mushroomRed',
+    'mushroomTan',
+    'oak',
+    'shrub',
+  ],
+  water: { shallow: 0x4f8f6b, deep: 0x123024 },
+  sky: {
+    biome: 'fen',
+    fog: { color: 0xa8c8a0, near: 85, far: 430 },
+  },
+};
+
+/**
+ * The Palmreach: a tropical shore behind a log stockade.
+ *
+ * Shares the Nightbloom's palisade MODULE and nothing else about it: cut at
+ * 3.2 rather than 2.5, so the logs stand three and a half yards rather than
+ * two and three quarters, which is a stockade rather than a garden fence. The
+ * repeat is deliberate and cheap; two log walls in one world is not a defect.
+ */
+const PALMREACH: RallyCircuitTheme = {
+  ground: 'jungle',
+  // Coral sand against lagoon teal.
+  kerb: { base: 0xf4ecd0, stripe: 0x1f8a72 },
+  startGrid: { light: 0xf6f0d8, dark: 0x123028 },
+  perimeter: {
+    fenceUrl: '/models/biome/hexn_palisade.glb',
+    pillarUrl: '/models/biome/hexn_palisade.glb',
+    panelYards: 6.4,
+    scale: 3.2,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    bannerUrl: '/models/dungeon/banner_patternb_green.glb',
+  },
+  flowers: {
+    // The zone's own card, copied byte for byte from `FLOWER_PALETTES.jungle`:
+    // hibiscus orange and morning-glory blue leading over plumeria white and
+    // jungle pink.
+    card: [
+      { p: [245, 120, 60], c: [200, 70, 30] },
+      { p: [100, 150, 240], c: [225, 235, 252] },
+      { p: [245, 120, 60], c: [200, 70, 30] },
+      { p: [100, 150, 240], c: [225, 235, 252] },
+      { p: [250, 248, 240], c: [245, 200, 80] },
+      { p: [240, 130, 170], c: [200, 80, 120] },
+    ],
+    // AUTHORED off that card: the jungle has no bloom-tint table of its own.
+    colours: [0xf5783c, 0x6496f0, 0xfaf8f0, 0xf082aa, 0xf5c84c],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'hexnPalisade',
+    'timberPillar',
+    'rowboat',
+    'dockPlatform',
+    'hexShipGreen',
+    'hexBoat',
+    'hexAnchor',
+    'hexCrateBig',
+    'hexCrateOpen',
+    'hexSack',
+    'barrel',
+    'crateWooden',
+    'bonfire',
+    'banner',
+    'rockLargeF',
+    'mushroomRed',
+    'oak',
+    'shrub',
+  ],
+  water: { shallow: 0x2fa8a0, deep: 0x0d3a4a },
+  sky: {
+    biome: 'jungle',
+    fog: { color: 0x8fc4a8, near: 85, far: 430 },
+  },
+};
+
+/**
+ * The Farshore: the isle, and the theme that made the sky field a `SkyKey`.
+ *
+ * Two things here are not like the others, and both are the zone being honest
+ * rather than the record being odd:
+ *
+ *  - its DOME is `farshore`, a place-keyed sky rather than a biome one. The
+ *    world already flies it over the isle's rect (`sky.ts` overrides the biome
+ *    pick there), so a Farshore circuit under the vale's day sky would be lit
+ *    by the mainland;
+ *  - its GROUND is `beach` rather than the isle's own `vale`. The isle is a
+ *    sand shore, `beach` is a fully-tabled paint-only biome, and it leaves the
+ *    vale free for Eastbrook under the one-ground-per-theme rule.
+ *
+ * The 16 manifested `beach_*` models (the dock, the ship, the house, the
+ * cannon) are NOT reachable from here: none is registered in the world's prop
+ * catalog, so promoting one would cost every player a download at world entry.
+ * The harbour vocabulary below is the already-loaded set's own, which is
+ * Wickharbor's rather than the isle's.
+ */
+const FARSHORE: RallyCircuitTheme = {
+  ground: 'beach',
+  // Sailcloth over deep water.
+  kerb: { base: 0xf6efdc, stripe: 0x2a6c93 },
+  startGrid: { light: 0xf8f2e4, dark: 0x14293a },
+  perimeter: {
+    // The hex town wall, a low harbour parapet at 2.4: 4.8 yards of run and
+    // 2.64 tall, which is a sea wall rather than a fortification.
+    fenceUrl: '/models/biome/hex_wall.glb',
+    pillarUrl: '/models/biome/hex_wall.glb',
+    panelYards: 4.8,
+    scale: 2.4,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    bannerUrl: '/models/dungeon/banner_patternc_white.glb',
+  },
+  flowers: {
+    // AUTHORED: neither the beach nor the isle has a zone card. Dune planting:
+    // sea holly, sand verbena, sailcloth white.
+    card: [
+      { p: [236, 242, 244], c: [240, 214, 120] },
+      { p: [168, 196, 204], c: [120, 150, 160] },
+      { p: [244, 186, 150], c: [190, 110, 70] },
+    ],
+    colours: [
+      0xeef2f0, // sail white
+      0x9fc4cc, // sea holly
+      0xf2c07e, // sand verbena
+      0xe8dcb4, // dune gold
+    ],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'hexShipRed',
+    'hexShipGreen',
+    'hexBoat',
+    'hexBoatrack',
+    'hexAnchor',
+    'dockPlatform',
+    'rowboat',
+    'shipMonument',
+    'hexbShipyard',
+    'hexCrateBig',
+    'hexCrateOpen',
+    'hexSack',
+    'hexBarrel',
+    'barrel',
+    'hexWall',
+    'bonfire',
+    'oak',
+    'shrub',
+  ],
+  water: { shallow: 0x35a0c0, deep: 0x0e3350 },
+  sky: {
+    biome: 'farshore',
+    fog: { color: 0xa8c8d8, near: 85, far: 430 },
+  },
+};
+
+/**
+ * The Amberfall: the warmest air in the world, and a vocabulary that is
+ * deliberately generic.
+ *
+ * Recorded so a later pass does not read it as an oversight: the Amberfall has
+ * no signature GLB and is not supposed to have one. Its identity is COLOUR,
+ * the autumn tint on its trees and the warmest fog anywhere, and the zone's
+ * god-rays were removed on purpose rather than lost. So this record leans on
+ * the amber card, the amber bloom tints and an ornate iron railing, and its
+ * scenery is lanterns, ruin columns and campfires: what stands under the
+ * turning wood, not what replaces it.
+ */
+const AMBERFALL: RallyCircuitTheme = {
+  ground: 'amber',
+  // Birch pale against burnt amber.
+  kerb: { base: 0xf2e2c0, stripe: 0xc86a1e },
+  startGrid: { light: 0xf4e8cc, dark: 0x30210f },
+  perimeter: {
+    // The city kit's ornamental railing at its authored size: 1.95 yards of
+    // run and 2.85 tall, the finest module in the registry, which is what an
+    // avenue under turning trees is lined with.
+    fenceUrl: '/models/biome/city_fence_ornament.glb',
+    pillarUrl: '/models/biome/city_fence_ornament.glb',
+    panelYards: 1.95,
+    scale: 1,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    bannerUrl: '/models/dungeon/banner_patternb_yellow.glb',
+  },
+  flowers: {
+    // The zone's own card, copied byte for byte from `FLOWER_PALETTES.amber`:
+    // oranges, yellows and whites.
+    card: [
+      { p: [245, 150, 50], c: [150, 80, 20] },
+      { p: [248, 205, 70], c: [160, 100, 25] },
+      { p: [248, 244, 235], c: [230, 170, 60] },
+    ],
+    // AMBER_BLOOM_TINTS: near-white, which is the zone letting its LIGHT do
+    // the colouring rather than its petals.
+    colours: [0xffffff, 0xfaf6ec, 0xf4eedd],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'postLantern',
+    'lanternWall',
+    'bench',
+    'well',
+    'column',
+    'columnBroken',
+    'statueBlock',
+    'statueHead',
+    'bonfire',
+    'banner',
+    'haybale',
+    'farmCrate',
+    'kmedHomeA',
+    'kmedTavern',
+    'kmedChurch',
+    'bedRound',
+    'oak',
+    'shrub',
+  ],
+  sky: {
+    biome: 'amber',
+    fog: { color: 0xd8a86a, near: 85, far: 430 },
+  },
+};
+
+/**
+ * The Frostveil Reach: the honest gap in this registry.
+ *
+ * NAMED rather than papered over, because the next person to open this file
+ * should not spend an afternoon looking for what is missing: there is NO frost
+ * asset anywhere in the world. No snowed model, no ice piece, no frost flower
+ * card, and `GRASS_BIOME_DENSITY.frost` is zero, so the circuit's lawn is bare.
+ * What carries the zone here is the ground and the air: a near-white surface
+ * under the frost twilight dome, the coldest fog in the registry, and borrowed
+ * castle masonry standing in for a wall nobody has carved.
+ *
+ * If the seat verdict is that this is not good enough, the follow-up is an
+ * asset job (the image-to-glb pipeline, a handful of snow-laden pieces), not a
+ * theme job: there is nothing left to author out of what exists.
+ */
+const FROSTVEIL: RallyCircuitTheme = {
+  ground: 'frost',
+  // Snow against glacier blue: the palest pair in the registry, which is the
+  // one place a kerb has to work by VALUE rather than by hue.
+  kerb: { base: 0xf4f9ff, stripe: 0x5f86b4 },
+  startGrid: { light: 0xf6faff, dark: 0x1c2a3c },
+  perimeter: {
+    // BORROWED, and that is the point of saying so: the castle curtain wall,
+    // drawn a fifth over size so it stands 4.8 yards, is stone the Frostveil
+    // has no claim on. It is here because a circuit needs a perimeter and the
+    // alternative was the garden's wrought iron.
+    // The corner takes the same piece for the reason the Drakelands record
+    // spells out: `kcas_wall_corner` is an L (arms to -2.00 x and +2.00 z), and
+    // the builder's single corner yaw cannot seat one.
+    fenceUrl: '/models/biome/kcas_wall.glb',
+    pillarUrl: '/models/biome/kcas_wall.glb',
+    panelYards: 4.8,
+    scale: 1.2,
+    lengthAxis: 'x',
+  },
+  startFixture: {
+    archUrl: COURSE_ARCH_URL,
+    bannerUrl: '/models/dungeon/banner_patternb_blue.glb',
+  },
+  flowers: {
+    // AUTHORED: the frost has no zone card, and a snowfield has no flowers
+    // either, so this card is deliberately almost colourless. It is what the
+    // border sows, and a border of white on white is the correct answer for
+    // this zone rather than a missing one.
+    card: [
+      { p: [240, 246, 252], c: [196, 220, 240] },
+      { p: [204, 224, 244], c: [240, 248, 252] },
+      { p: [224, 236, 248], c: [168, 198, 228] },
+    ],
+    colours: [
+      0xf2f7fc, // snow white
+      0xc8dcf0, // glacier
+      0xa8c4e0, // ice blue
+      0xdce8f4, // rime
+    ],
+  },
+  reedUrl: REEDS_URL,
+  props: [
+    'kkWall',
+    'kkPillar',
+    'kkWallCracked',
+    'kcasRocks',
+    'kcasRubbleHalf',
+    'column',
+    'columnBroken',
+    'statueBlock',
+    'rockTallA',
+    'rockTallH',
+    'rockLargeD',
+    'crateWooden',
+    'barrel',
+    'bonfire',
+    'postLantern',
+    'graveBevel',
+    'oak',
+    'shrub',
+  ],
+  water: { shallow: 0x8fc2d8, deep: 0x1b3a52 },
+  sky: {
+    biome: 'frost',
+    fog: { color: 0xc8d8e8, near: 85, far: 430 },
+  },
+};
+
+/**
+ * One record per world-map ZONE, which is the whole point of the seam: a
+ * circuit drawn anywhere wears the art of the realm it is meant to be in, and
+ * adding a realm's circuit is adding a `theme:` string to its record.
+ *
+ * `tests/realm_racers_themes.test.ts` holds the registry to the zone table
+ * both ways, so a fifteenth realm cannot ship without one.
+ */
 export const CIRCUIT_THEMES: Record<string, RallyCircuitTheme> = {
   evergarden: EVERGARDEN,
   galecrest: GALECREST,
   nightbloom: NIGHTBLOOM,
+  veiled_hollow: VEILED_HOLLOW,
+  thornpeak: THORNPEAK,
+  drakelands: DRAKELANDS,
+  wraithwood: WRAITHWOOD,
+  eastbrook: EASTBROOK,
+  mirefen: MIREFEN,
+  willowfen: WILLOWFEN,
+  palmreach: PALMREACH,
+  farshore: FARSHORE,
+  amberfall: AMBERFALL,
+  frostveil: FROSTVEIL,
 };
 
 /**
@@ -424,19 +1288,55 @@ export function realmRacersThemeAt(x: number, z: number): RallyCircuitTheme {
   return lane ? realmRacersTheme(lane.circuit) : CIRCUIT_THEMES[REALM_RACERS_DEFAULT_THEME_ID];
 }
 
-/** Every model any theme can ask for: its wall kit, its start fixture and what
- *  it plants along a shore. The track builder preloads the whole set, because a
- *  themed piece whose url misses the preload lane draws nothing at all on a
- *  cold client and fails no test that does not look. (A theme's prop PALETTE is
- *  not here: those models ride the authored-dressing catalog's own lane.) */
+/** A theme's own kit: the wall, the start fixture and what it plants along a
+ *  shore. NOT its prop palette, which rides the authored-dressing catalog's own
+ *  lane. */
+function themeKitUrls(theme: RallyCircuitTheme): readonly string[] {
+  return [
+    theme.perimeter.fenceUrl,
+    theme.perimeter.pillarUrl,
+    theme.startFixture.archUrl,
+    theme.startFixture.bannerUrl,
+    theme.reedUrl,
+  ];
+}
+
+/**
+ * Every model ANY theme can ask for.
+ *
+ * What the disk and media-manifest guards cover, so a record naming a file
+ * nobody shipped fails before anyone drives it. It is deliberately NOT the boot
+ * lane any more (see below).
+ */
 export const REALM_RACERS_THEME_ASSET_URLS: readonly string[] = [
+  ...new Set(Object.values(CIRCUIT_THEMES).flatMap(themeKitUrls)),
+];
+
+/**
+ * The kits that ride the BOOT lane: the ones a shipped circuit actually wears.
+ *
+ * It used to be every theme's, on the reasoning that structure a circuit cannot
+ * draw late (the wall, the arch, the grid banner) must be resident before the
+ * lights. That reasoning still holds; what stopped holding is the assumption
+ * underneath it, that the registry is a handful of records. At one theme per
+ * world zone it is fourteen, and a lane holding all fourteen kits would pin
+ * about forty parsed scenes for the whole session, on a map that never clears,
+ * for a player who may never race at all. That is the exact retention the
+ * dressing catalog was kept out of the lane to avoid.
+ *
+ * So the lane is scoped to what is actually raced. The default theme is in it
+ * unconditionally, because an unknown theme id falls back to it mid-build. A
+ * theme with no circuit on it (the registry is meant to be written a zone ahead
+ * of its circuit, and every one of these is) reaches the draw path through
+ * `instanceModel`'s fetch-and-fill arm instead: one bounded fetch at circuit
+ * build, on the dev routes that are the only way to see such a circuit today
+ * (the editor's preview and `/dev rallydraft`).
+ */
+export const REALM_RACERS_THEME_BOOT_URLS: readonly string[] = [
   ...new Set(
-    Object.values(CIRCUIT_THEMES).flatMap((theme) => [
-      theme.perimeter.fenceUrl,
-      theme.perimeter.pillarUrl,
-      theme.startFixture.archUrl,
-      theme.startFixture.bannerUrl,
-      theme.reedUrl,
-    ]),
+    [
+      CIRCUIT_THEMES[REALM_RACERS_DEFAULT_THEME_ID],
+      ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => realmRacersTheme(circuit)),
+    ].flatMap(themeKitUrls),
   ),
 ];

@@ -11,9 +11,11 @@
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
+import { REALM_DAYNIGHT_AMPLITUDE } from '../src/render/day_night_core';
 import {
   CIRCUIT_THEMES,
   REALM_RACERS_THEME_ASSET_URLS,
+  rallySkyDayNightBiome,
   realmRacersTheme,
   realmRacersThemeAt,
 } from '../src/render/realm_racers_themes';
@@ -31,12 +33,13 @@ import {
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
+import { ZONES } from '../src/sim/data';
 import {
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
 import { REALM_RACERS_ORIGIN, realmRacersLaneOffset } from '../src/sim/realm_racers_layout';
-import { glbSize } from './helpers/glb_bounds';
+import { glbBounds, glbSize } from './helpers/glb_bounds';
 
 // The builder mints procedural canvas textures, so the build cases below need
 // the same texture stub every other headless render suite uses.
@@ -198,16 +201,19 @@ describe('Realm Racers circuit themes', () => {
   describe.each(Object.keys(CIRCUIT_THEMES))('the %s theme', (themeId) => {
     const theme = CIRCUIT_THEMES[themeId];
 
-    it('names only models the client has and will have loaded', () => {
+    it('names only models the client actually has', () => {
       for (const url of themeUrls(themeId)) {
-        // On disk and hashed into the media manifest...
+        // On disk and hashed into the media manifest. A theme nothing ships
+        // yet is exactly the case where a url typed one letter wrong would go
+        // unnoticed, so this is held for EVERY record rather than the worn
+        // ones: an unresolvable model draws nothing at all rather than
+        // failing, on a route (the editor preview, `/dev rallydraft`) whose
+        // whole job is to look at a theme before a circuit wears it.
         expect(MEDIA_ASSETS[url.replace(/^\//, '')], url).toBeDefined();
-        // ...and in the preload lane, which is the half no other test can see:
-        // an unpreloaded model draws NOTHING on a cold client rather than
-        // failing, and a theme nothing ships yet is exactly the case where
-        // that would go unnoticed.
-        expect(realmRacersPreloadInternalsForTest.assetUrls, url).toContain(url);
       }
+      // ...and it is the SET the manifest guard walks, so a record naming a
+      // file outside it is out of that guard's reach.
+      expect(REALM_RACERS_THEME_ASSET_URLS).toEqual(expect.arrayContaining(themeUrls(themeId)));
     });
 
     it('carries a vocabulary, a palette and a card the build can use', () => {
@@ -250,6 +256,53 @@ describe('Realm Racers circuit themes', () => {
       // second, so a mis-authored theme is named rather than merely failing.
       const measured = glbLongHorizontalAxis(theme.perimeter.fenceUrl);
       expect(theme.perimeter.lengthAxis, `${themeId} wall kit`).toBe(measured);
+
+      // ...and the RUN is measured too, which the axis check alone never was.
+      // `panelYards` is how far the builder steps between modules, so it has to
+      // be what one module actually covers at this theme's scale: step further
+      // and the wall gaps all the way round, step much shorter and it stacks
+      // into itself. Fourteen hand-authored numbers behind a review-only check
+      // is exactly the thing that is right once and wrong the third time.
+      //
+      // Bounded rather than exact, and asymmetrically, because the slack has a
+      // direction: an UNDERCUT overlaps neighbours slightly and is invisible,
+      // while an overshoot is a hole. The floor admits the Evergarden's own
+      // deliberate 12.5 percent undercut (3.5 authored on a 4 yard module),
+      // which is the widest any record takes.
+      //
+      // The ceiling carries one centimetre, which is not slop but the grain the
+      // records are authored at: the Galecrest's 4.851 is the rounding of a
+      // 4.84974 module run, and holding it to the raw float would fail a record
+      // that is right, over 2.6 millimetres spread across a whole panel.
+      const run = glbSize(theme.perimeter.fenceUrl)[measured] * theme.perimeter.scale;
+      expect(theme.perimeter.panelYards, `${themeId} overshoots its module`).toBeLessThanOrEqual(
+        run + 0.01,
+      );
+      expect(theme.perimeter.panelYards, `${themeId} undercuts too far`).toBeGreaterThan(
+        run * 0.85,
+      );
+
+      // The CORNER piece has to survive the same seating, and it gets no axis
+      // of its own to be measured against: the builder centres it on the corner
+      // point under the outgoing edge's yaw, one orientation for all four
+      // corners. So the only module that can be right there is one whose mass
+      // is centred on its own origin.
+      //
+      // An L is the shape this refuses, and it is not hypothetical: two castle
+      // kit corner modules (`kcas_barrier_corner`, `kcas_wall_corner`) reach to
+      // -2.00 on their local x and +2.00 on their local z, so seated this way
+      // one arm stands outside the perimeter while the wall leaving the corner
+      // goes uncapped. Both were authored into this registry and both had to
+      // come back out. Measured off the GLB rather than listed by name, so the
+      // next kit that happens to be an L fails the same way.
+      const pillar = glbBounds(theme.perimeter.pillarUrl);
+      for (const axis of ['x', 'z'] as const) {
+        const reach = [Math.abs(pillar.min[axis]), Math.abs(pillar.max[axis])];
+        expect(
+          Math.max(...reach) / Math.max(Math.min(...reach), 1e-6),
+          `${themeId} corner piece is lopsided on ${axis}`,
+        ).toBeLessThan(2);
+      }
 
       const circuit: RealmRacersCircuit = { ...GARDEN_CIRCUIT, id: 'wall_probe', theme: themeId };
       const pieces = rallyPerimeterPieces(circuit).filter((piece) => !piece.pillar);
@@ -297,6 +350,26 @@ describe('Realm Racers circuit themes', () => {
       expect(theme.sky.fog.far).toBe(shipped.far);
     });
 
+    it('flies a dome the world has, and grades it off a realm the tables know', () => {
+      // The DOME and the day/night GRADE are two questions, and this is the one
+      // case that holds them apart. `sky.biome` is a `RallySkyKey`, so it may
+      // name the Farshore's place-keyed dome, which is NOT a biome; the grade
+      // tables are keyed by biome, so `renderer.ts` resolves it through
+      // `rallySkyDayNightBiome` before indexing them.
+      //
+      // The amplitude arm is the one that matters: an undefined there is a NaN
+      // sun angle rather than a crash, so a mis-keyed record would darken a
+      // circuit and fail nothing. Held for EVERY record rather than for the one
+      // exception, since a fifteenth realm naming a fresh key is exactly the
+      // case that would slip through a spot check.
+      const graded = rallySkyDayNightBiome(theme.sky.biome);
+      expect(REALM_DAYNIGHT_AMPLITUDE[graded], `${themeId} amplitude`).toBeTypeOf('number');
+      expect(Number.isFinite(REALM_DAYNIGHT_AMPLITUDE[graded])).toBe(true);
+      // ...and the mapping is the identity wherever the key IS a biome, which
+      // is what makes the helper's introduction a no-op for thirteen realms.
+      if (theme.sky.biome !== 'farshore') expect(graded).toBe(theme.sky.biome);
+    });
+
     it('changes visuals only: it has no field physics could read', () => {
       // The rule this whole registry is written under, made mechanical. Speed,
       // grip, drag, widths, laps and the referee live on the circuit record and
@@ -320,16 +393,102 @@ describe('Realm Racers circuit themes', () => {
     });
   });
 
-  it('preloads every kit, including one no circuit wears yet', () => {
-    for (const url of REALM_RACERS_THEME_ASSET_URLS) {
-      expect(realmRacersPreloadInternalsForTest.assetUrls).toContain(url);
+  it('preloads the kit of every theme a shipped circuit wears, and no other', () => {
+    // The boot lane is structure a circuit cannot draw late (the wall, the
+    // arch, the grid banner), so what a raced circuit wears must be resident
+    // before the lights. What is NOT in it is the point of this case: at one
+    // theme per world zone the registry is fourteen kits, and preloading all
+    // of them would pin about forty parsed scenes on a map that never clears,
+    // for the whole session, for a player who may never race. An unworn
+    // theme's wall takes the builder's fetch-and-fill arm instead.
+    const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
+    const worn = new Set([
+      REALM_RACERS_DEFAULT_THEME_ID,
+      ...REALM_RACERS_CIRCUIT_LIST.map((circuit) => circuit.theme),
+    ]);
+    // Derived from the circuit list rather than listed, so the day a Frostveil
+    // circuit ships, its wall joins the lane without anyone remembering to.
+    expect([...lane].sort()).toEqual(
+      [...new Set([...worn].flatMap((themeId) => themeUrls(themeId)))].sort(),
+    );
+    for (const themeId of worn) {
+      for (const url of themeUrls(themeId)) expect(lane, `${themeId} ${url}`).toContain(url);
     }
-    // EVERY theme's kit, worn by a shipped circuit or not: a theme with no
-    // circuit on it is exactly the case a lane check would miss, and the
-    // registry is meant to be written a zone ahead of the circuit.
-    for (const themeId of OTHER_THEME_IDS) {
-      expect(REALM_RACERS_THEME_ASSET_URLS).toContain(CIRCUIT_THEMES[themeId].perimeter.fenceUrl);
+    // ...and the counter-example, stated positively: a theme written a zone
+    // ahead of its circuit is out of the lane, wall and banner both.
+    const unworn = Object.keys(CIRCUIT_THEMES).filter((id) => !worn.has(id));
+    // Only a non-vacuity floor: the equality above already fixes the lane
+    // exactly, so this exists so the loop under it registers cases at all.
+    // Deliberately NOT a count near today's thirteen, which would go red the
+    // day enough circuits ship to drain it, reporting success as a regression.
+    expect(unworn.length).toBeGreaterThan(0);
+    for (const themeId of unworn) {
+      const theme = CIRCUIT_THEMES[themeId];
+      expect(lane, `${themeId} wall`).not.toContain(theme.perimeter.fenceUrl);
+      expect(lane, `${themeId} banner`).not.toContain(theme.startFixture.bannerUrl);
     }
+    // The whole reason for the scoping, stated against the thing it is scoped
+    // FROM rather than against an absolute: the lane is strictly smaller than
+    // the registry's own kit set. An absolute ceiling would have to be raised
+    // every time a circuit ships, which is the one event that must not need a
+    // test edit; this one holds until every realm has a circuit, and on that
+    // day it is correct that scoping bought nothing.
+    expect(lane.size).toBeLessThan(REALM_RACERS_THEME_ASSET_URLS.length);
+  });
+
+  it('sends the one place-keyed dome to the realm under it', () => {
+    // The single non-identity branch in the whole seam, asserted on its own
+    // rather than only through the records: the Farshore's dome is a place key
+    // (`sky.ts` overrides the biome pick inside the isle's rect), and the realm
+    // beneath it is the vale its ZoneDef sits in. Stated as a LITERAL, because
+    // reading the answer back out of the record it is meant to check would pass
+    // whatever the helper did.
+    expect(rallySkyDayNightBiome('farshore')).toBe('vale');
+    expect(ZONES.find((zone) => zone.id === 'farshore_isle')?.biome).toBe('vale');
+    // ...and it touches nothing else: every biome key is its own answer.
+    for (const biome of new Set(ZONES.map((zone) => zone.biome))) {
+      expect(rallySkyDayNightBiome(biome), biome).toBe(biome);
+    }
+  });
+
+  it('gives every world-map zone a theme, and every theme a zone', () => {
+    // THE contract this registry exists for, held mechanically rather than by
+    // review: a circuit drawn anywhere wears the art of the realm it is meant
+    // to be in, so a fifteenth realm cannot ship without a record and a record
+    // cannot name a realm the world does not have.
+    //
+    // Matched on the zone id with its article dropped, which is the naming
+    // rule the ids are authored under (`thornpeak` for `thornpeak_heights`).
+    const themeIdForZone = (zoneId: string): string =>
+      zoneId.replace(/_(vale|marsh|heights|isle)$/, '');
+    expect(ZONES.length).toBeGreaterThan(13);
+    expect(ZONES.map((zone) => themeIdForZone(zone.id)).sort()).toEqual(
+      [...REALM_RACERS_THEME_IDS].sort(),
+    );
+    // ...and each one paints its OWN realm's ground, which is the half an id
+    // match cannot see: a record could carry the right name over the wrong
+    // palette. The Farshore is the deliberate exception and is named here
+    // rather than exempted quietly: its isle is a sand shore, so it takes the
+    // `beach` paint rather than the `vale` its ZoneDef sits in, which is also
+    // what leaves the vale free for Eastbrook under the unique-ground rule.
+    for (const zone of ZONES) {
+      const theme = CIRCUIT_THEMES[themeIdForZone(zone.id)];
+      const expected = zone.id === 'farshore_isle' ? 'beach' : zone.biome;
+      expect(theme.ground, zone.id).toBe(expected);
+      // The SKY is the second dimension, and it is worth the extra line: an id
+      // match plus one field could still be two records swapped wholesale, one
+      // realm's art under the other's name. It also pins the Evergarden's move
+      // off Eastbrook's `vale` dome onto its own POSITIVELY, rather than only
+      // through "not the garden's" somewhere else. The Farshore is the same
+      // deliberate exception, from the other side: its dome is place-keyed, so
+      // it is the one record whose sky is not a biome at all.
+      const sky = zone.id === 'farshore_isle' ? 'farshore' : zone.biome;
+      expect(theme.sky.biome, zone.id).toBe(sky);
+    }
+    // No two themes paint the same ground: two realms that came out the same
+    // colour would make the whole registry decorative.
+    const grounds = Object.values(CIRCUIT_THEMES).map((theme) => theme.ground);
+    expect(new Set(grounds).size).toBe(grounds.length);
   });
 
   it('flies one sky per circuit rather than one per lane', () => {
@@ -361,15 +520,36 @@ describe('Realm Racers circuit themes', () => {
     });
 
     it.each(OTHER_THEME_IDS)('%s re-sows the border off its own palette', (themeId) => {
-      // The colour index is drawn against the palette's LENGTH, so a theme with
-      // a different number of colours sows a different border on the same road.
-      const garden = rallyBorderFlowerSpots(probeCircuit(REALM_RACERS_DEFAULT_THEME_ID));
-      const themed = rallyBorderFlowerSpots(probeCircuit(themeId));
+      // Resolved through each theme's OWN palette rather than compared as raw
+      // indices, which is the whole difference between this case and a
+      // coincidence: the index is drawn against the palette's LENGTH, so two
+      // themes that happen to carry five colours each sow the identical index
+      // sequence down the identical road and an index comparison would call
+      // that "not re-sown". What the border actually shows is the colour the
+      // index lands on.
+      const sown = (id: string): number[] => {
+        const palette = CIRCUIT_THEMES[id].flowers.colours;
+        const indices = rallyBorderFlowerSpots(probeCircuit(id)).map((spot) => spot.colour);
+        // The core reads the theme through EXACTLY ONE value, the palette's
+        // length, so this is where that read is proven. Both directions, which
+        // is what makes it bite: no index may fall outside the palette, and
+        // every slot in the palette must actually be drawn. A core that
+        // hardcoded any constant fails the second half against the Amberfall's
+        // three colours or the garden's five, whichever it did not pick.
+        //
+        // It carries the whole case for the four themes whose palette happens
+        // to be five long like the garden's: those sow the identical index
+        // sequence down the identical road, so the comparison below is only
+        // telling them apart by palette CONTENT, which another case already
+        // owns.
+        expect(Math.max(...indices)).toBe(palette.length - 1);
+        expect(new Set(indices).size).toBe(palette.length);
+        return indices.map((index) => palette[index]);
+      };
+      const garden = sown(REALM_RACERS_DEFAULT_THEME_ID);
+      const themed = sown(themeId);
       expect(themed).toHaveLength(garden.length);
-      expect(themed.map((spot) => spot.colour)).not.toEqual(garden.map((spot) => spot.colour));
-      for (const spot of themed) {
-        expect(spot.colour).toBeLessThan(CIRCUIT_THEMES[themeId].flowers.colours.length);
-      }
+      expect(themed).not.toEqual(garden);
     });
 
     describe('through the real builder', () => {
@@ -379,6 +559,55 @@ describe('Realm Racers circuit themes', () => {
       });
       afterEach(() => {
         vi.doUnmock('../src/render/textures');
+      });
+
+      it('asks for an unworn wall at build time, since the lane no longer holds it', async () => {
+        // THE assumption the whole boot-lane scoping rests on, and the one
+        // thing about it nothing else can see. Scoping the lane is only safe
+        // because a theme no circuit wears still reaches the draw path, through
+        // `instanceModel`'s fetch-and-fill arm; if that arm ever regressed (an
+        // added must-be-preloaded assert, or the headless early return moving
+        // above the fetch), thirteen themes would draw no wall, no arch and no
+        // banner, and every other case here would stay green because none of
+        // them can tell an unfetched model from an undrawn one.
+        //
+        // The window stub is load-bearing rather than incidental: that arm is
+        // gated on a browser host, so without it the builder takes the headless
+        // no-op path and this case would pass while asserting nothing.
+        const asked: string[] = [];
+        vi.doMock('../src/render/assets/loader', () => ({
+          // Never settles. What is under test is the ASK, not the fill, and a
+          // resolved stub would drag in a fake scene graph for no added claim.
+          loadGltf: vi.fn((url: string) => {
+            asked.push(url);
+            return new Promise(() => undefined);
+          }),
+          releaseGltf: vi.fn(),
+          releaseTexture: vi.fn(),
+          loadHdr: vi.fn(() => new Promise(() => undefined)),
+          loadTexture: vi.fn(() => new Promise(() => undefined)),
+        }));
+        vi.stubGlobal('window', {});
+        try {
+          const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+          const themeId = 'frostveil';
+          expect(REALM_RACERS_THEME_IDS).toContain(themeId);
+          const theme = CIRCUIT_THEMES[themeId];
+          // Not in the lane, which is the precondition that makes the rest mean
+          // something rather than restate it.
+          expect(realmRacersPreloadInternalsForTest.assetUrls).not.toContain(
+            theme.perimeter.fenceUrl,
+          );
+          buildRealmRacersTrack(probeCircuit(themeId));
+          // Structure, not dressing: the wall, the corner pier and the grid
+          // banner are the three pieces the lane used to guarantee.
+          expect(asked, 'wall').toContain(theme.perimeter.fenceUrl);
+          expect(asked, 'pier').toContain(theme.perimeter.pillarUrl);
+          expect(asked, 'banner').toContain(theme.startFixture.bannerUrl);
+        } finally {
+          vi.unstubAllGlobals();
+          vi.doUnmock('../src/render/assets/loader');
+        }
       });
 
       it('paints the ground and the water in the theme colours', async () => {

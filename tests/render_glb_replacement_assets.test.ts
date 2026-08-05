@@ -36,6 +36,7 @@ import { gatherNodePreloadInternalsForTest } from '../src/render/gather_nodes';
 import { mailboxPreloadInternalsForTest } from '../src/render/mailbox';
 import { propPreloadInternalsForTest } from '../src/render/props';
 import { questObjectPreloadInternalsForTest } from '../src/render/quest_objects';
+import { REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
 import { stationsPreloadInternalsForTest } from '../src/render/stations';
 import { wildheartPropsPreloadInternalsForTest } from '../src/render/wildheart_props';
@@ -712,8 +713,16 @@ describe('GLB-replacement asset preload sets resolve to real, manifested files',
   });
 
   it('Realm Racers circuit assets', () => {
-    for (const url of realmRacersPreloadInternalsForTest.assetUrls) {
+    // EVERY theme's kit, not just the boot lane's: the lane is scoped to the
+    // themes a shipped circuit wears, and a record written a zone ahead of its
+    // circuit is exactly the one whose url nobody has looked at yet.
+    for (const url of REALM_RACERS_THEME_ASSET_URLS) {
       expectAssetExistsAndManifested(url);
+    }
+    // ...and the lane is inside it, so scoping the lane can never take a url
+    // out of this guard's reach.
+    for (const url of realmRacersPreloadInternalsForTest.assetUrls) {
+      expect(REALM_RACERS_THEME_ASSET_URLS, url).toContain(url);
     }
   });
 
