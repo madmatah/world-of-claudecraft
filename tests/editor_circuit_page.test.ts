@@ -17,7 +17,11 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CALLOUT_REACH } from '../src/editor/circuit/layout_core';
-import { PLAN_PALETTE_FALLBACK, PLAN_PALETTE_VARS } from '../src/editor/circuit/plan_core';
+import {
+  PLAN_LEGEND,
+  PLAN_PALETTE_FALLBACK,
+  PLAN_PALETTE_VARS,
+} from '../src/editor/circuit/plan_core';
 import { expectScansOnlyThroughSharedWalkers } from './helpers/scan_guard_self_audit';
 import { tsFilesUnder } from './helpers/ts_files_under';
 
@@ -195,6 +199,23 @@ describe('the circuit editor page stylesheet', () => {
     expect(offset?.[1], 'the callout is offset by a pixel amount').toBeDefined();
     expect(width?.[1], 'the callout is capped in PX, not in a font-relative unit').toBeDefined();
     expect(Number(offset?.[1]) + Number(width?.[1])).toBe(CALLOUT_REACH);
+  });
+
+  it('keeps the bearing legend clear of the chips parked in the same corner', () => {
+    // The legend is drawn on the CANVAS and `#viewChips` is a DOM overlay, so
+    // nothing at runtime can discover the collision: they would simply be
+    // painted on top of each other, and the key explaining the boxes is the one
+    // thing on that canvas an operator reads instead of guessing.
+    const chips = rules().find((rule) => rule.selector === '#viewChips');
+    expect(chips, 'the sheet parks the view chips somewhere').toBeDefined();
+    const bottom = /bottom:\s*(\d+)px/.exec(chips?.body ?? '');
+    expect(bottom?.[1], 'the chips are parked a pixel amount off the bottom').toBeDefined();
+    expect(chips?.body).toMatch(/left:\s*\d+px/);
+    // A chip is about 20px tall at the page's own 11px type with its 2px
+    // padding, so the legend's baseline has to clear the chips by more than
+    // that. Asserted as a gap rather than as a magic number, since what matters
+    // is that one does not paint over the other.
+    expect(PLAN_LEGEND.bottomInset - Number(bottom?.[1])).toBeGreaterThanOrEqual(24);
   });
 
   it('lets the dock scrubber take its resolution from the module, not the markup', () => {

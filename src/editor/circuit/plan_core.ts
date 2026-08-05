@@ -1,7 +1,7 @@
 // The plan canvas's own numbers: what a blank circuit opens on, how much room a
-// fit frames, what the two limit boxes say before the first stroke, how far a
-// click may miss and still land, and which of the stylesheet's colours the
-// canvas borrows.
+// fit frames, which named boxes a circuit lives inside and what each one says,
+// where the legend naming them sits, how far a click may miss and still land,
+// and which of the stylesheet's colours the canvas borrows.
 //
 // None of it is a rule about a CIRCUIT (those are the sim's readout) and none of
 // it is about the shell (that is `layout_core.ts`); it is the arithmetic the page
@@ -12,6 +12,7 @@
 import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
 import {
+  REALM_RACERS_LAWN_OVERSHOOT,
   REALM_RACERS_MAX_REGION_HALF_X,
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_RUNOFF_WIDTH,
@@ -112,38 +113,137 @@ export function fitScale(planWidth: number, planHeight: number, half: number): n
   return clampScale(Math.min(planWidth, planHeight) / (2 * half));
 }
 
-// ---- the room a circuit has, drawn on a blank canvas ----
-
-export interface PlanLimits {
-  /** The widest region the instance band and the lane gap allow. */
-  outer: { halfX: number; halfZ: number };
-  /** Where the CENTERLINE has to stay, since the line under the pen carries a
-   *  road and a garden either side of it. */
-  inner: { halfX: number; halfZ: number };
-  outerLabel: string;
-  innerLabel: string;
-}
+// ---- the room a circuit has ----
 
 /**
- * The two boxes a blank canvas draws, and what they say.
+ * Where the CENTERLINE has to stay, and what to call it.
  *
- * On a blank canvas the readout is hidden, so the two ceilings a circuit lives
- * under are nowhere on screen at the exact moment they matter most: before the
- * first stroke. The wall has to sit strictly inside the region and the road
- * inside the wall, so a yard comes off before the garden either side does.
+ * The line under the pen carries a road and a garden either side of it, so the
+ * box an operator aims at is the volume less the garden edge, not the volume.
+ * It is SHAPE's alone: it is the only tool whose gesture puts that line down,
+ * and a box about drawing shown while barriers are being placed is a fourth
+ * rectangle with nothing to say.
  */
-export function planLimits(halfWidths: readonly number[]): PlanLimits {
+export interface CenterlineLimit {
+  halfX: number;
+  halfZ: number;
+  label: string;
+}
+
+export function centerlineLimit(halfWidths: readonly number[]): CenterlineLimit {
   const road = halfWidths.length > 0 ? Math.max(...halfWidths) : 0;
   const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
-  const halfX = REALM_RACERS_MAX_REGION_HALF_X - 1;
-  const halfZ = REALM_RACERS_MAX_REGION_HALF_Z - 1;
-  const inner = { halfX: halfX - gardenEdge, halfZ: halfZ - gardenEdge };
+  const halfX = REALM_RACERS_MAX_REGION_HALF_X - gardenEdge;
+  const halfZ = REALM_RACERS_MAX_REGION_HALF_Z - gardenEdge;
   return {
-    outer: { halfX, halfZ },
-    inner,
-    outerLabel: `widest a circuit may be: ${halfX * 2} x ${halfZ * 2} yd`,
-    innerLabel: `keep the line you draw inside ${Math.round(inner.halfX * 2)} x ${Math.round(inner.halfZ * 2)} yd`,
+    halfX,
+    halfZ,
+    label: `keep the line you draw inside ${Math.round(halfX * 2)} x ${Math.round(halfZ * 2)} yd`,
   };
+}
+
+// ---- the bearings: which box is which, and what each one is ----
+
+/**
+ * The rectangles the plan draws around a circuit, as things with NAMES.
+ *
+ * They exist because the plan drew five of them and named one. The one an
+ * operator was told about ("widest a circuit may be") showed only before the
+ * first stroke, and the box that took its place afterwards wore the same colour
+ * and the same dashes: two different objects, one drawing, so the mark that was
+ * supposed to be the fixed reference read as a rectangle that shrank.
+ *
+ * Three now, each with its own dash pattern, all of them named on screen:
+ * - `volume` is the instance volume, where the ground is flat and the world's
+ *   colliders are off. Every circuit carries it at its ceiling, which is what
+ *   makes it the FIXED reference the operator asked for: it is the same
+ *   rectangle on a blank canvas and on a finished circuit.
+ * - `wall` is the perimeter, the only one of the three that stops a machine.
+ * - `ground` is the land, which is the rectangle a circuit gets when nobody
+ *   draws one. It is on the plan because it is what the 3D dock stands on, and
+ *   an operator looking at that floor had nothing anywhere saying what it was.
+ */
+export type PlanBearingId = 'volume' | 'wall' | 'ground';
+
+export interface PlanBearing {
+  id: PlanBearingId;
+  /** Half-extents, circuit-local yards. Null for a ground shape that is
+   *  AUTHORED: it is a curve, drawn as itself, and no rectangle describes it. */
+  half: { halfX: number; halfZ: number } | null;
+  /** What it is called on screen. */
+  label: string;
+  /** Its size, or what it is instead of a size. */
+  value: string;
+  /** Dashes, so a legend swatch and the box it stands for cannot drift. */
+  dash: readonly number[];
+}
+
+export const PLAN_BEARING_DASH: Readonly<Record<PlanBearingId, readonly number[]>> = {
+  volume: [8, 6],
+  wall: [],
+  ground: [2, 5],
+};
+
+const size = (halfX: number, halfZ: number): string =>
+  `${Math.round(halfX * 2)} x ${Math.round(halfZ * 2)} yd`;
+
+/**
+ * The bearings for this circuit, in the order they nest.
+ *
+ * A BLANK canvas gets the volume alone, and that is the same rule the rest of
+ * the page follows: nothing of the placeholder record is shown until the first
+ * stroke, and its wall belongs to whichever circuit the template was borrowed
+ * from. The volume is not the placeholder's, though, which is why it survives
+ * the rule: it is the ceiling, identical on every circuit that will ever be
+ * drawn here.
+ */
+export function planBearings(circuit: RealmRacersCircuit, drawn: boolean): PlanBearing[] {
+  const volumeHalf = { halfX: circuit.regionHalfX, halfZ: circuit.regionHalfZ };
+  const ceiling =
+    circuit.regionHalfX === REALM_RACERS_MAX_REGION_HALF_X &&
+    circuit.regionHalfZ === REALM_RACERS_MAX_REGION_HALF_Z;
+  const volume: PlanBearing = {
+    id: 'volume',
+    half: volumeHalf,
+    label: 'volume',
+    // A record from before the volume became the ceiling is legal and still
+    // loads, so the plan says which of the two it is looking at rather than
+    // printing a number that would be a guess on one of them.
+    value: ceiling
+      ? `${size(volumeHalf.halfX, volumeHalf.halfZ)}, the ceiling`
+      : `${size(volumeHalf.halfX, volumeHalf.halfZ)} of ${size(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z)}`,
+    dash: PLAN_BEARING_DASH.volume,
+  };
+  if (!drawn) return [volume];
+
+  const authoredGround = (circuit.groundOutline?.length ?? 0) > 0;
+  return [
+    volume,
+    {
+      id: 'wall',
+      half: { halfX: circuit.perimeter.halfX, halfZ: circuit.perimeter.halfZ },
+      label: 'wall',
+      value: size(circuit.perimeter.halfX, circuit.perimeter.halfZ),
+      dash: PLAN_BEARING_DASH.wall,
+    },
+    {
+      id: 'ground',
+      half: authoredGround
+        ? null
+        : {
+            halfX: circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
+            halfZ: circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
+          },
+      label: 'ground',
+      value: authoredGround
+        ? 'the shape you drew'
+        : size(
+            circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
+            circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
+          ),
+      dash: PLAN_BEARING_DASH.ground,
+    },
+  ];
 }
 
 // ---- what a gesture may miss by ----
@@ -158,6 +258,24 @@ export function planLimits(halfWidths: readonly number[]): PlanLimits {
  * bigger than the tolerance anyway.
  */
 export const HIT_TOLERANCE_PIXELS = { handle: 8, segment: 10, dressing: 7 } as const;
+
+/**
+ * The bearing legend's own geometry, PIXELS, since it is drawn in screen space
+ * rather than in yards: a key that slid around with the view would be a fourth
+ * thing to find.
+ *
+ * `bottomInset` is a real coupling and not a taste: the legend sits bottom left
+ * and `#viewChips` is parked in that corner (`bottom: 10px` in the page's own
+ * sheet), so this has to clear the chips or the two overlap at every zoom.
+ * `tests/editor_circuit_page.test.ts` reads that rule and fails if they meet.
+ */
+export const PLAN_LEGEND = {
+  left: 12,
+  bottomInset: 44,
+  rowHeight: 15,
+  swatch: 22,
+  gap: 8,
+} as const;
 
 /** Above this plan scale a placed piece is drawn with its catalog key beside it.
  *  Below it the labels are a wash of overlapping text. */

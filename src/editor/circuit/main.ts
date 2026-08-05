@@ -171,12 +171,16 @@ import {
 } from './placement_core';
 import {
   blankCircuit as blankCircuitFrom,
+  centerlineLimit,
   fitHalfExtent,
   fitScale,
   HIT_TOLERANCE_PIXELS,
   labelledPieces,
+  PLAN_LEGEND,
+  type PlanBearing,
+  type PlanBearingId,
   PROP_LABEL_MIN_SCALE,
-  planLimits,
+  planBearings,
   resolvePlanPalette,
   wheelZoomScale,
   withAlpha,
@@ -914,27 +918,87 @@ function drawHandles(): void {
 }
 
 /**
- * The room a circuit has, drawn on a blank canvas.
+ * Which colour each named box is drawn in.
  *
- * On a blank canvas the readout is hidden, so the two ceilings a circuit lives
- * under are nowhere on screen at the exact moment they matter most: before the
- * first stroke. The inner box is what an operator actually aims at, since the
- * line they draw carries a road and a garden either side of it and only the
- * CENTERLINE is under the pen. Both boxes and both sentences come from the core.
+ * `ground` shares the authored outline's own colour deliberately: the rectangle
+ * and the drawn shape are the SAME object in two states, and giving the default
+ * a colour of its own would make drawing a shore look like adding a fourth kind
+ * of boundary rather than replacing the one already there.
  */
-function drawLimits(): void {
-  const limits = planLimits(record.widthBands.map((band) => band.halfWidth));
-  strokeRect(limits.outer.halfX, limits.outer.halfZ, planPalette.line, [8, 6]);
-  strokeRect(limits.inner.halfX, limits.inner.halfZ, '#55607a', [3, 3]);
+const BEARING_COLOUR: Record<PlanBearingId, string> = {
+  volume: '#6f7890',
+  wall: '#55607a',
+  ground: '#4d7fa0',
+};
 
-  ctx.fillStyle = planPalette.dim;
-  ctx.font = '12px ui-monospace, Menlo, monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(limits.outerLabel, screenX(0), screenY(-limits.outer.halfZ) - 8);
-  // Inside its own box rather than under it: sat on the outer frame it read as
-  // a label for the wrong rectangle.
-  ctx.fillText(limits.innerLabel, screenX(0), screenY(limits.inner.halfZ) - 8);
+/**
+ * The named boxes a circuit lives inside, drawn in EVERY state.
+ *
+ * The defect this ends: the ceiling was drawn only on a blank canvas, and the
+ * circuit's own collision region took its place after the first stroke wearing
+ * the same colour and the same dashes. Two different objects, one drawing, so
+ * the fixed reference read as a rectangle that shrank when a circuit was drawn.
+ * They are one box now (every circuit carries the volume at its ceiling), and
+ * every box on the plan says what it is in the legend.
+ */
+function drawBearings(): void {
+  const bearings = planBearings(record, drawn);
+  for (const bearing of bearings) {
+    if (!bearing.half) continue;
+    strokeRect(bearing.half.halfX, bearing.half.halfZ, BEARING_COLOUR[bearing.id], [
+      ...bearing.dash,
+    ]);
+  }
+  // The aim box belongs to the tool that puts a line down and to no other: what
+  // it says is about the stroke, and only SHAPE strokes.
+  if (railMode === 'shape') {
+    const limit = centerlineLimit(record.widthBands.map((band) => band.halfWidth));
+    strokeRect(limit.halfX, limit.halfZ, '#55607a', [3, 3]);
+    ctx.fillStyle = planPalette.dim;
+    ctx.font = '12px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    // Inside its own box rather than under it: sat on the frame outside it, it
+    // read as a label for the wrong rectangle.
+    ctx.fillText(limit.label, screenX(0), screenY(limit.halfZ) - 8);
+    ctx.textAlign = 'left';
+  }
+  drawBearingLegend(bearings);
+}
+
+/**
+ * The legend, bottom left, in SCREEN space.
+ *
+ * In pixels rather than in yards because it is a key rather than a measurement:
+ * at any zoom that makes a road legible, two of the three boxes are off the
+ * canvas entirely, which is exactly when their numbers are the only way to know
+ * they are there. Each row wears its box's own dashes, so the swatch and the
+ * rectangle cannot drift apart.
+ */
+function drawBearingLegend(bearings: readonly PlanBearing[]): void {
+  ctx.save();
+  ctx.font = '11px ui-monospace, Menlo, monospace';
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const bottom = plan.height - PLAN_LEGEND.bottomInset;
+  bearings.forEach((bearing, index) => {
+    const y = bottom - (bearings.length - 1 - index) * PLAN_LEGEND.rowHeight;
+    ctx.save();
+    ctx.setLineDash([...bearing.dash]);
+    ctx.strokeStyle = BEARING_COLOUR[bearing.id];
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PLAN_LEGEND.left, y);
+    ctx.lineTo(PLAN_LEGEND.left + PLAN_LEGEND.swatch, y);
+    ctx.stroke();
+    ctx.restore();
+    const textX = PLAN_LEGEND.left + PLAN_LEGEND.swatch + PLAN_LEGEND.gap;
+    ctx.fillStyle = planPalette.muted;
+    ctx.fillText(bearing.label, textX, y);
+    ctx.fillStyle = planPalette.dim;
+    ctx.fillText(bearing.value, textX + 52, y);
+  });
+  ctx.restore();
+  ctx.textBaseline = 'alphabetic';
 }
 
 function drawStroke(): void {
@@ -1298,16 +1362,17 @@ function draw(): void {
   ctx.fillRect(0, 0, width, height);
   drawGridLines();
 
+  // The named boxes come first and come in BOTH states: the volume is the one
+  // mark on this canvas that never moves, and an operator who has just drawn a
+  // circuit needs it exactly as much as one who has not.
+  drawBearings();
   if (!drawn) {
-    // Nothing of the placeholder record is drawn, so a blank canvas really is
-    // blank: the room a circuit has, and the live stroke so a gesture is
+    // Nothing else of the placeholder record is drawn, so a blank canvas really
+    // is blank: just the room a circuit has, and the live stroke so a gesture is
     // visible as it happens.
-    drawLimits();
     drawStroke();
     return;
   }
-  strokeRect(record.regionHalfX, record.regionHalfZ, planPalette.line, [8, 6]);
-  strokeRect(record.perimeter.halfX, record.perimeter.halfZ, '#55607a');
   // The land first, under everything standing on it.
   drawGroundOutline();
   drawSurfaces();

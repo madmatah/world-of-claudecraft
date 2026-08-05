@@ -1,26 +1,30 @@
-// The plan canvas's own arithmetic: the starter circuit, the fit, the two limit
-// boxes, the hit tolerances and the colours it borrows from the stylesheet.
+// The plan canvas's own arithmetic: the starter circuit, the fit, the named
+// boxes a circuit lives inside, the hit tolerances and the colours it borrows
+// from the stylesheet.
 //
 // All of it was inline in `main.ts`, which is the one thing the local CLAUDE.md
 // says the page may not hold. Pinned here because each number is a decision:
 // framing the ROOM a circuit has rather than a shape nobody drew, keeping the
-// centerline a road-and-garden inside the wall, and reading a token once rather
-// than spelling its hex twice.
+// centerline a road-and-garden inside the wall, giving every box on the plan a
+// name and its own dashes, and reading a token once rather than spelling its
+// hex twice.
 
 import { describe, expect, it } from 'vitest';
 import { ZOOM_MAX_SCALE, ZOOM_MIN_SCALE } from '../src/editor/circuit/layout_core';
 import {
   blankCircuit,
+  centerlineLimit,
   FIT_MARGIN_BLANK,
   FIT_MARGIN_DRAWN,
   fitHalfExtent,
   fitScale,
   HIT_TOLERANCE_PIXELS,
   labelledPieces,
+  PLAN_BEARING_DASH,
   PLAN_PALETTE_FALLBACK,
   PLAN_PALETTE_VARS,
   PROP_LABEL_MIN_SCALE,
-  planLimits,
+  planBearings,
   resolvePlanPalette,
   STARTER_OVAL,
   starterControlPoints,
@@ -34,6 +38,7 @@ import {
 } from '../src/sim/content/realm_racers_circuits';
 import { realmRacersCircuitMetrics } from '../src/sim/realm_racers_circuit_metrics';
 import {
+  REALM_RACERS_LAWN_OVERSHOOT,
   REALM_RACERS_MAX_REGION_HALF_X,
   REALM_RACERS_MAX_REGION_HALF_Z,
   REALM_RACERS_RUNOFF_WIDTH,
@@ -82,9 +87,9 @@ describe('the starter oval', () => {
   });
 
   it('fits inside the room a circuit has, garden and all', () => {
-    const limits = planLimits([10]);
-    expect(STARTER_OVAL.halfX).toBeLessThan(limits.inner.halfX);
-    expect(STARTER_OVAL.halfZ).toBeLessThan(limits.inner.halfZ);
+    const limit = centerlineLimit([10]);
+    expect(STARTER_OVAL.halfX).toBeLessThan(limit.halfX);
+    expect(STARTER_OVAL.halfZ).toBeLessThan(limit.halfZ);
   });
 });
 
@@ -122,42 +127,122 @@ describe('framing the plan', () => {
   });
 });
 
-describe('the two limit boxes', () => {
-  it('keeps the wall inside the region and the road inside the wall', () => {
-    const limits = planLimits([10]);
-    expect(limits.outer.halfX).toBe(REALM_RACERS_MAX_REGION_HALF_X - 1);
-    expect(limits.outer.halfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z - 1);
+describe('the centerline aim box', () => {
+  it('comes off the volume by the whole garden edge, since the pen draws the middle', () => {
+    const limit = centerlineLimit([10]);
     const gardenEdge = 10 + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
-    expect(limits.inner.halfX).toBe(limits.outer.halfX - gardenEdge);
-    expect(limits.inner.halfZ).toBe(limits.outer.halfZ - gardenEdge);
+    expect(limit.halfX).toBe(REALM_RACERS_MAX_REGION_HALF_X - gardenEdge);
+    expect(limit.halfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z - gardenEdge);
   });
 
-  it('shrinks the inner box as the road widens, since the pen only draws the middle', () => {
-    const narrow = planLimits([6]);
-    const wide = planLimits([6, 24, 9]);
-    expect(wide.inner.halfX).toBeLessThan(narrow.inner.halfX);
-    expect(wide.inner.halfX).toBe(narrow.inner.halfX - 18);
+  it('shrinks as the road widens, since the pen only draws the middle', () => {
+    const narrow = centerlineLimit([6]);
+    const wide = centerlineLimit([6, 24, 9]);
+    expect(wide.halfX).toBeLessThan(narrow.halfX);
+    expect(wide.halfX).toBe(narrow.halfX - 18);
     // The widest band binds, not the last one written.
-    expect(planLimits([24, 6]).inner.halfX).toBe(wide.inner.halfX);
+    expect(centerlineLimit([24, 6]).halfX).toBe(wide.halfX);
   });
 
-  it('says both numbers in whole yards, in its own sentence', () => {
-    const limits = planLimits([10]);
-    expect(limits.outerLabel).toBe(
-      `widest a circuit may be: ${limits.outer.halfX * 2} x ${limits.outer.halfZ * 2} yd`,
+  it('says its numbers in whole yards, in its own sentence', () => {
+    const limit = centerlineLimit([10]);
+    expect(limit.label).toBe(
+      `keep the line you draw inside ${Math.round(limit.halfX * 2)} x ${Math.round(limit.halfZ * 2)} yd`,
     );
-    expect(limits.innerLabel).toBe(
-      `keep the line you draw inside ${Math.round(limits.inner.halfX * 2)} x ${Math.round(limits.inner.halfZ * 2)} yd`,
-    );
-    expect(limits.innerLabel).not.toMatch(/\.\d/);
+    expect(limit.label).not.toMatch(/\.\d/);
   });
 
   it('survives a record with no bands at all', () => {
     // A hand-pasted draft can arrive with anything; `Math.max()` of nothing is
     // -Infinity, which draws a box at infinity and takes the page with it.
-    const limits = planLimits([]);
-    expect(Number.isFinite(limits.inner.halfX)).toBe(true);
-    expect(Number.isFinite(limits.inner.halfZ)).toBe(true);
+    const limit = centerlineLimit([]);
+    expect(Number.isFinite(limit.halfX)).toBe(true);
+    expect(Number.isFinite(limit.halfZ)).toBe(true);
+  });
+});
+
+describe('the named boxes on the plan', () => {
+  const GARDEN = REALM_RACERS_PRACTICE_CIRCUIT;
+
+  it('gives a blank canvas the volume, and nothing the placeholder brought', () => {
+    // The rule the whole canvas follows: none of the borrowed record is shown
+    // until the first stroke. The volume survives it because it is not the
+    // placeholder's, it is the ceiling every circuit that will ever be drawn
+    // here carries.
+    const bearings = planBearings(GARDEN, false);
+    expect(bearings.map((bearing) => bearing.id)).toEqual(['volume']);
+    expect(bearings[0].half).toEqual({ halfX: GARDEN.regionHalfX, halfZ: GARDEN.regionHalfZ });
+  });
+
+  it('draws the SAME volume box before and after the first stroke', () => {
+    // The defect that started packet 28: the ceiling showed only on a blank
+    // canvas and the circuit's own region took its place afterwards, in the same
+    // colour and the same dashes. The fixed reference read as a box that shrank.
+    const blank = planBearings(GARDEN, false)[0];
+    const drawn = planBearings(GARDEN, true)[0];
+    expect(drawn).toEqual(blank);
+    expect(drawn.value).toContain('the ceiling');
+    expect(drawn.value).toContain(
+      `${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd`,
+    );
+  });
+
+  it('says so when a record carries a volume UNDER the ceiling, rather than guessing', () => {
+    // A draft authored before the volume became the ceiling is legal and still
+    // loads. Printing its number beside the word "ceiling" would be the plan
+    // lying about the one mark it promises never moves.
+    const old: RealmRacersCircuit = { ...GARDEN, regionHalfX: 170, regionHalfZ: 140 };
+    const volume = planBearings(old, true)[0];
+    expect(volume.half).toEqual({ halfX: 170, halfZ: 140 });
+    expect(volume.value).not.toContain('ceiling');
+    expect(volume.value).toBe(
+      `340 x 280 yd of ${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd`,
+    );
+  });
+
+  it('names the wall and the ground on a drawn circuit, nesting outward', () => {
+    const bearings = planBearings(GARDEN, true);
+    expect(bearings.map((bearing) => bearing.id)).toEqual(['volume', 'wall', 'ground']);
+    const [volume, wall, ground] = bearings;
+    expect(wall.half).toEqual({ halfX: GARDEN.perimeter.halfX, halfZ: GARDEN.perimeter.halfZ });
+    // The wall is inside the volume and the ground reaches past both: it is the
+    // horizon the 3D dock stands on, which is the whole reason it is named here.
+    if (!volume.half || !wall.half || !ground.half) throw new Error('three rectangles');
+    expect(wall.half.halfX).toBeLessThan(volume.half.halfX);
+    expect(ground.half.halfX).toBe(GARDEN.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT);
+    expect(ground.half.halfZ).toBe(GARDEN.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT);
+    expect(ground.half.halfX).toBeGreaterThan(volume.half.halfX);
+  });
+
+  it('stops describing the ground as a rectangle once one is DRAWN', () => {
+    // It is a curve then, drawn as itself. A rectangle in the legend beside a
+    // shore on the canvas would be the key describing the box the shape
+    // replaced.
+    const island: RealmRacersCircuit = {
+      ...GARDEN,
+      groundOutline: [
+        { x: -100, z: -80 },
+        { x: 100, z: -80 },
+        { x: 100, z: 80 },
+        { x: -100, z: 80 },
+      ],
+    };
+    const ground = planBearings(island, true)[2];
+    expect(ground.id).toBe('ground');
+    expect(ground.half).toBeNull();
+    expect(ground.value).toBe('the shape you drew');
+  });
+
+  it('gives every box its own dashes, so a legend swatch cannot stand for two', () => {
+    const bearings = planBearings(REALM_RACERS_PRACTICE_CIRCUIT, true);
+    for (const bearing of bearings) {
+      expect(bearing.dash).toEqual(PLAN_BEARING_DASH[bearing.id]);
+    }
+    const patterns = bearings.map((bearing) => bearing.dash.join(','));
+    expect(new Set(patterns).size).toBe(patterns.length);
+    // The labels have to be distinct for the same reason.
+    const labels = bearings.map((bearing) => bearing.label);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });
 
