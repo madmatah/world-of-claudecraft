@@ -369,7 +369,16 @@ of course: that is the circuit being edited.
   place, for every box; `tests/editor_circuit_plan.test.ts` pins the id list per
   state. In SCREEN space, because at any zoom a road is legible at most of the
   boxes are off canvas, which is exactly when their numbers are the only way to
-  know they are there.
+  know they are there. Three more things the same seat rounds settled. Each box
+  gets a HUE and keeps its dashes: four shades of slate told apart by dash
+  length alone is not a key a person reads, and colour plus dashes means neither
+  channel carries it alone. A row is named for what it is FOR (`max`), not for
+  what the sim does with it (the instance volume), which goes in the value where
+  it is read once. And a bearing may be legend-ONLY: the default ground runs 160
+  yd past the ceiling, so drawing it put the biggest rectangle on the canvas
+  outside the box that bounds everything, which reads as a contradiction; its
+  number stays because it is the only answer to "what is that floor in the 3D
+  dock", and an AUTHORED ground appears as its own curve instead.
 - **The rail has five entries, and SHAPE is one intent over two gestures.** A
   blank canvas is drawn on, a drawn one is edited by its handles, and which of
   the two the operator gets was never a choice worth a button (`toolFor`). RACE

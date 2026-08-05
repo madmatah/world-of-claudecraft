@@ -941,15 +941,22 @@ function drawHandles(): void {
 /**
  * Which colour each named box is drawn in.
  *
- * `ground` shares the authored outline's own colour deliberately: the rectangle
- * and the drawn shape are the SAME object in two states, and giving the default
- * a colour of its own would make drawing a shore look like adding a fourth kind
- * of boundary rather than replacing the one already there.
+ * HUES, not four shades of the same slate, and that is a seat finding rather
+ * than decoration: the boxes were told apart by their dash patterns alone, and
+ * a legend keyed on "long dashes versus short dashes versus dots" is not one a
+ * person can read at a glance. Colour is the channel that works; the dashes
+ * stay as the second one, so the key survives being looked at by someone who
+ * does not separate these hues.
+ *
+ * Chosen clear of the colours this canvas already spends: amber is a selection
+ * (`--pick`), red and green are the readout's verdicts, the handles are
+ * cornflower and the stroke is pink. `ground` keeps the authored shore's own
+ * blue, because the row and the drawn curve are the same object.
  */
 const BEARING_COLOUR: Record<PlanBearingId, string> = {
-  volume: '#6f7890',
-  centerline: '#55607a',
-  wall: '#55607a',
+  volume: '#8f7fd6',
+  centerline: '#4fb3a5',
+  wall: '#c98f5a',
   ground: '#4d7fa0',
 };
 
@@ -964,7 +971,9 @@ const BEARING_COLOUR: Record<PlanBearingId, string> = {
  * every box on the plan says what it is in the legend.
  */
 function drawBearings(): void {
-  const bearings = planBearings(record, drawn, railMode === 'shape');
+  // The aim box is up while the PEN is, not for the whole of SHAPE: a blank
+  // canvas and a redraw are strokes, and dragging a handle is not.
+  const bearings = planBearings(record, drawn, tool() === 'draw');
   const sizing = wallGrip !== null;
   for (const bearing of bearings) {
     if (!bearing.half) continue;
@@ -1011,10 +1020,17 @@ function drawWallGrips(): void {
  * The legend, bottom left, in SCREEN space.
  *
  * In pixels rather than in yards because it is a key rather than a measurement:
- * at any zoom that makes a road legible, two of the three boxes are off the
- * canvas entirely, which is exactly when their numbers are the only way to know
- * they are there. Each row wears its box's own dashes, so the swatch and the
- * rectangle cannot drift apart.
+ * at any zoom that makes a road legible, most of the boxes are off the canvas
+ * entirely, which is exactly when their numbers are the only way to know they
+ * are there. Each row wears its box's own colour AND its own dashes, so the
+ * swatch and the rectangle cannot drift apart, and neither channel is carrying
+ * the key on its own.
+ *
+ * The value column is MEASURED off the widest label rather than set to a
+ * constant. It was a constant, and `centerline` (66 px at this size) ran
+ * straight through a column parked at 52, so the row printed
+ * `centerline62 x 272 yd` on screen. A monospace font makes the arithmetic look
+ * safe to do by eye, and it is exactly as wrong as any other kind.
  */
 function drawBearingLegend(bearings: readonly PlanBearing[]): void {
   ctx.save();
@@ -1022,6 +1038,11 @@ function drawBearingLegend(bearings: readonly PlanBearing[]): void {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   const bottom = plan.height - PLAN_LEGEND.bottomInset;
+  const textX = PLAN_LEGEND.left + PLAN_LEGEND.swatch + PLAN_LEGEND.gap;
+  const valueX =
+    textX +
+    Math.max(...bearings.map((bearing) => ctx.measureText(bearing.label).width)) +
+    PLAN_LEGEND.gap;
   bearings.forEach((bearing, index) => {
     const y = bottom - (bearings.length - 1 - index) * PLAN_LEGEND.rowHeight;
     ctx.save();
@@ -1033,11 +1054,12 @@ function drawBearingLegend(bearings: readonly PlanBearing[]): void {
     ctx.lineTo(PLAN_LEGEND.left + PLAN_LEGEND.swatch, y);
     ctx.stroke();
     ctx.restore();
-    const textX = PLAN_LEGEND.left + PLAN_LEGEND.swatch + PLAN_LEGEND.gap;
-    ctx.fillStyle = planPalette.muted;
+    // The NAME wears the box's colour, so the eye can go from a rectangle on the
+    // canvas to its row without reading the swatch as a separate thing.
+    ctx.fillStyle = BEARING_COLOUR[bearing.id];
     ctx.fillText(bearing.label, textX, y);
     ctx.fillStyle = planPalette.dim;
-    ctx.fillText(bearing.value, textX + 52, y);
+    ctx.fillText(bearing.value, valueX, y);
   });
   ctx.restore();
   ctx.textBaseline = 'alphabetic';

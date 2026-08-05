@@ -154,7 +154,8 @@ export function centerlineLimit(halfWidths: readonly number[]): CenterlineLimit 
  *   colliders are off. Every circuit carries it at its ceiling, which is what
  *   makes it the FIXED reference the operator asked for: it is the same
  *   rectangle on a blank canvas and on a finished circuit.
- * - `centerline` is where the line under the pen has to stay, SHAPE's alone.
+ * - `centerline` is where the line under the pen has to stay, up only while a
+ *   stroke is about to be made.
  * - `wall` is the perimeter, the only one that stops a machine.
  * - `ground` is the land, which is the rectangle a circuit gets when nobody
  *   draws one. It is on the plan because it is what the 3D dock stands on, and
@@ -214,18 +215,25 @@ export function planBearings(
   const volume: PlanBearing = {
     id: 'volume',
     half: volumeHalf,
-    label: 'volume',
+    // Called MAX rather than "volume", on the operator's call: the legend's job
+    // is to let someone identify a rectangle, not to teach them what the sim
+    // does with it. What this box IS goes in the value, where it is read once;
+    // what it is FOR goes in the name, which is read every time.
+    label: 'max',
     // A record from before the volume became the ceiling is legal and still
-    // loads, so the plan says which of the two it is looking at rather than
-    // printing a number that would be a guess on one of them.
+    // loads, so the row says it is under the ceiling rather than printing a
+    // number beside a word that would then be a lie.
     value: ceiling
-      ? `${size(volumeHalf.halfX, volumeHalf.halfZ)}, the ceiling`
-      : `${size(volumeHalf.halfX, volumeHalf.halfZ)} of ${size(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z)}`,
+      ? `${size(volumeHalf.halfX, volumeHalf.halfZ)}, the flat floor`
+      : `${size(volumeHalf.halfX, volumeHalf.halfZ)}, under the ${size(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z)} ceiling`,
     dash: PLAN_BEARING_DASH.volume,
   };
-  // The aim box goes in whether or not anything is drawn, and the BLANK arm is
-  // the one that matters: it says where to put the first stroke, at the one
-  // moment nothing else on the canvas does.
+  // The aim box is up while a STROKE is about to be made, and not for the whole
+  // of SHAPE. It is guidance for the pen: once a circuit exists and its handles
+  // are being dragged, the readout is what reports a road that has left its
+  // room, at the place it happens, which a box cannot do. Leaving it up through
+  // the handle work made it a permanent rectangle the operator had to ask the
+  // purpose of, which is the answer.
   const aim = centerlineLimit(circuit.widthBands.map((band) => band.halfWidth));
   const centerline: PlanBearing = {
     id: 'centerline',
@@ -252,19 +260,23 @@ export function planBearings(
     },
     {
       id: 'ground',
-      half: authoredGround
-        ? null
-        : {
-            halfX: circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
-            halfZ: circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
-          },
+      // NEVER a rectangle on the plan, and that is the operator's call from the
+      // seat: the default lawn runs 160 yards PAST the ceiling, so drawing it
+      // put the biggest box on the canvas outside the one box that is supposed
+      // to bound everything, and it read as a contradiction rather than as a
+      // horizon. Nothing is lost by dropping the outline: it is decoration that
+      // stops nobody, it is never edited, and the question it was drawn to
+      // answer ("what is that floor in the 3D dock") is answered by the number
+      // in the legend. A ground that IS drawn appears as its own curve, which
+      // is a shape somebody authored and worth seeing in place.
+      half: null,
       label: 'ground',
       value: authoredGround
         ? 'the shape you drew'
-        : size(
+        : `${size(
             circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
             circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
-          ),
+          )}, the lawn past the edge`,
       dash: PLAN_BEARING_DASH.ground,
     },
   ];

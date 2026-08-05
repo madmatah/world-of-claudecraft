@@ -173,9 +173,12 @@ describe('the named boxes on the plan', () => {
     const blank = planBearings(GARDEN, false)[0];
     const drawn = planBearings(GARDEN, true)[0];
     expect(drawn).toEqual(blank);
-    expect(drawn.value).toContain('the ceiling');
-    expect(drawn.value).toContain(
-      `${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd`,
+    // Named for what it is FOR rather than for what the sim does with it: the
+    // legend has to let someone identify a rectangle, and "max" is the word an
+    // operator reaches for. What it IS goes in the value, read once.
+    expect(drawn.label).toBe('max');
+    expect(drawn.value).toBe(
+      `${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd, the flat floor`,
     );
   });
 
@@ -186,24 +189,38 @@ describe('the named boxes on the plan', () => {
     const old: RealmRacersCircuit = { ...GARDEN, regionHalfX: 170, regionHalfZ: 140 };
     const volume = planBearings(old, true)[0];
     expect(volume.half).toEqual({ halfX: 170, halfZ: 140 });
-    expect(volume.value).not.toContain('ceiling');
+    // Still called max, and the row says it is UNDER one rather than printing a
+    // number beside a word that would then be a lie.
+    expect(volume.label).toBe('max');
     expect(volume.value).toBe(
-      `340 x 280 yd of ${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd`,
+      `340 x 280 yd, under the ${REALM_RACERS_MAX_REGION_HALF_X * 2} x ${REALM_RACERS_MAX_REGION_HALF_Z * 2} yd ceiling`,
     );
   });
 
   it('names the wall and the ground on a drawn circuit, nesting outward', () => {
     const bearings = planBearings(GARDEN, true);
     expect(bearings.map((bearing) => bearing.id)).toEqual(['volume', 'wall', 'ground']);
-    const [volume, wall, ground] = bearings;
+    const [volume, wall] = bearings;
     expect(wall.half).toEqual({ halfX: GARDEN.perimeter.halfX, halfZ: GARDEN.perimeter.halfZ });
-    // The wall is inside the volume and the ground reaches past both: it is the
-    // horizon the 3D dock stands on, which is the whole reason it is named here.
-    if (!volume.half || !wall.half || !ground.half) throw new Error('three rectangles');
+    if (!volume.half || !wall.half) throw new Error('two rectangles');
     expect(wall.half.halfX).toBeLessThan(volume.half.halfX);
-    expect(ground.half.halfX).toBe(GARDEN.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT);
-    expect(ground.half.halfZ).toBe(GARDEN.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT);
-    expect(ground.half.halfX).toBeGreaterThan(volume.half.halfX);
+  });
+
+  it('never draws the default ground, and still reports how far the lawn runs', () => {
+    // The operator's call from the seat: the default lawn runs 160 yards PAST
+    // the ceiling, so drawing it put the biggest rectangle on the canvas
+    // outside the one box that bounds everything, which reads as a
+    // contradiction. The NUMBER stays, because it is the only answer to "what
+    // is that floor in the 3D dock".
+    const ground = planBearings(GARDEN, true)[2];
+    expect(ground.id).toBe('ground');
+    expect(ground.half).toBeNull();
+    const halfX = GARDEN.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT;
+    const halfZ = GARDEN.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT;
+    expect(ground.value).toBe(`${halfX * 2} x ${halfZ * 2} yd, the lawn past the edge`);
+    // ...and it really is bigger than the box that bounds everything else,
+    // which is the whole reason drawing it was confusing rather than useful.
+    expect(halfX).toBeGreaterThan(REALM_RACERS_MAX_REGION_HALF_X);
   });
 
   it('stops describing the ground as a rectangle once one is DRAWN', () => {
@@ -237,22 +254,25 @@ describe('the named boxes on the plan', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 
-  it('carries the AIM box while shaping, in both states, and nowhere else', () => {
+  it('carries the AIM box while a STROKE is coming, and nowhere else', () => {
     // The defect coming back one box later, reported from the seat: the aim box
     // was drawn with a sentence floating at its own base instead of a legend
     // row, and the operator read that sentence, could not tell which of the
     // three rectangles it belonged to, and asked what the middle one was. A box
     // on the plan that is not in this list is the same defect again.
-    const shaping = planBearings(GARDEN, true, true).map((bearing) => bearing.id);
-    expect(shaping).toEqual(['volume', 'centerline', 'wall', 'ground']);
+    // The drawn arm is a REDRAW, the other time a pen is about to touch a
+    // circuit that already exists.
+    const stroking = planBearings(GARDEN, true, true).map((bearing) => bearing.id);
+    expect(stroking).toEqual(['volume', 'centerline', 'wall', 'ground']);
     // On a BLANK canvas too, which is the arm that matters most: it is the only
     // thing on screen saying where the first stroke goes.
     expect(planBearings(GARDEN, false, true).map((bearing) => bearing.id)).toEqual([
       'volume',
       'centerline',
     ]);
-    // And nowhere else: what it says is about the gesture, and only SHAPE puts
-    // a centerline down.
+    // And nowhere else, which is the operator's question answered: it is
+    // guidance for the PEN, so it comes down when the handles come out and the
+    // readout takes over reporting a road that has left its room.
     expect(planBearings(GARDEN, true, false).map((bearing) => bearing.id)).toEqual([
       'volume',
       'wall',
