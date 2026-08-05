@@ -59,6 +59,7 @@ import { Sim } from '../src/sim/sim';
 import type { SimContext } from '../src/sim/sim_context';
 import { tradeSetOffer } from '../src/sim/social/trade';
 import { DT, FORM_AURA_KINDS, type MountItemDef, type SimEvent } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { groundHeight } from '../src/sim/world';
 
 function makeWorld() {
@@ -552,6 +553,38 @@ describe('mount reins transfer (not soulbound: the collection trades hands)', ()
       sim.tickCount++;
     }
   }
+
+  it('a seated rally pilot survives the re-validation with no reins of its own', () => {
+    // Realm Racers seats a pilot on the match's machine: the race hands it out
+    // and takes it back, and no reins item exists for it. The transferable-reins
+    // rule has nothing to re-validate against there, so the seat must outlive
+    // the check, or a heat dismounts every pilot mid-race four ticks in.
+    const sim = makeWorld();
+    const pid = join(sim);
+    const e = sim.entities.get(pid)!;
+    e.mountKey = 'tank';
+    e.drive = createVehicleDrive('tank');
+    expect(mountOwned(sim.players.get(pid)!, 'tank')).toBe(false);
+
+    revalidateWindow(sim, pid, 3);
+
+    expect(e.mountKey).toBe('tank');
+    expect(e.drive).not.toBeNull();
+  });
+
+  it('still dismounts an unowned mount that is NOT a seated vehicle', () => {
+    // The negative arm of the carve-out above: without a drive the ordinary
+    // rule applies, so the exemption cannot be read as "unowned is fine now".
+    const sim = makeWorld();
+    const pid = join(sim);
+    const e = sim.entities.get(pid)!;
+    e.mountKey = 'tank';
+    e.drive = null;
+
+    revalidateWindow(sim, pid, 3);
+
+    expect(e.mountKey).toBe('');
+  });
 
   it('listing the ridden reins away dismounts within the re-validation window', () => {
     // The ride follows the item: once the reins leave the player's possession

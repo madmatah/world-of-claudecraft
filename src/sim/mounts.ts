@@ -126,6 +126,15 @@ function trainingSummon(meta: PlayerMeta | undefined, key: string): boolean {
   return key === TRAINING_MOUNT_KEY && meta?.mountTraining?.state === 'IN_PROGRESS';
 }
 
+/** A Realm Racers pilot is seated on the match's machine, which the race hands
+ *  out and takes back itself: no reins item exists for it and the pilot never
+ *  owns one, so the transferable-reins rule has nothing to re-validate against.
+ *  `drive` is set only by the race (and cleared by it, or by forceDismount), so
+ *  it is the exact discriminator for that seat. */
+function seatedInVehicle(e: Entity): boolean {
+  return e.drive !== null;
+}
+
 /** Force an instant dismount with no put-away channel: clears the live mount and
  *  any in-flight summon/dismount channel, then recomputes stats. Used by the riding
  *  lesson to take the unowned training steed back the moment the lesson ends, and by
@@ -313,15 +322,17 @@ export function updateMountTransition(ctx: SimContext, e: Entity, swimming: bool
   // (a2) Ownership re-validation while mounted. Reins are transferable items,
   // so the ridden mount can leave the player's possession mid-ride (traded,
   // mailed, listed, deposited): the ride must follow the item, or one reins
-  // could keep a chain of players mounted. The lent training steed is the one
-  // sanctioned unowned ride. Draws no rng (a pure bags+bank scan), and the
-  // id-staggered cadence keeps the per-tick cost flat across mounted players.
+  // could keep a chain of players mounted. The lent training steed and a
+  // seated rally pilot are the two sanctioned unowned rides. Draws no rng (a
+  // pure bags+bank scan), and the id-staggered cadence keeps the per-tick cost
+  // flat across mounted players.
   if (
     e.mountKey &&
     meta &&
     ctx.tickCount % MOUNT_OWNERSHIP_REVALIDATE_TICKS === e.id % MOUNT_OWNERSHIP_REVALIDATE_TICKS &&
     !mountOwned(meta, e.mountKey) &&
-    !trainingSummon(meta, e.mountKey)
+    !trainingSummon(meta, e.mountKey) &&
+    !seatedInVehicle(e)
   ) {
     forceDismount(ctx, e);
     return;
