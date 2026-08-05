@@ -48,6 +48,15 @@ export {
   editorIcon,
 } from './editor_icons';
 export {
+  type EnclosureGrip,
+  type EnclosureGripId,
+  type EnclosureHit,
+  enclosureGrips,
+  enclosureHitAt,
+  enclosureResized,
+  MIN_PERIMETER_HALF,
+} from './enclosure_core';
+export {
   type EnvelopeSuggestion,
   MAX_PERIMETER_HALF_X,
   MAX_PERIMETER_HALF_Z,

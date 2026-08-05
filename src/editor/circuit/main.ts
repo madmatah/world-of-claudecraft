@@ -67,6 +67,12 @@ import {
   serializeDraft,
   shouldWarnOnUnload,
 } from './draft_store_core';
+import {
+  type EnclosureGrip,
+  enclosureGrips,
+  enclosureHitAt,
+  enclosureResized,
+} from './enclosure_core';
 import { suggestEnvelope, suggestGroundOutline } from './envelope_core';
 import { circuitToTypeScript, roundCircuit } from './export_core';
 import {
@@ -326,6 +332,17 @@ let fenceDraft: FenceDraft | null = null;
  */
 let groundPoint: number | null = null;
 let groundDragging = false;
+/**
+ * The WALL grip the pointer has hold of, and where the circuit stood when a move
+ * began.
+ *
+ * Two states rather than one because the box answers two different verbs: eight
+ * grips RESIZE it, and the centre one does not touch it at all, it slides the
+ * circuit's own contents. The move keeps its origin because it is a delta
+ * gesture: the record has no position to read the offset back out of.
+ */
+let wallGrip: EnclosureGrip | null = null;
+let wallMove: { x: number; z: number; from: RealmRacersCircuit } | null = null;
 /**
  * Whether the next drag on the plan shapes the LAND.
  *
@@ -603,6 +620,11 @@ function clearSelections(): void {
   groundStroke = [];
   groundDrawing = false;
   groundArmed = false;
+  wallGrip = null;
+  // The move's origin is a point in the coordinates of the record being left, so
+  // a load or an undo mid-drag would slide the next circuit by the difference
+  // between two frames.
+  wallMove = null;
   // The draft goes with them: it holds points in the coordinates of the record
   // being left, so carrying it into an undo or a load would drop a run onto a
   // circuit nobody drew it on.
@@ -943,12 +965,17 @@ const BEARING_COLOUR: Record<PlanBearingId, string> = {
  */
 function drawBearings(): void {
   const bearings = planBearings(record, drawn);
+  const sizing = wallGrip !== null;
   for (const bearing of bearings) {
     if (!bearing.half) continue;
-    strokeRect(bearing.half.halfX, bearing.half.halfZ, BEARING_COLOUR[bearing.id], [
-      ...bearing.dash,
-    ]);
+    // The wall lights up while it is being dragged, and lighting the WHOLE box
+    // is the point rather than a flourish: a half-extent moves both edges, and
+    // an operator watching only the one under the pointer would read the far
+    // side moving as the tool doing something it was not asked to.
+    const colour = bearing.id === 'wall' && sizing ? planPalette.pick : BEARING_COLOUR[bearing.id];
+    strokeRect(bearing.half.halfX, bearing.half.halfZ, colour, [...bearing.dash]);
   }
+  if (drawn && railMode === 'terrain') drawWallGrips();
   // The aim box belongs to the tool that puts a line down and to no other: what
   // it says is about the stroke, and only SHAPE strokes.
   if (railMode === 'shape') {
@@ -963,6 +990,34 @@ function drawBearings(): void {
     ctx.textAlign = 'left';
   }
   drawBearingLegend(bearings);
+}
+
+/**
+ * The wall's grips, and the centre one that moves the circuit instead.
+ *
+ * TERRAIN only, because that is the mode the wall belongs to: eight dots on
+ * every other tool's canvas would be eight things to click by accident while
+ * painting a road or placing a bench.
+ */
+function drawWallGrips(): void {
+  ctx.save();
+  for (const grip of enclosureGrips(record.perimeter.halfX, record.perimeter.halfZ)) {
+    ctx.fillStyle = wallGrip?.id === grip.id ? planPalette.pick : BEARING_COLOUR.wall;
+    ctx.beginPath();
+    ctx.arc(screenX(grip.x), screenY(grip.z), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // The centre is a CROSS rather than a ninth dot, because it is a different
+  // verb: the eight resize the box and this one picks the circuit up.
+  ctx.strokeStyle = wallMove ? planPalette.pick : BEARING_COLOUR.wall;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(screenX(0) - 5, screenY(0));
+  ctx.lineTo(screenX(0) + 5, screenY(0));
+  ctx.moveTo(screenX(0), screenY(0) - 5);
+  ctx.lineTo(screenX(0), screenY(0) + 5);
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**
@@ -1571,6 +1626,10 @@ function startTerrainGesture(raw: RallyPoint): void {
   // mean. After the barriers, because a barrier is small and a ground handle is
   // one of eight around a whole circuit: the near thing wins the near click.
   if (kit === null && startGroundGesture(raw)) return;
+  // Then the WALL, last of the three, for the same reason in the same order: its
+  // grips are the furthest apart of anything on this canvas, so a click that
+  // could be either was aimed at whatever is smaller.
+  if (kit === null && startWallGesture(raw)) return;
   if (kit === null) {
     fenceSelection = null;
     groundPoint = null;
@@ -1811,6 +1870,77 @@ function startGroundGesture(raw: RallyPoint): boolean {
   applySideTab();
   requestRedraw();
   return true;
+}
+
+// ---- the wall gesture ----
+
+/**
+ * One click on the WALL, with nothing armed: its eight grips, and its centre.
+ *
+ * Returns whether the click was the wall's, so the caller can go on to whatever
+ * else a click can mean. The undo snapshot is taken at the PRESS, like every
+ * other drag in this tool, so one gesture is one step back rather than one per
+ * pointermove.
+ */
+function startWallGesture(raw: RallyPoint): boolean {
+  const hit = enclosureHitAt(
+    record.perimeter.halfX,
+    record.perimeter.halfZ,
+    raw.x,
+    raw.z,
+    HIT_TOLERANCE_PIXELS.handle / view.scale,
+  );
+  if (!hit) return false;
+  pushUndo();
+  fenceSelection = null;
+  fencePoint = null;
+  groundPoint = null;
+  if (hit.kind === 'move') {
+    wallMove = { x: raw.x, z: raw.z, from: record };
+    setStatus('drag to slide the whole circuit inside its wall', '');
+    requestRedraw();
+    return true;
+  }
+  wallGrip = hit.grip;
+  // What the drag is about to do to the OTHER side, said once at the press: the
+  // record holds one half-extent per axis, so there is no version of this
+  // gesture that moves the edge under the pointer alone.
+  setStatus(`wall ${hit.grip.id}: drag to resize, both sides move together`, '');
+  requestRedraw();
+  return true;
+}
+
+/** Drag a wall grip. `remember` is false through the drag: the press already
+ *  snapshotted. */
+function resizeWallTo(x: number, z: number): void {
+  if (!wallGrip) return;
+  const perimeter = enclosureResized(record.perimeter, wallGrip, x, z);
+  commit({ ...record, perimeter }, false);
+  form.sync();
+  setStatus(`wall ${perimeter.halfX * 2} x ${perimeter.halfZ * 2} yd`, '');
+  requestRedraw();
+}
+
+/**
+ * Drag the circuit inside its wall.
+ *
+ * Everything circuit-local moves together through the one core that knows what
+ * "everything" is (`moveCircuitContent`): moving the road alone would walk it
+ * out from under its own dressing.
+ *
+ * The offset is applied to the record as it stood at the PRESS, every move,
+ * rather than stepped from the last frame. Stepping is the obvious shape and it
+ * DRIFTS: a commit rounds the control points, so a slow drag across the plan is
+ * a hundred separate roundings compounding in whatever direction the pointer was
+ * going. Measured from the press there is exactly one rounding, of the total.
+ */
+function moveCircuitTo(x: number, z: number): void {
+  if (!wallMove) return;
+  const dx = x - wallMove.x;
+  const dz = z - wallMove.z;
+  commit(moveCircuitContent(wallMove.from, dx, dz), false);
+  setStatus(`circuit moved ${dx.toFixed(1)}, ${dz.toFixed(1)} yd inside its wall`, '');
+  requestRedraw();
 }
 
 /** Drag one handle. `remember` is false through the drag: the press already
@@ -2787,6 +2917,17 @@ canvas.addEventListener('pointermove', (ev) => {
     moveGroundPointTo(snap.x, snap.z);
     return;
   }
+  // The wall takes the RAW point rather than a snapped one: it is authored in
+  // whole yards by its own core, and the road-edge magnet every other terrain
+  // gesture goes through has nothing to say about a box out in the lawn.
+  if (wallGrip && tool() === 'terrain') {
+    resizeWallTo(point.x, point.z);
+    return;
+  }
+  if (wallMove && tool() === 'terrain') {
+    moveCircuitTo(point.x, point.z);
+    return;
+  }
   if (fenceDragging && tool() === 'terrain' && !fenceDraft) {
     const snap = resolveSnap(record, point.x, point.z, { grid: layout.snap, free: altHeld });
     moveFencePointTo(snap.x, snap.z);
@@ -2826,6 +2967,14 @@ function endGesture(): void {
   if (groundDrawing) finishGroundStroke();
   if (groundDragging) {
     groundDragging = false;
+    requestRedraw();
+  }
+  if (wallGrip || wallMove) {
+    // Nothing stays selected: the wall has no numbers of its own to inspect
+    // beyond the two the panel already shows, and a grip left lit would answer
+    // `del` with whichever branch ran first.
+    wallGrip = null;
+    wallMove = null;
     requestRedraw();
   }
   if (painting) reportStroke();
