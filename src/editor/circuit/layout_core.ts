@@ -92,14 +92,14 @@ export const RAIL_MODES: readonly RailModeDef[] = [
     label: 'Race',
     icon: 'flag',
     shortcut: '4',
-    detail: 'The race furniture on the road, plus the enclosure and the race settings',
+    detail: 'The race furniture on the road, plus the race settings',
   },
   {
     id: 'terrain',
     label: 'Terrain',
     icon: 'terrain',
     shortcut: '5',
-    detail: 'Shape the land, and draw the barriers that enclose it',
+    detail: 'Shape the land, draw the barriers on it, and size the wall around it',
   },
 ];
 
@@ -179,7 +179,7 @@ export function railBanner(
       // cannot find the way out of a drawing gesture is stuck in it.
       return placing
         ? 'click to drop each point of the run; click the first point to close the ring, enter to finish it open, esc to cancel'
-        : 'click a barrier or a ground handle to select it: drag it to move it, del removes it. Arm a kit in the library, or Draw ground shape above';
+        : 'drag a barrier point, a ground handle, or a wall grip: both sides of the wall move together, and its centre slides the circuit';
     default:
       return 'the numbers a circuit carries that nothing on the canvas can show';
   }
@@ -241,7 +241,7 @@ export type ActionId =
   | 'zoomIn'
   | 'redrawCenterline'
   | 'disarmTool'
-  | 'fitEnclosure'
+  | 'fitWall'
   | 'centerCircuit'
   | 'fitGround'
   | 'drawGround'
@@ -488,10 +488,10 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     group: 'selection',
   },
   {
-    id: 'fitEnclosure',
+    id: 'fitWall',
     needsCircuit: true,
-    label: 'Fit enclosure',
-    detail: 'Size the perimeter wall and the collision region to the road',
+    label: 'Fit wall',
+    detail: 'Size the perimeter wall to the road it encloses',
     icon: 'box',
     scope: 'global',
     menu: 'track',
@@ -501,7 +501,7 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     id: 'centerCircuit',
     needsCircuit: true,
     label: 'Center circuit',
-    detail: 'Slide the whole circuit so the road sits in the middle of its enclosure',
+    detail: 'Slide the whole circuit so the road sits in the middle of its wall',
     icon: 'center',
     scope: 'global',
     menu: 'track',
@@ -799,7 +799,7 @@ export const MENU_ITEMS: Record<MenuId, readonly ActionId[]> = {
     'drawGround',
     'fitGround',
     'deleteGround',
-    'fitEnclosure',
+    'fitWall',
     'centerCircuit',
     'fixCorners',
     'raceSettings',
@@ -822,40 +822,48 @@ export const MODE_ACTIONS: Record<RailModeId, ActionId> = {
 /**
  * The repairs a mode puts ON the plan, beside its banner.
  *
- * They are in the Track menu too, and the menu is where they were LOST: fitting
- * the enclosure and narrowing a folded corner are both things an operator wants
- * the moment they finish a stroke, and hunting a menu bar for them broke the
+ * They are in the Track menu too, and the menu is where they were LOST: sizing
+ * the wall and narrowing a folded corner are both things an operator wants the
+ * moment they finish a stroke, and hunting a menu bar for them broke the
  * gesture. A tool that has a repair shows it where the work is.
  *
- * `fixCorners` belongs to both shaping tools because it is both their business:
- * it narrows the ROAD (width's table) to clear a corner the CURVE made (shape's
- * geometry), and whichever of the two the operator is in is where they meet it.
+ * **Each action is on exactly ONE mode's banner**, and getting there was the
+ * point of packet 28. `fitWall` had spread to three (SHAPE, RACE and TERRAIN)
+ * and `centerCircuit` sat on the one mode it has the least to do with, so an
+ * operator could not learn where anything lived. The rule now is the object each
+ * one acts on:
  *
- * The three GROUND actions and the two ENCLOSURE ones belong to TERRAIN, which
- * is the tool about the land a race sits on. `Draw ground shape` is the odd one
- * in this table: every other repair here acts once and is done, and that one
- * arms a MODE, so the chrome holds it lit (`setChecked`) for as long as it is
- * true. It is on the banner rather than in the palette beside the barrier kits
- * because a circuit has ONE ground and any number of barriers: a palette is for
- * picking one of many, and the land is not one of many. `fitEnclosure` also stays on SHAPE, and that is deliberate
- * rather than a leftover: an operator who has just finished a stroke wants it
- * immediately, which is the whole reason it was pulled out of the menu bar in
- * the first place. An action may appear on two modes' banners; it is one row in
- * the table either way.
+ * - `fixCorners` acts on the ROAD, and belongs to both shaping tools because it
+ *   is both their business: it narrows the road (width's table) to clear a corner
+ *   the curve made (shape's geometry), and whichever of the two the operator is
+ *   in is where they meet it. It is the one deliberate exception.
+ * - `centerCircuit` moves the circuit's own geometry, so it is SHAPE's.
+ * - the land and the wall are TERRAIN's, which is the tool about the ground a
+ *   race sits on and the box around it.
+ *
+ * The argument that used to keep `fitWall` on SHAPE ("wanted the instant a
+ * stroke ends") no longer holds: a freehand stroke calls the fit itself, so the
+ * banner copy only ever served a handle edit, and it cost the tool a rule an
+ * operator could state.
+ *
+ * `Draw ground shape` is the odd one in this table: every other repair here acts
+ * once and is done, and that one arms a MODE, so the chrome holds it lit
+ * (`setChecked`) for as long as it is true. It is on the banner rather than in
+ * the palette beside the barrier kits because a circuit has ONE ground and any
+ * number of barriers: a palette is for picking one of many, and the land is not
+ * one of many.
  */
 export function railActions(mode: RailModeId): readonly ActionId[] {
   switch (mode) {
     case 'shape':
-      return ['redrawCenterline', 'fitEnclosure', 'fixCorners'];
+      return ['redrawCenterline', 'fixCorners', 'centerCircuit'];
     case 'width':
       return ['fixCorners'];
-    case 'race':
-      return ['fitEnclosure'];
     case 'terrain':
-      // The LAND first and the enclosure after, which is the order the mode is
-      // read in: the shape of the ground is what a circuit sits on, and the two
-      // boxes around it are what bounds it.
-      return ['drawGround', 'fitGround', 'deleteGround', 'fitEnclosure', 'centerCircuit'];
+      // The LAND first and the wall after, which is the order the mode is read
+      // in: the shape of the ground is what a circuit sits on, and the box
+      // around it is what bounds it.
+      return ['drawGround', 'fitGround', 'deleteGround', 'fitWall'];
     default:
       return [];
   }

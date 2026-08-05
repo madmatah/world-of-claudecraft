@@ -1,5 +1,10 @@
-// The record form: everything a circuit holds that is NOT drawn, which is the
-// id, the race numbers, the presentation ids and the enclosure.
+// The record form: everything a circuit holds that is NOT drawn and NOT shaped,
+// which is the id, the race numbers and the presentation ids.
+//
+// The enclosure used to end it, and packet 28 moved the wall's two numbers into
+// TERRAIN's inspector: a box with grips on the plan, a fit on its own mode's
+// bar, and its numbers one rail entry away was the wall being authored from
+// three places at once.
 //
 // Built ONCE and only synced, because rebuilding it on every drag would take the
 // focus out of an input the operator is still typing in. `sync()` re-reads the
@@ -12,7 +17,6 @@ import {
   type RealmRacersCircuit,
   type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
-import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { validateCircuitPayload } from './export_core';
 import { fieldRow, heading, numberOr, type PanelHost } from './panels';
 
@@ -314,29 +318,10 @@ export class RecordFormPanel {
     );
     this.el.append(art);
 
-    this.el.append(heading('enclosure'));
-    const box = document.createElement('div');
-    this.field(
-      box,
-      'perimeter half x',
-      () => String(record().perimeter.halfX),
-      (raw) => ({
-        ...record(),
-        perimeter: { ...record().perimeter, halfX: numberOr(raw, record().perimeter.halfX) },
-      }),
-      { max: String(MAX_PERIMETER_HALF_X) },
-    );
-    this.field(
-      box,
-      'perimeter half z',
-      () => String(record().perimeter.halfZ),
-      (raw) => ({
-        ...record(),
-        perimeter: { ...record().perimeter, halfZ: numberOr(raw, record().perimeter.halfZ) },
-      }),
-      { max: String(MAX_PERIMETER_HALF_Z) },
-    );
-    this.el.append(box);
+    // The ENCLOSURE used to end this form, and it left the wall as the one
+    // object on this canvas authored from a mode that cannot see it: its grips
+    // and its fit are TERRAIN's, and its numbers were a rail entry away. They
+    // are in TERRAIN's inspector now, beside the land and the barriers.
   }
 
   sync(): void {

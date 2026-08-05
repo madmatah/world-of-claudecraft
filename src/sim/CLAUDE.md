@@ -173,8 +173,9 @@ consequences, this owns the verdict),
 `realm_racers_ground.ts` (the shape of the LAND: a circuit's authored `groundOutline`
 read as the same closed centripetal Catmull-Rom the centerline is, memoized per record
 identity. Absent means the rectangle the ground has always been (`regionHalf*` plus
-`REALM_RACERS_LAWN_OVERSHOOT`), which is what keeps both shipped circuits identical to
-what they were before the field existed; the renderer cuts its lawn along what this
+`REALM_RACERS_LAWN_OVERSHOOT`), which is what let the field arrive without either shipped
+circuit changing; the two grew later, when the instance volume became the ceiling on every
+circuit, so that rectangle is now the ceiling plus the overshoot on both. The renderer cuts its lawn along what this
 returns and puts the theme's water outside it, and the readout measures the road against
 it (`road_outside_ground_outline`). It also answers `realmRacersOnGround`, which every
 DERIVED fill on a circuit asks before it places a piece (the seeded scatters here, the

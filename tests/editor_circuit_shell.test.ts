@@ -156,7 +156,7 @@ describe('the circuit editor shell, on the real markup', () => {
     expect(el('sideTabs').hidden).toBe(true);
   });
 
-  it('shows TERRAIN’s five chips, and holds the drawing one lit while it is armed', () => {
+  it('shows TERRAIN’s four chips, and holds the drawing one lit while it is armed', () => {
     // `Draw ground shape` is the odd action in the table: every other repair on
     // a banner acts once and is done, and this one arms a MODE, so the chip has
     // to stay lit for as long as that is true. And `Delete ground shape` is live
@@ -171,8 +171,7 @@ describe('the circuit editor shell, on the real markup', () => {
       'Draw ground shape',
       'Fit ground',
       'Delete ground shape',
-      'Fit enclosure',
-      'Center circuit',
+      'Fit wall',
     ]);
     // The order is the MODE's, not the union of every mode's: the buttons are
     // built once for all five modes and MOVED into place, so a chip cannot be

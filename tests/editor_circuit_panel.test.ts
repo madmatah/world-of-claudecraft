@@ -186,7 +186,7 @@ describe('what a blank canvas refuses', () => {
     for (const id of [
       'saveDraft',
       'copyRecord',
-      'fitEnclosure',
+      'fitWall',
       'fixCorners',
       'redrawCenterline',
       'toggleDock',

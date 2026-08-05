@@ -27,9 +27,12 @@ import {
   REALM_RACERS_BARRIER_KEYS,
   REALM_RACERS_BARRIERS,
 } from '../../sim/content/realm_racers_barriers';
+import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
 import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
 import { parseThumbnailCache, THUMBNAIL_STORAGE_KEY } from './draft_store_core';
 import { editorIcon } from './editor_icons';
+import { MIN_PERIMETER_HALF } from './enclosure_core';
+import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { FENCE_SCALE_MAX, FENCE_SCALE_MIN, fenceColliderCount } from './fences_core';
 import {
   detailLine,
@@ -346,6 +349,61 @@ export class TerrainInspectorPanel {
     // of.
     this.el.append(...this.landRows());
     this.el.append(...this.barrierRows());
+    this.el.append(...this.wallRows());
+  }
+
+  /**
+   * The wall's two numbers, editable.
+   *
+   * They lived in the RACE tool's record form until packet 28, which made the
+   * wall the one object on this canvas authored from a mode that cannot see it:
+   * the grips are here, `Fit wall` is here, and the numbers were one rail entry
+   * away. Third rather than first because it is the outermost of the three: the
+   * land, the barriers standing on it, then the box around both.
+   *
+   * HALF-extents, spelled as such, because that is what the record holds and
+   * what the grips write. A field called "width" over a number that is half of
+   * one is a field that will be typed into wrong.
+   */
+  private wallRows(): HTMLElement[] {
+    const record = this.host.record();
+    const out: HTMLElement[] = [heading('the wall')];
+    out.push(
+      this.wallField('half x', record.perimeter.halfX, MAX_PERIMETER_HALF_X, (halfX) => ({
+        ...record,
+        perimeter: { ...record.perimeter, halfX },
+      })),
+    );
+    out.push(
+      this.wallField('half z', record.perimeter.halfZ, MAX_PERIMETER_HALF_Z, (halfZ) => ({
+        ...record,
+        perimeter: { ...record.perimeter, halfZ },
+      })),
+    );
+    out.push(
+      detailLine(
+        `${record.perimeter.halfX * 2} x ${record.perimeter.halfZ * 2} yd: drag a grip on the plan, or Fit wall`,
+      ),
+    );
+    return out;
+  }
+
+  private wallField(
+    label: string,
+    value: number,
+    max: number,
+    write: (next: number) => RealmRacersCircuit,
+  ): HTMLElement {
+    const { wrap, name } = fieldRow(label);
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.step = '1';
+    input.min = String(MIN_PERIMETER_HALF);
+    input.max = String(max);
+    input.value = String(value);
+    input.onchange = () => this.host.commit(write(numberOr(input.value, value)));
+    name.append(input);
+    return wrap;
   }
 
   /**

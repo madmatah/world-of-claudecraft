@@ -17,6 +17,8 @@
 // Dev tool, so English lives in the assertions.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MIN_PERIMETER_HALF } from '../src/editor/circuit/enclosure_core';
+import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from '../src/editor/circuit/envelope_core';
 import {
   barrierKitLabel,
   TerrainInspectorPanel,
@@ -257,24 +259,60 @@ describe('the terrain inspector', () => {
     expect(inspector.el.textContent).toContain('colliders');
   });
 
-  it('shows TWO permanent groups, the land then the barriers on it', () => {
+  it('shows THREE permanent groups, the land, the barriers on it, then the wall', () => {
     // The defect this closes was a reading one: the land's lines and the
     // barriers' ran into each other as one column, so nothing on screen said
-    // which of the two a number belonged to. Both titles are always there, in
-    // this order, whether or not either has anything selected.
+    // which of the two a number belonged to. Every title is always there, in
+    // this order, whether or not any of them has a selection to report.
+    //
+    // The order is outward: the ground a race sits on, what stands on it, then
+    // the box around both.
     const { inspector } = mount({ record: () => walled });
     inspector.paint();
     const titles = (panel: TerrainInspectorPanel) =>
       [...panel.el.querySelectorAll('h2')].map((node) => node.textContent);
-    expect(titles(inspector)).toEqual(['the land', 'barriers']);
+    expect(titles(inspector)).toEqual(['the land', 'barriers', 'the wall']);
     // WITH a barrier selected too, which is the state the source edit was made
-    // for: the selected barrier's own name used to be a third `h2`, so a test
+    // for: the selected barrier's own name used to be an extra `h2`, so a test
     // that only ever mounted the empty state would stay green over a panel that
     // grew its title back.
     const selected = mount({ record: () => walled, fenceSelection: () => 0 });
     selected.inspector.paint();
-    expect(titles(selected.inspector)).toEqual(['the land', 'barriers']);
+    expect(titles(selected.inspector)).toEqual(['the land', 'barriers', 'the wall']);
     expect(selected.inspector.el.textContent).toContain('ironwork 1 of 1');
+  });
+
+  it('edits the wall here, where its grips and its fit already are', () => {
+    // The wall was authored from the RACE tool's record form, one rail entry
+    // from the mode that carries its grips and its fit. Two half-extents,
+    // spelled as halves because that is what the record holds and what a grip
+    // writes: a field called "width" over half of one is a field typed into
+    // wrong.
+    const commits: RealmRacersCircuit[] = [];
+    const { inspector } = mount({ record: () => walled, commit: (next) => commits.push(next) });
+    inspector.paint();
+    const inputs = [...inspector.el.querySelectorAll('input[type="number"]')].filter(
+      (input) => (input as HTMLInputElement).step === '1',
+    ) as HTMLInputElement[];
+    expect(inputs).toHaveLength(2);
+    expect(inputs.map((input) => input.value)).toEqual([
+      String(walled.perimeter.halfX),
+      String(walled.perimeter.halfZ),
+    ]);
+    // The ceiling on the control is the one the readout refuses past, so the
+    // two ways of sizing this box cannot disagree about where it stops.
+    expect(inputs[0].max).toBe(String(MAX_PERIMETER_HALF_X));
+    expect(inputs[1].max).toBe(String(MAX_PERIMETER_HALF_Z));
+    expect(inputs[0].min).toBe(String(MIN_PERIMETER_HALF));
+
+    inputs[1].value = '77';
+    inputs[1].onchange?.(new Event('change'));
+    expect(commits).toHaveLength(1);
+    expect(commits[0].perimeter.halfZ).toBe(77);
+    // The other axis and the wall's dressing are untouched: this field owns one
+    // number.
+    expect(commits[0].perimeter.halfX).toBe(walled.perimeter.halfX);
+    expect(commits[0].perimeter.height).toBe(walled.perimeter.height);
   });
 
   it('names the land as a state, whether or not a shape has been drawn', () => {

@@ -65,14 +65,30 @@ outright without `ctx.devCommands`.
   record behind an id changes, which is what lets a draft redraw on every drag.
 - A closed centripetal Catmull-Rom does NOT pass through the operator's stroke,
   so the page draws both: the raw stroke faint, the derived curve over it.
-- **The enclosure follows the drawing, not the other way round.** A freehand fit
-  re-sizes the perimeter wall and the collision region to the road it just drew
-  (`Fit enclosure` does it on demand after handle edits), because a circuit is
-  drawn at whatever size it wants to be and the enclosure it inherited belongs to
-  the previous one. Both ceilings are real and reported live: `regionHalfX`
-  cannot leave the instance band, and `regionHalfZ` cannot exceed half the lane
-  spacing less the interest clearance, or two copies of the circuit would see
-  each other.
+- **"The enclosure" is TWO objects, and only one of them is authored.** The
+  `perimeter` is the WALL: collision slabs, the only thing on a circuit that
+  stops a machine. `regionHalfX/Z` is the INSTANCE VOLUME, which collides with
+  nothing and instead answers `realmRacersLaneAt`, and that answer is what
+  flattens the ground (`world.ts` `terrainHeight`), switches off the world's
+  colliders and mantling (`colliders.ts`), and picks the sky, the theme's art and
+  the music. Hence `perimeter_outside_region` is load-bearing in one precise
+  sense: **the wall is the only thing keeping a pilot on the flat floor.**
+  Since packet 28 the volume is not authored at all: **every circuit carries the
+  CEILING**, which is safe by construction (`MAX_REGION_HALF_Z` IS
+  `(LANE_DZ - LANE_CLEARANCE) / 2`, so two lanes both at it keep the designed
+  clear air) and leaves the tool one box to understand instead of two. The gap it
+  used to leave the wall was a constant, so it carried no design decision, which
+  is the same rule that deleted the hand-placed recovery anchors.
+- **The wall follows the drawing, not the other way round.** A freehand fit
+  re-sizes it to the road it just drew (`Fit wall` does it on demand after handle
+  edits), because a circuit is drawn at whatever size it wants to be and the wall
+  it inherited belongs to the previous one. It is also DRAGGED
+  (`enclosure_core.ts`): eight grips, nearest-first, and the resize is
+  SYMMETRIC because the record holds one half-extent per axis, so the whole box
+  lights through the gesture rather than the edge under the pointer. The record
+  carries no POSITION for it, so the centre grip does not move the box: it slides
+  the circuit's own contents, which is what an operator means by moving it and is
+  `Center circuit` done by hand.
 
 ## Two things the readout learned the hard way
 - **Every failing stretch is reported, never the worst one.** The corner checks
@@ -202,7 +218,7 @@ outright without `ctx.devCommands`.
   stops nobody. Where the shape ends up is `src/sim/realm_racers_ground.ts`, the
   one resolver; the plan draws the SAMPLED curve rather than the record's points,
   because a closed centripetal Catmull-Rom does not pass through the polygon
-  between them. `Fit ground` proposes one around the road the way `Fit enclosure`
+  between them. `Fit ground` proposes one around the road the way `Fit wall`
   proposes a box, and the readout is what judges it
   (`road_outside_ground_outline`, measured at the garden edge either side of the
   road rather than at the centerline). **Every DERIVED fill is clipped to it**,
@@ -345,21 +361,31 @@ of course: that is the circuit being edited.
   blank canvas is drawn on, a drawn one is edited by its handles, and which of
   the two the operator gets was never a choice worth a button (`toolFor`). RACE
   is the fourth, and it is read as ONE intent: everything about the race that is
-  not the road's shape. TERRAIN is the fifth, read the same way: the land the
-  race sits on. Its palette holds the barrier KITS and nothing else, and the five
-  actions about the land itself are on its banner, the ground first and the
-  enclosure after (`Draw ground shape`, `Fit ground`, `Delete ground shape`, then
-  `Fit enclosure` and `Center circuit`). The ground is not in the palette because
-  a palette is for picking one of many and a circuit has ONE ground, drawn with a
-  gesture that is not a barrier's. `Draw ground shape` is the only action in the
-  table that arms a MODE rather than acting once, so the chrome holds it lit
-  through `setChecked`; `Delete ground shape` is the only one whose enabled state
-  follows the RECORD, so the page re-reads it on every commit rather than at load
-  (`syncGroundActions`). The chips are built once for every mode and MOVED into
-  the active mode's order, never rebuilt: they are registered by id for those two
-  states. `Fit enclosure` is on SHAPE's banner
-  too, deliberately: an operator who has just finished a stroke wants it
-  immediately, which is why it left the menu bar in the first place. That is what lets the furniture and the record's own
+  not the road's shape. TERRAIN is the fifth, read the same way: the ground a
+  race sits on, and the box around it. Its palette holds the barrier KITS and
+  nothing else, and the four actions about the terrain are on its banner, the
+  land first and the wall after (`Draw ground shape`, `Fit ground`,
+  `Delete ground shape`, then `Fit wall`). The ground is not in the palette
+  because a palette is for picking one of many and a circuit has ONE ground,
+  drawn with a gesture that is not a barrier's. `Draw ground shape` is the only
+  action in the table that arms a MODE rather than acting once, so the chrome
+  holds it lit through `setChecked`; `Delete ground shape` is the only one whose
+  enabled state follows the RECORD, so the page re-reads it on every commit
+  rather than at load (`syncGroundActions`). The chips are built once for every
+  mode and MOVED into the active mode's order, never rebuilt: they are registered
+  by id for those two states.
+- **Every repair has exactly ONE home, and the home is the object it acts on.**
+  `Fit wall` had spread to three banners (SHAPE, RACE and TERRAIN) and
+  `centerCircuit` sat on the mode with the least to do with it, so there was no
+  rule an operator could learn. The wall and the land are TERRAIN's; moving the
+  circuit's own geometry is SHAPE's. `fixCorners` is the ONE deliberate
+  exception, because it is genuinely both shaping tools' business: it narrows the
+  road (width's table) to clear a corner the curve made (shape's geometry). The
+  argument that used to keep `Fit wall` on SHAPE ("wanted the instant a stroke
+  ends") had stopped being true: a freehand stroke calls the fit itself, so the
+  copy only ever served a handle edit. Pinned in
+  `tests/editor_circuit_layout.test.ts`, which names the exception rather than
+  counting it. That is what lets the furniture and the record's own
   numbers share a mode without it being a sack. A dedicated furniture MODE was
   considered and turned down for a reason worth keeping: splitting leaves RACE a
   rail entry with no canvas gesture at all, and the obvious remedy (let it move
@@ -460,7 +486,7 @@ of course: that is the circuit being edited.
   now builds its buttons instead of a hardcoded list.
 - **A mode's repairs sit on the plan, beside its banner** (`railActions`). Both
   were reachable only through the Track menu, and that is where they were lost: an
-  operator who has just finished a stroke wants Fit enclosure and Fix corners
+  operator who has just finished a stroke wants Fit wall and Fix corners
   immediately, and hunting a menu bar for them breaks the gesture. They stay in
   the menu too, off the same table. The chrome builds one button per action and
   only shows or hides it, because an action button is registered by id for its
@@ -605,17 +631,17 @@ of course: that is the circuit being edited.
 | `panel_core.ts` | what the right column shows (`panelLayout`, one call for six interdependent rules), which readout sections a tabless mode carries, the props arm text, and which actions a blank canvas refuses (off the table's own `needsCircuit` flag) |
 | `history_core.ts` | the edit history: a capped undo stack with a forward branch that a new edit drops |
 | `layout_core.ts` | the shell: the action table (labels, chords, icons, menus, cheatsheet grouping), the rail modes and their tool resolution, chord matching and platform spelling, the persisted layout with its clamps, the zoom/grid/snap arithmetic, the headline chips, the callout spread and its edge flip, and the problem labels the chip, the callouts and the drawer all print |
-| `plan_core.ts` | the plan canvas's own numbers: the starter oval, the placeholder record a blank canvas stands on (template numbers, none of its placed content), what a fit frames, the two limit boxes and their sentences, the click tolerances, the wheel step, and the stylesheet tokens the canvas borrows |
+| `plan_core.ts` | the plan canvas's own numbers: the starter oval, the placeholder record a blank canvas stands on (template numbers, none of its placed content), what a fit frames, the three NAMED boxes a circuit lives inside (volume, wall, ground) with their dashes and their sentences, where the legend naming them sits, the centerline aim box, the click tolerances, the wheel step, and the stylesheet tokens the canvas borrows |
 | `editor_icons.ts` | the icon set: one inline SVG per action and rail mode, plus the chrome-only list that keeps the completeness check honest |
 | `shell.ts` | the chrome as ELEMENTS: menu bar, rail, plan overlays, status bar, contextual right panel, metrics drawer, cheatsheet. Structure and listeners only, all of it rendered off the action table |
 | `panels.ts` | the `PanelHost` every right-column panel reads the document through, plus the element shapes all five of them repeat |
-| `panel_form.ts` | the record form: roles, race numbers, presentation ids and the enclosure, built once and only synced |
+| `panel_form.ts` | the record form: roles, race numbers and presentation ids, built once and only synced. NOT the wall: its numbers are in TERRAIN's inspector, beside its grips and its fit |
 | `panel_inspector.ts` | the numbers behind the selection, editable, every edit back through `commitDressing` |
 | `panel_outliner.ts` | what is standing on this circuit, entry by entry, and the way back to any of it: select, focus, delete, off two listeners on the panel rather than on the rows |
 | `panel_readout.ts` | one builder per readout section, plus the drawer and the tabless mode's own column |
 | `panel_library.ts` | what the props tool can put down, and which piece is armed |
 | `panel_race.ts` | the RACE tool's own two: the furniture palette (the table, its tiles and the arm grammar) and the selected row's numbers, editable. The palette has no tile DRAG on purpose: dressing is a hunt through 182 photographed assets and dragging is how you place the one you found, while a palette of one named kind is armed by clicking it, which gets the keyboard for free |
-| `panel_terrain.ts` | the TERRAIN tool's own two: the barrier-kit palette (folded by the theme, photographed like the props library, kits and nothing else) and the mode's inspector, which is two permanent groups, the LAND then the BARRIERS on it. Neither owns a ground button: drawing a shape and discarding one act on the whole terrain, so they are actions on the banner |
+| `panel_terrain.ts` | the TERRAIN tool's own two: the barrier-kit palette (folded by the theme, photographed like the props library, kits and nothing else) and the mode's inspector, which is three permanent groups outward, the LAND, the BARRIERS standing on it, then the WALL around both. Neither owns a ground button: drawing a shape and discarding one act on the whole terrain, so they are actions on the banner |
 | `dock.ts` | the floating 3D panel: move, resize, fullscreen, the camera tabs and the lap readout. Geometry rules come from `layout_core.ts` |
 | `stroke_fit_core.ts` | freehand stroke to control points: arc-length resample, then Ramer-Douglas-Peucker, closing the loop |
 | `handles_core.ts` | hit testing and insert/move/delete for the control ring, plus `paintSpan` for the two INTERPOLATED band tables and the ordering and minimum-count invariants |
@@ -627,7 +653,8 @@ of course: that is the circuit being edited.
 | `prop_thumbnails.ts` | the off-screen rig that takes the pictures. Lazily imported; never disposes what it borrowed from a shared cache |
 | `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry (a grip drag, an arrow nudge, a duplicate included), where the view goes to look at a selection, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
-| `envelope_core.ts` | what perimeter wall and collision region fit a road of a given size, clamped to the band and the lane depth budget. A convenience, not a rule: the enclosure rules themselves are in the metrics core |
+| `enclosure_core.ts` | the TERRAIN tool's gestures on the WALL: which of its eight grips (or its centre) a click landed on, and what dragging one writes. Both facts the record forces are here rather than in the page: a resize is SYMMETRIC, since one half-extent is both edges, and the box has no position at all, so the centre grip slides the circuit's contents instead. It does not judge the result: `road_outside_perimeter` is the readout's |
+| `envelope_core.ts` | what perimeter WALL fits a road of a given size, clamped to the ceilings (`MAX_PERIMETER_HALF_*`, the instance volume's own less the yard that keeps the wall inside it), plus the ground outline `Fit ground` proposes. A convenience, not a rule: the containment rules themselves are in the metrics core |
 | `fences_core.ts` | the TERRAIN tool's gestures: which barrier (and which of its points) a click landed on, what each click of a drawing run does to the run in progress, what a point drag, a nudge, a delete or a scale edit do to the list, and the offset that centres a circuit in its enclosure plus what has to move with it. It AUTHORS: where the modules end up is `src/sim/realm_racers_fences.ts`, and the plan draws what that resolver returns |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |
 | `draft_endpoints_core.ts` | what the dev server answers about a saved draft: the list (newest first, with its last write), one parsed draft, and whether a DELETE may go ahead. It is handed a READER and has no writer at all, which is what makes "a GET never writes" structural; the delete arm names an id and the plugin unlinks it |

@@ -49,6 +49,7 @@ import {
   problemsChip,
   RAIL_ACTION_IDS,
   RAIL_MODES,
+  type RailModeId,
   railActions,
   railBanner,
   SIDE_TAB_LABELS,
@@ -487,25 +488,18 @@ describe('the rail', () => {
   it('puts a mode repair on the plan, and only where it means something', () => {
     // The defect: both repairs lived in the Track menu alone, and an operator who
     // had just finished a stroke could not find either.
-    expect(railActions('shape')).toContain('fitEnclosure');
-    expect(railActions('shape')).toContain('fixCorners');
+    expect(railActions('shape')).toEqual(['redrawCenterline', 'fixCorners', 'centerCircuit']);
     // fixCorners narrows the ROAD to clear a corner the CURVE made, so it is both
     // shaping tools' business.
     expect(railActions('width')).toEqual(['fixCorners']);
     expect(railActions('props')).toEqual([]);
-    // TERRAIN is read as one intent, the land the race sits on, so every action
-    // about that land is on its banner, the GROUND first and the enclosure
-    // after: draw the shape, fit one to the road, discard it, then size and
-    // centre the boxes around it. `fitEnclosure` is on SHAPE as well,
-    // deliberately, and an action appearing on two banners is still one row in
-    // the table.
-    expect(railActions('terrain')).toEqual([
-      'drawGround',
-      'fitGround',
-      'deleteGround',
-      'fitEnclosure',
-      'centerCircuit',
-    ]);
+    // RACE carries none at all: it had `fitWall` while owning nothing about the
+    // wall, which is how the same button ended up on three banners.
+    expect(railActions('race')).toEqual([]);
+    // TERRAIN is read as one intent, the ground a race sits on and the box
+    // around it, so the actions about both are on its banner, the LAND first:
+    // draw the shape, fit one to the road, discard it, then size the wall.
+    expect(railActions('terrain')).toEqual(['drawGround', 'fitGround', 'deleteGround', 'fitWall']);
     for (const mode of RAIL_MODES) {
       for (const id of railActions(mode.id)) {
         // Every one is a real action, with a menu home as well as a plan button.
@@ -513,6 +507,26 @@ describe('the rail', () => {
         expect(RAIL_ACTION_IDS, id).toContain(id);
       }
     }
+  });
+
+  it('gives every repair but one exactly ONE home, so an operator can learn it', () => {
+    // The complaint packet 28 answers: `fitWall` sat on three banners at once
+    // and `centerCircuit` on the mode with the least to do with it, so there was
+    // no rule to learn. The rule is the OBJECT each one acts on.
+    const homes = new Map<string, RailModeId[]>();
+    for (const mode of RAIL_MODES) {
+      for (const id of railActions(mode.id)) {
+        homes.set(id, [...(homes.get(id) ?? []), mode.id]);
+      }
+    }
+    const shared = [...homes].filter(([, modes]) => modes.length > 1);
+    // Exactly one exception, and it is named rather than counted: `fixCorners`
+    // narrows the road (width's table) to clear a corner the curve made
+    // (shape's geometry), so both shaping tools own it.
+    expect(shared.map(([id]) => id)).toEqual(['fixCorners']);
+    expect(homes.get('fixCorners')).toEqual(['shape', 'width']);
+    expect(homes.get('fitWall')).toEqual(['terrain']);
+    expect(homes.get('centerCircuit')).toEqual(['shape']);
   });
 
   it('names each plan-repair button once, so the chrome can build it once', () => {

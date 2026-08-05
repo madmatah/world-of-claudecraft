@@ -2490,7 +2490,7 @@ function deleteDressing(): void {
  * this is what brings a draft authored before that rule up to it. Nothing here
  * chooses the number, which is why the status line talks about the wall.
  */
-function fitEnclosure(): void {
+function fitWall(): void {
   const suggestion = suggestEnvelope(metrics.roadHalfX, metrics.roadHalfZ, record.perimeter);
   commit({
     ...record,
@@ -2959,7 +2959,7 @@ function endGesture(): void {
       // A freshly drawn loop is whatever size it is, and the enclosure it
       // inherited is the previous circuit's. Sizing it here is what lets an
       // operator draw a 1000 yard lap without meeting a wall complaint first.
-      fitEnclosure();
+      fitWall();
     } else {
       setStatus('stroke too short to fit a loop: draw a bigger one', 'err');
     }
@@ -3225,8 +3225,8 @@ function runAction(id: ActionId): void {
     case 'zoomIn':
       applyZoom(200);
       return;
-    case 'fitEnclosure':
-      fitEnclosure();
+    case 'fitWall':
+      fitWall();
       return;
     case 'centerCircuit':
       centerCircuit();
