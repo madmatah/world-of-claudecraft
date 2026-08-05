@@ -361,9 +361,6 @@ export const SFX = [
   {
     key: 'proj_groundshaker',
     custom: true,
-    duration: 1.2,
-    prompt:
-      'A synthesized explosion used for the Terrorspark Groundshaker cannon. Single shot, no music, no voice.',
   },
   {
     key: 'proj_shadow',

@@ -253,7 +253,7 @@ until that loop stops.
 | `proj_shadow` | 0.6 | a shadow bolt flying, dark whooshing void streak |
 | `proj_holy` | 0.5 | a bolt of holy light streaking, bright shimmering zip |
 | `proj_nature` | 0.5 | a glob of nature energy flying, organic whoosh |
-| `proj_groundshaker` | 1.2 | a synthesized explosion for the Terrorspark Groundshaker cannon |
+| `proj_groundshaker` | 2.7 | a real tank cannon firing for the Terrorspark Groundshaker, three ordered takes |
 
 ### Spell and Realm Racers impacts (spatial one-shots)
 | key | dur | prompt summary |

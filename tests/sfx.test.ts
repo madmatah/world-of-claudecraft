@@ -198,6 +198,8 @@ beforeEach(() => {
   buffers.set('foot_stone', { duration: 0.5 });
   buffers.set('foot_dirt', { duration: 0.5 });
   buffers.set('proj_groundshaker', RALLY_GROUND_BLAST_BUFFER);
+  buffers.set('proj_groundshaker:1', RALLY_GROUND_BLAST_BUFFER);
+  buffers.set('proj_groundshaker:2', RALLY_GROUND_BLAST_BUFFER);
   buffers.set('impact_groundshaker', GROUND_SHAKER_IMPACT_BUFFER);
   buffers.set('impact_arcane', ARCANE_IMPACT_BUFFER);
 });
@@ -645,7 +647,7 @@ describe('Realm Racers vehicle loops', () => {
     expect(panners[shellPannerIndex]?.refDistance).toBe(24);
     expect(panners[shellPannerIndex]?.maxDistance).toBe(46);
     expect(panners[shellPannerIndex]).toMatchObject({ x: 2, y: 6, z: 3 });
-    // -6 dBTP asset ceiling x runtime gain x +5 dB catalog trim x sample master.
+    // -6 dBTP asset ceiling x runtime gain x +4.5 dB catalog trim x sample master.
     expect(10 ** (-6 / 20) * 1.25 * SFX_CLIPS.proj_groundshaker.gain * 0.85).toBeLessThan(1);
     vi.mocked(Math.random).mockReturnValue(0.5);
 

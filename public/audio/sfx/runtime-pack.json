@@ -1,7 +1,7 @@
 {
   "format": "woc-sfx-runtime-pack",
   "version": 1,
-  "bundleId": "965086ca1a70e3292effe2d26f7ab733137e6bc35c67b2ac0d23f225398ea3ea",
+  "bundleId": "402b7441eedc9c64978b7ca523444c19f3910dd9621627f974f80b184b22f57e",
   "catalogHash": "b5c583df32f0a369906ee26ff0e14d6a62b5752497a142fe53381207ffbb5e56",
   "clips": {
     "amb_birds": {
@@ -3175,14 +3175,26 @@
     "proj_groundshaker": {
       "variants": [
         {
-          "id": "main",
-          "url": "/audio/sfx/proj_groundshaker.mp3?v=4463fef1a8b1",
-          "bytes": 30136,
-          "sha256": "4463fef1a8b1c15dc09d710a3df544cd23d97056d2ce574dff1eb0f288cc5305"
+          "id": "1",
+          "url": "/audio/sfx/proj_groundshaker_1.mp3?v=c75e12d6bf89",
+          "bytes": 65871,
+          "sha256": "c75e12d6bf89b7feb95ef9a2b886655ce8ade2e04e18e6a2b79d337ba30ea0f0"
+        },
+        {
+          "id": "2",
+          "url": "/audio/sfx/proj_groundshaker_2.mp3?v=725ced04cdc5",
+          "bytes": 64617,
+          "sha256": "725ced04cdc54b91309af4df59518c7ffbb286d04d393cf48a00a6aa8f760f7b"
+        },
+        {
+          "id": "3",
+          "url": "/audio/sfx/proj_groundshaker_3.mp3?v=7493d239cec4",
+          "bytes": 61483,
+          "sha256": "7493d239cec4ae039e2d6be2f9d88587b8c7500b0d7e4f4e95382804462c7ac4"
         }
       ],
-      "gain": 1.778279,
-      "playbackRate": 1
+      "gain": 1.678804,
+      "playbackRate": 0.6
     },
     "proj_holy": {
       "variants": [
