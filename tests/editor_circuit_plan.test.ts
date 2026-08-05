@@ -144,14 +144,6 @@ describe('the centerline aim box', () => {
     expect(centerlineLimit([24, 6]).halfX).toBe(wide.halfX);
   });
 
-  it('says its numbers in whole yards, in its own sentence', () => {
-    const limit = centerlineLimit([10]);
-    expect(limit.label).toBe(
-      `keep the line you draw inside ${Math.round(limit.halfX * 2)} x ${Math.round(limit.halfZ * 2)} yd`,
-    );
-    expect(limit.label).not.toMatch(/\.\d/);
-  });
-
   it('survives a record with no bands at all', () => {
     // A hand-pasted draft can arrive with anything; `Math.max()` of nothing is
     // -Infinity, which draws a box at infinity and takes the page with it.
@@ -234,7 +226,7 @@ describe('the named boxes on the plan', () => {
   });
 
   it('gives every box its own dashes, so a legend swatch cannot stand for two', () => {
-    const bearings = planBearings(REALM_RACERS_PRACTICE_CIRCUIT, true);
+    const bearings = planBearings(REALM_RACERS_PRACTICE_CIRCUIT, true, true);
     for (const bearing of bearings) {
       expect(bearing.dash).toEqual(PLAN_BEARING_DASH[bearing.id]);
     }
@@ -243,6 +235,42 @@ describe('the named boxes on the plan', () => {
     // The labels have to be distinct for the same reason.
     const labels = bearings.map((bearing) => bearing.label);
     expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('carries the AIM box while shaping, in both states, and nowhere else', () => {
+    // The defect coming back one box later, reported from the seat: the aim box
+    // was drawn with a sentence floating at its own base instead of a legend
+    // row, and the operator read that sentence, could not tell which of the
+    // three rectangles it belonged to, and asked what the middle one was. A box
+    // on the plan that is not in this list is the same defect again.
+    const shaping = planBearings(GARDEN, true, true).map((bearing) => bearing.id);
+    expect(shaping).toEqual(['volume', 'centerline', 'wall', 'ground']);
+    // On a BLANK canvas too, which is the arm that matters most: it is the only
+    // thing on screen saying where the first stroke goes.
+    expect(planBearings(GARDEN, false, true).map((bearing) => bearing.id)).toEqual([
+      'volume',
+      'centerline',
+    ]);
+    // And nowhere else: what it says is about the gesture, and only SHAPE puts
+    // a centerline down.
+    expect(planBearings(GARDEN, true, false).map((bearing) => bearing.id)).toEqual([
+      'volume',
+      'wall',
+      'ground',
+    ]);
+    expect(planBearings(GARDEN, false, false).map((bearing) => bearing.id)).toEqual(['volume']);
+  });
+
+  it('tells the aim box what to DO, since it is about the gesture not the circuit', () => {
+    const aim = planBearings(GARDEN, true, true)[1];
+    const limit = centerlineLimit(GARDEN.widthBands.map((band) => band.halfWidth));
+    expect(aim.half).toEqual({ halfX: limit.halfX, halfZ: limit.halfZ });
+    expect(aim.value).toBe(
+      `${Math.round(limit.halfX * 2)} x ${Math.round(limit.halfZ * 2)} yd, keep your line inside`,
+    );
+    // Whole yards: the garden edge is a fraction, and a legend quoting
+    // 571.6 x 271.6 reads as a measurement of something rather than a bound.
+    expect(aim.value).not.toMatch(/\.\d/);
   });
 });
 

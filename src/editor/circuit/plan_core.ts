@@ -127,18 +127,14 @@ export function fitScale(planWidth: number, planHeight: number, half: number): n
 export interface CenterlineLimit {
   halfX: number;
   halfZ: number;
-  label: string;
 }
 
 export function centerlineLimit(halfWidths: readonly number[]): CenterlineLimit {
   const road = halfWidths.length > 0 ? Math.max(...halfWidths) : 0;
   const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
-  const halfX = REALM_RACERS_MAX_REGION_HALF_X - gardenEdge;
-  const halfZ = REALM_RACERS_MAX_REGION_HALF_Z - gardenEdge;
   return {
-    halfX,
-    halfZ,
-    label: `keep the line you draw inside ${Math.round(halfX * 2)} x ${Math.round(halfZ * 2)} yd`,
+    halfX: REALM_RACERS_MAX_REGION_HALF_X - gardenEdge,
+    halfZ: REALM_RACERS_MAX_REGION_HALF_Z - gardenEdge,
   };
 }
 
@@ -153,17 +149,25 @@ export function centerlineLimit(halfWidths: readonly number[]): CenterlineLimit 
  * and the same dashes: two different objects, one drawing, so the mark that was
  * supposed to be the fixed reference read as a rectangle that shrank.
  *
- * Three now, each with its own dash pattern, all of them named on screen:
+ * Each has its own dash pattern, and every one of them is in the legend:
  * - `volume` is the instance volume, where the ground is flat and the world's
  *   colliders are off. Every circuit carries it at its ceiling, which is what
  *   makes it the FIXED reference the operator asked for: it is the same
  *   rectangle on a blank canvas and on a finished circuit.
- * - `wall` is the perimeter, the only one of the three that stops a machine.
+ * - `centerline` is where the line under the pen has to stay, SHAPE's alone.
+ * - `wall` is the perimeter, the only one that stops a machine.
  * - `ground` is the land, which is the rectangle a circuit gets when nobody
  *   draws one. It is on the plan because it is what the 3D dock stands on, and
  *   an operator looking at that floor had nothing anywhere saying what it was.
+ *
+ * **A box on the plan that is not in this list is the whole defect coming
+ * back.** The aim box was drawn with a sentence floating at its own base
+ * instead, and that failed in the seat exactly as the unnamed box before it
+ * did: the operator read the sentence, could not tell which rectangle it
+ * belonged to, and asked what the middle one was. One naming scheme, in one
+ * place, for every box.
  */
-export type PlanBearingId = 'volume' | 'wall' | 'ground';
+export type PlanBearingId = 'volume' | 'centerline' | 'wall' | 'ground';
 
 export interface PlanBearing {
   id: PlanBearingId;
@@ -180,6 +184,7 @@ export interface PlanBearing {
 
 export const PLAN_BEARING_DASH: Readonly<Record<PlanBearingId, readonly number[]>> = {
   volume: [8, 6],
+  centerline: [3, 3],
   wall: [],
   ground: [2, 5],
 };
@@ -197,7 +202,11 @@ const size = (halfX: number, halfZ: number): string =>
  * the rule: it is the ceiling, identical on every circuit that will ever be
  * drawn here.
  */
-export function planBearings(circuit: RealmRacersCircuit, drawn: boolean): PlanBearing[] {
+export function planBearings(
+  circuit: RealmRacersCircuit,
+  drawn: boolean,
+  aiming = false,
+): PlanBearing[] {
   const volumeHalf = { halfX: circuit.regionHalfX, halfZ: circuit.regionHalfZ };
   const ceiling =
     circuit.regionHalfX === REALM_RACERS_MAX_REGION_HALF_X &&
@@ -214,11 +223,26 @@ export function planBearings(circuit: RealmRacersCircuit, drawn: boolean): PlanB
       : `${size(volumeHalf.halfX, volumeHalf.halfZ)} of ${size(REALM_RACERS_MAX_REGION_HALF_X, REALM_RACERS_MAX_REGION_HALF_Z)}`,
     dash: PLAN_BEARING_DASH.volume,
   };
-  if (!drawn) return [volume];
+  // The aim box goes in whether or not anything is drawn, and the BLANK arm is
+  // the one that matters: it says where to put the first stroke, at the one
+  // moment nothing else on the canvas does.
+  const aim = centerlineLimit(circuit.widthBands.map((band) => band.halfWidth));
+  const centerline: PlanBearing = {
+    id: 'centerline',
+    half: { halfX: aim.halfX, halfZ: aim.halfZ },
+    label: 'centerline',
+    // It says what to DO, unlike the other three, because it is the only box
+    // that is about the gesture rather than about the circuit: what the pen
+    // draws is the middle of a road, and the road and its garden need the rest.
+    value: `${size(aim.halfX, aim.halfZ)}, keep your line inside`,
+    dash: PLAN_BEARING_DASH.centerline,
+  };
+  const aimed = aiming ? [volume, centerline] : [volume];
+  if (!drawn) return aimed;
 
   const authoredGround = (circuit.groundOutline?.length ?? 0) > 0;
   return [
-    volume,
+    ...aimed,
     {
       id: 'wall',
       half: { halfX: circuit.perimeter.halfX, halfZ: circuit.perimeter.halfZ },

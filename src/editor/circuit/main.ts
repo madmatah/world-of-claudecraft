@@ -177,7 +177,6 @@ import {
 } from './placement_core';
 import {
   blankCircuit as blankCircuitFrom,
-  centerlineLimit,
   fitHalfExtent,
   fitScale,
   HIT_TOLERANCE_PIXELS,
@@ -949,6 +948,7 @@ function drawHandles(): void {
  */
 const BEARING_COLOUR: Record<PlanBearingId, string> = {
   volume: '#6f7890',
+  centerline: '#55607a',
   wall: '#55607a',
   ground: '#4d7fa0',
 };
@@ -964,7 +964,7 @@ const BEARING_COLOUR: Record<PlanBearingId, string> = {
  * every box on the plan says what it is in the legend.
  */
 function drawBearings(): void {
-  const bearings = planBearings(record, drawn);
+  const bearings = planBearings(record, drawn, railMode === 'shape');
   const sizing = wallGrip !== null;
   for (const bearing of bearings) {
     if (!bearing.half) continue;
@@ -976,19 +976,6 @@ function drawBearings(): void {
     strokeRect(bearing.half.halfX, bearing.half.halfZ, colour, [...bearing.dash]);
   }
   if (drawn && railMode === 'terrain') drawWallGrips();
-  // The aim box belongs to the tool that puts a line down and to no other: what
-  // it says is about the stroke, and only SHAPE strokes.
-  if (railMode === 'shape') {
-    const limit = centerlineLimit(record.widthBands.map((band) => band.halfWidth));
-    strokeRect(limit.halfX, limit.halfZ, '#55607a', [3, 3]);
-    ctx.fillStyle = planPalette.dim;
-    ctx.font = '12px ui-monospace, Menlo, monospace';
-    ctx.textAlign = 'center';
-    // Inside its own box rather than under it: sat on the frame outside it, it
-    // read as a label for the wrong rectangle.
-    ctx.fillText(limit.label, screenX(0), screenY(limit.halfZ) - 8);
-    ctx.textAlign = 'left';
-  }
   drawBearingLegend(bearings);
 }
 

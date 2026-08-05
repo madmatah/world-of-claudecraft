@@ -357,6 +357,19 @@ of course: that is the circuit being edited.
   it is a movable, resizable DOCK now (`dock.ts`), `shift+F` for the whole plan,
   with a "follows cursor" mode where hovering a corner on the plan is the gesture
   that looks at it in 3D.
+- **A rectangle on the plan is NAMED in the legend, and that rule cost two seat
+  rounds.** The canvas drew five boxes and named one: the ceiling showed only
+  before the first stroke and the circuit's own collision region took its place
+  afterwards in the same colour and the same dashes, so the fixed reference read
+  as a box that shrank. The fix was `planBearings` plus a legend bottom left,
+  and the SECOND round proved the rule rather than the fix: the centerline aim
+  box was left out of the legend and given a sentence floating at its own base
+  instead, and the operator read that sentence, could not tell which rectangle
+  it belonged to, and asked what the middle one was. One naming scheme, in one
+  place, for every box; `tests/editor_circuit_plan.test.ts` pins the id list per
+  state. In SCREEN space, because at any zoom a road is legible at most of the
+  boxes are off canvas, which is exactly when their numbers are the only way to
+  know they are there.
 - **The rail has five entries, and SHAPE is one intent over two gestures.** A
   blank canvas is drawn on, a drawn one is edited by its handles, and which of
   the two the operator gets was never a choice worth a button (`toolFor`). RACE
@@ -631,7 +644,7 @@ of course: that is the circuit being edited.
 | `panel_core.ts` | what the right column shows (`panelLayout`, one call for six interdependent rules), which readout sections a tabless mode carries, the props arm text, and which actions a blank canvas refuses (off the table's own `needsCircuit` flag) |
 | `history_core.ts` | the edit history: a capped undo stack with a forward branch that a new edit drops |
 | `layout_core.ts` | the shell: the action table (labels, chords, icons, menus, cheatsheet grouping), the rail modes and their tool resolution, chord matching and platform spelling, the persisted layout with its clamps, the zoom/grid/snap arithmetic, the headline chips, the callout spread and its edge flip, and the problem labels the chip, the callouts and the drawer all print |
-| `plan_core.ts` | the plan canvas's own numbers: the starter oval, the placeholder record a blank canvas stands on (template numbers, none of its placed content), what a fit frames, the three NAMED boxes a circuit lives inside (volume, wall, ground) with their dashes and their sentences, where the legend naming them sits, the centerline aim box, the click tolerances, the wheel step, and the stylesheet tokens the canvas borrows |
+| `plan_core.ts` | the plan canvas's own numbers: the starter oval, the placeholder record a blank canvas stands on (template numbers, none of its placed content), what a fit frames, the NAMED boxes a circuit lives inside (volume, centerline, wall, ground) with their dashes and what each one says, where the legend naming them sits, the click tolerances, the wheel step, and the stylesheet tokens the canvas borrows |
 | `editor_icons.ts` | the icon set: one inline SVG per action and rail mode, plus the chrome-only list that keeps the completeness check honest |
 | `shell.ts` | the chrome as ELEMENTS: menu bar, rail, plan overlays, status bar, contextual right panel, metrics drawer, cheatsheet. Structure and listeners only, all of it rendered off the action table |
 | `panels.ts` | the `PanelHost` every right-column panel reads the document through, plus the element shapes all five of them repeat |
