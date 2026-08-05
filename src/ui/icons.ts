@@ -4539,6 +4539,30 @@ export const DEED_ART_PENDING: ReadonlySet<string> = new Set([
   // the deed_cat_chronicle crest until their commissioned art lands.
   'chr_drakemaw_broodlord',
   'chr_maw_matriarch',
+  // Realm Racers (13c): the seven placing-based deeds are 'pvp', so they fall back to the
+  // deed_cat_pvp crest. Commissioned in docs/achievements/icon-brief.md, not yet committed.
+  'pvp_rr_first_race',
+  'pvp_rr_first_win',
+  'pvp_rr_wins_10',
+  'pvp_rr_wins_25',
+  'pvp_rr_fast_lap',
+  'pvp_rr_clean_race',
+  'pvp_rr_comeback',
+]);
+
+// Abilities whose PAINTED art is commissioned but not yet committed, the DEED_ART_PENDING model
+// above applied to the ability sheet. Behavior is unchanged either way: an ability absent from
+// ABILITY_IMAGE_IDS already draws its procedural ABILITY_RECIPES icon, which is a real icon and
+// not a placeholder. The list exists so the painted-art debt is ENUMERATED rather than silent,
+// and so the art tests share one name instead of repeating the literal.
+// Same rule as the deed list: do not add an id here merely to silence a failure; commission the
+// art and file it in docs/achievements/icon-brief.md.
+export const ABILITY_ART_PENDING: ReadonlySet<string> = new Set([
+  // Realm Racers (13c): the three pickup-driven rally abilities. Each ships with an authored
+  // procedural recipe (rally_ground_blast / rally_nitro / rally_oil_slick in ABILITY_RECIPES).
+  'rally_ground_blast',
+  'rally_nitro',
+  'rally_oil_slick',
 ]);
 /** Static URL of a deed crest's painted art, or null when the crest id has no committed image. */
 export function deedImageUrl(crestId: string): string | null {

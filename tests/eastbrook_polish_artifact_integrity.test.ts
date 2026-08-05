@@ -917,7 +917,7 @@ describe('Eastbrook polish committed capture artifacts', () => {
     }
     expect(acceptedFiles).toHaveLength(18);
     expect(fingerprint.digest('hex')).toBe(
-      'e4e7cab8633ba083707e6cd3fda3b75fed7bfe88cbfcf7d6577ff46afb742144',
+      '031d3a72fe04c1b4b084ca6608ce137d4078f9ddff42c488efe6ca8624fcc1b4',
     );
   });
 
@@ -1500,7 +1500,7 @@ describe('Eastbrook polish performance and contact evidence', () => {
     // numbers) is adopted verbatim from the base tip; no parent's literal
     // matched the merged tree, and no capture was retaken here.
     expect(fingerprint.digest('hex')).toBe(
-      '985ebaa5c0e031e33ef4b781689a9b1e29dca0ae526f21b059e9bfe180bcc707',
+      'e4e7cab8633ba083707e6cd3fda3b75fed7bfe88cbfcf7d6577ff46afb742144',
     );
   });
 

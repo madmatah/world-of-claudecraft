@@ -38,3 +38,28 @@ the single edit that lands with the ingested crest.
 Chronicle:
 - [v1] `chr_drakemaw_broodlord`, Clutch Breaker: a cracked dragon egg in a scorched nest, a broken broodlord horn laid across the shell, ember orange on slate.
 - [v1] `chr_maw_matriarch`, The Sky Goes Quiet: a wide dragon wing folding over a crater rim, a single fleck of ash falling through cold dusk light.
+
+## Realm Racers (13c), pending
+
+Nine ids, seven deed crests and two ability icons, all enumerated once in
+`src/ui/icons.ts`: the deeds as `DEED_ART_PENDING`, the abilities as
+`ABILITY_ART_PENDING`. Each ships a real fallback rather than a placeholder (the
+`deed_cat_pvp` category crest, and an authored procedural `ABILITY_RECIPES`
+entry), so removing an id from its list is the single edit that lands with the
+ingested art.
+
+PvP (deed crests, `npm run assets:deeds <source-dir>`):
+- [v1] `pvp_rr_first_race`, Off the Line: a lowered starting flag over four tyre tracks cut into pale grit, dusk blue on warm sand.
+- [v1] `pvp_rr_first_win`, Chequered and Cheered: a chequered flag half-furled above a raised gauntlet, hot white on deep track grey.
+- [v1] `pvp_rr_wins_10`, Podium Regular: three stepped blocks seen head-on, the centre one worn smooth, brushed bronze on slate.
+- [v1] `pvp_rr_wins_25`, Circuit Legend: a full circuit ribbon coiled into a laurel, gold on night blue.
+- [v1] `pvp_rr_fast_lap`, (fast lap): a single glowing lap line splitting a stopwatch face, violet on charcoal.
+- [v1] `pvp_rr_clean_race`, (clean race): an unscratched machine flank catching one clean highlight, cold steel on green.
+- [v1] `pvp_rr_comeback`, From the Back of the Pack: four staggered silhouettes with the rearmost breaking forward, ember trail behind it.
+
+Abilities (icon sheet):
+- [v1] `rally_nitro`: a pressurised canister venting a forward cone of flame, orange over gunmetal.
+- [v1] `rally_oil_slick`: a spreading black pool with an iridescent sheen at its rim, on wet asphalt.
+
+`rally_ground_blast` is listed as pending too, sharing the Ground Blast weapon
+art brief above rather than a second commission.

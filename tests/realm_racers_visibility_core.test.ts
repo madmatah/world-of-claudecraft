@@ -18,7 +18,6 @@ interface RequiredViewsHarness {
   createRequiredViews(
     player: Entity,
     createdViewTypes: string[],
-    nameplateParent: ParentNode,
     participantIds: readonly number[],
   ): number;
 }
@@ -49,7 +48,6 @@ describe('Realm Racers participant visibility', () => {
     const created = renderer.createRequiredViews(
       { id: 10, targetId: null } as Entity,
       [],
-      {} as ParentNode,
       participantIds,
     );
 
@@ -78,12 +76,7 @@ describe('Realm Racers participant visibility', () => {
     renderer.viewCreateRetry = { canAttempt: () => true };
     renderer.createView = vi.fn();
     renderer.sampleCreatedViewType = vi.fn();
-    const created = renderer.createRequiredViews(
-      humanEntity,
-      [],
-      {} as ParentNode,
-      info.participantIds,
-    );
+    const created = renderer.createRequiredViews(humanEntity, [], info.participantIds);
 
     expect(dx * dx + dz * dz).toBeGreaterThan(96 * 96);
     expect(isRealmRacersCoPilot(info.participantIds, human, bot)).toBe(true);

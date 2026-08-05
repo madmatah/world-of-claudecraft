@@ -4368,11 +4368,11 @@ describe('gather node cooldown wire round trip (ncd)', () => {
 });
 
 describe('delta-key contract pins (anti-drift)', () => {
-  it('ALL_DELTA_KEYS contains exactly 64 unique keys in sorted order', () => {
+  it('ALL_DELTA_KEYS contains exactly 66 unique keys in sorted order', () => {
     // +1: guildBank (Guild Bank Phase 2), +2: the Realm Racers state and
     // temporary-kit keys.
     expect(ALL_DELTA_KEYS).toHaveLength(66);
-    expect(new Set(ALL_DELTA_KEYS).size).toBe(64);
+    expect(new Set(ALL_DELTA_KEYS).size).toBe(66);
     expect([...ALL_DELTA_KEYS]).toEqual([...ALL_DELTA_KEYS].sort());
   });
 

@@ -204,17 +204,20 @@ describe('Realm Racers coordinator audio wiring', () => {
       viewLights: unknown[];
       clickTargets: unknown[];
       audioSink: { stopVehicle: ReturnType<typeof vi.fn> };
+      nameplatePainter: { remove: ReturnType<typeof vi.fn> };
       removeView(id: number): void;
     };
     renderer.scene = { remove: vi.fn() };
     renderer.lightOwnerGroups = { delete: vi.fn() };
+    // Overhead text is one batched canvas surface now, keyed by entity id, so
+    // dropping a view unregisters it there rather than detaching a DOM plate.
+    renderer.nameplatePainter = { remove: vi.fn() };
     renderer.viewLights = [];
     renderer.clickTargets = [];
     const view = {
       vehicleAudioActive: true,
       group: {},
       viewLights: [],
-      nameplate: { remove: vi.fn() },
       clickTarget: {},
       visual: { dispose: vi.fn() },
       visualPoolKey: null,

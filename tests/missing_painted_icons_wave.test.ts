@@ -9,6 +9,7 @@ import { DEED_ORDER } from '../src/sim/content/deeds';
 import { ABILITIES, ITEMS } from '../src/sim/data';
 import { DEED_IMAGE_IDS } from '../src/ui/deed_image_ids';
 import {
+  ABILITY_ART_PENDING,
   ABILITY_IMAGE_IDS,
   abilityImageUrl,
   DEED_ART_PENDING,
@@ -370,7 +371,11 @@ describe('missing painted ability integration', () => {
   it('makes every live ability image-backed while preserving all 19 modifier/talent ids', () => {
     const accepted = manifest();
     expect(accepted.targetSets.abilities).toHaveLength(90);
-    expect(Object.keys(ABILITIES).filter((id) => !ABILITY_IMAGE_IDS.has(id))).toEqual([]);
+    // Read from ABILITY_ART_PENDING, the one enumeration of the painted-ability
+    // debt (src/ui/icons.ts), so unenumerated debt still reddens this line.
+    expect(Object.keys(ABILITIES).filter((id) => !ABILITY_IMAGE_IDS.has(id))).toEqual([
+      ...ABILITY_ART_PENDING,
+    ]);
     expect(sorted([...ABILITY_IMAGE_IDS].filter((id) => !Object.hasOwn(ABILITIES, id)))).toEqual([
       ...PRESERVED_IMAGE_BACKED_MODIFIER_IDS,
     ]);
@@ -512,15 +517,16 @@ describe('missing painted deed and Heroic weapon integration', () => {
       'dgn_wildheart_basin_heroic',
       'pvp_card_duel_first_win',
     ]);
-    // The Drakelands brood merge appended two deeds after this wave, so the live catalog
-    // is 234 and the wave's own claim is unchanged: every deed that existed when it landed
-    // is painted. The only artless ids are those two appended later, which ride the
+    // The Drakelands brood merge appended two deeds after this wave and Realm Racers
+    // seven more, so the live catalog is 241 and the wave's own claim is unchanged: every
+    // deed that existed when it landed is painted. The only artless ids are those nine
+    // appended later, which ride the
     // category-crest fallback the Icons authoring rule in docs/design/deeds.md sanctions,
     // until their 512px sources are commissioned (flagged in
     // docs/achievements/icon-brief.md). Read from DEED_ART_PENDING, the one enumeration of
     // that debt (src/ui/icons.ts), so this file cannot end up naming a different pending
     // set than the other two art suites. Exhaustive: a third artless deed still reds here.
-    expect(DEED_ORDER).toHaveLength(234);
+    expect(DEED_ORDER).toHaveLength(241);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     const credits = readFileSync(path.join(repoRoot, 'CREDITS.md'), 'utf8');
     const provenance = readFileSync(

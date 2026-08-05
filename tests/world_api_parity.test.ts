@@ -1701,7 +1701,8 @@ const FACET_MEMBER_ARRAYS: Readonly<Record<string, readonly string[]>> = {
 
 describe('W1: aggregate IWorld member set equals the disjoint union of the facets', () => {
   it('pins the facet count', () => {
-    expect(Object.keys(FACET_MEMBER_ARRAYS).length).toBe(31);
+    // +1 over the release: the Realm Racers facet joins the pin.
+    expect(Object.keys(FACET_MEMBER_ARRAYS).length).toBe(32);
   });
 
   it('each facet array is non-empty and internally duplicate-free', () => {
