@@ -16,13 +16,13 @@ import {
 import {
   drawRallyPickupEffect,
   isRallyHeldEffect,
-  rallyHeldEffectFromWire,
   type RallyPickupBand,
   type RallyPickupEffect,
   REALM_RACERS_NITRO_KICK,
   REALM_RACERS_NITRO_SPEED_MULT,
   REALM_RACERS_NITRO_TICKS,
   REALM_RACERS_PICKUP_TABLES,
+  rallyHeldEffectFromWire,
   rallyPickupBand,
 } from '../src/sim/realm_racers_pickup_effects';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
