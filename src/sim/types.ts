@@ -3326,6 +3326,19 @@ export interface VehicleDrive {
   dragMult: number;
   /** Surface top-speed multiplier, written by the owning activity. 1 = road. */
   speedCap: number;
+  /**
+   * Surface SLIDE-ceiling multiplier, written by the owning activity. 1 = road.
+   *
+   * The twin of `speedCap` on the other axis, and it exists because a ceiling is
+   * not a modifier: a machine racing hard already sits AT `maxSlip`, so anything
+   * that shoves it sideways delivers nothing at all to the pilots pushing
+   * hardest (measured on the loaner: a racing machine carries the ceiling on one
+   * cornering tick in ten, and three quarters of a 12 yd/s shove is discarded at
+   * the median). Oil is the case that needs it: on a slick a car really does
+   * slide further than tarmac allows, so the surface raises the ceiling rather
+   * than the weapon pushing against it.
+   */
+  slipCap: number;
   /** Speed rejected by static collision on the latest movement tick, yd/s.
    * Presentation-only: scrape sparks and audio consume it. */
   collisionImpact: number;
@@ -4691,6 +4704,19 @@ export type SimEvent = { pid?: number } & (
       x: number;
       z: number;
       /** Closing speed along the contact normal, yd/s: how hard it was. */
+      impact: number;
+    }
+  // A machine drove into a patch of oil and was thrown by it. World-visible and
+  // text-free like the pair above, and for the same reason: a rival spinning
+  // beside you is something you hear and see happen, not a line in your log.
+  | {
+      type: 'realmRacersSlicked';
+      targetId: number;
+      x: number;
+      z: number;
+      /** Fraction of the machine's top speed it crossed at, 0 to 1. The shove is
+       *  scaled by it, so the presentation scales by it too. Never 0: a crossing
+       *  with nothing to throw is not announced at all. */
       impact: number;
     }
   // Card Duel minigame (src/sim/social/card_duel.ts). Personal (pid), text-free

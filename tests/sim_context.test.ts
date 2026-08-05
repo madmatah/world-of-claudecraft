@@ -246,6 +246,7 @@ const CALLBACK_KEYS = [
   'realmRacersFireGroundBlast',
   'realmRacersSpendPickupEffect',
   'realmRacersDevRace',
+  'realmRacersDevGrantKit',
 ] as const;
 
 // A fully-spied fake host. `clock` is mutable so a test can prove the context reads
@@ -568,6 +569,7 @@ function makeFakeHost() {
     realmRacersFireGroundBlast: vi.fn(),
     realmRacersSpendPickupEffect: vi.fn(),
     realmRacersDevRace: vi.fn(),
+    realmRacersDevGrantKit: vi.fn(),
   };
   return { host, rng, entities, clock };
 }

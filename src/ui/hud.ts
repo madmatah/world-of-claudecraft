@@ -12089,9 +12089,11 @@ export class Hud {
         case 'realmRacersGroundBlastFired':
         case 'realmRacersGroundBlastHit':
           break;
-        // Contact is rendered in the world (sparks, ring, shake), never in the
-        // HUD: a banner on every nudge would bury the lap and result lines.
+        // Contact and oil are rendered in the world (sparks, puff, ring, shake),
+        // never in the HUD: a banner on every nudge would bury the lap and
+        // result lines.
         case 'realmRacersBump':
+        case 'realmRacersSlicked':
           break;
         case 'realmRacersResult': {
           if (ev.pid !== sim.playerId) break;

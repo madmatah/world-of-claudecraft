@@ -141,14 +141,20 @@ function displaySpeedBudget(e: Entity): number {
  * predictor could not have simulated? A vehicle carries VELOCITY across ticks
  * (a runner re-derives it from held input every step), so a shove the predictor
  * never saw would otherwise live on in the scratch state and steer against the
- * server for the rest of the corner. Two events do it: a rival's contact, and an
- * Ground Blast going off under the machine.
+ * server for the rest of the corner. Three events do it: a rival's contact, a
+ * Ground Blast going off under the machine, and a patch of oil.
  *
  * Only the momentum needs this. The HEADING a contact turns the machine through
  * arrives on its own: a driver's predicted facing is re-anchored on the wire
  * value every step (main.ts hands the interpolated server facing down while
  * driving, since a pilot does not claim the facing channel), so a server-side
  * rotation lands on the display an echo later with nothing to replay.
+ *
+ * The oil is the easy one to overlook and the one that proves the rule: it does
+ * not touch the machine's heading at all, it moves the velocity sideways, and a
+ * predictor that never saw it drives the line the machine was on while the
+ * correction drags the pose back every frame. That is the stutter this function
+ * exists to prevent, and it shipped that way once.
  */
 export function hasAuthoritativeDriveImpulse(
   events: readonly SimEvent[],
@@ -157,7 +163,8 @@ export function hasAuthoritativeDriveImpulse(
   return events.some(
     (event) =>
       (event.type === 'realmRacersBump' && (event.aId === playerId || event.bId === playerId)) ||
-      (event.type === 'realmRacersGroundBlastHit' && event.targetId === playerId),
+      (event.type === 'realmRacersGroundBlastHit' && event.targetId === playerId) ||
+      (event.type === 'realmRacersSlicked' && event.targetId === playerId),
   );
 }
 
@@ -508,6 +515,7 @@ export class SelfMotionPredictor {
       actor.drive.gripMult = self.drive.gripMult;
       actor.drive.dragMult = self.drive.dragMult;
       actor.drive.speedCap = self.drive.speedCap;
+      actor.drive.slipCap = self.drive.slipCap;
     }
     // Fixed-step advance with the held intent. Turn flags are stripped ON FOOT:
     // the heading is assigned from the one display source each step, and letting

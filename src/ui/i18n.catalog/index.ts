@@ -134,6 +134,7 @@ export const en = {
       spec: 'Spec',
       rallyCircuit: 'Circuit',
       rallyTier: 'Rival tier',
+      rallyKitCharges: 'Weapon charges',
     },
     difficulty: { normal: 'Normal', heroic: 'Heroic' },
     actions: {
@@ -198,6 +199,10 @@ export const en = {
       rally: {
         label: 'Race a circuit',
         description: 'Start a Realm Racers race on the chosen circuit right now.',
+      },
+      rallykit: {
+        label: 'Fill the rally kit',
+        description: 'Top the seated weapon and every pickup effect up to the same count.',
       },
       raidreset: {
         label: 'Reset raid lockout',

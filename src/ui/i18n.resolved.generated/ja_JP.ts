@@ -66,7 +66,8 @@ export const ja_JP: EnTranslations = {
       "name": "名前",
       "spec": "スペック",
       "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier"
+      "rallyTier": "Rival tier",
+      "rallyKitCharges": "Weapon charges"
     },
     "difficulty": {
       "normal": "ノーマル",
@@ -164,6 +165,10 @@ export const ja_JP: EnTranslations = {
       "rally": {
         "label": "Race a circuit",
         "description": "Start a Realm Racers race on the chosen circuit right now."
+      },
+      "rallykit": {
+        "label": "Fill the rally kit",
+        "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
         "label": "レイドロックアウトをリセット",

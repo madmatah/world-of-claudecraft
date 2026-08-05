@@ -4,12 +4,14 @@ import { type PlayerMotionDeps, stepPlayerMotion } from '../src/sim/player_motio
 import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
 import { DT, type Entity, type MoveInput, type VehicleDrive } from '../src/sim/types';
 import {
+  addVehicleSlip,
   advanceVehicleDrive,
   applyAchievedVehicleVelocity,
   createVehicleDrive,
   resetVehicleDrive,
   steerAuthority,
   type VehicleStepInput,
+  vehicleMaxSlip,
   vehicleVelocityX,
   vehicleVelocityZ,
 } from '../src/sim/vehicle_motion';
@@ -496,6 +498,33 @@ describe('the vehicle arm of the movement kernel', () => {
     drive.speed = 10;
     resetVehicleDrive(drive);
     expect(drive.spin).toBe(0);
+  });
+
+  it('lets the surface raise the slide ceiling, and clamps to the raised one', () => {
+    // The two halves of `slipCap`, which exists because a ceiling is not a
+    // modifier: nothing that shoves a machine sideways can deliver anything to
+    // one already sitting at `maxSlip`, which is where a pilot attacking a
+    // corner lives. Oil raises it; the road takes it back.
+    const drive = createVehicleDrive('rally_loaner');
+    expect(drive.slipCap).toBe(1);
+    expect(vehicleMaxSlip(LOANER, drive)).toBe(LOANER.maxSlip);
+
+    // The add honours the ceiling handed in, not the profile's.
+    drive.slipCap = 2;
+    expect(vehicleMaxSlip(LOANER, drive)).toBe(LOANER.maxSlip * 2);
+    addVehicleSlip(drive, LOANER.maxSlip * 3, vehicleMaxSlip(LOANER, drive));
+    expect(drive.slip).toBe(LOANER.maxSlip * 2);
+
+    // And a grounded step leaves a raised slide alone rather than clipping it
+    // back to the road's ceiling the tick after it was granted.
+    drive.speed = 30;
+    advanceVehicleDrive(drive, LOANER, controls({}));
+    expect(drive.slip).toBeGreaterThan(LOANER.maxSlip);
+
+    // Back on tarmac the kernel pulls it down to what the road allows.
+    drive.slipCap = 1;
+    advanceVehicleDrive(drive, LOANER, controls({}));
+    expect(drive.slip).toBe(LOANER.maxSlip);
   });
 
   it('never jumps: the jump arm of the vertical pass is held down while driving', () => {

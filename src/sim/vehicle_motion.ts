@@ -78,6 +78,7 @@ export function createVehicleDrive(profileKey: string): VehicleDrive {
     gripMult: 1,
     dragMult: 1,
     speedCap: 1,
+    slipCap: 1,
     collisionImpact: 0,
     controlsLocked: false,
   };
@@ -227,7 +228,8 @@ export function advanceVehicleDrive(
   // the ceiling the velocity vector would shrink), which is exactly what a shell
   // or a bump launching a drifting racer would hit.
   if (input.onGround) {
-    drive.slip = Math.max(-profile.maxSlip, Math.min(profile.maxSlip, drive.slip));
+    const ceiling = vehicleMaxSlip(profile, drive);
+    drive.slip = Math.max(-ceiling, Math.min(ceiling, drive.slip));
   }
 
   // 5. The engagement reading the presentation layers ride.
@@ -261,6 +263,41 @@ export function vehicleVelocityZ(drive: VehicleDrive, facing: number): number {
  * ceiling that named either of them would be the wrong ceiling for the other.
  */
 export const MAX_VEHICLE_SPIN = 5;
+
+/**
+ * How far sideways this body may travel right now: the profile's ceiling, raised
+ * by whatever surface it is on.
+ *
+ * The twin of `vehicleMaxSpeed`, and the ONE place the two halves of the slide
+ * ceiling are multiplied, so the kernel's clamp and anything that shoves a
+ * machine sideways cannot disagree about where the ceiling is.
+ */
+export function vehicleMaxSlip(profile: VehicleProfile, drive: VehicleDrive): number {
+  return profile.maxSlip * drive.slipCap;
+}
+
+/**
+ * Add to a body's LATERAL velocity, held inside the slide ceiling in force.
+ *
+ * The twin of `addVehicleSpin`, and the difference between the two is the whole
+ * difference between a slide and a steering input: spin rotates the body under a
+ * velocity this model CONSERVES, so at the instant it lands the machine is still
+ * travelling exactly where it was, merely pointing elsewhere (and a chase camera
+ * glued to the nose reads that as the wheel being yanked). This moves the
+ * velocity itself, so the machine leaves the line it was on at once while the
+ * nose stays put, which is what a slide looks like from the seat.
+ *
+ * The ceiling is passed in (`vehicleMaxSlip`) rather than read from the profile
+ * here: the kernel already clamps to it every grounded step, so an unbounded add
+ * would be silently truncated a tick later instead of at the site that has to
+ * reason about it, and a caller that RAISES the ceiling for its own surface has
+ * to be able to hand in the one it just granted. Airborne it is the only clamp
+ * there is.
+ */
+export function addVehicleSlip(drive: VehicleDrive, delta: number, maxSlip: number): void {
+  const slip = drive.slip + delta;
+  drive.slip = slip < -maxSlip ? -maxSlip : slip > maxSlip ? maxSlip : slip;
+}
 
 /** Add to a body's carried spin, held inside the shared ceiling. */
 export function addVehicleSpin(drive: VehicleDrive, delta: number): void {

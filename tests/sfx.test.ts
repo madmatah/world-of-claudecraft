@@ -512,6 +512,7 @@ describe('Realm Racers vehicle loops', () => {
       gripMult: 1,
       dragMult: 1.8,
       speedCap: 1,
+      slipCap: 1,
       collisionImpact: 0,
       controlsLocked: false,
     };
@@ -602,6 +603,17 @@ describe('Realm Racers vehicle loops', () => {
         impact: 12,
       }),
     ).toEqual({ kind: 'bump', x: 6, z: 7, heightOffset: 0.5, impact: 0.5 });
+    // Oil borrows the scrape voice rather than a sample of its own, at tyre
+    // height and with the impact already normalized at the emit site.
+    expect(
+      realmRacersSpatialAudioCue({
+        type: 'realmRacersSlicked',
+        targetId: 3,
+        x: 10,
+        z: 11,
+        impact: 0.6,
+      }),
+    ).toEqual({ kind: 'scrape', x: 10, z: 11, heightOffset: 0.3, impact: 0.6 });
     expect(realmRacersScrapeAudioCue(8, 9, 0.4)).toEqual({
       kind: 'scrape',
       x: 8,

@@ -22,6 +22,7 @@ import type {
   RealmRacersRacerInfo,
 } from '../../world_api/realm_racers';
 import {
+  type RallyHeldSlot,
   REALM_RACERS_EFFECT_ABILITIES,
   realmRacersWeaponCharges,
   resolveRealmRacersKit,
@@ -88,6 +89,8 @@ import {
   REALM_RACERS_SLICK_GRIP,
   REALM_RACERS_SLICK_GRIP_TICKS,
   REALM_RACERS_SLICK_LIFETIME_TICKS,
+  REALM_RACERS_SLICK_SLIP_CAP,
+  realmRacersSlickThrow,
   stepRealmRacersSlicks,
 } from '../realm_racers_slicks';
 import {
@@ -114,7 +117,12 @@ import type { ArenaReturnPools, PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
 import { type Entity, TICK_RATE, type VehicleDrive } from '../types';
 import { type ContactBody, resolveVehicleContact } from '../vehicle_contact';
-import { createVehicleDrive, resetVehicleDrive } from '../vehicle_motion';
+import {
+  addVehicleSlip,
+  createVehicleDrive,
+  resetVehicleDrive,
+  vehicleMaxSlip,
+} from '../vehicle_motion';
 import { cloneAbilityCharges, cloneCcDr, isArenaQueued, snapshotArenaReturnPools } from './arena';
 
 /** The machine every pilot is loaned, as a VEHICLE_PROFILES key. A roster of
@@ -386,7 +394,25 @@ export interface RealmRacersProgress {
    * contact.
    */
   slickContactUntilTick: number;
+  /** WHICH patch that contact deadline belongs to, or null before the first
+   *  one. Keyed per patch rather than per racer so lingering in one slick can
+   *  never buy immunity to a DIFFERENT one further down the road. */
+  slickContactId: number | null;
   slickGripUntilTick: number;
+  /**
+   * DEV ONLY, and inert without `ctx.devCommands`: a stack of each held effect,
+   * standing in for the one-charge slot above while it lasts.
+   *
+   * A pickup grants one charge, which is right for a race and useless for tuning
+   * one: feeling a weapon means spending it lap after lap, and re-typing a chat
+   * command between two crossings is not a thing anyone can do at 45 yd/s. Both
+   * effects at once, because the bar reserves a key for each anyway, so a tuning
+   * session never has to choose which half of the kit it is judging.
+   *
+   * Read at the ONE spend site behind the same gate that let it be set, so a
+   * saved race can never carry it into a real one.
+   */
+  devHeldCharges: Record<RallyHeldEffect, number> | null;
   /** Tick the shell shock's grip loss expires on; 0 when the machine has not
    *  been hit. */
   groundBlastShockUntilTick: number;
@@ -740,31 +766,65 @@ function republishKit(ctx: SimContext, match: RealmRacersMatch, pid: number): vo
   const progress = match.progress.get(pid);
   if (!meta || !e || !progress) return;
   const held = progress.heldWeapon;
-  meta.known = held ? resolveRealmRacersKit(held.abilityId, held.charges, progress.heldEffect) : [];
+  const slots = realmRacersHeldSlots(ctx, progress);
+  meta.known = held ? resolveRealmRacersKit(held.abilityId, held.charges, slots) : [];
   meta.wireRev++;
   publishWeaponCharges(e, held);
-  publishHeldEffectCharge(e, progress.heldEffect);
+  publishHeldEffectCharge(e, slots);
+}
+
+/** Every held effect there is, derived from the ability table rather than
+ *  written out again: that record is keyed by the union, so its keys cannot fall
+ *  out of step with it. */
+const RALLY_HELD_EFFECTS = Object.keys(REALM_RACERS_EFFECT_ABILITIES) as RallyHeldEffect[];
+
+/**
+ * What this pilot is holding, as the kit and the charge badges see it: the one
+ * charge a pickup granted, or the dev stack standing in for it.
+ *
+ * The ONE place the two are reconciled, so every reader downstream (the kit, the
+ * bar badges, the spend gate) is looking at the same answer.
+ */
+function realmRacersHeldSlots(
+  ctx: SimContext,
+  progress: RealmRacersProgress,
+): readonly RallyHeldSlot[] {
+  const stock = ctx.devCommands ? progress.devHeldCharges : null;
+  const stocked = stock
+    ? RALLY_HELD_EFFECTS.map((effect) => ({ effect, charges: stock[effect] })).filter(
+        (slot) => slot.charges > 0,
+      )
+    : [];
+  // A DRAINED stack stands aside rather than shadowing the slot: the record is
+  // still there once every entry hits zero, and a stack tested by existence
+  // left a pilot who then took an ordinary box holding an effect with no button
+  // and no way to re-acquire it (a full slot turns every later box into a
+  // refill). The spend site falls through the same way, on the same test.
+  if (stocked.length > 0) return stocked;
+  return progress.heldEffect ? [{ effect: progress.heldEffect, charges: 1 }] : [];
 }
 
 /**
- * The held effect's own charge pool: exactly one use, `fixed` so the recharge
- * tick never refills it, and REMOVED the moment the slot empties, so a spent
- * effect cannot be cast a second time even if a stale bar still points at it.
+ * The held effects' own charge pools: what the pilot is holding, `fixed` so the
+ * recharge tick never refills them, and REMOVED the moment a slot empties, so a
+ * spent effect cannot be cast a second time even if a stale bar still points at
+ * it.
  */
-function publishHeldEffectCharge(e: Entity, heldEffect: RallyHeldEffect | null): void {
+function publishHeldEffectCharge(e: Entity, slots: readonly RallyHeldSlot[]): void {
   for (const abilityId of Object.values(REALM_RACERS_EFFECT_ABILITIES)) {
-    if (heldEffect && REALM_RACERS_EFFECT_ABILITIES[heldEffect] === abilityId) continue;
+    if (slots.some((slot) => REALM_RACERS_EFFECT_ABILITIES[slot.effect] === abilityId)) continue;
     if (e.abilityCharges) delete e.abilityCharges[abilityId];
   }
-  if (!heldEffect) return;
-  e.abilityCharges ??= {};
-  e.abilityCharges[REALM_RACERS_EFFECT_ABILITIES[heldEffect]] = {
-    charges: 1,
-    maxCharges: 1,
-    recharge: 0,
-    rechargeLength: 0,
-    fixed: true,
-  };
+  for (const slot of slots) {
+    e.abilityCharges ??= {};
+    e.abilityCharges[REALM_RACERS_EFFECT_ABILITIES[slot.effect]] = {
+      charges: slot.charges,
+      maxCharges: slot.charges,
+      recharge: 0,
+      rechargeLength: 0,
+      fixed: true,
+    };
+  }
 }
 
 function standardizeRacer(
@@ -965,7 +1025,9 @@ function startMatch(
           nitroUntilTick: 0,
           heldEffect: null,
           slickContactUntilTick: 0,
+          slickContactId: null,
           slickGripUntilTick: 0,
+          devHeldCharges: null,
           groundBlastShockUntilTick: 0,
           lapStartTick: ctx.tickCount,
           hadOffTrackContact: false,
@@ -1098,22 +1160,37 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
     progress.nitroUntilTick = 0;
     progress.slickGripUntilTick = 0;
     progress.slickContactUntilTick = 0;
+    progress.slickContactId = null;
     // The ward goes with the flag: it is a race effect, and a shield standing
     // through a tableau where nothing can hit anyone is chrome.
     const racer = ctx.entities.get(pid);
     if (racer) consumeRealmRacersWard(ctx, racer);
     // The kit goes with it too: an effect held at the flag is spent on nothing,
     // and a button that stays on the bar through the tableau is a button that lies.
-    if (progress.heldEffect !== null) {
-      progress.heldEffect = null;
-      republishKit(ctx, match, pid);
-    }
+    // The dev stack goes with the race that granted it, so a second race never
+    // inherits an armoury nobody asked it for.
+    //
+    // The republish is gated on EITHER emptying, not on the slot alone: a dev
+    // grant fills the stack and leaves `heldEffect` null, so a slot-only test
+    // skipped the republish and left the whole granted kit on the bar for the
+    // tableau, which is the exact thing the sentence above forbids.
+    const heldSomething = progress.heldEffect !== null || progress.devHeldCharges !== null;
+    progress.devHeldCharges = null;
+    progress.heldEffect = null;
+    if (heldSomething) republishKit(ctx, match, pid);
     // The surface pass stops running the moment the phase leaves `racing`, so a
     // ceiling raised by a nitro would stand for the whole tableau (and be the
     // state a `resetVehicleDrive` below does NOT clear: it zeroes the motion,
     // never the multipliers).
     const drive = ctx.entities.get(pid)?.drive;
-    if (drive) drive.speedCap = 1;
+    if (drive) {
+      drive.speedCap = 1;
+      // And the slide ceiling with it, for the same reason and on the same
+      // clock: it is written by that same surface pass, it rides the wire, and
+      // a mirror would otherwise show a machine free to slide twice as far for
+      // the whole tableau.
+      drive.slipCap = 1;
+    }
   }
   const ranked = classify(match);
   match.finishOrder = ranked.map((entry) => entry.pid);
@@ -1292,6 +1369,7 @@ function resetRacerTo(
   racer.drive.gripMult = 1;
   racer.drive.dragMult = 1;
   racer.drive.speedCap = 1;
+  racer.drive.slipCap = 1;
 
   progress.lap = target.lap;
   progress.lastS = anchor.s;
@@ -1308,6 +1386,7 @@ function resetRacerTo(
   progress.nitroUntilTick = 0;
   progress.slickGripUntilTick = 0;
   progress.slickContactUntilTick = 0;
+  progress.slickContactId = null;
   // A racer put back on the racing line is on it: whatever excursion carried
   // them here is over, and the odometer starts again from the next one.
   progress.excursion = noRallyExcursion();
@@ -1635,10 +1714,15 @@ function applyVehicleSurface(
   band: RealmRacersSlowBand | null,
   gripPenalty: number,
   speedBoost: number,
+  slipCeiling: number,
 ): void {
   if (!racer.drive) return;
   racer.drive.gripMult = (band ? band.gripMult : 1) * gripPenalty;
   racer.drive.dragMult = band ? band.dragMult : 1;
+  // How far sideways this surface lets the machine travel at all. Oil is the
+  // only thing that raises it: a shove has nowhere to put a machine that is
+  // already at its ceiling, which is where a pilot attacking a corner lives.
+  racer.drive.slipCap = slipCeiling;
   // The band's speed loss rides its slow AURA, which the kernel already folds
   // into the top speed, so the surface cap stays neutral off a nitro and nothing
   // is charged twice.
@@ -1746,6 +1830,7 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
       band,
       (shocked ? GROUND_BLAST_SHOCK_GRIP : 1) * (slicked ? REALM_RACERS_SLICK_GRIP : 1),
       ctx.tickCount < progress.nitroUntilTick ? REALM_RACERS_NITRO_SPEED_MULT : 1,
+      slicked ? REALM_RACERS_SLICK_SLIP_CAP : 1,
     );
     const existing = racer.auras.find((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA);
     if (!band) {
@@ -2087,8 +2172,18 @@ export function realmRacersSpendPickupEffect(
   if (!progress || !realmRacersStillRunning(match, caster.id)) return;
   // The slot is the authority, never the button: a stale bar (or a cheat client
   // casting an id it no longer holds) spends nothing.
-  if (progress.heldEffect !== effect) return;
-  progress.heldEffect = null;
+  // The dev stack stands in for the slot while it lasts, so a weapon under
+  // tuning can be felt lap after lap without a chat command between crossings.
+  // Gated here as well as at the grant, so a stack is inert in production even
+  // if some future load path resurrected one.
+  const stock = ctx.devCommands ? progress.devHeldCharges : null;
+  if (stock && stock[effect] > 0) {
+    stock[effect] -= 1;
+  } else if (progress.heldEffect !== effect) {
+    return;
+  } else {
+    progress.heldEffect = null;
+  }
   if (effect === 'nitro') {
     progress.nitroUntilTick = ctx.tickCount + REALM_RACERS_NITRO_TICKS;
     const drive = caster.drive;
@@ -2113,6 +2208,47 @@ export function realmRacersSpendPickupEffect(
 }
 
 /**
+ * DEV ONLY: hand the seated pilot a full armoury, so a weapon can be felt over
+ * and over while it is being tuned.
+ *
+ * Gated by `ctx.devCommands` at the call site, exactly like `realmRacersDevRace`
+ * beside it. It grants what a race can actually hold: the signature weapon's
+ * budget is a real count and is set outright, while a pickup effect is a
+ * one-charge slot by design, so "a stack of them" is expressed as the refill
+ * latch rather than by inventing a second counter the rest of the code would
+ * have to learn. `ward` is neither: it is an aura, granted once.
+ *
+ * Returns false when the pilot is not in a race, which is the only way to fail.
+ */
+export function realmRacersDevGrantKit(ctx: SimContext, pid: number, charges: number): boolean {
+  const match = realmRacersMatchOf(ctx, pid);
+  const racer = ctx.entities.get(pid);
+  const progress = match?.progress.get(pid);
+  if (!match || !racer || !progress) return false;
+  const held = progress.heldWeapon;
+  // Zero hands the race back its own rules, which is what a tuning session needs
+  // at the end of one: the ordinary budget and the one-charge pickup are the
+  // things being judged. So the weapon goes back to what a race grants it,
+  // rather than to nothing: `0` is "stop cheating", never "leave me empty".
+  // A null budget is unlimited fire already and has nothing to be topped up to.
+  if (held && held.charges !== null) {
+    held.charges = charges > 0 ? charges : (realmRacersWeaponCharges(held.abilityId) ?? 0);
+  }
+  progress.devHeldCharges =
+    charges > 0
+      ? (Object.fromEntries(RALLY_HELD_EFFECTS.map((effect) => [effect, charges])) as Record<
+          RallyHeldEffect,
+          number
+        >)
+      : null;
+  // The ward is NOT granted, deliberately: it eats the next hostile effect, so a
+  // kit that included one would silently swallow the first hit of whatever the
+  // session was convened to feel.
+  republishKit(ctx, match, pid);
+  return true;
+}
+
+/**
  * Put one patch of oil on this race's circuit, holding the field to the cap the
  * renderer can actually draw.
  *
@@ -2132,6 +2268,9 @@ function dropRealmRacersSlick(
     x,
     z,
     ownerPid,
+    // The oil goes down under the machine, so the pilot is standing in it: it
+    // arms against them the moment they drive out (`stepRealmRacersSlicks`).
+    ownerClear: false,
     expiresTick: ctx.tickCount + REALM_RACERS_SLICK_LIFETIME_TICKS,
   });
   while (match.slicks.length > REALM_RACERS_SLICK_CAP) match.slicks.shift();
@@ -2166,18 +2305,73 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
   for (const hit of step.hits) {
     const progress = match.progress.get(hit.pid);
     if (!progress) continue;
-    // Contact with the oil is resolved ONCE per window, not once per tick spent
-    // in the puddle: a machine crosses a patch over two or three ticks, and
-    // re-resolving it every one of them would announce twenty times a second and
-    // eat a ward the tick after it had already saved the pilot.
-    if (ctx.tickCount < progress.slickContactUntilTick) continue;
+    // Contact with the oil is resolved ONCE per crossing, not once per tick
+    // spent in the puddle: a machine crosses a patch over two or three ticks,
+    // and re-resolving it every one of them would announce twenty times a second
+    // and eat a ward the tick after it had already saved the pilot.
+    // The deadline follows THIS patch's contact, resolved or not, so it can only
+    // lapse once the machine is out of THAT oil. Two halves, both load-bearing:
+    // letting it lapse underneath a machine still sitting in a patch threw a
+    // stopped pilot again every window for the whole twelve seconds the patch
+    // lives (harmless while a crossing only cost grip, a fresh shove once one
+    // moved the machine), and keying it to the patch rather than to the racer is
+    // what stops lingering in one slick from buying a free pass through the next
+    // one down the road. The GRIP window deliberately does NOT follow the
+    // contact: it expires on its own clock, or a machine that stopped in the oil
+    // would never get the grip back to drive out of it.
+    const resolves =
+      progress.slickContactId !== hit.slick || ctx.tickCount >= progress.slickContactUntilTick;
+    progress.slickContactId = hit.slick;
     progress.slickContactUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+    if (!resolves) continue;
     const racer = ctx.entities.get(hit.pid);
     if (racer && consumeRealmRacersWard(ctx, racer)) {
       ctx.emit({ type: 'realmRacersWardBroken', pid: hit.pid });
       continue;
     }
     progress.slickGripUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+    // The shove, which is the half of a slick that does not depend on what the
+    // machine was doing when it arrived. The grip loss above is the other half
+    // and they are written to work together: this takes the machine off the line
+    // it was on, and the missing grip is why it cannot gather it back up. The
+    // ward above absorbs both, as one contact, which is why this sits after it.
+    const drive = racer?.drive;
+    if (!racer || !drive) continue;
+    const profile = vehicleProfile(drive.profileKey);
+    const local = realmRacersToCanonical(match, racer.pos.x, racer.pos.z);
+    const thrown = realmRacersSlickThrow({
+      slip: drive.slip,
+      forwardSpeed: drive.speed,
+      topSpeed: profile.maxSpeed,
+      facing: racer.facing,
+      x: local.x,
+      z: local.z,
+      slickX: hit.x,
+      slickZ: hit.z,
+      slickId: hit.slick,
+      pid: hit.pid,
+    });
+    // A machine that is not moving is not thrown by a puddle, and must not
+    // ANNOUNCE being thrown either: the event re-seeds the online predictor's
+    // whole drive state (`hasAuthoritativeDriveImpulse`), so firing one for a
+    // shove of zero would pay that cost, and play the noise, for nothing.
+    if (thrown.strength <= 0) continue;
+    // The ceiling is raised HERE rather than waited for, exactly as the nitro
+    // raises its own: the surface pass runs earlier in this same tick, so a
+    // shove that clamped against the tarmac ceiling first would be cut to what
+    // the road allows and the raise would arrive a tick after the moment it was
+    // granted for.
+    drive.slipCap = REALM_RACERS_SLICK_SLIP_CAP;
+    addVehicleSlip(drive, thrown.push, vehicleMaxSlip(profile, drive));
+    // World coordinates, and the MACHINE's rather than the patch's: the noise
+    // and the smoke come off the tyres that lost, not off the ground.
+    ctx.emit({
+      type: 'realmRacersSlicked',
+      targetId: hit.pid,
+      x: racer.pos.x,
+      z: racer.pos.z,
+      impact: thrown.strength,
+    });
   }
 }
 

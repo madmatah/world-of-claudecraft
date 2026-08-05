@@ -36,7 +36,10 @@ vi.mock('../server/db', () => ({
 
 import { type ClientSession, GameServer } from '../server/game';
 import { ClientWorld } from '../src/net/online';
-import { REALM_RACERS_SLICK_ABILITY_ID } from '../src/sim/content/realm_racers';
+import {
+  REALM_RACERS_NITRO_ABILITY_ID,
+  REALM_RACERS_SLICK_ABILITY_ID,
+} from '../src/sim/content/realm_racers';
 import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
@@ -315,6 +318,55 @@ describe('Realm Racers online parity', () => {
     expect(world.realmRacersInfo.match?.pickupsTaken).toContain(4);
   });
 
+  it('mirrors EVERY held effect at once, not just the first', () => {
+    // The seat report of 2026-08-05, and the second instance of this exact bug
+    // class: the kit flag carried ONE held effect (`known[1]`), so a racer
+    // holding two had the second silently dropped between the sim and the bar.
+    // In game that read as "/dev rallykit does not give me the slick" while the
+    // nitro beside it came through, because the nitro happens to sort first.
+    // The grant is a DEV surface, and the seat it was reported from runs a dev
+    // realm, so the server under test has to be one too: without the flag the
+    // stack is set and deliberately ignored, and this would pass on a mirror
+    // that had nothing to carry.
+    const previous = process.env.ALLOW_DEV_COMMANDS;
+    process.env.ALLOW_DEV_COMMANDS = '1';
+    try {
+      const server = new GameServer();
+      const client = fakeClient();
+      const session = join(server, client, 1, 'Aster');
+      command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+      advance(server);
+      const match = server.sim.realmRacers.practices[0];
+      if (!match) throw new Error('missing practice match');
+      match.phase = 'racing';
+
+      // Both slots stocked, the way the dev grant leaves them.
+      expect(server.sim.ctx.realmRacersDevGrantKit(session.pid, 50)).toBe(true);
+      advance(server);
+
+      const kit = selfFields(client, 'rrkit').at(-1) as { h?: string[] };
+      expect(kit.h).toEqual(['nitro', 'slick']);
+
+      // And the mirror's OWN kit surface carries both, which is what the action
+      // bar reads: replay every frame, since the kit flag rides a wireRev gate.
+      const mirror = bareClient(session.pid);
+      for (const frame of client.sent.filter((sent) => sent.t === 'snap')) {
+        (mirror as unknown as { applySnapshot(frame: unknown): void }).applySnapshot(frame);
+      }
+      const known = mirror.known.map((entry) => entry.def.id);
+      expect(known).toContain(REALM_RACERS_SLICK_ABILITY_ID);
+      expect(known).toContain(REALM_RACERS_NITRO_ABILITY_ID);
+      // Carrying the server's real counts, not a hardcoded single charge: the
+      // badge a pilot reads has to be the stack they actually hold.
+      expect(
+        mirror.known.find((entry) => entry.def.id === REALM_RACERS_SLICK_ABILITY_ID)?.charges,
+      ).toBe(50);
+    } finally {
+      if (previous === undefined) delete process.env.ALLOW_DEV_COMMANDS;
+      else process.env.ALLOW_DEV_COMMANDS = previous;
+    }
+  });
+
   it('mirrors the oil a drawn pickup left on the road', () => {
     const server = new GameServer();
     const client = fakeClient();
@@ -354,7 +406,7 @@ describe('Realm Racers online parity', () => {
     expect(progressAfter.heldEffect).toBe('slick');
     // The held effect rides the kit flag onto the mirror, or an online pilot
     // would be holding something with no button to spend it.
-    expect(selfFields(client, 'rrkit').at(-1)).toMatchObject({ h: 'slick' });
+    expect(selfFields(client, 'rrkit').at(-1)).toMatchObject({ h: ['slick'] });
     // The seat report of 2026-08-04: the wire carried `h` and the button never
     // appeared, because the decode re-fed the EFFECT NAME to a mapper whose
     // domain is ability ids and rebuilt the kit with `held: null`. While the

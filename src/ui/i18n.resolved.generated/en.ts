@@ -66,7 +66,8 @@ export const en: EnTranslations = {
       "name": "Name",
       "spec": "Spec",
       "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier"
+      "rallyTier": "Rival tier",
+      "rallyKitCharges": "Weapon charges"
     },
     "difficulty": {
       "normal": "Normal",
@@ -164,6 +165,10 @@ export const en: EnTranslations = {
       "rally": {
         "label": "Race a circuit",
         "description": "Start a Realm Racers race on the chosen circuit right now."
+      },
+      "rallykit": {
+        "label": "Fill the rally kit",
+        "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
         "label": "Reset raid lockout",

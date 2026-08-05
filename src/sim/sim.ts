@@ -5256,6 +5256,8 @@ export class Sim {
         isRallyDriverTier(tier)
           ? realmRacersBotsMod.startRealmRacersDevRace(sim, circuitId, tier, pid)
           : false,
+      realmRacersDevGrantKit: (pid, charges) =>
+        realmRacersMod.realmRacersDevGrantKit(sim.ctx, pid, charges),
     };
     return createSimContext(host);
   }

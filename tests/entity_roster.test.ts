@@ -395,6 +395,7 @@ function makeCtx() {
     realmRacersFireGroundBlast: vi.fn(),
     realmRacersSpendPickupEffect: vi.fn(),
     realmRacersDevRace: vi.fn(),
+    realmRacersDevGrantKit: vi.fn(),
   };
   const ctx = createSimContext(host);
   return {

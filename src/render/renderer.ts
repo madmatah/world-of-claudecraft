@@ -310,6 +310,7 @@ import {
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
+import { REALM_RACERS_SLICK_SHEEN_COLOR } from './realm_racers_slicks_core';
 import { type RallySkyKey, rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
 import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
 import {
@@ -6527,6 +6528,30 @@ export class Renderer {
         if (ev.aId === this.sim.playerId || ev.bId === this.sim.playerId) {
           this.addShake(0.12 + 0.28 * force);
         }
+        break;
+      }
+      case 'realmRacersSlicked': {
+        // Oil letting go, in the world: a puff off the tyres in the patch's own
+        // sheen colour (so what threw the machine is legible from the car that
+        // is about to arrive) plus the scrape cue. No HUD line, same as a bump:
+        // this is a driving event and the banner belongs to the moments that
+        // stop a race.
+        //
+        // And deliberately NO camera shake, unlike every other rally impact. A
+        // shell or a contact is a JOLT: the machine keeps pointing where it
+        // pointed, so without a shake nothing says a moment happened. Oil is not
+        // a jolt, it is the road leaving: the machine keeps its heading (the
+        // throw moves the velocity and never the yaw) and slides out from under
+        // the nose, which the world already shows. A shake on top reads as the
+        // picture coming apart rather than as force. An earlier build DID spin
+        // the machine here and the seat verdict was that it felt like the wheel
+        // being yanked, so restoring either one means reckoning with that.
+        this.vfx.groundPuff(
+          new THREE.Vector3(ev.x, this.groundSample(ev.x, ev.z), ev.z),
+          0.9 + ev.impact,
+          REALM_RACERS_SLICK_SHEEN_COLOR,
+        );
+        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
         break;
       }
       case 'vcupGoal': {

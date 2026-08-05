@@ -985,6 +985,9 @@ export interface SimContextCallbacks {
   /** Dev only, gated by `devCommands` at the call site: seat `pid` on a named
    *  circuit against a full grid of house pilots, with no queue and no wait. */
   realmRacersDevRace(circuitId: string, tier: string, pid: number): boolean;
+  /** Dev only, same gate: top the seated pilot's weapon budget AND every pickup
+   *  effect up to `charges` each. Zero restores the race's own rules. */
+  realmRacersDevGrantKit(pid: number, charges: number): boolean;
 }
 
 // The seam consumed by extracted modules.
@@ -1491,5 +1494,6 @@ export function createSimContext(host: SimContextHost): SimContext {
     realmRacersFireGroundBlast: host.realmRacersFireGroundBlast,
     realmRacersSpendPickupEffect: host.realmRacersSpendPickupEffect,
     realmRacersDevRace: host.realmRacersDevRace,
+    realmRacersDevGrantKit: host.realmRacersDevGrantKit,
   };
 }

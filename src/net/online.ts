@@ -1500,7 +1500,10 @@ export class ClientWorld implements IWorld {
   private realmRacersKit: {
     abilityId: string;
     charges: number | null;
-    held: RallyHeldEffect | null;
+    /** Every pickup effect the racer is holding, not just the first: a racer can
+     *  carry more than one, and a mirror that kept one drops the other's button
+     *  off the bar entirely. */
+    held: readonly RallyHeldEffect[];
   } | null = null;
   // --- IWorldSocialGraph: persistent friends/blocks/guild, set ONLY by the
   // `social`/`socialpos` frames (there is no `s.social` snapshot field). ---
@@ -2896,6 +2899,7 @@ export class ClientWorld implements IWorld {
             gripMult: w.drv.g ?? 1,
             dragMult: w.drv.dg ?? 1,
             speedCap: w.drv.c ?? 1,
+            slipCap: w.drv.sc ?? 1,
             collisionImpact: w.drv.ci ?? 0,
             // Sent only while set, so absent means the pilot has the controls.
             controlsLocked: !!w.drv.lk,
@@ -3375,10 +3379,14 @@ export class ClientWorld implements IWorld {
             ? {
                 abilityId: String(s.rrkit.w ?? ''),
                 charges: s.rrkit.c ?? null,
-                // The HELD pickup effect (22b), or null with an empty slot. The
-                // mirror rebuilds the whole kit below, so without this an online
+                // The HELD pickup effects (22b), empty with an empty slot. The
+                // mirror rebuilds the whole kit below, so without these an online
                 // pilot would carry an effect with no button to spend it.
-                held: rallyHeldEffectFromWire(String(s.rrkit.h ?? '')),
+                held: (Array.isArray(s.rrkit.h) ? s.rrkit.h : [])
+                  .map((effect: unknown) => rallyHeldEffectFromWire(String(effect ?? '')))
+                  .filter(
+                    (effect: RallyHeldEffect | null): effect is RallyHeldEffect => effect !== null,
+                  ),
               }
             : null;
       }
@@ -3392,16 +3400,19 @@ export class ClientWorld implements IWorld {
       // aiming mode) off exactly this flag.
       const budget = rallyKit ? e?.abilityCharges?.[rallyKit.abilityId] : undefined;
       if (budget) budget.fixed = true;
-      // The held effect's own pool is the same shape and needs the same stamp:
-      // one charge, never recharging, so the HUD greys it the moment it is spent
-      // rather than showing a button on a cooldown that will not come back.
-      const heldBudget =
-        rallyKit?.held && e?.abilityCharges
-          ? e.abilityCharges[REALM_RACERS_EFFECT_ABILITIES[rallyKit.held]]
-          : undefined;
-      if (heldBudget) heldBudget.fixed = true;
+      // Each held effect's own pool is the same shape and needs the same stamp:
+      // a fixed count that never recharges, so the HUD greys the button the
+      // moment it is spent rather than showing a cooldown that will not come
+      // back. The COUNT is the authoritative one off `achg`, which is why the
+      // kit flag carries no number: one charge from a pickup, or a stack from a
+      // dev grant, and the badge reads whatever the server published.
+      const heldSlots = (rallyKit?.held ?? []).map((effect) => {
+        const pool = e?.abilityCharges?.[REALM_RACERS_EFFECT_ABILITIES[effect]];
+        if (pool) pool.fixed = true;
+        return { effect, charges: pool?.charges ?? 1 };
+      });
       this.known = rallyKit
-        ? resolveRealmRacersKit(rallyKit.abilityId, rallyKit.charges, rallyKit.held)
+        ? resolveRealmRacersKit(rallyKit.abilityId, rallyKit.charges, heldSlots)
         : this.sportRole
           ? resolveSportKit(this.sportRole)
           : abilitiesKnownAt(this.cfg.playerClass, e.level, talentMods);

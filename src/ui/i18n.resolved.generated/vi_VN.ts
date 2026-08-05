@@ -66,7 +66,8 @@ export const vi_VN: EnTranslations = {
       "name": "Tên",
       "spec": "Chuyên Môn",
       "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier"
+      "rallyTier": "Rival tier",
+      "rallyKitCharges": "Weapon charges"
     },
     "difficulty": {
       "normal": "Thường",
@@ -164,6 +165,10 @@ export const vi_VN: EnTranslations = {
       "rally": {
         "label": "Race a circuit",
         "description": "Start a Realm Racers race on the chosen circuit right now."
+      },
+      "rallykit": {
+        "label": "Fill the rally kit",
+        "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
         "label": "Đặt lại khóa raid",

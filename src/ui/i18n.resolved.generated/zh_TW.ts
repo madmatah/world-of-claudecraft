@@ -66,7 +66,8 @@ export const zh_TW: EnTranslations = {
       "name": "名稱",
       "spec": "專精",
       "rallyCircuit": "Circuit",
-      "rallyTier": "Rival tier"
+      "rallyTier": "Rival tier",
+      "rallyKitCharges": "Weapon charges"
     },
     "difficulty": {
       "normal": "普通",
@@ -164,6 +165,10 @@ export const zh_TW: EnTranslations = {
       "rally": {
         "label": "Race a circuit",
         "description": "Start a Realm Racers race on the chosen circuit right now."
+      },
+      "rallykit": {
+        "label": "Fill the rally kit",
+        "description": "Top the seated weapon and every pickup effect up to the same count."
       },
       "raidreset": {
         "label": "重設團隊副本鎖定",

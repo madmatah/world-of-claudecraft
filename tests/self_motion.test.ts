@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { wrapAngle } from '../src/render/facing_smooth';
 import {
+  hasAuthoritativeDriveImpulse,
   SELF_MOTION_CAP_MAX_MS,
   SELF_MOTION_CAP_MIN_MS,
   SELF_MOTION_SNAP_DIST_SQ,
@@ -201,6 +202,67 @@ class Lab {
     return (RUN_SPEED * cap) / 1000 + 0.05;
   }
 }
+
+describe('the announced-impulse list', () => {
+  // The registration this list IS. Every authoritative write to the local
+  // machine's drive state has to appear here or the predictor keeps driving a
+  // machine that was never thrown while the position correction drags it back
+  // every frame: the oil slick shipped missing from it and that is exactly what
+  // it looked like. A spin counts as momentum even though it writes only
+  // `spin`, because carried spin is what turns forward speed into slide.
+  const ME = 7;
+  const THEM = 8;
+
+  it('announces every rally impulse aimed at the local machine', () => {
+    expect(
+      hasAuthoritativeDriveImpulse(
+        [{ type: 'realmRacersBump', aId: THEM, bId: ME, x: 0, z: 0, impact: 9 }],
+        ME,
+      ),
+    ).toBe(true);
+    expect(
+      hasAuthoritativeDriveImpulse(
+        [
+          {
+            type: 'realmRacersGroundBlastHit',
+            sourceId: THEM,
+            targetId: ME,
+            x: 0,
+            z: 0,
+            impact: 1,
+          },
+        ],
+        ME,
+      ),
+    ).toBe(true);
+    expect(
+      hasAuthoritativeDriveImpulse(
+        [{ type: 'realmRacersSlicked', targetId: ME, x: 0, z: 0, impact: 0.8 }],
+        ME,
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores the same impulses landing on somebody else', () => {
+    // A rival spinning out is their prediction's business, not ours: re-seeding
+    // the scratch drive off it would throw away a lead that is still correct.
+    expect(
+      hasAuthoritativeDriveImpulse(
+        [{ type: 'realmRacersSlicked', targetId: THEM, x: 0, z: 0, impact: 0.8 }],
+        ME,
+      ),
+    ).toBe(false);
+    expect(
+      hasAuthoritativeDriveImpulse(
+        [
+          { type: 'realmRacersBump', aId: THEM, bId: 9, x: 0, z: 0, impact: 9 },
+          { type: 'realmRacersGo' },
+        ],
+        ME,
+      ),
+    ).toBe(false);
+  });
+});
 
 describe('SelfMotionPredictor', () => {
   it('snaps both predictive and fallback poses on a sub-threshold authoritative recovery', () => {

@@ -65,6 +65,7 @@ import { restoreToolEffectSlotAction } from '../src/sim/professions/tool_effect_
 import type { ToolEffectConfirmMode } from '../src/sim/professions/tools';
 import { questProgressForWire } from '../src/sim/quests/interact_object_credit';
 import { isRallyDriverTier } from '../src/sim/realm_racers_driver';
+import type { RallyHeldEffect } from '../src/sim/realm_racers_pickup_effects';
 import { loadRiftWorldState, serializeRiftWorldState } from '../src/sim/rift/persistence';
 import type { CharacterState, PetState, PlayerMeta } from '../src/sim/sim';
 import { MAX_CHAT_MESSAGE_LEN, Sim } from '../src/sim/sim';
@@ -1279,6 +1280,7 @@ function dynamicFields(e: Entity, includeAuras = true): Record<string, unknown> 
       g: round2(e.drive.gripMult),
       dg: round2(e.drive.dragMult),
       c: round2(e.drive.speedCap),
+      sc: round2(e.drive.slipCap),
       ...(e.drive.collisionImpact > 0.01 ? { ci: round2(e.drive.collisionImpact) } : {}),
       // The activity holding the controls (a racer on the grid). Sent only
       // while true, so an ordinary driving frame costs nothing: the client
@@ -8268,12 +8270,24 @@ export class GameServer {
       // is holding. The live remaining count is not here: it rides `achg`, the
       // shared charge wire.
       const rallyWeapon = meta.realmRacersMatchId !== null ? meta.known[0] : undefined;
-      // `h` is the HELD pickup effect (22b), the second ability the kit grants
-      // while a racer is carrying one. It rides the kit flag rather than a field
-      // of its own because the mirror rebuilds the whole kit from this payload:
+      // `h` is the LIST of HELD pickup effects (22b), the abilities the kit
+      // grants beside the weapon. It rides the kit flag rather than a field of
+      // its own because the mirror rebuilds the whole kit from this payload:
       // sending the weapon alone would leave an online pilot holding an effect
       // they have no button for.
-      const rallyHeld = rallyWeapon ? realmRacersHeldEffectOf(meta.known[1]?.def.id ?? '') : null;
+      //
+      // A LIST, and read off the whole kit rather than `known[1]`, because a
+      // racer can hold more than one at a time (a dev grant hands out a stack of
+      // each). Reading one slot silently dropped whatever the sim put second:
+      // the oil went missing online exactly this way while the nitro beside it
+      // came through. The COUNTS are not here, they ride `achg` like every other
+      // charge-limited ability.
+      const rallyHeld = rallyWeapon
+        ? meta.known
+            .slice(1)
+            .map((known) => realmRacersHeldEffectOf(known.def.id))
+            .filter((effect): effect is RallyHeldEffect => effect !== null)
+        : [];
       maybe(
         'rrkit',
         rallyWeapon
@@ -8281,7 +8295,7 @@ export class GameServer {
               active: true,
               w: rallyWeapon.def.id,
               c: rallyWeapon.charges ?? null,
-              ...(rallyHeld ? { h: rallyHeld } : {}),
+              ...(rallyHeld.length > 0 ? { h: rallyHeld } : {}),
             }
           : null,
       );

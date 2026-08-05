@@ -198,11 +198,26 @@ it; the draw takes a roll in [0, 1) rather than reaching for randomness, so the 
 fallback (a full slot draws the refill instead) is decided AFTER the draw so the tables
 keep their meaning),
 `realm_racers_slicks.ts` (the oil a spent `slick` leaves under the machine: the patch
-record, its lifetime, the concurrent-patch CAP the renderer's pool is sized from, and the
-per-tick step that sweeps the expired ones and reports who drove through one. It never
-catches the machine that dropped it, and it reports a machine standing in a
-patch every tick, because deciding what a REPEAT means (one event, one ward, one grip
-window) is the race's business and not the geometry's),
+record, its lifetime, the concurrent-patch CAP the renderer's pool is sized from, the
+per-tick step that sweeps the expired ones and reports who drove through one, and how hard
+the oil throws them. It spares the machine that dropped it only until that machine has
+LEFT it once (the drop is under their own wheels, so without the grace they would catch
+their own patch on the tick they spent it; after it, a patch laid into a hairpin is ground
+like any other). It reports a machine standing in a patch every tick, because deciding
+what a REPEAT means (one event, one ward, one grip window) is the race's business and not
+the geometry's. The THROW it returns is the half of a slick that does not depend on what
+the machine was doing: grip is a rate, so on its own it does nothing at all to a machine
+travelling straight. It is a LATERAL velocity impulse and never a yaw one, which is a
+feel finding rather than a taste: the driving model conserves world velocity through a
+body rotation, so a yaw impulse leaves the trajectory untouched at the instant it lands
+and only swings the nose, and a chase camera glued to that nose reports it as a violent
+steering input. It shipped that way once and read as exactly that. Its direction follows
+the slide, then the side of the patch, then a stateless `hash2` of the pair, never
+`ctx.rng`. The oil also RAISES the machine's slide ceiling while it bites
+(`VehicleDrive.slipCap`, on the surface seam beside `gripMult`/`speedCap`), because a
+ceiling is not a modifier: a machine attacking a corner already sits at `maxSlip`, so
+before that the shove delivered nothing at all to the only pilots worth shoving, and no
+value of `_PUSH` could have fixed it),
 `realm_racers_draft_registry.ts` (the session-only DRAFT circuit overlay: a table
 with NO runtime imports at all, because both `content/realm_racers_circuits.ts` and
 `realm_racers_layout.ts` consult it and either importing something that imported it

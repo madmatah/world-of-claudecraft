@@ -1,22 +1,36 @@
-// The oil slicks: the patches of ground a drawn `slick` leaves on the circuit,
+// The oil slicks: the patches of ground a spent `slick` leaves on the circuit,
 // how long they last, and who drives into one.
 //
-// A slick is dropped AT the row the box stood in, which is what makes it a
-// rearward weapon by construction: the machine that took the box is already
-// past, and whoever is following crosses the same row a moment later. It is not
-// consumed by the machine that hits it, and it never bites the pilot who
-// dropped it; it simply sits there until its lifetime runs out or the race ends.
+// A slick is dropped UNDER the machine that spent it, which is what makes it a
+// decision rather than a delivery: the oil goes into the corner the pilot
+// chooses, and the machine that laid it is already past it. It is not consumed
+// by the machine that hits it; it simply sits there until its lifetime runs out
+// or the race ends.
+//
+// The pilot who dropped it is immune only until they have LEFT it once. Not
+// forever: a patch laid into a hairpin is on ground its own author may well see
+// again, and a trap that is safe for exactly one machine on the circuit reads as
+// a rule rather than as oil. The immunity has to exist at all only because the
+// drop is under the machine, so without it a pilot would catch their own patch
+// on the tick they spent it.
 //
 // The same split as `realm_racers_pickups.ts`, for the same reason: this decides
-// WHERE the slicks are and WHO touched one this tick, and
-// `social/realm_racers.ts` owns every consequence (the grip loss, the ward that
-// eats a hit, the readout, the events). Both halves are driven from the rally
-// tick; neither knows what a race is.
+// WHERE the slicks are, WHO touched one this tick and HOW HARD it takes them,
+// and `social/realm_racers.ts` owns every consequence (the grip loss, the spin,
+// the ward that eats a hit, the readout, the events). Both halves are driven
+// from the rally tick; neither knows what a race is.
 //
-// Pure leaf: no SimContext, no rng, no clock, no DOM. It draws NO randomness at
-// all: which effect a box gives is decided once, at the take
-// (`realm_racers_pickup_effects.ts`), and everything after that is geometry.
+// Pure leaf in the sense that matters here: no SimContext, no clock, no DOM,
+// and deterministic. It is not side-effect free, and deliberately so: the step
+// SWEEPS expired patches out of the caller's list and latches `ownerClear` on
+// the ones it arms, which is bookkeeping only the geometry can do. It never
+// touches the shared rng stream: which effect a box gives is decided once, at the take
+// (`realm_racers_pickup_effects.ts`), and everything after that is geometry plus
+// one STATELESS hash (`hash2`, the same tool the circuit scenery resolves
+// through). A draw here would shift the shared stream's order for every other
+// system in the world.
 
+import { hash2 } from './rng';
 import { TICK_RATE } from './types';
 
 /**
@@ -47,11 +61,83 @@ export const REALM_RACERS_SLICK_GRIP_TICKS = Math.round(1.5 * TICK_RATE);
 /**
  * Fraction of the surface's grip that survives the oil.
  *
- * Harder than a Ground Blast shock (0.25) because it is the WHOLE of what a
- * slick does: it never pops, shoves or spins anyone, so if it did not take the
- * grip away properly it would be a patch of ground with no consequence.
+ * Harder than a Ground Blast shock (0.25) because oil is a passive trap: a shell
+ * is aimed and dodgeable, a patch is driven over.
+ *
+ * This knob SATURATES, which is worth knowing before reaching for it: grip is
+ * the rate the lateral slide bleeds away at, so the value only says how long
+ * recovery takes (`1 / (roadGrip * this)`, so 3.3 s here) and the window it acts
+ * over is 1.5 s. Anything below about 0.2 already means "no grip at all for the
+ * whole window", and lowering it further changes nothing a pilot can feel. The
+ * knobs that DO move the needle are the window (`_GRIP_TICKS`) and the spin
+ * below, which is the only part of a slick that bites a machine travelling in a
+ * straight line: with no lateral velocity there is nothing for grip to take.
  */
 export const REALM_RACERS_SLICK_GRIP = 0.15;
+
+/**
+ * The lateral velocity the oil throws into a machine crossing at full speed,
+ * yd/s, before the profile's slide ceiling.
+ *
+ * A SIDEWAYS shove, not a rotation, and that choice is the whole feel of the
+ * weapon: the driving model conserves world velocity through a body rotation, so
+ * a yaw impulse leaves the trajectory untouched at the instant it lands and only
+ * swings the nose, which a chase camera glued to that nose reports as a violent
+ * steering input. It was tried and it read as exactly that. Moving the velocity
+ * instead puts the machine 11 degrees across its own nose on the first frame and
+ * about ten yards off its line over the window, which on this road is most of
+ * the width of it.
+ *
+ * Sized under the profile's `maxSlip` (14 on the loaner) so the shove that
+ * arrives is the shove that was chosen rather than one the clamp rewrote, and it
+ * composes with the grip loss above rather than duplicating it: the push is what
+ * takes the machine off its line, the missing grip is why it cannot gather it
+ * back up (at full grip this much slide would be gone in a third of a second).
+ */
+export const REALM_RACERS_SLICK_PUSH = 12;
+
+/**
+ * How far the oil raises the machine's SLIDE CEILING while it bites, as a
+ * multiplier on the profile's `maxSlip`.
+ *
+ * Without it the shove above is nearly inert against the only pilots worth
+ * shoving, which a measurement over a real ace lap says outright: a racing
+ * machine carries 9.2 yd/s of slide at the median and the full 14 ceiling on one
+ * cornering tick in ten, so a same-side push of 12 delivers 4.8 at the median,
+ * 0.6 at the third quartile and NOTHING at the ninth decile. The weapon was
+ * weakest exactly against the machines attacking hardest, which is backwards.
+ *
+ * Raising the ceiling rather than growing the push is the fix because a ceiling
+ * is not a modifier: no value of `_PUSH` can get past a clamp. It is also the
+ * true thing to say about oil, which is why it belongs on the SURFACE seam
+ * (`applyVehicleSurface`, beside `gripMult` and `speedCap`) rather than on the
+ * weapon: on a slick a car really does slide further than tarmac allows.
+ */
+export const REALM_RACERS_SLICK_SLIP_CAP = 2;
+
+/**
+ * Lateral speed at which a machine counts as ALREADY sliding, yd/s.
+ *
+ * Above it the push follows the slide (the oil takes the end that was already
+ * going, the way a car steps out on a wet patch). Below it there is no slide to
+ * follow and the direction comes from the geometry instead, then from the hash:
+ * a machine crossing dead straight through the middle still has to be thrown
+ * somewhere, and "nothing happened" is the failure this whole weapon has.
+ */
+export const REALM_RACERS_SLICK_PUSH_SLIP_FLOOR = 1.5;
+
+/**
+ * How far off the patch's centre a crossing has to be for the geometric side to
+ * decide the direction, as a fraction of the radius.
+ *
+ * Nearer than this the side is a rounding artefact rather than a fact a pilot
+ * could have read off the ground, so the hash takes over.
+ */
+const SLICK_PUSH_SIDE_FLOOR = 0.15;
+
+/** Fixed key for the stateless direction hash. Any constant works; it is pinned
+ *  only so a replay of the same race throws the same way on every host. */
+const SLICK_PUSH_HASH_SEED = 0x5cb1c;
 
 /**
  * The most patches one race carries at once, oldest evicted past it.
@@ -79,8 +165,18 @@ export interface RallySlick {
   id: number;
   x: number;
   z: number;
-  /** Who dropped it. They are never caught by their own oil. */
+  /** Who dropped it. Immune while `ownerClear` is false, ordinary prey after. */
   ownerPid: number;
+  /**
+   * Whether the owner has left this patch since dropping it.
+   *
+   * False at the drop, since the oil goes down under their own machine, and
+   * latched true the first tick they are clear of the radius. It is per PATCH
+   * rather than per racer because a pilot can be standing in their newest slick
+   * while an older one of their own, three corners back, is already armed
+   * against them.
+   */
+  ownerClear: boolean;
   /** Tick it stops existing on. */
   expiresTick: number;
 }
@@ -106,6 +202,11 @@ export interface RallySlickHit {
   /** `RallySlick.id`, not an index: the caller may drop expired slicks in the
    *  same step. */
   slick: number;
+  /** Where that patch is, circuit-local. Carried on the hit rather than left to
+   *  a lookup by id: the step has just measured this machine against it, and the
+   *  throw the caller asks for next needs the same point. */
+  x: number;
+  z: number;
 }
 
 export interface RallySlickStep {
@@ -172,7 +273,6 @@ export function stepRealmRacersSlicks(
   if (slicks.length === 0) return { hits, expired };
   const reach2 = REALM_RACERS_SLICK_RADIUS * REALM_RACERS_SLICK_RADIUS;
   for (const racer of input.racers) {
-    if (!racer.eligible) continue;
     // The NEAREST slick this machine's path came to, so two overlapping patches
     // hand out one grip loss rather than two. A strict `<` keeps the earliest
     // one on an exact tie, and the list is in id order (patches are appended as
@@ -181,7 +281,19 @@ export function stepRealmRacersSlicks(
     let best: RallySlick | null = null;
     let bestDistance = reach2;
     for (const slick of slicks) {
-      if (slick.ownerPid === racer.pid) continue;
+      if (slick.ownerPid === racer.pid && !slick.ownerClear) {
+        // Arming the owner's own patch, measured on where the machine ENDED the
+        // tick rather than on the segment it drove: a machine leaving a patch is
+        // still touching the ground it just crossed, so a swept test would hold
+        // the immunity open forever. It never bites on the tick it arms, which
+        // needs no rule of its own: being clear of the radius is exactly what
+        // arming it means.
+        const dx = slick.x - racer.toX;
+        const dz = slick.z - racer.toZ;
+        if (dx * dx + dz * dz > reach2) slick.ownerClear = true;
+        continue;
+      }
+      if (!racer.eligible) continue;
       const distance = distanceSqToSegment(
         slick.x,
         slick.z,
@@ -195,7 +307,80 @@ export function stepRealmRacersSlicks(
         bestDistance = distance;
       }
     }
-    if (best) hits.push({ pid: racer.pid, slick: best.id });
+    if (best) hits.push({ pid: racer.pid, slick: best.id, x: best.x, z: best.z });
   }
   return { hits, expired };
+}
+
+/** One machine's crossing, as the throw sees it. Positions and `facing` share
+ *  one frame; the caller's canonical frame is a translation of the world's, so a
+ *  world facing is a canonical facing. */
+export interface RallySlickThrowInput {
+  /** Lateral velocity, yd/s, signed along the body's right vector. */
+  slip: number;
+  /** Forward velocity, yd/s. Negative in reverse. */
+  forwardSpeed: number;
+  /** The machine's top speed, yd/s: what the crossing is measured against. */
+  topSpeed: number;
+  facing: number;
+  x: number;
+  z: number;
+  slickX: number;
+  slickZ: number;
+  /** Both only reach the deterministic hash of last resort. */
+  slickId: number;
+  pid: number;
+}
+
+export interface RallySlickThrowResult {
+  /** Signed lateral velocity to add, yd/s, on the SAME axis `slip` is measured
+   *  on (the body's right vector). Ready for `addVehicleSlip`, which holds it
+   *  inside the profile's slide ceiling. */
+  push: number;
+  /** How hard the crossing was, 0 to 1. The push is already scaled by it; it is
+   *  returned because the presentation scales off the same number, and a puff of
+   *  smoke that disagrees with the shove is worse than no puff. */
+  strength: number;
+}
+
+/**
+ * Which way, and how hard, the oil throws a machine crossing it.
+ *
+ * The MAGNITUDE is unconditional (it follows the speed, nothing else), which is
+ * the whole design: grip alone is a modifier that does nothing to a machine
+ * travelling straight, and a weapon that does nothing most of the time is not a
+ * weapon. The DIRECTION follows the slide when there is one, so the oil takes
+ * the end that was already going.
+ *
+ * Deterministic, and pure: same input, same answer, on all three hosts.
+ */
+export function realmRacersSlickThrow(input: RallySlickThrowInput): RallySlickThrowResult {
+  const groundSpeed = Math.hypot(input.forwardSpeed, input.slip);
+  const strength = input.topSpeed > 0 ? Math.min(1, groundSpeed / input.topSpeed) : 0;
+  if (strength <= 0) return { push: 0, strength: 0 };
+  return { push: REALM_RACERS_SLICK_PUSH * strength * slickPushDirection(input), strength };
+}
+
+/**
+ * The direction, +1 or -1, in three fallbacks.
+ *
+ * The push shares an axis with `slip` by construction, so following the slide is
+ * simply the same sign: a machine already going left is sent further left.
+ */
+function slickPushDirection(input: RallySlickThrowInput): number {
+  if (Math.abs(input.slip) >= REALM_RACERS_SLICK_PUSH_SLIP_FLOOR) return Math.sign(input.slip);
+  // No slide to follow, so the geometry answers: the offset from the patch to
+  // the machine, projected on the body's right vector (-cos f, sin f). Positive
+  // means the machine is off to its own right of the centre, and pushing that
+  // way carries it further off the edge it clipped rather than dragging it back
+  // across the oil.
+  const dx = input.x - input.slickX;
+  const dz = input.z - input.slickZ;
+  const away = dz * Math.sin(input.facing) - dx * Math.cos(input.facing);
+  if (Math.abs(away) >= SLICK_PUSH_SIDE_FLOOR * REALM_RACERS_SLICK_RADIUS) return Math.sign(away);
+  // Straight through the middle: there is no fact about this crossing left to
+  // read, so the answer is a stateless hash of the pair rather than a draw. It
+  // is unpredictable to the pilot and identical on every host, which is the
+  // whole of what is needed here.
+  return hash2(input.slickId, input.pid, SLICK_PUSH_HASH_SEED) < 0.5 ? -1 : 1;
 }

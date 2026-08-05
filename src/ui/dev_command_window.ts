@@ -192,6 +192,8 @@ function actionFields(actionId: string): string {
           '',
         ),
       )}`;
+    case 'rallykit':
+      return textField('devCommand.fields.rallyKitCharges', 'rallyKitCharges', '50', 'number');
     case 'raid':
       return selectField(
         'devCommand.fields.difficulty',

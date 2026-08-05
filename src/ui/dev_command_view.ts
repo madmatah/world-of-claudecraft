@@ -240,6 +240,13 @@ export const DEV_COMMAND_ACTIONS: readonly DevCommandAction[] = [
     },
   },
   {
+    id: 'rallykit',
+    category: 'travel',
+    labelKey: 'devCommand.actions.rallykit.label',
+    descriptionKey: 'devCommand.actions.rallykit.description',
+    command: (values) => `/dev rallykit ${boundedInteger(values, 'rallyKitCharges', 0, 999, 50)}`,
+  },
+  {
     id: 'raidreset',
     category: 'travel',
     labelKey: 'devCommand.actions.raidreset.label',

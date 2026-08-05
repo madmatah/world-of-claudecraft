@@ -170,6 +170,24 @@ export function handleDevChat(
     return null;
   }
 
+  // A full armoury for the seated pilot, so a rally weapon can be felt lap after
+  // lap while it is being tuned: the weapon budget and EVERY pickup effect, all
+  // at once, because a chat command between two crossings is not something
+  // anyone can type at 45 yd/s. `0` hands the race its own rules back.
+  const rallyKitMatch = /^\/(?:dev\s+rallykit|devrallykit)(?:\s+(\d+))?\s*$/i.exec(raw);
+  if (rallyKitMatch) {
+    const charges = clampInteger(Number(rallyKitMatch[1] ?? 50), 0, 999);
+    const granted = ctx.realmRacersDevGrantKit(pid, charges);
+    emitDevLog(
+      ctx,
+      pid,
+      granted
+        ? `[dev] Rally kit: ${charges} of the weapon and ${charges} of every pickup effect.`
+        : '[dev] Not in a race.',
+    );
+    return null;
+  }
+
   const spawnMatch = /^\/(?:dev\s+spawn|devspawn)\s+(\S+)(?:\s+(\d+))?(?:\s+(\d+))?\s*$/i.exec(raw);
   if (spawnMatch) {
     const templateId = spawnMatch[1];

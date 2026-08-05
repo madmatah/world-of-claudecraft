@@ -107,6 +107,7 @@ const drive = (): VehicleDrive => ({
   gripMult: 1,
   dragMult: 1.8,
   speedCap: 1,
+  slipCap: 1,
   collisionImpact: 0,
   controlsLocked: false,
 });

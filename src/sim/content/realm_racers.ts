@@ -198,10 +198,17 @@ export const REALM_RACERS_BOT_CLASSES: readonly PlayerClass[] = [
  * that field drives the RECHARGE model, which refills, and a race's three shots
  * never do.
  */
+export interface RallyHeldSlot {
+  effect: RallyHeldEffect;
+  /** Uses left. One, for every pickup a race ever grants; a dev grant is the
+   *  only thing that has ever put a stack in here. */
+  charges: number;
+}
+
 export function resolveRealmRacersKit(
   weaponAbilityId: string,
   charges: number | null,
-  heldEffect: RallyHeldEffect | null = null,
+  held: readonly RallyHeldSlot[] = [],
 ): KnownAbility[] {
   const def = REALM_RACERS_ABILITIES[weaponAbilityId];
   if (!def) return [];
@@ -222,13 +229,16 @@ export function resolveRealmRacersKit(
       ...(charges === null ? {} : { charges }),
     },
   ];
-  // The held effect, when the racer is carrying one: ONE charge, because that is
-  // the whole of what a pickup granted. Spending it takes the ability back out
-  // of the kit, so an empty slot never sits on the bar pretending to be ready.
-  const heldDef = heldEffect
-    ? REALM_RACERS_ABILITIES[REALM_RACERS_EFFECT_ABILITIES[heldEffect]]
-    : undefined;
-  if (heldDef) {
+  // Whatever the racer is holding, at the count they hold it. A race only ever
+  // fills one of these with one charge, and the LIST rather than the single slot
+  // is what lets a dev grant put a stack of each on the bar at once: the bar has
+  // a reserved key per effect (`REALM_RACERS_BAR_SLOTS`) either way, so nothing
+  // downstream has to know which case it is looking at. An effect at zero is not
+  // in the kit at all, so an empty slot never sits on the bar pretending to be
+  // ready.
+  for (const slot of held) {
+    const heldDef = REALM_RACERS_ABILITIES[REALM_RACERS_EFFECT_ABILITIES[slot.effect]];
+    if (!heldDef || slot.charges <= 0) continue;
     kit.push({
       def: heldDef,
       rank: 1,
@@ -238,7 +248,7 @@ export function resolveRealmRacersKit(
       effects: heldDef.effects,
       threatFlat: 0,
       threatMult: 1,
-      charges: 1,
+      charges: slot.charges,
     });
   }
   return kit;

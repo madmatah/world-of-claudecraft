@@ -3241,6 +3241,7 @@ describe('vehicle drive state over the wire', () => {
     e.drive.gripMult = 0.5;
     e.drive.dragMult = 3;
     e.drive.speedCap = 0.8;
+    e.drive.slipCap = 2;
 
     const wire = wireEntity(e);
     expect(wire.drv).toEqual({
@@ -3253,6 +3254,11 @@ describe('vehicle drive state over the wire', () => {
       g: 0.5,
       dg: 3,
       c: 0.8,
+      // The slide ceiling travels with the other two surface multipliers rather
+      // than sparsely like `ci`/`lk` below: it is one of the three the owning
+      // activity rewrites EVERY tick, and a reader that had to guess a missing
+      // one would be guessing about how far a machine may slide.
+      sc: 2,
     });
 
     const client = bareClient(e.id + 1000);

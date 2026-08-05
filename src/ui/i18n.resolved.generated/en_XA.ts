@@ -66,7 +66,8 @@ export const en_XA: EnTranslations = {
       "name": "[Ñáɱé]",
       "spec": "[Šþéç]",
       "rallyCircuit": "[Çíŕçúíţ]",
-      "rallyTier": "[Ŕíʋáļ ţíéŕ]"
+      "rallyTier": "[Ŕíʋáļ ţíéŕ]",
+      "rallyKitCharges": "[Ŵéáþóñ çĥáŕĝéš]"
     },
     "difficulty": {
       "normal": "[Ñóŕɱáļ]",
@@ -164,6 +165,10 @@ export const en_XA: EnTranslations = {
       "rally": {
         "label": "[Ŕáçé á çíŕçúíţ]",
         "description": "[Šţáŕţ á Ŕéáļɱ Ŕáçéŕš ŕáçé óñ ţĥé çĥóšéñ çíŕçúíţ ŕíĝĥţ ñóŵ.]"
+      },
+      "rallykit": {
+        "label": "[Ƒíļļ ţĥé ŕáļļý ķíţ]",
+        "description": "[Ţóþ ţĥé šéáţéð ŵéáþóñ áñð éʋéŕý þíçķúþ éƒƒéçţ úþ ţó ţĥé šáɱé çóúñţ.]"
       },
       "raidreset": {
         "label": "[Ŕéšéţ ŕáíð ļóçķóúţ]",
