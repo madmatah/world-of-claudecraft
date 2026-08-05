@@ -26,9 +26,15 @@ Everything else is a sibling module in one of these families:
   (`realm_racers_themes.ts`, keyed by the sim-side `theme` string), so one
   themed circuit per zone is a data exercise. A theme carries the AMBIANCE (the
   ground tint, the sky it flies plus its light and fog, the kerb and grid
-  colours) and the kits of the pieces a record cannot place by hand (the
-  perimeter wall, the start arch); SCENERY is authored, and a theme only names
-  the vocabulary the editor should offer for its zone. A theme is VISUALS ONLY,
+  colours) and the kit of the one piece a record cannot place by hand (the start
+  arch); SCENERY and BARRIERS are authored, and a theme only names the
+  vocabulary the editor should offer for its zone (`props`, `barriers`). The
+  perimeter box draws NOTHING and has not since the barriers arrived: it was the
+  last derived thing standing on a circuit, so it wore one kit around a rectangle
+  and made every circuit read as a box. It survives as collision only, and what
+  a circuit's edge LOOKS like is a `fences` list on the record, resolved by
+  `src/sim/realm_racers_fences.ts` and cut into modules by `rallyFencePieces`
+  from the kits in `realm_racers_barrier_visuals.ts`. A theme is VISUALS ONLY,
   never a handling or track-limits knob. There is now one record per world-map
   ZONE, which is what makes the boot lane scoped rather than complete: only the
   kits a SHIPPED circuit wears are preloaded (`REALM_RACERS_THEME_BOOT_URLS`,

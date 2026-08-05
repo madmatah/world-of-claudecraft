@@ -26,9 +26,15 @@
 
 import * as THREE from 'three';
 import { loadGltf } from '../../render/assets/loader';
+import { REALM_RACERS_BARRIER_VISUALS } from '../../render/realm_racers_barrier_visuals';
 import { REALM_RACERS_PROP_VISUALS } from '../../render/realm_racers_prop_visuals';
 import { disposeRealmRacersTrackGroup } from '../../render/realm_racers_track_dispose_core';
-import { thumbnailBoundsUsable, thumbnailOwnsGeometry, thumbnailPose } from './thumbnail_core';
+import {
+  BARRIER_PREFIX,
+  thumbnailBoundsUsable,
+  thumbnailOwnsGeometry,
+  thumbnailPose,
+} from './thumbnail_core';
 
 /** Tile size in device pixels. Small on purpose: a grid of forty of these lives
  *  in `localStorage`, which is a few megabytes for the whole origin. */
@@ -90,8 +96,48 @@ export class PropThumbnailRig {
     return this.renderer;
   }
 
+  /**
+   * A BARRIER kit's tile: three modules in a row, not one.
+   *
+   * One module answers "what is it made of" and not "what does a run of it look
+   * like", which is the question an operator arming a kit is actually asking:
+   * the difference between a rail and a wall is mostly what it does repeated.
+   * Three is enough to read as a run and cheap enough to photograph.
+   *
+   * Every module is a clone of the loader's parsed scene, so its geometry and
+   * materials belong to that cache and are never disposed here.
+   */
+  private async barrierSubject(kit: string): Promise<THREE.Object3D | null> {
+    const visual = REALM_RACERS_BARRIER_VISUALS[kit];
+    if (!visual) return null;
+    try {
+      const gltf = await loadGltf(visual.panelUrl);
+      const row = new THREE.Group();
+      const step = visual.panelYards / visual.scale;
+      for (let i = -1; i <= 1; i++) {
+        const panel = gltf.scene.clone(true);
+        // Along the module's OWN length axis, so a kit authored on +z lays the
+        // same row as one authored on +x rather than three pieces stacked
+        // through each other.
+        if (visual.lengthAxis === 'z') panel.position.z = i * step;
+        else panel.position.x = i * step;
+        row.add(panel);
+      }
+      return row;
+    } catch {
+      return null;
+    }
+  }
+
   /** The piece itself, plus whether we own what it is made of. */
   private async subject(asset: string): Promise<{ object: THREE.Object3D; owned: boolean } | null> {
+    // Namespaced rather than merged into one lookup: the two catalogs are free
+    // to use the same word (a `hedge` is a plausible prop key), and a silent
+    // collision would photograph the wrong thing with nothing saying so.
+    if (asset.startsWith(BARRIER_PREFIX)) {
+      const object = await this.barrierSubject(asset.slice(BARRIER_PREFIX.length));
+      return object ? { object, owned: false } : null;
+    }
     const visual = REALM_RACERS_PROP_VISUALS[asset];
     if (!visual) return null;
     if (visual.kind === 'group') {

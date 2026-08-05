@@ -44,6 +44,10 @@ import {
   type GroundLayer,
   paintInstanceGround,
 } from './instance_surface';
+import {
+  REALM_RACERS_BARRIER_BOOT_URLS,
+  realmRacersBarrierVisual,
+} from './realm_racers_barrier_visuals';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
 import {
   REALM_RACERS_GRASS_TILE_RADIUS,
@@ -61,9 +65,9 @@ import {
 } from './realm_racers_themes';
 import {
   rallyBorderFlowerSpots,
+  rallyFencePieces,
   rallyFlowerSpots,
   rallyKerbRuns,
-  rallyPerimeterPieces,
   rallyPondMeshes,
   rallyPondReedSpots,
   rallyStartArchPlacement,
@@ -115,17 +119,20 @@ function preload(url: string): void {
   );
 }
 
-// The kit of every theme a SHIPPED circuit wears rides the boot lane: the
-// perimeter wall, the start arch and the grid banner are structure rather than
-// dressing, and a circuit that drew them a second late would be a circuit whose
-// start line appeared after the lights.
+// What a SHIPPED circuit actually wears rides the boot lane: the start arch and
+// the grid banner are structure rather than dressing, and a circuit that drew
+// them a second late would be a circuit whose start line appeared after the
+// lights. The authored BARRIERS are structure by the same argument, and they
+// come from the records rather than from the themes
+// (`REALM_RACERS_BARRIER_BOOT_URLS`), because a circuit's edge is placed by hand
+// now rather than derived from a rectangle.
 //
 // It used to be every theme's kit, worn or not. That stopped being tenable at
 // one theme per world zone: fourteen kits is about forty parsed scenes pinned
 // on the never-clearing map below, for the whole session, for a player who may
 // never race at all, which is the same retention the dressing catalog is kept
-// out of this lane to avoid. `REALM_RACERS_THEME_BOOT_URLS` decides the scope;
-// an unworn theme's wall takes `instanceModel`'s fetch-and-fill arm instead,
+// out of this lane to avoid. The two BOOT lists decide the scope; a kit no
+// shipped circuit wears takes `instanceModel`'s fetch-and-fill arm instead,
 // which is what the dev preview and `/dev rallydraft` already rely on for every
 // piece of dressing.
 //
@@ -139,7 +146,9 @@ function preload(url: string): void {
 // here bought nothing but retention. `instanceModel` fetches a dressing model
 // when a circuit is actually built instead, so what stays resident is what an
 // authored circuit places rather than what the catalog could offer.
-const ASSET_URLS = [...new Set(REALM_RACERS_THEME_BOOT_URLS)];
+const ASSET_URLS = [
+  ...new Set([...REALM_RACERS_THEME_BOOT_URLS, ...REALM_RACERS_BARRIER_BOOT_URLS]),
+];
 for (const url of ASSET_URLS) preload(url);
 
 /** Test-only window onto the boot-lane asset set (see
@@ -612,6 +621,42 @@ interface BreathingProp {
  * calls it an error by name, and a missing model is not worth a crash inside a
  * world build.
  */
+/**
+ * The authored barriers, instanced kit by kit.
+ *
+ * One `instanceModel` call per (kit, piece kind), not per fence: two hedges on
+ * one circuit are one draw of hedge panels. A kit whose corner takes the same
+ * model as its panel still gets two calls, because the two carry different yaws
+ * and merging them would mean interleaving spots by hand for one saved draw.
+ */
+function buildFences(circuit: RealmRacersCircuit, group: THREE.Group): void {
+  const panelSpots = new Map<string, ModelSpot[]>();
+  const cornerSpots = new Map<string, ModelSpot[]>();
+  const push = (into: Map<string, ModelSpot[]>, url: string, spot: ModelSpot): void => {
+    const held = into.get(url);
+    if (held) held.push(spot);
+    else into.set(url, [spot]);
+  };
+  for (const drawing of rallyFencePieces(circuit)) {
+    const visual = realmRacersBarrierVisual(drawing.kit);
+    if (!visual) continue;
+    const spotOf = (piece: { x: number; z: number; yaw: number }): ModelSpot => ({
+      x: piece.x,
+      y: GRASS_Y,
+      z: piece.z,
+      yaw: piece.yaw,
+      sx: drawing.scale,
+      sy: drawing.scale,
+      sz: drawing.scale,
+    });
+    for (const panel of drawing.panels) push(panelSpots, visual.panelUrl, spotOf(panel));
+    if (visual.corner === 'none') continue;
+    for (const corner of drawing.corners) push(cornerSpots, visual.corner.url, spotOf(corner));
+  }
+  for (const [url, spots] of panelSpots) instanceModel(group, url, spots);
+  for (const [url, spots] of cornerSpots) instanceModel(group, url, spots);
+}
+
 function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): BreathingProp[] {
   const byAsset = new Map<string, RallyPlacedProp[]>();
   for (const prop of realmRacersPlacedProps(circuit)) {
@@ -919,21 +964,15 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   const slicks = buildRealmRacersSlicks();
   group.add(slicks.group);
 
-  // --- the perimeter, so the circuit sits in a walled garden ---
-  const perimeter = rallyPerimeterPieces(circuit);
-  const wallScale = theme.perimeter.scale;
-  const wallSpot = (piece: (typeof perimeter)[number]): ModelSpot => ({
-    x: piece.x,
-    y: GRASS_Y,
-    z: piece.z,
-    yaw: piece.yaw,
-    sx: wallScale,
-    sy: wallScale,
-    sz: wallScale,
-  });
-  const { fenceUrl, pillarUrl } = theme.perimeter;
-  instanceModel(group, fenceUrl, perimeter.filter((p) => !p.pillar).map(wallSpot));
-  instanceModel(group, pillarUrl, perimeter.filter((p) => p.pillar).map(wallSpot));
+  // --- the AUTHORED barriers: what a circuit's visible edge is made of ---
+  //
+  // The perimeter box used to be drawn here, from four derived corners wearing
+  // one kit from the theme. It was the last derived thing standing on a circuit
+  // and it is why every one of them read as a rectangle; it survives as
+  // collision (`realm_racers_colliders.ts`) and draws nothing. What stands at a
+  // circuit's edge is placed by hand now, from the same resolver the collision
+  // set reads, so a hedge is where a machine hits one.
+  buildFences(circuit, group);
 
   group.visible = false;
 

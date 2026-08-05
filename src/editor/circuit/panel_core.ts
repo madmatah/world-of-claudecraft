@@ -52,6 +52,11 @@ export const MODE_READOUT: Record<RailModeId, readonly ReadoutSection[]> = {
   width: ['surface', 'corners'],
   props: [],
   race: [],
+  // TERRAIN has tabs of its own, so this is never read for it. Spelled empty
+  // rather than given the envelope section: the table is keyed by every mode and
+  // a mode with tabs answers here with nothing, which is what `props` and `race`
+  // already say.
+  terrain: [],
 };
 
 /** How many problems the drawer lists before it says how many it is holding

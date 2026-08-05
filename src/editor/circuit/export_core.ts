@@ -17,6 +17,7 @@
 // Pure core: DOM-free, deterministic, no clock, no rng.
 
 import {
+  type RallyFence,
   type RallyPickupRow,
   type RallyPond,
   type RallyProp,
@@ -28,6 +29,7 @@ import {
 } from '../../sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../../sim/content/realm_racers_props';
 import type { RallyPoint } from '../../sim/realm_racers_layout';
+import { isBarrierKit, MAX_FENCE_POINTS, MAX_FENCES } from './fences_core';
 import { MAX_PICKUP_ROWS } from './pickup_rows_core';
 
 /** Yards, to a tenth: finer than an operator can aim and finer than the
@@ -67,6 +69,7 @@ export function roundCircuit(circuit: RealmRacersCircuit): RealmRacersCircuit {
     ...(circuit.props ? { props: circuit.props.map(roundProp) } : {}),
     ...(circuit.scatters ? { scatters: circuit.scatters.map(roundScatter) } : {}),
     ...(circuit.ponds ? { ponds: circuit.ponds.map(roundPond) } : {}),
+    ...(circuit.fences ? { fences: circuit.fences.map(roundFence) } : {}),
     ...(circuit.pickupRows
       ? { pickupRows: circuit.pickupRows.map((row) => ({ s: round(row.s, FRACTION_PLACES) })) }
       : {}),
@@ -162,6 +165,25 @@ function scatterLiteral(scatter: RallyScatter): string {
   return `{ ${parts.join(', ')} }`;
 }
 
+function roundFence(fence: RallyFence): RallyFence {
+  return {
+    ...fence,
+    points: fence.points.map((point) => ({
+      x: round(point.x, POINT_PLACES),
+      z: round(point.z, POINT_PLACES),
+    })),
+    ...(fence.scale === undefined ? {} : { scale: round(fence.scale, BAND_PLACES) }),
+  };
+}
+
+function fenceLiteral(fence: RallyFence): string {
+  const points = fence.points.map((point) => `{ x: ${point.x}, z: ${point.z} }`).join(', ');
+  const parts = [`kit: '${fence.kit}'`, `points: [${points}]`];
+  if (fence.closed) parts.push('closed: true');
+  if (fence.scale !== undefined) parts.push(`scale: ${fence.scale}`);
+  return `{ ${parts.join(', ')} }`;
+}
+
 function pondLiteral(pond: RallyPond): string {
   const parts = [`x: ${pond.x}`, `z: ${pond.z}`, `rx: ${pond.rx}`, `rz: ${pond.rz}`];
   if (pond.rot !== undefined) parts.push(`rot: ${pond.rot}`);
@@ -218,6 +240,13 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
   if (c.scatters) {
     lines.push('  scatters: [');
     for (const scatter of c.scatters) lines.push(`    ${scatterLiteral(scatter)},`);
+    lines.push('  ],');
+  }
+  // The barriers last of the dressing, because they are what encloses everything
+  // above them.
+  if (c.fences) {
+    lines.push('  fences: [');
+    for (const fence of c.fences) lines.push(`    ${fenceLiteral(fence)},`);
     lines.push('  ],');
   }
   // The race furniture, after the dressing and before the race numbers: a row is
@@ -390,6 +419,45 @@ function readScatters(raw: unknown): RallyScatter[] | null {
   return out;
 }
 
+/**
+ * The barriers off the wire.
+ *
+ * The KIT is checked against the sim catalog, the same way a prop's asset key is
+ * and for the same reason: the tool must not bless a piece the game has no
+ * dimensions for. A one-point entry is refused rather than dropped, because a
+ * barrier with no run is a record entry every consumer then has to special-case.
+ */
+function readFences(raw: unknown): RallyFence[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_FENCES) return null;
+  const out: RallyFence[] = [];
+  for (const item of raw) {
+    const fence = item as Record<string, unknown>;
+    if (typeof fence.kit !== 'string' || !isBarrierKit(fence.kit)) return null;
+    if (
+      !Array.isArray(fence.points) ||
+      fence.points.length < 2 ||
+      fence.points.length > MAX_FENCE_POINTS
+    ) {
+      return null;
+    }
+    const points: RallyPoint[] = [];
+    for (const rawPoint of fence.points) {
+      const point = rawPoint as Record<string, unknown>;
+      if (!inRange(point.x, -5000, 5000) || !inRange(point.z, -5000, 5000)) return null;
+      points.push({ x: point.x, z: point.z });
+    }
+    if (fence.closed !== undefined && typeof fence.closed !== 'boolean') return null;
+    if (fence.scale !== undefined && !inRange(fence.scale, 0.05, 20)) return null;
+    out.push({
+      kit: fence.kit,
+      points,
+      ...(fence.closed ? { closed: true } : {}),
+      ...(fence.scale === undefined ? {} : { scale: fence.scale as number }),
+    });
+  }
+  return out;
+}
+
 function readPonds(raw: unknown): RallyPond[] | null {
   if (!Array.isArray(raw) || raw.length > 256) return null;
   const out: RallyPond[] = [];
@@ -474,6 +542,8 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   if (c.scatters !== undefined && !scatters) return null;
   const ponds = c.ponds === undefined ? undefined : readPonds(c.ponds);
   if (c.ponds !== undefined && !ponds) return null;
+  const fences = c.fences === undefined ? undefined : readFences(c.fences);
+  if (c.fences !== undefined && !fences) return null;
   const pickupRows = c.pickupRows === undefined ? undefined : readPickupRows(c.pickupRows);
   if (c.pickupRows !== undefined && !pickupRows) return null;
 
@@ -526,6 +596,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     ...(props ? { props } : {}),
     ...(scatters ? { scatters } : {}),
     ...(ponds ? { ponds } : {}),
+    ...(fences ? { fences } : {}),
     ...(pickupRows ? { pickupRows } : {}),
     regionHalfX: c.regionHalfX,
     regionHalfZ: c.regionHalfZ,

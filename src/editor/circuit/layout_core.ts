@@ -36,10 +36,10 @@ export const GRID_YARDS = 10;
 /** What the left rail offers. SHAPE is one intent over two gestures: a blank
  *  canvas is drawn on, a drawn one is edited by its handles, and which of the
  *  two the operator gets was never a choice worth a button of its own. */
-export type RailModeId = 'shape' | 'width' | 'props' | 'race';
+export type RailModeId = 'shape' | 'width' | 'props' | 'race' | 'terrain';
 
 /** The gesture the canvas is actually routing, which SHAPE resolves into two. */
-export type CircuitTool = 'draw' | 'handles' | 'width' | 'props' | 'race';
+export type CircuitTool = 'draw' | 'handles' | 'width' | 'props' | 'race' | 'terrain';
 
 /**
  * How the next dressing gesture lays what is armed.
@@ -93,6 +93,13 @@ export const RAIL_MODES: readonly RailModeDef[] = [
     icon: 'flag',
     shortcut: '4',
     detail: 'The race furniture on the road, plus the enclosure and the race settings',
+  },
+  {
+    id: 'terrain',
+    label: 'Terrain',
+    icon: 'terrain',
+    shortcut: '5',
+    detail: 'Draw the barriers that make a circuit an enclosure rather than a rectangle',
   },
 ];
 
@@ -157,6 +164,14 @@ export function railBanner(
       return placing
         ? 'click the road to lay a pickup row across it; esc puts the pointer back'
         : 'click a row to select it: drag or arrow it along the lap, del removes it. Arm a piece in the library to place one';
+    case 'terrain':
+      // The same pointer/armed pair, for the same reason both the others grew
+      // one. A barrier is drawn point by point rather than dropped, so the armed
+      // banner says how a run ENDS as well as how it continues: an operator who
+      // cannot find the way out of a drawing gesture is stuck in it.
+      return placing
+        ? 'click to drop each point of the run; click the first point to close the ring, enter to finish it open, esc to cancel'
+        : 'click a barrier to select it: drag a point to move it, del removes the run. Arm a kit in the library to draw one';
     default:
       return 'the numbers a circuit carries that nothing on the canvas can show';
   }
@@ -192,6 +207,10 @@ export const TOOL_VALUE_FIELDS: Record<CircuitTool, ToolValueField | null> = {
   // and a spacing in the placement block would be two boxes holding one value.
   props: null,
   race: null,
+  // TERRAIN has none either: a barrier's one number is the record's own scale
+  // multiplier, which belongs beside the piece in the inspector rather than in a
+  // strip that would keep applying it to the next thing armed.
+  terrain: null,
 };
 
 // ---- the action table ----
@@ -215,12 +234,14 @@ export type ActionId =
   | 'redrawCenterline'
   | 'disarmTool'
   | 'fitEnclosure'
+  | 'centerCircuit'
   | 'fixCorners'
   | 'raceSettings'
   | 'modeShape'
   | 'modeWidth'
   | 'modeProps'
   | 'modeRace'
+  | 'modeTerrain'
   | 'keys'
   | 'deleteSelection'
   | 'duplicateSelection'
@@ -466,6 +487,16 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     group: 'track',
   },
   {
+    id: 'centerCircuit',
+    needsCircuit: true,
+    label: 'Center circuit',
+    detail: 'Slide the whole circuit so the road sits in the middle of its enclosure',
+    icon: 'center',
+    scope: 'global',
+    menu: 'track',
+    group: 'track',
+  },
+  {
     id: 'fixCorners',
     needsCircuit: true,
     label: 'Fix corners',
@@ -522,6 +553,16 @@ export const EDITOR_ACTIONS: readonly EditorActionDef[] = [
     icon: 'flag',
     scope: 'global',
     shortcut: '4',
+    group: 'tools',
+  },
+  {
+    id: 'modeTerrain',
+    needsCircuit: true,
+    label: 'Terrain',
+    detail: 'Draw the barriers a circuit is enclosed by, and size that enclosure',
+    icon: 'terrain',
+    scope: 'global',
+    shortcut: '5',
     group: 'tools',
   },
   {
@@ -712,7 +753,7 @@ export const MENU_ITEMS: Record<MenuId, readonly ActionId[]> = {
     'zoomIn',
     'keys',
   ],
-  track: ['redrawCenterline', 'fitEnclosure', 'fixCorners', 'raceSettings'],
+  track: ['redrawCenterline', 'fitEnclosure', 'centerCircuit', 'fixCorners', 'raceSettings'],
 };
 
 export function menuActions(menu: MenuId): EditorActionDef[] {
@@ -725,6 +766,7 @@ export const MODE_ACTIONS: Record<RailModeId, ActionId> = {
   width: 'modeWidth',
   props: 'modeProps',
   race: 'modeRace',
+  terrain: 'modeTerrain',
 };
 
 /**
@@ -738,6 +780,13 @@ export const MODE_ACTIONS: Record<RailModeId, ActionId> = {
  * `fixCorners` belongs to both shaping tools because it is both their business:
  * it narrows the ROAD (width's table) to clear a corner the CURVE made (shape's
  * geometry), and whichever of the two the operator is in is where they meet it.
+ *
+ * The two ENCLOSURE actions belong to TERRAIN, which is the tool about the land
+ * a race sits on. `fitEnclosure` also stays on SHAPE, and that is deliberate
+ * rather than a leftover: an operator who has just finished a stroke wants it
+ * immediately, which is the whole reason it was pulled out of the menu bar in
+ * the first place. An action may appear on two modes' banners; it is one row in
+ * the table either way.
  */
 export function railActions(mode: RailModeId): readonly ActionId[] {
   switch (mode) {
@@ -747,6 +796,8 @@ export function railActions(mode: RailModeId): readonly ActionId[] {
       return ['fixCorners'];
     case 'race':
       return ['fitEnclosure'];
+    case 'terrain':
+      return ['fitEnclosure', 'centerCircuit'];
     default:
       return [];
   }
@@ -1250,6 +1301,9 @@ export const PROBLEM_LABELS: Record<RealmRacersCircuitProblemCode, string> = {
   prop_blocks_racing_surface: 'a prop stands on the racing surface',
   prop_outside_region: 'a prop stands outside the collision region',
   prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
+  unknown_barrier_kit: 'a fence names a barrier kit nothing draws',
+  fence_blocks_racing_surface: 'a fence crosses the racing surface',
+  fence_outside_region: 'a fence leaves the collision region',
   pond_on_racing_surface: 'a pond reaches onto the racing surface',
   pickup_row_off_road: 'a pickup row does not fit on the road there',
   pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',
@@ -1409,6 +1463,13 @@ export function sideTabsFor(mode: RailModeId): readonly SideTabId[] {
   // element that stayed visible under every tab read as belonging to none of
   // them.
   if (mode === 'race') return ['library', 'inspector', 'properties'];
+  // TERRAIN takes the same two positions again, for the same reason: it is the
+  // third placing tool, and Library and Inspector mean the same thing in all
+  // three. It has no outliner, on the rule RACE settled: a way BACK to a piece
+  // earns its own list once there are more of them than the eye can find on the
+  // plan, and a circuit's barriers are a handful of long runs rather than a
+  // hundred lanterns.
+  if (mode === 'terrain') return ['library', 'inspector'];
   return [];
 }
 

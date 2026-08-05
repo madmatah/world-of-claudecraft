@@ -75,20 +75,21 @@ export interface RallyCircuitTheme {
   kerb: RallyThemeKerb;
   startGrid: RallyThemeStartGrid;
   /**
-   * The perimeter wall's kit. Three numbers that travel together, because each
-   * one is meaningless without the others: `panelYards` is one panel's run at
-   * `scale` (a module measured at scale 1 and drawn at another leaves gaps),
-   * and `lengthAxis` is which of the module's OWN axes that run lies along.
-   * The shipped kits disagree on that last one (the garden's ironwork is +x,
-   * the world's stone wall is +z), so it is authored rather than assumed.
+   * The barrier kits that BELONG on a circuit in this zone, in the order the
+   * editor should offer them: keys of `src/sim/content/realm_racers_barriers.ts`.
+   *
+   * An authoring aid and only that, exactly like `props` below. It filters
+   * nothing at runtime and forbids nothing: a record may name any kit in the
+   * catalog, and the readout judges the placement rather than the vocabulary.
+   *
+   * It replaced a mandatory `perimeter` kit, and the replacement is the whole
+   * point. That field dressed a derived rectangle: one kit, four straight faces
+   * and four right angles, which is what made every circuit read as a box
+   * however different its road was. Nothing draws that box any more, so what a
+   * circuit's edge looks like is authored (`fences` on the record) and a theme's
+   * job here is to say which two or three of the kits look like this zone.
    */
-  perimeter: {
-    fenceUrl: string;
-    pillarUrl: string;
-    panelYards: number;
-    scale: number;
-    lengthAxis: 'x' | 'z';
-  };
+  barriers: readonly string[];
   /**
    * The start line's one visible fixture. Only the IDS live here: the arch's
    * authored bounds stay in `realm_racers_track_core.ts`, where the placement
@@ -152,8 +153,6 @@ export interface RallyCircuitTheme {
   sky: { biome: RallySkyKey; fog: { color: number; near: number; far: number } };
 }
 
-const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
-const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
 /** The game's own race arch: `props.ts` already plants this exact model as the
  *  Highwatch show-jumping start gate, so a rally start line inherits a fixture
  *  the world has established rather than inventing one. */
@@ -173,13 +172,7 @@ const EVERGARDEN: RallyCircuitTheme = {
   // classic alternating kerb down the outside of a corner.
   kerb: { base: 0xe8e2d4, stripe: 0xb8402f },
   startGrid: { light: 0xf2efe6, dark: 0x22201d },
-  perimeter: {
-    fenceUrl: IRON_FENCE_URL,
-    pillarUrl: IRON_PILLAR_URL,
-    panelYards: 3.5,
-    scale: 1,
-    lengthAxis: 'x',
-  },
+  barriers: ['ironwork', 'hedge', 'stoneWall'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patterna_white.glb',
@@ -265,18 +258,7 @@ const GALECREST: RallyCircuitTheme = {
   // Weathered grey and a faded harbour red, against the downs' sage.
   kerb: { base: 0xdcd8cd, stripe: 0xa04a3c },
   startGrid: { light: 0xe9e6dc, dark: 0x272b2e },
-  perimeter: {
-    // The world's own coastal wall module, at the scale `props.ts` builds its
-    // stone runs with (1.155 yards of module at scale 4.2). The corner takes
-    // the same piece rather than a pier of unknown height: a mismatched cap
-    // reads worse than a corner that is simply more wall.
-    fenceUrl: '/models/biome/hexn_fence_stone.glb',
-    pillarUrl: '/models/biome/hexn_fence_stone.glb',
-    panelYards: 4.851,
-    scale: 4.2,
-    // This kit's run is along its own +z, unlike the garden's ironwork.
-    lengthAxis: 'z',
-  },
+  barriers: ['stoneWall', 'woodPaling', 'ironwork'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patterna_blue.glb',
@@ -362,16 +344,7 @@ const NIGHTBLOOM: RallyCircuitTheme = {
   // bone against red.
   kerb: { base: 0xf2ecff, stripe: 0x4a2a8c },
   startGrid: { light: 0xf2ecff, dark: 0x201233 },
-  perimeter: {
-    // The world's own log palisade, at the length `props.ts` builds its
-    // palisade runs at (2 yards of module, drawn here at 2.5). A dream wood is
-    // fenced with the wood, not with the garden's wrought iron.
-    fenceUrl: '/models/biome/hexn_palisade.glb',
-    pillarUrl: '/models/biome/hexn_palisade.glb',
-    panelYards: 5,
-    scale: 2.5,
-    lengthAxis: 'x',
-  },
+  barriers: ['hedge', 'woodPaling', 'ornateRailing'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     // Gold cloth, the one banner colourway that carries against violet.
@@ -448,16 +421,7 @@ const VEILED_HOLLOW: RallyCircuitTheme = {
   // garden's red, which would sit dead against a mauve meadow.
   kerb: { base: 0xece4f2, stripe: 0x7a4a86 },
   startGrid: { light: 0xece4f2, dark: 0x2a2038 },
-  perimeter: {
-    // The dungeon kit's ruin masonry, the same stone the zone's broken walls
-    // are built from, with its own matching pier at the corners. Both measured
-    // at 4 yards long and 4 tall, so the run needs no scale at all.
-    fenceUrl: '/models/dungeon/wall.glb',
-    pillarUrl: '/models/dungeon/pillar.glb',
-    panelYards: 4,
-    scale: 1,
-    lengthAxis: 'x',
-  },
+  barriers: ['ruinWall', 'crackedWall', 'woodPaling'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     // Pattern B in moon white: the pale cloth a violet dusk carries, in a
@@ -517,17 +481,7 @@ const THORNPEAK: RallyCircuitTheme = {
   // Snow-bleached stone and slate: cold where the garden's pair is warm.
   kerb: { base: 0xdfe4e2, stripe: 0x4f6b78 },
   startGrid: { light: 0xe6eae8, dark: 0x24302f },
-  perimeter: {
-    // The world's mountain masonry, a 2 yard module drawn at 1.8 for a 3.6
-    // yard run and the same 3.6 in height. The corner takes the same piece
-    // rather than the kit's 4 yard pier, which would stand half again as tall
-    // as the wall it caps.
-    fenceUrl: '/models/biome/dungeon_wall_stone.glb',
-    pillarUrl: '/models/biome/dungeon_wall_stone.glb',
-    panelYards: 3.6,
-    scale: 1.8,
-    lengthAxis: 'x',
-  },
+  barriers: ['mountainWall', 'stoneWall', 'woodPaling'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     // Highland leather brown, the one warm colour on a grey mountain.
@@ -591,25 +545,7 @@ const DRAKELANDS: RallyCircuitTheme = {
   // a bone-pale block on black ash reads as a hole rather than an edge.
   kerb: { base: 0x2e2622, stripe: 0xe06030 },
   startGrid: { light: 0xefe0cc, dark: 0x1c1512 },
-  perimeter: {
-    // The castle kit's BATTLEMENT rather than its curtain wall: 1.1 yards tall
-    // at scale 1, so at 1.5 it stands 1.65, a crenellated parapet a pilot sees
-    // over instead of a four yard wall that would box the circuit in.
-    //
-    // The corner takes the same piece, NOT the kit's own `kcas_barrier_corner`,
-    // and that is a measurement rather than a preference: that module is an L,
-    // with arms reaching to -2.00 on its local x and +2.00 on its local z. The
-    // builder seats a corner centred on the corner point under the OUTGOING
-    // edge's yaw, which is the one thing an L cannot take: one arm would stand
-    // outside the perimeter while the wall leaving the corner went uncapped. It
-    // also stands 1.40 against the parapet's 1.10, the same quarter-again
-    // mismatch the Thornpeak record rejects its own kit's pier for.
-    fenceUrl: '/models/biome/kcas_barrier.glb',
-    pillarUrl: '/models/biome/kcas_barrier.glb',
-    panelYards: 6,
-    scale: 1.5,
-    lengthAxis: 'x',
-  },
+  barriers: ['battlement', 'curtainWall', 'mountainWall'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     // Drakelands red, the colourway the zone's own hexr town flies.
@@ -669,13 +605,7 @@ const WRAITHWOOD: RallyCircuitTheme = {
   // stripe is green rather than red, which would read as fresh paint here.
   kerb: { base: 0xd8dcc8, stripe: 0x4c5a3e },
   startGrid: { light: 0xdfe3d2, dark: 0x1e2419 },
-  perimeter: {
-    fenceUrl: '/models/dungeon/wall_cracked.glb',
-    pillarUrl: '/models/dungeon/pillar.glb',
-    panelYards: 4.4,
-    scale: 1.1,
-    lengthAxis: 'x',
-  },
+  barriers: ['crackedWall', 'ruinWall', 'woodPaling'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     // Pattern C in brown: rotted cloth, the one colourway that reads as having
@@ -739,17 +669,7 @@ const EASTBROOK: RallyCircuitTheme = {
   // Limewash and barn ochre, the two colours the village paints with.
   kerb: { base: 0xf0e8d2, stripe: 0x9c5a2c },
   startGrid: { light: 0xf4eeda, dark: 0x2c2419 },
-  perimeter: {
-    // Eastbrook's OWN rail: the village fence `props.ts` runs along the zone's
-    // paddocks, a 0.79 yard module drawn at 3 for a 2.37 yard panel just under
-    // a yard tall. The corner takes the same piece rather than the timber post,
-    // which at this scale would stand three times the rail's height.
-    fenceUrl: '/models/props/fence.glb',
-    pillarUrl: '/models/props/fence.glb',
-    panelYards: 2.35,
-    scale: 3,
-    lengthAxis: 'x',
-  },
+  barriers: ['paddockRail', 'stoneWall', 'hedge'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patterna_green.glb',
@@ -815,17 +735,7 @@ const MIREFEN: RallyCircuitTheme = {
   // Bog-bleached wood over peat: the wettest, brownest pair in the registry.
   kerb: { base: 0xcfd4b2, stripe: 0x5c4a2e },
   startGrid: { light: 0xd8dcbc, dark: 0x231d13 },
-  perimeter: {
-    // A rough wooden paling. `marsh_root_wall.glb`, the piece a marsh circuit
-    // would obviously want, is 1.42 by 1.50 and so is not a RUN at all: laid
-    // end to end it reads as a row of stumps, and the suite's own is-not-a-run
-    // ratio gate refuses it.
-    fenceUrl: '/models/biome/city_fence_wood.glb',
-    pillarUrl: '/models/biome/city_fence_wood.glb',
-    panelYards: 3.3,
-    scale: 1.6,
-    lengthAxis: 'x',
-  },
+  barriers: ['woodPaling', 'paddockRail', 'crackedWall'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patternb_brown.glb',
@@ -887,13 +797,7 @@ const WILLOWFEN: RallyCircuitTheme = {
   // red.
   kerb: { base: 0xe4eedc, stripe: 0x3f7a58 },
   startGrid: { light: 0xe8f0e2, dark: 0x1b2b22 },
-  perimeter: {
-    fenceUrl: '/models/props/maze_hedge_wall.glb',
-    pillarUrl: '/models/props/maze_hedge_arch.glb',
-    panelYards: 2.9,
-    scale: 3,
-    lengthAxis: 'x',
-  },
+  barriers: ['hedge', 'woodPaling', 'paddockRail'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patternc_blue.glb',
@@ -954,13 +858,7 @@ const PALMREACH: RallyCircuitTheme = {
   // Coral sand against lagoon teal.
   kerb: { base: 0xf4ecd0, stripe: 0x1f8a72 },
   startGrid: { light: 0xf6f0d8, dark: 0x123028 },
-  perimeter: {
-    fenceUrl: '/models/biome/hexn_palisade.glb',
-    pillarUrl: '/models/biome/hexn_palisade.glb',
-    panelYards: 6.4,
-    scale: 3.2,
-    lengthAxis: 'x',
-  },
+  barriers: ['woodPaling', 'paddockRail', 'stoneWall'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patternb_green.glb',
@@ -1033,15 +931,7 @@ const FARSHORE: RallyCircuitTheme = {
   // Sailcloth over deep water.
   kerb: { base: 0xf6efdc, stripe: 0x2a6c93 },
   startGrid: { light: 0xf8f2e4, dark: 0x14293a },
-  perimeter: {
-    // The hex town wall, a low harbour parapet at 2.4: 4.8 yards of run and
-    // 2.64 tall, which is a sea wall rather than a fortification.
-    fenceUrl: '/models/biome/hex_wall.glb',
-    pillarUrl: '/models/biome/hex_wall.glb',
-    panelYards: 4.8,
-    scale: 2.4,
-    lengthAxis: 'x',
-  },
+  barriers: ['stoneWall', 'paddockRail', 'ornateRailing'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patternc_white.glb',
@@ -1106,16 +996,7 @@ const AMBERFALL: RallyCircuitTheme = {
   // Birch pale against burnt amber.
   kerb: { base: 0xf2e2c0, stripe: 0xc86a1e },
   startGrid: { light: 0xf4e8cc, dark: 0x30210f },
-  perimeter: {
-    // The city kit's ornamental railing at its authored size: 1.95 yards of
-    // run and 2.85 tall, the finest module in the registry, which is what an
-    // avenue under turning trees is lined with.
-    fenceUrl: '/models/biome/city_fence_ornament.glb',
-    pillarUrl: '/models/biome/city_fence_ornament.glb',
-    panelYards: 1.95,
-    scale: 1,
-    lengthAxis: 'x',
-  },
+  barriers: ['ornateRailing', 'stoneWall', 'hedge'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patternb_yellow.glb',
@@ -1180,20 +1061,7 @@ const FROSTVEIL: RallyCircuitTheme = {
   // one place a kerb has to work by VALUE rather than by hue.
   kerb: { base: 0xf4f9ff, stripe: 0x5f86b4 },
   startGrid: { light: 0xf6faff, dark: 0x1c2a3c },
-  perimeter: {
-    // BORROWED, and that is the point of saying so: the castle curtain wall,
-    // drawn a fifth over size so it stands 4.8 yards, is stone the Frostveil
-    // has no claim on. It is here because a circuit needs a perimeter and the
-    // alternative was the garden's wrought iron.
-    // The corner takes the same piece for the reason the Drakelands record
-    // spells out: `kcas_wall_corner` is an L (arms to -2.00 x and +2.00 z), and
-    // the builder's single corner yaw cannot seat one.
-    fenceUrl: '/models/biome/kcas_wall.glb',
-    pillarUrl: '/models/biome/kcas_wall.glb',
-    panelYards: 4.8,
-    scale: 1.2,
-    lengthAxis: 'x',
-  },
+  barriers: ['curtainWall', 'stoneWall', 'ironwork'],
   startFixture: {
     archUrl: COURSE_ARCH_URL,
     bannerUrl: '/models/dungeon/banner_patternb_blue.glb',
@@ -1288,17 +1156,20 @@ export function realmRacersThemeAt(x: number, z: number): RallyCircuitTheme {
   return lane ? realmRacersTheme(lane.circuit) : CIRCUIT_THEMES[REALM_RACERS_DEFAULT_THEME_ID];
 }
 
-/** A theme's own kit: the wall, the start fixture and what it plants along a
- *  shore. NOT its prop palette, which rides the authored-dressing catalog's own
- *  lane. */
+/**
+ * A theme's own kit: the start fixture and what it plants along a shore.
+ *
+ * It used to open with the perimeter wall's two urls, and that pairing is what
+ * the barrier catalog took over: a circuit's visible boundary is authored now
+ * (`fences` on the record, drawn from
+ * `src/render/realm_racers_barrier_visuals.ts`), so the models it wears follow
+ * the RECORD rather than the theme, and they ride their own lane below.
+ *
+ * NOT the prop palette either, which rides the authored-dressing catalog's own
+ * lane.
+ */
 function themeKitUrls(theme: RallyCircuitTheme): readonly string[] {
-  return [
-    theme.perimeter.fenceUrl,
-    theme.perimeter.pillarUrl,
-    theme.startFixture.archUrl,
-    theme.startFixture.bannerUrl,
-    theme.reedUrl,
-  ];
+  return [theme.startFixture.archUrl, theme.startFixture.bannerUrl, theme.reedUrl];
 }
 
 /**

@@ -311,11 +311,15 @@ of course: that is the circuit being edited.
   it is a movable, resizable DOCK now (`dock.ts`), `shift+F` for the whole plan,
   with a "follows cursor" mode where hovering a corner on the plan is the gesture
   that looks at it in 3D.
-- **The rail has four entries, and SHAPE is one intent over two gestures.** A
+- **The rail has five entries, and SHAPE is one intent over two gestures.** A
   blank canvas is drawn on, a drawn one is edited by its handles, and which of
   the two the operator gets was never a choice worth a button (`toolFor`). RACE
   is the fourth, and it is read as ONE intent: everything about the race that is
-  not the road's shape. That is what lets the furniture and the record's own
+  not the road's shape. TERRAIN is the fifth, read the same way: the land the
+  race sits on, which is the authored BARRIERS plus the two actions that size
+  and centre the enclosure they stand in. `Fit enclosure` is on SHAPE's banner
+  too, deliberately: an operator who has just finished a stroke wants it
+  immediately, which is why it left the menu bar in the first place. That is what lets the furniture and the record's own
   numbers share a mode without it being a sack. A dedicated furniture MODE was
   considered and turned down for a reason worth keeping: splitting leaves RACE a
   rail entry with no canvas gesture at all, and the obvious remedy (let it move
@@ -572,6 +576,7 @@ of course: that is the circuit being edited.
 | `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry (a grip drag, an arrow nudge, a duplicate included), where the view goes to look at a selection, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
 | `envelope_core.ts` | what perimeter wall and collision region fit a road of a given size, clamped to the band and the lane depth budget. A convenience, not a rule: the enclosure rules themselves are in the metrics core |
+| `fences_core.ts` | the TERRAIN tool's gestures: which barrier (and which of its points) a click landed on, what each click of a drawing run does to the run in progress, what a point drag, a nudge, a delete or a scale edit do to the list, and the offset that centres a circuit in its enclosure plus what has to move with it. It AUTHORS: where the modules end up is `src/sim/realm_racers_fences.ts`, and the plan draws what that resolver returns |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |
 | `draft_endpoints_core.ts` | what the dev server answers about a saved draft: the list (newest first, with its last write), one parsed draft, and whether a DELETE may go ahead. It is handed a READER and has no writer at all, which is what makes "a GET never writes" structural; the delete arm names an id and the plugin unlinks it |
 | `preview_camera_core.ts` | where the 3D preview's camera stands: the orbit rig's clamps, and the fly-through pose along the racing line |

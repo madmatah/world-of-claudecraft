@@ -15,6 +15,7 @@
 // of yards across). The first caller only ever compared one axis against
 // another, so the error cancelled and nothing noticed.
 
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import * as THREE from 'three';
@@ -102,4 +103,29 @@ export function glbBounds(url: string): THREE.Box3 {
 /** The model's extent on each axis, in its own authored frame at scale 1. */
 export function glbSize(url: string): THREE.Vector3 {
   return glbBounds(url).getSize(new THREE.Vector3());
+}
+
+/**
+ * A fingerprint of the model's GEOMETRY: the SHA-1 of its glTF binary chunk.
+ *
+ * What a url comparison cannot see. The world ships models that are the same
+ * asset under two filenames (`hex_wall.glb` and `hexn_palisade.glb` are byte for
+ * byte identical), and a catalog that offers both as separate choices is
+ * offering one thing twice, which is what the rally's barrier kits did until a
+ * seat test caught three of them drawing one wall.
+ */
+export function glbBinarySha1(url: string): string {
+  const buf = readFileSync(path.join(process.cwd(), 'public', url.replace(/^\//, '')));
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  for (let off = 12; off < buf.byteLength; ) {
+    const length = view.getUint32(off, true);
+    const type = view.getUint32(off + 4, true);
+    if (type === 0x004e4942) {
+      return createHash('sha1')
+        .update(buf.subarray(off + 8, off + 8 + length))
+        .digest('hex');
+    }
+    off += 8 + length;
+  }
+  throw new Error(`no binary chunk in ${url}`);
 }

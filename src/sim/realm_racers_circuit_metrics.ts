@@ -17,6 +17,11 @@
 import { REALM_RACERS_THEME_IDS, type RealmRacersCircuit } from './content/realm_racers_circuits';
 import { polygonContainsPoint } from './geometry2d';
 import {
+  rallyFenceRunSamples,
+  realmRacersFencePlacements,
+  realmRacersFenceRuns,
+} from './realm_racers_fences';
+import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_MAX_RANGE,
   GROUND_BLAST_RADIUS,
@@ -98,6 +103,18 @@ export const REALM_RACERS_RADIUS_OVER_WIDTH_WARN = 1.5;
 const TURNING_TOLERANCE_DEGREES = 5;
 
 /**
+ * How finely a barrier run is sampled when the readout asks where it stands,
+ * yards.
+ *
+ * A property of the READOUT rather than of a kit, which is why it is not the
+ * module length: what is being answered is "does this straight line cross the
+ * racing surface anywhere", and the answer must not get coarser because a
+ * circuit chose a kit with longer panels. Two yards is comfortably finer than
+ * the narrowest road a circuit may author.
+ */
+const FENCE_SAMPLE_YARDS = 2;
+
+/**
  * A contiguous stretch of lap over which one check fails, and the worst sample
  * in it.
  *
@@ -174,6 +191,21 @@ export type RealmRacersCircuitProblemCode =
   /** A prop or scatter names a catalog key nothing authors, so nothing draws
    *  it and nothing knows how big it is. */
   | 'unknown_prop_asset'
+  /** A fence names a barrier kit nothing authors, so nothing draws it and
+   *  nothing knows how thick it is. */
+  | 'unknown_barrier_kit'
+  /**
+   * A fence run reaches into the racing surface (road, verge and run-off).
+   *
+   * The prop rule, applied to a thing with LENGTH, and the length is the whole
+   * difference: a run is measured by SAMPLING it rather than by its two ends,
+   * because a fence whose endpoints both sit safely out in the lawn can still
+   * cut the inside of a corner between them.
+   */
+  | 'fence_blocks_racing_surface'
+  /** A fence run leaves the collision region, where the rally's own
+   *  short-circuits stop applying at all. */
+  | 'fence_outside_region'
   /**
    * A prop's footprint, SOLID or decorative, reaches into the racing surface
    * (road, verge, run-off and the whole drivable apron). The check the
@@ -562,6 +594,58 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     if (prop.height > REALM_RACERS_CAMERA_CANOPY_HEIGHT) {
       const reach = track.halfWidthAt(s) + REALM_RACERS_CAMERA_REACH;
       if (clear < reach) problem('prop_in_camera_reach', 'warning', clear, reach, s);
+    }
+  }
+
+  // --- the authored barriers ---
+  //
+  // Same two questions the props answer (is it on the racing surface, is it
+  // inside the region), asked of a thing with LENGTH. Both are sampled along the
+  // run rather than tested at its ends: a fence drawn between two points out in
+  // the lawn can still cut straight across a corner, and that is exactly the
+  // case an endpoint test blesses. One problem per RUN, not per sample, or a
+  // hedge across a hairpin would be forty callouts at one place.
+  const fencePlacements = realmRacersFencePlacements(circuit);
+  for (let i = 0; i < fencePlacements.unknownKits.length; i++) {
+    problem('unknown_barrier_kit', 'error', fencePlacements.unknownKits.length, 0);
+  }
+  for (const { run } of realmRacersFenceRuns(circuit)) {
+    let worst: { s: number; clear: number; surface: number } | null = null;
+    // Tracked PER AXIS, because the problem carries one value and one limit and
+    // the reader compares them. A run leaving the region on z, reported with its
+    // x reach against the x limit, prints a value comfortably UNDER its limit:
+    // the readout names a real defect with numbers that say there is none, which
+    // is worse than silence. `prop_outside_region` has two arms for this reason
+    // and this mirrors it.
+    let worstX = 0;
+    let worstZ = 0;
+    for (const point of rallyFenceRunSamples(run, FENCE_SAMPLE_YARDS)) {
+      const projection = track.project(
+        point.x + REALM_RACERS_ORIGIN.x,
+        point.z + REALM_RACERS_ORIGIN.z,
+      );
+      // The run's own half thickness counts: a hedge is over a yard wide, and a
+      // centre line that clears the verge by a hand's breadth is a hedge on it.
+      const clear = Math.abs(projection.lateral) - run.hd;
+      const surface = rallyGardenEdgeOffsetAt(circuit, projection.s);
+      if (!worst || clear - surface < worst.clear - worst.surface) {
+        worst = { s: projection.s, clear, surface };
+      }
+      worstX = Math.max(worstX, Math.abs(point.x) + run.hd);
+      worstZ = Math.max(worstZ, Math.abs(point.z) + run.hd);
+    }
+    // Raised on `clear < surface` rather than on `!(clear >= surface)`, the way
+    // `realmRacersPropStanding` spells the same test: a malformed draft yields
+    // NaN, every comparison with NaN is false, and this arm is the one where
+    // that means "raise nothing" rather than "raise everything".
+    if (worst && worst.clear < worst.surface) {
+      problem('fence_blocks_racing_surface', 'error', worst.clear, worst.surface, worst.s);
+    }
+    if (worstX > circuit.regionHalfX) {
+      problem('fence_outside_region', 'error', worstX, circuit.regionHalfX, -1, 'x');
+    }
+    if (worstZ > circuit.regionHalfZ) {
+      problem('fence_outside_region', 'error', worstZ, circuit.regionHalfZ, -1, 'z');
     }
   }
 

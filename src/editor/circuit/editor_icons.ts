@@ -47,7 +47,9 @@ export type EditorIconId =
   | 'warning'
   | 'orbit'
   | 'fly'
-  | 'pickupRow';
+  | 'pickupRow'
+  | 'terrain'
+  | 'center';
 
 const svg = (body: string): string =>
   `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
@@ -130,6 +132,15 @@ export const EDITOR_ICONS: Record<EditorIconId, string> = {
   // pixels a 1.5 stroke around a two-unit box is all stroke and no box.
   pickupRow: svg(
     '<path d="M3 2v12" /><path d="M13 2v12" /><path d="M4 8h1" /><path d="M6.4 8h1" /><path d="M8.8 8h1" /><path d="M11.2 8h1" />',
+  ),
+  // A run of fence with its posts: the rail across the top, the uprights under
+  // it, and the corner it turns.
+  terrain: svg(
+    '<path d="M2 5.5h7l3.5 3.5" /><path d="M4 5.5v6" /><path d="M7 5.5v6" /><path d="M9 5.5v6" /><path d="M12.5 9v3" />',
+  ),
+  // A shape pulled to the middle of its box.
+  center: svg(
+    '<rect x="2.5" y="2.5" width="11" height="11" rx="1" /><circle cx="8" cy="8" r="2.5" /><path d="M8 2.5v1.5" /><path d="M8 12v1.5" /><path d="M2.5 8H4" /><path d="M12 8h1.5" />',
   ),
 };
 

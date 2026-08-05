@@ -132,7 +132,7 @@ describe('the action table', () => {
       expect(action.shortcut).toBe(mode.shortcut);
     }
     const digits = RAIL_MODES.map((mode) => mode.shortcut);
-    expect(digits).toEqual(['1', '2', '3', '4']);
+    expect(digits).toEqual(['1', '2', '3', '4', '5']);
   });
 
   it('throws on an id the table does not carry, rather than returning undefined', () => {
@@ -991,6 +991,9 @@ describe('problems on the plan', () => {
       prop_blocks_racing_surface: 'a prop stands on the racing surface',
       prop_outside_region: 'a prop stands outside the collision region',
       prop_in_camera_reach: 'a tall prop stands inside the chase camera reach',
+      unknown_barrier_kit: 'a fence names a barrier kit nothing draws',
+      fence_blocks_racing_surface: 'a fence crosses the racing surface',
+      fence_outside_region: 'a fence leaves the collision region',
       pond_on_racing_surface: 'a pond reaches onto the racing surface',
       pickup_row_off_road: 'a pickup row does not fit on the road there',
       pickup_row_lanes_overlap: 'a pickup row is narrow enough that its boxes overlap',

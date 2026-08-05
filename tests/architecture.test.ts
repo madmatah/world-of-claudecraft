@@ -411,8 +411,12 @@ const RENDER_PURE_CORES = [
   'src/render/realm_racers_grass_core.ts',
   'src/render/realm_racers_pickups_core.ts',
   'src/render/realm_racers_slicks_core.ts',
-  // Data-as-code, but it is a purity DEPENDENCY of the two cores above, so it
-  // is swept: a three import here would make both of them three-loading.
+  // Data-as-code, but both are a purity DEPENDENCY of the cores above, so both
+  // are swept: a three import in either would make those cores three-loading.
+  // `realm_racers_barrier_visuals.ts` is `realm_racers_track_core.ts`'s, through
+  // `rallyFencePieces`; the scan is per FILE and not transitive, so a dependency
+  // that is not registered is a dependency nothing checks.
+  'src/render/realm_racers_barrier_visuals.ts',
   'src/render/realm_racers_themes.ts',
   'src/render/realm_racers_track_core.ts',
   'src/render/realm_racers_track_dispose_core.ts',
@@ -480,6 +484,7 @@ const BARE_NAMED = [
   'src/ui/item_kind_label.ts',
   'src/ui/item_name_color.ts',
   'src/render/foliage_lod.ts',
+  'src/render/realm_racers_barrier_visuals.ts',
   'src/render/realm_racers_themes.ts',
   'src/render/compile_gate.ts',
   'src/render/prewarm_pass.ts',
@@ -1073,6 +1078,7 @@ const EXPECTED_BARE_NAMED = [
   'src/render/prewarm_pass.ts',
   'src/render/prewarm_policy.ts',
   'src/render/prewarm_resume.ts',
+  'src/render/realm_racers_barrier_visuals.ts',
   'src/render/realm_racers_themes.ts',
   'src/ui/absorb_bar.ts',
   'src/ui/bag_filter.ts',

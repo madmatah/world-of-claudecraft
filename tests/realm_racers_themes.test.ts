@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
 import { REALM_DAYNIGHT_AMPLITUDE } from '../src/render/day_night_core';
+import { REALM_RACERS_BARRIER_VISUALS } from '../src/render/realm_racers_barrier_visuals';
 import {
   CIRCUIT_THEMES,
   REALM_RACERS_THEME_ASSET_URLS,
@@ -20,11 +21,9 @@ import {
   realmRacersThemeAt,
 } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
-import {
-  rallyBorderFlowerSpots,
-  rallyPerimeterPieces,
-} from '../src/render/realm_racers_track_core';
+import { rallyBorderFlowerSpots } from '../src/render/realm_racers_track_core';
 import { DEEP_COLOR, SHALLOW_COLOR } from '../src/render/water_surface_material';
+import { REALM_RACERS_BARRIERS } from '../src/sim/content/realm_racers_barriers';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
   REALM_RACERS_CIRCUIT_LIST,
@@ -39,7 +38,6 @@ import {
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
 import { REALM_RACERS_ORIGIN, realmRacersLaneOffset } from '../src/sim/realm_racers_layout';
-import { glbBounds, glbSize } from './helpers/glb_bounds';
 
 // The builder mints procedural canvas textures, so the build cases below need
 // the same texture stub every other headless render suite uses.
@@ -90,38 +88,10 @@ function probeCircuit(themeId: string): RealmRacersCircuit {
 
 const GALECREST_CIRCUIT = probeCircuit('galecrest');
 
-/**
- * Which horizontal axis a shipped model's LENGTH runs along, measured off the
- * GLB itself.
- *
- * Read out of the glTF JSON chunk rather than through GLTFLoader: every
- * POSITION accessor carries its own min/max, so the extents are available
- * without decoding a buffer, and the loader cannot parse these files headless
- * anyway (their KTX2 textures need a WebGL context). Node transforms are
- * composed on the way down, since a kit is free to author a module rotated
- * inside its own scene.
- */
-function glbLongHorizontalAxis(url: string): 'x' | 'z' {
-  const size = glbSize(url);
-  // Never a coin toss: both shipped wall kits are better than 5:1 on their own
-  // length, so a model this fails on is one nothing should be laying in a run.
-  expect(
-    Math.max(size.x, size.z) / Math.min(size.x, size.z),
-    `${url} is not a run`,
-  ).toBeGreaterThan(2);
-  return size.x >= size.z ? 'x' : 'z';
-}
-
 /** Every model url a theme names, whatever the shape of the piece naming it. */
 function themeUrls(themeId: string): string[] {
   const theme = CIRCUIT_THEMES[themeId];
-  return [
-    theme.perimeter.fenceUrl,
-    theme.perimeter.pillarUrl,
-    theme.startFixture.archUrl,
-    theme.startFixture.bannerUrl,
-    theme.reedUrl,
-  ];
+  return [theme.startFixture.archUrl, theme.startFixture.bannerUrl, theme.reedUrl];
 }
 
 describe('Realm Racers circuit themes', () => {
@@ -146,7 +116,6 @@ describe('Realm Racers circuit themes', () => {
     expect(theme.ground).not.toBe(garden.ground);
     expect(theme.kerb).not.toEqual(garden.kerb);
     expect(theme.startGrid).not.toEqual(garden.startGrid);
-    expect(theme.perimeter.fenceUrl).not.toBe(garden.perimeter.fenceUrl);
     expect(theme.startFixture.bannerUrl).not.toBe(garden.startFixture.bannerUrl);
     expect(theme.flowers.colours).not.toEqual(garden.flowers.colours);
     expect(theme.flowers.card).not.toEqual(garden.flowers.card);
@@ -156,19 +125,12 @@ describe('Realm Racers circuit themes', () => {
     // Pieces MAY be shared (a bench is a bench in any zone), but not all.
     expect(theme.props).not.toEqual(garden.props);
     expect(theme.props.filter((asset) => !garden.props.includes(asset)).length).toBeGreaterThan(0);
-    // The wall kit is owned too, and all four of its numbers travel together:
-    // a kit swapped without its run, scale or axis is the defect that stood
-    // the Galecrest wall broadside to itself.
-    expect(theme.perimeter.pillarUrl).not.toBe(garden.perimeter.pillarUrl);
-    expect([
-      theme.perimeter.panelYards,
-      theme.perimeter.scale,
-      theme.perimeter.lengthAxis,
-    ]).not.toEqual([
-      garden.perimeter.panelYards,
-      garden.perimeter.scale,
-      garden.perimeter.lengthAxis,
-    ]);
+    // The BARRIER vocabulary is its own too. It replaced a mandatory wall kit,
+    // and it is an authoring aid rather than a skin: pieces MAY be shared (a
+    // stone wall is a stone wall in any zone), but a record that just re-lists
+    // the garden's is a record nobody chose kits for.
+    expect(theme.barriers).not.toEqual(garden.barriers);
+    expect(theme.barriers[0], `${themeId} leads with its own kit`).not.toBe(garden.barriers[0]);
     // SHARED BY DESIGN, and listed so the exemption is auditable rather than
     // an omission: one race arch serves every zone, and reeds are reeds.
     expect(theme.startFixture.archUrl).toBe(garden.startFixture.archUrl);
@@ -239,97 +201,10 @@ describe('Realm Racers circuit themes', () => {
           expect(channel).toBeLessThanOrEqual(255);
         }
       }
-      expect(theme.perimeter.panelYards).toBeGreaterThan(0);
-      expect(theme.perimeter.scale).toBeGreaterThan(0);
-    });
-
-    it('lays every wall module ALONG the wall, whichever axis its kit runs on', () => {
-      // The defect this exists for was visible from the grid: the Galecrest
-      // wall's every stone module stood broadside to the wall, because the yaw
-      // was the ironwork's and that kit runs along a different local axis.
-      //
-      // The axis is MEASURED off the shipped GLB rather than read off the
-      // record, which is the whole difference between a test and a restatement:
-      // the first version of this case took `lengthAxis` from the theme and
-      // then checked a yaw derived from `lengthAxis`, so it passed with the
-      // field set wrong. The record is checked against the measurement too,
-      // second, so a mis-authored theme is named rather than merely failing.
-      const measured = glbLongHorizontalAxis(theme.perimeter.fenceUrl);
-      expect(theme.perimeter.lengthAxis, `${themeId} wall kit`).toBe(measured);
-
-      // ...and the RUN is measured too, which the axis check alone never was.
-      // `panelYards` is how far the builder steps between modules, so it has to
-      // be what one module actually covers at this theme's scale: step further
-      // and the wall gaps all the way round, step much shorter and it stacks
-      // into itself. Fourteen hand-authored numbers behind a review-only check
-      // is exactly the thing that is right once and wrong the third time.
-      //
-      // Bounded rather than exact, and asymmetrically, because the slack has a
-      // direction: an UNDERCUT overlaps neighbours slightly and is invisible,
-      // while an overshoot is a hole. The floor admits the Evergarden's own
-      // deliberate 12.5 percent undercut (3.5 authored on a 4 yard module),
-      // which is the widest any record takes.
-      //
-      // The ceiling carries one centimetre, which is not slop but the grain the
-      // records are authored at: the Galecrest's 4.851 is the rounding of a
-      // 4.84974 module run, and holding it to the raw float would fail a record
-      // that is right, over 2.6 millimetres spread across a whole panel.
-      const run = glbSize(theme.perimeter.fenceUrl)[measured] * theme.perimeter.scale;
-      expect(theme.perimeter.panelYards, `${themeId} overshoots its module`).toBeLessThanOrEqual(
-        run + 0.01,
-      );
-      expect(theme.perimeter.panelYards, `${themeId} undercuts too far`).toBeGreaterThan(
-        run * 0.85,
-      );
-
-      // The CORNER piece has to survive the same seating, and it gets no axis
-      // of its own to be measured against: the builder centres it on the corner
-      // point under the outgoing edge's yaw, one orientation for all four
-      // corners. So the only module that can be right there is one whose mass
-      // is centred on its own origin.
-      //
-      // An L is the shape this refuses, and it is not hypothetical: two castle
-      // kit corner modules (`kcas_barrier_corner`, `kcas_wall_corner`) reach to
-      // -2.00 on their local x and +2.00 on their local z, so seated this way
-      // one arm stands outside the perimeter while the wall leaving the corner
-      // goes uncapped. Both were authored into this registry and both had to
-      // come back out. Measured off the GLB rather than listed by name, so the
-      // next kit that happens to be an L fails the same way.
-      const pillar = glbBounds(theme.perimeter.pillarUrl);
-      for (const axis of ['x', 'z'] as const) {
-        const reach = [Math.abs(pillar.min[axis]), Math.abs(pillar.max[axis])];
-        expect(
-          Math.max(...reach) / Math.max(Math.min(...reach), 1e-6),
-          `${themeId} corner piece is lopsided on ${axis}`,
-        ).toBeLessThan(2);
+      expect(theme.barriers.length).toBeGreaterThan(0);
+      for (const kit of theme.barriers) {
+        expect(REALM_RACERS_BARRIERS[kit], `${themeId} offers ${kit}`).toBeDefined();
       }
-
-      const circuit: RealmRacersCircuit = { ...GARDEN_CIRCUIT, id: 'wall_probe', theme: themeId };
-      const pieces = rallyPerimeterPieces(circuit).filter((piece) => !piece.pillar);
-      expect(pieces.length).toBeGreaterThan(20);
-      const seen = new Set<string>();
-      for (const piece of pieces) {
-        // A three.js yaw maps local +x to (cos, -sin) and local +z to
-        // (sin, cos).
-        const along =
-          measured === 'z'
-            ? { x: Math.sin(piece.yaw), z: Math.cos(piece.yaw) }
-            : { x: Math.cos(piece.yaw), z: -Math.sin(piece.yaw) };
-        // Which face it stands on, read off the position rather than assumed.
-        const onEastWest =
-          Math.abs(Math.abs(piece.x - REALM_RACERS_ORIGIN.x) - circuit.perimeter.halfX) < 1e-6;
-        seen.add(onEastWest ? 'ew' : 'ns');
-        // Parallel to that face: the module's length runs down the wall, not
-        // across it.
-        const acrossTheFace = onEastWest ? along.x : along.z;
-        expect(Math.abs(acrossTheFace), `${themeId} module at ${piece.x}, ${piece.z}`).toBeCloseTo(
-          0,
-          6,
-        );
-      }
-      // ...on both pairs of faces, so a yaw that happens to be right on one
-      // axis and wrong on the other cannot pass.
-      expect(seen).toEqual(new Set(['ew', 'ns']));
     });
 
     it('tints the air without veiling anything a pilot reacts to', () => {
@@ -378,10 +253,10 @@ describe('Realm Racers circuit themes', () => {
       // be. A new VISUAL knob is added to this list in the same change.
       expect(Object.keys(theme).sort()).toEqual(
         [
+          'barriers',
           'flowers',
           'ground',
           'kerb',
-          'perimeter',
           'props',
           'reedUrl',
           'sky',
@@ -424,7 +299,6 @@ describe('Realm Racers circuit themes', () => {
     expect(unworn.length).toBeGreaterThan(0);
     for (const themeId of unworn) {
       const theme = CIRCUIT_THEMES[themeId];
-      expect(lane, `${themeId} wall`).not.toContain(theme.perimeter.fenceUrl);
       expect(lane, `${themeId} banner`).not.toContain(theme.startFixture.bannerUrl);
     }
     // The whole reason for the scoping, stated against the thing it is scoped
@@ -506,19 +380,6 @@ describe('Realm Racers circuit themes', () => {
   });
 
   describe('what a theme actually moves on one unchanged curve', () => {
-    it.each(Object.keys(CIRCUIT_THEMES))('%s cuts the wall with its own module', (themeId) => {
-      const wall = rallyPerimeterPieces(probeCircuit(themeId));
-      expect(wall.filter((piece) => piece.pillar)).toHaveLength(4);
-      // Same wall, so the same number of PIECES only if the module run is the
-      // same too: a longer module is fewer, bigger panels around one rectangle.
-      const panels = wall.length - 4;
-      const garden = rallyPerimeterPieces(probeCircuit(REALM_RACERS_DEFAULT_THEME_ID)).length - 4;
-      const longerModule =
-        CIRCUIT_THEMES[themeId].perimeter.panelYards >
-        CIRCUIT_THEMES[REALM_RACERS_DEFAULT_THEME_ID].perimeter.panelYards;
-      if (longerModule) expect(panels).toBeLessThan(garden);
-    });
-
     it.each(OTHER_THEME_IDS)('%s re-sows the border off its own palette', (themeId) => {
       // Resolved through each theme's OWN palette rather than compared as raw
       // indices, which is the whole difference between this case and a
@@ -593,16 +454,32 @@ describe('Realm Racers circuit themes', () => {
           const themeId = 'frostveil';
           expect(REALM_RACERS_THEME_IDS).toContain(themeId);
           const theme = CIRCUIT_THEMES[themeId];
+          // An authored BARRIER stands in for the wall this case was written
+          // against: since the perimeter box stopped being drawn, a kit reaches
+          // the draw path through the record rather than through the theme, and
+          // a kit no shipped circuit wears is exactly what the fetch-and-fill
+          // arm exists for.
+          const kit = theme.barriers[0];
+          const barrier = REALM_RACERS_BARRIER_VISUALS[kit];
           // Not in the lane, which is the precondition that makes the rest mean
           // something rather than restate it.
-          expect(realmRacersPreloadInternalsForTest.assetUrls).not.toContain(
-            theme.perimeter.fenceUrl,
-          );
-          buildRealmRacersTrack(probeCircuit(themeId));
-          // Structure, not dressing: the wall, the corner pier and the grid
-          // banner are the three pieces the lane used to guarantee.
-          expect(asked, 'wall').toContain(theme.perimeter.fenceUrl);
-          expect(asked, 'pier').toContain(theme.perimeter.pillarUrl);
+          expect(realmRacersPreloadInternalsForTest.assetUrls).not.toContain(barrier.panelUrl);
+          buildRealmRacersTrack({
+            ...probeCircuit(themeId),
+            id: 'fetch_and_fill_probe',
+            fences: [
+              {
+                kit,
+                points: [
+                  { x: -60, z: -40 },
+                  { x: -60, z: 40 },
+                ],
+              },
+            ],
+          });
+          // Structure, not dressing: the barrier and the grid banner are what
+          // the lane used to guarantee.
+          expect(asked, 'barrier').toContain(barrier.panelUrl);
           expect(asked, 'banner').toContain(theme.startFixture.bannerUrl);
         } finally {
           vi.unstubAllGlobals();

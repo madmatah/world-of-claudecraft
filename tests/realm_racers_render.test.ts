@@ -5,9 +5,9 @@ import { RALLY_SLICK_POOL } from '../src/render/realm_racers_slicks_core';
 import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import {
   rallyBorderFlowerSpots,
+  rallyFencePieces,
   rallyFlowerSpots,
   rallyKerbRuns,
-  rallyPerimeterPieces,
   rallyPondMeshes,
   rallyPondReedSpots,
   rallyStartArchPlacement,
@@ -20,6 +20,7 @@ import {
   REALM_RACERS_CIRCUIT_LIST,
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
+import { realmRacersColliders } from '../src/sim/realm_racers_colliders';
 import {
   REALM_RACERS_ORIGIN,
   REALM_RACERS_RUNOFF_WIDTH,
@@ -860,24 +861,15 @@ describe('Realm Racers procedural render', () => {
     // say so. Re-deriving any of it from today's records would pass by
     // construction.
 
-    it('cuts the perimeter into the same panels', () => {
-      // The panel run is the theme's now, and it decides how many pieces a
-      // face is cut into: a wall module measured at one scale and drawn at
-      // another leaves gaps, and the count is what says it did not happen.
-      const pieces = rallyPerimeterPieces(GARDEN_THEMED);
-      expect(pieces).toHaveLength(244);
-      expect(pieces[0]).toEqual({ x: 113582, z: -92, yaw: -0, pillar: true });
-      expect(pieces[1]).toEqual({ x: 113583.76119402985, z: -92, yaw: -0, pillar: false });
-      expect(GARDEN_THEME.perimeter.scale).toBe(1);
-    });
-
     it('keeps the kit, the palette and the ground the garden had', () => {
       // Not a restatement of the record: these are the ids and colours the
       // build carried as its own constants, so a theme edit that quietly
       // repoints the shipped circuit at another kit fails here.
       expect(GARDEN_THEME.ground).toBe('garden');
-      expect(GARDEN_THEME.perimeter.fenceUrl).toBe('/models/props/garden_iron_fence.glb');
-      expect(GARDEN_THEME.perimeter.pillarUrl).toBe('/models/props/garden_iron_pillar.glb');
+      // The Evergarden's barrier vocabulary, pinned to literals: a theme edit
+      // that quietly re-points the shipped circuit's zone at another kit set
+      // fails here.
+      expect(GARDEN_THEME.barriers).toEqual(['ironwork', 'hedge', 'stoneWall']);
       expect(GARDEN_THEME.startFixture.archUrl).toBe('/models/props/course_arch.glb');
       expect(GARDEN_THEME.startFixture.bannerUrl).toBe('/models/dungeon/banner_patterna_white.glb');
       expect(GARDEN_THEME.reedUrl).toBe('/models/props/reeds.glb');
@@ -907,17 +899,41 @@ describe('Realm Racers procedural render', () => {
     });
   });
 
-  it('runs the perimeter around the garden wall', () => {
-    const pieces = rallyPerimeterPieces(GARDEN_CIRCUIT);
-    expect(pieces.length).toBeGreaterThan(50);
-    expect(pieces.filter((piece) => piece.pillar)).toHaveLength(4);
-    for (const piece of pieces) {
-      const onX =
-        Math.abs(Math.abs(piece.x - REALM_RACERS_ORIGIN.x) - GARDEN_CIRCUIT.perimeter.halfX) < 1e-6;
-      const onZ =
-        Math.abs(Math.abs(piece.z - REALM_RACERS_ORIGIN.z) - GARDEN_CIRCUIT.perimeter.halfZ) < 1e-6;
-      expect(onX || onZ).toBe(true);
+  it('draws nothing at all on the perimeter box', () => {
+    // The box is COLLISION and nothing else since the barriers arrived: it was
+    // the last derived thing standing on a circuit, one kit around a rectangle,
+    // and it is why every circuit read as a box however different its road was.
+    // A circuit that authors no barrier therefore has no visible edge, which is
+    // a shape the tool has to be able to reach while one is being drawn.
+    expect(GARDEN_CIRCUIT.fences).toBeUndefined();
+    expect(rallyFencePieces(GARDEN_CIRCUIT)).toEqual([]);
+    // ...and the collision it draws nothing for is still there.
+    expect(realmRacersColliders(GARDEN_CIRCUIT).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('stands an authored barrier on the line it was drawn along', () => {
+    const walled = {
+      ...GARDEN_CIRCUIT,
+      id: 'render_barrier_probe',
+      fences: [
+        {
+          kit: 'ironwork',
+          points: [
+            { x: -100, z: -60 },
+            { x: -100, z: 60 },
+          ],
+        },
+      ],
+    };
+    const [drawing] = rallyFencePieces(walled);
+    expect(drawing.panels.length).toBeGreaterThan(20);
+    // Every module on the drawn line, in WORLD coordinates, and a corner piece
+    // at each authored end.
+    for (const panel of drawing.panels) {
+      expect(panel.x - REALM_RACERS_ORIGIN.x).toBeCloseTo(-100, 6);
+      expect(Math.abs(panel.z - REALM_RACERS_ORIGIN.z)).toBeLessThanOrEqual(60);
     }
+    expect(drawing.corners).toHaveLength(2);
   });
 
   describe('the Ground Blast visuals', () => {

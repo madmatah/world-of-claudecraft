@@ -48,7 +48,7 @@ describe('the circuit editor shell, on the real markup', () => {
     // The floor: a constructor that threw would make every case below vacuous.
     expect(() => mountShell()).not.toThrow();
     expect(document.querySelectorAll('#menus details').length).toBe(4);
-    expect(document.querySelectorAll('#railTop button.rail-btn').length).toBe(4);
+    expect(document.querySelectorAll('#railTop button.rail-btn').length).toBe(5);
     expect(document.querySelectorAll('#keysBody .keys-block').length).toBeGreaterThan(0);
     expect(el('chordHints').textContent).toContain('undo');
   });

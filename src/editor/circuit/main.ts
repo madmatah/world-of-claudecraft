@@ -18,7 +18,10 @@ import {
   REALM_RACERS_PICKUP_COLOR_CSS,
   REALM_RACERS_PICKUP_FILL_CSS,
 } from '../../render/realm_racers_pickups_core';
+import { realmRacersTheme } from '../../render/realm_racers_themes';
+import { REALM_RACERS_BARRIERS } from '../../sim/content/realm_racers_barriers';
 import {
+  type RallyFence,
   type RallyProp,
   REALM_RACERS_CIRCUIT_LIST,
   REALM_RACERS_PRACTICE_CIRCUIT,
@@ -32,6 +35,7 @@ import {
   realmRacersCircuitMetrics,
   realmRacersPickupRowFit,
 } from '../../sim/realm_racers_circuit_metrics';
+import { realmRacersFencePlacements } from '../../sim/realm_racers_fences';
 import { type RallyPoint, REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import {
   REALM_RACERS_PICKUP_BOX_HALF,
@@ -59,6 +63,22 @@ import {
 } from './draft_store_core';
 import { suggestEnvelope } from './envelope_core';
 import { circuitToTypeScript, roundCircuit } from './export_core';
+import {
+  addFence,
+  centerCircuitOffset,
+  FENCE_POINT_TOLERANCE_YD,
+  type FenceDraft,
+  fenceDraftClick,
+  fenceHitAt,
+  fenceRunClearOfSurface,
+  finishFenceDraft,
+  moveCircuitContent,
+  moveFence,
+  moveFencePoint,
+  removeFence,
+  removeFencePoint,
+  setFenceScale,
+} from './fences_core';
 import {
   type CircuitBand,
   deleteControlPoint,
@@ -114,6 +134,13 @@ import {
 import { type OutlinerHost, OutlinerPanel } from './panel_outliner';
 import { RaceInspectorPanel, RacePalettePanel, type RacePanelHost } from './panel_race';
 import { MetricsDrawerPanel, ModeReadoutPanel } from './panel_readout';
+import {
+  barrierKitLabel,
+  TerrainInspectorPanel,
+  TerrainPalettePanel,
+  type TerrainPanelHost,
+  terrainArmStateText,
+} from './panel_terrain';
 import {
   addPickupRow,
   movedPickupRow,
@@ -248,6 +275,36 @@ let pickupSelection: number | null = null;
 /** Whether the pointer currently has hold of that row and is sliding it along
  *  the lap. Armed at the press on a row, dropped on release. */
 let pickupDragging = false;
+/**
+ * The barrier the TERRAIN tool has selected, and which of its POINTS.
+ *
+ * Two numbers rather than one, because a barrier is the only thing on this page
+ * whose selection has an inside: a click may mean the whole run (to delete it,
+ * or to read its numbers) or one corner of it (to drag, to nudge, to delete on
+ * its own). `fencePoint` is null when the press landed on a run between two
+ * points.
+ */
+let fenceSelection: number | null = null;
+let fencePoint: number | null = null;
+/**
+ * Whether the pointer currently has hold of that point.
+ *
+ * SEPARATE from the selection, and it has to be: a pointermove fires on plain
+ * hover, so a selected point that also meant "dragging" would follow the pointer
+ * around the plan for the rest of the session after one drag ended. The
+ * selection survives the release, which is what lets an arrow key keep nudging
+ * the corner just moved.
+ */
+let fenceDragging = false;
+/**
+ * The run being drawn, held OUTSIDE the record until it is finished.
+ *
+ * A half-drawn barrier has no runs, collides with nothing and gives the readout
+ * nothing to say, so putting it on the record would be putting an entry on the
+ * circuit that every consumer then has to special-case. It reaches the record in
+ * one commit, which is also what makes the whole gesture one step back.
+ */
+let fenceDraft: FenceDraft | null = null;
 /** The raw gesture, kept after the fit so the operator can see how far the
  *  closed centripetal Catmull-Rom sits off the line they drew. */
 let stroke: RallyPoint[] = [];
@@ -498,6 +555,13 @@ function clearSelections(): void {
   selection = null;
   dressing = null;
   pickupSelection = null;
+  fenceSelection = null;
+  fencePoint = null;
+  fenceDragging = false;
+  // The draft goes with them: it holds points in the coordinates of the record
+  // being left, so carrying it into an undo or a load would drop a run onto a
+  // circuit nobody drew it on.
+  fenceDraft = null;
 }
 
 function restore(snapshot: EditSnapshot): void {
@@ -895,6 +959,76 @@ function cursorGhost(): RallyPlacedProp | null {
 }
 
 /**
+ * The barriers, as the resolver placed them, plus the run being drawn.
+ *
+ * Drawn as the RUNS the resolver returns rather than as the points on the
+ * record, for the reason every view on this page is: the line under the pointer
+ * has to be the line the collision set will hold. The two differ by more than
+ * rounding, since a run reaches a half thickness past every joint.
+ *
+ * The DRAFT is drawn from its own points, because it has no resolved geometry
+ * yet: it is not on the record, so there is nothing to resolve. Its last segment
+ * follows the pointer, which is what makes a drawing gesture readable at all.
+ */
+function drawFences(): void {
+  const placements = realmRacersFencePlacements(record);
+  for (const fence of placements.fences) {
+    // Keyed off the placement's OWN record index, never its position in this
+    // list: an unknown kit is skipped by the resolver, so the two lists stop
+    // being parallel and a position match would paint one barrier's runs under
+    // another's points.
+    const index = fence.index;
+    const selected = index === fenceSelection;
+    ctx.strokeStyle = selected ? planPalette.pick : '#8f9bb8';
+    ctx.lineWidth = selected ? 3 : 2;
+    for (const run of fence.runs) {
+      ctx.beginPath();
+      ctx.moveTo(screenX(run.ax), screenY(run.az));
+      ctx.lineTo(screenX(run.bx), screenY(run.bz));
+      ctx.stroke();
+    }
+    // The authored POINTS on top: they are what a drag grabs, so they have to be
+    // visible even where two runs meet at a shallow angle.
+    const authored = record.fences?.[index]?.points ?? [];
+    authored.forEach((point, p) => {
+      ctx.fillStyle = selected && p === fencePoint ? planPalette.pick : '#c8d2e8';
+      ctx.beginPath();
+      ctx.arc(screenX(point.x), screenY(point.z), selected ? 4 : 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+  if (!fenceDraft) return;
+  // The pending segment's tint is the READOUT's own verdict, the rule both the
+  // dressing ghost and the row ghost already keep: a tint derived from the
+  // tool's own arithmetic would be free to draw a normal-coloured line over a
+  // run the panel is about to refuse with `fence_blocks_racing_surface`, and the
+  // operator would only meet the refusal after committing.
+  const draftHalf = (REALM_RACERS_BARRIERS[fenceDraft.kit]?.halfThickness ?? 0) * 1;
+  const last = fenceDraft.points[fenceDraft.points.length - 1];
+  const pendingBlocked =
+    hover !== null && last !== undefined && !fenceRunClearOfSurface(record, last, hover, draftHalf);
+  ctx.strokeStyle = pendingBlocked ? planPalette.bad : planPalette.pick;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  fenceDraft.points.forEach((point, i) => {
+    const x = screenX(point.x);
+    const y = screenY(point.z);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  if (hover) ctx.lineTo(screenX(hover.x), screenY(hover.z));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = planPalette.pick;
+  for (const point of fenceDraft.points) {
+    ctx.beginPath();
+    ctx.arc(screenX(point.x), screenY(point.z), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/**
  * The dressing, as the resolver placed it.
  *
  * Every footprint here is read off `realmRacersPlacements`, never worked out
@@ -1093,8 +1227,12 @@ function draw(): void {
   drawPickupRows();
   drawStroke();
   if (tool() === 'race') drawPickupGhost();
+  // The barriers draw under EVERY tool, unlike the dressing: they are what a
+  // circuit's edge is made of, so a road being widened or a row being laid is
+  // being judged against them.
+  drawFences();
   if (tool() === 'props') drawDressing();
-  else drawHandles();
+  else if (tool() !== 'terrain') drawHandles();
   drawProblemMarkers();
 }
 
@@ -1205,6 +1343,193 @@ function deletePickupRow(): void {
   pickupSelection = null;
   setStatus('pickup row removed', 'ok');
   applySideTab();
+  requestRedraw();
+}
+
+// ---- the terrain gestures ----
+
+/** Click tolerance in yards for a barrier point, so a corner stays grabbable at
+ *  any zoom. The same shape as the dressing's own. */
+const fenceTolerance = (): number => FENCE_POINT_TOLERANCE_YD;
+
+/**
+ * One click in the TERRAIN tool.
+ *
+ * The barrier under the pointer is picked up FIRST, whether or not the palette
+ * is armed, which is the props tool's hit-test-first order: clicking a run that
+ * is already there means that run, never a new point on top of it. Only with
+ * nothing under the pointer does the tool's STATE decide, and the pointer state
+ * authors nothing at all.
+ *
+ * A DRAWING gesture is the exception to the first rule, and it has to be: every
+ * click after the first lands within tolerance of the run being drawn, so
+ * hit-testing first would make the second point select the barrier instead of
+ * extending it. While a draft is open every click goes to the draft.
+ */
+function startTerrainGesture(raw: RallyPoint): void {
+  if (!drawn) return;
+  if (fenceDraft) {
+    const step = fenceDraftClick(fenceDraft, raw.x, raw.z, fenceTolerance());
+    if (step.kind === 'ignored') {
+      setStatus(step.reason, 'err');
+      return;
+    }
+    if (step.kind === 'point') {
+      fenceDraft = step.draft;
+      // The HELD line rather than a transient one: "am I still drawing, and how
+      // many points have I put down" is a question about state, which a message
+      // that scrolls away cannot answer.
+      announceArmed(terrainPalette.armed);
+      return;
+    }
+    commitFence(step.fence, 'closed ring');
+    return;
+  }
+  const hit = fenceHitAt(record, raw.x, raw.z, fenceTolerance());
+  if (hit) {
+    fenceSelection = hit.fence;
+    fencePoint = hit.point;
+    fenceDragging = hit.point !== null;
+    // The undo snapshot is taken at the PRESS, so a drag that follows is one
+    // step back rather than one per pointermove.
+    if (hit.point !== null) pushUndo();
+    setStatus(
+      hit.point === null
+        ? `barrier ${hit.fence + 1} selected: del removes it`
+        : `barrier ${hit.fence + 1}, point ${hit.point + 1}: drag to move it, del removes it`,
+      '',
+    );
+    applySideTab();
+    requestRedraw();
+    return;
+  }
+  const kit = terrainPalette.armed;
+  if (kit === null) {
+    fenceSelection = null;
+    applySideTab();
+    requestRedraw();
+    return;
+  }
+  fenceDraft = { kit, points: [{ x: raw.x, z: raw.z }] };
+  fenceSelection = null;
+  announceArmed(kit);
+}
+
+/** Put a finished run on the record and select it. One commit, so the whole
+ *  drawing gesture is one step back. */
+function commitFence(fence: RallyFence, how: string): void {
+  const added = addFence(record.fences ?? [], fence);
+  fenceDraft = null;
+  announceArmed(terrainPalette.armed);
+  if (!added) {
+    setStatus('this circuit already carries every barrier it may', 'err');
+    requestRedraw();
+    return;
+  }
+  commit({ ...record, fences: added.fences });
+  fenceSelection = added.index;
+  setStatus(`${barrierKitLabel(fence.kit)} placed, ${how}`, 'ok');
+  applySideTab();
+  requestRedraw();
+}
+
+/** Finish the run being drawn as an OPEN one: the enter key, and the inspector's
+ *  own button. A run of one point is not a run, and says so. */
+function finishFenceDrawing(): void {
+  if (!fenceDraft) return;
+  const fence = finishFenceDraft(fenceDraft);
+  if (!fence) {
+    fenceDraft = null;
+    setStatus('a barrier needs at least two points', 'err');
+    applySideTab();
+    requestRedraw();
+    return;
+  }
+  commitFence(fence, 'open run');
+}
+
+/** Drag one authored point. `remember` is false through a drag: the press
+ *  already snapshotted, so one gesture is one step back. */
+function moveFencePointTo(x: number, z: number): void {
+  if (fenceSelection === null || fencePoint === null) return;
+  commit(
+    { ...record, fences: moveFencePoint(record.fences ?? [], fenceSelection, fencePoint, x, z) },
+    false,
+  );
+  requestRedraw();
+}
+
+/** One arrow key: the map editor's own step sizes, so a nudge means the same
+ *  thing in both tools. Moves the POINT when one is held and the whole run
+ *  otherwise, which is what the selection already says. */
+function nudgeFence(dx: number, dz: number): void {
+  if (fenceSelection === null) return;
+  const fences = record.fences ?? [];
+  const next =
+    fencePoint === null
+      ? moveFence(fences, fenceSelection, dx, dz)
+      : (() => {
+          const point = fences[fenceSelection]?.points[fencePoint];
+          return point
+            ? moveFencePoint(fences, fenceSelection, fencePoint, point.x + dx, point.z + dz)
+            : fences;
+        })();
+  commit({ ...record, fences: next });
+  requestRedraw();
+}
+
+/**
+ * `del` on a barrier: the POINT when one is held, the whole run otherwise.
+ *
+ * Removing the last point but two takes the whole barrier with it, in the core:
+ * a run needs two points, so refusing there would leave `del` doing nothing on
+ * the commonest barrier there is, a single straight run.
+ */
+function deleteFenceSelection(): void {
+  if (fenceSelection === null) return;
+  const fences = record.fences ?? [];
+  const before = fences.length;
+  const next =
+    fencePoint === null
+      ? removeFence(fences, fenceSelection)
+      : removeFencePoint(fences, fenceSelection, fencePoint);
+  commit({ ...record, fences: next });
+  if (next.length < before) {
+    fenceSelection = null;
+    fencePoint = null;
+    setStatus('barrier removed', 'ok');
+  } else {
+    fencePoint = null;
+    setStatus('point removed', 'ok');
+  }
+  applySideTab();
+  requestRedraw();
+}
+
+/** Cancel a run being drawn, which is what `esc` means while one is open. */
+function cancelFenceDrawing(): boolean {
+  if (!fenceDraft) return false;
+  fenceDraft = null;
+  setStatus('run cancelled', '');
+  announceArmed(terrainPalette.armed);
+  return true;
+}
+
+/**
+ * Slide the whole circuit so the road sits in the middle of its enclosure.
+ *
+ * Every circuit-local thing moves by the same offset, which is the core's own
+ * rule and the reason this is one call rather than four: moving the road alone
+ * would walk it out from under its own dressing.
+ */
+function centerCircuit(): void {
+  const offset = centerCircuitOffset(record);
+  if (Math.abs(offset.dx) < 0.05 && Math.abs(offset.dz) < 0.05) {
+    setStatus('the circuit is already centred in its enclosure', '');
+    return;
+  }
+  commit(moveCircuitContent(record, offset.dx, offset.dz));
+  setStatus(`circuit moved ${offset.dx.toFixed(1)}, ${offset.dz.toFixed(1)} yd to centre it`, 'ok');
   requestRedraw();
 }
 
@@ -1744,7 +2069,9 @@ let sideChoice: SideTabId | null = layout.side;
 /** Whether the ACTIVE tool has something selected, which is what decides that
  *  the panel opens on the inspector. Each tool selects its own kind of thing. */
 function hasSelection(): boolean {
-  return railMode === 'race' ? pickupSelection !== null : dressing !== null;
+  if (railMode === 'race') return pickupSelection !== null;
+  if (railMode === 'terrain') return fenceSelection !== null;
+  return dressing !== null;
 }
 
 /** What the ACTIVE tool's palette is armed with. Each placing tool has its own,
@@ -1752,6 +2079,7 @@ function hasSelection(): boolean {
 function activeArmed(): string | null {
   if (railMode === 'props') return library.armed;
   if (railMode === 'race') return racePalette.armed;
+  if (railMode === 'terrain') return terrainPalette.armed;
   return null;
 }
 
@@ -1778,8 +2106,10 @@ function applySideTab(): void {
   // are different vocabularies rather than one list with a filter.
   library.el.hidden = !(panel.showLibrary && railMode === 'props');
   racePalette.el.hidden = !(panel.showLibrary && railMode === 'race');
+  terrainPalette.el.hidden = !(panel.showLibrary && railMode === 'terrain');
   inspector.el.hidden = !(panel.showInspector && railMode === 'props');
   raceInspector.el.hidden = !(panel.showInspector && railMode === 'race');
+  terrainInspector.el.hidden = !(panel.showInspector && railMode === 'terrain');
   outliner.el.hidden = !panel.showOutliner;
   form.el.hidden = !panel.showForm;
   modeReadout.el.hidden = !panel.showModeReadout;
@@ -1815,7 +2145,12 @@ function announceArmed(asset: string | null): void {
       ? armStateText(asset, POND_CHOICE)
       : railMode === 'race'
         ? raceArmStateText(asset)
-        : '',
+        : railMode === 'terrain'
+          ? // The point count comes with it, because the two ways out of a
+            // drawing gesture become available at different counts, and "am I
+            // still drawing" is a question about state rather than a message.
+            terrainArmStateText(asset, fenceDraft?.points.length ?? null)
+          : '',
   );
   canvas.style.cursor = asset === null ? 'crosshair' : 'copy';
   // The banner's RACE arm says which of the two states the tool is in, so it has
@@ -1840,6 +2175,10 @@ function setRailMode(next: RailModeId): void {
   // screen to say so.
   if (library.armed !== null && next !== 'props') library.arm(null);
   if (racePalette.armed !== null && next !== 'race') racePalette.arm(null);
+  if (terrainPalette.armed !== null && next !== 'terrain') terrainPalette.arm(null);
+  // A run left half drawn in another mode is a run nothing on screen explains,
+  // so leaving TERRAIN cancels it rather than parking it.
+  if (next !== 'terrain') fenceDraft = null;
   shell.setMode(railMode, drawn, redrawing, placement.mode, isPlacing());
   // Unconditionally, even when neither palette moved: the armed line and the
   // canvas cursor belong to the mode now showing, and a tool entered with
@@ -1876,6 +2215,10 @@ function paintChrome(): void {
   outliner.paint();
   inspector.paint();
   raceInspector.paint();
+  // The palette repaints too, unlike the other two: its fold follows the
+  // record's THEME, and its hint counts the points in the run being drawn.
+  terrainPalette.paint();
+  terrainInspector.paint();
   modeReadout.paint();
 }
 
@@ -1938,6 +2281,10 @@ canvas.addEventListener('pointerdown', (ev) => {
   const active = tool();
   if (active === 'race') {
     startRaceFurnitureGesture(raw);
+    return;
+  }
+  if (active === 'terrain') {
+    startTerrainGesture(raw);
     return;
   }
   if (active === 'draw') {
@@ -2020,6 +2367,11 @@ canvas.addEventListener('pointermove', (ev) => {
   // The same rule for the row ghost: it follows the cursor, so it repaints on a
   // hover, and only while something is armed.
   if (tool() === 'race' && racePalette.armed !== null && !pickupDragging) requestRedraw();
+  // And for the run being drawn, whose last segment follows the pointer. Keyed
+  // on the DRAFT rather than on the palette being armed: an armed kit with no
+  // draft open has nothing on screen that moves, and a run being finished has
+  // one whether or not the kit is still armed.
+  if (tool() === 'terrain' && fenceDraft) requestRedraw();
   // The dock rides the pointer when asked to: hovering a corner on the plan is
   // then the gesture that looks at it in 3D, with no camera to fly.
   if (layout.followCursor && preview && drawn) {
@@ -2046,6 +2398,11 @@ canvas.addEventListener('pointermove', (ev) => {
     // the verge would read as the tool having dropped the gesture.
     const fraction = pickupDragFractionAt(record, point.x, point.z);
     if (fraction !== null) movePickupRow(fraction, false);
+    return;
+  }
+  if (fenceDragging && tool() === 'terrain' && !fenceDraft) {
+    const snap = resolveSnap(record, point.x, point.z, { grid: layout.snap, free: altHeld });
+    moveFencePointTo(snap.x, snap.z);
     return;
   }
   if (!dragging) return;
@@ -2088,6 +2445,14 @@ function endGesture(): void {
   paintFractions = [];
   dragging = null;
   pickupDragging = false;
+  // The point stays SELECTED after the release, so an arrow key keeps nudging
+  // the corner the drag just moved; what ends is the drag itself, and the two
+  // are the same variable because a point is only ever dragged while it is the
+  // one under the pointer.
+  if (fenceDragging) {
+    fenceDragging = false;
+    requestRedraw();
+  }
 }
 
 canvas.addEventListener('pointerup', endGesture);
@@ -2255,13 +2620,21 @@ function runAction(id: ActionId): void {
       );
       return;
     case 'disarmTool':
+      // A run being DRAWN takes the first `esc` on its own, and gives the kit
+      // back: an operator who mis-clicked one point of a five-point run wants
+      // that run gone, not the whole tool disarmed and the kit to re-find. A
+      // second `esc` then does what it always did.
+      if (cancelFenceDrawing()) return;
       redrawing = false;
       dressing = null;
       pickupSelection = null;
-      // Both palettes: `esc` drops what the tools ARM, and each placing tool has
+      fenceSelection = null;
+      fencePoint = null;
+      // Every palette: `esc` drops what the tools ARM, and each placing tool has
       // one of its own.
       library.arm(null);
       if (racePalette.armed !== null) racePalette.arm(null);
+      if (terrainPalette.armed !== null) terrainPalette.arm(null);
       applySideTab();
       shell.setMode(railMode, drawn, false, placement.mode, isPlacing());
       return;
@@ -2302,6 +2675,9 @@ function runAction(id: ActionId): void {
       return;
     case 'fitEnclosure':
       fitEnclosure();
+      return;
+    case 'centerCircuit':
+      centerCircuit();
       return;
     case 'fixCorners':
       fixCorners();
@@ -2540,11 +2916,32 @@ const racePanelHost: RacePanelHost = {
   onArmed: announceArmed,
 };
 
+const terrainPanelHost: TerrainPanelHost = {
+  ...panelDocument,
+  fenceSelection: () => fenceSelection,
+  draftPointCount: () => fenceDraft?.points.length ?? null,
+  setFenceScale: (scale) => {
+    if (fenceSelection === null) return;
+    commit({ ...record, fences: setFenceScale(record.fences ?? [], fenceSelection, scale) });
+    requestRedraw();
+  },
+  removeFence: deleteFenceSelection,
+  finishDraft: finishFenceDrawing,
+  onArmed: announceArmed,
+  // The theme's own vocabulary, off the RENDER registry, which is where a
+  // theme's art lives. An unknown theme id falls back the same way every other
+  // consumer does rather than leaving the palette empty: an operator drawing a
+  // circuit against a theme being written in the same change still needs kits.
+  themeBarriers: () => realmRacersTheme(record).barriers,
+};
+
 const form = new RecordFormPanel(panelHost);
 const inspector = new InspectorPanel(panelHost);
 const outliner = new OutlinerPanel(panelHost);
 const library = new LibraryPanel(panelHost);
 const racePalette = new RacePalettePanel(racePanelHost);
+const terrainPalette = new TerrainPalettePanel(terrainPanelHost);
+const terrainInspector = new TerrainInspectorPanel(terrainPanelHost);
 const raceInspector = new RaceInspectorPanel(racePanelHost);
 const modeReadout = new ModeReadoutPanel(panelHost);
 const metricsDrawer = new MetricsDrawerPanel(panelHost, shell.metricsBodyEl);
@@ -2685,6 +3082,24 @@ window.addEventListener('keydown', (ev) => {
     nudgeDressing(nudge, ev.shiftKey);
     return;
   }
+  // A barrier nudges in both axes, unlike a pickup row: it is a shape on the
+  // ground rather than a position along the lap. The step sizes are the map
+  // editor's own, through the same `planNudge`, so a nudge means the same thing
+  // in every tool in this repo.
+  if (nudge && tool() === 'terrain' && fenceSelection !== null) {
+    ev.preventDefault();
+    const step = planNudge(nudge, ev.shiftKey);
+    nudgeFence(step.dx, step.dz);
+    return;
+  }
+  // Enter finishes a run being drawn as an OPEN one, which is the half of the
+  // gesture a click cannot express: clicking the first point closes the ring,
+  // and there is no click that means "stop here".
+  if (ev.key === 'Enter' && tool() === 'terrain' && fenceDraft) {
+    ev.preventDefault();
+    finishFenceDrawing();
+    return;
+  }
   // A row has ONE degree of freedom, so only the horizontal pair means anything:
   // left is back down the lap and right is on down it, the way a scrubber reads.
   // The step is a length in yards, which is `pickup_rows_core`'s rule.
@@ -2723,6 +3138,15 @@ window.addEventListener('keydown', (ev) => {
       if (selected === 'deleteSelection' && pickupSelection !== null) {
         ev.preventDefault();
         deletePickupRow();
+      }
+      return;
+    }
+    // And in TERRAIN it acts on the barrier, or on the one point of it the
+    // selection holds.
+    if (tool() === 'terrain') {
+      if (selected === 'deleteSelection' && fenceSelection !== null) {
+        ev.preventDefault();
+        deleteFenceSelection();
       }
       return;
     }
@@ -2835,6 +3259,7 @@ window.addEventListener('pagehide', () => {
   preview?.dispose();
   preview = null;
   library.dispose();
+  terrainPalette.dispose();
 });
 
 // ---- boot ----
@@ -2842,8 +3267,10 @@ window.addEventListener('pagehide', () => {
 shell.sideBodyEl.append(
   library.el,
   racePalette.el,
+  terrainPalette.el,
   inspector.el,
   raceInspector.el,
+  terrainInspector.el,
   outliner.el,
   modeReadout.el,
   form.el,

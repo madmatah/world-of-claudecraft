@@ -230,6 +230,36 @@ export interface RallyPickupRow {
   s: number;
 }
 
+/**
+ * A hand-placed run of barrier modules: a hedge down the outside of a corner, a
+ * stone wall closing a courtyard, a line of ironwork between road and lawn.
+ *
+ * ANGULAR, and that is a decision rather than an omission. Every kit's module is
+ * a straight segment, so a smoothed run would be a chain of chords with a wedge
+ * of daylight at every joint; the one thing on a circuit that WANTS a curve is
+ * the ground's own outline, which is not made of modules.
+ *
+ * CIRCUIT-LOCAL, unlike a track-space prop: a fence does not follow a later
+ * centerline edit. That is the right trade for the shoreline and the boundary
+ * work fences exist for, and the wrong one for a hedge hugging a corner exit; if
+ * a second consumer ever wants the other frame, this grows the way `RallyPropAt`
+ * already did.
+ *
+ * FURNITURE, never containment. A gap in a fence is a view, never a shortcut:
+ * `../realm_racers_track_limits.ts` is the sole authority on track limits, and
+ * nothing here has any part in that verdict.
+ */
+export interface RallyFence {
+  /** A key of `REALM_RACERS_BARRIERS`. */
+  kit: string;
+  /** Circuit-local, in order. Two points is one straight run. */
+  points: readonly RallyPoint[];
+  /** Joins the last point back to the first. */
+  closed?: boolean;
+  /** Multiplies the kit's own scale, for the low-wall case. */
+  scale?: number;
+}
+
 export interface RealmRacersCircuit {
   /** Stable id: the cache key for every derived geometry, the wire token, and
    *  the suffix of this circuit's i18n name and blurb keys. */
@@ -279,6 +309,15 @@ export interface RealmRacersCircuit {
   scatters?: readonly RallyScatter[];
   /** Decorative water, placed. */
   ponds?: readonly RallyPond[];
+  /**
+   * The hand-placed barriers. Solid, always: a fence exists to be in the way.
+   *
+   * They are what a circuit's visible boundary is MADE of, now that the
+   * perimeter box is collision only and draws nothing. A circuit that authors
+   * none simply has no visible edge, which is a shape the tool has to be able to
+   * reach while one is being drawn.
+   */
+  fences?: readonly RallyFence[];
   /**
    * Where the pickup boxes stand, one entry per ROW across the road. A circuit
    * with none authored simply has no boxes on it.

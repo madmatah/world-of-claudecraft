@@ -130,6 +130,77 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(validateCircuitPayload(payload(bare))?.props).toBeUndefined();
   });
 
+  it('carries the authored BARRIERS through both directions', () => {
+    // Same rule as the dressing above, and the same failure it exists to
+    // prevent: a field the validator silently drops makes the editor's preview
+    // draw an enclosure the raced draft does not have.
+    const walled: RealmRacersCircuit = {
+      ...DRAFT,
+      id: 'draft_walled_fixture',
+      fences: [
+        {
+          kit: 'ironwork',
+          points: [
+            { x: -60, z: -40 },
+            { x: -60, z: 40 },
+          ],
+        },
+        {
+          kit: 'hedge',
+          points: [
+            { x: 60, z: -40 },
+            { x: 80, z: -40 },
+            { x: 80, z: 40 },
+          ],
+          closed: true,
+          scale: 1.5,
+        },
+      ],
+    };
+    const text = circuitToTypeScript(walled);
+    expect(text).toContain("kit: 'ironwork'");
+    expect(text).toContain('closed: true');
+    expect(text).toContain('scale: 1.5');
+    expect(circuitFromTypeScript(text)).toEqual(roundCircuit(walled));
+    expect(validateCircuitPayload(payload(walled))).toEqual(roundCircuit(walled));
+
+    const bare = { ...DRAFT, id: 'draft_unwalled_fixture', fences: undefined };
+    expect(circuitToTypeScript(bare)).not.toContain('fences: [');
+    expect(validateCircuitPayload(payload(bare))?.fences).toBeUndefined();
+  });
+
+  it('refuses a barrier the game could not build, one field at a time', () => {
+    const base = { ...DRAFT, id: 'draft_bad_fence' };
+    const withFence = (fence: unknown) =>
+      validateCircuitPayload(payload({ ...base, fences: [fence] } as RealmRacersCircuit));
+    const good = {
+      kit: 'ironwork',
+      points: [
+        { x: 0, z: 0 },
+        { x: 10, z: 0 },
+      ],
+    };
+    expect(withFence(good)).not.toBeNull();
+    // A kit the sim has no dimensions for: the tool must not bless a barrier the
+    // game cannot give a collider.
+    expect(withFence({ ...good, kit: 'nothingAuthorsThis' })).toBeNull();
+    // One point is not a run, and an entry with none is a record every consumer
+    // would have to special-case.
+    expect(withFence({ ...good, points: [{ x: 0, z: 0 }] })).toBeNull();
+    expect(
+      withFence({
+        ...good,
+        points: [
+          { x: 0, z: 1e9 },
+          { x: 1, z: 0 },
+        ],
+      }),
+    ).toBeNull();
+    expect(withFence({ ...good, closed: 'yes' })).toBeNull();
+    expect(withFence({ ...good, scale: 0 })).toBeNull();
+    expect(withFence({ ...good, scale: 99 })).toBeNull();
+  });
+
   it('refuses a prop the game could not place, and a pond with no bank to shade it', () => {
     // The tool cannot bless a key the sim has no footprint for: the collision
     // default has to come from the catalog the GAME reads, or the two disagree

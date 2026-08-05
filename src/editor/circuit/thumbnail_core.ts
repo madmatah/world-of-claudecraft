@@ -42,6 +42,20 @@ export function thumbnailOwnsGeometry(kind: 'group' | 'instanced' | 'gltf'): boo
   return kind === 'group';
 }
 
+/**
+ * What a BARRIER kit's cache key looks like.
+ *
+ * The two catalogs are keyed independently and are free to use the same word, so
+ * a shared thumbnail cache needs the namespace or a `hedge` in both would show
+ * whichever was photographed first. It lives here rather than in the rig because
+ * both the rig and the panel that asks it for pictures have to agree on it.
+ */
+export const BARRIER_PREFIX = 'barrier:';
+
+export function barrierThumbnailKey(kit: string): string {
+  return `${BARRIER_PREFIX}${kit}`;
+}
+
 export interface ThumbnailBounds {
   minX: number;
   minY: number;

@@ -1,7 +1,13 @@
-// The Realm Racers's static collision. There is exactly ONE wall, the
-// garden's own iron perimeter, and everything inside it is drivable:
+// The Realm Racers's static collision. There is exactly one DERIVED wall, the
+// perimeter box, and everything inside it is drivable:
 //
 //   ..garden.. [ pond ] ..garden.. |road| ..verge.. ..garden.. ##PERIMETER##
+//
+// That box is INVISIBLE. Nothing draws it any more: it was the last derived
+// thing standing on a circuit, so it wore one kit for its whole rectangular
+// length and made every circuit read as a box. It stayed as collision because a
+// band still needs an outer stop, and what a circuit's edge LOOKS like is
+// authored on top of it now, as barriers (`realm_racers_fences.ts`).
 //
 // Verge and garden cost time rather than stopping you (see the slow bands in
 // social/realm_racers.ts); a pond costs nothing at all, being decoration a
@@ -28,6 +34,7 @@
 import type { Collider } from './colliders';
 import type { RealmRacersCircuit } from './content/realm_racers_circuits';
 import { DUNGEON_FLOOR_Y } from './data';
+import { realmRacersFenceRuns } from './realm_racers_fences';
 import { realmRacersPlacedProps } from './realm_racers_props_resolve';
 
 /**
@@ -48,15 +55,22 @@ const cached = new Map<string, { circuit: RealmRacersCircuit; value: Collider[] 
 /**
  * One circuit's instance-local collision set: four slabs closing its garden
  * wall, each reaching a half thickness past the corner so the rectangle has no
- * gap to squeeze through, plus whatever the circuit's authored DRESSING marks
- * solid. Every collider carries its visual top as `cameraTopY` so the chase
- * camera rides over it instead of being pulled inside it, and none is
- * `standable`: a racer cannot mantle out of the garden or onto a statue.
+ * gap to squeeze through, plus whatever the circuit AUTHORED, which is its
+ * barrier runs and its solid dressing. Every collider carries its visual top as
+ * `cameraTopY` so the chase camera rides over it instead of being pulled inside
+ * it, and none is `standable`: a racer cannot mantle out of the garden, over a
+ * hedge, or onto a statue.
  *
- * The prop colliders come out of `realm_racers_props_resolve.ts` and are never
- * derived here, so what the renderer draws and what a machine hits are one set
- * of positions. Nothing seeded by a SCATTER is ever solid, so this set stays as
- * short as the authored list.
+ * The perimeter slabs are the only DERIVED colliders left, and they are the only
+ * ones a player cannot see: since the barriers arrived, nothing draws that box.
+ * It is a backstop against wandering off the band, not a boundary anyone is
+ * meant to meet, and what a circuit's edge LOOKS like is authored beside it.
+ *
+ * The rest comes out of `realm_racers_fences.ts` and
+ * `realm_racers_props_resolve.ts` and is never derived here, so what the
+ * renderer draws and what a machine hits are one set of positions. Nothing
+ * seeded by a SCATTER is ever solid, so this set stays as short as the authored
+ * lists.
  */
 export function realmRacersColliders(circuit: RealmRacersCircuit): Collider[] {
   const hit = cached.get(circuit.id);
@@ -69,6 +83,21 @@ export function realmRacersColliders(circuit: RealmRacersCircuit): Collider[] {
     { type: 'obb', x: -px, z: 0, hw: t, hd: pz + t, rot: 0, cameraTopY: top },
     { type: 'obb', x: px, z: 0, hw: t, hd: pz + t, rot: 0, cameraTopY: top },
   ];
+  // The authored barriers: ONE box per straight run, never one per module. A run
+  // is straight, so a single OBB covers it exactly, and its `hw` already reaches
+  // past any joint (see `realm_racers_fences.ts`), so a corner has no wedge to
+  // squeeze through. Solid always: a fence exists to be in the way.
+  for (const { run, height } of realmRacersFenceRuns(circuit)) {
+    built.push({
+      type: 'obb',
+      x: run.x,
+      z: run.z,
+      hw: run.hw,
+      hd: run.hd,
+      rot: run.rot,
+      cameraTopY: DUNGEON_FLOOR_Y + height,
+    });
+  }
   for (const prop of realmRacersPlacedProps(circuit)) {
     if (!prop.solid) continue;
     const propTop = DUNGEON_FLOOR_Y + prop.height;

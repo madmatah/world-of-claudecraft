@@ -223,7 +223,7 @@ describe('the circuit editor page stylesheet', () => {
         .replace(/(^|[^:])\/\/.*$/gm, '$1')
         .matchAll(/([A-Za-z][\w.]*)\.hidden\s*=/g),
     ]);
-    expect(assignments.length).toBe(27);
+    expect(assignments.length).toBe(29);
   });
 });
 

@@ -1,9 +1,9 @@
 // Placement decisions for the Realm Racers circuit: which stretches of road
 // get kerbs, where the start arch and its banners stand, where the garden is
-// sown, where the perimeter fence runs, and where the water sits along the
-// shore line. Everything here is geometry the painter then turns into meshes,
-// so it stays Three-free, DOM-free and deterministic and a plain Vitest can
-// assert the load-bearing properties.
+// sown, how an authored barrier is cut into modules, and where the water sits
+// along the shore line. Everything here is geometry the painter then turns into
+// meshes, so it stays Three-free, DOM-free and deterministic and a plain Vitest
+// can assert the load-bearing properties.
 //
 // There are two of those, and both are about a racer who has left the road.
 // Everything inside the perimeter is drivable, so nothing solid may stand
@@ -19,6 +19,7 @@
 // decisions here are geometric and the same on every circuit in every zone.
 
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
+import { realmRacersFencePlacements } from '../sim/realm_racers_fences';
 import {
   REALM_RACERS_BORDER_OFFSET,
   REALM_RACERS_BORDER_SPACING,
@@ -29,6 +30,7 @@ import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../sim/realm_racers_s
 import { hash2 } from '../sim/rng';
 import { TICK_RATE } from '../sim/types';
 import type { RealmRacersPhase } from '../world_api/realm_racers';
+import { realmRacersBarrierVisual } from './realm_racers_barrier_visuals';
 import { realmRacersTheme } from './realm_racers_themes';
 
 /**
@@ -41,11 +43,24 @@ export interface RallyKerbRun {
   to: number;
 }
 
-export interface RallyPerimeterPiece {
+/**
+ * One module of an authored barrier, in WORLD coordinates: either a panel cut
+ * out of a run, or the piece covering a joint.
+ */
+export interface RallyBarrierPiece {
   x: number;
   z: number;
   yaw: number;
-  pillar: boolean;
+  corner: boolean;
+}
+
+/** Everything one authored fence draws: its modules and the kit they wear. */
+export interface RallyFenceDrawing {
+  kit: string;
+  /** The kit's own scale times the record's multiplier: what a spot is drawn at. */
+  scale: number;
+  panels: readonly RallyBarrierPiece[];
+  corners: readonly RallyBarrierPiece[];
 }
 
 export interface RallyBannerPlacement {
@@ -537,62 +552,77 @@ export function rallyFlowerSpots(circuit: RealmRacersCircuit, density = 1): Rall
 }
 
 /**
- * The perimeter: panels around the garden wall with a pillar at every corner.
- * This is the circuit's OUTER bound, so what is drawn here is exactly what
- * `realm_racers_colliders.ts` stops a racer against.
+ * The authored barriers, cut into modules: what the renderer instances.
  *
- * Both numbers a wall kit brings come from the THEME, and neither is optional:
+ * The generalization of the perimeter walker this replaced. That one took four
+ * derived corners and one kit baked into the theme, and it was the last derived
+ * thing standing on a circuit: one kit for a rectangle's whole length, which is
+ * what made every circuit read as a box. This one takes the points an operator
+ * drew and the kit they chose, and the old behaviour is the case where those
+ * points happen to be a rectangle.
+ *
+ * The RUNS come from the sim (`realm_racers_fences.ts`), so a module stands on
+ * the line a machine collides with. What is added here is the only part that is
+ * about MODELS rather than geometry:
  *
  *  - `panelYards` is one module's run AT THE SCALE IT IS DRAWN AT, which is what
- *    decides how many pieces a face is cut into. A module measured at scale 1
- *    and drawn at another leaves gaps between panels.
+ *    decides how many pieces a run is cut into. A module measured at scale 1
+ *    and drawn at another leaves gaps between panels. The count is ROUNDED and
+ *    the step re-derived from it, so a run of any length comes out even rather
+ *    than ending on a fraction of a module.
  *  - `lengthAxis` is which of the module's own axes that run lies along, and
- *    the two shipped kits disagree: the garden's ironwork runs along local +x,
- *    the world's stone wall along local +z (`props.ts` says so where it builds
- *    the town fences, and builds each kind with its own yaw for exactly this
- *    reason). Assuming +x for both is what stood the Galecrest wall's every
- *    module broadside to the wall it was supposed to be.
+ *    the world's kits disagree: the garden's ironwork runs along local +x, the
+ *    coastal stone along local +z (`props.ts` says so where it builds the town
+ *    fences, and builds each kind with its own yaw for exactly this reason).
+ *    Assuming +x for both is what stood the Galecrest wall's every module
+ *    broadside to the wall it was supposed to be.
+ *
+ * A kit whose `corner` is `'none'` emits no corner pieces at all: its joint is
+ * covered by the runs themselves, which already overlap there.
  */
-export function rallyPerimeterPieces(circuit: RealmRacersCircuit): RallyPerimeterPiece[] {
-  const out: RallyPerimeterPiece[] = [];
-  const kit = realmRacersTheme(circuit).perimeter;
-  const halfX = circuit.perimeter.halfX;
-  const halfZ = circuit.perimeter.halfZ;
-  const corners: [number, number][] = [
-    [-halfX, -halfZ],
-    [halfX, -halfZ],
-    [halfX, halfZ],
-    [-halfX, halfZ],
-  ];
-  for (let c = 0; c < corners.length; c++) {
-    const a = corners[c];
-    const b = corners[(c + 1) % corners.length];
-    const dx = b[0] - a[0];
-    const dz = b[1] - a[1];
-    const run = Math.hypot(dx, dz);
-    const ux = dx / run;
-    const uz = dz / run;
+export function rallyFencePieces(circuit: RealmRacersCircuit): RallyFenceDrawing[] {
+  const out: RallyFenceDrawing[] = [];
+  for (const fence of realmRacersFencePlacements(circuit).fences) {
+    const visual = realmRacersBarrierVisual(fence.kit);
+    // Unknown kits are the readout's business (`unknown_barrier_kit`); a draft
+    // half way through being typed still has to draw the rest of itself.
+    if (!visual) continue;
     // A three.js yaw maps local +x to (cos, -sin) and local +z to (sin, cos),
-    // so the two kits need yaws a quarter turn apart to lay the same module
-    // along the same wall.
-    const yaw = kit.lengthAxis === 'z' ? Math.atan2(ux, uz) : Math.atan2(-uz, ux);
-    const panels = Math.max(1, Math.round(run / kit.panelYards));
-    const step = run / panels;
-    out.push({
-      x: a[0] + REALM_RACERS_ORIGIN.x,
-      z: a[1] + REALM_RACERS_ORIGIN.z,
-      yaw,
-      pillar: true,
-    });
-    for (let i = 0; i < panels; i++) {
-      const along = step * (i + 0.5);
-      out.push({
-        x: a[0] + ux * along + REALM_RACERS_ORIGIN.x,
-        z: a[1] + uz * along + REALM_RACERS_ORIGIN.z,
-        yaw,
-        pillar: false,
-      });
+    // so a kit whose module runs along +z needs a quarter turn on top of the
+    // run's own yaw to lay the same module along the same line.
+    const turn = visual.lengthAxis === 'z' ? Math.PI / 2 : 0;
+    const scale = visual.scale * fence.scale;
+    const panelYards = visual.panelYards * fence.scale;
+    const panels: RallyBarrierPiece[] = [];
+    for (const run of fence.runs) {
+      // The DRAWN length, not the authored one: it reaches a half thickness past
+      // every joint, so two runs meeting at any angle overlap there rather than
+      // leaving a wedge of daylight the collider does not have. That overlap IS
+      // how a kit with no corner piece closes a corner.
+      const count = Math.max(1, Math.round(run.drawnLength / panelYards));
+      const step = run.drawnLength / count;
+      const ux = (run.dbx - run.dax) / run.drawnLength;
+      const uz = (run.dbz - run.daz) / run.drawnLength;
+      for (let i = 0; i < count; i++) {
+        const along = step * (i + 0.5);
+        panels.push({
+          x: run.dax + ux * along + REALM_RACERS_ORIGIN.x,
+          z: run.daz + uz * along + REALM_RACERS_ORIGIN.z,
+          yaw: run.rot + turn,
+          corner: false,
+        });
+      }
     }
+    const corners: RallyBarrierPiece[] =
+      visual.corner === 'none'
+        ? []
+        : fence.corners.map((corner) => ({
+            x: corner.x + REALM_RACERS_ORIGIN.x,
+            z: corner.z + REALM_RACERS_ORIGIN.z,
+            yaw: corner.yaw + turn,
+            corner: true,
+          }));
+    out.push({ kit: fence.kit, scale, panels, corners });
   }
   return out;
 }

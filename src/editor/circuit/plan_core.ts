@@ -75,6 +75,7 @@ export function blankCircuit(template: RealmRacersCircuit): RealmRacersCircuit {
     ponds: undefined,
     basin: undefined,
     pickupRows: undefined,
+    fences: undefined,
     roles: ['competition'],
     practiceCopies: 0,
   };

@@ -56,6 +56,30 @@ export {
   validateCircuitPayload,
 } from './export_core';
 export {
+  addFence,
+  centerCircuitOffset,
+  FENCE_POINT_TOLERANCE_YD,
+  FENCE_SCALE_MAX,
+  FENCE_SCALE_MIN,
+  type FenceDraft,
+  type FenceDraftStep,
+  type FenceHit,
+  fenceColliderCount,
+  fenceDraftClick,
+  fenceHitAt,
+  fenceRunClearOfSurface,
+  finishFenceDraft,
+  isBarrierKit,
+  MAX_FENCE_POINTS,
+  MAX_FENCES,
+  moveCircuitContent,
+  moveFence,
+  moveFencePoint,
+  removeFence,
+  removeFencePoint,
+  setFenceScale,
+} from './fences_core';
+export {
   type CircuitBand,
   deleteControlPoint,
   FRACTION_SNAP,
@@ -331,6 +355,8 @@ export {
   type StrokeFitOptions,
 } from './stroke_fit_core';
 export {
+  BARRIER_PREFIX,
+  barrierThumbnailKey,
   THUMBNAIL_MARGIN,
   THUMBNAIL_MIN_DISTANCE,
   THUMBNAIL_PITCH,
