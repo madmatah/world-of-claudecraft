@@ -68,12 +68,14 @@ import {
   shouldWarnOnUnload,
 } from './draft_store_core';
 import {
-  type EnclosureGrip,
+  circuitMovedFromPress,
+  type EnclosureGrab,
+  enclosureGrab,
   enclosureGrips,
   enclosureHitAt,
   enclosureResized,
 } from './enclosure_core';
-import { suggestEnvelope, suggestGroundOutline } from './envelope_core';
+import { circuitWithCeilingVolume, fittedCircuit, suggestGroundOutline } from './envelope_core';
 import { circuitToTypeScript, roundCircuit } from './export_core';
 import {
   addFence,
@@ -91,7 +93,7 @@ import {
   removeFencePoint,
   setFenceScale,
 } from './fences_core';
-import { groundHitAt, groundPointRemoved, MIN_GROUND_POINTS } from './ground_core';
+import { type GroundHit, groundHitAt, groundPointRemoved, MIN_GROUND_POINTS } from './ground_core';
 import {
   type CircuitBand,
   deleteControlPoint,
@@ -340,7 +342,7 @@ let groundDragging = false;
  * circuit's own contents. The move keeps its origin because it is a delta
  * gesture: the record has no position to read the offset back out of.
  */
-let wallGrip: EnclosureGrip | null = null;
+let wallGrip: EnclosureGrab | null = null;
 let wallMove: { x: number; z: number; from: RealmRacersCircuit } | null = null;
 /**
  * Whether the next drag on the plan shapes the LAND.
@@ -984,7 +986,12 @@ function drawBearings(): void {
     const colour = bearing.id === 'wall' && sizing ? planPalette.pick : BEARING_COLOUR[bearing.id];
     strokeRect(bearing.half.halfX, bearing.half.halfZ, colour, [...bearing.dash]);
   }
-  if (drawn && railMode === 'terrain') drawWallGrips();
+  // Only while a click could actually take one: a kit armed or the ground armed
+  // routes every press elsewhere, and eight dots that answer nothing are the
+  // affordance lying about the state.
+  if (drawn && railMode === 'terrain' && terrainPalette.armed === null && !groundArmed) {
+    drawWallGrips();
+  }
   drawBearingLegend(bearings);
 }
 
@@ -998,7 +1005,7 @@ function drawBearings(): void {
 function drawWallGrips(): void {
   ctx.save();
   for (const grip of enclosureGrips(record.perimeter.halfX, record.perimeter.halfZ)) {
-    ctx.fillStyle = wallGrip?.id === grip.id ? planPalette.pick : BEARING_COLOUR.wall;
+    ctx.fillStyle = wallGrip?.grip.id === grip.id ? planPalette.pick : BEARING_COLOUR.wall;
     ctx.beginPath();
     ctx.arc(screenX(grip.x), screenY(grip.z), 4, 0, Math.PI * 2);
     ctx.fill();
@@ -1039,10 +1046,11 @@ function drawBearingLegend(bearings: readonly PlanBearing[]): void {
   ctx.textBaseline = 'middle';
   const bottom = plan.height - PLAN_LEGEND.bottomInset;
   const textX = PLAN_LEGEND.left + PLAN_LEGEND.swatch + PLAN_LEGEND.gap;
-  const valueX =
-    textX +
-    Math.max(...bearings.map((bearing) => ctx.measureText(bearing.label).width)) +
-    PLAN_LEGEND.gap;
+  // `Math.max()` of nothing is -Infinity, which puts the whole column at NaN.
+  // Unreachable through `planBearings`, which always answers with at least the
+  // volume, and this takes a caller-supplied list.
+  const widest = Math.max(0, ...bearings.map((bearing) => ctx.measureText(bearing.label).width));
+  const valueX = textX + widest + PLAN_LEGEND.gap;
   bearings.forEach((bearing, index) => {
     const y = bottom - (bearings.length - 1 - index) * PLAN_LEGEND.rowHeight;
     ctx.save();
@@ -1062,7 +1070,6 @@ function drawBearingLegend(bearings: readonly PlanBearing[]): void {
     ctx.fillText(bearing.value, valueX, y);
   });
   ctx.restore();
-  ctx.textBaseline = 'alphabetic';
 }
 
 function drawStroke(): void {
@@ -1631,14 +1638,25 @@ function startTerrainGesture(raw: RallyPoint): void {
     return;
   }
   const kit = terrainPalette.armed;
-  // With nothing armed, the land's own handles are the second thing a click can
-  // mean. After the barriers, because a barrier is small and a ground handle is
-  // one of eight around a whole circuit: the near thing wins the near click.
-  if (kit === null && startGroundGesture(raw)) return;
-  // Then the WALL, last of the three, for the same reason in the same order: its
-  // grips are the furthest apart of anything on this canvas, so a click that
-  // could be either was aimed at whatever is smaller.
+  // With nothing armed, POINTS come before CURVES, which is the rule the ground
+  // gesture already keeps inside itself and the reason it is split open here.
+  // Measured, on both shipped circuits after their own two fits: `Fit ground`
+  // proposes the shore at road + 26 and `Fit wall` sizes the box at road + 20,
+  // so the land's curve passes within 4.3 to 6.2 yards of the wall's four edge
+  // grips, and the curve's click tolerance is the WIDER of the two. Testing the
+  // whole ground gesture first therefore answered a click landing dead on a grip
+  // by inserting a ground handle instead, which is destructive rather than
+  // inert: four of the eight grips were unreachable at any working zoom.
+  const ground = kit === null ? groundHitOf(raw) : null;
+  if (ground?.kind === 'handle') {
+    takeGroundHandle(ground.index);
+    return;
+  }
   if (kit === null && startWallGesture(raw)) return;
+  if (ground) {
+    insertGroundHandle(ground);
+    return;
+  }
   if (kit === null) {
     fenceSelection = null;
     groundPoint = null;
@@ -1839,34 +1857,39 @@ function finishGroundStroke(): void {
  * it, a click on the line inserts one there, `del` removes one. Returns whether
  * the click was the ground's, so the caller can go on to deselect.
  */
-function startGroundGesture(raw: RallyPoint): boolean {
+function groundHitOf(raw: RallyPoint): GroundHit | null {
   const outline = record.groundOutline;
-  if (!outline || outline.length === 0) return false;
+  if (!outline || outline.length === 0) return null;
   // Which of the two it was is `ground_core.ts`'s call, not the page's. It was
   // decided twice until packet 28: the core carried the order a test could
   // reach, and this function carried a second copy of it that is what actually
   // ran, which is the one arrangement where a green test proves nothing.
-  const hit = groundHitAt(
+  return groundHitAt(
     outline,
     raw.x,
     raw.z,
     HIT_TOLERANCE_PIXELS.handle / view.scale,
     HIT_TOLERANCE_PIXELS.segment / view.scale,
   );
-  if (!hit) return false;
-  if (hit.kind === 'handle') {
-    groundPoint = hit.index;
-    groundDragging = true;
-    // The undo snapshot is taken at the PRESS, so the drag that follows is one
-    // step back rather than one per pointermove.
-    pushUndo();
-    fenceSelection = null;
-    fencePoint = null;
-    setStatus(`ground handle ${hit.index + 1}: drag to move it, del removes it`, '');
-    applySideTab();
-    requestRedraw();
-    return true;
-  }
+}
+
+/** Pick up a ground handle. The undo snapshot is taken at the PRESS, so the drag
+ *  that follows is one step back rather than one per pointermove. */
+function takeGroundHandle(index: number): void {
+  groundPoint = index;
+  groundDragging = true;
+  pushUndo();
+  fenceSelection = null;
+  fencePoint = null;
+  setStatus(`ground handle ${index + 1}: drag to move it, del removes it`, '');
+  applySideTab();
+  requestRedraw();
+}
+
+/** Add one on the curve between two handles, and hand it straight to the drag. */
+function insertGroundHandle(hit: Extract<GroundHit, { kind: 'insert' }>): void {
+  const outline = record.groundOutline;
+  if (!outline) return;
   commit({
     ...record,
     groundOutline: insertControlPoint(outline, hit.index, authored(hit.at)),
@@ -1878,7 +1901,6 @@ function startGroundGesture(raw: RallyPoint): boolean {
   setStatus('ground handle inserted', 'ok');
   applySideTab();
   requestRedraw();
-  return true;
 }
 
 // ---- the wall gesture ----
@@ -1904,13 +1926,18 @@ function startWallGesture(raw: RallyPoint): boolean {
   fenceSelection = null;
   fencePoint = null;
   groundPoint = null;
+  // The right column follows, like every other branch here: dropping three
+  // selections without it leaves an inspector up for nothing.
+  applySideTab();
   if (hit.kind === 'move') {
     wallMove = { x: raw.x, z: raw.z, from: record };
     setStatus('drag to slide the whole circuit inside its wall', '');
     requestRedraw();
     return true;
   }
-  wallGrip = hit.grip;
+  // The pointer's offset from the grip goes with it, so the box follows the
+  // drag instead of snapping its edge under the pointer on the first move.
+  wallGrip = enclosureGrab(hit.grip, raw.x, raw.z);
   // What the drag is about to do to the OTHER side, said once at the press: the
   // record holds one half-extent per axis, so there is no version of this
   // gesture that moves the edge under the pointer alone.
@@ -1945,10 +1972,12 @@ function resizeWallTo(x: number, z: number): void {
  */
 function moveCircuitTo(x: number, z: number): void {
   if (!wallMove) return;
-  const dx = x - wallMove.x;
-  const dz = z - wallMove.z;
-  commit(moveCircuitContent(wallMove.from, dx, dz), false);
-  setStatus(`circuit moved ${dx.toFixed(1)}, ${dz.toFixed(1)} yd inside its wall`, '');
+  const press = { x: wallMove.x, z: wallMove.z };
+  commit(circuitMovedFromPress(wallMove.from, press, { x, z }), false);
+  setStatus(
+    `circuit moved ${(x - press.x).toFixed(1)}, ${(z - press.z).toFixed(1)} yd inside its wall`,
+    '',
+  );
   requestRedraw();
 }
 
@@ -2500,13 +2529,8 @@ function deleteDressing(): void {
  * chooses the number, which is why the status line talks about the wall.
  */
 function fitWall(): void {
-  const suggestion = suggestEnvelope(metrics.roadHalfX, metrics.roadHalfZ, record.perimeter);
-  commit({
-    ...record,
-    perimeter: suggestion.perimeter,
-    regionHalfX: REALM_RACERS_MAX_REGION_HALF_X,
-    regionHalfZ: REALM_RACERS_MAX_REGION_HALF_Z,
-  });
+  const { circuit, suggestion } = fittedCircuit(record, metrics.roadHalfX, metrics.roadHalfZ);
+  commit(circuit);
   form.sync();
   const fitted = `wall ${suggestion.perimeter.halfX} x ${suggestion.perimeter.halfZ}`;
   // Whether a clamp MATTERED is not whether it happened: a clamp that only ate
@@ -3075,7 +3099,12 @@ function loadCircuit(circuit: RealmRacersCircuit, label: string): void {
   // A shipped record is loaded under a DRAFT id, so editing it can never hand
   // the memoized derivation of a live circuit a shape the game did not author.
   // Committed before the flag moves, for the same reason as `newBlank`.
-  commit(circuit);
+  //
+  // The instance volume comes up to the ceiling on the way in, because it has
+  // exactly one legal value now and no panel left to type it in: a draft from
+  // before that rule would otherwise be stuck under it, and dragging its wall
+  // out would answer with a containment error the tool offered no way to fix.
+  commit(circuitWithCeilingVolume(circuit));
   drawn = true;
   dirty = false;
   setRailMode('shape');

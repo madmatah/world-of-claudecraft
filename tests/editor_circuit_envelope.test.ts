@@ -14,6 +14,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  circuitWithCeilingVolume,
+  fittedCircuit,
   MAX_PERIMETER_HALF_X,
   MAX_PERIMETER_HALF_Z,
   suggestEnvelope,
@@ -86,7 +88,10 @@ describe('circuit editor enclosure', () => {
     // The complaint this exists for: a big loop drawn inside the garden's own
     // 118 x 92 wall reports a road running outside it, with nothing in the tool
     // able to change the number.
-    const { before, metrics, after } = fitted('envelope_big_lap', BIG_LAP_CONTROL_POINTS);
+    const { before, metrics, after, suggestion } = fitted(
+      'envelope_big_lap',
+      BIG_LAP_CONTROL_POINTS,
+    );
     expect(before.lapLength).toBeGreaterThan(1000);
     expect(before.problems.map((p) => p.code)).toContain('road_outside_perimeter');
     expect(metrics.problems.map((p) => p.code)).not.toContain('road_outside_perimeter');
@@ -96,10 +101,9 @@ describe('circuit editor enclosure', () => {
     // ...and the wall really did have to grow past the garden's, on the axis
     // the big lap is bigger on.
     expect(after.perimeter.halfX).toBeGreaterThan(GARDEN.perimeter.halfX);
-    // The instance volume was NOT touched, and could not have been: it is the
-    // ceiling on every circuit, and this fit is about one box.
-    expect(after.regionHalfX).toBe(GARDEN.regionHalfX);
-    expect(after.regionHalfZ).toBe(GARDEN.regionHalfZ);
+    // The suggestion carries a WALL and nothing else: it used to hand back a
+    // region too, off a constant margin that turned out to be nobody's decision.
+    expect(Object.keys(suggestion).sort()).toEqual(['clampedBy', 'perimeter']);
   });
 
   it('leaves room for the road inside the wall, and for the wall inside the volume', () => {
@@ -289,5 +293,31 @@ describe('the ground outline suggester', () => {
 
   it('is deterministic, so re-fitting settles rather than wandering', () => {
     expect(suggestGroundOutline(GARDEN)).toEqual(suggestGroundOutline(GARDEN));
+  });
+});
+
+describe('what a Fit wall leaves behind', () => {
+  it('brings a legacy volume up to the ceiling, which is its only route back', () => {
+    // The two region fields left every panel in packet 28, so a draft authored
+    // before the ceiling rule has no way to type its way up. A fit is one of the
+    // two doors that migrate it; a load is the other.
+    const legacy: RealmRacersCircuit = { ...GARDEN, regionHalfX: 170, regionHalfZ: 140 };
+    const metrics = realmRacersCircuitMetrics(legacy);
+    const { circuit } = fittedCircuit(legacy, metrics.roadHalfX, metrics.roadHalfZ);
+    expect(circuit.regionHalfX).toBe(REALM_RACERS_MAX_REGION_HALF_X);
+    expect(circuit.regionHalfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z);
+    // ...and the wall really was fitted at the same time, so the two halves of
+    // the action are one call rather than a page remembering to do both.
+    expect(circuit.perimeter).not.toEqual(legacy.perimeter);
+    expect(circuit.perimeter.halfX).toBeGreaterThan(metrics.roadHalfX);
+  });
+
+  it('hands back the SAME object when there is nothing to migrate', () => {
+    // A load runs this on every record, including the two shipped ones, and an
+    // identity change there would read as an edit to the undo stack.
+    expect(circuitWithCeilingVolume(GARDEN)).toBe(GARDEN);
+    const legacy: RealmRacersCircuit = { ...GARDEN, regionHalfZ: 140 };
+    expect(circuitWithCeilingVolume(legacy)).not.toBe(legacy);
+    expect(circuitWithCeilingVolume(legacy).regionHalfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z);
   });
 });

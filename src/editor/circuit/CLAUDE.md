@@ -237,6 +237,19 @@ outright without `ctx.devCommands`.
   nobody; and `road_outside_ground_outline` probes three points per sample (the
   centerline and both garden edges), so an inlet narrow enough to reach between
   two probes without crossing either is not reported.
+- **A rule whose stated harm is FALSE is worse than no rule.** The land's own
+  readout shipped as `ground_outside_region`, an ERROR justified by lawn standing
+  over unflattened world terrain past the collision region. Measured, that is not
+  what happens: the whole instance band sits past `DUNGEON_X_THRESHOLD`, so
+  `groundHeight` answers with the flat interior floor inside the region and
+  outside it alike, and the open-world collider grid is never consulted out
+  there. Worse, its limit was 160 yards STRICTER than the rectangle the same
+  resolver hands a circuit that draws nothing, so it refused shapes smaller than
+  the one both shipped circuits wear, and an error refuses the draft outright at
+  `/dev rallydraft`. It is `ground_beyond_water_reach` now, a WARNING at
+  `realmRacersGroundReach` (the one function the default rectangle, the sea and
+  the readout all read), naming what actually degrades: the sea is cast outward
+  from the island's centroid and collapses along any coast that overran it.
 - **The water is PLACED.** A pond is an entry in the Props palette: drag a box,
   then drag its handles. Deleting the last one leaves a circuit with no water at
   all, which is a shape the tool has to be able to reach, and the basin follows
@@ -357,6 +370,17 @@ of course: that is the circuit being edited.
   it is a movable, resizable DOCK now (`dock.ts`), `shift+F` for the whole plan,
   with a "follows cursor" mode where hovering a corner on the plan is the gesture
   that looks at it in 3D.
+- **POINTS beat CURVES, across objects and not only inside one.** TERRAIN routes
+  a click through three of them, and the order is measured rather than reasoned:
+  after both fits, `Fit ground` proposes the shore at road + 26 while `Fit wall`
+  sizes the box at road + 20, so the land's curve passes within 4.3 to 6.2 yards
+  of the wall's four edge grips, and a curve's click tolerance is the WIDER of
+  the two. Testing the whole ground gesture before the wall therefore answered a
+  click landing dead on a grip by inserting a ground handle, which is destructive
+  rather than inert: four of the eight grips were unreachable at any working
+  zoom. So the ground gesture is split open (`groundHitOf` then either
+  `takeGroundHandle` or `insertGroundHandle`) and the wall's grips are tested
+  between its two halves.
 - **A rectangle on the plan is NAMED in the legend, and that rule cost two seat
   rounds.** The canvas drew five boxes and named one: the ceiling showed only
   before the first stroke and the circuit's own collision region took its place
@@ -675,7 +699,7 @@ of course: that is the circuit being edited.
 | `prop_thumbnails.ts` | the off-screen rig that takes the pictures. Lazily imported; never disposes what it borrowed from a shared cache |
 | `props_core.ts` | the dressing: which frame a click authors a piece in, what the pointer is over, what a transform does to a record entry (a grip drag, an arrow nudge, a duplicate included), where the view goes to look at a selection, and how a dragged rectangle becomes a scatter or a pond. It AUTHORS: where a piece ends up is `src/sim/realm_racers_props_resolve.ts`, and the page reads the placements back off it. It calls that resolver in exactly ONE place, `ghostPlacement`, and for the same reason the ban exists: the outline under the cursor has to be the outline the collision set will hold, so the ghost asks the one resolver instead of deriving a second placement of its own |
 | `width_fix_core.ts` | the corner repair: a road profile that clears every corner the road's floor can reach, in one pass. Sound because `turnRadius` depends on the centerline alone, so narrowing cannot move a corner |
-| `enclosure_core.ts` | the TERRAIN tool's gestures on the WALL: which of its eight grips (or its centre) a click landed on, and what dragging one writes. Both facts the record forces are here rather than in the page: a resize is SYMMETRIC, since one half-extent is both edges, and the box has no position at all, so the centre grip slides the circuit's contents instead. It does not judge the result: `road_outside_perimeter` is the readout's |
+| `enclosure_core.ts` | the TERRAIN tool's gestures on the WALL: which of its eight grips (or its centre) a click landed on, what dragging one writes, and what the centre one slides. Both gestures capture their press (`enclosureGrab`, `circuitMovedFromPress`), which is not symmetry for its own sake: without the grab the box snaps its edge under the pointer on the first move, and without the press-relative move a hundred frames of rounding compound into yards of drift. Both facts the record forces are here rather than in the page: a resize is SYMMETRIC, since one half-extent is both edges, and the box has no position at all, so the centre grip slides the circuit's contents instead. It does not judge the result: `road_outside_perimeter` is the readout's |
 | `envelope_core.ts` | what perimeter WALL fits a road of a given size, clamped to the ceilings (`MAX_PERIMETER_HALF_*`, the instance volume's own less the yard that keeps the wall inside it), plus the ground outline `Fit ground` proposes. A convenience, not a rule: the containment rules themselves are in the metrics core |
 | `fences_core.ts` | the TERRAIN tool's gestures: which barrier (and which of its points) a click landed on, what each click of a drawing run does to the run in progress, what a point drag, a nudge, a delete or a scale edit do to the list, and the offset that centres a circuit in its enclosure plus what has to move with it. It AUTHORS: where the modules end up is `src/sim/realm_racers_fences.ts`, and the plan draws what that resolver returns |
 | `export_core.ts` | the record to a pasteable TypeScript literal and back, the rounding the live record shares with it, and the payload validator the save endpoint runs |

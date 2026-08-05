@@ -33,6 +33,7 @@ import { parseThumbnailCache, THUMBNAIL_STORAGE_KEY } from './draft_store_core';
 import { editorIcon } from './editor_icons';
 import { MIN_PERIMETER_HALF } from './enclosure_core';
 import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
+import { validateCircuitPayload } from './export_core';
 import { FENCE_SCALE_MAX, FENCE_SCALE_MIN, fenceColliderCount } from './fences_core';
 import {
   detailLine,
@@ -388,6 +389,18 @@ export class TerrainInspectorPanel {
     return out;
   }
 
+  /**
+   * One wall number, validated the way the SAVE endpoint validates.
+   *
+   * The `min` and `max` attributes are a hint to a spinner and NOTHING to a
+   * typed value: a number input takes `0`, `-5` and `4000` and fires `change`
+   * with them. So this goes through `validateCircuitPayload`, which is the rule
+   * the record form these fields came from already kept, and losing it in the
+   * move was not a style regression but a data-loss one. A committed record the
+   * validator refuses is still written to the autosave, and boot re-validates
+   * what it finds: the stored draft would fail there and degrade to a fresh
+   * canvas, so a typed zero here quietly costs the operator the session.
+   */
   private wallField(
     label: string,
     value: number,
@@ -401,7 +414,17 @@ export class TerrainInspectorPanel {
     input.min = String(MIN_PERIMETER_HALF);
     input.max = String(max);
     input.value = String(value);
-    input.onchange = () => this.host.commit(write(numberOr(input.value, value)));
+    input.onchange = () => {
+      const next = validateCircuitPayload(write(numberOr(input.value, value)));
+      if (!next) {
+        // Back to what the record carries, so the control never keeps a number
+        // the circuit does not, and the status line says why.
+        input.value = String(value);
+        this.host.setStatus(`wall ${label}: not a value a circuit can carry`, 'err');
+        return;
+      }
+      this.host.commit(next);
+    };
     name.append(input);
     return wrap;
   }

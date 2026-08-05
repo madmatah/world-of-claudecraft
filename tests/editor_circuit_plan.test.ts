@@ -10,6 +10,7 @@
 // hex twice.
 
 import { describe, expect, it } from 'vitest';
+import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from '../src/editor/circuit/envelope_core';
 import { ZOOM_MAX_SCALE, ZOOM_MIN_SCALE } from '../src/editor/circuit/layout_core';
 import {
   blankCircuit,
@@ -128,11 +129,26 @@ describe('framing the plan', () => {
 });
 
 describe('the centerline aim box', () => {
-  it('comes off the volume by the whole garden edge, since the pen draws the middle', () => {
-    const limit = centerlineLimit([10]);
-    const gardenEdge = 10 + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
-    expect(limit.halfX).toBe(REALM_RACERS_MAX_REGION_HALF_X - gardenEdge);
-    expect(limit.halfZ).toBe(REALM_RACERS_MAX_REGION_HALF_Z - gardenEdge);
+  it('leaves room for the road INSIDE the widest wall, which is the point of it', () => {
+    // Stated as the relation rather than as the formula, because restating the
+    // formula is how a yard went missing here: the box was computed off the
+    // volume's ceiling instead of the WALL's, and the test that was supposed to
+    // hold it simply moved with the drift. What has to be true is that a line
+    // drawn exactly on this box carries a road the widest legal wall can hold.
+    for (const road of [6, 10, 24]) {
+      const limit = centerlineLimit([road]);
+      const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
+      expect(limit.halfX + gardenEdge, `x at ${road}`).toBeLessThanOrEqual(MAX_PERIMETER_HALF_X);
+      expect(limit.halfZ + gardenEdge, `z at ${road}`).toBeLessThanOrEqual(MAX_PERIMETER_HALF_Z);
+      // ...and not needlessly tighter than that, or the tool would be refusing
+      // room a circuit is allowed to use.
+      expect(limit.halfX + gardenEdge).toBeGreaterThanOrEqual(MAX_PERIMETER_HALF_X - 1);
+      expect(limit.halfZ + gardenEdge).toBeGreaterThanOrEqual(MAX_PERIMETER_HALF_Z - 1);
+    }
+    // The wall's ceiling really is inside the volume's, which is the fact the
+    // relation above rests on.
+    expect(MAX_PERIMETER_HALF_X).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_X);
+    expect(MAX_PERIMETER_HALF_Z).toBeLessThan(REALM_RACERS_MAX_REGION_HALF_Z);
   });
 
   it('shrinks as the road widens, since the pen only draws the middle', () => {

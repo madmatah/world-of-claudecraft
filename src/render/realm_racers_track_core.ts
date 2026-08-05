@@ -20,7 +20,11 @@
 
 import type { RealmRacersBasin, RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { realmRacersFencePlacements } from '../sim/realm_racers_fences';
-import { realmRacersGroundShape, realmRacersOnGround } from '../sim/realm_racers_ground';
+import {
+  realmRacersGroundReach,
+  realmRacersGroundShape,
+  realmRacersOnGround,
+} from '../sim/realm_racers_ground';
 import {
   REALM_RACERS_BORDER_OFFSET,
   REALM_RACERS_BORDER_SPACING,
@@ -584,14 +588,10 @@ export function rallySeaBasin(circuit: RealmRacersCircuit): RealmRacersBasin {
   return circuit.basin ?? REALM_RACERS_SEA_BASIN;
 }
 
-/** Where the sea stops: the region, plus the same overshoot the derived ground
- *  rectangle uses, so the water reaches exactly as far as the lawn used to. */
-function seaHalfExtents(circuit: RealmRacersCircuit): { halfX: number; halfZ: number } {
-  return {
-    halfX: circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
-    halfZ: circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
-  };
-}
+/** Where the sea stops: the land's own reach, off the one resolver that owns it,
+ *  so the water goes exactly as far as the lawn does and the readout judges an
+ *  authored shore against the same number. */
+const seaHalfExtents = realmRacersGroundReach;
 
 /**
  * The sea around an authored island, as rings walking OUTWARD from the shore to

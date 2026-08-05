@@ -442,4 +442,37 @@ describe('the terrain inspector', () => {
     expect(inspector.el.querySelector('input')).toBe(input);
     expect(input.value).toBe('2.7');
   });
+
+  it('REFUSES a typed value the save endpoint would not carry, and says so', () => {
+    // The `min` and `max` attributes are a hint to a spinner and nothing to a
+    // typed value. Losing the record form's validation in the move was a
+    // data-loss bug, not a style one: a committed record the validator refuses
+    // still reaches the autosave, and boot re-validates what it finds, so the
+    // stored draft degrades to a fresh canvas and the session is gone.
+    const commits: RealmRacersCircuit[] = [];
+    const setStatus = vi.fn();
+    const { inspector } = mount({
+      record: () => walled,
+      commit: (next) => commits.push(next),
+      setStatus,
+    });
+    inspector.paint();
+    const input = [...inspector.el.querySelectorAll('input[type="number"]')].filter(
+      (node) => (node as HTMLInputElement).step === '1',
+    )[0] as HTMLInputElement;
+
+    input.value = '0';
+    input.onchange?.(new Event('change'));
+    expect(commits).toEqual([]);
+    expect(setStatus).toHaveBeenCalledWith(expect.stringContaining('half x'), 'err');
+    // The control goes back to what the record carries, so it never keeps a
+    // number the circuit does not.
+    expect(input.value).toBe(String(walled.perimeter.halfX));
+
+    // A legal one still lands, so the guard is a floor and not a wall.
+    input.value = '150';
+    input.onchange?.(new Event('change'));
+    expect(commits).toHaveLength(1);
+    expect(commits[0].perimeter.halfX).toBe(150);
+  });
 });

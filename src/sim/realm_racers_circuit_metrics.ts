@@ -21,7 +21,7 @@ import {
   realmRacersFencePlacements,
   realmRacersFenceRuns,
 } from './realm_racers_fences';
-import { realmRacersGroundShape } from './realm_racers_ground';
+import { realmRacersGroundReach, realmRacersGroundShape } from './realm_racers_ground';
 import {
   GROUND_BLAST_AIM_CONE_RAD,
   GROUND_BLAST_MAX_RANGE,
@@ -261,23 +261,34 @@ export type RealmRacersCircuitProblemCode =
    */
   | 'ground_outline_folds'
   /**
-   * The authored ground outline leaves the instance volume.
+   * The authored ground outline reaches past where the WATER can follow it.
    *
-   * An ERROR, and the one rule that says what the region IS: inside it the
-   * ground is flat (`world.ts` returns the interior floor) and the world's own
-   * colliders are switched off; outside it the world resumes. So an outline
-   * drawn past the region is lawn drawn over unflattened world terrain, with the
-   * world's rocks and slopes still live under it, and a machine that reached it
-   * would meet a floor nobody authored. The wall normally stops anyone getting
-   * there, which is exactly why this has to be a readout rule and not a thing
-   * the seat discovers.
+   * A WARNING, and the severity is the whole of what this rule learned. It
+   * shipped as an error saying an outline past the collision region stood over
+   * unflattened world terrain with the world's rocks live under it, and that was
+   * simply false: the entire instance band sits past `DUNGEON_X_THRESHOLD`, so
+   * `groundHeight` returns the flat interior floor inside the region and outside
+   * it alike, and the open-world collider grid is never consulted out there at
+   * all. Nothing about the ground under an oversized island is different.
+   *
+   * What IS different is the sea. It is cast as rings from the island's centroid
+   * out to `realmRacersGroundReach`, and a shore point past that reach clamps to
+   * itself (`rallySeaMesh`), so the water collapses to nothing along whichever
+   * part of the coast overran: an island with a beach on one side and a dry
+   * edge on the other, for a reason nothing on screen would otherwise give.
+   *
+   * The limit therefore comes from the resolver rather than from the region, and
+   * that fixed the rule's second fault: at the region it was 160 yards STRICTER
+   * than the rectangle the same module hands a circuit that draws nothing, so it
+   * refused shapes smaller than the one every shipped circuit already wears, and
+   * an error there refuses the draft outright (`realm_racers_drafts.ts`).
    *
    * Measured on the SAMPLED curve rather than on the authored handles, because
    * the curve is the shape: a centripetal Catmull-Rom bulges past its control
    * points on the outside of a bend, so a ring of handles all inside the box can
    * still draw a shore outside it. One problem per axis, like the fence rule.
    */
-  | 'ground_outside_region'
+  | 'ground_beyond_water_reach'
   /**
    * A pickup row does not fit on the ROAD where it stands: one of its boxes
    * reaches past the road edge.
@@ -759,14 +770,16 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
       worstX = Math.max(worstX, Math.abs(point.x));
       worstZ = Math.max(worstZ, Math.abs(point.z));
     }
-    if (worstX > circuit.regionHalfX) {
-      problem('ground_outside_region', 'error', worstX, circuit.regionHalfX, -1, 'x');
+    // From the RESOLVER, so the shape a circuit is given by default and the
+    // shape it is allowed to draw are the same size. They were 160 yards apart.
+    const reach = realmRacersGroundReach(circuit);
+    if (worstX > reach.halfX) {
+      problem('ground_beyond_water_reach', 'warning', worstX, reach.halfX, -1, 'x');
     }
-    if (worstZ > circuit.regionHalfZ) {
-      problem('ground_outside_region', 'error', worstZ, circuit.regionHalfZ, -1, 'z');
+    if (worstZ > reach.halfZ) {
+      problem('ground_beyond_water_reach', 'warning', worstZ, reach.halfZ, -1, 'z');
     }
-  }
-  if (ground.authored) {
+
     const offGround = (index: number): boolean => {
       const sample = samples[index];
       const localX = sample.x - REALM_RACERS_ORIGIN.x;

@@ -22,8 +22,14 @@
 // owns that (`road_outside_perimeter`), as it does for every other placement in
 // this tool.
 
-import type { RealmRacersPerimeter } from '../../sim/content/realm_racers_circuits';
+import type {
+  RealmRacersCircuit,
+  RealmRacersPerimeter,
+} from '../../sim/content/realm_racers_circuits';
+import type { RallyPoint } from '../../sim/realm_racers_layout';
 import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
+import { roundCircuit } from './export_core';
+import { moveCircuitContent } from './fences_core';
 
 /**
  * The eight box grips, by compass point, plus the centre.
@@ -132,6 +138,54 @@ const clamp = (value: number, low: number, high: number): number =>
   Math.min(high, Math.max(low, value));
 
 /**
+ * The circuit slid by how far the pointer has come SINCE THE PRESS, applied to
+ * the record as it stood at that press.
+ *
+ * The obvious shape is to step from the last frame, and it drifts, badly enough
+ * to read as a broken tool rather than as a rounding: a commit rounds control
+ * points to a tenth of a yard, so a slow drag of two hundredths a frame rounds
+ * to nothing every frame and the circuit never moves at all, while six
+ * hundredths a frame rounds UP every frame and lands at six yards where the
+ * pointer travelled three and a half. Measured from the press there is exactly
+ * one rounding, of the total.
+ *
+ * Everything circuit-local moves together, through the one core that knows what
+ * everything is: moving the road alone would walk it out from under its own
+ * dressing.
+ */
+export function circuitMovedFromPress(
+  from: RealmRacersCircuit,
+  press: RallyPoint,
+  at: RallyPoint,
+): RealmRacersCircuit {
+  return roundCircuit(moveCircuitContent(from, at.x - press.x, at.z - press.z));
+}
+
+/**
+ * A grip with the pointer's offset from it, taken at the press.
+ *
+ * Without it the box JUMPS on the first pointermove: a grip is grabbed from
+ * anywhere inside the click tolerance, and writing the raw pointer coordinate
+ * puts the edge under the pointer rather than moving it by what the pointer
+ * moved. The jump is the tolerance in yards, which is about 4 at a default fit
+ * and 20 at the widest zoom out, so the wall lurches before it follows.
+ *
+ * It is here rather than in the page because it is the same decision the move
+ * gesture makes at its own press, and one of the two having it was how this was
+ * noticed at all.
+ */
+export interface EnclosureGrab {
+  grip: EnclosureGrip;
+  /** Grip position minus pointer position, at the press. */
+  dx: number;
+  dz: number;
+}
+
+export function enclosureGrab(grip: EnclosureGrip, x: number, z: number): EnclosureGrab {
+  return { grip, dx: grip.x - x, dz: grip.z - z };
+}
+
+/**
  * The wall this drag leaves behind.
  *
  * `Math.abs`, and that is the symmetry made honest rather than a defence: the
@@ -145,19 +199,20 @@ const clamp = (value: number, low: number, high: number): number =>
  */
 export function enclosureResized(
   perimeter: RealmRacersPerimeter,
-  grip: EnclosureGrip,
+  grab: EnclosureGrab,
   x: number,
   z: number,
 ): RealmRacersPerimeter {
+  const at = { x: x + grab.dx, z: z + grab.dz };
   return {
     ...perimeter,
     halfX:
-      grip.axis === 'z'
+      grab.grip.axis === 'z'
         ? perimeter.halfX
-        : Math.round(clamp(Math.abs(x), MIN_PERIMETER_HALF, MAX_PERIMETER_HALF_X)),
+        : Math.round(clamp(Math.abs(at.x), MIN_PERIMETER_HALF, MAX_PERIMETER_HALF_X)),
     halfZ:
-      grip.axis === 'x'
+      grab.grip.axis === 'x'
         ? perimeter.halfZ
-        : Math.round(clamp(Math.abs(z), MIN_PERIMETER_HALF, MAX_PERIMETER_HALF_Z)),
+        : Math.round(clamp(Math.abs(at.z), MIN_PERIMETER_HALF, MAX_PERIMETER_HALF_Z)),
   };
 }

@@ -48,16 +48,21 @@ export {
   editorIcon,
 } from './editor_icons';
 export {
+  circuitMovedFromPress,
+  type EnclosureGrab,
   type EnclosureGrip,
   type EnclosureGripId,
   type EnclosureHit,
+  enclosureGrab,
   enclosureGrips,
   enclosureHitAt,
   enclosureResized,
   MIN_PERIMETER_HALF,
 } from './enclosure_core';
 export {
+  circuitWithCeilingVolume,
   type EnvelopeSuggestion,
+  fittedCircuit,
   MAX_PERIMETER_HALF_X,
   MAX_PERIMETER_HALF_Z,
   suggestEnvelope,

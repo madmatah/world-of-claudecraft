@@ -10,9 +10,11 @@
 //
 // The DEFAULT is the whole of the interesting behaviour. A circuit that authors
 // no outline gets the rectangle the ground has always been (`regionHalf*` plus
-// `REALM_RACERS_LAWN_OVERSHOOT`), so both shipped circuits are byte-identical to
-// what they were before the field existed and the rule below can never fire on
-// them.
+// `REALM_RACERS_LAWN_OVERSHOOT`), which is what let the field arrive without
+// either shipped circuit changing. Both grew LATER, in packet 28, when the
+// instance volume became the ceiling on every circuit: the rectangle is the
+// ceiling plus the overshoot on both now, and `tests/realm_racers_ground.test.ts`
+// pins it against those literals.
 //
 // Coordinates in and out are CIRCUIT-LOCAL, the frame `controlPoints` are
 // authored in.
@@ -79,11 +81,28 @@ export interface RallyGroundShape {
   authored: boolean;
 }
 
-/** The rectangle the ground is when nobody drew one: the region, plus the
- *  overshoot that keeps the horizon lawn rather than empty band. */
+/**
+ * How far the LAND may reach, half-extents: the region plus the overshoot.
+ *
+ * One function because three readers need the same answer and were computing it
+ * separately: the default rectangle below, the sea the renderer casts out to
+ * (`seaHalfExtents`), and the readout that judges an authored outline. They
+ * disagreed by 160 yards, which made the rule refuse a shape SMALLER than the
+ * one every shipped circuit already wears.
+ */
+export function realmRacersGroundReach(circuit: RealmRacersCircuit): {
+  halfX: number;
+  halfZ: number;
+} {
+  return {
+    halfX: circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT,
+    halfZ: circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT,
+  };
+}
+
+/** The rectangle the ground is when nobody drew one: the whole of its reach. */
 export function realmRacersGroundRectangle(circuit: RealmRacersCircuit): RallyPoint[] {
-  const halfX = circuit.regionHalfX + REALM_RACERS_LAWN_OVERSHOOT;
-  const halfZ = circuit.regionHalfZ + REALM_RACERS_LAWN_OVERSHOOT;
+  const { halfX, halfZ } = realmRacersGroundReach(circuit);
   return [
     { x: -halfX, z: -halfZ },
     { x: halfX, z: -halfZ },

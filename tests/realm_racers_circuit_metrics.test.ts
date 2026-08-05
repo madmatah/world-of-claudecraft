@@ -23,7 +23,7 @@ import {
   realmRacersPickupRowFit,
   realmRacersPropStanding,
 } from '../src/sim/realm_racers_circuit_metrics';
-import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
+import { realmRacersGroundReach, realmRacersGroundShape } from '../src/sim/realm_racers_ground';
 import {
   REALM_RACERS_BAND_X_MAX,
   REALM_RACERS_BAND_X_MIN,
@@ -90,6 +90,15 @@ function ring(radius: number, points = 12): { x: number; z: number }[] {
   return Array.from({ length: points }, (_, i) => {
     const angle = (i / points) * Math.PI * 2;
     return { x: radius * Math.cos(angle), z: radius * Math.sin(angle) };
+  });
+}
+
+/** An ellipse, for the cases where the two axes have to be told apart: a circle
+ *  fires both at once and would let one arm of a per-axis rule read as two. */
+function ellipse(radiusX: number, radiusZ: number, points = 12): { x: number; z: number }[] {
+  return Array.from({ length: points }, (_, i) => {
+    const angle = (i / points) * Math.PI * 2;
+    return { x: radiusX * Math.cos(angle), z: radiusZ * Math.sin(angle) };
   });
 }
 
@@ -458,48 +467,66 @@ describe('Realm Racers circuit metrics: the ground the road stands on', () => {
     expect(codesOf(clean)).not.toContain('ground_outline_folds');
   });
 
-  it('calls a ground outline that leaves the instance volume an error, per axis', () => {
-    // The rule that says what the region IS. Inside it the ground is flat and
-    // the world's colliders are off; outside it the world resumes, so lawn drawn
-    // out there is lawn over unflattened terrain with the world's rocks still
-    // live under it. The wall normally stops anyone reaching it, which is
-    // exactly why this has to be a readout rule rather than a seat discovery.
+  it('warns when a ground outline runs past where the WATER follows it, per axis', () => {
+    // What this rule learned. It shipped as an ERROR saying an outline past the
+    // collision region stood over unflattened world terrain with the world's
+    // rocks live under it, and that was measurably false: the whole instance
+    // band sits past the dungeon threshold, so the floor is the flat interior
+    // one inside the region and outside it alike. What IS different out there is
+    // the SEA, which is cast from the island's centroid out to the land's own
+    // reach and collapses along any coast that overran it.
     //
-    // The fixture is a SIX-handle ring, and that is the whole point of it: every
-    // handle sits 11 yards inside the volume's depth (138.56 against 150) and
-    // the smoothed curve bulges nearly 6 yards OUTSIDE it (155.88), because a
-    // centripetal Catmull-Rom leaves its control points on the outside of a
-    // bend. A rule reading the authored handles would bless this shape.
-    const bulging = draft('metrics_ground_volume', ROAD, 10, { groundOutline: ring(160, 6) });
-    const handles = bulging.groundOutline ?? [];
-    expect(Math.max(...handles.map((point) => Math.abs(point.z)))).toBeLessThan(
-      bulging.regionHalfZ,
-    );
-    const problems = realmRacersCircuitMetrics(bulging).problems.filter(
-      (entry) => entry.code === 'ground_outside_region',
-    );
-    expect(problems).toHaveLength(1);
-    expect(problems[0].severity).toBe('error');
-    expect(problems[0].axis).toBe('z');
-    // The value is how far the LAND actually reaches, against the volume it had
-    // to stay in, so the callout says how much to pull the shore back by.
-    expect(problems[0].limit).toBe(bulging.regionHalfZ);
-    expect(problems[0].value).toBeGreaterThan(bulging.regionHalfZ);
-    expect(problems[0].value).toBeCloseTo(155.88, 1);
-    // The x axis is silent on this one, so the two are reported separately
-    // rather than as one verdict about the shape.
-    expect(Math.max(...handles.map((point) => Math.abs(point.x)))).toBeLessThan(
-      bulging.regionHalfX,
-    );
+    // So the limit comes from the resolver, not from the region, and that fixed
+    // the second fault too: at the region it was 160 yards STRICTER than the
+    // rectangle the same module hands a circuit that draws nothing, and an error
+    // there refuses the draft outright.
+    const reach = realmRacersGroundReach(draft('metrics_ground_reach_probe', ROAD, 10));
+    expect(reach.halfZ).toBeGreaterThan(DRAFT_BASE.regionHalfZ);
 
-    // ...and the same ring drawn small enough to stay inside is not reported, so
-    // the check is about leaving the volume rather than about authoring a shape.
-    const inside = draft('metrics_ground_volume_ok', ROAD, 10, { groundOutline: ring(130, 6) });
-    expect(codesOf(inside)).not.toContain('ground_outside_region');
-    // Nor is a circuit that authors nothing: its land is the derived rectangle,
-    // which is the region PLUS an overshoot and would otherwise report itself.
-    expect(codesOf(draft('metrics_ground_volume_none', ROAD, 10))).not.toContain(
-      'ground_outside_region',
+    // A SIX-handle ring, and that is the whole point of the fixture: every
+    // handle sits 24 yards inside the reach (285.8 against 310) and the smoothed
+    // curve bulges 11 yards OUTSIDE it (321.5), because a centripetal
+    // Catmull-Rom leaves its control points on the outside of a bend. A rule
+    // reading the authored handles would bless this shape.
+    const deep = draft('metrics_ground_reach_z', ROAD, 10, { groundOutline: ellipse(330, 330, 6) });
+    const handles = deep.groundOutline ?? [];
+    expect(Math.max(...handles.map((point) => Math.abs(point.z)))).toBeLessThan(reach.halfZ);
+    const onZ = realmRacersCircuitMetrics(deep).problems.filter(
+      (entry) => entry.code === 'ground_beyond_water_reach',
+    );
+    expect(onZ).toHaveLength(1);
+    // A WARNING, not an error, and that is load-bearing rather than a taste: an
+    // error here is a draft the dev command refuses to race, and a dry stretch
+    // of coast is a look, not a circuit the sim cannot drive.
+    expect(onZ[0].severity).toBe('warning');
+    expect(onZ[0].axis).toBe('z');
+    expect(onZ[0].limit).toBe(reach.halfZ);
+    expect(onZ[0].value).toBeCloseTo(321.5, 1);
+    // The x axis stays silent on this one, so the two are separate verdicts
+    // rather than one about the shape.
+    expect(Math.max(...handles.map((point) => Math.abs(point.x)))).toBeLessThan(reach.halfX);
+
+    // ...and the OTHER axis fires on its own, which the z fixture cannot show:
+    // an outline wide and shallow reports x and nothing else.
+    const wide = draft('metrics_ground_reach_x', ROAD, 10, { groundOutline: ellipse(440, 200, 6) });
+    const onX = realmRacersCircuitMetrics(wide).problems.filter(
+      (entry) => entry.code === 'ground_beyond_water_reach',
+    );
+    expect(onX).toHaveLength(1);
+    expect(onX[0].axis).toBe('x');
+    expect(onX[0].limit).toBe(reach.halfX);
+    expect(onX[0].value).toBeCloseTo(440, 1);
+
+    // An island inside the reach is not reported, so the rule is about running
+    // past the water rather than about authoring a shape at all.
+    const inside = draft('metrics_ground_reach_ok', ROAD, 10, {
+      groundOutline: ellipse(240, 240, 6),
+    });
+    expect(codesOf(inside)).not.toContain('ground_beyond_water_reach');
+    // Nor is a circuit that authors nothing, whose land IS the reach exactly and
+    // would otherwise report itself on every axis.
+    expect(codesOf(draft('metrics_ground_reach_none', ROAD, 10))).not.toContain(
+      'ground_beyond_water_reach',
     );
   });
 

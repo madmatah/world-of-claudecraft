@@ -100,6 +100,52 @@ export function suggestEnvelope(
 }
 
 /**
+ * The record with its instance volume at the ceiling.
+ *
+ * The volume has exactly ONE legal value since packet 28, so this is a
+ * migration rather than a decision: a draft on disk or in the autosave from
+ * before that rule still carries a smaller one, and with the two fields gone
+ * from every panel there is no way left to type it up. Applied on LOAD and again
+ * on a fit, which are the two doors a record comes through.
+ *
+ * Returns the same object when there is nothing to do, so a load that changes
+ * nothing cannot look like an edit to the undo stack.
+ */
+export function circuitWithCeilingVolume(circuit: RealmRacersCircuit): RealmRacersCircuit {
+  if (
+    circuit.regionHalfX === REALM_RACERS_MAX_REGION_HALF_X &&
+    circuit.regionHalfZ === REALM_RACERS_MAX_REGION_HALF_Z
+  ) {
+    return circuit;
+  }
+  return {
+    ...circuit,
+    regionHalfX: REALM_RACERS_MAX_REGION_HALF_X,
+    regionHalfZ: REALM_RACERS_MAX_REGION_HALF_Z,
+  };
+}
+
+/**
+ * The record a `Fit wall` leaves behind, plus what the fit had to say.
+ *
+ * One function rather than four lines in the page, because it carries a decision
+ * the page was holding alone: a fit writes the ceiling volume as well as the
+ * wall, and that pairing is the only migration path a legacy draft has through
+ * the tool's own buttons.
+ */
+export function fittedCircuit(
+  circuit: RealmRacersCircuit,
+  roadHalfX: number,
+  roadHalfZ: number,
+): { circuit: RealmRacersCircuit; suggestion: EnvelopeSuggestion } {
+  const suggestion = suggestEnvelope(roadHalfX, roadHalfZ, circuit.perimeter);
+  return {
+    circuit: circuitWithCeilingVolume({ ...circuit, perimeter: suggestion.perimeter }),
+    suggestion,
+  };
+}
+
+/**
  * Lawn between the garden edge and the water, yards.
  *
  * A little more than the wall's own margin, because what stands between a road

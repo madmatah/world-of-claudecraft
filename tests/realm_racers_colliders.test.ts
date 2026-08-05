@@ -122,6 +122,9 @@ describe('Realm Racers boundaries', () => {
     const westEdge = REALM_RACERS_ORIGIN.x - GARDEN_CIRCUIT.regionHalfX;
     expect(westEdge).toBeGreaterThanOrEqual(YUMI_BAND_X_MAX);
     expect(isYumiMazePos(westEdge)).toBe(false);
+    // ...and the seam really is a seam rather than a gap: the yard below it IS
+    // the neighbour's, so the two windows meet exactly and nothing is orphaned.
+    expect(isYumiMazePos(westEdge - 1)).toBe(true);
     expect(YUMI_MAZE_X).toBeLessThan(westEdge - 1000);
     expect(REALM_RACERS_ORIGIN.x + GARDEN_CIRCUIT.regionHalfX).toBeLessThan(
       DUNGEON_OVERFLOW_X_BASE - 300,

@@ -18,6 +18,7 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../../sim/realm_racers_layout';
+import { MAX_PERIMETER_HALF_X, MAX_PERIMETER_HALF_Z } from './envelope_core';
 import { clampScale } from './layout_core';
 
 // ---- the circuit a blank canvas stands on ----
@@ -132,9 +133,15 @@ export interface CenterlineLimit {
 export function centerlineLimit(halfWidths: readonly number[]): CenterlineLimit {
   const road = halfWidths.length > 0 ? Math.max(...halfWidths) : 0;
   const gardenEdge = road + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
+  // Off the WALL's ceiling, not the volume's, and the yard between them is the
+  // whole of it: the road has to fit inside the widest legal wall, and the
+  // widest legal wall is a yard under the volume so it stays strictly inside.
+  // Measuring from the volume made this box a yard too generous, so a line drawn
+  // exactly on it answered with `road_outside_perimeter` and nothing on the plan
+  // explained why.
   return {
-    halfX: REALM_RACERS_MAX_REGION_HALF_X - gardenEdge,
-    halfZ: REALM_RACERS_MAX_REGION_HALF_Z - gardenEdge,
+    halfX: MAX_PERIMETER_HALF_X - gardenEdge,
+    halfZ: MAX_PERIMETER_HALF_Z - gardenEdge,
   };
 }
 

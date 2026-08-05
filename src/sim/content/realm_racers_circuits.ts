@@ -274,7 +274,7 @@ export interface RealmRacersCircuit {
    * The INSTANCE VOLUME, half-extents from the circuit's origin: where the world
    * stops being the world. It is not a wall and it stops nobody. It answers
    * `realmRacersLaneAt`, and that answer is what flattens the ground
-   * (`world.ts` `terrainHeight` returns `DUNGEON_FLOOR_Y` inside it), switches
+   * (`world.ts` `groundHeight`, not `terrainHeight`), switches
    * off the world's colliders and mantling (`colliders.ts`), and picks the sky,
    * the theme's art and the music. The one thing that STOPS a machine is
    * `perimeter`, and the rule that the wall stays strictly inside this box is

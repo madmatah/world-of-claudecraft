@@ -202,8 +202,11 @@ export function rallyGateCrossingFraction(
  * Lanes: where the circuits live in the band.
  *
  * The instance band is tight on x (the usable window between `YUMI_BAND_X_MAX`
- * and the overflow-dungeon guard is about 700 yards, and one circuit's region is
- * already 340 of it) and free on z, so everything stacks along z at the SAME x.
+ * and the overflow-dungeon guard is about 700 yards, and since packet 28 every
+ * circuit's region fills 600 of it, because the volume stopped being a
+ * per-circuit number and became the ceiling) and free on z, so everything stacks
+ * along z at the SAME x. That is what makes the lane spacing the interesting
+ * constraint and the x window a fixed fact.
  * x is what separates the instance plane's bands from each other and the rally
  * owns its whole band, so nothing else in the world keys on z out here.
  *
