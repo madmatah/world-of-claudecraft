@@ -499,23 +499,77 @@ describe('cutting a run into modules', () => {
         },
       ]);
       const [drawing] = rallyFencePieces(circuit);
-      const panelYards = REALM_RACERS_BARRIER_VISUALS.ironwork.panelYards;
+      const visual = REALM_RACERS_BARRIER_VISUALS.ironwork;
+      // The ironwork wears a pillar, so the tiling is inset at both ends by half
+      // of it: the piece has to have somewhere to stand.
+      const inset = (visual.corner as { yards: number }).yards / 2;
+      const span = length - inset * 2;
       expect(drawing.panels.length, `${length} yd`).toBe(
-        Math.max(1, Math.round(length / panelYards)),
+        Math.max(1, Math.round(span / visual.panelYards)),
       );
       // The pieces come out in WORLD coordinates, which is what the renderer
       // instances them at; the run was authored circuit-local.
-      const step = length / drawing.panels.length;
+      const step = span / drawing.panels.length;
       drawing.panels.forEach((panel, i) => {
         expect(panel.x - REALM_RACERS_ORIGIN.x, `${length} yd, panel ${i}`).toBeCloseTo(
-          step * (i + 0.5),
+          inset + step * (i + 0.5),
           6,
         );
         expect(panel.z - REALM_RACERS_ORIGIN.z).toBeCloseTo(0, 6);
       });
-      // No gap and no overhang: the last panel's far edge lands on the run's end.
-      expect(step).toBeLessThanOrEqual(panelYards * 1.5);
+      // Even, with no cell left over: the first and last cells start and end on
+      // the inset, so the run is covered exactly between its two pillars.
+      expect(inset + step * drawing.panels.length).toBeCloseTo(length - inset, 6);
     }
+  });
+
+  it('makes ROOM for a corner piece, and overlaps the joint when there is none', () => {
+    // The two opposite answers to one question, and the seat test that found
+    // them: with a pillar at the joint the two arms were tiled PAST each other,
+    // so the railing crossed straight through the pillar and came out into the
+    // opposite arm. A kit with a corner piece has to stop short of it; a kit
+    // without one has to overlap, because that overlap IS the seal.
+    const chevron = (kit: string) =>
+      withFences([
+        {
+          kit,
+          points: [
+            { x: -20, z: 0 },
+            { x: 0, z: -20 },
+            { x: 20, z: 0 },
+          ],
+        },
+      ]);
+    /**
+     * How far SHORT of the joint the nearest panel's own cell stops, along the
+     * run. Negative means the cell crossed the joint into the other arm.
+     *
+     * Measured off the drawn pieces alone: two adjacent panels of one run are
+     * exactly one cell apart, and the nearest centre sits half a cell inside its
+     * own end, so the end of the tiling is `nearest - cell / 2` from the joint.
+     */
+    const reachPastJoint = (kit: string): number => {
+      const [drawing] = rallyFencePieces(chevron(kit));
+      const local = drawing.panels.map((panel) => ({
+        x: panel.x - REALM_RACERS_ORIGIN.x,
+        z: panel.z - REALM_RACERS_ORIGIN.z,
+      }));
+      const cell = Math.hypot(local[0].x - local[1].x, local[0].z - local[1].z);
+      const nearest = Math.min(...local.map((point) => Math.hypot(point.x, point.z + 20)));
+      return nearest - cell / 2;
+    };
+
+    // Ironwork has a pillar: its cell stops short of the joint by the pillar's
+    // own half, so the piece has somewhere to stand.
+    const withPillar = reachPastJoint('ironwork');
+    expect(withPillar).toBeGreaterThan(0);
+    expect(withPillar).toBeCloseTo(
+      (REALM_RACERS_BARRIER_VISUALS.ironwork.corner as { yards: number }).yards / 2,
+      2,
+    );
+    // The hedge has none, so its cells run PAST the joint and the two arms
+    // interpenetrate there. Same measurement, opposite sign.
+    expect(reachPastJoint('hedge')).toBeLessThan(0);
   });
 
   it('puts a corner piece at every authored point, and none for a kit with no corner', () => {

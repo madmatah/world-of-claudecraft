@@ -89,8 +89,14 @@ export interface RallyBarrierVisual {
   /**
    * What stands at an authored point where two runs meet, and at both ends of an
    * open run. `'none'` covers the joint by overlapping the two runs instead.
+   *
+   * `yards` is the corner module's own run at `scale`, and it is what the panels
+   * make ROOM for: a run wearing a corner piece is tiled INSIDE the joint by
+   * half of it at each end, so the pillar sits in the gap. Without it the two
+   * arms are tiled past each other and the railing crosses straight through the
+   * pillar, which is what the first seat test of the corner rework showed.
    */
-  corner: { url: string } | 'none';
+  corner: { url: string; yards: number } | 'none';
 }
 
 export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = {
@@ -102,7 +108,7 @@ export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = 
     panelYards: 3.5,
     scale: 1,
     lengthAxis: 'x',
-    corner: { url: IRON_PILLAR_URL },
+    corner: { url: IRON_PILLAR_URL, yards: 0.5 },
   },
   ornateRailing: {
     panelUrl: ORNAMENT_URL,
@@ -165,14 +171,14 @@ export const REALM_RACERS_BARRIER_VISUALS: Record<string, RallyBarrierVisual> = 
     panelYards: 4,
     scale: 1,
     lengthAxis: 'x',
-    corner: { url: RUIN_PILLAR_URL },
+    corner: { url: RUIN_PILLAR_URL, yards: 1.5 },
   },
   crackedWall: {
     panelUrl: CRACKED_WALL_URL,
     panelYards: 4.4,
     scale: 1.1,
     lengthAxis: 'x',
-    corner: { url: RUIN_PILLAR_URL },
+    corner: { url: RUIN_PILLAR_URL, yards: 1.5 },
   },
   // Mountain masonry, half of whose module is authored below its own origin. Its
   // kit's 4 yard pier would stand half again as tall as the wall it capped, so

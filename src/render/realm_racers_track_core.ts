@@ -593,21 +593,35 @@ export function rallyFencePieces(circuit: RealmRacersCircuit): RallyFenceDrawing
     const turn = visual.lengthAxis === 'z' ? Math.PI / 2 : 0;
     const scale = visual.scale * fence.scale;
     const panelYards = visual.panelYards * fence.scale;
+    // WHERE THE MODULES ARE LAID depends on whether the kit has a corner piece,
+    // and the two answers are opposite because the joint is closed two different
+    // ways:
+    //
+    //  - with NO corner piece, the runs themselves close it, so they are tiled
+    //    along the DRAWN span, which reaches a half thickness past every joint.
+    //    They overlap there, and that overlap is the seal;
+    //  - with a corner piece, the PIECE closes it, so the runs are tiled inside
+    //    the joint by half the piece and stop short. Tiled past each other
+    //    instead, the two arms cross straight through the pillar standing
+    //    between them, which is what the first seat test of this rework showed.
+    const inset = visual.corner === 'none' ? 0 : (visual.corner.yards * fence.scale) / 2;
     const panels: RallyBarrierPiece[] = [];
     for (const run of fence.runs) {
-      // The DRAWN length, not the authored one: it reaches a half thickness past
-      // every joint, so two runs meeting at any angle overlap there rather than
-      // leaving a wedge of daylight the collider does not have. That overlap IS
-      // how a kit with no corner piece closes a corner.
-      const count = Math.max(1, Math.round(run.drawnLength / panelYards));
-      const step = run.drawnLength / count;
+      const fromX = visual.corner === 'none' ? run.dax : run.ax;
+      const fromZ = visual.corner === 'none' ? run.daz : run.az;
+      const span = (visual.corner === 'none' ? run.drawnLength : run.length) - inset * 2;
       const ux = (run.dbx - run.dax) / run.drawnLength;
       const uz = (run.dbz - run.daz) / run.drawnLength;
+      // A run shorter than the two corner pieces meeting on it has no room for a
+      // panel at all, and the pieces alone are the barrier there.
+      if (!(span > 0)) continue;
+      const count = Math.max(1, Math.round(span / panelYards));
+      const step = span / count;
       for (let i = 0; i < count; i++) {
-        const along = step * (i + 0.5);
+        const along = inset + step * (i + 0.5);
         panels.push({
-          x: run.dax + ux * along + REALM_RACERS_ORIGIN.x,
-          z: run.daz + uz * along + REALM_RACERS_ORIGIN.z,
+          x: fromX + ux * along + REALM_RACERS_ORIGIN.x,
+          z: fromZ + uz * along + REALM_RACERS_ORIGIN.z,
           yaw: run.rot + turn,
           corner: false,
         });
