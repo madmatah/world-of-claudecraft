@@ -76,6 +76,51 @@ function value(body: string, prop: string): string | null {
   return m ? m[1].trim() : null;
 }
 
+// Split a shorthand value on top-level whitespace only: `max(10px, env(...))`
+// carries spaces inside its parens, so a naive split would shear the function.
+function splitTopLevel(v: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of v) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (/\s/.test(ch) && depth === 0) {
+      if (cur) parts.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+
+// The `inset` family re-pins `left`/`right` without ever writing the longhand
+// (the #realm-racers-window bug shipped exactly this way), so expand the
+// shorthands to their horizontal edges before merging. Logical `inline`
+// properties map to left/right directly: every shipped locale is LTR.
+function horizontalInsets(body: string): { left: string | null; right: string | null } {
+  const out: { left: string | null; right: string | null } = { left: null, right: null };
+  const inset = value(body, 'inset');
+  if (inset) {
+    const p = splitTopLevel(inset);
+    // 1 value: all edges; 2: vertical horizontal; 3: top horizontal bottom;
+    // 4: top right bottom left.
+    out.right = p.length === 1 ? p[0] : p[1];
+    out.left = p.length <= 2 ? out.right : (p[3] ?? p[1]);
+  }
+  const inline = value(body, 'inset-inline');
+  if (inline) {
+    const p = splitTopLevel(inline);
+    out.left = p[0];
+    out.right = p[1] ?? p[0];
+  }
+  out.left = value(body, 'inset-inline-start') ?? out.left;
+  out.right = value(body, 'inset-inline-end') ?? out.right;
+  return out;
+}
+
 // A selector group is "base mobile-touch state" when at least one of its
 // comma-separated selectors targets a window id through exactly the
 // `body.mobile-touch` state, with no extra state class (e.g. `.vendor-open`,
@@ -109,8 +154,9 @@ function analyze(html: string) {
   for (const rule of rules) {
     for (const id of baseMobileWindowIds(rule.selector, windowIds)) {
       const acc = merged.get(id)!;
-      acc.left = value(rule.body, 'left') ?? acc.left;
-      acc.right = value(rule.body, 'right') ?? acc.right;
+      const ins = horizontalInsets(rule.body);
+      acc.left = value(rule.body, 'left') ?? ins.left ?? acc.left;
+      acc.right = value(rule.body, 'right') ?? ins.right ?? acc.right;
       acc.transform = value(rule.body, 'transform') ?? acc.transform;
     }
   }

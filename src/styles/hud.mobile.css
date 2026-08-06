@@ -5663,6 +5663,9 @@
     body.mobile-touch #realm-racers-window {
       inset: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
         max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+      /* Both edges pinned: the base .window translateX(-50%) would drag the
+         near-full-width box half a screen off the left edge. */
+      transform: none;
       width: auto;
       max-width: none;
       max-height: none;
