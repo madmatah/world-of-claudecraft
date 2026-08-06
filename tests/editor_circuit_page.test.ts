@@ -16,7 +16,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CALLOUT_REACH } from '../src/editor/circuit/layout_core';
+import { CALLOUT_REACH, MODE_ACTIONS, RAIL_MODES } from '../src/editor/circuit/layout_core';
 import {
   PLAN_LEGEND,
   PLAN_PALETTE_FALLBACK,
@@ -245,6 +245,107 @@ describe('the circuit editor page stylesheet', () => {
         .matchAll(/([A-Za-z][\w.]*)\.hidden\s*=/g),
     ]);
     expect(assignments.length).toBe(29);
+  });
+});
+
+describe('the circuit editor page wiring', () => {
+  // `main.ts` is the one module of the page no unit test can construct (it is
+  // the page), so the contracts between the action table, the boot order and
+  // the gesture state are pinned the way this file pins everything else: by
+  // reading the source. Each pin names the defect it holds shut.
+  const mainSource = sources[files.findIndex((entry) => entry.file === 'main.ts')];
+
+  it('has the walked corpus to scan', () => {
+    expect(mainSource).toBeDefined();
+    expect(mainSource).toContain('function runAction');
+  });
+
+  it('carries a runAction case for every rail mode the table advertises', () => {
+    // The defect this pins: the Terrain rail grew a fifth digit in the table
+    // and the keydown handler preventDefaulted it, but `runAction` had no
+    // `modeTerrain` arm, so the shortcut was silently dead.
+    for (const mode of RAIL_MODES) {
+      expect(mainSource, `runAction has no case for ${MODE_ACTIONS[mode.id]}`).toContain(
+        `case '${MODE_ACTIONS[mode.id]}':`,
+      );
+    }
+  });
+
+  it('captures the parked zoom before the blank canvas frames itself', () => {
+    // Boot runs `newBlank()`, whose `fitView()` calls `rememberZoom()` and
+    // overwrites `layout.zoom` with the blank-canvas fit scale, so a restore
+    // that reads `layout.zoom` afterwards restores the clobbered value: the
+    // operator's parked zoom was lost on every reload.
+    const capture = mainSource.indexOf('const parkedZoom = layout.zoom');
+    const boot = mainSource.lastIndexOf('newBlank();');
+    expect(capture, 'boot captures layout.zoom before newBlank can clobber it').toBeGreaterThan(-1);
+    expect(boot).toBeGreaterThan(-1);
+    expect(capture).toBeLessThan(boot);
+    expect(mainSource).toContain('view.scale = parkedZoom');
+  });
+
+  it('clamps the tool value where it changes, so the status says what a stroke paints', () => {
+    // Typing 100 into the width box painted 40 (paintSpan clamps internally)
+    // while the status line reported "set to 100": the box was only clamped on
+    // a tool or tab SWAP, never on its own change event.
+    const start = mainSource.indexOf('onToolValue');
+    const end = mainSource.indexOf('onResume', start);
+    expect(start).toBeGreaterThan(-1);
+    const handler = mainSource.slice(start, end);
+    expect(handler).toContain('clampToolValue');
+    expect(handler).toContain('toolValueInput.value = String(');
+  });
+
+  it('scales the fence hit tolerance by the zoom, like every sibling gesture', () => {
+    // `FENCE_POINT_TOLERANCE_YD` documents itself as "yards at zoom 1, the
+    // caller scales it", and the caller returned it fixed while the handle,
+    // segment and dressing tolerances all divide pixels by `view.scale`.
+    expect(mainSource).toContain('FENCE_POINT_TOLERANCE_YD / view.scale');
+  });
+
+  it('feeds the refreshed hint and the PRESS frame through a dressing drag', () => {
+    // Two silent flips out of one wiring. The hint was set ONCE at the press,
+    // so a drag along the road longer than the projection window's reach fell
+    // back to the whole-lap scan and authored the piece circuit-local twelve
+    // yards off the road; and the frame was read off the entry the LAST move
+    // committed, so one intermediate position past the envelope latched
+    // 'absolute' for the rest of the drag. The move arm carries both: the hint
+    // the core handed back, and the frame the piece wore at the press.
+    expect(mainSource).toContain('movedProp(record, prop, point.x, point.z, dragHint, dragFrame)');
+    expect(mainSource).toContain('dragHint = moved.hint;');
+    // Both press arms that start a move drag capture the frame beside the hint.
+    const captures = [...mainSource.matchAll(/dragFrame = propFrameOf\(/g)];
+    expect(captures.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('reads a corner drag against the placement captured at the press', () => {
+    // `placedFootprint` returns an explicit `collide` literal UNSCALED, so its
+    // grip reach is CONSTANT while the scale grows: a ratio read against the
+    // placement the previous move just committed multiplies the scale by
+    // dist/reach on every pointermove and compounds to the clamp within a few
+    // moves. The press captures the resolved piece; every move measures
+    // against THAT.
+    expect(mainSource).toContain('propGrab = placed;');
+    expect(mainSource).toContain(
+      'propWithHandleAt(prop, propGrab, propHandle, raw.x, raw.z, free)',
+    );
+    // And the fresh resolve is gone from the handle arm: nothing re-reads the
+    // placement mid-drag.
+    const arm = mainSource.slice(
+      mainSource.indexOf("if (dressingDrag === 'prop'"),
+      mainSource.indexOf("if (dressingDrag === 'road'"),
+    );
+    expect(arm).not.toContain('selectedPlacedProp()');
+  });
+
+  it('drops the stale point selection when a fence draw starts', () => {
+    // Starting a draw reset `fenceSelection` and `groundPoint` but not
+    // `fencePoint`, so a point index from the previous selection survived into
+    // the freshly drawn fence and `del` removed one of ITS points.
+    const draftStart = mainSource.indexOf('fenceDraft = { kit,');
+    expect(draftStart).toBeGreaterThan(-1);
+    const arm = mainSource.slice(draftStart, mainSource.indexOf('announceArmed', draftStart));
+    expect(arm).toContain('fencePoint = null;');
   });
 });
 

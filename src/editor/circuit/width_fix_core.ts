@@ -128,6 +128,26 @@ export function suggestWidthBands(circuit: RealmRacersCircuit): WidthFixResult {
   }
   breakpoints.push({ s: 1, halfWidth: round2(at(0)) });
 
+  // The authored breakpoints come along too, capped at their OWN fractions.
+  // The grid rows alone sample the authored ceiling only at cell boundaries, so
+  // a chicane authored inside one cell was erased by the interpolation between
+  // two boundaries that never saw it: the repair WIDENED a road the operator
+  // tightened on purpose, the one thing the contract above forbids. A row on a
+  // boundary is skipped, because the grid row there already caps against the
+  // authored table at that exact fraction. Capping at the containing cell's
+  // requirement keeps the interpolation argument sound: every row inside cell k
+  // stays at or under `cellNeed[k]`.
+  for (const band of circuit.widthBands) {
+    const scaled = band.s * cells;
+    if (Math.abs(scaled - Math.round(scaled)) < 1e-6) continue;
+    const need = cellNeed[Math.min(cells - 1, Math.floor(scaled))];
+    breakpoints.push({
+      s: band.s,
+      halfWidth: round2(Math.max(REALM_RACERS_MIN_HALF_WIDTH, Math.min(band.halfWidth, need))),
+    });
+  }
+  breakpoints.sort((a, b) => a.s - b.s);
+
   // Drop a breakpoint its two neighbours already explain, so a road that holds
   // one width for half the lap says so once instead of fifty times.
   const widthBands: { s: number; halfWidth: number }[] = [];

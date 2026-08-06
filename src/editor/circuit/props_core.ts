@@ -91,7 +91,8 @@ export function propFrameOf(prop: RallyProp): PropFrame {
 }
 
 /**
- * A placement, plus the projection index that produced it.
+ * A placement, plus the projection index the NEXT move of the same gesture
+ * should carry.
  *
  * The index is the caller's DRAG HINT and the reason this returns a pair. Two
  * stretches of a circuit can run eleven yards apart facing opposite ways, and
@@ -99,6 +100,16 @@ export function propFrameOf(prop: RallyProp): PropFrame {
  * search reached first: dragging a bench across the corridor would teleport it
  * onto the far stretch at a mirrored offset. Feeding the prop's own previous
  * index back in keeps the drag on the stretch it started on.
+ *
+ * It is the index to CARRY FORWARD, not always the one this projection
+ * returned: while the projection answered from its own window it is the fresh
+ * index, which keeps the window anchored to wherever the drag has GOT to (a
+ * hint parked at the press is outrun by any drag longer than the window's
+ * reach, and the piece silently went absolute twelve yards off the road). Once
+ * the projection fell back to the whole lap it is the caller's own hint
+ * unchanged, because the piece did not move to the stretch the fallback found,
+ * and re-anchoring the window there would hand the rest of the drag to the
+ * wrong road.
  */
 export interface AuthoredPlacement {
   at: RallyPropAt;
@@ -122,13 +133,12 @@ export function authorPlacement(
 ): AuthoredPlacement {
   const track = realmRacersTrack(circuit);
   const projection = track.project(x + REALM_RACERS_ORIGIN.x, z + REALM_RACERS_ORIGIN.z, hint);
-  const trackside =
-    Math.abs(projection.lateral) <= PROP_TRACK_SPACE_BAND &&
-    stayedNear(projection.index, hint, track.samples.length);
+  const near = stayedNear(projection.index, hint, track.samples.length);
+  const trackside = Math.abs(projection.lateral) <= PROP_TRACK_SPACE_BAND && near;
   const useTrack = frame === 'auto' ? trackside : frame === 'track';
   return {
     at: useTrack ? { s: projection.s / track.length, offset: projection.lateral } : { x, z },
-    hint: projection.index,
+    hint: near ? projection.index : (hint ?? projection.index),
   };
 }
 
@@ -163,7 +173,8 @@ export function propProjectionHint(
 }
 
 /**
- * The same piece, moved to a point.
+ * The same piece, moved to a point: one MOVE of a drag, plus what the next move
+ * of the same drag needs to carry.
  *
  * An ABSOLUTE piece stays absolute, however near the road it is dragged: that
  * frame is the operator's own call (the inspector toggle says so), and a
@@ -175,6 +186,18 @@ export function propProjectionHint(
  * exact point it was dropped, rather than being re-anchored on whichever
  * stretch an untrusted projection reached first. The piece stops following the
  * road, which is what a piece out in the open should do anyway.
+ *
+ * `pressFrame` is the frame the piece wore when the DRAG began, and it is a
+ * parameter because every pointermove COMMITS: read off the entry the last
+ * move committed, the frame latched 'absolute' the first time an intermediate
+ * position crossed the envelope, and a drag that came back inside never
+ * recovered. The decision the release persists has to be the one the drop
+ * point alone would make. A single-shot move (a nudge, a duplicate) leaves it
+ * to the default, which is the frame the piece carries.
+ *
+ * The returned `hint` is `AuthoredPlacement`'s: the next move of the SAME drag
+ * feeds it back, so the projection window stays anchored to wherever the drag
+ * has got to instead of to where it began.
  */
 export function movedProp(
   circuit: RealmRacersCircuit,
@@ -182,9 +205,11 @@ export function movedProp(
   x: number,
   z: number,
   hint?: number,
-): RallyProp {
-  const frame = propFrameOf(prop) === 'absolute' ? 'absolute' : 'auto';
-  return { ...prop, at: authorPlacement(circuit, x, z, frame, hint).at };
+  pressFrame: PropFrame = propFrameOf(prop),
+): { prop: RallyProp; hint: number } {
+  const frame = pressFrame === 'absolute' ? 'absolute' : 'auto';
+  const placement = authorPlacement(circuit, x, z, frame, hint);
+  return { prop: { ...prop, at: placement.at }, hint: placement.hint };
 }
 
 /**
@@ -325,13 +350,22 @@ export function hitTestPropHandle(
 /**
  * The piece a grip drag leaves behind.
  *
+ * `placed` is the piece as the resolver placed it at the PRESS of the drag, and
+ * every move of the drag measures against that same placement. The ratio is
+ * press-relative on purpose: the resolver returns an explicit `collide` literal
+ * UNSCALED, so its grip reach is CONSTANT while the scale grows, and a ratio
+ * read against the placement the previous move committed would multiply the
+ * scale by dist/reach on every pointermove, compounding to the clamp within a
+ * few moves. (The centre does not move under a grip drag, so the press
+ * placement is the current one for everything else read off it.)
+ *
  * Rotation lands on the ROTATE STEP unless `free`, because a row of benches that
  * each stopped at whatever angle the pointer happened to be at is the thing an
  * author is trying to avoid; `shift` is the way out for the one piece that wants
  * an angle nothing else has.
  *
- * Scale is read as a RATIO of the reach the grip already had, so it is the same
- * gesture at every zoom and at every size the piece is already at: the grip
+ * Scale is read as a RATIO of the reach the grip had at the press, so it is the
+ * same gesture at every zoom and at every size the piece already was: the grip
  * follows the pointer because the piece grew to meet it.
  */
 export function propWithHandleAt(
@@ -410,7 +444,7 @@ export function duplicatedProp(
     placedX + DUPLICATE_OFFSET_YD,
     placedZ + DUPLICATE_OFFSET_YD,
     hint,
-  );
+  ).prop;
 }
 
 /** The same pond again, beside itself. Its own seed comes along: a copy that
@@ -645,7 +679,10 @@ export function pondHandlePoints(pond: RallyPond): Record<PondHandle, RallyPoint
   };
 }
 
-/** The handle a pointer is on, or null. */
+/** The handle a pointer is on, or null. NEAREST wins, like the prop grips: the
+ *  rot handle sits `POND_ROTATE_HANDLE_GAP` yards past the rx handle on the
+ *  same axis, so at a low zoom the tolerance reaches both at once and
+ *  first-in-list made the rotate handle unreachable. */
 export function hitTestPondHandle(
   pond: RallyPond,
   x: number,
@@ -653,11 +690,17 @@ export function hitTestPondHandle(
   tolerance: number,
 ): PondHandle | null {
   const points = pondHandlePoints(pond);
+  let best: PondHandle | null = null;
+  let bestDistance = tolerance;
   for (const handle of POND_HANDLES) {
     const point = points[handle];
-    if (Math.hypot(point.x - x, point.z - z) <= tolerance) return handle;
+    const distance = Math.hypot(point.x - x, point.z - z);
+    if (distance <= bestDistance) {
+      bestDistance = distance;
+      best = handle;
+    }
   }
-  return null;
+  return best;
 }
 
 /** The pond a handle drag leaves behind. The two radius handles read the

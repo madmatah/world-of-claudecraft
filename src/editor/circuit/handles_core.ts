@@ -246,12 +246,16 @@ export function paintSpan(
   const out: { band: CircuitBand; emitted: boolean }[] = [];
   for (const band of bands) {
     // A breakpoint inside the stroke or its ramps is part of the transition
-    // now, so the stroke replaces it rather than fighting it.
+    // now, so the stroke replaces it rather than fighting it. A breakpoint
+    // inside cell c is inside the transition only when BOTH boundaries of that
+    // cell are: judging its left boundary alone deleted authored rows one cell
+    // further to the stroke's right than to its left.
     const cell = Math.min(cells - 1, Math.floor(band.s * cells));
     const onEdge = Math.abs(band.s * cells - Math.round(band.s * cells)) < 1e-9;
-    if (onEdge ? boundaryTouched(Math.round(band.s * cells)) : distance[cell] <= rampCells + 1) {
-      continue;
-    }
+    const inTransition = onEdge
+      ? boundaryTouched(Math.round(band.s * cells))
+      : boundaryTouched(cell) && boundaryTouched(cell + 1);
+    if (inTransition) continue;
     out.push({ band: { ...band }, emitted: false });
   }
   for (let k = 0; k <= cells; k++) {

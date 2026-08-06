@@ -113,6 +113,7 @@ import {
   actionForShortcut,
   type CircuitTool,
   calloutProblems,
+  clampToolValue,
   type DockGeometry,
   type EditorLayout,
   gridRange,
@@ -209,6 +210,7 @@ import {
   nudgeKeyOf,
   POND_CHOICE,
   type PondHandle,
+  type PropFrame,
   type PropHandle,
   placedPropIndices,
   placementIndexOf,
@@ -381,9 +383,21 @@ let dressingDrag: 'move' | 'rect' | 'pond' | 'prop' | 'road' | null = null;
 let pondHandle: PondHandle | null = null;
 /** The selected prop's grip under a rotate/scale drag. */
 let propHandle: PropHandle | null = null;
-/** The projection index a track-space drag started from: without it a drag
- *  across a pinch re-anchors the piece to the facing stretch. */
+/** The piece as the resolver placed it at the grip PRESS: every move of a grip
+ *  drag measures against THIS. An explicit collide literal keeps a constant
+ *  reach while the scale grows, so a ratio read against the placement the
+ *  previous move committed compounds to the clamp within a few moves. */
+let propGrab: RallyPlacedProp | null = null;
+/** The projection index a track-space drag is anchored to: without it a drag
+ *  across a pinch re-anchors the piece to the facing stretch. Refreshed from
+ *  every move's own answer, because a hint parked at the press is outrun by
+ *  any drag longer than the projection window's reach. */
 let dragHint: number | undefined;
+/** The frame the dragged piece wore at the PRESS. Every move commits, so the
+ *  frame read off the entry the last move committed latched 'absolute' after
+ *  one excursion past the envelope; the drop decides from where the pointer
+ *  is NOW, against the frame the drag began with. */
+let dragFrame: PropFrame | undefined;
 /** The live rectangle a scatter or a pond is being dragged out over. */
 let dressingRect: DressingRect | null = null;
 /**
@@ -1572,9 +1586,9 @@ function deletePickupRow(): void {
 
 // ---- the terrain gestures ----
 
-/** Click tolerance in yards for a barrier point, so a corner stays grabbable at
- *  any zoom. The same shape as the dressing's own. */
-const fenceTolerance = (): number => FENCE_POINT_TOLERANCE_YD;
+/** Click tolerance for a barrier point: yards at zoom 1, over the zoom, so a
+ *  corner stays grabbable at any zoom. The same shape as the dressing's own. */
+const fenceTolerance = (): number => FENCE_POINT_TOLERANCE_YD / view.scale;
 
 /**
  * One click in the TERRAIN tool.
@@ -1666,6 +1680,9 @@ function startTerrainGesture(raw: RallyPoint): void {
   }
   fenceDraft = { kit, points: [{ x: raw.x, z: raw.z }] };
   fenceSelection = null;
+  // The point index goes with the selection: left behind, it survived into the
+  // freshly drawn fence's selection and `del` removed a point of the NEW fence.
+  fencePoint = null;
   groundPoint = null;
   announceArmed(kit);
 }
@@ -2116,6 +2133,7 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
       pushUndo();
       dressingDrag = 'prop';
       propHandle = handle;
+      propGrab = placed;
       return;
     }
   }
@@ -2141,7 +2159,9 @@ function startDressingGesture(raw: RallyPoint, rect: boolean): void {
     dressing = { kind: 'prop', index };
     pushUndo();
     dressingDrag = 'move';
-    dragHint = propProjectionHint(record, (record.props ?? [])[index]);
+    const grabbed = (record.props ?? [])[index];
+    dragHint = propProjectionHint(record, grabbed);
+    dragFrame = propFrameOf(grabbed);
     applySideTab();
     requestRedraw();
     return;
@@ -2213,6 +2233,7 @@ function placeOne(raw: RallyPoint): void {
   dressing = { kind: 'prop', index: props.length - 1 };
   dressingDrag = 'move';
   dragHint = authoredAt.hint;
+  dragFrame = propFrameOf(piece);
   commitDressing({ props });
   applySideTab();
   const legality = placementLegality(
@@ -2237,16 +2258,18 @@ function moveDressingGesture(raw: RallyPoint, free = false): void {
   const point = authored(raw);
   if (dressingDrag === 'prop' && propHandle && dressing?.kind === 'prop') {
     const prop = selectedProp();
-    const placed = selectedPlacedProp();
-    if (!prop || !placed) return;
+    if (!prop || !propGrab) return;
     // The RAW pointer: a grip drag authors an angle or a ratio, and neither is a
-    // coordinate the grid has anything to say about.
+    // coordinate the grid has anything to say about. Against the placement the
+    // PRESS captured, never a fresh resolve: an explicit collide footprint keeps
+    // a constant reach while the scale grows, so a ratio read against the entry
+    // the last move committed compounds on every pointermove.
     commitDressing(
       {
         props: replacedAt(
           record.props,
           dressing.index,
-          propWithHandleAt(prop, placed, propHandle, raw.x, raw.z, free),
+          propWithHandleAt(prop, propGrab, propHandle, raw.x, raw.z, free),
         ),
       },
       false,
@@ -2285,16 +2308,13 @@ function moveDressingGesture(raw: RallyPoint, free = false): void {
   if (dressing.kind === 'prop') {
     const prop = (record.props ?? [])[dressing.index];
     if (!prop) return;
-    commitDressing(
-      {
-        props: replacedAt(
-          record.props,
-          dressing.index,
-          movedProp(record, prop, point.x, point.z, dragHint),
-        ),
-      },
-      false,
-    );
+    // The hint the move hands back anchors the next move's projection window to
+    // wherever the drag has got to, and the frame is the PRESS's: both are what
+    // keeps a long drag along the road track-space, and an excursion past the
+    // envelope a decision the drop point makes rather than a latch.
+    const moved = movedProp(record, prop, point.x, point.z, dragHint, dragFrame);
+    dragHint = moved.hint;
+    commitDressing({ props: replacedAt(record.props, dressing.index, moved.prop) }, false);
     return;
   }
   if (dressing.kind === 'pond') {
@@ -2367,7 +2387,9 @@ function endDressingGesture(): void {
   roadRunPreview = { props: [], placed: [], legal: [] };
   pondHandle = null;
   propHandle = null;
+  propGrab = null;
   dragHint = undefined;
+  dragFrame = undefined;
   requestRedraw();
 }
 
@@ -2412,7 +2434,8 @@ function nudgeDressing(key: NudgeKey, big: boolean): void {
       props: replacedAt(
         record.props,
         dressing.index,
-        movedProp(record, prop, placed.x + dx, placed.z + dz, propProjectionHint(record, prop)),
+        movedProp(record, prop, placed.x + dx, placed.z + dz, propProjectionHint(record, prop))
+          .prop,
       ),
     });
     setStatus(`nudged ${prop.asset} ${Math.hypot(dx, dz).toFixed(1)} yd`, '');
@@ -3306,6 +3329,9 @@ function runAction(id: ActionId): void {
     case 'modeRace':
       setRailMode('race');
       return;
+    case 'modeTerrain':
+      setRailMode('terrain');
+      return;
     case 'keys':
       shell.toggleKeys();
       return;
@@ -3406,9 +3432,15 @@ const shell = new EditorShell(
     onFocusProblem: focusProblem,
     onToolValue: () => {
       // Nothing to recompute: the field is read at the start of the next stroke.
-      // Reported so a change the operator made is visibly the tool's now.
+      // Clamped HERE, on the change itself, with the same clamp the tool-swap
+      // path uses: typing 100 into the width box painted 40 (paintSpan clamps
+      // internally) while the status line reported "set to 100". Reported so a
+      // change the operator made is visibly the tool's now.
       const field = TOOL_VALUE_FIELDS[tool()];
-      if (field) setStatus(`${field.label}: ${shell.toolValueInput.value}`, '');
+      if (!field) return;
+      const value = clampToolValue(field, Number(shell.toolValueInput.value));
+      shell.toolValueInput.value = String(value);
+      setStatus(`${field.label}: ${value}`, '');
     },
     onResume: takeResume,
   },
@@ -3899,14 +3931,20 @@ shell.sideBodyEl.append(
 shell.showMetrics(layout.metricsOpen);
 syncToggles();
 shell.setPreviewReady('off');
+// Captured BEFORE the blank canvas: `newBlank` runs `fitView`, whose
+// `rememberZoom` overwrites `layout.zoom` with the blank-canvas fit scale, so
+// reading the field after it meant the operator's parked zoom was already gone.
+const parkedZoom = layout.zoom;
 newBlank();
 // Offered AFTER the blank canvas, so the status line the operator reads is the
 // offer rather than "blank canvas: draw a closed loop" written over it.
 offerResume();
 // The stored zoom, applied after the blank canvas framed itself: the operator
 // left the plan at a zoom they were working at, and `newBlank` frames the room a
-// circuit has rather than the one they were looking at.
-if (layout.zoom) {
-  view.scale = layout.zoom;
+// circuit has rather than the one they were looking at. Remembered again, since
+// the boot fit has just SAVED its own scale over the parked one.
+if (parkedZoom) {
+  view.scale = parkedZoom;
+  rememberZoom();
   requestRedraw();
 }

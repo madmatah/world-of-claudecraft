@@ -286,6 +286,23 @@ describe('circuit editor export: the pasteable literal', () => {
     };
     expect(validateCircuitPayload(payload(unknown))).toBeNull();
 
+    // Membership must be an OWN key of the catalog: a prototype-chain name is
+    // not a prop the game has dimensions for, however truthy `key in table` is.
+    for (const ghost of ['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty']) {
+      const ghostProp = {
+        ...DRAFT,
+        id: 'draft_proto_asset',
+        props: [{ asset: ghost, at: { x: 0, z: 0 } }],
+      };
+      expect(validateCircuitPayload(payload(ghostProp)), `prop asset ${ghost}`).toBeNull();
+      const ghostScatter = {
+        ...DRAFT,
+        id: 'draft_proto_scatter',
+        scatters: [{ asset: ghost, zone: 'outfield' as const, spacing: 9, seed: 1 }],
+      };
+      expect(validateCircuitPayload(payload(ghostScatter)), `scatter asset ${ghost}`).toBeNull();
+    }
+
     // A placed pond is water, so the basin IFF covers it exactly as it covers a
     // water span: a pond with no bank profile is water made of nothing.
     const pondNoBasin = {

@@ -190,6 +190,26 @@ describe('circuit editor: painting a band table', () => {
     expect(after[Math.round(0.21 * after.length)]).toBeCloseTo(10, 1);
   });
 
+  it('keeps an authored breakpoint just past the ramp on BOTH sides of a stroke', () => {
+    // The off-by-one this pins: a breakpoint inside cell c was judged against
+    // its LEFT cell boundary only, so a stroke deleted authored rows one cell
+    // further to its right than to its left. A row is inside the transition
+    // only when BOTH boundaries of the cell it sits in are, and these two rows
+    // are mirror images of each other around the stroke, so either both go or
+    // both stay.
+    const shaped: CircuitBand[] = [
+      { s: 0, value: 10 },
+      { s: 0.4825, value: 8.5 },
+      { s: 0.5175, value: 8.5 },
+      { s: 1, value: 10 },
+    ];
+    const painted = paintSpan(shaped, [0.5025], 12, WIDTH_BRUSH);
+    expect(painted).toContainEqual({ s: 0.4825, value: 8.5 });
+    expect(painted).toContainEqual({ s: 0.5175, value: 8.5 });
+    // And the stroke really painted: the plateau sits at the painted value.
+    expect(profile(painted, 2000)[Math.round(0.5025 * 2000)]).toBeCloseTo(12, 6);
+  });
+
   it('spans the whole lap and keeps its two ends equal', () => {
     // s = 0 and s = 1 are the same yard of road: a table whose ends differ puts
     // a step across the start/finish line.

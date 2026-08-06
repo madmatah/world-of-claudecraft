@@ -327,6 +327,9 @@ describe('shortcut matching', () => {
     expect(actionForShortcut({ key: '&', code: 'Digit1' })).toBe('modeShape');
     expect(actionForShortcut({ key: 'é', code: 'Digit2' })).toBe('modeWidth');
     expect(actionForShortcut({ key: "'", code: 'Digit4' })).toBe('modeRace');
+    // The fifth rail entry too: it is the one whose runAction arm went missing,
+    // so it is never again the digit this sweep skips.
+    expect(actionForShortcut({ key: '(', code: 'Digit5' })).toBe('modeTerrain');
     expect(actionForShortcut({ key: 'à', code: 'Digit0' })).toBe('fitView');
   });
 

@@ -385,7 +385,8 @@ function readProps(raw: unknown): RallyProp[] | null {
   const out: RallyProp[] = [];
   for (const item of raw) {
     const prop = item as Record<string, unknown>;
-    if (typeof prop.asset !== 'string' || !(prop.asset in REALM_RACERS_PROPS)) return null;
+    if (typeof prop.asset !== 'string' || !Object.hasOwn(REALM_RACERS_PROPS, prop.asset))
+      return null;
     const at = prop.at as Record<string, unknown> | undefined;
     if (!at || typeof at !== 'object') return null;
     let placement: RallyProp['at'];
@@ -417,7 +418,8 @@ function readScatters(raw: unknown): RallyScatter[] | null {
   const out: RallyScatter[] = [];
   for (const item of raw) {
     const scatter = item as Record<string, unknown>;
-    if (typeof scatter.asset !== 'string' || !(scatter.asset in REALM_RACERS_PROPS)) return null;
+    if (typeof scatter.asset !== 'string' || !Object.hasOwn(REALM_RACERS_PROPS, scatter.asset))
+      return null;
     if (scatter.zone !== 'infield' && scatter.zone !== 'outfield') return null;
     if (!inRange(scatter.spacing, 1, 200) || !isInteger(scatter.seed, -1e9, 1e9)) return null;
     const span = scatter.span as Record<string, unknown> | undefined;

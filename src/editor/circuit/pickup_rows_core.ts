@@ -188,12 +188,18 @@ function gapBetween(a: number, b: number): number {
  * `neighbour + PICKUP_ROW_MIN_GAP` is not reliably one whole gap away from the
  * neighbour once a double has rounded it (0.19 + 0.01 lands at
  * 0.19999999999999998, which measures 0.00999999999999998 away), so the parked
- * row would be refused by the very rule that put it there. Nudging outward by
- * far more than a double's error and far less than anything the record keeps
- * (`FRACTION_PLACES` rounds to 1e-4, and this is 1e-9 of a lap, under a
- * micrometre) lets ONE definition of "clear" serve the placement and the move.
+ * row would be refused by the very rule that put it there.
+ *
+ * The slack has to SURVIVE the commit: every commit rounds a fraction to
+ * `FRACTION_PLACES` (4 decimals, `export_core.ts`), so a slack under half that
+ * resolution is rounded straight back ONTO the band edge, where the gap
+ * measures short in doubles again (0.21 - 0.2 < 0.01), and the record durably
+ * held a pair `isClearOf` refuses. One whole resolution step is the smallest
+ * value the rounding preserves exactly: a twentieth of a yard on the garden
+ * circuit, invisible on the plan, and one definition of "clear" serves the
+ * placement, the move, and the committed record alike.
  */
-const GAP_SLACK = 1e-9;
+const GAP_SLACK = 1e-4;
 
 /** Is `s` far enough from every row in `rows`? The same test `addPickupRow`
  *  refuses a placement with, so a move cannot author what a click could not. */

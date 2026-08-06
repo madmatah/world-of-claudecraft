@@ -60,8 +60,12 @@ import {
 } from '../src/sim/content/realm_racers_circuits';
 import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
 import { REALM_RACERS_ORIGIN } from '../src/sim/realm_racers_layout';
-import { realmRacersPlacements } from '../src/sim/realm_racers_props_resolve';
-import { REALM_RACERS_PROJECTION_ENVELOPE, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { rallyFootprintRadius, realmRacersPlacements } from '../src/sim/realm_racers_props_resolve';
+import {
+  REALM_RACERS_PROJECTION_ENVELOPE,
+  REALM_RACERS_PROJECTION_WINDOW,
+  realmRacersTrack,
+} from '../src/sim/realm_racers_spline';
 
 const EXPRESS = REALM_RACERS_CIRCUITS.evergarden_express_tour;
 
@@ -231,10 +235,33 @@ describe('circuit editor props: dragging across the pinch', () => {
     // So the piece stops being track-space and stands exactly where it was
     // dropped instead.
     const dropped = movedProp(EXPRESS, authored, target.x, target.z, hint);
-    expect(propFrameOf(dropped)).toBe('absolute');
-    const placed = placedOn(EXPRESS, dropped);
+    expect(propFrameOf(dropped.prop)).toBe('absolute');
+    const placed = placedOn(EXPRESS, dropped.prop);
     expect(placed.x).toBeCloseTo(target.x, 6);
     expect(placed.z).toBeCloseTo(target.z, 6);
+  });
+
+  it('keeps the drag anchored to its own stretch across the corridor, so coming back re-anchors home', () => {
+    // The move whose projection fell back did NOT move the piece to the stretch
+    // the fallback found: adopting that index as the next hint would hand the
+    // rest of the drag to the far road. The hint the move returns is the
+    // caller's own, so a drag out across the strip and back re-anchors to the
+    // stretch it started on.
+    const start = pointAt(EXPRESS, CORRIDOR_FRACTION, 12);
+    const authored: RallyProp = {
+      asset: 'bench',
+      at: authorPlacement(EXPRESS, start.x, start.z).at,
+    };
+    const hint = propProjectionHint(EXPRESS, authored);
+    const target = pointAt(EXPRESS, CORRIDOR_FRACTION, 30);
+    const across = movedProp(EXPRESS, authored, target.x, target.z, hint, 'track');
+    expect(propFrameOf(across.prop)).toBe('absolute');
+    expect(across.hint).toBe(hint);
+    const home = pointAt(EXPRESS, CORRIDOR_FRACTION, 10);
+    const back = movedProp(EXPRESS, across.prop, home.x, home.z, across.hint, 'track');
+    if (!('s' in back.prop.at)) throw new Error('back inside the band it is track-space again');
+    expect(back.prop.at.s).toBeCloseTo(CORRIDOR_FRACTION, 2);
+    expect(back.prop.at.offset).toBeCloseTo(10, 1);
   });
 
   it('keeps a piece dragged inside the band on the stretch it started on', () => {
@@ -243,14 +270,13 @@ describe('circuit editor props: dragging across the pinch', () => {
       asset: 'bench',
       at: authorPlacement(EXPRESS, start.x, start.z).at,
     };
-    const target = pointAt(EXPRESS, CORRIDOR_FRACTION, 20);
     const moved = movedProp(
       EXPRESS,
       authored,
-      target.x,
-      target.z,
+      pointAt(EXPRESS, CORRIDOR_FRACTION, 20).x,
+      pointAt(EXPRESS, CORRIDOR_FRACTION, 20).z,
       propProjectionHint(EXPRESS, authored),
-    );
+    ).prop;
     if (!('s' in moved.at)) throw new Error('inside the band it stays track-space');
     expect(moved.at.s).toBeCloseTo(CORRIDOR_FRACTION, 2);
     expect(moved.at.offset).toBeCloseTo(20, 1);
@@ -260,7 +286,91 @@ describe('circuit editor props: dragging across the pinch', () => {
     const fountain: RallyProp = { asset: 'fountain', at: { x: 0, z: 0 } };
     const target = pointAt(EXPRESS, 0.4, 6);
     const moved = movedProp(EXPRESS, fountain, target.x, target.z);
-    expect(moved.at).toEqual({ x: target.x, z: target.z });
+    expect(moved.prop.at).toEqual({ x: target.x, z: target.z });
+  });
+});
+
+describe('circuit editor props: what a drag carries between moves', () => {
+  it('follows a long drag ALONG the road by refreshing the hint, instead of outrunning the window', () => {
+    // The projection window is a fixed number of samples around the hint. A
+    // hint parked at the PRESS makes any drag longer than the window's reach
+    // fall back to the whole-lap scan, and the piece silently went absolute
+    // twelve yards off the road: it stopped following the centerline at the
+    // very next shape edit. Each move returns the hint the next one should
+    // carry, anchored to wherever the drag has got to.
+    const start = pointAt(GARDEN, 0.3, 12);
+    const pressProp: RallyProp = {
+      asset: 'bench',
+      at: authorPlacement(GARDEN, start.x, start.z).at,
+    };
+    expect(propFrameOf(pressProp)).toBe('track');
+    const pressHint = propProjectionHint(GARDEN, pressProp);
+    expect(pressHint).toBeDefined();
+
+    // The drop point sits half again past the window's reach from the press, so
+    // with the STALE press hint the projection is the whole-lap fallback: the
+    // exact arm that used to flip the piece to circuit-local.
+    const track = realmRacersTrack(GARDEN);
+    const reach = (REALM_RACERS_PROJECTION_WINDOW * track.step) / track.length;
+    const endFraction = 0.3 + reach * 1.5;
+    const end = pointAt(GARDEN, endFraction, 12);
+    expect('s' in authorPlacement(GARDEN, end.x, end.z, 'auto', pressHint).at).toBe(false);
+
+    // The drag as the page runs it: every move commits, and feeds the returned
+    // hint into the next.
+    let entry = pressProp;
+    let hint = pressHint;
+    const moves = 12;
+    for (let i = 1; i <= moves; i++) {
+      const point = pointAt(GARDEN, 0.3 + (reach * 1.5 * i) / moves, 12);
+      const step = movedProp(GARDEN, entry, point.x, point.z, hint, 'track');
+      entry = step.prop;
+      hint = step.hint;
+    }
+    expect(propFrameOf(entry)).toBe('track');
+    if (!('s' in entry.at)) return;
+    expect(entry.at.s).toBeCloseTo(endFraction, 2);
+    expect(entry.at.offset).toBeCloseTo(12, 1);
+  });
+
+  it('re-decides the frame at every move, so an excursion past the envelope can come back', () => {
+    // Every pointermove commits, and the frame used to be read off the entry
+    // the LAST move committed: one intermediate position past the envelope
+    // latched 'absolute' for the rest of the drag, while the documented rule is
+    // a decision at the DROP point. The drag carries the frame the piece wore
+    // at the PRESS, and the band is re-decided from wherever the pointer is.
+    const start = pointAt(GARDEN, 0.3, 12);
+    const pressProp: RallyProp = {
+      asset: 'bench',
+      at: authorPlacement(GARDEN, start.x, start.z).at,
+    };
+    const pressHint = propProjectionHint(GARDEN, pressProp);
+    const out = pointAt(GARDEN, 0.3, PROP_TRACK_SPACE_BAND + 8);
+    const trip = movedProp(GARDEN, pressProp, out.x, out.z, pressHint, 'track');
+    // The intermediate commit really is absolute, which is what set the latch.
+    expect(propFrameOf(trip.prop)).toBe('absolute');
+
+    const back = pointAt(GARDEN, 0.32, 10);
+    const home = movedProp(GARDEN, trip.prop, back.x, back.z, trip.hint, 'track');
+    expect(propFrameOf(home.prop)).toBe('track');
+    if (!('s' in home.prop.at)) return;
+    expect(home.prop.at.s).toBeCloseTo(0.32, 2);
+    expect(home.prop.at.offset).toBeCloseTo(10, 1);
+    // The persisted outcome at the release is the decision the final position
+    // alone would make: the excursion left no trace on the record.
+    expect(home.prop.at).toEqual(
+      movedProp(GARDEN, pressProp, back.x, back.z, pressHint, 'track').prop.at,
+    );
+  });
+
+  it('never re-frames a piece the operator made absolute, whatever the drag did', () => {
+    // The press frame is the OPERATOR's call when it is 'absolute' (the
+    // inspector toggle says so): re-deciding it against the band would re-anchor
+    // a fountain to the nearest stretch because a drag passed close to one.
+    const fountain: RallyProp = { asset: 'fountain', at: { x: 0, z: 0 } };
+    const near = pointAt(GARDEN, 0.3, 6);
+    const dragged = movedProp(GARDEN, fountain, near.x, near.z, undefined, 'absolute');
+    expect(dragged.prop.at).toEqual({ x: near.x, z: near.z });
   });
 });
 
@@ -415,6 +525,47 @@ describe('circuit editor props: the selected piece own grips', () => {
       placedBig.z + (bigGrips.scale.z - placedBig.z) * 2,
     );
     expect(doubled.scale).toBeCloseTo(4, 2);
+  });
+
+  it('reads the ratio against the PRESS, so an explicit collide literal cannot compound', () => {
+    // The one resolver returns an explicit `collide` literal UNSCALED, so its
+    // grip reach is CONSTANT while the scale grows. That is the premise, pinned
+    // first: a ratio read against the placement the PREVIOUS move committed
+    // multiplies the scale by dist/reach on every pointermove and runs away to
+    // the clamp within a few moves. The ratio is press-relative instead:
+    // pressScale times dist over pressReach, stable at every size.
+    const literal: RallyProp = {
+      asset: 'bench',
+      at: { x: 20, z: 30 },
+      yaw: 0,
+      collide: { kind: 'obb', hw: 2, hd: 1, rot: 0 },
+    };
+    const press = placedOn(GARDEN, literal);
+    const scaledUp = placedOn(GARDEN, { ...literal, scale: 2.5 });
+    expect(rallyFootprintRadius(scaledUp.footprint)).toBeCloseTo(
+      rallyFootprintRadius(press.footprint),
+      6,
+    );
+
+    const grip = propHandlePoints(press).scale;
+    /** One move of the drag: the grip pulled to `factor` times its press reach,
+     *  read against the placement captured at the PRESS, as the page holds it. */
+    const pull = (prop: RallyProp, factor: number) =>
+      propWithHandleAt(
+        prop,
+        press,
+        'scale',
+        press.x + (grip.x - press.x) * factor,
+        press.z + (grip.z - press.z) * factor,
+      );
+    // Mid-drag the scale is the pointer's own ratio, not a product of the moves
+    // so far: the second move sits at 2.5 times the press reach, full stop.
+    expect(pull(pull(literal, 1.5), 2.5).scale).toBeCloseTo(2.5, 2);
+    // And a multi-move drag that ends where it started leaves the scale exactly
+    // where it started, which no compounding rule can do.
+    let dragged = literal;
+    for (const factor of [1.5, 2.5, 1]) dragged = pull(dragged, factor);
+    expect(dragged.scale).toBe(1);
   });
 
   it('clamps a corner drag to the bounds the inspector and the keypress share', () => {
@@ -637,6 +788,18 @@ describe('circuit editor props: ponds', () => {
     expect(hitTestPondHandle(pond, points.rz.x, points.rz.z, 1)).toBe('rz');
     expect(hitTestPondHandle(pond, points.rot.x, points.rot.z, 1)).toBe('rot');
     expect(hitTestPondHandle(pond, pond.x, pond.z, 1)).toBeNull();
+  });
+
+  it('picks the NEAREST handle when a wide tolerance reaches two, like the prop grips', () => {
+    // The rot handle sits POND_ROTATE_HANDLE_GAP yards past the rx handle on
+    // the same axis, and the caller's tolerance is pixels over the zoom, so at
+    // a low zoom it spans that gap. First-in-list made the rotate handle
+    // unreachable there: every click on it resized instead.
+    const pond = { x: 5, z: 5, rx: 10, rz: 6 };
+    const points = pondHandlePoints(pond);
+    const wide = POND_ROTATE_HANDLE_GAP + 1;
+    expect(hitTestPondHandle(pond, points.rot.x, points.rot.z, wide)).toBe('rot');
+    expect(hitTestPondHandle(pond, points.rx.x, points.rx.z, wide)).toBe('rx');
   });
 });
 

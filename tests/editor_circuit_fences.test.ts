@@ -11,6 +11,7 @@ import type { FenceDraft } from '../src/editor/circuit/fences_core';
 import {
   addFence,
   centerCircuitOffset,
+  FENCE_POINT_TOLERANCE_YD,
   fenceColliderCount,
   fenceDraftClick,
   fenceHitAt,
@@ -82,9 +83,14 @@ describe('drawing a barrier run', () => {
     const closed = fenceDraftClick(three, 0.5, 0.5, 2.5);
     expect(closed.kind).toBe('close');
     if (closed.kind === 'close') expect(closed.fence.closed).toBe(true);
+    // The tolerance arrives from the caller as FENCE_POINT_TOLERANCE_YD over
+    // the zoom, so zoomed in the same 0.7 yd miss is more pixels than the
+    // tolerance covers and the click is an ordinary point, not a close.
+    expect(fenceDraftClick(three, 0.5, 0.5, FENCE_POINT_TOLERANCE_YD / 4).kind).toBe('point');
     // Two points closed would lay the same ground twice back to back, so the
-    // click is read as an ordinary point instead. It lands within tolerance of
-    // the first point, so what it must NOT be is a close.
+    // click is read as an ordinary point instead. At zoom 1 the caller's
+    // tolerance is the constant itself and the click lands within it of the
+    // first point, so what it must NOT be is a close.
     const two = {
       kit: 'ironwork',
       points: [
@@ -92,7 +98,7 @@ describe('drawing a barrier run', () => {
         { x: 20, z: 0 },
       ],
     };
-    expect(fenceDraftClick(two, 0.5, 0.5, 2.5).kind).not.toBe('close');
+    expect(fenceDraftClick(two, 0.5, 0.5, FENCE_POINT_TOLERANCE_YD).kind).toBe('point');
   });
 
   it('refuses to finish a run of one point', () => {

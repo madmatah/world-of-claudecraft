@@ -171,6 +171,43 @@ describe('circuit editor corner repair', () => {
     expect(untouched / after.samples.length).toBeGreaterThan(0.5);
   });
 
+  it('preserves an authored chicane narrower than one repair cell', () => {
+    // The repair emits breakpoints on a 1-percent-of-lap grid and used to cap
+    // each against the authored ceiling sampled at the GRID fractions only, so
+    // a dip authored inside one cell was erased by the interpolation between
+    // two boundaries that never saw it, and "only ever narrows" broke exactly
+    // there: the road at the chicane came back WIDER than the operator drew it.
+    // The four-lobes shape the one-pass test proves is constrained, with a
+    // hand-authored chicane parked between two of its corners.
+    const shaped: RealmRacersCircuit = {
+      ...circuit('widthfix_subcell', flower(4, 110, 26), 13),
+      widthBands: [
+        { s: 0, halfWidth: 13 },
+        { s: 0.622, halfWidth: 13 },
+        { s: 0.625, halfWidth: 9 },
+        { s: 0.628, halfWidth: 13 },
+        { s: 1, halfWidth: 13 },
+      ],
+    };
+    const fix = suggestWidthBands(shaped);
+    // The rebuild really ran: the corner constrains the road, so this is not
+    // the leave-it-alone early return hiding the defect.
+    expect(fix.narrowedYards).toBeGreaterThan(0);
+    const before = realmRacersTrack(shaped);
+    const after = realmRacersTrack({
+      ...shaped,
+      id: 'widthfix_subcell_after',
+      widthBands: fix.widthBands,
+    });
+    after.samples.forEach((sample, i) => {
+      expect(sample.halfWidth, `sample ${i}`).toBeLessThanOrEqual(
+        before.samples[i].halfWidth + 1e-9,
+      );
+    });
+    // The authored sub-cell dip itself survives at its own fraction.
+    expect(after.halfWidthAt(0.625 * after.length)).toBeLessThanOrEqual(9 + 0.05);
+  });
+
   it('is deterministic', () => {
     const drawn = circuit('widthfix_deterministic', flower(4, 110, 26), 13);
     expect(suggestWidthBands(drawn).widthBands).toEqual(suggestWidthBands(drawn).widthBands);

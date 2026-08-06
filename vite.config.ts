@@ -435,14 +435,22 @@ function circuitEditorSavePlugin() {
           return;
         }
         let body = '';
+        let refused = false;
         req.on('data', (chunk) => {
+          if (refused) return;
           body += String(chunk);
           if (body.length > 1_000_000) {
+            // Refuse ONCE and stop accumulating: without the flag every later
+            // chunk still lands in `body`, `res.end` fires a second time, and
+            // the `end` handler writes the file the 413 just refused.
+            refused = true;
+            body = '';
             res.statusCode = 413;
             res.end('too large');
           }
         });
         req.on('end', () => {
+          if (refused) return;
           try {
             // Validated through the same core the editor exports with, on the
             // music editor's precedent: the browser is not trusted to have kept
@@ -453,13 +461,21 @@ function circuitEditorSavePlugin() {
               res.end('invalid payload');
               return;
             }
+            const file = path.join(draftDir, `${circuit.id}.ts`);
+            // Same fs-adapter guarantee the DELETE arm states above: hold even
+            // if the id shape upstream is ever loosened.
+            if (path.dirname(file) !== draftDir) {
+              res.statusCode = 400;
+              res.end('draft is not in the draft directory');
+              return;
+            }
             mkdirSync(draftDir, { recursive: true });
-            writeFileSync(path.join(draftDir, `${circuit.id}.ts`), draftFileContents(circuit));
+            writeFileSync(file, draftFileContents(circuit));
             res.statusCode = 200;
             res.end('ok');
-          } catch (err) {
+          } catch {
             res.statusCode = 400;
-            res.end(String(err));
+            res.end('invalid payload');
           }
         });
       });

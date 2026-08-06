@@ -172,6 +172,23 @@ describe('what a MOVE does to the list of rows', () => {
     expect(addPickupRow([{ s: 0.2 }, { s: 0.8 }], landed).outcome).toBe('added');
   });
 
+  it('parks a pushed row where the commit rounding cannot drag it back into the band', () => {
+    // Every commit rounds a fraction to 4 decimals (`FRACTION_PLACES` in
+    // export_core, applied to the live record on every commit), and a slack
+    // under half that resolution is rounded straight back ONTO the band edge,
+    // where the gap measures short in doubles: the record durably held a pair
+    // the core's own clearance rule refuses, the exact state the slack claims
+    // cannot exist.
+    expect(0.21 - 0.2).toBeLessThan(PICKUP_ROW_MIN_GAP);
+    const round4 = (s: number) => Math.round(s * 1e4) / 1e4;
+    const pushed = movedPickupRow(rows, 1, 0.2 + PICKUP_ROW_MIN_GAP / 3);
+    expect(pushed.outcome).toBe('moved');
+    const landed = pushed.rows[pushed.index].s;
+    // Rounded as the commit rounds BOTH of them, the pair is still one a click
+    // could author: the same clearance the move parked the row with.
+    expect(addPickupRow([{ s: round4(0.2) }], round4(landed)).outcome).toBe('added');
+  });
+
   it('parks on the side the pointer is, and hops when it passes the neighbour', () => {
     // The two halves of one rule, which is what makes a drag past a neighbour a
     // SWAP rather than a wall. Approaching from below it stops short of 0.2...
