@@ -21,6 +21,7 @@
 // mobSwing, spawnDelveModule), never reaching into not-yet-extracted internals
 // in a way the sim itself does not already expose.
 
+import { realmRacersCompetitionCircuits } from '../../src/sim/content/realm_racers_circuits';
 import {
   arenaOrigin,
   DELVES,
@@ -35,7 +36,14 @@ import { createMob } from '../../src/sim/entity';
 import { solveLockActions } from '../../src/sim/lockpick';
 import { startFishing } from '../../src/sim/professions/fishing';
 import { gatherCastDurationSec, gatherNodeById } from '../../src/sim/professions/gathering';
+import { realmRacersPickupBoxes } from '../../src/sim/realm_racers_pickups';
+import { realmRacersTrack } from '../../src/sim/realm_racers_spline';
 import { Sim } from '../../src/sim/sim';
+import {
+  REALM_RACERS_COUNTDOWN_TICKS,
+  REALM_RACERS_RETURN_TICKS,
+  realmRacersToWorld,
+} from '../../src/sim/social/realm_racers';
 import { addThreat } from '../../src/sim/threat';
 import {
   type Aura,
@@ -4996,6 +5004,64 @@ function professionsToolEffectSlot(seed = 1): Scenario {
   };
 }
 
+// Realm Racers: the rally's two shared-stream draw sites (the competition
+// circuit pick when a grid seats, and the weighted pickup-effect draw when a
+// box changes hands) plus the vehicle kernel, the countdown lock, the surface
+// pass, and the forfeit-cascade classification, all inside the digest. Before
+// this scenario the whole rally phase sat outside the golden-trace net.
+function realmRacersRace(): Scenario {
+  return {
+    name: 'realm_racers',
+    coverage: [
+      'realm racers grid seat (startMatch competition-circuit draw)',
+      'countdown lock + vehicle kernel drive on the circuit copy',
+      'pickup take (the one weighted effect draw per box that changes hands)',
+      'forfeit cascade -> endMatch classification -> tableau return -> teardown',
+    ],
+    build: () => new Sim({ seed: 7601, playerClass: 'warrior', noPlayer: true }),
+    drive(rec: Recorder) {
+      const sim = rec.sim as AnySim;
+      const names = ['Aster', 'Briar', 'Cass', 'Dell'];
+      const pids = (['warrior', 'mage', 'rogue', 'priest'] as const).map((cls, i) =>
+        sim.addPlayer(cls, names[i]),
+      );
+      for (const pid of pids) sim.realmRacersQueueJoin(pid);
+      rec.tick(1); // seats the grid: the circuit draw enters the digest here
+      rec.snapshot('seated');
+      rec.tick(REALM_RACERS_COUNTDOWN_TICKS); // the start lock, then GO
+      for (const pid of pids) {
+        const meta = sim.players.get(pid);
+        if (meta) meta.moveInput.forward = true;
+      }
+      rec.tick(40); // two seconds of the vehicle kernel on the circuit
+      // A deterministic take: stand the leader on box 0 with the bookkeeping a
+      // machine that DROVE there would carry. A bare jump reads as a cut and
+      // the referee returns it before the take can fire.
+      const liveMatch = sim.realmRacers.match;
+      if (!liveMatch) throw new Error('realm racers grid did not seat');
+      const circuit = realmRacersCompetitionCircuits()[0];
+      const box = realmRacersPickupBoxes(circuit)[0];
+      const world = realmRacersToWorld(liveMatch, box.x, box.z);
+      const racer = sim.entities.get(pids[0]) as AnyEntity;
+      teleport(sim, racer, world.x, world.z);
+      const progress = liveMatch.progress.get(pids[0]);
+      if (!progress) throw new Error('missing racer progress');
+      const projection = realmRacersTrack(circuit).project(box.x, box.z, progress.trackIndex);
+      progress.lastS = projection.s;
+      progress.trackIndex = projection.index;
+      rec.tick(2); // the take: exactly one draw, and the effect grant
+      rec.snapshot('pickup');
+      // The forfeit cascade ends it: three quit, the lone survivor's race is
+      // decided, and the classification plus deed credit land in the digest.
+      sim.realmRacersForfeit(pids[1]);
+      sim.realmRacersForfeit(pids[2]);
+      sim.realmRacersForfeit(pids[3]);
+      rec.tick(REALM_RACERS_RETURN_TICKS + 2); // tableau, returns, teardown
+      rec.snapshot('teardown');
+    },
+  };
+}
+
 export const SCENARIOS: Scenario[] = [
   soloWarrior(),
   soloMage(),
@@ -5057,4 +5123,5 @@ export const SCENARIOS: Scenario[] = [
   professionsGatherFine(),
   professionsFishingSession(),
   professionsToolEffectSlot(),
+  realmRacersRace(),
 ];

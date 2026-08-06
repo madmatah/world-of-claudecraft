@@ -539,4 +539,18 @@ describe('coverage: each scenario fires its subsystem', () => {
     expect(slot.durability).toBeLessThan(slot.maxDurability);
     expect(slot.durability).toBe(29);
   });
+
+  it('realm_racers: seats a grid, drives, takes a box, and classifies the forfeit cascade', () => {
+    const rec = run('realm_racers');
+    const ev = rec.allEvents as Ev[];
+    // The grid really seated and went green: one personal GO per pilot.
+    expect(ev.filter((e) => e.type === 'realmRacersGo')).toHaveLength(4);
+    // The box really changed hands, which is the tick the one weighted effect
+    // draw fires on; without it the digest never covers the rally's draw site.
+    expect(ev.some((e) => e.type === 'realmRacersPickup')).toBe(true);
+    // The forfeit cascade decided the race and the survivor got a tableau.
+    expect(ev.some((e) => e.type === 'realmRacersResult')).toBe(true);
+    // Teardown really ran: the race slot is free again.
+    expect((rec.sim as any).realmRacers.match).toBeNull();
+  });
 });
