@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { loadTexture } from './assets/loader';
-import { GFX, type GfxSettings, SUN_DIR, sharedUniforms } from './gfx';
+import { type GfxSettings, SUN_DIR, sharedUniforms } from './gfx';
 import {
   WATER_FIELD_EDGE_FEATHER_UV,
   WATER_FOAM_WIDTH_YARDS,

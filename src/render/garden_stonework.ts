@@ -58,8 +58,16 @@ export function gardenStatueGeo(): THREE.BufferGeometry {
   return statueGeo;
 }
 
+/** Built once, like the geometry above: the track disposer deliberately skips
+ *  materials on the "one minted material per BUILD" contract, so a per-call
+ *  mint here leaked one per rebuilt Realm Racers track. */
+let statueMat: THREE.Material | null = null;
+let fountainStoneMat: THREE.Material | null = null;
+let fountainWaterMat: THREE.MeshBasicMaterial | null = null;
+
 export function gardenStatueMaterial(): THREE.Material {
-  return mat(GARDEN_MARBLE, 0.75);
+  statueMat ??= mat(GARDEN_MARBLE, 0.75);
+  return statueMat;
 }
 
 /**
@@ -69,8 +77,14 @@ export function gardenStatueMaterial(): THREE.Material {
  */
 export function buildTieredFountain(x: number, z: number, y: number, scale = 1): THREE.Group {
   const g = new THREE.Group();
-  const stone = mat(0xb8b4a6, 0.9);
-  const water = new THREE.MeshBasicMaterial({ color: 0x69b8c4, transparent: true, opacity: 0.85 });
+  fountainStoneMat ??= mat(0xb8b4a6, 0.9);
+  fountainWaterMat ??= new THREE.MeshBasicMaterial({
+    color: 0x69b8c4,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const stone = fountainStoneMat;
+  const water = fountainWaterMat;
   const basin = new THREE.Mesh(new THREE.CylinderGeometry(3.1, 3.3, 0.9, 14), stone);
   basin.position.set(x, y + 0.45, z);
   g.add(basin);

@@ -28,7 +28,6 @@ import {
 import {
   REALM_RACERS_BORDER_OFFSET,
   REALM_RACERS_BORDER_SPACING,
-  REALM_RACERS_LAWN_OVERSHOOT,
   REALM_RACERS_ORIGIN,
 } from '../sim/realm_racers_layout';
 import { realmRacersPlacedPonds } from '../sim/realm_racers_props_resolve';

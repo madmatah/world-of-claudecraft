@@ -1030,11 +1030,15 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
       group.visible = mine;
       if (!lane || !mine) return;
       const offset = realmRacersLaneOffset(lane.index);
-      if (group.position.z !== offset.z) group.position.set(offset.x, 0, offset.z);
+      if (group.position.x !== offset.x || group.position.z !== offset.z)
+        group.position.set(offset.x, 0, offset.z);
+      // Same gate as the boxes and the oil below: a match on another circuit is
+      // another lane's, and its countdown must not run this lane's lamps.
+      const laneMatch = match?.circuitId === circuit.id ? match : null;
       const signal = realmRacersStartLightSignal(
-        match?.phase ?? null,
-        match?.countdownTicks ?? 0,
-        match?.elapsed ?? 0,
+        laneMatch?.phase ?? null,
+        laneMatch?.countdownTicks ?? 0,
+        laneMatch?.elapsed ?? 0,
       );
       const signalKey = `${signal.colour}:${signal.litCount}`;
       if (signalKey !== lastStartLightSignal) {
