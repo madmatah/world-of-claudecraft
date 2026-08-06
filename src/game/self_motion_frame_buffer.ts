@@ -10,6 +10,7 @@ export interface BufferedSelfMotionFrame {
   alpha: number;
   frameDt: number;
   driveImpulse: boolean;
+  popVelocity: number;
 }
 
 export class SelfMotionFrameBuffer {
@@ -25,6 +26,7 @@ export class SelfMotionFrameBuffer {
     alpha: number,
     frameDt: number,
     driveImpulse: boolean,
+    popVelocity: number,
   ): BufferedSelfMotionFrame {
     if (this.frame === null) {
       this.frame = {
@@ -37,6 +39,7 @@ export class SelfMotionFrameBuffer {
         alpha,
         frameDt,
         driveImpulse,
+        popVelocity,
       };
     } else {
       this.frame.enabled = enabled;
@@ -48,6 +51,7 @@ export class SelfMotionFrameBuffer {
       this.frame.alpha = alpha;
       this.frame.frameDt = frameDt;
       this.frame.driveImpulse = driveImpulse;
+      this.frame.popVelocity = popVelocity;
     }
     return this.frame;
   }

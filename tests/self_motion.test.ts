@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { wrapAngle } from '../src/render/facing_smooth';
 import {
+  authoritativeVerticalPop,
   hasAuthoritativeDriveImpulse,
   SELF_MOTION_CAP_MAX_MS,
   SELF_MOTION_CAP_MIN_MS,
@@ -10,6 +11,10 @@ import {
   updateSelfRenderFallback,
 } from '../src/render/self_motion';
 import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import {
+  GROUND_BLAST_POP_VELOCITY,
+  resolveGroundBlastImpact,
+} from '../src/sim/realm_racers_ground_blast';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
 import { type Entity, type MoveInput, RUN_SPEED } from '../src/sim/types';
@@ -75,6 +80,9 @@ class Lab {
   // The authority announced a momentum change (a bump) for the next frame.
   // Consumed once, like the real event drain in main.ts.
   driveImpulse = false;
+  // The vertical half of an announced blast, reconstructed from the event's
+  // falloff exactly as main.ts does. Consumed once, like driveImpulse.
+  popVelocity = 0;
   // Scripted broadcast stall: while positive, tick boundaries still advance
   // the server (it never stops simulating) but the mirror and lastSnapMs are
   // suppressed, so the client renders against a frozen snapshot exactly like
@@ -180,8 +188,10 @@ class Lab {
       alpha,
       frameDt: this.frameMs / 1000,
       driveImpulse: this.driveImpulse,
+      popVelocity: this.popVelocity,
     };
     this.driveImpulse = false;
+    this.popVelocity = 0;
     const out = this.predictor.step(this.self, frame);
     const a = {
       x: this.self.prevPos.x + (this.self.pos.x - this.self.prevPos.x) * alpha,
@@ -261,6 +271,34 @@ describe('the announced-impulse list', () => {
         ME,
       ),
     ).toBe(false);
+  });
+
+  it('reconstructs the vertical pop from the blast event, local machine only', () => {
+    // The drive resync cannot carry the pop (the drive state has no vertical
+    // component and the wire carries no vy), but the pop is pure geometry off
+    // the falloff the event already carries, so the client rebuilds the exact
+    // velocity the server applied: GROUND_BLAST_POP_VELOCITY times impact.
+    const hit = (targetId: number | null, impact: number) =>
+      ({
+        type: 'realmRacersGroundBlastHit',
+        sourceId: THEM,
+        targetId,
+        x: 0,
+        z: 0,
+        impact,
+      }) as const;
+    expect(authoritativeVerticalPop([hit(ME, 1)], ME)).toBeCloseTo(GROUND_BLAST_POP_VELOCITY);
+    expect(authoritativeVerticalPop([hit(ME, 0.5)], ME)).toBeCloseTo(
+      GROUND_BLAST_POP_VELOCITY * 0.5,
+    );
+    // A rival's hit, an empty-track crater, and an unrelated event are all zero.
+    expect(authoritativeVerticalPop([hit(THEM, 1)], ME)).toBe(0);
+    expect(authoritativeVerticalPop([hit(null, 0)], ME)).toBe(0);
+    expect(authoritativeVerticalPop([{ type: 'realmRacersGo' }], ME)).toBe(0);
+    // Two shells landing in one drain both count: the server applied both pops.
+    expect(authoritativeVerticalPop([hit(ME, 1), hit(ME, 0.25)], ME)).toBeCloseTo(
+      GROUND_BLAST_POP_VELOCITY * 1.25,
+    );
   });
 });
 
@@ -997,5 +1035,78 @@ describe('SelfMotionPredictor', () => {
     // Either way the pose stays bounded: the resync settles the prediction, it
     // never lets it run away from (or oscillate around) the authority.
     expect(adopted.lead).toBeLessThan((26 * SELF_MOTION_CAP_MAX_MS) / 1000);
+  });
+
+  it('rides a ground blast pop into the air instead of staying glued to the floor', () => {
+    // A shell pops the machine vertically (vy on the ENTITY, not the drive
+    // state), so the drive resync structurally cannot carry it and the wire
+    // never will (no vy field). Without the reconstructed pop the scratch
+    // actor stays grounded for the whole 1+ second arc: the kernel re-pins it
+    // to the floor while the correction servo drags it toward the rising
+    // anchor, the flight the player sees is flattened and late, and the
+    // predictor reports onGround the entire time, which is what feeds the
+    // renderer's grounded presentation mid-air.
+    const race = (announcePop: boolean) => {
+      const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
+      const lab = new Lab(150, FRAME_MS, {
+        start: { x: start.x, z: start.z },
+        facing: start.facing,
+        drive: true,
+      });
+      lab.setInput(mi({ forward: true }));
+      for (let i = 0; i < 60; i++) lab.frame(); // 1 s down the start straight
+      const server = lab.srv.player;
+      const drive = server.drive;
+      if (!drive) throw new Error('missing drive');
+      const floorY = server.pos.y;
+      // The blast, applied exactly as social/realm_racers.ts does: horizontal
+      // shove and spin into the drive state, pop onto the entity's own vy.
+      const blast = resolveGroundBlastImpact(
+        { x: server.pos.x, z: server.pos.z, facing: server.facing, drive },
+        server.pos.x - 1,
+        server.pos.z - 1,
+      );
+      expect(blast.pop).toBeGreaterThan(6); // the shell really caught it
+      server.vy += blast.pop;
+      server.onGround = false;
+      server.fallStartY = server.pos.y;
+      // Both halves of the announcement, as main.ts drains them. The horizontal
+      // resync stays on in BOTH arms so the measurement isolates the pop.
+      lab.driveImpulse = true;
+      lab.popVelocity = announcePop ? blast.pop : 0;
+      let apexShown = 0;
+      let apexTrue = 0;
+      let maxErrY = 0;
+      let sawAirborne = false;
+      const frames = 110; // the full arc (~1.2 s) plus the landing settle
+      for (let i = 0; i < frames; i++) {
+        const result = lab.frame();
+        apexTrue = Math.max(apexTrue, lab.srv.player.pos.y - floorY);
+        if (result.pose) {
+          apexShown = Math.max(apexShown, result.pose.y - floorY);
+          maxErrY = Math.max(maxErrY, Math.abs(result.pose.y - result.ac.y));
+        }
+        if (!lab.predictor.onGround) sawAirborne = true;
+      }
+      return { apexShown, apexTrue, maxErrY, sawAirborne, landed: lab.predictor.onGround };
+    };
+
+    const adopted = race(true);
+    const ignored = race(false);
+    // The true arc is a real jump (pop^2 / 2g of height).
+    expect(adopted.apexTrue).toBeGreaterThan(2);
+    // Adopted: the display flies the same arc, through the same kernel, and
+    // the physics state agrees with it (airborne during the flight, grounded
+    // again after the landing).
+    expect(adopted.apexShown).toBeGreaterThan(0.75 * adopted.apexTrue);
+    expect(adopted.sawAirborne).toBe(true);
+    expect(adopted.landed).toBe(true);
+    // Ignored: the floor glue flattens the flight and the predictor never
+    // learns it left the ground, which is the defect this pins away.
+    expect(ignored.sawAirborne).toBe(false);
+    expect(ignored.apexShown).toBeLessThan(0.6 * ignored.apexTrue);
+    // And the adopted arc tracks the authority far tighter than the servo
+    // fight it replaces.
+    expect(adopted.maxErrY).toBeLessThan(0.6 * ignored.maxErrY);
   });
 });

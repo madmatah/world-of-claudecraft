@@ -244,7 +244,11 @@ import {
   resolveGfxProfile,
 } from './render/gfx';
 import { Renderer } from './render/renderer';
-import { hasAuthoritativeDriveImpulse, type SelfMotionFrame } from './render/self_motion';
+import {
+  authoritativeVerticalPop,
+  hasAuthoritativeDriveImpulse,
+  type SelfMotionFrame,
+} from './render/self_motion';
 import { ensureSkyAssetsAt, navigatorSaveData } from './render/sky';
 import { ARRIVAL_NEIGHBOR_STREAM_RADIUS } from './render/zone_streaming';
 import { desktopBridge } from './runtime';
@@ -4255,8 +4259,12 @@ async function startGame(
     // snapshot has updated the self mirror.
     const selfAuthoritativeDiscontinuity = net.consumeSelfPositionDiscontinuity();
     // A rival shoved the local machine: momentum the predictor cannot simulate,
-    // so it re-seeds its scratch drive from the next authoritative state.
+    // so it re-seeds its scratch drive from the next authoritative state. The
+    // vertical half of a blast (vy lives on the entity, not the drive state,
+    // and never rides the wire) is reconstructed from the event's falloff and
+    // handed over as a velocity to apply outright.
     const selfDriveImpulse = hasAuthoritativeDriveImpulse(drainedEvents, net.playerId);
+    const selfPopVelocity = authoritativeVerticalPop(drainedEvents, net.playerId);
     const drainedEventsLength = drainedEvents.length;
     const eventsStart = perf.startTime();
     traceStart = perf.startTrace();
@@ -4345,6 +4353,7 @@ async function startGame(
           alpha,
           frameDt,
           selfDriveImpulse,
+          selfPopVelocity,
         );
     const cameraLastSnapAge = net.lastSnapAt > 0 ? performance.now() - net.lastSnapAt : -1;
     const onlineCameraFacing = cameraFollowFacing(

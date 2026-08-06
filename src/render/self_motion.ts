@@ -32,6 +32,7 @@ import {
   type PlayerMotionDeps,
   stepPlayerMotion,
 } from '../sim/player_motion';
+import { GROUND_BLAST_POP_VELOCITY } from '../sim/realm_racers_ground_blast';
 import {
   DT,
   type Entity,
@@ -114,6 +115,17 @@ export interface SelfMotionFrame {
    * scratch drive is re-seeded from the next authoritative state to arrive.
    */
   driveImpulse?: boolean;
+  /**
+   * The vertical half of an announced impulse, yd/s: a Ground Blast pops the
+   * machine off the floor by writing vy on the ENTITY (the drive state carries
+   * no vertical component), so the drive resync structurally cannot restore
+   * it and the wire never will (snapshots carry no vy). It is applied to the
+   * scratch actor IMMEDIATELY rather than latched like the drive resync,
+   * because there is no wire value to wait for: the pop is reconstructed from
+   * the event (see `authoritativeVerticalPop`) and the shared kernel then
+   * flies the same arc the server does, under the same gravity.
+   */
+  popVelocity?: number;
 }
 
 export interface Vec3Like {
@@ -166,6 +178,25 @@ export function hasAuthoritativeDriveImpulse(
       (event.type === 'realmRacersGroundBlastHit' && event.targetId === playerId) ||
       (event.type === 'realmRacersSlicked' && event.targetId === playerId),
   );
+}
+
+/**
+ * The vertical launch the local machine took this frame, reconstructed from
+ * the blast event: the pop is pure geometry (GROUND_BLAST_POP_VELOCITY times
+ * the falloff the event already carries as `impact`), so the client rebuilds
+ * the exact velocity the server added to vy, with no wire change.
+ *
+ * The event names only the racer NEAREST the crater, so a second machine
+ * caught in the same shell misses its pop, the same limit the horizontal
+ * resync already lives with (it keys off the same targetId).
+ */
+export function authoritativeVerticalPop(events: readonly SimEvent[], playerId: number): number {
+  let pop = 0;
+  for (const event of events) {
+    if (event.type === 'realmRacersGroundBlastHit' && event.targetId === playerId)
+      pop += GROUND_BLAST_POP_VELOCITY * event.impact;
+  }
+  return pop;
 }
 
 export const SELF_RENDER_SMOOTH_RATE = 30;
@@ -473,6 +504,22 @@ export class SelfMotionPredictor {
     if (frame.driveImpulse) {
       this.pendingDriveResync = true;
       this.resyncMirror = self.drive;
+    }
+    // The vertical half of the announcement, applied the frame it arrives:
+    // mirror of the server's own application site (social/realm_racers.ts,
+    // "the pop rides the entity's own air pass"), so the kernel below flies
+    // the same arc under the same gravity and the divergence servo has next to
+    // nothing to correct. Without it the scratch actor stays grounded for the
+    // whole flight: the floor glue re-pins it every kernel step while the
+    // servo drags it toward the rising anchor, and the renderer keeps the
+    // grounded presentation mid-air. A pop sharing its frame with an
+    // authoritative discontinuity never reaches here (the recovery arm above
+    // returns first), and that drop is deliberate: the recovery's destination
+    // supersedes an arc that was interrupted the same tick.
+    if (frame.popVelocity && actor.drive) {
+      actor.vy += frame.popVelocity;
+      actor.onGround = false;
+      actor.fallStartY = actor.pos.y;
     }
     if (!self.drive) actor.drive = null;
     else if (!actor.drive) {
