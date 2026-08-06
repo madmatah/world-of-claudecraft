@@ -88,7 +88,14 @@ export function syncRealmRacersVehicleAudio(
   }
   if (action !== 'run' || !drive) return wasActive;
   const vehicle = vehicleProfile(drive.profileKey);
-  const speedFraction = Math.min(1, Math.abs(drive.speed) / vehicle.maxSpeed);
+  // Speed OVER THE GROUND, not the forward component. The driving kernel
+  // conserves the velocity vector through the body rotation, so a drift is
+  // exactly the process of moving pace out of `speed` and into `slip`: reading
+  // the forward component alone dives the engine pitch and thins the tyre roll
+  // purely because the machine is sideways, which is when both should be at
+  // their most urgent. src/sim/vehicle_motion.ts refuses the same mistake for
+  // steering authority, for the same reason.
+  const speedFraction = Math.min(1, Math.hypot(drive.speed, drive.slip) / vehicle.maxSpeed);
   const effort = Math.min(1, speedFraction * 0.2 + Math.max(0, acceleration) / vehicle.engineAccel);
   sink.vehicle(
     entityId,

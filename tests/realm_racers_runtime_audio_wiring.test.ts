@@ -112,6 +112,21 @@ const drive = (): VehicleDrive => ({
   controlsLocked: false,
 });
 
+/** Assert the last sink.vehicle call argument for argument, with the two derived
+ *  fractions compared as floats rather than by exact equality. */
+function expectVehicleCall(spy: ReturnType<typeof vi.fn>, expected: (number | boolean)[]): void {
+  const call = spy.mock.calls.at(-1);
+  expect(call).toBeDefined();
+  expect(call).toHaveLength(expected.length);
+  for (const [index, want] of expected.entries()) {
+    if (typeof want === 'number' && !Number.isInteger(want)) {
+      expect(call?.[index]).toBeCloseTo(want, 10);
+    } else {
+      expect(call?.[index]).toBe(want);
+    }
+  }
+}
+
 beforeEach(() => vi.clearAllMocks());
 
 describe('Realm Racers coordinator audio wiring', () => {
@@ -172,23 +187,38 @@ describe('Realm Racers coordinator audio wiring', () => {
     const entity: { id: number; drive: VehicleDrive | null } = { id: 77, drive: drive() };
     const view = { vehicleAudioActive: false, vehicleLean: { acceleration: 6 } };
 
+    // speed 30 with slip 4 on a 60 yd/s machine: the fraction is the GROUND
+    // speed, so the sideways component counts toward how hard the engine reads.
+    const groundFraction = Math.hypot(30, 4) / 60;
+    const effort = groundFraction * 0.2 + 6 / 20;
+
     renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
     expect(view.vehicleAudioActive).toBe(true);
-    expect(renderer.audioSink.vehicle).toHaveBeenCalledWith(77, false, 2, 0, 3, 0.5, 0.4, 4, true);
+    expectVehicleCall(renderer.audioSink.vehicle, [
+      77,
+      false,
+      2,
+      0,
+      3,
+      groundFraction,
+      effort,
+      4,
+      true,
+    ]);
 
     renderer.sim.playerId = 77;
     renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);
-    expect(renderer.audioSink.vehicle).toHaveBeenLastCalledWith(
+    expectVehicleCall(renderer.audioSink.vehicle, [
       77,
       true,
       2,
       0,
       3,
-      0.5,
-      0.4,
+      groundFraction,
+      effort,
       4,
       true,
-    );
+    ]);
 
     entity.drive = null;
     renderer.syncRealmRacersVehicleAudioForView(entity, view, true, 2, 0, 3);

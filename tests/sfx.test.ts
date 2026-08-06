@@ -1,6 +1,12 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FORGE_MAX_DISTANCE, MAX_DISTANCE, REF_DISTANCE, sfx } from '../src/game/sfx';
+import {
+  FORGE_MAX_DISTANCE,
+  LOOP_RATE_GLIDE,
+  MAX_DISTANCE,
+  REF_DISTANCE,
+  sfx,
+} from '../src/game/sfx';
 import { SFX_CLIPS, type SfxEntry } from '../src/game/sfx_manifest.generated';
 import {
   playRealmRacersEventAudio,
@@ -23,7 +29,12 @@ import type { VehicleDrive } from '../src/sim/types';
 
 interface FakeSource {
   buffer: { duration: number } | null;
-  playbackRate: { value: number };
+  playbackRate: {
+    value: number;
+    targets: number[];
+    timeConstants: number[];
+    setTargetAtTime(value: number, when: number, timeConstant: number): void;
+  };
   onended: (() => void) | null;
   started: boolean;
   stopAt: number | null;
@@ -150,7 +161,17 @@ function installAudioStub(): void {
     createBufferSource(): FakeSource {
       const s: FakeSource = {
         buffer: null,
-        playbackRate: { value: 1 },
+        // A live loop RAMPS its rate rather than assigning it, so the fake has to
+        // record the ramp as well as the instant value a one-shot still sets.
+        playbackRate: {
+          value: 1,
+          targets: [] as number[],
+          timeConstants: [] as number[],
+          setTargetAtTime(value: number, _when: number, timeConstant: number) {
+            this.targets.push(value);
+            this.timeConstants.push(timeConstant);
+          },
+        },
         onended: null,
         started: false,
         stopAt: null,
@@ -391,6 +412,21 @@ describe('mount running audio', () => {
   });
 });
 
+const vehicleDrive = (): VehicleDrive => ({
+  profileKey: 'rally_loaner',
+  speed: 0,
+  slip: 0,
+  yawRate: 0,
+  spin: 0,
+  handbrake: 0,
+  gripMult: 1,
+  dragMult: 1,
+  speedCap: 1,
+  slipCap: 1,
+  collisionImpact: 0,
+  controlsLocked: false,
+});
+
 describe('Realm Racers vehicle loops', () => {
   beforeEach(() => sfx.setListener(0, 0, 0, 0, 0, 1));
 
@@ -407,7 +443,7 @@ describe('Realm Racers vehicle loops', () => {
     sfx.vehicle(77, false, 3, 0, 0, 0.85, 0.8, 5, false);
     const second = loops.get('realm-racers-engine-77')?.src;
     expect(second).toBe(first);
-    expect(second?.playbackRate.value).toBeGreaterThan(lowRate);
+    expect(second?.playbackRate.targets.at(-1) ?? 0).toBeGreaterThan(lowRate);
     expect(sfx.hasLoop('realm-racers-skid-77')).toBe(true);
     const buffers = (sfx as unknown as { buffers: Map<string, { duration: number }> }).buffers;
     expect(loops.get('realm-racers-engine-77')?.src.buffer).toBe(
@@ -430,16 +466,83 @@ describe('Realm Racers vehicle loops', () => {
       }
     ).loops;
     const engine = loops.get('realm-racers-engine-85');
+    // A fresh loop opens AT its rate; every later change is a commanded ramp
+    // target, which is what the formula is pinned against from here on.
     expect(engine?.src.playbackRate.value).toBeCloseTo(0.4, 6);
     expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * 0.26, 6);
 
     sfx.vehicle(85, false, 2, 0, 0, 1, 0, 0, false);
-    expect(engine?.src.playbackRate.value).toBeCloseTo(0.4 + 0.6, 6);
+    expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.4 + 0.6, 6);
     expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48), 6);
 
     sfx.vehicle(85, false, 2, 0, 0, 1, 1, 0, false);
-    expect(engine?.src.playbackRate.value).toBeCloseTo(0.4 + 0.6 + 0.14, 6);
+    expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.4 + 0.6 + 0.14, 6);
     expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48 + 0.22), 6);
+  });
+
+  it('glides a live loop rate instead of stepping it', () => {
+    // The corner bug: drive.speed reaches the client in 20 Hz snapshot steps and
+    // the rate was assigned raw, so the pitch climbed a staircase (~4% of rate in
+    // one tick coming out of a corner, measured on the real driving kernel). The
+    // gain beside it has always ramped; the rate now does too.
+    sfx.vehicle(93, false, 2, 0, 0, 0.2, 0, 0, false);
+    const engine = (
+      sfx as unknown as {
+        loops: Map<string, { src: FakeSource }>;
+      }
+    ).loops.get('realm-racers-engine-93');
+    const opened = engine?.src.playbackRate.value ?? 0;
+    expect(engine?.src.playbackRate.targets).toHaveLength(0);
+
+    sfx.vehicle(93, false, 2, 0, 0, 0.9, 0.9, 0, false);
+    const target = engine?.src.playbackRate.targets.at(-1) ?? 0;
+    expect(target).toBeGreaterThan(opened);
+    // The commanded value is a ramp target, never a jump: the raw value stays put.
+    expect(engine?.src.playbackRate.value).toBe(opened);
+    expect(engine?.src.playbackRate.timeConstants.at(-1)).toBe(LOOP_RATE_GLIDE);
+    // Re-commanding the same rate must not re-arm the ramp every frame.
+    sfx.vehicle(93, false, 2, 0, 0, 0.9, 0.9, 0, false);
+    expect(engine?.src.playbackRate.targets).toHaveLength(1);
+  });
+
+  it('reads speed over the ground, so a drift does not dive the engine pitch', () => {
+    // The kernel conserves velocity through the body rotation: in a drift part of
+    // it lives in `slip`, so the forward component alone under-reads the machine's
+    // actual pace. src/sim/vehicle_motion.ts already refuses that mistake for
+    // steering authority; the engine and the tyre roll follow the same rule.
+    const straight = { speed: 30, slip: 0 };
+    const drifting = { speed: 30, slip: 24 };
+    const calls: number[] = [];
+    const sink = {
+      vehicle: (
+        _id: number,
+        _self: boolean,
+        _x: number,
+        _y: number,
+        _z: number,
+        speedFraction: number,
+      ) => calls.push(speedFraction),
+      stopVehicle: () => {},
+      realmRacersEvent: () => {},
+    };
+    for (const state of [straight, drifting]) {
+      syncRealmRacersVehicleAudio(
+        sink,
+        94,
+        false,
+        true,
+        { ...vehicleDrive(), speed: state.speed, slip: state.slip },
+        true,
+        0,
+        0,
+        0,
+        0,
+      );
+    }
+    // rally_loaner tops out at 60 yd/s.
+    expect(calls[0]).toBeCloseTo(30 / 60, 6);
+    expect(calls[1]).toBeCloseTo(Math.hypot(30, 24) / 60, 6);
+    expect(calls[1]).toBeGreaterThan(calls[0]);
   });
 
   it('preserves the engine target, ducks contacts to the per-vehicle budget, and limits the vehicle bus', () => {

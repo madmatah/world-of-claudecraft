@@ -32,6 +32,17 @@ const MAX_VOICES = 24; // concurrent one-shot sources (frame-budget guard)
 // here they sit inside the 0.85 sample master, hence the extra headroom).
 const ABILITY_VOICES = 8;
 const ABILITY_GAIN = 0.34;
+// Time constant a live loop's playback RATE glides over, on the same principle
+// as its gain. The rally vehicle bed is the only caller that moves a running
+// loop's rate, and its source signal is the drive state, which reaches the
+// client in 20 Hz snapshot steps with no interpolation. Assigned raw, that
+// stepped the pitch audibly: measured against the real driving kernel, coming
+// out of a corner the commanded rate moves ~0.04 in a single 50 ms tick, and a
+// sustained tonal loop reports each step. Shorter than the gain's 0.25 so the
+// engine still answers the throttle promptly. Callers that never change their
+// rate (every ambience bed) are unaffected: a loop still OPENS at its rate, and
+// only later changes ramp.
+export const LOOP_RATE_GLIDE = 0.12;
 export const REF_DISTANCE = 5; // world units at which a sound is at full volume
 export const MAX_DISTANCE = 46; // hard cutoff: beyond this, sources are silent/skipped
 // The race camera can trail its machine by 22 yd. Keep nearby cannon fire in
@@ -852,7 +863,11 @@ class Sfx {
     }
     if (slot.rate !== rate) {
       slot.rate = rate;
-      slot.src.playbackRate.value = this.authoredPlaybackRate(key) * rate;
+      slot.src.playbackRate.setTargetAtTime(
+        this.authoredPlaybackRate(key) * rate,
+        ctx.currentTime,
+        LOOP_RATE_GLIDE,
+      );
     }
     // Only (re)arm the ramp when the target actually changes. loop() is called
     // every frame for active ambience, so this keeps the hot path allocation-free.
