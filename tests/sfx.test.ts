@@ -468,15 +468,15 @@ describe('Realm Racers vehicle loops', () => {
     const engine = loops.get('realm-racers-engine-85');
     // A fresh loop opens AT its rate; every later change is a commanded ramp
     // target, which is what the formula is pinned against from here on.
-    expect(engine?.src.playbackRate.value).toBeCloseTo(0.4, 6);
+    expect(engine?.src.playbackRate.value).toBeCloseTo(0.35, 6);
     expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * 0.26, 6);
 
     sfx.vehicle(85, false, 2, 0, 0, 1, 0, 0, false);
-    expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.4 + 0.6, 6);
+    expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.35 + 0.6, 6);
     expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48), 6);
 
     sfx.vehicle(85, false, 2, 0, 0, 1, 1, 0, false);
-    expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.4 + 0.6 + 0.14, 6);
+    expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.35 + 0.6 + 0.3, 6);
     expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48 + 0.22), 6);
   });
 

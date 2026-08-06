@@ -117,9 +117,15 @@ const REALM_RACERS_ENGINE_GAIN = 2.2;
 const VEHICLE_ENGINE_IDLE = 0.26;
 const VEHICLE_ENGINE_SPEED = 0.48;
 const VEHICLE_ENGINE_LOAD = 0.22;
-const VEHICLE_ENGINE_IDLE_RATE = 0.4;
+// The three PITCH knobs, retuned by ear once the rate glide landed. A lower
+// idle floor with more than double the load response widens the throttle's
+// share of the pitch and narrows the speed's: what the ear reads as engine
+// effort is the driver working, not the road going past. That split was the
+// wrong trade while the rate was assigned raw, because the load term is the
+// fastest-moving of the three and every one of its swings arrived as a step.
+const VEHICLE_ENGINE_IDLE_RATE = 0.35;
 const VEHICLE_ENGINE_SPEED_RATE = 0.6;
-const VEHICLE_ENGINE_LOAD_RATE = 0.14;
+const VEHICLE_ENGINE_LOAD_RATE = 0.3;
 const VEHICLE_SKID_GAIN = 0.42;
 const VEHICLE_ROLL_DIRT = 0.2;
 const VEHICLE_ROLL_ROAD = 0.12;
