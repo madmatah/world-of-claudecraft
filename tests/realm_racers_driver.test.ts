@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import { vehicleProfile } from '../src/sim/content/vehicles';
 import {
   driveRealmRacers,
   RALLY_DRIVER_TIERS,
@@ -16,13 +17,24 @@ import {
   type RallyDriverTier,
   rallyDriverProfile,
   rallyRacingLineOffset,
+  unstickCycleTicks,
 } from '../src/sim/realm_racers_driver';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { TICK_RATE } from '../src/sim/types';
 
 const TOP_SPEED = 60;
+/** The shipped machine's own wheel travel, read from the profile rather than
+ *  copied, so re-tuning `steerRate` retunes the brain's rock-out with it. */
+const LOANER_STEER_RATE = vehicleProfile('rally_loaner').steerRate;
 /** Arc positions read off the real circuit: the start/finish straight, the fast
  *  sweeper onto the north straight, and the hairpin (its tightest corner). */
 const START_STRAIGHT_S = 5;
+/** The one point on the lap whose WHOLE aim window is straight (measured: the
+ *  worst heading error over the next 30 yards is 0.005 rad, an order under the
+ *  finest deadband). `START_STRAIGHT_S` above is straight where the machine
+ *  STANDS but its aim window reaches the first corner, which at racing speed is
+ *  turn-in rather than weaving now that the aim carries the wheel's travel. */
+const FULLY_STRAIGHT_S = 440;
 const SWEEPER_S = 120;
 const HAIRPIN_S = 340;
 
@@ -35,6 +47,9 @@ interface Placement {
   slip?: number;
   tier?: RallyDriverTier;
   rival?: { x: number; z: number; vx?: number; vz?: number } | null;
+  yawRate?: number;
+  steerAngle?: number;
+  steerLockSeconds?: number;
   incoming?: RallyDriverBlast[];
   weaponReady?: boolean;
   tick?: number;
@@ -55,9 +70,12 @@ function at(s: number, place: Placement = {}): RallyDriverInput {
     facing: Math.atan2(p.tx, p.tz) + (place.heading ?? 0),
     speed: place.speed ?? 0,
     slip: place.slip ?? 0,
+    yawRate: place.yawRate ?? 0,
     track,
     projection: track.project(x, z),
     topSpeed: TOP_SPEED,
+    steerAngle: place.steerAngle ?? 0,
+    steerLockSeconds: place.steerLockSeconds ?? 1 / LOANER_STEER_RATE,
     rival: place.rival
       ? { x: place.rival.x, z: place.rival.z, vx: place.rival.vx ?? 0, vz: place.rival.vz ?? 0 }
       : null,
@@ -77,7 +95,7 @@ function pointOnTrack(s: number, lateral = 0): { x: number; z: number } {
 describe('Realm Racers driver: holding the line', () => {
   it('asks for no steering on the start straight, centred and aligned', () => {
     for (const tier of RALLY_DRIVER_TIERS) {
-      const out = driveRealmRacers(at(START_STRAIGHT_S, { tier, speed: 40 }));
+      const out = driveRealmRacers(at(FULLY_STRAIGHT_S, { tier, speed: 40 }));
       expect(out.mode, tier).toBe('race');
       expect({ tier, left: out.turnLeft, right: out.turnRight }).toEqual({
         tier,
@@ -102,6 +120,46 @@ describe('Realm Racers driver: holding the line', () => {
       left: false,
       right: true,
     });
+  });
+
+  // The wheel takes real time to travel (VehicleProfile.steerRate), so a brain
+  // that steered on the error as it stands would keep full lock held through a
+  // turn it has already made and correct into a fresh overshoot: a bang-bang
+  // controller against a lagging actuator is a limit cycle. It steers on the
+  // error it will STILL have once the rotation already underway has run its
+  // course, which is what a human does with the horizon.
+  it('lets go of the wheel once the rotation underway will finish the correction', () => {
+    // The same machine, running wide to the right, wheel already held at full
+    // left lock: only the rotation reading changes, the geometry is identical.
+    const wide = { lateral: 5, speed: 30, steerAngle: 1 };
+    const still = driveRealmRacers(at(START_STRAIGHT_S, { ...wide, yawRate: 0 }));
+    expect({ left: still.turnLeft, right: still.turnRight }).toEqual({ left: true, right: false });
+
+    // Coming round gently: the correction is still wanted, so the wheel stays.
+    const easing = driveRealmRacers(at(START_STRAIGHT_S, { ...wide, yawRate: 0.2 }));
+    expect(easing.turnLeft).toBe(true);
+
+    // Coming round fast enough to finish the job on its own: the brain is off
+    // the wheel entirely rather than holding a correction that has already been
+    // made.
+    const swinging = driveRealmRacers(at(START_STRAIGHT_S, { ...wide, yawRate: 0.5 }));
+    expect({ left: swinging.turnLeft, right: swinging.turnRight }).toEqual({
+      left: false,
+      right: false,
+    });
+
+    // Faster still, and it is winding the OTHER way to catch the overshoot
+    // before it arrives.
+    const spinning = driveRealmRacers(at(START_STRAIGHT_S, { ...wide, yawRate: 1 }));
+    expect(spinning.turnRight).toBe(true);
+
+    // And the anticipation is the WHEEL's, not a constant: with the wheel
+    // already straight there is nothing to unwind, so the same rotation buys no
+    // hesitation at all and the correction is held. A brain that led by a fixed
+    // horizon instead would let go here too, which is measurably slower on a
+    // machine whose wheel is quick (it under-steers every corner it enters).
+    const centred = driveRealmRacers(at(START_STRAIGHT_S, { ...wide, steerAngle: 0, yawRate: 1 }));
+    expect(centred.turnLeft).toBe(true);
   });
 
   it('runs the racing line to the INSIDE of a corner and not the outside', () => {
@@ -197,13 +255,40 @@ describe('Realm Racers driver: recovery', () => {
     // steering authority, so the only way out is to move.
     const wedged = (tick: number) =>
       driveRealmRacers(at(SWEEPER_S, { lateral: 24, heading: 1.4, speed: 0.2, tick }));
+    const half = unstickCycleTicks(1 / LOANER_STEER_RATE) / 2;
     const first = wedged(0);
-    const later = wedged(12);
+    const later = wedged(half);
     expect(first.mode).toBe('unstick');
     expect(later.mode).toBe('unstick');
     expect(first.forward).not.toBe(later.forward);
     expect(first.back).not.toBe(later.back);
     for (const out of [first, later]) expect(out.turnLeft || out.turnRight).toBe(true);
+    // Same half, same direction: the alternation is the CYCLE's, not the tick's.
+    expect(wedged(half - 1).forward).toBe(first.forward);
+  });
+
+  // The rock-out is the one manoeuvre timed by the wheel rather than by the
+  // road: the kernel inverts the yaw demand in reverse, so each half of the
+  // cycle has to carry the wheel all the way from one lock to the other before
+  // any of it bites. A flat tick count cannot say that for every machine, and a
+  // half sized under the crossing leaves a wedged pilot rocking with its
+  // steering permanently in transit.
+  it('sizes the rock-out so the wheel arrives at lock and still has time to bite', () => {
+    for (const steerRate of [2, 3.5, 8]) {
+      const lockSeconds = 1 / steerRate;
+      const halfSeconds = unstickCycleTicks(lockSeconds) / 2 / TICK_RATE;
+      // A full lock-to-lock crossing is two lock travels, and what is left over
+      // is the part of the half-cycle that actually pushes.
+      expect(halfSeconds, `steerRate ${steerRate}`).toBeGreaterThan(2 * lockSeconds);
+      expect(halfSeconds - 2 * lockSeconds, `bite at steerRate ${steerRate}`).toBeGreaterThan(0.25);
+    }
+    // A heavier wheel earns a longer cycle; it is not one constant for all.
+    expect(unstickCycleTicks(1 / 2)).toBeGreaterThan(unstickCycleTicks(1 / 8));
+    // Even and never zero, so the two halves are equal and the modulo is safe.
+    for (const lockSeconds of [0, 1 / 3.5, 5]) {
+      expect(unstickCycleTicks(lockSeconds) % 2).toBe(0);
+      expect(unstickCycleTicks(lockSeconds)).toBeGreaterThanOrEqual(2);
+    }
   });
 
   it('steers a machine out in the garden back toward the road while it still rolls', () => {

@@ -1275,6 +1275,13 @@ function dynamicFields(e: Entity, includeAuras = true): Record<string, unknown> 
       sp: round2(e.drive.speed),
       sl: round2(e.drive.slip),
       yr: round2(e.drive.yawRate),
+      // Where the wheel is, not where the keys are. It rides because the
+      // self-extrapolator RAMPS it from the same flags: re-anchoring onto a
+      // record without it would centre the wheel of a pilot who is mid-corner,
+      // and the prediction would straighten for the length of the ramp every
+      // time a snapshot landed. Sparse like ci/lk: a machine running straight
+      // has a centred wheel and pays nothing.
+      ...(e.drive.steerAngle !== 0 ? { st: round2(e.drive.steerAngle) } : {}),
       sn: round2(e.drive.spin),
       hb: round2(e.drive.handbrake),
       g: round2(e.drive.gripMult),

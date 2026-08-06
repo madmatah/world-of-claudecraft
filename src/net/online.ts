@@ -2895,6 +2895,8 @@ export class ClientWorld implements IWorld {
             profileKey: w.drv.k ?? '',
             speed: w.drv.sp ?? 0,
             slip: w.drv.sl ?? 0,
+            // Absent means a centred wheel (see the server's sparse encoding).
+            steerAngle: w.drv.st ?? 0,
             yawRate: w.drv.yr ?? 0,
             spin: w.drv.sn ?? 0,
             handbrake: w.drv.hb ?? 0,

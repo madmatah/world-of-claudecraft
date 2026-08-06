@@ -39,6 +39,28 @@ export interface VehicleProfile {
   airDrag: number;
   /** Yaw rate at peak steering authority, rad/s. */
   steerMaxYaw: number;
+  /**
+   * How fast the WHEEL travels toward the held command, 1/s: 1 divided by this
+   * is the seconds it takes to reach full lock from centre.
+   *
+   * This is the machine's weight in the steering, the one knob that reads as
+   * heavy against light. It does a different job from `steerResponse`: a
+   * first-order lag like that servo attenuates a quick flick without delaying
+   * it much, because its initial slope is its steepest, while a rate limit
+   * bounds how far the wheel can have MOVED at all. Only the second one can
+   * stop a machine from changing direction inside a couple of ticks. It also
+   * RECONSTRUCTS the analog axis the input chain cannot carry: see
+   * `VehicleDrive.steerAngle`.
+   */
+  steerRate: number;
+  /**
+   * Speed at which steering authority peaks, yd/s. Below it the authority ramps
+   * in (a machine standing still cannot pivot on nothing); above it the
+   * authority tapers toward `steerTopAuthority` so the straights stay stable.
+   */
+  steerPeakSpeed: number;
+  /** Steering authority left at top speed, as a fraction of the peak. */
+  steerTopAuthority: number;
   /** How fast the yaw rate reaches its target, 1/s. */
   steerResponse: number;
   /** Lateral grip on a clean road surface, 1/s (an exponential bleed rate). */
@@ -88,14 +110,27 @@ export const VEHICLE_PROFILES: Record<string, VehicleProfile> = {
     rollDrag: 1.5,
     airDrag: 0.02,
     steerMaxYaw: 2.6,
+    // A heavy machine on tracks: about 0.29 s from centre to full lock, which
+    // puts a full direction change at racing speed around 0.35 s.
+    steerRate: 3.5,
+    steerPeakSpeed: 21,
+    // The taper the straights ride. With the wheel travel above, a corner held
+    // at top speed settles on a ~43 yd radius after a second, the order of the
+    // circuits' own corners rather than a pirouette through them.
+    steerTopAuthority: 0.35,
     steerResponse: 9,
     roadGrip: 2,
     handbrakeGripFraction: 0.03,
     handbrakeDecel: 6,
     maxSlip: 14,
     // ~1.5 s to shake off a shove: long enough to read the yaw after a bump,
-    // short enough that a rub in a corner is not a lost lap.
-    spinDecay: 1.6,
+    // short enough that a rub in a corner is not a lost lap. It is coupled to
+    // `steerRate`, because a shove runs until the counter-steer bites and the
+    // wheel's travel is part of that wait: a heavier wheel needs a faster decay
+    // to put the nose in the same place. This is the knob for how far a contact
+    // turns a machine; `BUMP_SPIN` is how hard the contact hits, and reaching
+    // for that one instead flattens the big hits along with the small.
+    spinDecay: 2,
     airSteerFraction: 0.25,
     bodyRadius: 1.7,
     mass: 1,

@@ -45,6 +45,10 @@ function run(
   return facing;
 }
 
+/** Ticks the loaner's wheel needs to travel from full lock back to centre. */
+const wheelToCentreTicks = (profile: VehicleProfile = LOANER): number =>
+  Math.ceil(1 / profile.steerRate / DT);
+
 const mi = (over: Partial<MoveInput> = {}): MoveInput => ({
   forward: false,
   back: false,
@@ -153,28 +157,118 @@ describe('the vehicle driving model', () => {
   });
 
   it('gives no steering authority at rest, most in the mid range and less at top speed', () => {
-    expect(steerAuthority(0)).toBe(0);
-    expect(steerAuthority(0.35)).toBeCloseTo(1, 6);
-    expect(steerAuthority(1)).toBeLessThan(steerAuthority(0.35));
-    expect(steerAuthority(1)).toBeGreaterThan(0);
+    expect(steerAuthority(LOANER, 0)).toBe(0);
+    expect(steerAuthority(LOANER, LOANER.steerPeakSpeed)).toBeCloseTo(1, 6);
+    expect(steerAuthority(LOANER, LOANER.maxSpeed)).toBeLessThan(
+      steerAuthority(LOANER, LOANER.steerPeakSpeed),
+    );
+    expect(steerAuthority(LOANER, LOANER.maxSpeed)).toBeGreaterThan(0);
 
-    // The same taper as the model actually applies, measured on yaw rate.
+    // The same taper as the model actually applies, measured on yaw rate. The
+    // wheel is held at full lock first: the steering command now RAMPS, so a
+    // reading taken before it arrives would measure the ramp, not the taper.
     const yawAt = (speed: number): number => {
       const drive = createVehicleDrive('rally_loaner');
       drive.speed = speed;
-      // Held long enough for the yaw response to settle on its target.
-      for (let tick = 0; tick < 20; tick++) {
+      // Held long enough for both the wheel and the yaw response to settle.
+      for (let tick = 0; tick < 20 + Math.ceil(1 / LOANER.steerRate / DT); tick++) {
         advanceVehicleDrive(drive, LOANER, controls({ steer: 1 }));
         drive.speed = speed; // hold the speed: this measures steering, not drag
       }
       return drive.yawRate;
     };
     const standing = yawAt(0);
-    const mid = yawAt(LOANER.maxSpeed * 0.35);
+    const mid = yawAt(LOANER.steerPeakSpeed);
     const flat = yawAt(LOANER.maxSpeed);
     expect(Math.abs(standing)).toBeLessThan(1e-9);
     expect(mid).toBeGreaterThan(flat);
     expect(flat).toBeGreaterThan(0);
+  });
+
+  // The wheel is a THING THAT MOVES, not a signal that is either on or off. The
+  // input chain can only deliver -1/0/+1 (a keyboard has no axis, and the wire
+  // carries flags), so the analog axis is reconstructed here, sim-side and
+  // deterministically, which is what both hosts then predict in lockstep.
+  it('ramps the steering command at the profile rate instead of applying it whole', () => {
+    const drive = createVehicleDrive('rally_loaner');
+    expect(drive.steerAngle).toBe(0);
+
+    const perTick = LOANER.steerRate * DT;
+    for (let tick = 1; tick <= 3; tick++) {
+      advanceVehicleDrive(drive, LOANER, controls({ steer: 1 }));
+      expect(drive.steerAngle).toBeCloseTo(Math.min(1, tick * perTick), 9);
+    }
+    // It arrives at full lock, and never past it.
+    run(drive, 20, { steer: 1 });
+    expect(drive.steerAngle).toBe(1);
+
+    // Releasing returns it to centre at the same rate, and it settles exactly on
+    // centre rather than hunting around it.
+    advanceVehicleDrive(drive, LOANER, controls());
+    expect(drive.steerAngle).toBeCloseTo(1 - perTick, 9);
+    run(drive, 20, {});
+    expect(drive.steerAngle).toBe(0);
+  });
+
+  // What the ramp buys: a direction change at racing speed cannot be a yank.
+  // The bound is the profile's own lock-to-lock time rather than a hand-picked
+  // number of ticks, because the wheel cannot reach centre sooner than that and
+  // so neither can the yaw it drives.
+  it('cannot flip the yaw across a direction change faster than the wheel can travel', () => {
+    const drive = createVehicleDrive('rally_loaner');
+    run(drive, 20 * 12, { throttle: 1 });
+    run(drive, 10, { throttle: 1, steer: 1 });
+    const entryYaw = drive.yawRate;
+    expect(entryYaw).toBeGreaterThan(0);
+
+    // One tick of opposite lock cannot undo a corner: the machine is still
+    // turning the way it was.
+    advanceVehicleDrive(drive, LOANER, controls({ throttle: 1, steer: -1 }));
+    expect(drive.yawRate).toBeGreaterThan(0);
+
+    let ticksToCross = 1;
+    while (drive.yawRate > 0 && ticksToCross < 20 * 3) {
+      advanceVehicleDrive(drive, LOANER, controls({ throttle: 1, steer: -1 }));
+      ticksToCross++;
+    }
+    expect(drive.yawRate).toBeLessThanOrEqual(0);
+    // The wheel starts at full lock, so centre is 1/steerRate away.
+    expect(ticksToCross * DT).toBeGreaterThanOrEqual(1 / LOANER.steerRate);
+    // And it is a heavier wheel, not a broken one: the machine still answers
+    // within the time the wheel needs to reach the opposite lock.
+    expect(ticksToCross * DT).toBeLessThanOrEqual(2 / LOANER.steerRate);
+  });
+
+  // The point of the refactor: the speed/authority curve is per-machine data, so
+  // a heavy loaner and a light machine can disagree about it. A curve wired into
+  // the kernel could not, and every future profile would have inherited this
+  // one's handling whether it suited the machine or not.
+  it('reads the whole steering curve from the profile, not from the kernel', () => {
+    const at = (over: Partial<VehicleProfile>, speed: number): number => {
+      const profile: VehicleProfile = { ...LOANER, ...over };
+      const drive = createVehicleDrive('rally_loaner');
+      drive.speed = speed;
+      for (let tick = 0; tick < 20 + Math.ceil(1 / profile.steerRate / DT); tick++) {
+        advanceVehicleDrive(drive, profile, controls({ steer: 1 }));
+        // Hold the whole velocity, not just the forward half: authority reads
+        // the speed over the GROUND, so a slide left to build would walk the
+        // machine up its own curve and this would measure the drift instead.
+        drive.speed = speed;
+        drive.slip = 0;
+      }
+      return drive.yawRate;
+    };
+    // Top-of-the-range authority scales with the profile's own fraction.
+    const meek = at({ steerTopAuthority: 0.2 }, LOANER.maxSpeed);
+    const keen = at({ steerTopAuthority: 0.6 }, LOANER.maxSpeed);
+    expect(keen / meek).toBeCloseTo(0.6 / 0.2, 1);
+
+    // And the speed the curve peaks at is the profile's too: a machine that
+    // peaks late has less bite at the other one's peak.
+    const early = at({ steerPeakSpeed: 12 }, 12);
+    const late = at({ steerPeakSpeed: 40 }, 12);
+    expect(early).toBeGreaterThan(late);
+    expect(early).toBeCloseTo(LOANER.steerMaxYaw, 1);
   });
 
   it('holds a cornering line on the road and breaks it loose on the handbrake', () => {
@@ -187,6 +281,12 @@ describe('the vehicle driving model', () => {
       const drive = createVehicleDrive('rally_loaner');
       run(drive, 20 * 12, { throttle: 1 });
       let facing = run(drive, 12, { throttle: 1, steer: 1, handbrake });
+      // Releasing the key is not the same as the wheel being straight: it
+      // travels back at the profile's rate and keeps feeding the slide until it
+      // arrives. The decay window starts once it has, so this measures GRIP
+      // rather than the tail of the wheel's return, and it is derived from the
+      // profile so re-tuning the rate cannot silently invalidate it.
+      facing += run(drive, wheelToCentreTicks(), { handbrake });
       const peak = Math.abs(drive.slip);
       facing += run(drive, 10, { handbrake }); // half a second, steering neutral
       const travel = Math.atan2(vehicleVelocityX(drive, facing), vehicleVelocityZ(drive, facing));
@@ -228,6 +328,7 @@ describe('the vehicle driving model', () => {
       drive.dragMult = dragMult;
       run(drive, 20 * 12, { throttle: 1 });
       run(drive, 12, { throttle: 1, steer: 1 });
+      run(drive, wheelToCentreTicks(), { throttle: 1 }); // see the handbrake case
       const peak = Math.abs(drive.slip);
       run(drive, 10, { throttle: 1 });
       return { speed: drive.speed, kept: Math.abs(drive.slip) / peak };
@@ -466,8 +567,14 @@ describe('the vehicle arm of the movement kernel', () => {
     // per-tick decay (three seconds in, the tail left is under a few hundredths).
     const expected = (2.4 * DT) / (1 - Math.exp(-LOANER.spinDecay * DT));
     expect(turned).toBeCloseTo(expected, 1);
-    expect(turned).toBeGreaterThan(1.4);
-    expect(turned).toBeLessThan(1.6);
+    // ...and it is bounded by the CONTINUOUS integral of the same decay, which
+    // is a different formula from the sum above rather than a restatement of
+    // it: a fixed step overshoots the integral, by half a step's worth of
+    // decay and no more. Both ends move with the profile, so tuning the decay
+    // cannot leave this pinning a number the machine no longer produces.
+    const continuous = 2.4 / LOANER.spinDecay;
+    expect(turned).toBeGreaterThan(continuous);
+    expect(turned).toBeLessThan(continuous * (1 + LOANER.spinDecay * DT));
     expect(Math.abs(drive.spin)).toBeLessThan(0.03);
   });
 

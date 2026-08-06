@@ -101,6 +101,7 @@ const drive = (): VehicleDrive => ({
   profileKey: 'rally_loaner',
   speed: 30,
   slip: 4,
+  steerAngle: 0,
   yawRate: 0,
   spin: 0,
   handbrake: 0,

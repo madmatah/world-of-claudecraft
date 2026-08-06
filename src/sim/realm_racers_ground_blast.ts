@@ -85,9 +85,11 @@ export const GROUND_BLAST_PUSH = 22;
  * erased before the pilot felt it; `spin` decays on the profile's own clock and
  * is what a shove has to ride (workstream 04 found this the hard way).
  *
- * Total rotation is roughly the kick divided by the profile's `spinDecay`
- * (1.6), so 4.5 turns the machine about 160 degrees before it is spent: a real
- * spin to drive out of, and still inside the shared `MAX_VEHICLE_SPIN` ceiling.
+ * Total rotation is roughly the kick divided by the profile's `spinDecay`, so
+ * on the loaner 4.5 turns the machine about 130 degrees before it is spent: a
+ * real spin to drive out of, and still inside the shared `MAX_VEHICLE_SPIN`
+ * ceiling. The divisor is per-machine, so read it off the profile rather than
+ * from here.
  */
 export const GROUND_BLAST_YAW_KICK = 4.5;
 /** How long a hit machine drives on ice afterwards, ticks. It starts at the

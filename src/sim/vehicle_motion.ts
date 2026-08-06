@@ -22,14 +22,6 @@ import { type VehicleProfile, vehicleProfile } from './content/vehicles';
 import { DT, type VehicleDrive } from './types';
 
 /**
- * Fraction of top speed at which steering authority peaks. Below it the
- * authority ramps in (a machine standing still cannot pivot on nothing); above
- * it the authority tapers so the circuit's straights stay stable at speed.
- */
-const STEER_AUTHORITY_PEAK = 0.35;
-/** Steering authority left at top speed, as a fraction of the peak. */
-const STEER_AUTHORITY_AT_TOP = 0.45;
-/**
  * Shape of the engine's ease-off toward top speed. A LINEAR ease-off (the
  * obvious `1 - v/max`) can never reach the top: the engine force goes to zero
  * exactly where drag is largest, so the machine settles ~20% short and the
@@ -72,6 +64,7 @@ export function createVehicleDrive(profileKey: string): VehicleDrive {
     profileKey,
     speed: 0,
     slip: 0,
+    steerAngle: 0,
     yawRate: 0,
     spin: 0,
     handbrake: 0,
@@ -90,6 +83,10 @@ export function createVehicleDrive(profileKey: string): VehicleDrive {
 export function resetVehicleDrive(drive: VehicleDrive): void {
   drive.speed = 0;
   drive.slip = 0;
+  // The wheel is centred with the rest of the motion: a pilot who held a turn
+  // through the countdown would otherwise roll off the grid already committed to
+  // it, which is the same banked-input defect the speed reset exists for.
+  drive.steerAngle = 0;
   drive.yawRate = 0;
   drive.spin = 0;
   drive.handbrake = 0;
@@ -113,15 +110,22 @@ export function vehicleTopSpeedFor(drive: VehicleDrive, auraMult: number): numbe
 }
 
 /**
- * Steering authority as a function of how fast the machine is going, expressed
- * as a fraction of its top speed: 0 at a standstill, full at
- * STEER_AUTHORITY_PEAK, tapering to STEER_AUTHORITY_AT_TOP at maximum speed.
+ * Steering authority at a given ground speed, yd/s: 0 at a standstill, full at
+ * the profile's `steerPeakSpeed`, tapering to `steerTopAuthority` at the
+ * profile's maximum speed.
+ *
+ * Both ends of the curve are the PROFILE's, which is the whole point: a heavy
+ * machine and a light one disagree about where steering bites and about how much
+ * of it survives on a straight, and a curve wired into the kernel would have
+ * handed every future machine this one's handling.
  */
-export function steerAuthority(speedFraction: number): number {
-  const t = clamp01(speedFraction);
-  if (t <= STEER_AUTHORITY_PEAK) return t / STEER_AUTHORITY_PEAK;
-  const past = (t - STEER_AUTHORITY_PEAK) / (1 - STEER_AUTHORITY_PEAK);
-  return 1 - (1 - STEER_AUTHORITY_AT_TOP) * past;
+export function steerAuthority(profile: VehicleProfile, groundSpeed: number): number {
+  const peak = profile.steerPeakSpeed;
+  if (peak <= 0) return 1;
+  if (groundSpeed <= peak) return clamp01(groundSpeed / peak);
+  const span = profile.maxSpeed - peak;
+  if (span <= 0) return 1;
+  return 1 - (1 - profile.steerTopAuthority) * clamp01((groundSpeed - peak) / span);
 }
 
 /**
@@ -178,7 +182,20 @@ export function advanceVehicleDrive(
     drive.speed = Math.max(-profile.reverseMax, drive.speed);
   }
 
-  // 2. Steering. Authority follows the speed OVER THE GROUND, not the forward
+  // 2. The wheel. The command arrives as -1/0/+1 (a keyboard has no axis and the
+  //    wire carries flags), so the travel between them is reconstructed here: a
+  //    rate limit, not a filter. The distinction is load-bearing. A first-order
+  //    lag like the yaw servo below attenuates a quick flick but hardly delays
+  //    it, because its initial slope is its steepest; a rate limit caps how far
+  //    the wheel can have MOVED, so a flick cannot reach an amplitude the
+  //    machine's weight would not allow. Doing it sim-side keeps it deterministic
+  //    and keeps both hosts ramping the same wheel from the same flags.
+  const command = input.steer < -1 ? -1 : input.steer > 1 ? 1 : input.steer;
+  const travel = profile.steerRate * DT;
+  const toGo = command - drive.steerAngle;
+  drive.steerAngle += toGo < -travel ? -travel : toGo > travel ? travel : toGo;
+
+  // 3. Steering. Authority follows the speed OVER THE GROUND, not the forward
   //    component: a drift is exactly the process of turning the one into the
   //    other, so measuring the forward component alone kills the steering at
   //    ~90 degrees of slide, precisely where a spin becomes interesting. A
@@ -186,14 +203,13 @@ export function advanceVehicleDrive(
   //    line the lateral term is ~0 and this is the forward speed again.
   const groundSpeed = Math.hypot(drive.speed, drive.slip);
   const authority =
-    steerAuthority(profile.maxSpeed > 0 ? groundSpeed / profile.maxSpeed : 0) *
-    (input.onGround ? 1 : profile.airSteerFraction);
+    steerAuthority(profile, groundSpeed) * (input.onGround ? 1 : profile.airSteerFraction);
   // Backing up steers like a car rather than like a turret. REVERSING means the
   // forward component dominates AND points backwards; mid-slide it crosses zero
   // and its sign is noise, which would flip the braking direction and fight the
   // spin the instant the body passes ninety degrees.
   const direction = drive.speed < 0 && Math.abs(drive.speed) > Math.abs(drive.slip) ? -1 : 1;
-  const targetYaw = profile.steerMaxYaw * authority * input.steer * direction;
+  const targetYaw = profile.steerMaxYaw * authority * drive.steerAngle * direction;
   drive.yawRate += (targetYaw - drive.yawRate) * clamp01(profile.steerResponse * DT);
   // The contact spin turns the machine ALONGSIDE the wheel rather than through
   // it. Folding it into yawRate instead would hand it straight to the servo
@@ -203,7 +219,7 @@ export function advanceVehicleDrive(
   const yawDelta = (drive.yawRate + drive.spin) * DT;
   drive.spin *= Math.exp(-profile.spinDecay * DT);
 
-  // 3. Body rotation. The velocity vector keeps pointing where it pointed, so
+  // 4. Body rotation. The velocity vector keeps pointing where it pointed, so
   //    rotating the BODY under it is what throws the machine sideways: this
   //    exact rotation of (speed, slip) is the whole source of drift, and it
   //    conserves the velocity's magnitude, which is what makes the airborne
@@ -215,7 +231,7 @@ export function advanceVehicleDrive(
   drive.speed = forward * cos - lateral * sin;
   drive.slip = lateral * cos + forward * sin;
 
-  // 4. Grip bleeds the lateral component away exponentially. The handbrake and
+  // 5. Grip bleeds the lateral component away exponentially. The handbrake and
   //    a loose surface both cut it, which is what produces a controllable
   //    slide; airborne there is nothing to grip.
   const grip = input.onGround
@@ -232,7 +248,7 @@ export function advanceVehicleDrive(
     drive.slip = Math.max(-ceiling, Math.min(ceiling, drive.slip));
   }
 
-  // 5. The engagement reading the presentation layers ride.
+  // 6. The engagement reading the presentation layers ride.
   const target = input.handbrake ? 1 : 0;
   const ramp = HANDBRAKE_RAMP * DT;
   drive.handbrake =

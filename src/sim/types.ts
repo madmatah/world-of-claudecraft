@@ -3307,6 +3307,20 @@ export interface VehicleDrive {
   speed: number;
   /** Lateral velocity in the body frame, yd/s: the drift component. */
   slip: number;
+  /**
+   * Where the wheel is actually pointed, -1 (right) to 1 (left), ramped toward
+   * the held command at the profile's `steerRate`.
+   *
+   * It exists because the wheel is a thing that MOVES and the input chain cannot
+   * say so: a keyboard has no axis and the wire carries flags, so `MoveInput`
+   * delivers -1/0/+1 and nothing in between. Reconstructing the analog travel
+   * here rather than at the input keeps it deterministic and host-agnostic, so
+   * the authoritative Sim and the online self-extrapolator ramp the same wheel
+   * from the same flags. It is what bounds how fast a machine can change
+   * direction: a first-order lag on the yaw would attenuate a flick without
+   * delaying it, which reads as the machine being yanked rather than steered.
+   */
+  steerAngle: number;
   /** Yaw rate, rad/s (positive turns left, the repo's facing convention). */
   yawRate: number;
   /**

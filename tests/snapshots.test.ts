@@ -3279,6 +3279,20 @@ describe('vehicle drive state over the wire', () => {
     (client as any).applySnapshot({ t: 'snap', ents: [wireEntity(e)] });
     expect(client.entities.get(e.id)?.drive?.collisionImpact).toBe(0);
 
+    // The wheel angle is sparse like the two above, and ACTIONABLE for the same
+    // reason the speed is: the self-extrapolator ramps the wheel from the same
+    // input flags, so a re-anchor onto a record missing it would straighten a
+    // pilot who is mid-corner for the length of the ramp.
+    expect(wireEntity(e).drv).not.toHaveProperty('st');
+    e.drive.steerAngle = -0.75;
+    const turning = wireEntity(e);
+    expect(turning.drv).toMatchObject({ st: -0.75 });
+    (client as any).applySnapshot({ t: 'snap', ents: [turning] });
+    expect(client.entities.get(e.id)?.drive?.steerAngle).toBe(-0.75);
+    e.drive.steerAngle = 0;
+    (client as any).applySnapshot({ t: 'snap', ents: [wireEntity(e)] });
+    expect(client.entities.get(e.id)?.drive?.steerAngle).toBe(0);
+
     // The control lock rides only while it is SET, so an ordinary driving frame
     // pays nothing for it; the mirror decodes an absent key as "the pilot has
     // the controls". The client greys its weapon slot off this exact fact, so a

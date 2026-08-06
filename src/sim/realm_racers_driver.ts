@@ -54,6 +54,16 @@ export interface RallyDriverInput {
   speed: number;
   /** Lateral component, yd/s: how far sideways the machine is travelling. */
   slip: number;
+  /**
+   * How fast the nose is already coming round, rad/s. Not privileged sense: it
+   * is what a human reads off the horizon swinging, and the brain needs it for
+   * the same reason a human does, because the WHEEL takes real time to travel
+   * (`VehicleProfile.steerRate`). Steering on the error as it stands, against
+   * an actuator that lags, is the textbook recipe for a limit cycle: full lock
+   * held through a turn already made, then full opposite lock through the
+   * correction, until the machine is spinning instead of racing.
+   */
+  yawRate: number;
   /** The circuit this race is on, as the derived model every geometric read
    *  goes through. Handed in rather than resolved here, so the brain stays a
    *  leaf that knows the shape of a circuit and nothing about which ones exist. */
@@ -62,6 +72,21 @@ export interface RallyDriverInput {
   projection: RallyProjection;
   /** Top speed available right now (profile maximum, surface, auras). */
   topSpeed: number;
+  /** Where the machine's wheel is right now, -1 to 1 (VehicleDrive.steerAngle). */
+  steerAngle: number;
+  /**
+   * Seconds the machine's wheel needs to travel from centre to full lock
+   * (1 / `VehicleProfile.steerRate`). Handed in like `topSpeed`, and for the
+   * same reason: it is a fact about the machine in the seat, and the brain has
+   * to drive a light one and a heavy one without being rewritten.
+   *
+   * It is the brain's whole model of its own lag, and all three places the lag
+   * shows up scale off it: how far ahead the rotation is read (`yawLeadSeconds`),
+   * how far up the road the aim point sits, and how long a half of a rock-out
+   * lasts. A machine whose wheel is instant gets zero of all three, which is
+   * what keeps this correct across the roster rather than tuned to one record.
+   */
+  steerLockSeconds: number;
   /** The nearest rival's pose and world velocity, if there is one to shoot at.
    *  The velocity is what the bot leads with, exactly as a human leads by eye. */
   rival: { x: number; z: number; vx: number; vz: number } | null;
@@ -152,6 +177,26 @@ export function rallyDriverProfile(tier: RallyDriverTier): RallyDriverProfile {
   return DRIVER_PROFILES[tier];
 }
 
+/**
+ * How far ahead the brain reads its own rotation when deciding which way to
+ * hold the wheel, seconds: the steering demand it acts on is the heading error
+ * MINUS the rotation the machine will have carried out on its own by then.
+ *
+ * This is anticipation, not a filter, and it is what lets a bang-bang wheel
+ * drive a machine whose steering has weight: unwinding only once the nose is
+ * already pointed right leaves the wheel a third of a second behind, and the
+ * correction becomes a fresh overshoot.
+ *
+ * It is the time to bring THIS wheel back from where it currently sits, so it
+ * is zero on a centred wheel and largest at full lock. A flat horizon would be
+ * wrong at both ends: on a quick wheel it over-damps, letting go of corrections
+ * barely begun and entering every corner wide, and on a wheel that has not
+ * moved there is nothing to unwind and so nothing to anticipate.
+ */
+function yawLeadSeconds(input: RallyDriverInput): number {
+  return Math.abs(input.steerAngle) * Math.max(0, input.steerLockSeconds);
+}
+
 /** Yards of circuit the aim point sits ahead, at a standstill and per yd/s. */
 const LOOKAHEAD_BASE = 7;
 const LOOKAHEAD_PER_SPEED = 0.28;
@@ -192,8 +237,22 @@ const WRONG_WAY_DOT = 0.15;
 const RECOVERY_MARGIN = 6;
 /** Ground speed under which a lost machine counts as wedged rather than moving. */
 const RECOVERY_CRAWL = 2.5;
-/** Ticks of one full rock-out cycle (forward half, reverse half). */
-const UNSTICK_CYCLE = 24;
+/**
+ * Seconds of ACTUAL lock each half of a rock-out is worth, on top of the time
+ * the wheel spends getting there. The allowance is what makes the manoeuvre
+ * work at all: the kernel inverts the yaw demand in reverse, so every half
+ * carries the wheel the full width from one lock to the other, and a half
+ * sized under that leaves a wedged machine rocking with its steering
+ * permanently in transit.
+ */
+const UNSTICK_BITE_SECONDS = 0.5;
+
+/** Ticks of one full rock-out cycle (forward half, reverse half) for a machine
+ *  whose wheel takes `steerLockSeconds` to reach full lock. */
+export function unstickCycleTicks(steerLockSeconds: number): number {
+  const half = 2 * Math.max(0, steerLockSeconds) + UNSTICK_BITE_SECONDS;
+  return Math.max(2, 2 * Math.round(half * TICK_RATE));
+}
 /** Yards ahead the recovery aim point sits, on the centerline itself. */
 const RECOVERY_LOOKAHEAD = 12;
 /** Range a shot is taken at, yards. Comfortably inside the auto-range's reach
@@ -403,7 +462,8 @@ export function driveRealmRacers(input: RallyDriverInput): RallyDriverOutput {
     // machine pinned against the garden wall, which nothing else here can do
     // (a stopped machine has no steering authority to turn on the spot with).
     // Deterministic by tick, so a replay of the same seed rocks identically.
-    const reversing = input.tick % UNSTICK_CYCLE < UNSTICK_CYCLE / 2;
+    const cycle = unstickCycleTicks(input.steerLockSeconds);
+    const reversing = input.tick % cycle < cycle / 2;
     // Reversing steers like a car: the kernel flips the yaw demand, so the
     // wheel goes the other way to point the nose the same way.
     const demand = reversing ? -homeDemand : homeDemand;
@@ -426,21 +486,33 @@ export function driveRealmRacers(input: RallyDriverInput): RallyDriverOutput {
       ...IDLE,
       forward: input.speed < -RECOVERY_CRAWL,
       back: input.speed > RECOVERY_CRAWL,
-      turnLeft: homeDemand > 0,
-      turnRight: homeDemand < 0,
+      // Led like the racing demand below: this branch runs with speed on, so a
+      // nose already swinging round would otherwise be steered straight past
+      // the heading it was sent to find. The rock-out above is deliberately not
+      // led: it runs at a crawl, where there is no rotation to anticipate, and
+      // its wheel is timed by the cycle rather than by the error.
+      turnLeft: homeDemand - input.yawRate * yawLeadSeconds(input) > 0,
+      turnRight: homeDemand - input.yawRate * yawLeadSeconds(input) < 0,
       speedTarget: 0,
       mode: 'turnAround',
     };
   }
 
-  const lookahead = Math.min(
-    LOOKAHEAD_MAX,
-    LOOKAHEAD_BASE + Math.max(0, groundSpeed) * LOOKAHEAD_PER_SPEED,
-  );
+  // Yards covered while the wheel is still travelling to where it was sent.
+  // The aim point carries it, so the brain turns in early enough for a heavy
+  // wheel to have arrived by the corner rather than at its exit.
+  const wheelReach = Math.max(0, groundSpeed) * Math.max(0, input.steerLockSeconds);
+  const lookahead =
+    Math.min(LOOKAHEAD_MAX, LOOKAHEAD_BASE + Math.max(0, groundSpeed) * LOOKAHEAD_PER_SPEED) +
+    wheelReach;
   const aim = aimPoint(track, s, lookahead);
   const racingDemand = demandTo(input.facing, input.x, input.z, aim.x, aim.z);
   const dodge = dodgeDemand(input, profile);
-  const demand = dodge ?? racingDemand;
+  // The wheel is held against the error the machine will STILL have once its
+  // current rotation has run for as long as this wheel takes to unwind, not the
+  // error it has now. Only the steering reads the lead: the handbrake below is a
+  // decision about how sharp the CORNER is, which no rotation of ours changes.
+  const demand = (dodge ?? racingDemand) - input.yawRate * yawLeadSeconds(input);
 
   const ceiling = Math.max(0, input.topSpeed) * profile.speedFraction;
   const speedTarget = speedTargetAt(track, s, groundSpeed, profile, ceiling);

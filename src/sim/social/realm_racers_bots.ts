@@ -34,6 +34,7 @@ import {
   REALM_RACERS_BOT_NAMES,
 } from '../content/realm_racers';
 import { realmRacersCircuitById } from '../content/realm_racers_circuits';
+import { vehicleProfile } from '../content/vehicles';
 import { auraSpeedMult } from '../player_motion';
 import {
   driveRealmRacers,
@@ -298,9 +299,14 @@ function driveRallyBot(
     facing: e.facing,
     speed: drive.speed,
     slip: drive.slip,
+    // The carried contact spin rides with it: to the brain, being shoved
+    // sideways and steering into it are the same rotation to anticipate.
+    yawRate: drive.yawRate + drive.spin,
     track,
     projection,
     topSpeed: vehicleTopSpeedFor(drive, auraSpeedMult(e)),
+    steerAngle: drive.steerAngle,
+    steerLockSeconds: 1 / vehicleProfile(drive.profileKey).steerRate,
     // Positions shift into the canonical frame; velocities are frame-invariant
     // under a pure translation and pass through untouched.
     rival: rival
