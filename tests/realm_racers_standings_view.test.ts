@@ -101,6 +101,20 @@ describe('Realm Racers standings core', () => {
     expect(view.rows.map((row) => row.retired)).toEqual([false, true]);
   });
 
+  it('flags each house pilot and no human, which is what draws the Bot tag', () => {
+    // The flag is WHO IS NOT HUMAN, nothing more: the tier stays off the panel
+    // (the noise the removed tier badge was), so the row carries a boolean, not
+    // the tier string.
+    const view = buildRealmRacersStandingsView(
+      match([
+        racer({ pid: 1, position: 1 }),
+        racer({ pid: 2, position: 2, botTier: 'rookie' }),
+        racer({ pid: 3, position: 3, botTier: 'ace' }),
+      ]),
+    );
+    expect(view.rows.map((row) => row.bot)).toEqual([false, true, true]);
+  });
+
   it('moves its signature on everything it draws, and on nothing else', () => {
     const baseSig = buildRealmRacersStandingsView(match(field())).sig;
     expect(buildRealmRacersStandingsView(match(field())).sig).toBe(baseSig);
@@ -125,6 +139,12 @@ describe('Realm Racers standings core', () => {
     expect(buildRealmRacersStandingsView(match(retired)).sig).not.toBe(baseSig);
     const finished = field().map((row) => (row.pid === 2 ? { ...row, finished: true } : row));
     expect(buildRealmRacersStandingsView(match(finished)).sig).not.toBe(baseSig);
+    // So is who is driving: a seat handed to a house pilot must repaint the row
+    // so the Bot tag appears, and a human taking it back must clear it.
+    const backfilled = field().map((row) =>
+      row.pid === 4 ? { ...row, botTier: 'ace' as const } : row,
+    );
+    expect(buildRealmRacersStandingsView(match(backfilled)).sig).not.toBe(baseSig);
     // And a different race is a different panel outright.
     expect(buildRealmRacersStandingsView({ ...match(field()), id: 8 }).sig).not.toBe(baseSig);
   });

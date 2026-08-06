@@ -14437,6 +14437,24 @@
 .rally-standing-you:empty {
   display: none;
 }
+/* The house-pilot tag: the Vale Cup team sheet's Bot badge (.vcupb-tag.bot,
+   same chip shape and colors) in the rally row's flex cell, so the game keeps
+   ONE AI marker. Collapses when empty, the same contract as the YOU marker;
+   the cell's own gap spaces it, so the vcup margin is dropped. */
+.rally-standing-bot {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid #5a4a20;
+  border-radius: 7px;
+  background: #2a2208;
+  color: #b6ad8c;
+  font-family: var(--title-font);
+  font-size: 8.5px;
+  letter-spacing: 0.5px;
+}
+.rally-standing-bot:empty {
+  display: none;
+}
 .rally-standing-lap {
   color: #9fb098;
   font-size: 11px;

@@ -45,6 +45,7 @@ interface PooledRow {
   crest: HTMLImageElement;
   name: HTMLElement;
   you: HTMLElement;
+  bot: HTMLElement;
   lap: HTMLElement;
   /** The class the portrait was last painted for: the party frames' portrait
    *  gate, so a crest is only redrawn when the pilot in the row changes. */
@@ -138,6 +139,13 @@ export class RealmRacersStandingsPanel {
     // panel, and a marker glued to its end is the first thing an ellipsis eats.
     w.setText(pooled.name, row.name);
     w.setText(pooled.you, row.isMe ? t('hudChrome.rally.standingsYou') : '');
+    // The house-pilot marker is the game's ONE AI badge, the Vale Cup team
+    // sheet's Bot tag: the same key rather than a second rally-only term. The
+    // title mirrors the text so hover names it too; both ride the row
+    // signature (the core's `bot` flag) and the empty cell collapses in CSS.
+    const botLabel = row.bot ? t('hudChrome.vcup.briefing.bot') : '';
+    w.setText(pooled.bot, botLabel);
+    w.setAttr(pooled.bot, 'title', botLabel);
     w.setText(pooled.lap, lapLabel(row, totalLaps));
     w.toggleClass(pooled.el, ME_CLASS, row.isMe);
     w.toggleClass(pooled.el, OUT_CLASS, row.retired);
@@ -152,7 +160,8 @@ export class RealmRacersStandingsPanel {
       `<span class="rally-standing-place"></span>` +
       `<img class="rally-standing-crest" src="" alt="">` +
       `<span class="rally-standing-id"><span class="rally-standing-name"></span>` +
-      `<span class="rally-standing-you"></span></span>` +
+      `<span class="rally-standing-you"></span>` +
+      `<span class="rally-standing-bot"></span></span>` +
       `<span class="rally-standing-lap"></span>`;
     const pooled: PooledRow = {
       el,
@@ -160,6 +169,7 @@ export class RealmRacersStandingsPanel {
       crest: el.querySelector('.rally-standing-crest') as HTMLImageElement,
       name: el.querySelector('.rally-standing-name') as HTMLElement,
       you: el.querySelector('.rally-standing-you') as HTMLElement,
+      bot: el.querySelector('.rally-standing-bot') as HTMLElement,
       lap: el.querySelector('.rally-standing-lap') as HTMLElement,
       crestCls: '',
       placing: 0,

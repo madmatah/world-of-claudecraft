@@ -28,6 +28,13 @@ export interface RealmRacersStandingsRow {
   finished: boolean;
   /** Quit rather than finished: still classified, no longer on the circuit. */
   retired: boolean;
+  /**
+   * True for a house pilot (`botTier` set on the racer), so a queued race the
+   * realm backfilled never reads as an all-human grid. Deliberately a boolean,
+   * not the tier: the tier badge was removed from this panel as noise, and the
+   * one thing the row says is who is not human.
+   */
+  bot: boolean;
 }
 
 export interface RealmRacersStandingsView {
@@ -87,6 +94,7 @@ export function buildRealmRacersStandingsView(
         isMe: false,
         finished: false,
         retired: false,
+        bot: false,
       };
       rowPool[i] = row;
     }
@@ -100,9 +108,10 @@ export function buildRealmRacersStandingsView(
     row.isMe = racer.pid === viewerPid;
     row.finished = racer.finished;
     row.retired = racer.retired;
+    row.bot = racer.botTier !== null;
     sig +=
       `${i === 0 ? '' : ','}${row.pid}:${row.placing}${row.isMe ? '*' : ''}${row.cls}/${row.lap}` +
-      `${row.finished ? 'f' : ''}${row.retired ? 'r' : ''}`;
+      `${row.finished ? 'f' : ''}${row.retired ? 'r' : ''}${row.bot ? 'b' : ''}`;
   }
   state.active = true;
   state.totalLaps = match.totalLaps;

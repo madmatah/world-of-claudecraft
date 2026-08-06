@@ -555,6 +555,40 @@ describe('Realm Racers practice setup screen', () => {
     expect(iconDataUrlSpy).not.toHaveBeenCalled();
   });
 
+  it('tags a house pilot with the Vale Cup Bot badge, and no human row', () => {
+    const h = harness();
+    const me = racer({ position: 1 });
+    h.info.match = match({
+      phase: 'racing',
+      me,
+      standings: [me, racer({ pid: 2, name: 'Briar', botTier: 'rookie', position: 2 })],
+    });
+    h.ui.update();
+    const badges = [...h.layer.querySelectorAll('.rally-standing-bot')] as HTMLElement[];
+    // Every row carries the cell (the pooled skeleton is uniform); only the
+    // house pilot's says anything, and the stylesheet collapses the empty one.
+    expect(badges).toHaveLength(2);
+    expect(badges[0].textContent).toBe('');
+    // The game's ONE AI badge, the Vale Cup team sheet's Bot tag: the same key,
+    // not a second marker, and mirrored onto the title so hover says it too.
+    expect(badges[1].textContent).toBe(t('hudChrome.vcup.briefing.bot'));
+    expect(badges[1].getAttribute('title')).toBe(t('hudChrome.vcup.briefing.bot'));
+    // The badge says WHO IS NOT HUMAN, never the tier: that pin (above) holds
+    // for a bot-backfilled grid too.
+    expect(h.layer.querySelector('.rally-standing-tier')).toBeNull();
+
+    // A human taking the seat back clears the tag on the SAME pooled node.
+    h.info.match = match({
+      phase: 'racing',
+      me,
+      standings: [me, racer({ pid: 2, name: 'Briar', position: 2 })],
+    });
+    h.ui.update();
+    const after = [...h.layer.querySelectorAll('.rally-standing-bot')] as HTMLElement[];
+    expect(after[1]).toBe(badges[1]);
+    expect(after[1].textContent).toBe('');
+  });
+
   it('says where a pilot stopped once they are no longer driving', () => {
     const h = harness();
     const me = racer({ position: 2 });
