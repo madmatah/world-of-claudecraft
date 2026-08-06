@@ -132,11 +132,8 @@ export const SFX = [
   {
     key: 'move_groundshaker_engine',
     custom: true,
-    duration: 4,
     loop: true,
     preload: 'lazy',
-    prompt:
-      'A heavy tracked vehicle engine loop used by the Terrorspark Groundshaker in Realm Racers.',
   },
   {
     key: 'move_jump',

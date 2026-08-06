@@ -94,17 +94,17 @@ export const FORGE_MAX_DISTANCE = 38;
 // Groundshaker engine adjustment knobs. The master gain raises idle, speed and
 // acceleration together. VEHICLE_ENGINE_LOAD and VEHICLE_ENGINE_LOAD_RATE
 // control how strongly engine effort (mostly positive acceleration, plus a
-// small cruise floor) adds body and revs. The supplied loop loses about 6 dB
-// to true-peak safety and about 3.5 dB when its stereo channels are folded to
-// the positional mono path. In-game tuning with the local engine anchored to
-// the player settled at 2.2 so it remains present against the race music. At
-// full load the engine alone commands 2.11, which stays below unity after the
-// asset's -6 dB true-peak ceiling and the 0.85 sampled-clip master.
+// small cruise floor) adds body and revs. The supplied loop ships mono already
+// (no stereo fold) and loses about 7.2 dB to true-peak safety. In-game tuning
+// with the local engine anchored to the player settled at 2.2 so it remains
+// present against the race music. At full load the engine alone commands
+// 2.11, which stays below unity after the asset's -7.2 dB true-peak ceiling
+// and the 0.85 sampled-clip master.
 const REALM_RACERS_ENGINE_GAIN = 2.2;
 const VEHICLE_ENGINE_IDLE = 0.26;
 const VEHICLE_ENGINE_SPEED = 0.48;
 const VEHICLE_ENGINE_LOAD = 0.22;
-const VEHICLE_ENGINE_IDLE_RATE = 0.72;
+const VEHICLE_ENGINE_IDLE_RATE = 0.4;
 const VEHICLE_ENGINE_SPEED_RATE = 0.6;
 const VEHICLE_ENGINE_LOAD_RATE = 0.14;
 const VEHICLE_SKID_GAIN = 0.42;
