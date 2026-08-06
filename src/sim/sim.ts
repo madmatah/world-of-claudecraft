@@ -9695,6 +9695,16 @@ export class Sim {
     return this.realmRacersInfoFor(this.primaryId);
   }
 
+  realmRacersTracksideFor(
+    pid: number,
+  ): import('../world_api/realm_racers').RealmRacersLaneView | null {
+    return realmRacersMod.realmRacersTracksideFor(this.ctx, pid);
+  }
+
+  get realmRacersTrackside(): import('../world_api/realm_racers').RealmRacersLaneView | null {
+    return this.realmRacersTracksideFor(this.primaryId);
+  }
+
   joinRealmRacersQueue(): void {
     this.realmRacersQueueJoin(this.primaryId);
   }

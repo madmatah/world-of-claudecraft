@@ -34,10 +34,12 @@ import {
   REALM_RACERS_WEAPON_CHARGES,
   resolveRealmRacersKit,
 } from '../src/sim/content/realm_racers';
+import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
 import { COMBO_RECIPES } from '../src/sim/content/recipes';
 import { BUILTIN_WORLD, DELVES, GATHER_NODES, ITEMS, MOBS } from '../src/sim/data';
 import { createMob } from '../src/sim/entity';
 import { MOUNT_RACE_COUNTDOWN_TICKS } from '../src/sim/mount_race';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
 import { type Aura, DT, type PlayerClass, type WorldContent } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
@@ -3520,6 +3522,7 @@ const ALL_DELTA_KEYS = [
   'renown',
   'rr',
   'rrkit',
+  'rrt',
   'salv',
   'sport',
   'stats',
@@ -3596,6 +3599,7 @@ const TERSE_TO_IWORLD: Record<string, string> = {
   qlog: 'questLog',
   res: 'resource',
   rr: 'realmRacersInfo',
+  rrt: 'realmRacersTrackside',
   rtype: 'resourceType',
   rxp: 'restedXp',
   salv: 'lastSalvageResult',
@@ -3989,11 +3993,50 @@ describe('full self-state snapshot delta fixture', () => {
     broadcast(server);
     const snap = lastSnap(fc.sent);
     expect(snap).not.toBeNull();
+    // `rrt` is the one key whose non-null value is POSITION-exclusive with the
+    // rest of this fixture: a body cannot stand at the bank and at a rally
+    // fence at once, so it gets its own dedicated first-snapshot test below.
+    const positionExclusive = new Set(['rrt']);
     for (const key of ALL_DELTA_KEYS) {
       expect(snap.self, `self.${key} missing from first snapshot`).toHaveProperty(key);
+      if (positionExclusive.has(key)) continue;
       // each was dirtied to a non-default value, so none rides the wire as null
       expect(snap.self[key], `self.${key} arrived null`).not.toBeNull();
     }
+  });
+
+  it('carries the trackside lane view for a first-snapshot bystander at the fence', () => {
+    const server = new GameServer();
+    const racerClient = fakeWs();
+    const racer = joinServer(server, racerClient, 91, 'Pilot');
+    const fc = fakeWs();
+    const watcher = joinServer(server, fc, 92, 'Watcher');
+    server.sim.realmRacersPracticeStart('rookie', racer.pid);
+    const practice = server.sim.realmRacers.practices[0];
+    expect(practice).toBeTruthy();
+    const sample = realmRacersTrack(REALM_RACERS_PRACTICE_CIRCUIT).pointAt(10);
+    const body = server.sim.entities.get(watcher.pid);
+    if (!body) throw new Error('missing watcher entity');
+    body.pos = { ...body.pos, x: sample.x + practice.origin.x, z: sample.z + practice.origin.z };
+    body.prevPos = { ...body.pos };
+    fc.sent.length = 0;
+    broadcast(server);
+    const snap = lastSnap(fc.sent);
+    expect(snap.self.rrt).toMatchObject({
+      circuitId: REALM_RACERS_PRACTICE_CIRCUIT.id,
+      phase: 'countdown',
+    });
+    const client = bareClient(watcher.pid);
+    (client as any).applySnapshot(snap);
+    expect(client.realmRacersTrackside?.circuitId).toBe(REALM_RACERS_PRACTICE_CIRCUIT.id);
+
+    // Walking away clears the mirror on the next delta.
+    body.pos = { ...body.pos, x: 0, z: 0 };
+    body.prevPos = { ...body.pos };
+    fc.sent.length = 0;
+    broadcast(server);
+    (client as any).applySnapshot(lastSnap(fc.sent));
+    expect(client.realmRacersTrackside).toBeNull();
   });
 
   it('mirrors every dirtied self value onto the correct decode target', () => {
@@ -4368,11 +4411,11 @@ describe('gather node cooldown wire round trip (ncd)', () => {
 });
 
 describe('delta-key contract pins (anti-drift)', () => {
-  it('ALL_DELTA_KEYS contains exactly 66 unique keys in sorted order', () => {
+  it('ALL_DELTA_KEYS contains exactly 67 unique keys in sorted order', () => {
     // +1: guildBank (Guild Bank Phase 2), +2: the Realm Racers state and
     // temporary-kit keys.
-    expect(ALL_DELTA_KEYS).toHaveLength(66);
-    expect(new Set(ALL_DELTA_KEYS).size).toBe(66);
+    expect(ALL_DELTA_KEYS).toHaveLength(67);
+    expect(new Set(ALL_DELTA_KEYS).size).toBe(67);
     expect([...ALL_DELTA_KEYS]).toEqual([...ALL_DELTA_KEYS].sort());
   });
 
@@ -4397,7 +4440,7 @@ describe('delta-key contract pins (anti-drift)', () => {
     // plus the packet's slotted-tool-effects key tslot for 63, guildBank for 64
     // (Guild Bank Phase 2), and the Realm Racers state and temporary-kit keys
     // for 66.
-    expect(scraped.size).toBe(66);
+    expect(scraped.size).toBe(67);
     expect([...scraped].sort()).toEqual([...ALL_DELTA_KEYS].sort());
   });
 

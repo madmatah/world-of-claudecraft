@@ -17,6 +17,7 @@
 
 import type {
   RealmRacersInfo,
+  RealmRacersLaneView,
   RealmRacersMatchInfo,
   RealmRacersPhase,
   RealmRacersRacerInfo,
@@ -53,6 +54,7 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
   rallyGateCrossingFraction,
+  realmRacersLaneAt,
   realmRacersLaneOffset,
   realmRacersPracticeLanes,
   realmRacersPublicLane,
@@ -90,6 +92,7 @@ import {
   REALM_RACERS_SLICK_GRIP_TICKS,
   REALM_RACERS_SLICK_LIFETIME_TICKS,
   REALM_RACERS_SLICK_SLIP_CAP,
+  rallySlickContains,
   realmRacersSlickThrow,
   stepRealmRacersSlicks,
 } from '../realm_racers_slicks';
@@ -1411,12 +1414,16 @@ function resetRacerTo(
   progress.wrongWay = false;
   // A machine put back on the racing line is put back CLEAN: whatever surface
   // it was fighting is behind it, and a burst it can no longer spend (the
-  // recovery stopped it dead) is not a burst it keeps. The ward is untouched:
-  // it is a thing the pilot won, not a state of the ground under them.
+  // recovery stopped it dead) is not a burst it keeps. The shell shock goes
+  // with the rest (operator call, 2026-08-06): a recovery is a fresh start,
+  // not a way to serve out a control penalty mid-teleport. The ward is
+  // untouched: it is a thing the pilot won, not a state of the ground under
+  // them.
   progress.nitroUntilTick = 0;
   progress.slickGripUntilTick = 0;
   progress.slickContactUntilTick = 0;
   progress.slickContactId = null;
+  progress.groundBlastShockUntilTick = 0;
   // A racer put back on the racing line is on it: whatever excursion carried
   // them here is over, and the odometer starts again from the next one.
   progress.excursion = noRallyExcursion();
@@ -2360,6 +2367,22 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
     // one down the road. The GRIP window deliberately does NOT follow the
     // contact: it expires on its own clock, or a machine that stopped in the oil
     // would never get the grip back to drive out of it.
+    // Overlapping patches are one crossing while the machine has not LEFT the
+    // remembered one: two rivals oiling the same corner overlap, the nearest
+    // patch flips across the equidistance line every wobble, and each flip
+    // used to read as a fresh crossing (a throw and an announcement per flip).
+    // The remembered patch is kept until the machine is really out of it.
+    if (progress.slickContactId !== null && progress.slickContactId !== hit.slick) {
+      const racerEntity = ctx.entities.get(hit.pid);
+      const remembered = match.slicks.find((slick) => slick.id === progress.slickContactId);
+      if (racerEntity && remembered) {
+        const local = realmRacersToCanonical(match, racerEntity.pos.x, racerEntity.pos.z);
+        if (rallySlickContains(remembered, local.x, local.z)) {
+          progress.slickContactUntilTick = ctx.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+          continue;
+        }
+      }
+    }
     const resolves =
       progress.slickContactId !== hit.slick || ctx.tickCount >= progress.slickContactUntilTick;
     progress.slickContactId = hit.slick;
@@ -2612,10 +2635,60 @@ function racerInfo(
   };
 }
 
+/**
+ * The viewer-independent half of the match readout, built once per match per
+ * tick: the 20 Hz broadcast builds `rr` for every seated pilot (and the online
+ * self wire asks once per PLAYER, racing or not), so the classification walk,
+ * the standings rows, the box list and the oil list are shared instead of
+ * re-derived per viewer. The arrays are shared by every reader on the tick and
+ * are treated as frozen presentation data: nothing downstream writes into a
+ * readout. Keyed by the match OBJECT (multi-Sim isolation) and the sim clock;
+ * a mid-tick mutation (a forfeit landing between ticks) is picked up by the
+ * next tick's build, which is also when the wire reads it.
+ */
+interface RallySharedReadout {
+  tick: number;
+  participantIds: number[];
+  standings: RealmRacersRacerInfo[];
+  pickupsTaken: number[];
+  slicks: { id: number; x: number; z: number }[];
+}
+const sharedReadouts = new WeakMap<RealmRacersMatch, RallySharedReadout>();
+
+function sharedMatchReadout(ctx: SimContext, match: RealmRacersMatch): RallySharedReadout {
+  const cached = sharedReadouts.get(match);
+  if (cached && cached.tick === ctx.tickCount) return cached;
+  const ranked = classify(match);
+  const fresh: RallySharedReadout = {
+    tick: ctx.tickCount,
+    participantIds: [...match.pids],
+    standings: ranked.map((entry, index) => racerInfo(ctx, match, entry.pid, index + 1)),
+    // Which boxes are GONE, never which are there: on a full circuit this is an
+    // empty array, and it is the shorter list at every moment of a race.
+    pickupsTaken: realmRacersPickupTakenIndices(match.pickups),
+    // The oil on the road, in the circuit's own frame like the boxes. Every
+    // pilot in the race sees every patch, whoever dropped it: a hazard nobody
+    // could see coming would not be a decision, and hiding one from the machine
+    // that is about to hit it is exactly what the graphics-fairness rule forbids.
+    slicks: match.slicks.map((slick) => ({
+      id: slick.id,
+      // Rounded HERE, in the readout both hosts build, rather than at the wire:
+      // a patch is a fixed point on a 2.6 yard disk, so a hundredth of a yard is
+      // far below anything a player or the renderer can tell apart, and doing it
+      // in the shared builder halves the per-tick `rr` payload with no chance of
+      // the two hosts disagreeing about where the oil is.
+      x: roundReadout(slick.x),
+      z: roundReadout(slick.z),
+    })),
+  };
+  sharedReadouts.set(match, fresh);
+  return fresh;
+}
+
 function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): RealmRacersMatchInfo {
   const me = match.progress.get(pid) as RealmRacersProgress;
-  const ranked = classify(match);
-  const standings = ranked.map((entry, index) => racerInfo(ctx, match, entry.pid, index + 1));
+  const shared = sharedMatchReadout(ctx, match);
+  const standings = shared.standings;
   const mine = standings.find((racer) => racer.pid === pid) as RealmRacersRacerInfo;
   const countdownTicks =
     match.phase === 'countdown' ? Math.max(0, match.goTick - ctx.tickCount) : 0;
@@ -2646,7 +2719,7 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
   return {
     id: match.id,
     circuitId: match.circuitId,
-    participantIds: [...match.pids],
+    participantIds: shared.participantIds,
     phase: myEndTick !== null ? 'finished' : match.phase,
     countdown,
     countdownTicks,
@@ -2666,23 +2739,8 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     // because the whole info object already rides `rr`.
     offTrackIn: Math.ceil(rallyLoiterCountdownTicks(me.excursion) / TICK_RATE),
     cutReturned: ctx.tickCount < me.cutReturnUntilTick,
-    // Which boxes are GONE, never which are there: on a full circuit this is an
-    // empty array, and it is the shorter list at every moment of a race.
-    pickupsTaken: realmRacersPickupTakenIndices(match.pickups),
-    // The oil on the road, in the circuit's own frame like the boxes. Every
-    // pilot in the race sees every patch, whoever dropped it: a hazard nobody
-    // could see coming would not be a decision, and hiding one from the machine
-    // that is about to hit it is exactly what the graphics-fairness rule forbids.
-    slicks: match.slicks.map((slick) => ({
-      id: slick.id,
-      // Rounded HERE, in the readout both hosts build, rather than at the wire:
-      // a patch is a fixed point on a 2.6 yard disk, so a hundredth of a yard is
-      // far below anything a player or the renderer can tell apart, and doing it
-      // in the shared builder halves the per-tick `rr` payload with no chance of
-      // the two hosts disagreeing about where the oil is.
-      x: roundReadout(slick.x),
-      z: roundReadout(slick.z),
-    })),
+    pickupsTaken: shared.pickupsTaken,
+    slicks: shared.slicks,
     // Whether this pilot is carrying a ward, DERIVED from the aura that is the
     // source of truth rather than tracked twice. The strip's pip reads this; the
     // buff bar under the portrait (and a rival's target frame) get the aura
@@ -2707,6 +2765,40 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
               match.winnerPid === null && mine.position <= 2
               ? 'draw'
               : 'lost',
+  };
+}
+
+/**
+ * The race on the lane `pid` is STANDING on while not seated in it, or null
+ * anywhere else. A returned quitter watching the end of their race, or a
+ * spectator walked to the fence, sees the viewer-independent slice a lane
+ * shows: the lights, the boxes taken, the oil. Reads the same per-tick shared
+ * readout the seated pilots ride, so a stand full of watchers costs one build.
+ */
+export function realmRacersTracksideFor(ctx: SimContext, pid: number): RealmRacersLaneView | null {
+  if (realmRacersMatchOf(ctx, pid)) return null;
+  const e = ctx.entities.get(pid);
+  if (!e) return null;
+  const lane = realmRacersLaneAt(e.pos.x, e.pos.z);
+  if (!lane) return null;
+  const origin = realmRacersLaneOffset(lane.index);
+  const match = realmRacersMatches(ctx).find(
+    (m) => m.origin.x === origin.x && m.origin.z === origin.z,
+  );
+  if (!match) return null;
+  const shared = sharedMatchReadout(ctx, match);
+  return {
+    circuitId: match.circuitId,
+    phase: match.phase,
+    countdownTicks: match.phase === 'countdown' ? Math.max(0, match.goTick - ctx.tickCount) : 0,
+    elapsed:
+      match.phase === 'countdown'
+        ? 0
+        : Math.floor(
+            Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick) / TICK_RATE,
+          ),
+    pickupsTaken: shared.pickupsTaken,
+    slicks: shared.slicks,
   };
 }
 

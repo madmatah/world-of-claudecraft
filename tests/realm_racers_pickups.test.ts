@@ -629,7 +629,9 @@ describe('Realm Racers pickup boxes, in a race', () => {
     const [a, b] = pids;
     expect(sim.realmRacersInfoFor(a).match?.pickupsTaken).toEqual([]);
     standOnBox(sim, a, 2);
-    updateRealmRacers(sim.ctx);
+    // A full tick, not the surgical phase call: the shared readout is built
+    // once per tick, so the take is read on the tick that ran it.
+    sim.tick();
     // The whole grid sees the same set: the boxes belong to the race, not to the
     // pilot who took one.
     expect(sim.realmRacersInfoFor(a).match?.pickupsTaken).toEqual([2]);

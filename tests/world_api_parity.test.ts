@@ -263,6 +263,7 @@ export const IWORLD_MEMBERS = [
   // together with startRealmRacersPractice rather than leaving the facet
   // one-fifth pinned. ---
   { name: 'realmRacersInfo', kind: 'data' },
+  { name: 'realmRacersTrackside', kind: 'data' },
   { name: 'joinRealmRacersQueue', kind: 'method' },
   { name: 'leaveRealmRacersQueue', kind: 'method' },
   { name: 'forfeitRealmRacers', kind: 'method' },
@@ -543,8 +544,8 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
     // facet then joins the pin (it had shipped unpinned): realmRacersInfo (one
     // data read) plus the four queue/forfeit/practice methods, leaving 294.
     // The race-feel pass adds the recovery method, leaving 295.
-    expect(IWORLD_MEMBERS.length).toBe(295);
-    expect(DATA_MEMBERS.length).toBe(75);
+    expect(IWORLD_MEMBERS.length).toBe(296);
+    expect(DATA_MEMBERS.length).toBe(76);
     expect(METHOD_MEMBERS.length).toBe(220);
   });
   it('has no duplicate member names', () => {
@@ -770,6 +771,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'readyCheckRespond',
       'realm',
       'realmRacersInfo',
+      'realmRacersTrackside',
       'rechargeToolEffect',
       'recipeList',
       'releaseEmpoweredAbility',
@@ -915,6 +917,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'questsDone',
       'realm',
       'realmRacersInfo',
+      'realmRacersTrackside',
       'recipeList',
       'renown',
       'restedXp',
@@ -1573,6 +1576,7 @@ type _ExhaustValeCup = AssertNever<Exclude<keyof IWorldValeCup, (typeof FACET_VA
 
 const FACET_REALM_RACERS = [
   'realmRacersInfo',
+  'realmRacersTrackside',
   'joinRealmRacersQueue',
   'leaveRealmRacersQueue',
   'forfeitRealmRacers',
@@ -1730,8 +1734,8 @@ describe('W1: aggregate IWorld member set equals the disjoint union of the facet
 
   it('the facet union equals the pinned IWORLD_MEMBERS set', () => {
     const union = Object.values(FACET_MEMBER_ARRAYS).flatMap((arr) => [...arr]);
-    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(295);
-    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(295);
+    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(296);
+    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(296);
     const sortedUnion = [...union].sort();
     const pinned = IWORLD_MEMBERS.map((m) => m.name).sort();
     expect(sortedUnion).toEqual(pinned);

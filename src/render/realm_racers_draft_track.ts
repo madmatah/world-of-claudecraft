@@ -16,14 +16,14 @@
 
 import type * as THREE from 'three';
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
-import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
+import type { RealmRacersLaneView } from '../world_api/realm_racers';
 import type { RealmRacersTrackView } from './realm_racers_track';
 import { disposeRealmRacersTrackGroup } from './realm_racers_track_dispose_core';
 
 export interface RealmRacersDraftTracks {
   /** Rebuild the view for a draft id, disposing the one it replaces. */
   register(circuit: RealmRacersCircuit): void;
-  update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
+  update(px: number, pz: number, time: number, match: RealmRacersLaneView | null): void;
 }
 
 /** The part of the tracks group this needs. Structural so the lifecycle above

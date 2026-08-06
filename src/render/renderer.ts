@@ -10081,7 +10081,15 @@ export class Renderer {
     this.impactSite.update(p.pos.x, p.pos.z, dt);
     // null-safe cupInfo read: the offline Sim may predate the Vale Cup module
     this.valeCupStadium.update(p.pos.x, p.pos.z, dt, this.sim.cupInfo ?? null);
-    this.realmRacersTrack.update(p.pos.x, p.pos.z, this.time, realmRacersInfo.match);
+    // A seated pilot reads their own match; a bystander at the fence reads the
+    // lane's trackside view, so the lights, the boxes and the oil stay honest
+    // for anyone looking at the circuit (same shape as the Vale Cup spectate).
+    this.realmRacersTrack.update(
+      p.pos.x,
+      p.pos.z,
+      this.time,
+      realmRacersInfo.match ?? this.sim.realmRacersTrackside ?? null,
+    );
     this.realmRacersGroundBlasts.update(dt);
     // Team rings ride the live entity views (positions are fresh: the entity loop
     // ran above). Reads cupInfo.match for a participant, else cupInfo.spectate (a

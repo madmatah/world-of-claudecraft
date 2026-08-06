@@ -32,7 +32,7 @@ import {
   realmRacersPlacedProps,
 } from '../sim/realm_racers_props_resolve';
 import { type RallySample, realmRacersTrack } from '../sim/realm_racers_spline';
-import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
+import type { RealmRacersLaneView } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { createStaticBladeCluster } from './blade_grass';
@@ -85,7 +85,7 @@ import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_mat
 
 export interface RealmRacersTrackView {
   group: THREE.Group;
-  update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
+  update(px: number, pz: number, time: number, match: RealmRacersLaneView | null): void;
 }
 
 /** The whole pool under one group, plus the dev arm that puts a circuit drawn

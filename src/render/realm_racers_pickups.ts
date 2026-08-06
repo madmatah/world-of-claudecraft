@@ -60,7 +60,7 @@
 import * as THREE from 'three';
 import type { RealmRacersCircuit } from '../sim/content/realm_racers_circuits';
 import { REALM_RACERS_PICKUP_BOX_HALF, realmRacersPickupBoxes } from '../sim/realm_racers_pickups';
-import type { RealmRacersMatchInfo } from '../world_api/realm_racers';
+import type { RealmRacersLaneView } from '../world_api/realm_racers';
 import { surfaceMat } from './gfx';
 import { buildGroundQuestObject } from './quest_objects';
 import {
@@ -96,7 +96,7 @@ export interface RealmRacersPickupsView {
   /** `time` is the renderer's own clock, seconds. `match` is the viewer's live
    *  race on THIS circuit, or null when they are not racing (every box then
    *  stands, which is what a circuit with nobody on it looks like). */
-  update(time: number, match: RealmRacersMatchInfo | null): void;
+  update(time: number, match: RealmRacersLaneView | null): void;
 }
 
 const NO_TAKEN: readonly number[] = [];

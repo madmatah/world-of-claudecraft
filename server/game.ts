@@ -8009,6 +8009,11 @@ export class GameServer {
     maybe('duel', this.duelWire(anchorSession.pid));
     maybe('cardDuel', this.sim.cardMinigameInfoFor(anchorSession.pid));
     maybe('rr', this.sim.realmRacersInfoFor(anchorSession.pid));
+    // The lane the viewer is STANDING on while not seated in its race: null for
+    // almost everyone (the lane test is the same cheap band check the movement
+    // kernel runs), and the slick/box arrays are the per-tick shared readout,
+    // so a stand full of watchers serializes one build.
+    maybe('rrt', this.sim.realmRacersTracksideFor(anchorSession.pid));
     // Small PvP-ledger scalars. Delta-guarded like delve marks: a fresh
     // session receives both, then they ride only on earn/spend changes.
     maybe('honor', meta.honor);

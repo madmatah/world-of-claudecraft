@@ -250,7 +250,7 @@ describe('Realm Racers procedural render', () => {
 
     const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
     const rally = buildRealmRacersTrack(GARDEN_CIRCUIT);
-    rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 1, {
+    const countdownMatch: RealmRacersMatchInfo = {
       circuitId: GARDEN_CIRCUIT.id,
       id: 7,
       participantIds: [1, 2] as number[],
@@ -276,7 +276,8 @@ describe('Realm Racers procedural render', () => {
       totalLaps: 3,
       practice: false,
       result: null,
-    });
+    };
+    rally.update(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z, 1, countdownMatch);
     const fixture = rally.group.getObjectByName('realm-racers-start-lights') as THREE.Group;
     expect(fixture.children.filter((child) => child.name.match(/start-light-\d+$/))).toHaveLength(
       3,

@@ -259,6 +259,17 @@ function distanceSqToSegment(
  * the grip window and announces nothing, so sitting in a puddle is not twenty
  * events a second.
  */
+/**
+ * Is this point still inside the patch's oil? The race asks it when the
+ * NEAREST patch flips inside an overlap: leaving the remembered patch is what
+ * ends a crossing, not the tie between two patches both under the machine.
+ */
+export function rallySlickContains(slick: RallySlick, x: number, z: number): boolean {
+  const dx = x - slick.x;
+  const dz = z - slick.z;
+  return dx * dx + dz * dz <= REALM_RACERS_SLICK_RADIUS * REALM_RACERS_SLICK_RADIUS;
+}
+
 export function stepRealmRacersSlicks(
   slicks: RallySlick[],
   input: RallySlickInput,

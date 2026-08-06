@@ -45,6 +45,23 @@ export interface RealmRacersSlickInfo {
   z: number;
 }
 
+/**
+ * What a LANE shows to anyone looking at it: the viewer-independent slice of a
+ * race the renderer needs to draw the circuit honestly (the start lights, the
+ * boxes already taken, the oil on the road). `RealmRacersMatchInfo` carries all
+ * of it, so a seated pilot's own readout satisfies this structurally; the
+ * trackside readout below carries ONLY it. A hazard is actionable information,
+ * so a bystander at the fence sees the same oil a pilot does.
+ */
+export interface RealmRacersLaneView {
+  circuitId: string;
+  phase: RealmRacersPhase;
+  countdownTicks: number;
+  elapsed: number;
+  pickupsTaken: readonly number[];
+  slicks: readonly RealmRacersSlickInfo[];
+}
+
 export interface RealmRacersMatchInfo {
   id: number;
   /**
@@ -163,6 +180,14 @@ export interface RealmRacersInfo {
 
 export interface IWorldRealmRacers {
   realmRacersInfo: RealmRacersInfo;
+  /**
+   * The race on the lane the viewer is STANDING on while not seated in it, or
+   * null anywhere else. It is what lets a bystander at the fence (a returned
+   * quitter watching the end, a spectating moderator) see the start lights run,
+   * the boxes pop and the oil land, instead of a circuit that lies clean while
+   * machines slide on nothing.
+   */
+  realmRacersTrackside: RealmRacersLaneView | null;
   joinRealmRacersQueue(): void;
   leaveRealmRacersQueue(): void;
   forfeitRealmRacers(): void;

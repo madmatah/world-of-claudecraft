@@ -759,6 +759,7 @@ describe('a machine the referee puts back', () => {
     progress.nitroUntilTick = sim.tickCount + REALM_RACERS_NITRO_TICKS;
     progress.slickGripUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
     progress.slickContactUntilTick = sim.tickCount + REALM_RACERS_SLICK_GRIP_TICKS;
+    progress.groundBlastShockUntilTick = sim.tickCount + GROUND_BLAST_SHOCK_TICKS;
     const drive = required(sim.entities.get(a)?.drive, 'drive');
     drive.speedCap = REALM_RACERS_NITRO_SPEED_MULT;
     expect(wardedOf(sim, a)).toBe(true);
@@ -777,6 +778,9 @@ describe('a machine the referee puts back', () => {
     expect(progress.nitroUntilTick).toBe(0);
     expect(progress.slickGripUntilTick).toBe(0);
     expect(progress.slickContactUntilTick).toBe(0);
+    // The shock of a shell hit goes with the rest: a recovery is a fresh
+    // start, not a way to serve out a control penalty while teleporting.
+    expect(progress.groundBlastShockUntilTick).toBe(0);
     expect(drive.speedCap).toBe(1);
   });
 });

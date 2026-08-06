@@ -1498,6 +1498,7 @@ export class ClientWorld implements IWorld {
     practiceAvailable: true,
     queueViable: true,
   };
+  realmRacersTrackside: import('../world_api/realm_racers').RealmRacersLaneView | null = null;
   private realmRacersKit: {
     abilityId: string;
     charges: number | null;
@@ -3440,6 +3441,7 @@ export class ClientWorld implements IWorld {
           practiceAvailable: true,
           queueViable: true,
         };
+      if (s.rrt !== undefined) this.realmRacersTrackside = s.rrt ?? null;
       if (s.honor !== undefined) this.honor = s.honor ?? 0;
       if (s.lhonor !== undefined) this.lifetimeHonor = s.lhonor ?? 0;
       if (s.vcup !== undefined) this.lastVcupRemainder = s.vcup as VcViewerReadout | null;

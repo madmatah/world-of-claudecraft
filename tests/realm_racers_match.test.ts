@@ -323,6 +323,9 @@ describe('The Realm Racers lifecycle', () => {
     completeLap(sim, a);
     completeLap(sim, a);
     completeLap(sim, a);
+    // The shared half of the readout is built once per tick: a surgical
+    // mutation is read on the NEXT one, which is also when the wire reads it.
+    sim.tick();
     const progress = required(liveMatch.progress.get(a), `progress ${a}`);
     const seconds = required(sim.realmRacersInfoFor(a).match?.me.finishSeconds, 'finish time');
     // Measured from the flag, and sub-tick: the crossing happened inside the
@@ -342,6 +345,7 @@ describe('The Realm Racers lifecycle', () => {
     const other = required(liveMatch.progress.get(b), `progress ${b}`);
     other.finishedTick = progress.finishedTick;
     other.finishFraction = progress.finishFraction / 2;
+    sim.tick();
     const both = required(sim.realmRacersInfoFor(a).match, 'match info').standings;
     const times = both.flatMap((row) => (row.finishSeconds === null ? [] : [row.finishSeconds]));
     expect(new Set(times).size).toBe(times.length);
@@ -351,6 +355,7 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.realmRacersInfoFor(a).match?.decided).toBe(false);
     for (const pid of pids.slice(2)) sim.realmRacersForfeit(pid);
     expect(liveMatch.phase).toBe('finished');
+    sim.tick();
     expect(sim.realmRacersInfoFor(a).match?.decided).toBe(true);
   });
 
@@ -679,6 +684,57 @@ describe('The Realm Racers lifecycle', () => {
     expect(events).toContainEqual({ type: 'realmRacersUnqueued', pid: a });
     expect(sim.realmRacers.queue.includes(a)).toBe(false);
     expect(sim.realmRacers.queue.includes(b)).toBe(true);
+  });
+
+  it('shares the viewer-independent half of the readout across one tick', () => {
+    // The 20 Hz broadcast builds `rr` for every seated pilot: the standings
+    // walk, the box list and the oil list are identical for all of them, so
+    // one tick builds them once and every viewer's readout shares the arrays.
+    const { sim, a, b } = startMatch();
+    const infoA = sim.realmRacersInfoFor(a);
+    const infoB = sim.realmRacersInfoFor(b);
+    expect(infoA.match?.standings).toBe(infoB.match?.standings);
+    expect(infoA.match?.slicks).toBe(infoB.match?.slicks);
+    expect(infoA.match?.pickupsTaken).toBe(infoB.match?.pickupsTaken);
+    // The per-viewer half stays per-viewer.
+    expect(infoA.match?.me).not.toBe(infoB.match?.me);
+    expect(infoA.match?.me.pid).toBe(a);
+    expect(infoB.match?.me.pid).toBe(b);
+    // A new tick is a new build: the shared half cannot go stale across ticks.
+    sim.tick();
+    expect(sim.realmRacersInfoFor(a).match?.standings).not.toBe(infoA.match?.standings);
+  });
+
+  it('shows a bystander at the fence the lane they are standing on', () => {
+    // A hazard is actionable information for anyone LOOKING at the circuit: a
+    // watcher at the fence sees the same oil and missing boxes a pilot does,
+    // through the viewer-independent lane view, or the circuit lies clean
+    // while machines slide on nothing.
+    const { sim, a } = startMatch();
+    const live = match(sim);
+    live.phase = 'racing';
+    const watcher = addAt(sim, 'warrior', 'Evert', -5, -40);
+    // In the Evergarden, nowhere near the band: nothing to watch.
+    expect(sim.realmRacersTracksideFor(watcher)).toBeNull();
+    // A seated pilot reads their own match, never the trackside view.
+    expect(sim.realmRacersTracksideFor(a)).toBeNull();
+
+    // Walked to the fence of the live race's lane: the lane view, sharing the
+    // very arrays the seated pilots' readout built this tick.
+    const sample = realmRacersTrack(RACE_CIRCUIT).pointAt(10);
+    const aside = sample.halfWidth + 8;
+    const fence = onLane(sim, sample.x - sample.tz * aside, sample.z + sample.tx * aside);
+    teleport(sim, watcher, fence.x, fence.z);
+    const trackside = required(sim.realmRacersTracksideFor(watcher), 'trackside view');
+    expect(trackside.circuitId).toBe(live.circuitId);
+    expect(trackside.phase).toBe('racing');
+    const seated = required(sim.realmRacersInfoFor(a).match, 'seated view');
+    expect(trackside.slicks).toBe(seated.slicks);
+    expect(trackside.pickupsTaken).toBe(seated.pickupsTaken);
+
+    // Back in town: null again.
+    teleport(sim, watcher, -5, -40);
+    expect(sim.realmRacersTracksideFor(watcher)).toBeNull();
   });
 
   it('reports the queue viable only where it can actually seat a race', () => {

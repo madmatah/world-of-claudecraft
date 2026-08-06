@@ -30,7 +30,7 @@
 
 import * as THREE from 'three';
 import { REALM_RACERS_SLICK_RADIUS } from '../sim/realm_racers_slicks';
-import type { RealmRacersMatchInfo, RealmRacersSlickInfo } from '../world_api/realm_racers';
+import type { RealmRacersLaneView, RealmRacersSlickInfo } from '../world_api/realm_racers';
 import {
   RALLY_SLICK_OPACITY,
   RALLY_SLICK_POOL,
@@ -60,7 +60,7 @@ export interface RealmRacersSlicksView {
   /** `time` is the renderer's own clock, seconds. `match` is the viewer's live
    *  race on THIS circuit, or null when they are not racing (a circuit with no
    *  race on it carries no oil: the slicks belong to a race). */
-  update(time: number, match: RealmRacersMatchInfo | null): void;
+  update(time: number, match: RealmRacersLaneView | null): void;
 }
 
 const NO_SLICKS: readonly RealmRacersSlickInfo[] = [];

@@ -547,6 +547,70 @@ describe('oil slicks, in a race', () => {
     expect(events.filter((event) => event.type === 'realmRacersSlicked')).toHaveLength(1);
   });
 
+  it('reads two overlapping patches under one machine as one crossing', () => {
+    // Two rivals oil the same corner: the patches overlap, and a machine
+    // wobbling across the equidistance line flips which one is NEAREST every
+    // tick. Each flip used to read as a fresh crossing: a throw and an
+    // announcement per flip for as long as the machine sat in the overlap.
+    // Leaving the remembered patch is what ends a crossing, not the tie
+    // between two patches both under the wheels.
+    const { sim, pids } = racingGrid();
+    const [dropper, rival] = pids;
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const near = track.pointAt(track.length * 0.25);
+    const first = dropSlickAt(sim, dropper, near.x, near.z);
+    const live = match(sim);
+    const second: RallySlick = {
+      id: live.nextSlickId++,
+      x: near.x + near.tx * 2,
+      z: near.z + near.tz * 2,
+      ownerPid: dropper,
+      ownerClear: true,
+      expiresTick: sim.tickCount + REALM_RACERS_SLICK_LIFETIME_TICKS,
+    };
+    live.slicks.push(second);
+    const progress = required(live.progress.get(rival), 'rival progress');
+    const rivalDrive = required(sim.entities.get(rival)?.drive, 'rival drive');
+
+    // The dropper is still parked in the first patch, and the contact pass
+    // would shove a rival teleported half a yard from their hull clean across
+    // the overlap: park them well down the road before the rival enters.
+    standOnCenterline(sim, dropper, track.length * 0.6);
+
+    // Driven through updateRealmRacers directly: the geometry here is tighter
+    // than the two yards a 40 yd/s machine covers between a teleport and the
+    // slick pass inside a full tick.
+    const slickedEvents = () =>
+      sim.drainEvents().filter((event) => event.type === 'realmRacersSlicked');
+
+    // Enter nearer the FIRST patch: one crossing, announced once.
+    standAt(sim, rival, first.x + near.tx * 0.5, first.z + near.tz * 0.5);
+    rivalDrive.speed = 40;
+    sim.drainEvents();
+    updateRealmRacers(sim.ctx);
+    expect(progress.slickContactId).toBe(first.id);
+    expect(slickedEvents()).toHaveLength(1);
+
+    // Wobble across the midline and back: the SECOND patch keeps becoming the
+    // nearest, but the machine never leaves the first, so nothing new resolves
+    // and the remembered patch stays the first.
+    for (const offset of [1.5, 0.5, 1.6, 0.4, 1.7]) {
+      standAt(sim, rival, first.x + near.tx * offset, first.z + near.tz * offset);
+      rivalDrive.speed = 40;
+      updateRealmRacers(sim.ctx);
+      expect(slickedEvents(), `offset ${offset}`).toHaveLength(0);
+      expect(progress.slickContactId).toBe(first.id);
+    }
+
+    // Clear of the FIRST patch while still inside the second: leaving the
+    // remembered patch is a real new crossing of the other one.
+    standAt(sim, rival, first.x + near.tx * 3.5, first.z + near.tz * 3.5);
+    rivalDrive.speed = 40;
+    updateRealmRacers(sim.ctx);
+    expect(progress.slickContactId).toBe(second.id);
+    expect(slickedEvents()).toHaveLength(1);
+  });
+
   it('says nothing at all when there is no shove to announce', () => {
     // A stopped machine is not thrown by a puddle. The event must not fire
     // either: it re-seeds the online predictor's whole drive state, so an
