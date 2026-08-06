@@ -5,7 +5,6 @@ import {
   applyRealmRacersStartCameraFromWorld,
   createRealmRacersStartCamera,
   REALM_RACERS_HANDOFF_TICKS,
-  REALM_RACERS_OVERVIEW_TICKS,
   REALM_RACERS_PANORAMA_TICKS,
   REALM_RACERS_START_TICKS,
   realmRacersStartCameraInput,
@@ -91,7 +90,6 @@ function cameraEyeHeight(pose: CameraPose): number {
 describe('Realm Racers start camera', () => {
   it('pins one six-second panorama and the shared nine-second start', () => {
     expect(REALM_RACERS_PANORAMA_TICKS).toBe(120);
-    expect(REALM_RACERS_OVERVIEW_TICKS).toBe(120);
     expect(REALM_RACERS_START_TICKS).toBe(180);
     expect(REALM_RACERS_START_TICKS).toBe(REALM_RACERS_COUNTDOWN_TICKS);
   });

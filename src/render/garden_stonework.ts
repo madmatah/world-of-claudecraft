@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GFX } from './gfx';
 
-export const GARDEN_MARBLE = 0xcfcdc2;
+const GARDEN_MARBLE = 0xcfcdc2;
 
 function mat(color: number, rough = 0.85): THREE.MeshStandardMaterial | THREE.MeshLambertMaterial {
   return GFX.standardMaterials

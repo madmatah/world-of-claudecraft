@@ -43,7 +43,7 @@ import { realmRacersTheme } from './realm_racers_themes';
  * sample index; `to` is exclusive and may exceed the sample count, meaning the
  * run crosses the start line, so the painter walks it modulo the count.
  */
-export interface RallyKerbRun {
+interface RallyKerbRun {
   from: number;
   to: number;
 }
@@ -52,7 +52,7 @@ export interface RallyKerbRun {
  * One module of an authored barrier, in WORLD coordinates: either a panel cut
  * out of a run, or the piece covering a joint.
  */
-export interface RallyBarrierPiece {
+interface RallyBarrierPiece {
   x: number;
   z: number;
   yaw: number;
@@ -60,7 +60,7 @@ export interface RallyBarrierPiece {
 }
 
 /** Everything one authored fence draws: its modules and the kit they wear. */
-export interface RallyFenceDrawing {
+interface RallyFenceDrawing {
   kit: string;
   /** The kit's own scale times the record's multiplier: what a spot is drawn at. */
   scale: number;
@@ -68,7 +68,7 @@ export interface RallyFenceDrawing {
   corners: readonly RallyBarrierPiece[];
 }
 
-export interface RallyBannerPlacement {
+interface RallyBannerPlacement {
   x: number;
   z: number;
   /** Height of the banner NODE above the ground plane, yards. */
@@ -77,7 +77,7 @@ export interface RallyBannerPlacement {
   scale: number;
 }
 
-export interface RallyStartArchPlacement {
+interface RallyStartArchPlacement {
   x: number;
   z: number;
   /** Yaw putting the arch's long axis ACROSS the road. */
@@ -98,7 +98,7 @@ export interface RallyStartArchPlacement {
   banners: RallyBannerPlacement[];
 }
 
-export interface RallyStartLightPlacement {
+interface RallyStartLightPlacement {
   x: number;
   z: number;
   lift: number;
@@ -106,7 +106,7 @@ export interface RallyStartLightPlacement {
   yaw: number;
 }
 
-export interface RealmRacersStartLightSignal {
+interface RealmRacersStartLightSignal {
   colour: 'off' | 'red' | 'green';
   litCount: number;
 }
@@ -127,7 +127,7 @@ export function realmRacersStartLightSignal(
   };
 }
 
-export interface RallyFlowerSpot {
+interface RallyFlowerSpot {
   x: number;
   z: number;
   rot: number;
@@ -580,7 +580,6 @@ export const REALM_RACERS_SEA_BASIN: RealmRacersBasin = {
   waterY: -0.55,
   bankSlope: 0.8,
   depthMax: 6,
-  wadeYards: 4,
 };
 
 export function rallySeaBasin(circuit: RealmRacersCircuit): RealmRacersBasin {

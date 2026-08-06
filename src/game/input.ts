@@ -141,7 +141,7 @@ export interface InputDebugState {
  * through is something a player will end up looking from inside, which is what
  * sizes the Realm Racers dressing ring (`realm_racers_track_core.ts`).
  */
-export const CAMERA_ZOOM_MIN = 3;
+const CAMERA_ZOOM_MIN = 3;
 export const CAMERA_ZOOM_MAX = 22;
 
 export class Input {

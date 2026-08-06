@@ -15,7 +15,11 @@
 // every other system in the world. Every "personality" difference is a pure
 // function of the tier, the bot's pid and the tick count.
 
-import { GROUND_BLAST_AIM_CONE_RAD, groundBlastFlightSeconds } from './realm_racers_ground_blast';
+import {
+  GROUND_BLAST_AIM_CONE_RAD,
+  GROUND_BLAST_RADIUS,
+  groundBlastFlightSeconds,
+} from './realm_racers_ground_blast';
 import { type RallyProjection, type RallyTrackModel, rallyForwardDot } from './realm_racers_spline';
 import { normAngle, TICK_RATE } from './types';
 
@@ -193,15 +197,17 @@ const UNSTICK_CYCLE = 24;
 /** Yards ahead the recovery aim point sits, on the centerline itself. */
 const RECOVERY_LOOKAHEAD = 12;
 /** Range a shot is taken at, yards. Comfortably inside the auto-range's reach
- *  once the lead is added (GROUND_BLAST_MAX_RANGE is 60). */
+ *  (GROUND_BLAST_MAX_RANGE) once the lead is added. */
 const FIRE_RANGE = 12.5;
 /**
  * How near a marked impact point the bot is willing to be when it lands, yards.
- * Wider than GROUND_BLAST_RADIUS (4) on purpose: leaving the blast by a hair is
- * a coin flip against the machine's own drift, and a margin is what makes the
- * dodge read as a driver getting out of the way.
+ * Exactly the blast radius: the bots start evading at the shell's own edge,
+ * with no margin. A widened disc (radius + 2) was tried and reverted: it moved
+ * the ace's measured road pace, and the cut-economics gate in
+ * tests/realm_racers_track_limits.test.ts pins its thresholds against that
+ * pace, so the dodge disc is a tuning knob those thresholds own too.
  */
-const DODGE_RADIUS = 6;
+const DODGE_RADIUS = GROUND_BLAST_RADIUS;
 /** The dodge aims at a point this far ahead and this far to the side. Aiming at
  *  an offset point rather than straight sideways is what makes a dodge a swerve
  *  a racer could drive rather than a ninety-degree turn out of the race. */

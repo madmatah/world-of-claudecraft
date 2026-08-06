@@ -84,7 +84,7 @@ export const SELF_MOTION_DEADBAND_YD = 0.05;
 // The wire rounds facing to 0.01 rad. Corrections inside that quantization
 // band are noise, not a real disagreement between the predicted machine and
 // the delayed authority.
-export const SELF_MOTION_FACING_DEADBAND_RAD = 0.01;
+const SELF_MOTION_FACING_DEADBAND_RAD = 0.01;
 // Same teleport rule the renderer's self smoother uses (6 yd).
 export const SELF_MOTION_SNAP_DIST_SQ = 6 * 6;
 const MAX_FRAME_DT = 0.25; // matches the main-loop frame clamp

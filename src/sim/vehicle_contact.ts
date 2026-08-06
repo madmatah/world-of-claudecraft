@@ -26,7 +26,7 @@ import {
 
 /** How much of the closing speed comes back as bounce. Mostly absorbed: two
  *  machines leaning on each other should settle, not ping apart. */
-export const BUMP_RESTITUTION = 0.6;
+const BUMP_RESTITUTION = 0.6;
 /**
  * Ceiling on the exchanged impulse. With unit masses this is exactly the
  * largest velocity change one contact can hand a body, so a machine launched by
@@ -35,7 +35,7 @@ export const BUMP_RESTITUTION = 0.6;
 export const MAX_BUMP_IMPULSE = 39;
 /** Fraction of the closing speed both bodies lose as FORWARD speed on top of
  *  the impulse, which is what makes ramming cost the rammer. */
-export const BUMP_SCRUB = 0.22;
+const BUMP_SCRUB = 0.22;
 /** How much of the scrub a body pointing its nose into the contact keeps. Kept
  *  modest on purpose: a committed dive into a corner should be worth a little
  *  over a lazy sideswipe, not be a ram-to-win button. */

@@ -129,7 +129,7 @@ export const REALM_RACERS_BAR_SLOTS: Record<string, number> = {
  * shape every class ability wears: how many uses a race grants is a fact about
  * the RALLY, not about the spell.
  */
-export interface RealmRacersWeapon {
+interface RealmRacersWeapon {
   /** Uses per race, never refilled. Null would be unlimited fire. */
   charges: number | null;
 }
@@ -142,7 +142,7 @@ export interface RealmRacersWeapon {
  */
 export const REALM_RACERS_WEAPON_CHARGES = 3;
 
-export const REALM_RACERS_WEAPONS: Record<string, RealmRacersWeapon> = {
+const REALM_RACERS_WEAPONS: Record<string, RealmRacersWeapon> = {
   [REALM_RACERS_ABILITY_ID]: { charges: REALM_RACERS_WEAPON_CHARGES },
 };
 

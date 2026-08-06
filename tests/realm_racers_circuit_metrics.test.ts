@@ -54,7 +54,7 @@ const DRAFT_BASE = {
   // of its own into every case built on it.
   regionHalfZ: 150,
   perimeter: { halfX: 240, halfZ: 140, halfThickness: 0.4, height: 2.2 },
-  basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
+  basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6 },
   startBack: 7,
   startSpacing: 5,
   laps: 3,

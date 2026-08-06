@@ -256,11 +256,6 @@ export function scaledProp(prop: RallyProp, deltaY: number): RallyProp {
   return { ...prop, scale };
 }
 
-/** Whether a scale is one the tool will author. */
-export function propScaleInRange(scale: number): boolean {
-  return scale >= PLACEMENT_SCALE_MIN && scale <= RALLY_PLACEMENT_SCALE_MAX;
-}
-
 /** A scale the tool will author, from one a gesture asked for. The same clamp
  *  and the same two decimals `scaleStep` lands on, so a dragged corner and a
  *  tapped `+` cannot leave the record in two different shapes. */

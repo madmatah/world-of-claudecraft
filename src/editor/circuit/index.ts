@@ -367,7 +367,6 @@ export {
   propHandlePoints,
   propPalette,
   propProjectionHint,
-  propScaleInRange,
   propWithHandleAt,
   RALLY_PLACEMENT_SCALE_MAX,
   removedAt,

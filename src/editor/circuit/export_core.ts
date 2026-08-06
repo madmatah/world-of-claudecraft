@@ -229,7 +229,7 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
   // a lake nothing draws.
   if (c.basin) {
     lines.push(
-      `  basin: { waterY: ${c.basin.waterY}, bankSlope: ${c.basin.bankSlope}, depthMax: ${c.basin.depthMax}, wadeYards: ${c.basin.wadeYards} },`,
+      `  basin: { waterY: ${c.basin.waterY}, bankSlope: ${c.basin.bankSlope}, depthMax: ${c.basin.depthMax} },`,
     );
   }
   // The dressing, in AUTHORED order: it is the one part of a circuit a designer
@@ -580,8 +580,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     if (
       !inRange(basin.waterY, -20, 20) ||
       !inRange(basin.bankSlope, 0.01, 10) ||
-      !inRange(basin.depthMax, 0.1, 50) ||
-      !inRange(basin.wadeYards, 0, 50)
+      !inRange(basin.depthMax, 0.1, 50)
     ) {
       return null;
     }
@@ -636,7 +635,6 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
             waterY: basin.waterY as number,
             bankSlope: basin.bankSlope as number,
             depthMax: basin.depthMax as number,
-            wadeYards: basin.wadeYards as number,
           },
         }
       : {}),

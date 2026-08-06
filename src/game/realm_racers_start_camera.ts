@@ -9,7 +9,6 @@ import type { CameraPose } from './spawn_cinematic';
 
 export const REALM_RACERS_START_TICKS = 9 * TICK_RATE;
 export const REALM_RACERS_PANORAMA_TICKS = 6 * TICK_RATE;
-export const REALM_RACERS_OVERVIEW_TICKS = REALM_RACERS_PANORAMA_TICKS;
 
 const GAMEPLAY_PITCH = 0.32;
 const OPENING_DIST = 55;
@@ -195,7 +194,7 @@ export function stepRealmRacersStartCamera(
   if (input.reducedMotion) return grid;
 
   const elapsed = REALM_RACERS_START_TICKS - Math.max(0, input.countdownTicks);
-  if (elapsed >= REALM_RACERS_OVERVIEW_TICKS) return grid;
+  if (elapsed >= REALM_RACERS_PANORAMA_TICKS) return grid;
   const openingYaw = state.targetYaw - OPENING_TURNS * Math.PI * 2;
   // One easing curve owns yaw, pitch and distance all the way to the grid pose.
   // A separate settle segment visibly changed speed and direction just before

@@ -37,7 +37,7 @@ export const MAX_DISTANCE = 46; // hard cutoff: beyond this, sources are silent/
 // The race camera can trail its machine by 22 yd. Keep nearby cannon fire in
 // the panner's full-volume zone instead of compensating for camera falloff with
 // an unsafe source gain that also applies when the camera is close.
-export const REALM_RACERS_GROUND_BLAST_REF_DISTANCE = 24;
+const REALM_RACERS_GROUND_BLAST_REF_DISTANCE = 24;
 // With the conformed clip at -6 dBTP and its +5 dB catalog trim, 1.25 keeps a
 // close shot below unity through the 0.85 sampled-clip master. Disable jitter
 // for this cue too: its random +10% gain branch would consume that headroom.

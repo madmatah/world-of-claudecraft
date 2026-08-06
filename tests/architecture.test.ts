@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -620,6 +620,78 @@ describe('src/sim architecture invariants', () => {
       violations,
       `all sim randomness/time goes through Rng (src/sim/rng.ts) and the sim clock:\n${violations.join('\n')}`,
     ).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Presentation -> editor import direction. src/editor is the dev-only editor
+// layer COMPOSED OVER the game client (its viewport builds the real Sim +
+// Renderer), so the dependency arrow points editor -> game and never back: an
+// editor import in src/game, src/ui, or src/render drags dev-tool code toward
+// the shipped game bundles. Exactly ONE edge is sanctioned, named below.
+
+const editorImportRoots = ['game', 'ui', 'render'].map((layer) => join(repoRoot, 'src', layer));
+
+// The one allowed edge: the /dev rallydraft client validates a drawn circuit
+// with the SAME core the editor's save endpoint validates with
+// (validateCircuitPayload), so a draft the editor accepts is a draft the
+// command seats. Dev-only: the whole path runs behind import.meta.env.DEV, and
+// the import is proven tree-shaken out of every production build.
+const ALLOWED_EDITOR_IMPORTS = new Set([
+  'src/game/realm_racers_draft_dev.ts -> ../editor/circuit/export_core',
+]);
+
+// A relative specifier that lands inside src/editor, RESOLVED against the
+// importing file rather than matched by spelling: `./editor` is also the name
+// of the i18n catalog's own domain module (src/ui/i18n.catalog/editor.ts), so
+// only resolution can tell the sibling from the layer.
+const editorLayerRoot = join(repoRoot, 'src', 'editor');
+function resolvesIntoEditor(file: string, spec: string): boolean {
+  if (!spec.startsWith('.')) return false;
+  const resolved = resolvePath(dirname(file), spec);
+  return resolved === editorLayerRoot || resolved.startsWith(editorLayerRoot + sep);
+}
+
+describe('src/game, src/ui, src/render never import from src/editor', () => {
+  it('flags any editor import beyond the one sanctioned dev edge', () => {
+    const violations: string[] = [];
+    for (const file of editorImportRoots.flatMap((root) => walk(root))) {
+      const rel = posixRel(relative(repoRoot, file));
+      for (const spec of importSpecs(stripComments(readFileSync(file, 'utf8')))) {
+        if (!resolvesIntoEditor(file, spec)) continue;
+        if (ALLOWED_EDITOR_IMPORTS.has(`${rel} -> ${spec}`)) continue;
+        violations.push(`${rel} imports '${spec}'`);
+      }
+    }
+    expect(
+      violations,
+      `the presentation layers must not depend on the dev-only src/editor tree:\n${violations.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('still finds the sanctioned import, so the allowlist cannot rot into a stale grant', () => {
+    const source = stripComments(
+      readFileSync(join(repoRoot, 'src', 'game', 'realm_racers_draft_dev.ts'), 'utf8'),
+    );
+    expect(importSpecs(source)).toContain('../editor/circuit/export_core');
+  });
+
+  it('the matcher fires on every spelling an editor import could arrive by', () => {
+    const fromGame = join(repoRoot, 'src', 'game', 'x.ts');
+    for (const spec of ['../editor/circuit/export_core', '../editor', '../editor/main.js']) {
+      expect(resolvesIntoEditor(fromGame, spec), spec).toBe(true);
+    }
+    expect(
+      resolvesIntoEditor(join(repoRoot, 'src', 'render', 'nested', 'x.ts'), '../../editor/a'),
+    ).toBe(true);
+    // ...and stays quiet on the neighbours that merely carry the word: the i18n
+    // catalog's own editor.ts domain module, the music editor, a package.
+    expect(
+      resolvesIntoEditor(join(repoRoot, 'src', 'ui', 'i18n.catalog', 'x.ts'), './editor'),
+    ).toBe(false);
+    for (const spec of ['./music_editor', '../editor_notes', './circuit/export_core', 'three']) {
+      expect(resolvesIntoEditor(fromGame, spec), spec).toBe(false);
+    }
   });
 });
 

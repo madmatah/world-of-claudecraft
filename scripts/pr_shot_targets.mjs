@@ -2104,9 +2104,10 @@ export const TARGETS = [
     // before shows the queue window still centered over the circuit, the after
     // shows it gone with the race strip (and its forfeit control) in its place.
     //
-    // The rally needs two racers and there is no practice bot yet, so a second
-    // local player is added and both are queued; the FIFO pairs them on the next
-    // tick, and the countdown phase is where the covering window was worst.
+    // The rally needs two racers. Practice bots exist now
+    // (src/sim/social/realm_racers_bots.ts), but the shot stages a second local
+    // player instead: both are queued, the FIFO pairs them on the next tick,
+    // and the countdown phase is where the covering window was worst.
     async capture(page) {
       const staged = await page.evaluate(() => {
         const game = window.__game;

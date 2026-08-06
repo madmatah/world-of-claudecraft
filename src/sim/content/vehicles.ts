@@ -103,7 +103,7 @@ export const VEHICLE_PROFILES: Record<string, VehicleProfile> = {
   },
 };
 
-export const DEFAULT_VEHICLE_PROFILE_KEY = 'rally_loaner';
+const DEFAULT_VEHICLE_PROFILE_KEY = 'rally_loaner';
 
 /** The profile behind a drive state's key, falling back to the default so a
  *  stale key from an old wire record can never crash the movement kernel. */

@@ -83,14 +83,6 @@ export interface RealmRacersBasin {
    * visible.
    */
   depthMax: number;
-  /**
-   * How far in from the edge the water still reads as wadeable rather than as
-   * open lake, yards. Purely a LOOK now: it used to be the containment margin
-   * (a navigable strip, then a line no mount would cross, which is what held a
-   * racer out of the infield), and nothing holds anyone out of anything any
-   * more. The dressing reads it; nothing gameplay does.
-   */
-  wadeYards: number;
 }
 
 /** The wrought-iron garden wall: the circuit's OUTER bound, and the only thing
@@ -466,7 +458,7 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
   regionHalfX: 300,
   regionHalfZ: 150,
   perimeter: { halfX: 118, halfZ: 92, halfThickness: 0.4, height: 2.2 },
-  basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4.0 },
+  basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6 },
   /**
    * The infield lake, now that it is PLACED: two pools with the fountain's lawn
    * between them, instead of the one ring of water the shore line derived.
@@ -632,7 +624,7 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
   regionHalfX: 300,
   regionHalfZ: 150,
   perimeter: { halfX: 217, halfZ: 124, halfThickness: 0.4, height: 2.2 },
-  basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
+  basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6 },
   /**
    * Two pools, one in each wide part of the infield, both of them well clear of
    * the pinch strip.

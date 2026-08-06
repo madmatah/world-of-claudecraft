@@ -391,7 +391,7 @@ describe('centring a circuit in its enclosure', () => {
         { asset: 'bench', at: { s: 0.5, offset: 14 } },
       ],
       ponds: [{ x: -5, z: -6, rx: 8, rz: 9 }],
-      basin: { waterY: -0.5, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
+      basin: { waterY: -0.5, bankSlope: 0.8, depthMax: 6 },
       scatters: [{ asset: 'bench', zone: 'outfield', spacing: 20, seed: 1 }],
       pickupRows: [{ s: 0.25 }],
       groundOutline: [
@@ -457,7 +457,7 @@ describe('centring a circuit in its enclosure', () => {
       ]),
       props: [{ asset: 'bench', at: { x: 10, z: 20 } }],
       ponds: [{ x: -5, z: -6, rx: 8, rz: 9 }],
-      basin: { waterY: -0.5, bankSlope: 0.8, depthMax: 6, wadeYards: 4 },
+      basin: { waterY: -0.5, bankSlope: 0.8, depthMax: 6 },
       scatters: [{ asset: 'bench', zone: 'outfield', spacing: 20, seed: 1 }],
       pickupRows: [{ s: 0.25 }],
       groundOutline: [

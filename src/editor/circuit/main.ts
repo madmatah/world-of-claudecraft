@@ -481,7 +481,6 @@ let rememberedBasin: RealmRacersBasin = record.basin ??
     waterY: -0.55,
     bankSlope: 0.8,
     depthMax: 6,
-    wadeYards: 4,
   };
 
 // ---- the persisted layout ----

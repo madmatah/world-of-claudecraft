@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RallyPickupEffect } from '../src/sim/realm_racers_pickup_effects';
 import { t } from '../src/ui/i18n';
@@ -161,5 +163,83 @@ describe('the pickup splash controller', () => {
     expect(h.root()?.style.display).toBe('flex');
     expect(h.root()?.children[1]?.textContent).toBe(t('hudChrome.rally.pickupSlick'));
     expect(h.scheduled).toHaveLength(2);
+  });
+});
+
+// The splash timings exist TWICE: the constants above arm the controller's
+// one-shot take-down timer, and src/styles/components.css spells the same
+// lifecycle as an animation duration plus keyframe stops. Nothing at runtime
+// connects the two, so this reads the sheet (the editor_circuit_page idiom) and
+// holds the stops to the TS phase boundaries: retiming the splash in one place
+// without the other fails here instead of shipping a splash whose fade
+// disagrees with its own timer.
+describe('the pickup splash stylesheet timing', () => {
+  const css = readFileSync(resolve(import.meta.dirname, '../src/styles/components.css'), 'utf8');
+
+  /** The named keyframes body, brace-matched because the stops nest braces. */
+  function keyframes(name: string): string {
+    const at = css.indexOf(`@keyframes ${name}`);
+    expect(at, `components.css declares @keyframes ${name}`).toBeGreaterThan(-1);
+    const open = css.indexOf('{', at);
+    let depth = 0;
+    for (let i = open; i < css.length; i++) {
+      if (css[i] === '{') depth += 1;
+      else if (css[i] === '}') {
+        depth -= 1;
+        if (depth === 0) return css.slice(open + 1, i);
+      }
+    }
+    throw new Error(`unbalanced @keyframes ${name}`);
+  }
+
+  function stops(block: string): { at: number; body: string }[] {
+    return [...block.matchAll(/([\d.]+)%\s*\{([^}]*)\}/g)].map((match) => ({
+      at: Number(match[1]),
+      body: match[2],
+    }));
+  }
+
+  /** Where a TS phase boundary falls, as a percent of the animation. */
+  const percentOf = (ms: number): number => (ms / RALLY_SPLASH_LIFE_MS) * 100;
+
+  it('runs both pop animations for exactly the controller timer life', () => {
+    for (const [className, animation] of [
+      ['rally-splash-a', 'rally-splash-pop-a'],
+      ['rally-splash-b', 'rally-splash-pop-b'],
+    ] as const) {
+      const rule = new RegExp(
+        `\\.${className}\\s*\\{[^}]*animation:\\s*${animation}\\s+([\\d.]+)s\\b`,
+      ).exec(css);
+      expect(rule, `.${className} arms ${animation} with a literal duration`).not.toBeNull();
+      expect(Math.round(Number(rule?.[1]) * 1000), className).toBe(RALLY_SPLASH_LIFE_MS);
+    }
+  });
+
+  it('places every opacity stop on a TS phase boundary, within one point', () => {
+    // The reduced-motion fade rides the same clock (only animation-name is
+    // overridden), so it answers to the same boundaries as the two pops.
+    for (const name of ['rally-splash-pop-a', 'rally-splash-pop-b', 'rally-splash-fade']) {
+      const all = stops(keyframes(name));
+      expect(all.length, name).toBeGreaterThanOrEqual(4);
+      const opacity = all
+        .map(({ at, body }) => ({ at, value: /opacity\s*:\s*([\d.]+)/.exec(body)?.[1] }))
+        .filter((stop) => stop.value !== undefined);
+      // Born invisible, fully gone at the end of the life.
+      expect(opacity[0], name).toEqual({ at: 0, value: '0' });
+      expect(opacity[opacity.length - 1], name).toEqual({ at: 100, value: '0' });
+      // Arrived where the TS pop-in ends...
+      const arrived = opacity.find((stop) => stop.value === '1');
+      expect(arrived, `${name} reaches full opacity`).toBeDefined();
+      expect(
+        Math.abs((arrived?.at ?? 0) - percentOf(RALLY_SPLASH_IN_MS)),
+        `${name} pop-in boundary`,
+      ).toBeLessThanOrEqual(1);
+      // ...and held until the TS hold ends, which is where the fade-out starts.
+      const held = [...opacity].reverse().find((stop) => stop.value === '1');
+      expect(
+        Math.abs((held?.at ?? 0) - percentOf(RALLY_SPLASH_IN_MS + RALLY_SPLASH_HOLD_MS)),
+        `${name} fade-out boundary`,
+      ).toBeLessThanOrEqual(1);
+    }
   });
 });

@@ -459,7 +459,7 @@ describe('circuit editor export: the save endpoint validator', () => {
       'perimeter',
       { halfX: 118, halfZ: 92, halfThickness: 0, height: 2.2 },
     ],
-    ['basin: a bad member', 'basin', { waterY: -0.55, bankSlope: 0, depthMax: 6, wadeYards: 4 }],
+    ['basin: a bad member', 'basin', { waterY: -0.55, bankSlope: 0, depthMax: 6 }],
     ['roles: empty', 'roles', []],
     ['roles: unknown', 'roles', ['spectator']],
     ['roles: repeated', 'roles', ['practice', 'practice']],

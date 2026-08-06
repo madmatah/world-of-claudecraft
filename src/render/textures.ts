@@ -1507,7 +1507,13 @@ function cssHex(colour: number): string {
  * at a glance from a machine doing 58 yd/s with a camera behind it, which a thin
  * outline does not.
  */
+/** Drawn ONCE and shared, same reason as the kerb and grid caches above: every
+ *  marker is the same 256px canvas, and minting one per call handed each
+ *  rebuilt track a fresh texture to leak. */
+let rallyGroundBlastMarkerCache: THREE.CanvasTexture | null = null;
+
 export function rallyGroundBlastMarkerTexture(): THREE.CanvasTexture {
+  if (rallyGroundBlastMarkerCache) return rallyGroundBlastMarkerCache;
   const tex = makeCanvas(256, (ctx, s) => {
     const mid = s / 2;
     ctx.clearRect(0, 0, s, s);
@@ -1548,6 +1554,7 @@ export function rallyGroundBlastMarkerTexture(): THREE.CanvasTexture {
   // One circle over the whole quad: repeating it would tile the hazard band.
   tex.wrapS = THREE.ClampToEdgeWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
+  rallyGroundBlastMarkerCache = tex;
   return tex;
 }
 

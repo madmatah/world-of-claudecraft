@@ -388,10 +388,6 @@ export class EditorShell {
     this.modeActionsEl.hidden = offered.length === 0;
   }
 
-  setModeEnabled(mode: RailModeId, enabled: boolean): void {
-    this.setEnabled(MODE_ACTIONS[mode], enabled);
-  }
-
   /**
    * The problems, on the plan where they happen.
    *
