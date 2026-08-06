@@ -2613,9 +2613,11 @@ function racerInfo(
   return {
     pid,
     name: meta?.name ?? '',
-    // The class the standings row draws its portrait from, exactly as a party
-    // frame does. A racer's class has no effect on the machine: it is who is in
-    // the seat, which is the whole job of an avatar.
+    // The class the PODIUM draws its portrait from, exactly as a party frame
+    // does. A racer's class has no effect on the machine: it is who is in the
+    // seat, which is the whole job of an avatar. Which is also why the live
+    // standings rows draw no portrait: there, decoration cost the pilot's name
+    // the width it needed to be read at speed.
     cls: meta?.cls ?? 'warrior',
     lap: Math.min(match.totalLaps, p.lap),
     finished: p.finishedTick !== null,

@@ -5711,7 +5711,7 @@
       width: 168px;
     }
     body.mobile-touch .rally-standing {
-      grid-template-columns: 13px 18px minmax(0, 1fr) auto;
+      grid-template-columns: 13px minmax(0, 1fr) auto;
       gap: 6px;
       padding-inline: 8px;
     }
@@ -5723,10 +5723,6 @@
     }
     body.mobile-touch .rally-standing-lap {
       font-size: 10px;
-    }
-    body.mobile-touch .rally-standing-crest {
-      width: 18px;
-      height: 18px;
     }
     body.mobile-touch .rallyhud-phase {
       font-size: 17px;

@@ -14297,7 +14297,12 @@
   left: 12px;
   top: 12px;
   padding: 4px 0;
-  width: 214px;
+  /* Sized from the longest thing it has to say: a house pilot's full name plus
+     the Bot tag beside it, with the placing and the lap either side. The names
+     are 15 to 16 characters by construction (REALM_RACERS_BOT_NAMES), so a
+     narrower panel truncates every rival row of every practice race, not an
+     edge case. Dropping the class crest paid for most of the extra width. */
+  width: 240px;
   max-width: calc(100vw - 24px);
   border: 1px solid #dfc36c55;
   border-radius: 7px;
@@ -14368,11 +14373,14 @@
     animation: none;
   }
 }
-/* Placing, portrait, name, lap: the party-frame row grammar, with the placing
-   taking the place of the leader crown. */
+/* Placing, name, lap: the party-frame row grammar with the placing taking the
+   place of the leader crown, and no portrait. The class crest that used to sit
+   between them said nothing here (class has no effect on the machine) and cost
+   the name a quarter of its width, which on a four-pilot grid of 15-character
+   house-pilot names is the difference between a name and an ellipsis. */
 .rally-standing {
   display: grid;
-  grid-template-columns: 16px 20px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
   padding: 3px 10px;
@@ -14396,16 +14404,6 @@
 }
 .rally-standing.out .rally-standing-place {
   color: #8d9686;
-}
-.rally-standing-crest {
-  width: 20px;
-  height: 20px;
-  border: 1px solid #dfc36c66;
-  border-radius: 50%;
-  background: #0b120d;
-}
-.rally-standing.out .rally-standing-crest {
-  opacity: 0.45;
 }
 /* Name plus marker in one cell: only the NAME may shrink, so a pilot with a very
    long name loses letters and keeps their YOU. A marker glued onto the end of

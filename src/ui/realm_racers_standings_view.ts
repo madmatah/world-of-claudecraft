@@ -4,15 +4,21 @@
 // It exists because a four-pilot grid is mostly INVISIBLE. Server interest and
 // the client draw range are both well under a 454 yard lap, so for most of a
 // race the only evidence that three other machines are out there is this panel.
-// The rows therefore read like party frames (portrait plus name, one per pilot,
-// ordered by placing) rather than like a table of numbers.
+// The rows therefore read like party frames (one per pilot, ordered by placing)
+// rather than like a table of numbers.
+//
+// The row carries no CLASS. A pilot's class has no effect on the machine (see
+// `racerInfo` in sim/social/realm_racers.ts), so the crest the row used to draw
+// was decoration paid for in the one resource this panel is short of: width.
+// The name is what a pilot reads at speed, and on a 240px panel the crest cost
+// it about a quarter of its letters. The podium still draws crests; it has the
+// room and no name to truncate.
 //
 // The right-hand column is the LAP, not a distance. A distance to a machine
 // nobody can see is a number a pilot has to interpret; "Lap 3/4" beside "Lap
 // 2/4" says the one thing that is actually actionable at racing speed, which is
 // whether the rival ahead is on the same lap at all.
 
-import type { PlayerClass } from '../sim/types';
 import type { RealmRacersMatchInfo } from '../world_api';
 
 export interface RealmRacersStandingsRow {
@@ -20,8 +26,6 @@ export interface RealmRacersStandingsRow {
   /** 1-based live placing, 1 is the leader. */
   placing: number;
   name: string;
-  /** The class whose crest the row draws as this pilot's portrait. */
-  cls: PlayerClass;
   /** Lap this pilot is on, already clamped to the race length. */
   lap: number;
   isMe: boolean;
@@ -89,7 +93,6 @@ export function buildRealmRacersStandingsView(
         pid: 0,
         placing: 0,
         name: '',
-        cls: 'warrior',
         lap: 0,
         isMe: false,
         finished: false,
@@ -103,14 +106,13 @@ export function buildRealmRacersStandingsView(
     row.pid = racer.pid;
     row.placing = racer.position;
     row.name = racer.name;
-    row.cls = racer.cls;
     row.lap = racer.lap;
     row.isMe = racer.pid === viewerPid;
     row.finished = racer.finished;
     row.retired = racer.retired;
     row.bot = racer.botTier !== null;
     sig +=
-      `${i === 0 ? '' : ','}${row.pid}:${row.placing}${row.isMe ? '*' : ''}${row.cls}/${row.lap}` +
+      `${i === 0 ? '' : ','}${row.pid}:${row.placing}${row.isMe ? '*' : ''}/${row.lap}` +
       `${row.finished ? 'f' : ''}${row.retired ? 'r' : ''}${row.bot ? 'b' : ''}`;
   }
   state.active = true;

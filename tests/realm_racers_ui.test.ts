@@ -6,10 +6,11 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The standings portrait is the party frames' class crest, whose procedural path
+// The PODIUM portrait is the party frames' class crest, whose procedural path
 // needs a real 2D canvas jsdom does not provide. The strip only ever needs a
 // string, so the same hoisted spy the party-frames suite uses stands in, and it
-// also lets a test assert that each pilot's OWN class reaches the crest call.
+// also lets a test assert which surfaces do and do not reach the crest call:
+// the podium does, the live standings panel deliberately no longer does.
 const iconDataUrlSpy = vi.hoisted(() => vi.fn((_kind: string, key: string) => `data:${key}`));
 vi.mock('../src/ui/icons', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/ui/icons')>()),
@@ -388,7 +389,7 @@ describe('Realm Racers practice setup screen', () => {
     );
   });
 
-  it('paints a party-frame row per machine: placing, portrait, name, lap', () => {
+  it('paints a party-frame row per machine: placing, name, lap', () => {
     const h = harness();
     h.info.match = match({ phase: 'racing' });
     h.ui.update();
@@ -413,17 +414,19 @@ describe('Realm Racers practice setup screen', () => {
       '3',
       '4',
     ]);
-    const crests = rows.map((row) => row.querySelector('.rally-standing-crest'));
-    expect(crests.every((crest) => crest !== null)).toBe(true);
     // The right-hand column is the LAP, which is what says who is a lap down.
     const laps = rows.map((row) => row.querySelector('.rally-standing-lap')?.textContent);
     expect(laps[0]).toBe(t('hudChrome.rally.lap', { lap: '1', total: '3' }));
     expect(laps[1]).toBe(t('hudChrome.rally.lap', { lap: '2', total: '3' }));
     expect(rows[0].classList.contains('me')).toBe(true);
     expect(rows[1].classList.contains('me')).toBe(false);
-    // No distance and no tier badge: both were noise a pilot had to decode.
+    // No distance and no tier badge: both were noise a pilot had to decode. Nor
+    // a class portrait, which decorated the row at the NAME's expense on a panel
+    // whose scarce resource is width; the podium keeps its crests.
     expect(panel.querySelector('.rally-standing-gap')).toBeNull();
     expect(panel.querySelector('.rally-standing-tier')).toBeNull();
+    expect(panel.querySelector('.rally-standing-crest')).toBeNull();
+    expect(panel.querySelector('img')).toBeNull();
   });
 
   it('keeps the viewer marker in its own cell, so a long name cannot eat it', () => {
@@ -456,11 +459,11 @@ describe('Realm Racers practice setup screen', () => {
     h.info.match = match({ phase: 'racing', me, standings: [me, rival] });
     h.ui.update();
     const before = [...h.layer.querySelectorAll('.rally-standing')];
-    const crestBefore = before[0].querySelector('.rally-standing-crest');
+    const nameBefore = before[0].querySelector('.rally-standing-name');
 
     // Briar overtakes Aster. The nodes must be the SAME objects, swapped: a
     // rebuild would destroy them, and a destroyed node cannot animate from
-    // where it used to be (nor keep its decoded portrait).
+    // where it used to be.
     h.info.match = match({
       phase: 'racing',
       me: { ...me, position: 2 },
@@ -473,7 +476,7 @@ describe('Realm Racers practice setup screen', () => {
     const after = [...h.layer.querySelectorAll('.rally-standing')];
     expect(after[0]).toBe(before[1]);
     expect(after[1]).toBe(before[0]);
-    expect(after[1].querySelector('.rally-standing-crest')).toBe(crestBefore);
+    expect(after[1].querySelector('.rally-standing-name')).toBe(nameBefore);
     // The placing text followed the swap.
     expect(after.map((row) => row.querySelector('.rally-standing-place')?.textContent)).toEqual([
       '1',
@@ -522,36 +525,47 @@ describe('Realm Racers practice setup screen', () => {
     expect(rows.some((row) => row.classList.contains('lost'))).toBe(false);
   });
 
-  it('draws each pilot their own class portrait, not one shared crest', () => {
+  it('resolves no class portrait at all while a race is running', () => {
     const h = harness();
     const me = racer({ pid: 1, cls: 'warrior', position: 1 });
+    iconDataUrlSpy.mockClear();
     h.info.match = match({
       phase: 'racing',
       me,
       standings: [me, racer({ pid: 2, name: 'Briar', cls: 'mage', position: 2 })],
     });
     h.ui.update();
-    const crests = [...h.layer.querySelectorAll('.rally-standing-crest')] as HTMLImageElement[];
-    expect(crests).toHaveLength(2);
-    expect(crests[0].src).not.toBe(crests[1].src);
+    // The witness FIRST: every assertion below is a negative, and a negative is
+    // vacuous if nothing painted. Prove the two rows really are there, then
+    // prove what they do not contain.
+    const rows = [...h.layer.querySelectorAll('.rally-standing')];
+    expect(rows.map((row) => row.querySelector('.rally-standing-name')?.textContent)).toEqual([
+      'Aster',
+      'Briar',
+    ]);
+    // The class is what the pilot LOOKS like in the seat and has no effect on
+    // the machine, so the panel spends none of its scarce width on a crest and
+    // none of the frame's work resolving one. A grid of two different classes
+    // must reach the icon path for neither: the podium is the only rally
+    // surface that still draws class art, and no podium is up mid-race.
+    expect(h.layer.querySelector('.rally-standing-crest')).toBeNull();
     const keys = iconDataUrlSpy.mock.calls.map((call) => call[1]);
-    expect(keys).toContain('class_warrior');
-    expect(keys).toContain('class_mage');
-  });
+    expect(keys).not.toContain('class_warrior');
+    expect(keys).not.toContain('class_mage');
 
-  it('redraws a portrait only when the pilot in the row changes class', () => {
-    const h = harness();
-    const me = racer({ pid: 1, cls: 'warrior', position: 1 });
-    h.info.match = match({ phase: 'racing', me, standings: [me] });
-    h.ui.update();
+    // And a lap ticking over repaints the row without reaching it either. The
+    // repaint has to be witnessed too: an unmoved signature would paint nothing
+    // and pass the spy assertion while proving nothing at all.
     iconDataUrlSpy.mockClear();
-    // A lap ticks over: the row repaints, the portrait must not.
     h.info.match = match({
       phase: 'racing',
       me: { ...me, lap: 2 },
-      standings: [{ ...me, lap: 2 }],
+      standings: [{ ...me, lap: 2 }, racer({ pid: 2, name: 'Briar', cls: 'mage', position: 2 })],
     });
     h.ui.update();
+    expect(rows[0].querySelector('.rally-standing-lap')?.textContent).toBe(
+      t('hudChrome.rally.lap', { lap: '2', total: '3' }),
+    );
     expect(iconDataUrlSpy).not.toHaveBeenCalled();
   });
 
@@ -713,6 +727,27 @@ describe('Realm Racers podium', () => {
     expect(rest).toHaveLength(1);
     expect(rest[0].querySelector('.rally-podium-name')?.textContent).toBe('Aster');
     expect(rest[0].classList.contains('me')).toBe(true);
+  });
+
+  it('draws every pilot their own class crest here, the one rally surface that does', () => {
+    // The POSITIVE half of the standings' "resolves no class portrait" pin. The
+    // live panel dropped its crests to buy back name width; the podium keeps
+    // them, and that half has to be asserted rather than claimed in a comment,
+    // or a later sweep that removes the crest "everywhere for consistency" goes
+    // green. Pinned to literal keys (the mock renders `data:${key}`), so each
+    // pilot's OWN class has to reach the icon call, not one shared crest.
+    const h = harness();
+    h.info.match = finished();
+    h.ui.update();
+    const steps = [...h.layer.querySelectorAll('.rally-podium-crest')] as HTMLImageElement[];
+    expect(steps.map((img) => img.getAttribute('src'))).toEqual([
+      'data:class_rogue',
+      'data:class_mage',
+      'data:class_priest',
+    ]);
+    // And the rows listed under the blocks carry theirs too, at the roster size.
+    const rest = [...h.layer.querySelectorAll('.rally-podium-row-crest')] as HTMLImageElement[];
+    expect(rest.map((img) => img.getAttribute('src'))).toEqual(['data:class_warrior']);
   });
 
   it('shows a race time for a finisher and a lap for the pilot the flag caught', () => {

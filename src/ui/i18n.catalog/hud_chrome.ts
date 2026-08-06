@@ -1113,8 +1113,10 @@ export const hudChromeStrings = {
     lost: 'You finish {position} of {total}. The next starting grid awaits.',
     draw: 'Dead heat. The race stewards declare a draw.',
     // The race's live leaderboard, a panel down the left edge where the party
-    // frames live: one row per machine, portrait plus name like a party frame,
-    // reordered as they trade places. The viewer's own row keeps their name and
+    // frames live: one row per machine, reordered as they trade places. It
+    // borrows the party-frame grammar but draws NO portrait, because the name is
+    // what a pilot reads at speed and a crest cost it the width it needed. The
+    // viewer's own row keeps their name and
     // takes the marker in a cell of its own, so a long name truncates and the
     // marker survives; the right-hand column is the lap, or where a pilot who is
     // no longer driving stopped.

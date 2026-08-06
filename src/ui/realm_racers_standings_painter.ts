@@ -4,10 +4,8 @@
 //
 // A KEYED POOL, one row node per pid, held for the life of the race. That is
 // what buys the overtake animation: a full innerHTML rebuild destroys its nodes,
-// and a destroyed node cannot animate from where it used to be. It also stops
-// the four portrait images being re-created, and re-decoded by the browser,
-// every time two pilots trade places, which in a close race is several times a
-// second.
+// and a destroyed node cannot animate from where it used to be. Rows trade
+// places, which in a close race is several times a second.
 //
 // The slide needs no measurement and no layout read. Rows are uniform, so a row
 // that gained a place animates from `translateY(100%)`, which is exactly one row
@@ -15,16 +13,11 @@
 // and drops both under prefers-reduced-motion.
 
 import { formatNumber, t } from './i18n';
-import { iconDataUrl } from './icons';
 import type { PainterHostWriters } from './painter_host';
 import type {
   RealmRacersStandingsRow,
   RealmRacersStandingsView,
 } from './realm_racers_standings_view';
-
-/** Portrait edge, the same px the party frames' crest uses: one roster grammar
- *  across the HUD, and one cached icon size. */
-const CREST_PX = 20;
 
 const ROW_CLASS = 'rally-standing';
 const ME_CLASS = 'me';
@@ -42,14 +35,10 @@ const num = (value: number): string => formatNumber(value, { maximumFractionDigi
 interface PooledRow {
   el: HTMLElement;
   place: HTMLElement;
-  crest: HTMLImageElement;
   name: HTMLElement;
   you: HTMLElement;
   bot: HTMLElement;
   lap: HTMLElement;
-  /** The class the portrait was last painted for: the party frames' portrait
-   *  gate, so a crest is only redrawn when the pilot in the row changes. */
-  crestCls: string;
   /** Last painted placing, which is what decides the movement cue. */
   placing: number;
 }
@@ -130,10 +119,6 @@ export class RealmRacersStandingsPanel {
     pooled.placing = row.placing;
 
     w.setText(pooled.place, num(row.placing));
-    if (pooled.crestCls !== row.cls) {
-      pooled.crestCls = row.cls;
-      w.setAttr(pooled.crest, 'src', iconDataUrl('crest', `class_${row.cls}`, CREST_PX));
-    }
     // The pilot's own name, always. The marker is its OWN cell beside it rather
     // than a suffix on the same string: the name is what truncates on a narrow
     // panel, and a marker glued to its end is the first thing an ellipsis eats.
@@ -158,7 +143,6 @@ export class RealmRacersStandingsPanel {
     el.className = ROW_CLASS;
     el.innerHTML =
       `<span class="rally-standing-place"></span>` +
-      `<img class="rally-standing-crest" src="" alt="">` +
       `<span class="rally-standing-id"><span class="rally-standing-name"></span>` +
       `<span class="rally-standing-you"></span>` +
       `<span class="rally-standing-bot"></span></span>` +
@@ -166,12 +150,10 @@ export class RealmRacersStandingsPanel {
     const pooled: PooledRow = {
       el,
       place: el.querySelector('.rally-standing-place') as HTMLElement,
-      crest: el.querySelector('.rally-standing-crest') as HTMLImageElement,
       name: el.querySelector('.rally-standing-name') as HTMLElement,
       you: el.querySelector('.rally-standing-you') as HTMLElement,
       bot: el.querySelector('.rally-standing-bot') as HTMLElement,
       lap: el.querySelector('.rally-standing-lap') as HTMLElement,
-      crestCls: '',
       placing: 0,
     };
     this.list?.appendChild(el);

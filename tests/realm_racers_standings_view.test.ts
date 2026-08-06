@@ -81,13 +81,23 @@ describe('Realm Racers standings core', () => {
     expect(view.rows[1].name).toBe('Aster');
   });
 
-  it('carries each pilot their own class and lap, which is what the row draws', () => {
+  it('carries each pilot their own lap, which is what the row draws', () => {
     const view = buildRealmRacersStandingsView(match(field()));
-    expect(view.rows.map((row) => row.cls)).toEqual(['mage', 'warrior', 'rogue', 'priest']);
     // The lap is the readable answer to "am I a lap down": the leader is on 3,
     // the tail is still on 1.
     expect(view.rows.map((row) => row.lap)).toEqual([3, 2, 2, 1]);
     expect(view.totalLaps).toBe(3);
+  });
+
+  it('carries no class, whatever classes the racers are in', () => {
+    // The row deliberately drops the class the panel used to draw a crest from:
+    // class has no effect on the machine, and the crest cost the NAME about a
+    // quarter of its letters on a panel that is short of width. A field of four
+    // different classes must leave nothing class-shaped on the row, so a
+    // re-added crest cannot ride back in on a field nobody re-pinned.
+    const rows = buildRealmRacersStandingsView(match(field())).rows;
+    expect(rows.map((row) => row.name)).toEqual(['Briar', 'Aster', 'Cass', 'Dell']);
+    for (const row of rows) expect(Object.keys(row)).not.toContain('cls');
   });
 
   it('carries the finished and retired flags through', () => {
@@ -123,6 +133,10 @@ describe('Realm Racers standings core', () => {
     expect(buildRealmRacersStandingsView({ ...match(field()), speed: 51, elapsed: 62 }).sig).toBe(
       baseSig,
     );
+    // Neither is the class, now that no cell draws it: a signature that still
+    // moved on it would buy a full rebuild of the panel for nothing.
+    const reclassed = field().map((row) => ({ ...row, cls: 'druid' as const }));
+    expect(buildRealmRacersStandingsView(match(reclassed)).sig).toBe(baseSig);
 
     // A pass IS structure: the rows really do swap.
     const swapped = [

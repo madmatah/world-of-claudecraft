@@ -85,6 +85,12 @@ describe('Realm Racers practice: one press, one race', () => {
     // rather than as one name with numbers after it.
     expect(REALM_RACERS_BOT_NAMES.length).toBeGreaterThanOrEqual(REALM_RACERS_GRID_SIZE);
     expect(REALM_RACERS_BOT_NAMES[0]).toBe('Mat Driftwright');
+    // These names SIZE the live standings panel (the 240px in the
+    // `#realm-racers-standings` rule): the row shows the full name beside the
+    // Bot tag, and a longer house name than the ones the width was measured
+    // from puts every rival row back behind an ellipsis, which is the bug that
+    // width exists to fix. A new pilot past this bound needs the panel remeasured.
+    for (const name of REALM_RACERS_BOT_NAMES) expect(name.length).toBeLessThanOrEqual(16);
     const names = bots.map((pid) => sim.players.get(pid)?.name);
     expect(new Set(names).size).toBe(names.length);
     for (const name of names) expect(REALM_RACERS_BOT_NAMES).toContain(name);

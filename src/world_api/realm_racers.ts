@@ -13,7 +13,12 @@ export type { RallyDriverTier };
 export interface RealmRacersRacerInfo {
   pid: number;
   name: string;
-  /** Drives the standings row's portrait, the party-frame class crest. */
+  /**
+   * Who is in the seat, cosmetically: the class has no effect on the machine.
+   * Drives the PODIUM's party-frame class crest. The live standings rows
+   * deliberately draw no portrait, because on that panel the crest cost the
+   * pilot's name the width it needed.
+   */
   cls: PlayerClass;
   lap: number;
   finished: boolean;

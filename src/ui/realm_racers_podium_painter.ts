@@ -17,10 +17,11 @@ import type { PainterHostWriters } from './painter_host';
 import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
 import type { RealmRacersPodiumEntry, RealmRacersPodiumView } from './realm_racers_podium_view';
 
-/** Portrait edge on a podium step. Bigger than the standings row's 20: this is
- *  the one moment the pilots are meant to be looked at rather than scanned. */
+/** Portrait edge on a podium step. The podium is the one rally surface that
+ *  draws class art at all, and the one moment the pilots are meant to be looked
+ *  at rather than scanned: the live standings panel spends its width on names. */
 const STEP_CREST_PX = 44;
-/** And on the rows listed under it, which stay at the roster size. */
+/** And on the rows listed under it, which stay at the party-frame roster size. */
 const REST_CREST_PX = 20;
 
 const SHOWN_CLASS = 'shown';
