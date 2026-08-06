@@ -96,9 +96,11 @@ export const FORGE_MAX_DISTANCE = 38;
 // control how strongly engine effort (mostly positive acceleration, plus a
 // small cruise floor) adds body and revs. The supplied loop ships mono already
 // (no stereo fold) and loses about 7.2 dB to true-peak safety. In-game tuning
-// with the local engine anchored to the player settled at 2.2 so it remains
-// present against the race music. At full load the engine alone commands
-// 2.11, which stays below unity after the asset's -7.2 dB true-peak ceiling
+// settled at 2.2 so the pilot's engine remains present against the race music.
+// That level survived the move to unpanned playback untouched: the tuning ran
+// with the local engine sitting on the listener, which is inside REF_DISTANCE
+// and therefore already at full source gain. At full load the engine alone
+// commands 2.11, which stays below unity after the asset's -7.2 dB true-peak ceiling
 // and the 0.85 sampled-clip master.
 const REALM_RACERS_ENGINE_GAIN = 2.2;
 const VEHICLE_ENGINE_IDLE = 0.26;
@@ -762,7 +764,14 @@ class Sfx {
     const destination = output ?? master;
     const positional = x !== undefined && y !== undefined && z !== undefined;
     let slot = this.loops.get(id);
-    if (slot && (slot.key !== key || slot.output !== destination)) {
+    // Rebuild on a positional flip too: a live slot's panner is wired at
+    // creation, so a caller that stops passing coordinates (the rally engine
+    // when a machine becomes the viewed pilot's) would otherwise keep playing
+    // through the stale panner it was built with.
+    if (
+      slot &&
+      (slot.key !== key || slot.output !== destination || positional !== (slot.panner !== null))
+    ) {
       this.unloop(id, 0);
       slot = undefined;
     }
@@ -1012,13 +1021,17 @@ class Sfx {
       mixedContactTarget > 0
         ? Math.min(1, Math.max(0, VEHICLE_MIX_TARGET_BUDGET - engineTarget) / mixedContactTarget)
         : 1;
-    // The local engine is heard from the player instead of the chase camera.
-    // Keep rival engines at their world positions so distance and panning still
-    // communicate where the other racers are. Tyre and surface loops remain
-    // world-positioned for both, preserving their contact with the track.
-    const engineX = self ? this.lx + x - this.playerAudioAnchorX : x;
-    const engineY = self ? this.ly + y - this.playerAudioAnchorY : y;
-    const engineZ = self ? this.lz + z - this.playerAudioAnchorZ : z;
+    // The pilot's own engine is a cockpit sound: it plays unpanned, with no
+    // falloff, because it is under them wherever they are. Placing it near the
+    // listener instead is what broke it: a panner takes DIRECTION only, never
+    // length, so the yard or two between the machine and the chase pivot swung
+    // it hard into the inside ear through every corner. Rival engines keep
+    // their world positions, where distance and panning are what tell you where
+    // the other racers are, and tyre and surface loops stay world-positioned
+    // for both so they keep their contact with the track.
+    const engineX = self ? undefined : x;
+    const engineY = self ? undefined : y;
+    const engineZ = self ? undefined : z;
     const vehicleOutput = this.vehicleLimiter ?? this.master ?? undefined;
     this.loop(
       ids.engine,
@@ -1027,7 +1040,7 @@ class Sfx {
       engineX,
       engineY,
       engineZ,
-      MAX_DISTANCE,
+      self ? undefined : MAX_DISTANCE,
       VEHICLE_ENGINE_IDLE_RATE +
         speed * VEHICLE_ENGINE_SPEED_RATE +
         load * VEHICLE_ENGINE_LOAD_RATE,

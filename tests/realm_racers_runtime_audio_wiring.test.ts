@@ -251,6 +251,13 @@ describe('Realm Racers coordinator audio wiring', () => {
       /const boomProfile = stepCameraBoomForDriving\(\s*this\.camBoom,\s*selfPos\.x,\s*selfPos\.y,\s*selfPos\.z,\s*dt,\s*reduce \? 4 : 1,\s*driving,?\s*\)/,
     );
     expect(cameraSource).toContain('cameraBoomDistance(pose.dist, boomProfile)');
+    // The listener rides the camera and looks at the chase pivot, but the audio
+    // ANCHOR is the machine itself. The pivot lags and leads by yards through a
+    // corner, and handing that to setListener is what panned the pilot's own
+    // engine into the inside ear.
+    expect(cameraSource).toMatch(
+      /sink\.setListener\(\s*cpx,\s*cpy,\s*cpz,\s*fx \/ fl,\s*fy \/ fl,\s*fz \/ fl,\s*selfPos\.x,\s*selfPos\.y,\s*selfPos\.z,?\s*\)/,
+    );
     expect(cameraSource).toMatch(
       /const feelFovOffset = stepCameraFeelForDriving\([\s\S]*?driving\s*\)/,
     );

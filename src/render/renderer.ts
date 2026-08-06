@@ -10807,7 +10807,11 @@ export class Renderer {
         fy = eyeY - cpy,
         fz = pz - cpz;
       const fl = Math.hypot(fx, fy, fz) || 1;
-      sink.setListener(cpx, cpy, cpz, fx / fl, fy / fl, fz / fl, px, py, pz);
+      // The listener rides the camera and faces the chase pivot, but the
+      // player-distance anchor is the avatar itself, never that pivot: the
+      // pivot lags and leads by yards (spring-arm leash plus look-ahead), and
+      // an anchor carrying that offset misplaces every sound measured from it.
+      sink.setListener(cpx, cpy, cpz, fx / fl, fy / fl, fz / fl, selfPos.x, selfPos.y, selfPos.z);
       const inDungeon = px > DUNGEON_X_THRESHOLD;
       const biome = zoneBiomeAt(px, pz);
       const precip =

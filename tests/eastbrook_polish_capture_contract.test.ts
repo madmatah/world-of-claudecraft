@@ -387,7 +387,11 @@ describe('Eastbrook polish capture contract', () => {
       // spectator wiring edits src/render/renderer.ts again, moving the
       // rendererIntegration leaf and with it the composite. No pipeline input
       // or geometry value changed and no capture was retaken.
-      fingerprint: '6542ec1198899f8c2c0c50403f93fedbf281f0b3cbf72512c2e43a6fa0a0d59b',
+      // Re-minted again for the rally engine-audio fix: the spatial-audio
+      // listener anchor in src/render/renderer.ts moves to the avatar, which
+      // moves the rendererIntegration leaf once more. Nothing about Eastbrook
+      // changed, no pipeline input or geometry value moved, no capture retaken.
+      fingerprint: 'b9740c09dabbf4717960d17453630e3f2437f7426ad09b9f461ffdeb3852cfe0',
 
       components: {
         captureContract: {

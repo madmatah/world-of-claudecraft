@@ -485,22 +485,79 @@ describe('Realm Racers vehicle loops', () => {
     );
   });
 
-  it('anchors only the local engine to the player while rivals and track contact stay spatial', () => {
+  it('leaves the pilot engine unpanned while rivals and track contact stay spatial', () => {
     sfx.setListener(15, 8, 28, 0, 0, 1, 10, 2, 20);
     sfx.vehicle(83, true, 12, 3, 24, 0.5, 0.4, 5, false);
     sfx.vehicle(84, false, 18, 3, 26, 0.5, 0.4, 5, false);
 
-    const loops = (
-      sfx as unknown as {
-        loops: Map<string, { panner: FakePanner | null }>;
-      }
-    ).loops;
-    expect(loops.get('realm-racers-engine-83')?.panner).toMatchObject({ x: 17, y: 9, z: 32 });
+    const internals = sfx as unknown as {
+      loops: Map<string, { panner: FakePanner | null; output: unknown }>;
+      vehicleLimiter: FakeCompressor;
+    };
+    const loops = internals.loops;
+    // The pilot's own engine carries no listener-relative direction at all, so
+    // nothing can steer it into one ear. Rival engines stay world-positioned:
+    // distance and panning are how you hear where the other racers are.
+    expect(loops.get('realm-racers-engine-83')?.panner).toBeNull();
+    // Losing the panner must not also lose the vehicle bus: the pilot engine is
+    // the loudest layer in the mix and the limiter is what holds it under unity.
+    expect(loops.get('realm-racers-engine-83')?.output).toBe(internals.vehicleLimiter);
     expect(loops.get('realm-racers-roll-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
     expect(loops.get('realm-racers-skid-83')?.panner).toMatchObject({ x: 12, y: 3, z: 24 });
     expect(loops.get('realm-racers-engine-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
     expect(loops.get('realm-racers-roll-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
     expect(loops.get('realm-racers-skid-84')?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
+  });
+
+  it('holds the pilot engine steady through a corner whichever way the chase pivot swings', () => {
+    // The corner bug this pins: the engine used to be placed at the listener
+    // offset by (machine - chase pivot), and in a corner that pivot sits yards
+    // to the inside or outside of the machine (spring-arm lag plus look-ahead).
+    // A panner reads DIRECTION only, never length, so a source sitting all but
+    // on top of the listener panned hard into whichever ear the residual
+    // pointed at: turn left, hear it left. Both corners below drive that
+    // residual to opposite sides of the machine.
+    const engineSlot = () =>
+      (
+        sfx as unknown as {
+          loops: Map<string, { panner: FakePanner | null }>;
+        }
+      ).loops.get('realm-racers-engine-91');
+
+    sfx.setListener(0, 5, 0, 0, 0, 1, 4, 2, -3);
+    sfx.vehicle(91, true, 0, 2, 0, 0.9, 0.8, 0, false);
+    const cornering = engineSlot();
+    expect(cornering?.panner).toBeNull();
+
+    sfx.setListener(0, 5, 0, 0, 0, 1, -4, 2, -3);
+    sfx.vehicle(91, true, 0, 2, 0, 0.9, 0.8, 0, false);
+    // Same slot, still unpanned: the opposite corner changes nothing about
+    // where the pilot hears their own engine.
+    expect(engineSlot()).toBe(cornering);
+    expect(engineSlot()?.panner).toBeNull();
+  });
+
+  it('rebuilds the engine loop when a machine changes hands between pilot and rival', () => {
+    // Renderer-side `self` is `entity.id === sim.playerId`, so it flips under
+    // the eye a spectator follows. Reusing the slot across that flip would keep
+    // a stale panner wired in (or leave a rival's engine unpanned), because the
+    // loop cache keys on clip and output bus alone.
+    const engineSlot = () =>
+      (
+        sfx as unknown as {
+          loops: Map<string, { panner: FakePanner | null }>;
+        }
+      ).loops.get('realm-racers-engine-92');
+
+    sfx.setListener(15, 8, 28, 0, 0, 1, 10, 2, 20);
+    sfx.vehicle(92, false, 18, 3, 26, 0.5, 0.4, 0, false);
+    expect(engineSlot()?.panner).toMatchObject({ x: 18, y: 3, z: 26 });
+
+    sfx.vehicle(92, true, 18, 3, 26, 0.5, 0.4, 0, false);
+    expect(engineSlot()?.panner).toBeNull();
+
+    sfx.vehicle(92, false, 19, 3, 26, 0.5, 0.4, 0, false);
+    expect(engineSlot()?.panner).toMatchObject({ x: 19, y: 3, z: 26 });
   });
 
   it('tears every loop down on race exit and on leaving audible range', () => {
