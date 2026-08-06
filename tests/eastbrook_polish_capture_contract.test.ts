@@ -383,7 +383,11 @@ describe('Eastbrook polish capture contract', () => {
       // value changed, the Rally circuit stays isolated in its distant
       // instance band, and no capture was retaken (the five per-asset seal
       // suites stay green untouched).
-      fingerprint: '8e6eb47ecedcc11df2cc2f5b7a037256fc80d85c0389517f308e030f375c29d7',
+      // Re-minted 2026-08-06 for the Realm Racers QA pass: the trackside
+      // spectator wiring edits src/render/renderer.ts again, moving the
+      // rendererIntegration leaf and with it the composite. No pipeline input
+      // or geometry value changed and no capture was retaken.
+      fingerprint: '6542ec1198899f8c2c0c50403f93fedbf281f0b3cbf72512c2e43a6fa0a0d59b',
 
       components: {
         captureContract: {

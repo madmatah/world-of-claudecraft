@@ -629,9 +629,9 @@ const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(
 // merged rendererIntegration and layout inputs.
 // Re-minted with scripts/assets/eastbrook_grand_armoury/remint_polish_provenance.mjs.
 const ACCEPTED_POLISH_V2_METADATA_SHA256 =
-  'e1e5f0469ccc6bcb69243ef15407821b161b737b6d9d1df8f8337beb719227e0';
+  '953a2d430ad8d1e828184742632b918bf4fab76393361ef6ba3b230ffffa5e8c';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
-  '8e6eb47ecedcc11df2cc2f5b7a037256fc80d85c0389517f308e030f375c29d7';
+  '6542ec1198899f8c2c0c50403f93fedbf281f0b3cbf72512c2e43a6fa0a0d59b';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -1486,21 +1486,17 @@ describe('Eastbrook polish performance and contact evidence', () => {
       fingerprint.update('\0');
     }
     expect(acceptedFiles).toHaveLength(4);
-    // Second-order seal, recomputed LAST in the re-mint recipe: it hashes the
-    // performance evidence files, which carry the composite polish provenance.
-    // It therefore follows the first-order composite, so this merge moves it for
-    // the same reason: every rendererIntegration move on both sides stacks in
-    // that composite (from the release, PR #2720's fence-removal layout
-    // evidence, the live graphics rebuild #2799, the Bear Form rig swap #2842,
-    // the far-field impostors, fog-free vista and horizon pass #2793, the
-    // Blizzard timed ground loop #2861, and the brood shout/flourish wiring;
-    // from this branch, the worldObjectBurning fire-burst cue), recomputed last
-    // by remint_polish_provenance.mjs. The release retook the polish captures, so
-    // every measured value (frame timings, draw stats, triangle and scenario
-    // numbers) is adopted verbatim from the base tip; no parent's literal
-    // matched the merged tree, and no capture was retaken here.
+    // Second-order seal, recomputed LAST in the re-mint recipe
+    // (remint_polish_provenance.mjs): it hashes the performance evidence files,
+    // which carry the composite polish provenance. This literal and the
+    // capture-set pin above were both re-pinned BY MEASUREMENT over unchanged
+    // evidence bytes in 0d3fe7534d, not inherited from any parent tip: the
+    // capture-set pin had been carrying THIS seal's performance digest in its
+    // slot (a transposition), which kept the suite red from c1b689d2e3 until
+    // that re-pin. Re-minting either value means re-measuring the tree, never
+    // copying a literal across from the other pin or from a base branch.
     expect(fingerprint.digest('hex')).toBe(
-      'e4e7cab8633ba083707e6cd3fda3b75fed7bfe88cbfcf7d6577ff46afb742144',
+      '252a1a6fa17c00f4a368ddc7a6153bb7db58cf30205826f1e4e21690e9bb97e8',
     );
   });
 
