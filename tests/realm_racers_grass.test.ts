@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { suggestGroundOutline } from '../src/editor/circuit/envelope_core';
 import { biomeGrassTint, GRASS_BIOME_DENSITY } from '../src/render/foliage_core';
 import {
+  REALM_RACERS_GRASS_PICKUP_CLEARANCE,
   REALM_RACERS_GRASS_TILE_RADIUS,
   REALM_RACERS_GRASS_TILE_YARDS,
   REALM_RACERS_GRASS_YARDS_PER_CLUSTER,
@@ -22,6 +23,7 @@ import {
 } from '../src/render/realm_racers_grass_core';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT,
+  REALM_RACERS_CIRCUIT_LIST,
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
@@ -31,6 +33,10 @@ import {
   REALM_RACERS_RUNOFF_WIDTH,
   REALM_RACERS_VERGE_MARGIN,
 } from '../src/sim/realm_racers_layout';
+import {
+  REALM_RACERS_PICKUP_BOX_HALF,
+  realmRacersPickupBoxes,
+} from '../src/sim/realm_racers_pickups';
 import { realmRacersPlacedPonds } from '../src/sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 
@@ -171,6 +177,148 @@ describe('Realm Racers grass', () => {
     const { halfX, halfZ } = GARDEN_CIRCUIT.perimeter;
     expect(realmRacersGrassAllowed(GARDEN_CIRCUIT, halfX + 20, 0)).toBe(false);
     expect(realmRacersGrassAllowed(GARDEN_CIRCUIT, 0, halfZ + 20)).toBe(false);
+  });
+
+  describe('fairness: what a low tier sees plainly stays visible on high', () => {
+    // The meadow is high-tier cosmetics (`GFX.bladeCarpetRadius` gates it), so
+    // anything a racer READS may never stand inside it: a pickup crate is a
+    // line a pilot chooses, and the road edge is where the penalty steps. The
+    // road pass alone happens to cover every expressible pickup row today (a
+    // row spreads over 80 percent of the road, and the band the mask strips
+    // reaches yards past the edge), so the clearance stamp is the coded
+    // invariant that survives a road-band retune, and this block pins the
+    // CLAIM itself rather than either mechanism.
+
+    it('keeps the clearance wide enough for the crate and its sparkle', () => {
+      // The crate is a yaw-rotated box, so its footprint corner reaches
+      // BOX_HALF * sqrt2 from the centre; the extra yard is the sparkle's air.
+      expect(REALM_RACERS_GRASS_PICKUP_CLEARANCE).toBeGreaterThanOrEqual(
+        REALM_RACERS_PICKUP_BOX_HALF * Math.SQRT2 + 1,
+      );
+    });
+
+    it('refuses a blade inside the clearance of every box, on both shipped circuits', () => {
+      expect(REALM_RACERS_CIRCUIT_LIST.length).toBeGreaterThanOrEqual(2);
+      for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+        const boxes = realmRacersPickupBoxes(circuit);
+        expect(boxes.length, circuit.id).toBeGreaterThan(0);
+        const violations: string[] = [];
+        for (const box of boxes) {
+          const boxX = box.x - REALM_RACERS_ORIGIN.x;
+          const boxZ = box.z - REALM_RACERS_ORIGIN.z;
+          // The centre plus a ring a hair inside the clearance: the whole disc
+          // between them is what the crate and its sparkle actually occupy.
+          const probes: [number, number][] = [[boxX, boxZ]];
+          for (let k = 0; k < 8; k++) {
+            const angle = (k / 8) * Math.PI * 2;
+            const radius = REALM_RACERS_GRASS_PICKUP_CLEARANCE - 0.05;
+            probes.push([boxX + Math.cos(angle) * radius, boxZ + Math.sin(angle) * radius]);
+          }
+          for (const [x, z] of probes) {
+            if (realmRacersGrassAllowed(circuit, x, z)) {
+              violations.push(`${circuit.id} box ${box.index} at ${x.toFixed(2)}, ${z.toFixed(2)}`);
+            }
+          }
+        }
+        expect(violations).toEqual([]);
+      }
+    });
+
+    it('refuses the road AND the verge band, all the way round both shipped circuits', () => {
+      // Out to `rallyGardenEdgeOffsetAt`, THE lateral boundary of a circuit:
+      // the line the penalty steps at is the line the meadow must not blur.
+      for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+        const violations: string[] = [];
+        for (const sample of realmRacersTrack(circuit).samples) {
+          const localX = sample.x - REALM_RACERS_ORIGIN.x;
+          const localZ = sample.z - REALM_RACERS_ORIGIN.z;
+          const edge = rallyGardenEdgeOffsetAt(circuit, sample.s);
+          for (const across of [0, sample.halfWidth, -sample.halfWidth, edge, -edge]) {
+            const x = localX - sample.tz * across;
+            const z = localZ + sample.tx * across;
+            if (realmRacersGrassAllowed(circuit, x, z)) {
+              violations.push(`${circuit.id} s=${sample.s.toFixed(1)} across=${across.toFixed(2)}`);
+            }
+          }
+        }
+        expect(violations).toEqual([]);
+      }
+    });
+
+    it('still grows the open lawn just beyond the clearances', () => {
+      // The negative arm: both refusals above are CLEARANCES, not a blanket.
+      // Probed six yards past the garden edge at each pickup row, the same
+      // open-lawn distance the "grows in the garden" case establishes,
+      // filtered to points that really are free lawn.
+      for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
+        const circuitTrack = realmRacersTrack(circuit);
+        const boxes = realmRacersPickupBoxes(circuit);
+        const ponds = realmRacersPlacedPonds(circuit);
+        let qualifying = 0;
+        const refusals: string[] = [];
+        for (const box of boxes.filter((b) => b.lane === 0)) {
+          const point = circuitTrack.pointAt(box.s);
+          const edge = rallyGardenEdgeOffsetAt(circuit, box.s);
+          for (const side of [1, -1]) {
+            const across = side * (edge + 6);
+            const x = point.x - REALM_RACERS_ORIGIN.x - point.tz * across;
+            const z = point.z - REALM_RACERS_ORIGIN.z + point.tx * across;
+            if (Math.abs(x) > circuit.perimeter.halfX - 2) continue;
+            if (Math.abs(z) > circuit.perimeter.halfZ - 2) continue;
+            if (ponds.some((p) => polygonContainsPoint(p.outline, x, z))) continue;
+            // Really clear of the road (another stretch can pass nearby) and
+            // of every box's clearance, with the mask's own margins on top.
+            const projection = circuitTrack.project(
+              x + REALM_RACERS_ORIGIN.x,
+              z + REALM_RACERS_ORIGIN.z,
+            );
+            if (Math.abs(projection.lateral) <= rallyGardenEdgeOffsetAt(circuit, projection.s) + 4)
+              continue;
+            if (
+              boxes.some(
+                (b) =>
+                  Math.hypot(
+                    x - (b.x - REALM_RACERS_ORIGIN.x),
+                    z - (b.z - REALM_RACERS_ORIGIN.z),
+                  ) <=
+                  REALM_RACERS_GRASS_PICKUP_CLEARANCE + 1.5,
+              )
+            )
+              continue;
+            qualifying++;
+            if (!realmRacersGrassAllowed(circuit, x, z)) {
+              refusals.push(`${circuit.id} row at s=${box.s.toFixed(1)}, side ${side}`);
+            }
+          }
+        }
+        expect(qualifying, circuit.id).toBeGreaterThanOrEqual(2);
+        expect(refusals).toEqual([]);
+      }
+    });
+
+    it('puts no cluster of a grown meadow inside a pickup clearance', () => {
+      // Through the production scatter itself, on a theme that grows: the
+      // predicate above is what `buildTiles` places by, so the two must agree.
+      const night = probe('nightbloom');
+      const boxes = realmRacersPickupBoxes(night).map((box) => ({
+        x: box.x - REALM_RACERS_ORIGIN.x,
+        z: box.z - REALM_RACERS_ORIGIN.z,
+      }));
+      expect(boxes.length).toBeGreaterThan(0);
+      const clusters = realmRacersGrassTiles(night).flatMap((tile) => tile.clusters);
+      expect(clusters.length).toBeGreaterThan(5000);
+      const violations: string[] = [];
+      for (const cluster of clusters) {
+        for (const box of boxes) {
+          if (
+            Math.hypot(cluster.x - box.x, cluster.z - box.z) <= REALM_RACERS_GRASS_PICKUP_CLEARANCE
+          ) {
+            violations.push(`cluster at ${cluster.x.toFixed(1)}, ${cluster.z.toFixed(1)}`);
+          }
+        }
+      }
+      expect(violations).toEqual([]);
+    });
   });
 
   describe('what a themed circuit actually grows', () => {

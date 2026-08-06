@@ -34,6 +34,7 @@ import {
 import { polygonContainsPoint } from '../sim/geometry2d';
 import { realmRacersGroundShape, realmRacersGroundSpansAt } from '../sim/realm_racers_ground';
 import { REALM_RACERS_ORIGIN } from '../sim/realm_racers_layout';
+import { REALM_RACERS_PICKUP_BOX_HALF, realmRacersPickupBoxes } from '../sim/realm_racers_pickups';
 import { realmRacersPlacedPonds } from '../sim/realm_racers_props_resolve';
 import {
   memoizePerCircuit,
@@ -64,14 +65,28 @@ const MASK_MARGIN = 2;
 export const REALM_RACERS_GRASS_Y = -0.12;
 
 /**
+ * Yards of bare lawn kept around a pickup box, measured from its centre.
+ *
+ * A FAIRNESS number, not a looks one: the meadow is high-tier cosmetics
+ * (`GFX.bladeCarpetRadius` gates it), and a crate is actionable information,
+ * so a blade brushing one would hide from a high-tier player what a low tier
+ * sees plainly. The crate is a yaw-rotated box, so its footprint corner
+ * reaches `REALM_RACERS_PICKUP_BOX_HALF * sqrt2` from the centre; the extra
+ * yard is air for the sparkle the box wears.
+ */
+export const REALM_RACERS_GRASS_PICKUP_CLEARANCE = REALM_RACERS_PICKUP_BOX_HALF * Math.SQRT2 + 1;
+
+/**
  * A circuit's grass mask: one byte per square yard of the perimeter box, 1
  * where a blade may NOT stand.
  *
  * Blocked cells are everything off the authored LAND, the racing surface (road,
- * verge and run-off) and the ponds. The last two are the same reason twice:
- * grass on the tarmac reads as a bug, and a blade in a pond stands on water,
- * since the lawn is cut open under one. The first is that reason at the scale of
- * a circuit: this grid covers the perimeter BOX, and an island is not a box.
+ * verge and run-off), the ponds, and a clearance disc around every pickup box.
+ * The middle two are the same reason twice: grass on the tarmac reads as a bug,
+ * and a blade in a pond stands on water, since the lawn is cut open under one.
+ * The first is that reason at the scale of a circuit: this grid covers the
+ * perimeter BOX, and an island is not a box. The last is FAIRNESS rather than
+ * looks: see `REALM_RACERS_GRASS_PICKUP_CLEARANCE`.
  */
 export interface RealmRacersGrassMask {
   /** Half-extents of the covered box, circuit-local yards. */
@@ -206,6 +221,33 @@ function buildMask(circuit: RealmRacersCircuit): RealmRacersGrassMask {
       }
     }
   }
+
+  // The pickup boxes, each under a disc of bare lawn. The road pass above
+  // already strips every row a record can express (a row spreads over 80
+  // percent of the road, and the band reaches yards past the edge), so on
+  // everything shipped this stamp marks nothing new: it is the coded fairness
+  // invariant, kept here so the clearance survives a road-band retune instead
+  // of riding on one as a side effect. Half a cell's diagonal on top of the
+  // clearance, for the same reason the ponds take their neighbours: a cluster
+  // is jittered anywhere inside its own cell, and a query point rounds to a
+  // centre up to that far away.
+  const clearance = REALM_RACERS_GRASS_PICKUP_CLEARANCE + (MASK_CELL * Math.SQRT2) / 2;
+  for (const box of realmRacersPickupBoxes(circuit)) {
+    const boxX = box.x - REALM_RACERS_ORIGIN.x;
+    const boxZ = box.z - REALM_RACERS_ORIGIN.z;
+    const minCol = Math.max(0, Math.floor((boxX - clearance + halfX) / MASK_CELL));
+    const maxCol = Math.min(columns - 1, Math.ceil((boxX + clearance + halfX) / MASK_CELL));
+    const minRow = Math.max(0, Math.floor((boxZ - clearance + halfZ) / MASK_CELL));
+    const maxRow = Math.min(rows - 1, Math.ceil((boxZ + clearance + halfZ) / MASK_CELL));
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        const dx = col * MASK_CELL - halfX - boxX;
+        const dz = row * MASK_CELL - halfZ - boxZ;
+        if (dx * dx + dz * dz > clearance * clearance) continue;
+        blocked[row * columns + col] = 1;
+      }
+    }
+  }
   return { halfX, halfZ, columns, rows, blocked };
 }
 
@@ -296,9 +338,15 @@ function buildTiles(circuit: RealmRacersCircuit): RealmRacersGrassTile[] {
   const tiles = new Map<string, RealmRacersGrassTile>();
   for (let row = 0; row < mask.rows; row++) {
     for (let col = 0; col < mask.columns; col++) {
-      if (mask.blocked[row * mask.columns + col] === 1) continue;
       const cellX = col * MASK_CELL - mask.halfX;
       const cellZ = row * MASK_CELL - mask.halfZ;
+      // Through the exported predicate, never an inline read of the mask byte:
+      // `realmRacersGrassAllowed` is the placement rule the fairness suite pins,
+      // so it has to be the rule production actually runs. On a cell centre the
+      // two were always the same answer (the centre rounds back to its own cell,
+      // and the loop never leaves the mask's box), which is why this is a route
+      // and not a behavior change.
+      if (!realmRacersGrassAllowed(circuit, cellX, cellZ)) continue;
       // A fractional count is spent as a probability, so a density under one
       // per cell thins evenly instead of rounding to nothing.
       const whole = Math.floor(perCell);
