@@ -140,6 +140,9 @@ export function moveSpeedMult(e: Entity, extraSpeedPct = 0): number {
   // cannot be slowed): short-circuit the aura scan with the ghost-run multiplier.
   if (e.ghost) return GHOST_RUN_MULT;
   scanAuraSpeed(e);
+  // Snapshot the scratch before any call leaves this module: a future callee
+  // that re-enters the scan would silently overwrite the shared pair.
+  const slow = auraSpeedScan.slow;
   let speed = auraSpeedScan.speed;
   // Mounted travel: the active ground mount rides the entity mirror (mountKey,
   // synced over the wire like skin), so the online self-extrapolator predicts
@@ -148,7 +151,7 @@ export function moveSpeedMult(e: Entity, extraSpeedPct = 0): number {
   if (e.mountKey) speed += mountMoveSpeedPct(e.mountKey);
   // Fiesta move-speed augments (only ever non-zero inside a Fiesta bout).
   if (extraSpeedPct) speed += extraSpeedPct;
-  return auraSpeedScan.slow * speed;
+  return slow * speed;
 }
 
 // Fiesta "Moon Boots" power-up: a buff_jump aura multiplies jump height.

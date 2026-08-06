@@ -11048,6 +11048,8 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.forfeit': 'レースを棄権',
   'hudChrome.rally.forfeitConfirm': '棄権を確認',
   'hudChrome.rally.waiting': '{count}人のパイロットがグリッドを待っています。',
+  'hudChrome.rally.queueNeedsRealm':
+    'キューでのレースにはオンラインサーバーの他のパイロットが必要です。代わりに練習走行をお試しください。',
   'hudChrome.rally.queued': '待機位置 {position}/{count}。戦車を準備しています。',
   'hudChrome.rally.racingAgainst': 'レースが始まりました。現在{total}台中{position}位です。',
   'hudChrome.rally.practice': '練習',

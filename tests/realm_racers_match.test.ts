@@ -573,6 +573,129 @@ describe('The Realm Racers lifecycle', () => {
     expect(sim.realmRacersInfoFor(b).match).not.toBeNull();
   });
 
+  it('still restores before a disconnect save when the pilot had already forfeited', () => {
+    // Forfeit first (the six-second tableau starts), THEN close the client
+    // inside that window: the restore the leave save depends on must still run,
+    // or the save captures full pools, cleared cooldowns, and the loaned kit.
+    const { sim, a } = startMatch();
+    sim.realmRacersForfeit(a);
+    const original = match(sim).returns.get(a);
+    sim.preparePlayerLeave(a);
+    const meta = required(sim.players.get(a), `player ${a}`);
+    expect(entity(sim, a).pos).toMatchObject({ x: original?.x, z: original?.z });
+    expect(meta.realmRacersMatchId).toBeNull();
+    expect(entity(sim, a).drive).toBeNull();
+    expect(meta.known.some((known) => known.def.id === 'rally_ground_blast')).toBe(false);
+  });
+
+  it('leaves a returned quitter alone in the open world while the race runs on', () => {
+    // A pilot who forfeits and is returned stays on the frozen grid for the
+    // classification, but the referee must stop reprojecting their Evergarden
+    // body onto the circuit copy: that lands them in the garden band and pins
+    // an off-track slow on a player who is not racing. Checked on EVERY tick
+    // after the return, because the stuck arm used to swallow the aura a few
+    // seconds in and make the steady state look clean.
+    const { sim, a } = startMatch();
+    sim.realmRacersForfeit(a);
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 1; i++) sim.tick();
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    expect(progress.returned).toBe(true);
+    const aEntity = entity(sim, a);
+    for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS + 80; i++) {
+      sim.tick();
+      expect(
+        aEntity.auras.some((aura) => aura.id === REALM_RACERS_OFF_TRACK_AURA),
+        `tick ${i}`,
+      ).toBe(false);
+    }
+    expect(sim.realmRacers.match).not.toBeNull();
+  });
+
+  it('does not republish the rally kit onto a pilot the race already returned', () => {
+    // A quitter holding an unspent effect is returned to their class kit; when
+    // the race later ends, the tableau sweep must not hand them the rally kit
+    // back in the middle of the Evergarden.
+    const { sim, a, pids } = startMatch();
+    const progress = required(match(sim).progress.get(a), `progress ${a}`);
+    progress.heldEffect = 'nitro';
+    sim.realmRacersForfeit(a);
+    for (let i = 0; i < REALM_RACERS_RETURN_TICKS + 1; i++) sim.tick();
+    const meta = required(sim.players.get(a), `player ${a}`);
+    expect(progress.returned).toBe(true);
+    expect(meta.known.some((known) => known.def.id === 'rally_ground_blast')).toBe(false);
+    for (const pid of pids.slice(1)) sim.realmRacersForfeit(pid);
+    expect(match(sim).phase).toBe('finished');
+    expect(meta.known.length).toBeGreaterThan(0);
+    expect(meta.known.some((known) => known.def.id === 'rally_ground_blast')).toBe(false);
+  });
+
+  it('keeps a banked finish when the pilot leaves during the chase window', () => {
+    // Crossing the line banks the placing: a disconnect while the rest of the
+    // field chases must not reclassify the finisher as a quitter and hand the
+    // win, and the rated meter, to someone who never crossed.
+    const { sim, a, pids } = startMatch();
+    const m = match(sim);
+    m.phase = 'racing';
+    const progress = required(m.progress.get(a), `progress ${a}`);
+    progress.finishedTick = sim.ctx.tickCount;
+    sim.preparePlayerLeave(a);
+    expect(progress.finishedTick).not.toBeNull();
+    expect(progress.retiredTick).toBeNull();
+    expect(progress.returned).toBe(true);
+    for (const pid of pids.slice(1)) sim.realmRacersForfeit(pid);
+    expect(m.phase).toBe('finished');
+    expect(m.winnerPid).toBe(a);
+    expect(required(sim.players.get(a), `player ${a}`).rrWins).toBe(1);
+  });
+
+  it('does not issue a second tableau to a pilot who leaves during the finished phase', () => {
+    const { sim, a, pids } = startMatch();
+    const m = match(sim);
+    m.phase = 'racing';
+    for (const pid of pids.slice(1)) sim.realmRacersForfeit(pid);
+    expect(m.phase).toBe('finished');
+    sim.drainEvents();
+    sim.realmRacersForfeit(a);
+    const repeats = sim
+      .drainEvents()
+      .filter((ev) => ev.type === 'realmRacersResult' && ev.pid === a);
+    expect(repeats).toHaveLength(0);
+    // Leaving during the tableau is answered by going home, not by a second
+    // retirement that restarts the return clock.
+    expect(required(m.progress.get(a), `progress ${a}`).returned).toBe(true);
+  });
+
+  it('announces a queue eviction instead of dropping the pid silently', () => {
+    const sim = makeWorld();
+    const a = addAt(sim, 'warrior', 'Aster', -5, -40);
+    const b = addAt(sim, 'mage', 'Briar', 7, -42);
+    sim.realmRacersQueueJoin(a);
+    sim.realmRacersQueueJoin(b);
+    sim.drainEvents();
+    const aEntity = entity(sim, a);
+    aEntity.hp = 0;
+    aEntity.dead = true;
+    const events = sim.tick();
+    expect(events).toContainEqual({ type: 'realmRacersUnqueued', pid: a });
+    expect(sim.realmRacers.queue.includes(a)).toBe(false);
+    expect(sim.realmRacers.queue.includes(b)).toBe(true);
+  });
+
+  it('reports the queue viable only where it can actually seat a race', () => {
+    // Offline: no bot backfill and one human, so joining would wait forever
+    // and the window disables the affordance off this flag.
+    const solo = makeWorld();
+    const lone = addAt(solo, 'warrior', 'Aster', -5, -40);
+    expect(solo.realmRacersInfoFor(lone).queueViable).toBe(false);
+    // Enough humans fill a grid without bots.
+    const { sim, pids } = makeGrid();
+    expect(sim.realmRacersInfoFor(pids[0]).queueViable).toBe(true);
+    // The online server enables backfill, so one human is enough there.
+    const backfilled = makeWorld({ realmRacersBackfill: true });
+    const hosted = addAt(backfilled, 'warrior', 'Briar', -5, -40);
+    expect(backfilled.realmRacersInfoFor(hosted).queueViable).toBe(true);
+  });
+
   it('slows shortcut attempts outside the authored road without damaging the racer', () => {
     const { sim, a } = startMatch();
     match(sim).phase = 'racing';

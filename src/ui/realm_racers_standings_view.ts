@@ -43,29 +43,69 @@ export interface RealmRacersStandingsView {
   sig: string;
 }
 
-const EMPTY: RealmRacersStandingsView = { active: false, rows: [], totalLaps: 0, sig: 'off' };
+/**
+ * Module-level REUSED containers (the allocation-light per-frame contract,
+ * src/ui/CLAUDE.md): this view is built once per frame for the whole race, so
+ * a fresh array + row objects per call is per-frame garbage. `rows` is trimmed
+ * to the live grid while `rowPool` keeps the high-water slot objects, so every
+ * slot keeps its identity across frames and only primitives are mutated. A
+ * caller reads the frame's values before the next build, which the synchronous
+ * paint in `RealmRacersStandingsPanel.update` does.
+ */
+const rowPool: RealmRacersStandingsRow[] = [];
+const rows: RealmRacersStandingsRow[] = [];
+const state: {
+  active: boolean;
+  rows: RealmRacersStandingsRow[];
+  totalLaps: number;
+  sig: string;
+} = { active: false, rows, totalLaps: 0, sig: 'off' };
 
 export function buildRealmRacersStandingsView(
   match: RealmRacersMatchInfo | null,
 ): RealmRacersStandingsView {
-  if (!match) return EMPTY;
+  if (!match) {
+    state.active = false;
+    rows.length = 0;
+    state.totalLaps = 0;
+    state.sig = 'off';
+    return state;
+  }
   const viewerPid = match.me.pid;
-  const rows = match.standings.map((racer) => ({
-    pid: racer.pid,
-    placing: racer.position,
-    name: racer.name,
-    cls: racer.cls,
-    lap: racer.lap,
-    isMe: racer.pid === viewerPid,
-    finished: racer.finished,
-    retired: racer.retired,
-  }));
-  const sig = `${match.id}|${match.gridSize}|${match.totalLaps}|${rows
-    .map(
-      (row) =>
-        `${row.pid}:${row.placing}${row.isMe ? '*' : ''}${row.cls}/${row.lap}` +
-        `${row.finished ? 'f' : ''}${row.retired ? 'r' : ''}`,
-    )
-    .join(',')}`;
-  return { active: true, rows, totalLaps: match.totalLaps, sig };
+  const standings = match.standings;
+  rows.length = standings.length;
+  let sig = `${match.id}|${match.gridSize}|${match.totalLaps}|`;
+  for (let i = 0; i < standings.length; i++) {
+    let row = rowPool[i];
+    if (!row) {
+      row = {
+        pid: 0,
+        placing: 0,
+        name: '',
+        cls: 'warrior',
+        lap: 0,
+        isMe: false,
+        finished: false,
+        retired: false,
+      };
+      rowPool[i] = row;
+    }
+    rows[i] = row;
+    const racer = standings[i];
+    row.pid = racer.pid;
+    row.placing = racer.position;
+    row.name = racer.name;
+    row.cls = racer.cls;
+    row.lap = racer.lap;
+    row.isMe = racer.pid === viewerPid;
+    row.finished = racer.finished;
+    row.retired = racer.retired;
+    sig +=
+      `${i === 0 ? '' : ','}${row.pid}:${row.placing}${row.isMe ? '*' : ''}${row.cls}/${row.lap}` +
+      `${row.finished ? 'f' : ''}${row.retired ? 'r' : ''}`;
+  }
+  state.active = true;
+  state.totalLaps = match.totalLaps;
+  state.sig = sig;
+  return state;
 }

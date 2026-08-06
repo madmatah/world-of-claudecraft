@@ -13,14 +13,20 @@ import {
   REALM_RACERS_GRID_SIZE,
   REALM_RACERS_MIN_GATES,
   REALM_RACERS_ORIGIN,
+  REALM_RACERS_RUNOFF_WIDTH,
+  REALM_RACERS_VERGE_MARGIN,
   rallyGateCrossingFraction,
 } from '../src/sim/realm_racers_layout';
+import { REALM_RACERS_NITRO_SPEED_MULT } from '../src/sim/realm_racers_pickup_effects';
+import { REALM_RACERS_SLICK_SLIP_CAP } from '../src/sim/realm_racers_slicks';
 import {
   rallyGardenEdgeOffsetAt,
   realmRacersGates,
   realmRacersStarts,
   realmRacersTrack,
 } from '../src/sim/realm_racers_spline';
+import { REALM_RACERS_VEHICLE_KEY } from '../src/sim/social/realm_racers';
+import { TICK_RATE } from '../src/sim/types';
 
 const track = realmRacersTrack(GARDEN_CIRCUIT);
 const gates = realmRacersGates(GARDEN_CIRCUIT);
@@ -147,6 +153,48 @@ describe('Realm Racers recovery gates', () => {
         gate,
       ),
     ).toBeNull();
+  });
+
+  it('still detects a crossing at the fastest displacement a race can produce', () => {
+    // Nitro forward speed with an oil-raised slip ceiling is the fastest a
+    // machine legally moves in one tick. The plausibility cap must sit ABOVE
+    // it, or every gate crossed in that state is silently missed and the
+    // recovery anchor goes a whole lap stale.
+    const profile = vehicleProfile(REALM_RACERS_VEHICLE_KEY);
+    const perTick =
+      Math.hypot(
+        profile.maxSpeed * REALM_RACERS_NITRO_SPEED_MULT,
+        profile.maxSlip * REALM_RACERS_SLICK_SLIP_CAP,
+      ) / TICK_RATE;
+    expect(perTick).toBeGreaterThan(4); // the old cap, kept as the regression witness
+    const gate = gates[3];
+    const half = perTick / 2;
+    const crossing = rallyGateCrossingFraction(
+      { x: gate.x - gate.dirX * half, z: gate.z - gate.dirZ * half },
+      { x: gate.x + gate.dirX * half, z: gate.z + gate.dirZ * half },
+      gate,
+    );
+    expect(crossing).not.toBeNull();
+  });
+
+  it('covers the whole legal racing surface with the crossing band', () => {
+    // The verge and the run-off are legitimate road: a racer shoved wide on a
+    // straight still crosses the gate plane there, and missing it leaves no
+    // later gate to resync on. The band must reach at least as far as the
+    // surface the referee treats as on-track.
+    const gate = gates[3];
+    const surfaceEdge =
+      track.halfWidthAt(gate.s) + REALM_RACERS_VERGE_MARGIN + REALM_RACERS_RUNOFF_WIDTH;
+    const normalX = -gate.dirZ;
+    const normalZ = gate.dirX;
+    const wide = surfaceEdge - 0.25;
+    expect(
+      rallyGateCrossingFraction(
+        { x: gate.x - gate.dirX + normalX * wide, z: gate.z - gate.dirZ + normalZ * wide },
+        { x: gate.x + gate.dirX + normalX * wide, z: gate.z + gate.dirZ + normalZ * wide },
+        gate,
+      ),
+    ).not.toBeNull();
   });
 });
 

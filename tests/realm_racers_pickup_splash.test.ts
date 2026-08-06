@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { RallyPickupEffect } from '../src/sim/realm_racers_pickup_effects';
+import { t } from '../src/ui/i18n';
+import { makeWriterFacet } from '../src/ui/painter_host';
+import { RealmRacersPickupSplash } from '../src/ui/realm_racers_pickup_splash_controller';
 import {
   RALLY_SPLASH_HOLD_MS,
   RALLY_SPLASH_IN_MS,
@@ -8,6 +11,7 @@ import {
   rallyPickupSplashView,
   rallySplashPhaseAt,
 } from '../src/ui/realm_racers_pickup_splash_view';
+import { FakeDocument, type FakeElement } from './helpers/fake_dom';
 
 const EFFECTS: readonly RallyPickupEffect[] = ['charge', 'nitro', 'ward', 'slick'];
 
@@ -80,5 +84,82 @@ describe('the pickup splash view', () => {
     // as the beginning rather than as finished, so a splash can never be born
     // already over.
     expect(rallySplashPhaseAt(-50)).toBe('in');
+  });
+});
+
+// The controller, over the reusable hand-rolled fake DOM (the Node-env idiom
+// for controller suites, tests/CLAUDE.md): the module reaches `document` only
+// to mint its own subtree, so a FakeDocument stub on globalThis is the whole
+// host it needs, and the injected schedule/cancel pair means no timers run.
+describe('the pickup splash controller', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'document');
+  });
+
+  function controllerHarness() {
+    const doc = new FakeDocument();
+    (globalThis as { document?: unknown }).document = doc;
+    const layer = doc.createElement('div');
+    const noop = (): void => {};
+    const scheduled: Array<{ callback: () => void; delayMs: number }> = [];
+    const cancelled: number[] = [];
+    const splash = new RealmRacersPickupSplash({
+      layer: () => layer as unknown as HTMLElement,
+      writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
+      iconUrl: (icon) => `icon:${icon.kind}:${icon.id}`,
+      schedule: (callback, delayMs) => {
+        scheduled.push({ callback, delayMs });
+        return scheduled.length;
+      },
+      cancel: (handle) => {
+        cancelled.push(handle);
+      },
+    });
+    const root = (): FakeElement | undefined => layer.children[0];
+    return { splash, layer, root, scheduled, cancelled };
+  }
+
+  it('shows what a box gave and arms one take-down timer for the splash life', () => {
+    const h = controllerHarness();
+    h.splash.show('charge');
+    const root = h.root();
+    expect(root).toBeDefined();
+    expect(root?.style.display).toBe('flex');
+    expect(root?.children[1]?.textContent).toBe(t('hudChrome.rally.pickupCharge'));
+    expect(h.scheduled).toHaveLength(1);
+    expect(h.scheduled[0].delayMs).toBe(RALLY_SPLASH_LIFE_MS);
+  });
+
+  it('clear() takes it down at once and cancels the pending timer', () => {
+    // The two callers this wires: a race ending under a splash (the RealmRacersUi
+    // falling match edge) and a locale flip (the Hud language fan-out), both of
+    // which must not leave a stale splash on its own clock.
+    const h = controllerHarness();
+    h.splash.show('nitro');
+    expect(h.root()?.style.display).toBe('flex');
+    h.splash.clear();
+    expect(h.root()?.style.display).toBe('none');
+    expect(h.cancelled).toEqual([1]);
+    // The timer handle was released with the cancel: a second clear has
+    // nothing left to cancel and stays idempotent.
+    h.splash.clear();
+    expect(h.cancelled).toEqual([1]);
+  });
+
+  it('is safe to clear before anything was ever shown', () => {
+    const h = controllerHarness();
+    expect(() => h.splash.clear()).not.toThrow();
+    expect(h.cancelled).toEqual([]);
+    expect(h.root()).toBeUndefined();
+  });
+
+  it('rises again for the next box after being cleared', () => {
+    const h = controllerHarness();
+    h.splash.show('ward');
+    h.splash.clear();
+    h.splash.show('slick');
+    expect(h.root()?.style.display).toBe('flex');
+    expect(h.root()?.children[1]?.textContent).toBe(t('hudChrome.rally.pickupSlick'));
+    expect(h.scheduled).toHaveLength(2);
   });
 });

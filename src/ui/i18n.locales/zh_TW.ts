@@ -10549,6 +10549,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.forfeit': '退出比賽',
   'hudChrome.rally.forfeitConfirm': '確認退出',
   'hudChrome.rally.waiting': '{count} 名車手正在等待發車格。',
+  'hudChrome.rally.queueNeedsRealm': '排位賽需要線上伺服器上的其他車手。請先跑一圈練習賽。',
   'hudChrome.rally.queued': '佇列位置 {position}/{count}。正在準備你的坦克。',
   'hudChrome.rally.racingAgainst': '你的比賽已經開始。你目前名次 {position}/{total}。',
   'hudChrome.rally.practice': '試車',

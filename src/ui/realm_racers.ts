@@ -8,9 +8,9 @@ import { esc } from './esc';
 import { formatNumber, type TranslationKey, t } from './i18n';
 import type { PainterHostWriters } from './painter_host';
 import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
-import { RealmRacersPodium } from './realm_racers_podium';
+import { RealmRacersPodium } from './realm_racers_podium_painter';
 import { buildRealmRacersPodiumView } from './realm_racers_podium_view';
-import { RealmRacersStandingsPanel } from './realm_racers_standings_panel';
+import { RealmRacersStandingsPanel } from './realm_racers_standings_painter';
 import {
   buildRealmRacersStandingsView,
   type RealmRacersStandingsView,
@@ -91,6 +91,12 @@ export interface RealmRacersDeps {
    * same way `countdownTick` is: this module never imports `Hud`.
    */
   showBanner(text: string): void;
+  /**
+   * Takes the pickup splash down at once. This module owns the edge (it is the
+   * one that knows when the race view disappears), the HUD owns the splash, so
+   * the teardown is injected the same way the banner is.
+   */
+  clearPickupSplash(): void;
   writers: PainterHostWriters;
 }
 
@@ -213,6 +219,9 @@ export class RealmRacersUi {
         this.deps.showBanner(realmRacersCircuitName(match.circuitId) ?? match.circuitId);
       }
     }
+    // The falling edge: the race view is gone, so a splash announcing a pickup
+    // from it must not outlive it (a forfeit can end a race under one).
+    if (!inMatch && this.wasInMatch) this.deps.clearPickupSplash();
     this.wasInMatch = inMatch;
     const countdown = info.match?.phase === 'countdown' ? info.match.countdown : 0;
     if (countdown > 0 && countdown !== this.lastCountdown) this.deps.countdownTick();
@@ -356,11 +365,15 @@ export class RealmRacersUi {
    * (including while queued, which the sim treats as "race now" and takes the
    * player out of the queue for), because a player alone on the realm should
    * never have to find out the hard way that nobody else is waiting.
+   *
+   * Disabled when the realm has handed out every practice copy, the same
+   * availability the setup screen's Play control honors: a button that opens a
+   * screen whose only action is refused would be a two-click way to learn "no".
    */
-  private practiceButtonHtml(): string {
+  private practiceButtonHtml(available: boolean): string {
     return (
       `<div class="rally-or"><span>${esc(t('hudChrome.rally.orRace'))}</span></div>` +
-      `<button type="button" class="btn rally-cta rally-practice-cta" data-rally-practice-open>` +
+      `<button type="button" class="btn rally-cta rally-practice-cta" data-rally-practice-open${available ? '' : ' disabled'}>` +
       `${esc(t('hudChrome.rally.practice'))}</button>`
     );
   }
@@ -384,15 +397,22 @@ export class RealmRacersUi {
       `<span>${esc(t('hudChrome.rally.howToPlay'))}</span></div>`;
     let action = '';
     if (view.kind === 'idle') {
+      // A queue that can never seat a race (the offline world) keeps its button
+      // visible but disabled, with one line saying why and where to race
+      // instead: hiding it would read as a missing feature, and an enabled
+      // button would hold the player in a wait that cannot end.
+      const status = view.queueViable
+        ? `<div class="rally-status">${esc(t('hudChrome.rally.waiting', { count: num(view.queueSize) }))}</div>`
+        : `<div class="rally-status">${esc(t('hudChrome.rally.queueNeedsRealm'))}</div>`;
       action =
-        `<div class="rally-status">${esc(t('hudChrome.rally.waiting', { count: num(view.queueSize) }))}</div>` +
-        `<button type="button" class="btn btn-primary rally-cta" data-rally-join>${esc(t('hudChrome.rally.join'))}</button>` +
-        this.practiceButtonHtml();
+        status +
+        `<button type="button" class="btn btn-primary rally-cta" data-rally-join${view.queueViable ? '' : ' disabled'}>${esc(t('hudChrome.rally.join'))}</button>` +
+        this.practiceButtonHtml(view.practiceAvailable);
     } else if (view.kind === 'queued') {
       action =
         `<div class="rally-status queued">${esc(t('hudChrome.rally.queued', { position: num(view.position), count: num(view.queueSize) }))}</div>` +
         `<button type="button" class="btn rally-cta leave" data-rally-leave>${esc(t('hudChrome.rally.leave'))}</button>` +
-        this.practiceButtonHtml();
+        this.practiceButtonHtml(view.practiceAvailable);
     } else {
       const placing = { position: num(view.position), total: num(view.gridSize) };
       const live = view.practice

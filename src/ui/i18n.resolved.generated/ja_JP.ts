@@ -1196,6 +1196,7 @@ export const ja_JP: EnTranslations = {
       "forfeit": "レースを棄権",
       "forfeitConfirm": "棄権を確認",
       "waiting": "{count}人のパイロットがグリッドを待っています。",
+      "queueNeedsRealm": "キューでのレースにはオンラインサーバーの他のパイロットが必要です。代わりに練習走行をお試しください。",
       "queued": "待機位置 {position}/{count}。戦車を準備しています。",
       "racingAgainst": "レースが始まりました。現在{total}台中{position}位です。",
       "practice": "練習",

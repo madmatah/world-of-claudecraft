@@ -7859,6 +7859,7 @@ export type TranslationKeyFlat =
   | 'hudChrome.rally.promiseCircuit'
   | 'hudChrome.rally.promiseRival'
   | 'hudChrome.rally.promiseSlide'
+  | 'hudChrome.rally.queueNeedsRealm'
   | 'hudChrome.rally.queued'
   | 'hudChrome.rally.racingAgainst'
   | 'hudChrome.rally.racingAgainstBot'

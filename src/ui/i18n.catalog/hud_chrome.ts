@@ -1064,6 +1064,9 @@ export const hudChromeStrings = {
     // both, so a centred stats row never shifts when the state flips.
     forfeitConfirm: 'Confirm forfeit',
     waiting: '{count} pilots waiting for a grid.',
+    // Shown instead of the waiting line where the queue can never seat a race
+    // (the offline world): the join button beside it is disabled.
+    queueNeedsRealm: 'Queued races need other pilots on a live realm. Take a practice lap instead.',
     queued: 'Queue position {position} of {count}. Your machine is being readied.',
     // Every race is a full grid, so the window reports where you sit in the
     // field rather than naming one rival.

@@ -134,11 +134,7 @@ function placeOnLap(sim: Sim, pid: number, fraction: number): void {
   progress.lastS = point.s;
   progress.trackIndex = Math.round(point.s / track.step);
   progress.distanceSinceWrap = point.s;
-  progress.travelled = travelledFromArc(progress.lap, point.s, track.length);
-  // Every caller stays in the FIRST half of lap one on purpose: past halfway,
-  // `travelledFromArc` reads a lap-one racer as sitting BEHIND the start line
-  // (the grid convention) and hands back a negative key, which would reorder the
-  // field these cases are about.
+  progress.travelled = travelledFromArc(progress.lap, point.s, track.length, point.s);
   expect(progress.travelled).toBeGreaterThanOrEqual(0);
 }
 
@@ -740,8 +736,14 @@ describe('the ward', () => {
       expect(progress.heldEffect).toBeNull();
       // And the machine's ceiling comes back down with it: the surface pass
       // stops running once the phase leaves `racing`, so a nitro live at the
-      // flag would otherwise stand through the whole tableau.
-      expect(required(sim.entities.get(pid)?.drive, 'drive').speedCap).toBe(1);
+      // flag would otherwise stand through the whole tableau. A pilot whose
+      // forfeit landed AFTER the flag was sent straight home instead, so they
+      // have no machine at all.
+      if (progress.returned) {
+        expect(sim.entities.get(pid)?.drive).toBeNull();
+      } else {
+        expect(required(sim.entities.get(pid)?.drive, 'drive').speedCap).toBe(1);
+      }
     }
   });
 });

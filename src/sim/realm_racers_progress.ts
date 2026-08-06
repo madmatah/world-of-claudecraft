@@ -28,9 +28,23 @@ export function forwardArcDelta(prevS: number, s: number, lapLength: number): nu
   return delta;
 }
 
-export function travelledFromArc(lap: number, s: number, lapLength: number): number {
+export function travelledFromArc(
+  lap: number,
+  s: number,
+  lapLength: number,
+  distanceSinceWrap: number,
+): number {
   const wrapped = wrapS(s, lapLength);
-  return (lap - 1) * lapLength + wrapped - (lap === 1 && wrapped > lapLength / 2 ? lapLength : 0);
+  // The negative arm exists for the GRID: lap one starts a few yards behind the
+  // line, so a second-half arc there means "behind the start", not "nearly
+  // home". The arc alone cannot tell that zone from a racer who honestly DROVE
+  // into the second half while the lap counter still reads one (the first line
+  // crossing is deliberately lap-neutral), and reading the latter as negative
+  // inverted the live standings between the two halves of every first lap. The
+  // odometer disambiguates: a machine that has covered less than half a lap of
+  // ground and sits in the second half of the arc can only be behind the line.
+  const behindTheLine = lap === 1 && wrapped > lapLength / 2 && distanceSinceWrap < lapLength / 2;
+  return (lap - 1) * lapLength + wrapped - (behindTheLine ? lapLength : 0);
 }
 
 export function stepRealmRacersProgress(input: RealmRacersProgressInput): RealmRacersProgressStep {
@@ -46,7 +60,7 @@ export function stepRealmRacersProgress(input: RealmRacersProgressInput): RealmR
   return {
     lap,
     lastS: s,
-    travelled: travelledFromArc(lap, s, input.lapLength),
+    travelled: travelledFromArc(lap, s, input.lapLength, distanceSinceWrap),
     distanceSinceWrap: wrapped ? 0 : distanceSinceWrap,
     wrapped,
     finished,

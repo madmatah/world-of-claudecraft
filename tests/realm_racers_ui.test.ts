@@ -92,12 +92,14 @@ function harness() {
     queueSize: 0,
     match: null,
     practiceAvailable: true,
+    queueViable: true,
   };
   const forfeitRealmRacers = vi.fn();
   const resetRealmRacersPosition = vi.fn();
   const startRealmRacersPractice = vi.fn();
   const countdownTick = vi.fn();
   const showBanner = vi.fn();
+  const clearPickupSplash = vi.fn();
   const touch = { value: false };
   const restoreFocus = vi.fn();
   const world = {
@@ -120,6 +122,7 @@ function harness() {
     isTouchHud: () => touch.value,
     countdownTick,
     showBanner,
+    clearPickupSplash,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
   });
   const forfeitButton = (): HTMLButtonElement | null =>
@@ -135,6 +138,7 @@ function harness() {
     resetRealmRacersPosition,
     countdownTick,
     showBanner,
+    clearPickupSplash,
     startRealmRacersPractice,
     forfeitButton,
     touch,
@@ -259,11 +263,17 @@ describe('Realm Racers practice setup screen', () => {
     expect(h.startRealmRacersPractice).not.toHaveBeenCalled();
   });
 
-  it('offers no Play button, and says why, when the realm has no copy left', () => {
+  it('offers no Play button, and says why, when the realm runs out mid-setup', () => {
+    // The front-screen button is disabled while nothing is available, so the
+    // one way to see this screen without a copy left is to be ON it when the
+    // last one goes out; availability rides the setup signature, so the flip
+    // repaints on its own.
     const h = harness();
-    h.info.practiceAvailable = false;
     h.ui.toggle();
     practiceButton(h.root)?.click();
+    expect(playButton(h.root)).not.toBeNull();
+    h.info.practiceAvailable = false;
+    h.ui.update();
     expect(playButton(h.root)).toBeNull();
     expect(h.root.textContent).toContain(t('hudChrome.rally.practiceUnavailable'));
   });
@@ -297,6 +307,54 @@ describe('Realm Racers practice setup screen', () => {
     h.info.queueSize = 1;
     h.ui.toggle();
     expect(practiceButton(h.root)).not.toBeNull();
+  });
+
+  it('disables the front-screen practice button when the realm has no copy left', () => {
+    // The setup screen's Play control already honors availability; the button
+    // that LEADS there honors the same flag, or it is a two-click way to
+    // learn "no".
+    const h = harness();
+    h.info.practiceAvailable = false;
+    h.ui.toggle();
+    const open = practiceButton(h.root);
+    expect(open).not.toBeNull();
+    expect(open?.disabled).toBe(true);
+    open?.click();
+    expect(tierButtons(h.root)).toHaveLength(0);
+    // A copy comes back: availability rides the window signature, so the
+    // button repaints enabled without anything else moving.
+    h.info.practiceAvailable = true;
+    h.ui.update();
+    expect(practiceButton(h.root)?.disabled).toBe(false);
+  });
+
+  it('disables practice for a queued player on the same availability', () => {
+    const h = harness();
+    h.info.queued = true;
+    h.info.queuePosition = 1;
+    h.info.queueSize = 2;
+    h.info.practiceAvailable = false;
+    h.ui.toggle();
+    expect(practiceButton(h.root)?.disabled).toBe(true);
+  });
+
+  it('disables the join button where the queue can never seat a race', () => {
+    // The offline world: no bot backfill and one human, so the queue would
+    // hold the player forever. The button stays visible but disabled, the
+    // status line says why, and practice stays the live path onto the circuit.
+    const h = harness();
+    h.info.queueViable = false;
+    h.ui.toggle();
+    const join = h.root.querySelector<HTMLButtonElement>('[data-rally-join]');
+    expect(join).not.toBeNull();
+    expect(join?.disabled).toBe(true);
+    expect(h.root.textContent).toContain(t('hudChrome.rally.queueNeedsRealm'));
+    expect(practiceButton(h.root)?.disabled).toBe(false);
+    // Viability rides the window signature, so an online mirror flipping it
+    // back repaints the button enabled without anything else moving.
+    h.info.queueViable = true;
+    h.ui.update();
+    expect(h.root.querySelector<HTMLButtonElement>('[data-rally-join]')?.disabled).toBe(false);
   });
 
   it('leaves the setup screen behind once the race starts', () => {
@@ -717,6 +775,28 @@ describe('Realm Racers window lifecycle', () => {
     h.info.match = match();
     h.ui.update();
     expect(h.ui.isOpen).toBe(false);
+  });
+
+  it('takes the pickup splash down on the frame the race view disappears', () => {
+    // A splash lives about a second on its own timer, and a forfeit can end a
+    // race under one: the falling match edge clears it so it cannot outlive
+    // the race that produced it.
+    const h = harness();
+    h.info.match = match({ phase: 'racing' });
+    h.ui.update();
+    expect(h.clearPickupSplash).not.toHaveBeenCalled();
+    h.info.match = null;
+    h.ui.update();
+    expect(h.clearPickupSplash).toHaveBeenCalledTimes(1);
+    // An edge, not a level: an idle frame must not re-clear forever.
+    h.ui.update();
+    expect(h.clearPickupSplash).toHaveBeenCalledTimes(1);
+    // And it re-arms for the next race.
+    h.info.match = match({ id: 9, phase: 'racing' });
+    h.ui.update();
+    h.info.match = null;
+    h.ui.update();
+    expect(h.clearPickupSplash).toHaveBeenCalledTimes(2);
   });
 });
 

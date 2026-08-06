@@ -1496,6 +1496,7 @@ export class ClientWorld implements IWorld {
     queueSize: 0,
     match: null,
     practiceAvailable: true,
+    queueViable: true,
   };
   private realmRacersKit: {
     abilityId: string;
@@ -3437,6 +3438,7 @@ export class ClientWorld implements IWorld {
           queueSize: 0,
           match: null,
           practiceAvailable: true,
+          queueViable: true,
         };
       if (s.honor !== undefined) this.honor = s.honor ?? 0;
       if (s.lhonor !== undefined) this.lifetimeHonor = s.lhonor ?? 0;

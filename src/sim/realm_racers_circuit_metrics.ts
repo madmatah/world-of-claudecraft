@@ -356,7 +356,6 @@ export interface RealmRacersCircuitMetrics {
    *  for (`turnRadius` is positive toward the LEFT normal), -1 clockwise. */
   winding: 1 | -1;
   tightestRadius: number;
-  tightestRadiusAtS: number;
   /** The corner that comes closest to folding its own road, and where. */
   minRadiusOverWidth: number;
   minRadiusOverWidthAtS: number;
@@ -399,15 +398,11 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
   const winding: 1 | -1 = turningDegrees < 0 ? -1 : 1;
 
   let tightestRadius = Number.POSITIVE_INFINITY;
-  let tightestRadiusAtS = 0;
   let minRadiusOverWidth = Number.POSITIVE_INFINITY;
   let minRadiusOverWidthAtS = 0;
   for (const sample of samples) {
     const radius = Math.abs(sample.turnRadius);
-    if (radius < tightestRadius) {
-      tightestRadius = radius;
-      tightestRadiusAtS = sample.s;
-    }
+    if (radius < tightestRadius) tightestRadius = radius;
     const ratio = radius / sample.halfWidth;
     if (ratio < minRadiusOverWidth) {
       minRadiusOverWidth = ratio;
@@ -847,7 +842,6 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     turningDegrees,
     winding,
     tightestRadius,
-    tightestRadiusAtS,
     minRadiusOverWidth,
     minRadiusOverWidthAtS,
     nearestApproach,

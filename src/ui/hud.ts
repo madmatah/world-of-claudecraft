@@ -553,7 +553,7 @@ import { type RaidLockoutI18n, raidLockoutPanelHtml } from './raid_lockout_view'
 import { RealmRacersUi } from './realm_racers';
 import { realmRacersPickupEffectText } from './realm_racers_pickup_i18n';
 import { RealmRacersPickupSplash } from './realm_racers_pickup_splash_controller';
-import type { RallyControlAction } from './realm_racers_view';
+import { rallyControlKeys } from './realm_racers_view';
 import { restView } from './rest_indicator';
 import { isTalentRowUnlockLevel } from './row_unlock_toast';
 import { localizeServerText } from './server_i18n';
@@ -4401,33 +4401,16 @@ export class Hud {
     // so the binding lookup is resolved here (the rally module never reaches
     // into the game layer's keybind profile) and the touch HUD is told to drop
     // the key column entirely.
-    controlKeys: (action) => this.rallyControlKeys(action),
+    controlKeys: (action) => rallyControlKeys(action, (bind) => this.keybinds.primaryLabel(bind)),
     isTouchHud: () => document.body.classList.contains('mobile-touch'),
     countdownTick: () => audio.realmRacersCountdownTick(),
     showBanner: (text) => this.showBanner(text),
+    // The race UI owns the match-end edge; the splash it takes down is this
+    // class's, so the teardown is injected like the banner and the audio cues.
+    clearPickupSplash: () => this.realmRacersSplash.clear(),
     writers: this.writerFacet,
     ...this.windowFocus('#realm-racers-window'),
   });
-
-  /**
-   * The bound keys behind one taught rally control. Steering is two bindings by
-   * nature; the rest resolve their primary and secondary slots, so a player who
-   * drives on the arrow keys is taught the arrow keys.
-   */
-  private rallyControlKeys(action: RallyControlAction): string[] {
-    const RALLY_CONTROL_BINDS: Record<RallyControlAction, string[]> = {
-      throttle: ['forward'],
-      brake: ['back'],
-      steer: ['turnLeft', 'turnRight'],
-      handbrake: ['jump'],
-    };
-    const labels: string[] = [];
-    for (const bind of RALLY_CONTROL_BINDS[action]) {
-      const label = this.keybinds.primaryLabel(bind);
-      if (label) labels.push(label);
-    }
-    return labels;
-  }
   // Card Duel window painter (card_duel_view.ts model + card_duel_window.ts
   // painter, the ValeCupWindow shape scaled down). The Card Master NPC's gossip
   // menu AND the persistent #mm-cardduel micromenu button (the sim allows
@@ -5783,6 +5766,10 @@ export class Hud {
     // sigs so the next render/update rebuilds with fresh t().
     this.valeCupWindow.relocalize();
     this.realmRacersUi.relocalize();
+    // The pickup splash is a moment of about a second whose label was resolved
+    // at show(); rather than re-resolve it mid-flight, a locale flip takes it
+    // down (its clear() documents exactly this caller).
+    this.realmRacersSplash.clear();
     this.vcupBetting.relocalize();
     this.vcupIndicator.relocalize();
     this.vcupMatchHud.relocalize();

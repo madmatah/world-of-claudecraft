@@ -1196,6 +1196,7 @@ export const zh_TW: EnTranslations = {
       "forfeit": "退出比賽",
       "forfeitConfirm": "確認退出",
       "waiting": "{count} 名車手正在等待發車格。",
+      "queueNeedsRealm": "排位賽需要線上伺服器上的其他車手。請先跑一圈練習賽。",
       "queued": "佇列位置 {position}/{count}。正在準備你的坦克。",
       "racingAgainst": "你的比賽已經開始。你目前名次 {position}/{total}。",
       "practice": "試車",

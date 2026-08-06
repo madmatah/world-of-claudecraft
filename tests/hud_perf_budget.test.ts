@@ -598,6 +598,25 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
     allow: { '.innerHTML': 1, '.setAttribute': 3, '.removeAttribute': 3 },
     reflowAllow: {},
   },
+  // The Realm Racers standings panel is a keyed pool (one row node per pid,
+  // held for the race, the auras_painter shape): each row's skeleton is minted
+  // ONCE in rowFor (.className + .innerHTML), the panel root takes its two
+  // ARIA attributes once at ensure(), and every repaint write (placing, name,
+  // lap, movement cues) is facet-routed behind the core's data signature.
+  {
+    file: 'realm_racers_standings_painter.ts',
+    allow: { '.className': 1, '.innerHTML': 1, '.setAttribute': 2 },
+    reflowAllow: {},
+  },
+  // The Realm Racers podium builds its text-free skeleton in ONE innerHTML
+  // write behind the classification signature (once per race END, never per
+  // frame) and takes its two ARIA attributes once at ensure(); the names, the
+  // times and the per-second return countdown are all facet-routed.
+  {
+    file: 'realm_racers_podium_painter.ts',
+    allow: { '.innerHTML': 1, '.setAttribute': 2 },
+    reflowAllow: {},
+  },
 ];
 
 // BUCKET 2 of 3: the src/ui painters that are NOT facet-routed because they draw to a 2D

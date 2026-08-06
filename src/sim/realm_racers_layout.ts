@@ -56,7 +56,16 @@ export const REALM_RACERS_ORIGIN = { x: 113_700, z: 0 } as const;
 export const REALM_RACERS_BAND_X_MIN = 113_400;
 export const REALM_RACERS_BAND_X_MAX = 114_100;
 
-export const REALM_RACERS_MAX_GATE_STEP = 4;
+/**
+ * The plausibility ceiling on a one-tick move the gate test will read as a
+ * crossing, yards. It exists to reject teleports (resets, shell reprojections),
+ * so it must sit ABOVE the fastest displacement a race can legally produce:
+ * nitro forward speed with an oil-raised slip ceiling is hypot(60 * 1.3,
+ * 14 * 2) / 20 = 4.15 a tick, and a contact shove can add to the same tick. At
+ * the old value of 4 every gate crossed in that state was silently missed, and
+ * with no resync path the recovery anchor went a whole lap stale.
+ */
+export const REALM_RACERS_MAX_GATE_STEP = 6;
 
 /**
  * Target distance between recovery anchors, yards. It is what decides how far a
@@ -93,10 +102,14 @@ export const REALM_RACERS_SAMPLE_STEP = 1.0;
 
 /**
  * How far a gate's crossing band reaches PAST the local road edge. The band
- * must always over-cover the road, or a racer hugging the outer edge crosses
- * the road without crossing the gate and silently misses a recovery anchor.
+ * must cover the legal racing surface (the verge margin plus the run-off,
+ * 0.75 + 3.5 below), or a racer shoved wide on a straight crosses the road
+ * without crossing the gate, and with no resync path the missed anchor stays
+ * stale until the racer laps back around. It must also stay STRICTLY inside
+ * the garden edge at that same 4.25, because a gate is something a racer
+ * crosses on drivable ground: 4.2 is the surface edge less five centimetres.
  */
-export const REALM_RACERS_GATE_MARGIN = 1.5;
+export const REALM_RACERS_GATE_MARGIN = 4.2;
 
 /** How far past the road edge a racer may run before any penalty bites. */
 export const REALM_RACERS_VERGE_MARGIN = 0.75;
@@ -309,11 +322,15 @@ export function realmRacersPublicLane(circuit: RealmRacersCircuit): number {
   return slot < 0 ? -1 : REALM_RACERS_LANES.length + slot;
 }
 
-/** Every private copy of the practice circuit, in lane order. */
+/** Every private copy of the practice circuit, in lane order. Computed once:
+ *  the lane table is import-time content (drafts never add practice lanes), and
+ *  this read sits on the 20 Hz self-wire path for every online player. */
+const PRACTICE_LANES: readonly RealmRacersLane[] = REALM_RACERS_LANES.filter(
+  (lane) => lane.practice && lane.circuit.id === REALM_RACERS_PRACTICE_CIRCUIT.id,
+);
+
 export function realmRacersPracticeLanes(): readonly RealmRacersLane[] {
-  return REALM_RACERS_LANES.filter(
-    (lane) => lane.practice && lane.circuit.id === REALM_RACERS_PRACTICE_CIRCUIT.id,
-  );
+  return PRACTICE_LANES;
 }
 
 /** The offset added to every geometry read on lane `lane`. Zero for lane 0, so

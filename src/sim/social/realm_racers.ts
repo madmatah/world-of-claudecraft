@@ -187,12 +187,6 @@ export interface RealmRacersSlowBand {
   dragMult: number;
 }
 
-/** The fraction of speed a band actually costs, which is what the anti-cut
- *  arithmetic is written in. */
-export function realmRacersSpeedLoss(band: RealmRacersSlowBand): number {
-  return 1 - band.speedMult;
-}
-
 /** One aura id for every band, so deepening the penalty re-tunes the aura in
  *  place instead of stacking a second slow on top of the first. */
 export const REALM_RACERS_OFF_TRACK_AURA = 'realm_racers_soft_verge';
@@ -611,11 +605,19 @@ export function realmRacersCircuitOf(match: RealmRacersMatch): RealmRacersCircui
 }
 
 /** A free private lane of the practice circuit, or -1 when every one is in use.
- *  The public lane is never handed out. */
+ *  The public lane is never handed out. Allocation-free on purpose: this sits
+ *  on the 20 Hz self-wire path for every online player, and both counts here
+ *  are a handful at most. */
 export function realmRacersFreePracticeSlot(ctx: SimContext): number {
-  const used = new Set(ctx.realmRacers.practices.map((m) => m.practice?.slot));
   for (const lane of realmRacersPracticeLanes()) {
-    if (!used.has(lane.index)) return lane.index;
+    let used = false;
+    for (const m of ctx.realmRacers.practices) {
+      if (m.practice?.slot === lane.index) {
+        used = true;
+        break;
+      }
+    }
+    if (!used) return lane.index;
   }
   return -1;
 }
@@ -708,7 +710,12 @@ function seedProgress(match: RealmRacersMatch, pid: number, e: Entity): void {
   const projection = reproject(match, pid, e);
   const lapLength = realmRacersTrack(realmRacersCircuitOf(match)).length;
   progress.lastS = projection.s;
-  progress.travelled = travelledFromArc(progress.lap, projection.s, lapLength);
+  progress.travelled = travelledFromArc(
+    progress.lap,
+    projection.s,
+    lapLength,
+    progress.distanceSinceWrap,
+  );
   progress.resetS = projection.s;
   progress.resetLap = progress.lap;
   progress.resetDistanceSinceWrap = progress.distanceSinceWrap;
@@ -1156,7 +1163,10 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   match.slicks.length = 0;
   for (const pid of match.pids) {
     const progress = match.progress.get(pid);
-    if (!progress) continue;
+    // A returned pilot is back on their class kit in the Evergarden (possibly
+    // seated in a NEWER race): sweeping them here would republish the old
+    // race's kit over whatever they hold now.
+    if (!progress || progress.returned) continue;
     progress.nitroUntilTick = 0;
     progress.slickGripUntilTick = 0;
     progress.slickContactUntilTick = 0;
@@ -1286,7 +1296,22 @@ function retireRacer(
   restoreImmediately: boolean,
 ): void {
   const progress = match.progress.get(pid);
-  if (!progress || progress.returned || progress.retiredTick !== null) return;
+  if (!progress || progress.returned) return;
+  if (progress.retiredTick !== null) {
+    // Already in their tableau. A disconnect inside the six-second window must
+    // still close the parenthesis before the leave save, or the save captures
+    // full pools, cleared cooldowns, and the loaned kit.
+    if (restoreImmediately) returnRacer(ctx, match, pid);
+    return;
+  }
+  if (match.phase === 'finished' || progress.finishedTick !== null) {
+    // The race is over for them, honorably: a banked crossing survives leaving.
+    // Re-marking them retired would reclassify a finisher as a quitter (handing
+    // the win to someone who never crossed) or restart a tableau they already
+    // had, so leaving now just takes them home.
+    returnRacer(ctx, match, pid);
+    return;
+  }
   progress.retiredTick = ctx.tickCount;
   progress.finishedTick = null;
   const drive = ctx.entities.get(pid)?.drive;
@@ -1374,7 +1399,12 @@ function resetRacerTo(
   progress.lap = target.lap;
   progress.lastS = anchor.s;
   progress.distanceSinceWrap = target.distanceSinceWrap;
-  progress.travelled = travelledFromArc(target.lap, anchor.s, track.length);
+  progress.travelled = travelledFromArc(
+    target.lap,
+    anchor.s,
+    track.length,
+    target.distanceSinceWrap,
+  );
   progress.trackIndex = track.project(anchor.x, anchor.z, progress.trackIndex).index;
   progress.stuckTicks = 0;
   progress.wrongWayTicks = 0;
@@ -1783,7 +1813,10 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
   for (const pid of match.pids) {
     const racer = ctx.entities.get(pid);
     const progress = match.progress.get(pid);
-    if (!racer || !progress) continue;
+    // A returned pilot's body is back in the Evergarden: reprojecting it onto
+    // the circuit copy reads as deep garden and would pin the off-track slow on
+    // a player who is not racing.
+    if (!racer || !progress || progress.returned) continue;
     const projection = reproject(match, pid, racer);
     const band = realmRacersOffTrackBand(circuit, projection);
     // Deed-tracking only: the soft verge is a normal racing-line overshoot
@@ -1804,7 +1837,15 @@ function tickTrackLimits(ctx: SimContext, match: RealmRacersMatch): void {
     }
 
     const resetLocked = ctx.tickCount < progress.resetLockedUntilTick;
-    if (band && !resetLocked && Math.abs(racer.drive?.speed ?? 0) <= REALM_RACERS_STUCK_SPEED) {
+    // Still-running only: the recovery refuses a finished pilot anyway, and the
+    // `continue` it exits on would skip the surface pass below every tick,
+    // freezing a parked finisher's grip and letting their band aura go stale.
+    if (
+      band &&
+      !resetLocked &&
+      realmRacersStillRunning(match, pid) &&
+      Math.abs(racer.drive?.speed ?? 0) <= REALM_RACERS_STUCK_SPEED
+    ) {
       progress.stuckTicks++;
       if (progress.stuckTicks >= REALM_RACERS_STUCK_TICKS) {
         resetRacerToRecoveryAnchor(ctx, match, pid, false);
@@ -2378,7 +2419,14 @@ function tickSlicks(ctx: SimContext, match: RealmRacersMatch): void {
 function pruneQueue(ctx: SimContext): void {
   const seen = new Set<number>();
   ctx.realmRacers.queue = ctx.realmRacers.queue.filter((pid) => {
-    if (seen.has(pid) || !eligible(ctx, pid)) return false;
+    if (seen.has(pid)) return false;
+    if (!eligible(ctx, pid)) {
+      // An eviction is announced like a voluntary leave: the queued/unqueued
+      // event pair stays balanced, and a player who died or started a duel is
+      // told the queue let them go rather than silently forgetting them.
+      ctx.emit({ type: 'realmRacersUnqueued', pid });
+      return false;
+    }
     seen.add(pid);
     return true;
   });
@@ -2677,6 +2725,11 @@ export function realmRacersInfoFor(ctx: SimContext, pid: number): RealmRacersInf
     // `>= 0`, never truthiness: lane 0 is a real private copy the moment the
     // practice circuit stops serving competition and loses its public lane.
     practiceAvailable: match === null && realmRacersFreePracticeSlot(ctx) >= 0,
+    // The queue can seat a race when house pilots backfill it (the online
+    // server always enables that) or enough humans are connected to fill a
+    // grid without them. Offline neither holds, and a queue that can never
+    // fill is an affordance that lies.
+    queueViable: ctx.cfg.realmRacersBackfill || ctx.players.size >= REALM_RACERS_GRID_SIZE,
   };
 }
 
@@ -2690,8 +2743,12 @@ export function realmRacersMovementLocked(ctx: SimContext, pid: number): boolean
   if (!match) return false;
   if (match.phase !== 'racing') return true;
   const progress = match.progress.get(pid);
+  // matchSeats already refuses a pid with no progress row, so this arm never
+  // resolves on a missing entry; the explicit check keeps `undefined !== null`
+  // from reading as a permanent lock if that ever changes.
+  if (!progress) return false;
   // A pilot who quit is held where they stopped until the Society returns them,
   // even though the race around them is still live.
-  if (progress?.retiredTick !== null) return true;
-  return ctx.tickCount < (progress?.resetLockedUntilTick ?? 0);
+  if (progress.retiredTick !== null) return true;
+  return ctx.tickCount < progress.resetLockedUntilTick;
 }

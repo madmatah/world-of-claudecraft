@@ -11220,6 +11220,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.forfeit': 'Сойти с гонки',
   'hudChrome.rally.forfeitConfirm': 'Подтвердить',
   'hudChrome.rally.waiting': 'Пилотов в ожидании стартовой решётки: {count}.',
+  'hudChrome.rally.queueNeedsRealm': 'Для гонок из очереди нужны другие пилоты на сетевом сервере. Вместо этого пройдите тренировочный круг.',
   'hudChrome.rally.queued': 'Позиция в очереди: {position} из {count}. Ваш танк готовят.',
   'hudChrome.rally.racingAgainst': 'Гонка началась. Вы идёте {position} из {total}.',
   'hudChrome.rally.practice': 'Тренировка',

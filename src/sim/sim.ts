@@ -3552,6 +3552,8 @@ export class Sim {
     // before the leave save (vcupResolveDesertion is a public delegate).
     valeCupMod.vcupDequeue(this.ctx, pid);
     valeCupMod.vcupResolveDesertion(this.ctx, pid);
+    // Idempotent: preparePlayerLeave above already forfeited the Rally; this is
+    // the same defensive second pass the trade cancel below takes.
     realmRacersMod.realmRacersForfeit(this.ctx, pid, true);
     this.party.partyInvites.delete(pid);
     this.tradeInvites.delete(pid);

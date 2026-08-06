@@ -11039,6 +11039,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.forfeit': '경기 포기',
   'hudChrome.rally.forfeitConfirm': '포기 확인',
   'hudChrome.rally.waiting': '조종사 {count}명이 출발 그리드를 기다리고 있습니다.',
+  'hudChrome.rally.queueNeedsRealm':
+    '대기열 경주에는 온라인 서버의 다른 조종사가 필요합니다. 대신 연습 주행을 해 보세요.',
   'hudChrome.rally.queued': '대기 순번 {position}/{count}. 전차를 준비하고 있습니다.',
   'hudChrome.rally.racingAgainst': '경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.',
   'hudChrome.rally.practice': '연습',

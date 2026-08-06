@@ -111,9 +111,46 @@ describe('Realm Racers arc progress', () => {
   });
 
   it('ranks racers by travelled arc without checkpoint state', () => {
-    expect(travelledFromArc(1, 95, L)).toBe(-5);
-    expect(travelledFromArc(1, 5, L)).toBe(5);
-    expect(travelledFromArc(2, 5, L)).toBe(105);
+    // The grid zone: barely any ground covered, second-half arc = behind the line.
+    expect(travelledFromArc(1, 95, L, 0)).toBe(-5);
+    expect(travelledFromArc(1, 5, L, 5)).toBe(5);
+    expect(travelledFromArc(2, 5, L, 5)).toBe(105);
+  });
+
+  it('does not read a racer who DROVE into the second half of lap one as behind the line', () => {
+    // The lap counter deliberately stays at one through the whole first loop
+    // (the grid crossing is lap-neutral), so the arc alone cannot tell the
+    // grid zone from an honest second-half racer. The odometer can: a machine
+    // that covered most of a lap of ground did not reverse there.
+    expect(travelledFromArc(1, 70, L, 77)).toBe(70);
+    // And the honest racer outranks a first-half rival, not the other way round.
+    expect(travelledFromArc(1, 70, L, 77)).toBeGreaterThan(travelledFromArc(1, 30, L, 37));
+  });
+
+  it('keeps travelled monotone for a racer driving honestly from the grid', () => {
+    // Step-driven through the whole first lap from 7 yd behind the line, the
+    // ranking key must never fall: a drop of a full lap length between two
+    // ticks is what inverted the live standings at halfway.
+    let lap = 1;
+    let lastS = L - 7;
+    let distanceSinceWrap = 0;
+    let previous = Number.NEGATIVE_INFINITY;
+    for (let driven = 5; driven <= L + 20; driven += 5) {
+      const s = (L - 7 + driven) % L;
+      const step = stepRealmRacersProgress({
+        lap,
+        lastS,
+        s,
+        distanceSinceWrap,
+        lapLength: L,
+        totalLaps: 3,
+      });
+      expect(step.travelled, `after ${driven} yd`).toBeGreaterThan(previous);
+      previous = step.travelled;
+      lap = step.lap;
+      lastS = step.lastS;
+      distanceSinceWrap = step.distanceSinceWrap;
+    }
   });
 
   it('advances a shell-thrown racer projected outside the old gate band', () => {

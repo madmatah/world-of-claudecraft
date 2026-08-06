@@ -1463,8 +1463,6 @@ const UI_DOM_MODULES = [
   'src/ui/form_draft.ts',
   'src/ui/realm_racers.ts',
   'src/ui/realm_racers_pickup_splash_controller.ts',
-  'src/ui/realm_racers_standings_panel.ts',
-  'src/ui/realm_racers_podium.ts',
   'src/ui/gather_node_tooltip_controller.ts',
   'src/ui/gpu_notice_toast.ts',
   'src/ui/guild_bank_log_window.ts',

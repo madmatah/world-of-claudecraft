@@ -424,7 +424,18 @@ describe('Realm Racers track limits in a live race', () => {
     const track = realmRacersTrack(RACE_CIRCUIT);
     const progress = required(match.progress.get(a), 'progress');
     const cut = findCut(40);
-    const exit = startFrom(sim, match, a, track.samples[cut.from].s);
+    // Advance the ordered anchor for real before the cut: DRIVE across the
+    // start line, so `resetS` sits at gate 0 by an honest crossing. The old
+    // fixture parked the machine exactly ON the gate plane and the anchor
+    // advance rested on a 1e-13 floating-point coincidence that flipped with
+    // the gate band's width.
+    const approach = onLane(match, track.length - 2);
+    parkOffRoad(sim, match, a, approach.x, approach.z);
+    const past = onLane(match, 2);
+    glide(sim, a, past.x, past.z);
+    expect(progress.resetS).toBe(0);
+    // Start the cut clear of the gate plane, not on it.
+    const exit = startFrom(sim, match, a, track.samples[Math.max(cut.from, 3)].s);
     const lapBefore = progress.lap;
     const target = onLane(match, track.samples[cut.to].s);
 

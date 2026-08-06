@@ -1196,6 +1196,7 @@ export const ru_RU: EnTranslations = {
       "forfeit": "Сойти с гонки",
       "forfeitConfirm": "Подтвердить",
       "waiting": "Пилотов в ожидании стартовой решётки: {count}.",
+      "queueNeedsRealm": "Для гонок из очереди нужны другие пилоты на сетевом сервере. Вместо этого пройдите тренировочный круг.",
       "queued": "Позиция в очереди: {position} из {count}. Ваш танк готовят.",
       "racingAgainst": "Гонка началась. Вы идёте {position} из {total}.",
       "practice": "Тренировка",

@@ -1,8 +1,13 @@
 // The pure core behind the race's live leaderboard panel.
+//
+// The core returns ONE reused container + row slots mutated in place per call
+// (the allocation-light per-frame contract), so the signature tests below
+// capture the sig STRING per build rather than holding two object handles.
 
 import { describe, expect, it } from 'vitest';
 import { buildRealmRacersStandingsView } from '../src/ui/realm_racers_standings_view';
 import type { RealmRacersInfo } from '../src/world_api';
+import { assertAllocationStable } from './util/alloc_probe';
 
 type Match = NonNullable<RealmRacersInfo['match']>;
 type Racer = Match['standings'][number];
@@ -97,12 +102,12 @@ describe('Realm Racers standings core', () => {
   });
 
   it('moves its signature on everything it draws, and on nothing else', () => {
-    const base = buildRealmRacersStandingsView(match(field()));
-    expect(buildRealmRacersStandingsView(match(field())).sig).toBe(base.sig);
+    const baseSig = buildRealmRacersStandingsView(match(field())).sig;
+    expect(buildRealmRacersStandingsView(match(field())).sig).toBe(baseSig);
     // Speed and the elapsed clock move every frame and are not on this panel,
     // so they may never rebuild it.
     expect(buildRealmRacersStandingsView({ ...match(field()), speed: 51, elapsed: 62 }).sig).toBe(
-      base.sig,
+      baseSig,
     );
 
     // A pass IS structure: the rows really do swap.
@@ -112,15 +117,45 @@ describe('Realm Racers standings core', () => {
       field()[2],
       field()[3],
     ];
-    expect(buildRealmRacersStandingsView(match(swapped)).sig).not.toBe(base.sig);
+    expect(buildRealmRacersStandingsView(match(swapped)).sig).not.toBe(baseSig);
     // So is a lap ticking over, a pilot pulling off, and a pilot crossing.
     const lapped = field().map((row) => (row.pid === 4 ? { ...row, lap: 2 } : row));
-    expect(buildRealmRacersStandingsView(match(lapped)).sig).not.toBe(base.sig);
+    expect(buildRealmRacersStandingsView(match(lapped)).sig).not.toBe(baseSig);
     const retired = field().map((row) => (row.pid === 4 ? { ...row, retired: true } : row));
-    expect(buildRealmRacersStandingsView(match(retired)).sig).not.toBe(base.sig);
+    expect(buildRealmRacersStandingsView(match(retired)).sig).not.toBe(baseSig);
     const finished = field().map((row) => (row.pid === 2 ? { ...row, finished: true } : row));
-    expect(buildRealmRacersStandingsView(match(finished)).sig).not.toBe(base.sig);
+    expect(buildRealmRacersStandingsView(match(finished)).sig).not.toBe(baseSig);
     // And a different race is a different panel outright.
-    expect(buildRealmRacersStandingsView({ ...match(field()), id: 8 }).sig).not.toBe(base.sig);
+    expect(buildRealmRacersStandingsView({ ...match(field()), id: 8 }).sig).not.toBe(baseSig);
+  });
+
+  it('reuses its container and every row slot each frame (no per-frame garbage)', () => {
+    // Built once per frame for the whole race, so the container, the rows array
+    // and each row object must keep their identity across builds
+    // (tests/util/alloc_probe.ts is the canonical reused-reference proxy).
+    const racing = match(field());
+    expect(() => {
+      assertAllocationStable(
+        () => buildRealmRacersStandingsView(racing),
+        64,
+        'standings view container',
+      );
+      assertAllocationStable(
+        () => buildRealmRacersStandingsView(racing).rows,
+        64,
+        'standings view rows',
+      );
+    }).not.toThrow();
+  });
+
+  it('shrinks and regrows its rows without minting new slots', () => {
+    // A race ends (the container empties) and another starts: the pool keeps
+    // the old slot objects and reuses them rather than allocating a new grid.
+    const racing = match(field());
+    const before = [...buildRealmRacersStandingsView(racing).rows];
+    expect(buildRealmRacersStandingsView(null).rows).toHaveLength(0);
+    const after = buildRealmRacersStandingsView(racing).rows;
+    expect(after).toHaveLength(before.length);
+    for (const [i, row] of before.entries()) expect(after[i]).toBe(row);
   });
 });

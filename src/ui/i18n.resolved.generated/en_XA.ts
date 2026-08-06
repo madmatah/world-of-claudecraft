@@ -1196,6 +1196,7 @@ export const en_XA: EnTranslations = {
       "forfeit": "[Ƒóŕƒéíţ Ŕáçé]",
       "forfeitConfirm": "[Çóñƒíŕɱ ƒóŕƒéíţ]",
       "waiting": "[{count} þíļóţš ŵáíţíñĝ ƒóŕ á ĝŕíð.]",
+      "queueNeedsRealm": "[Ɋúéúéð ŕáçéš ñééð óţĥéŕ þíļóţš óñ á ļíʋé ŕéáļɱ. Ţáķé á þŕáçţíçé ļáþ íñšţéáð.]",
       "queued": "[Ɋúéúé þóšíţíóñ {position} óƒ {count}. Ýóúŕ ɱáçĥíñé íš ƀéíñĝ ŕéáðíéð.]",
       "racingAgainst": "[Ýóúŕ ŕáçé íš úñðéŕŵáý. Ýóú áŕé ŕúññíñĝ {position} óƒ {total}.]",
       "practice": "[Þŕáçţíçé]",

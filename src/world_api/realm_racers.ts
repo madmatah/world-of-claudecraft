@@ -152,6 +152,13 @@ export interface RealmRacersInfo {
    * copy it has.
    */
   practiceAvailable: boolean;
+  /**
+   * Whether joining the queue can ever seat a race here: house pilots may
+   * backfill the grid, or enough humans are connected to fill it. False in the
+   * offline world, where the queue would hold a player forever and Practice is
+   * the way onto the circuit; the window disables the join affordance on it.
+   */
+  queueViable: boolean;
 }
 
 export interface IWorldRealmRacers {

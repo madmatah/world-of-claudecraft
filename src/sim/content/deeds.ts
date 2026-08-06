@@ -2408,7 +2408,7 @@ export const DEEDS: Record<string, DeedDef> = {
   pvp_rr_first_race: {
     id: 'pvp_rr_first_race',
     name: 'Wheels on the Line',
-    desc: 'See out a full Realm Racers heat at the Evergarden circuit, placing or not.',
+    desc: 'See out a full rated Realm Racers heat, placing or not.',
     category: 'pvp',
     renown: 5,
     trigger: { kind: 'manual' },

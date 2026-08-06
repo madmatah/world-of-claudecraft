@@ -403,7 +403,6 @@ const baseEnTable = {
   // the mown verge just off the racing surface, then the garden beyond it.
   'aura.rallySoftVerge': 'Soft Verge',
   'aura.rallyGardenLawn': 'Garden Lawn',
-  'aura.rallyWading': 'Wading',
   // The debuff a Ground Blast hit leaves behind. Its aura is not in ABILITIES,
   // so the HUD row resolves its label through here rather than through tEntity.
   'aura.rallyGroundBlast': 'Ground Blast',
@@ -8058,7 +8057,6 @@ const AURA_NAME_KEY: Record<string, SimMessageKey> = {
   Tamed: 'aura.tamed',
   'Soft Verge': 'aura.rallySoftVerge',
   'Garden Lawn': 'aura.rallyGardenLawn',
-  Wading: 'aura.rallyWading',
   'Ground Blast': 'aura.rallyGroundBlast',
   'Racing Ward': 'aura.rallyWard',
   'Temporal Exhaustion': 'aura.temporalExhaustion',

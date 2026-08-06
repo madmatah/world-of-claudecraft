@@ -121,6 +121,7 @@ function openRealmRacers(): { ui: RealmRacersUi; root: HTMLElement } {
     isTouchHud: () => false,
     countdownTick: noop,
     showBanner: noop,
+    clearPickupSplash: noop,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
   });
   ui.toggle();

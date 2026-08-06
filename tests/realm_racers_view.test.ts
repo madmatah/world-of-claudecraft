@@ -9,8 +9,16 @@ import {
   buildRealmRacersWindowView,
   RALLY_CONTROL_ACTIONS,
   RALLY_PRACTICE_TIERS,
+  rallyControlKeys,
 } from '../src/ui/realm_racers_view';
 import type { RealmRacersInfo } from '../src/world_api';
+import { assertAllocationStable } from './util/alloc_probe';
+
+// NOTE on the HUD-view tests below: buildRealmRacersHudView returns ONE reused
+// live container mutated in place per call (the allocation-light per-frame
+// contract), so a test that compares two frames captures the PRIMITIVES it
+// needs (a sig string, a flag) before building the next frame, never two
+// object handles.
 
 function info(over: Partial<RealmRacersInfo> = {}): RealmRacersInfo {
   return {
@@ -19,6 +27,7 @@ function info(over: Partial<RealmRacersInfo> = {}): RealmRacersInfo {
     queueSize: 0,
     match: null,
     practiceAvailable: true,
+    queueViable: true,
     ...over,
   };
 }
@@ -109,6 +118,25 @@ describe('Realm Racers pure views: the practice setup screen', () => {
     expect(rebound.sig).not.toBe(bound.sig);
   });
 
+  it('resolves each taught control through the binds the player actually has', () => {
+    // Extracted from Hud (which passes Keybinds.primaryLabel): steering is two
+    // bindings by nature, the rest one, and an unbound control contributes no
+    // label rather than an empty keycap.
+    const bound: Record<string, string> = {
+      forward: 'W',
+      back: 'S',
+      turnLeft: 'A',
+      turnRight: 'D',
+      jump: 'Space',
+    };
+    const primary = (bind: string): string => bound[bind] ?? '';
+    expect(rallyControlKeys('throttle', primary)).toEqual(['W']);
+    expect(rallyControlKeys('brake', primary)).toEqual(['S']);
+    expect(rallyControlKeys('steer', primary)).toEqual(['A', 'D']);
+    expect(rallyControlKeys('handbrake', primary)).toEqual(['Space']);
+    expect(rallyControlKeys('handbrake', () => '')).toEqual([]);
+  });
+
   it('drops the key column entirely on a touch HUD', () => {
     const view = buildRealmRacersSetupView(info(), 'driver', keys, true);
     expect(view.touch).toBe(true);
@@ -158,7 +186,8 @@ describe('Realm Racers pure views', () => {
       kind: 'idle',
       queueSize: 0,
       practiceAvailable: true,
-      sig: 'idle|0|open',
+      queueViable: true,
+      sig: 'idle|0|open|q',
     });
     expect(
       buildRealmRacersWindowView(info({ queued: true, queuePosition: 2, queueSize: 3 })),
@@ -194,7 +223,7 @@ describe('Realm Racers pure views', () => {
   });
 
   it('keeps the structural HUD signature stable while race values tick', () => {
-    const first = buildRealmRacersHudView(info({ match: live() }));
+    const firstSig = buildRealmRacersHudView(info({ match: live() })).sig;
     const next = buildRealmRacersHudView(
       info({
         match: live({
@@ -203,8 +232,60 @@ describe('Realm Racers pure views', () => {
         }),
       }),
     );
-    expect(next.sig).toBe(first.sig);
+    expect(next.sig).toBe(firstSig);
     expect(next).toMatchObject({ elapsed: 62, position: 2, lap: 3 });
+  });
+
+  it('reuses one live strip container every frame (no per-frame garbage)', () => {
+    // The strip view is rebuilt from update() every frame of a race, so the
+    // core returns a module-level reused container and mutates primitives in
+    // place (tests/util/alloc_probe.ts is the canonical proxy for that).
+    const racing = info({ match: live() });
+    expect(() =>
+      assertAllocationStable(
+        () => buildRealmRacersHudView(racing),
+        64,
+        'realm racers hud view container',
+      ),
+    ).not.toThrow();
+  });
+
+  it('keeps the match window signature still while only the lap advances', () => {
+    // The queue window never displays the lap (the strip does), so a lap tick
+    // must not rebuild it: the lap is out of the view AND out of the signature.
+    const firstView = buildRealmRacersWindowView(info({ match: live({ me: racer({ lap: 1 }) }) }));
+    if (firstView.kind !== 'match') throw new Error('expected a match view');
+    const firstSig = firstView.sig;
+    expect('lap' in firstView).toBe(false);
+    const next = buildRealmRacersWindowView(info({ match: live({ me: racer({ lap: 3 }) }) }));
+    if (next.kind !== 'match') throw new Error('expected a match view');
+    expect(next.sig).toBe(firstSig);
+    // The placing IS displayed ("3 of 4"), so it still moves the signature.
+    const placed = buildRealmRacersWindowView(
+      info({ match: live({ me: racer({ lap: 1, position: 2 }) }) }),
+    );
+    expect(placed.sig).not.toBe(firstSig);
+  });
+
+  it('moves the idle and queued signatures when practice availability flips', () => {
+    // Availability is what the front screen's practice button paints as its
+    // disabled state, so the flip has to repaint the window on its own.
+    expect(buildRealmRacersWindowView(info({ practiceAvailable: false })).sig).not.toBe(
+      buildRealmRacersWindowView(info()).sig,
+    );
+    const queued = { queued: true, queuePosition: 2, queueSize: 3 } as const;
+    expect(buildRealmRacersWindowView(info({ ...queued, practiceAvailable: false })).sig).not.toBe(
+      buildRealmRacersWindowView(info({ ...queued })).sig,
+    );
+  });
+
+  it('carries queue viability into the idle window and its signature', () => {
+    // Offline the queue can never seat a race: the window disables the join
+    // button off this flag, so the flip has to repaint the window on its own.
+    const unviable = buildRealmRacersWindowView(info({ queueViable: false }));
+    expect(unviable.kind).toBe('idle');
+    if (unviable.kind === 'idle') expect(unviable.queueViable).toBe(false);
+    expect(unviable.sig).not.toBe(buildRealmRacersWindowView(info()).sig);
   });
 
   it('keeps a finished result visible through the return countdown', () => {
@@ -250,9 +331,9 @@ describe('Realm Racers pure views', () => {
     expect(buildRealmRacersHudView(info({ match: live({ phase: 'countdown' }) })).canReset).toBe(
       false,
     );
-    const unlocked = buildRealmRacersHudView(info({ match: live({ resetLocked: false }) }));
-    const locked = buildRealmRacersHudView(info({ match: live({ resetLocked: true }) }));
-    expect(locked.sig).toBe(unlocked.sig);
+    const unlockedSig = buildRealmRacersHudView(info({ match: live({ resetLocked: false }) })).sig;
+    const lockedSig = buildRealmRacersHudView(info({ match: live({ resetLocked: true }) })).sig;
+    expect(lockedSig).toBe(unlockedSig);
   });
 
   it('carries the ward as a live pip, out of the signature', () => {
@@ -264,9 +345,9 @@ describe('Realm Racers pure views', () => {
     // Out of the signature, like `resetLocked`: it flips mid-race and must not
     // rebuild the strip (which would drop the forfeit control's armed state and
     // any focus inside it).
-    const warded = buildRealmRacersHudView(info({ match: live({ warded: true }) }));
-    const bare = buildRealmRacersHudView(info({ match: live({ warded: false }) }));
-    expect(warded.sig).toBe(bare.sig);
+    const wardedSig = buildRealmRacersHudView(info({ match: live({ warded: true }) })).sig;
+    const bareSig = buildRealmRacersHudView(info({ match: live({ warded: false }) })).sig;
+    expect(wardedSig).toBe(bareSig);
   });
 
   it('resolves the track-limits banner to ONE line, countdown before notice', () => {
@@ -277,9 +358,11 @@ describe('Realm Racers pure views', () => {
     // branch the painter happens to test first.
     const off = buildRealmRacersHudView(info({ match: live({ offTrackIn: 3 }) }));
     expect(off).toMatchObject({ trackLimit: 'offTrack', offTrackIn: 3 });
+    const offSig = off.sig;
 
     const cut = buildRealmRacersHudView(info({ match: live({ cutReturned: true }) }));
     expect(cut.trackLimit).toBe('cutReturned');
+    const cutSig = cut.sig;
 
     const both = buildRealmRacersHudView(
       info({ match: live({ offTrackIn: 2, cutReturned: true }) }),
@@ -289,11 +372,13 @@ describe('Realm Racers pure views', () => {
     expect(buildRealmRacersHudView(info({ match: live({}) })).trackLimit).toBe('none');
     // Neither state is structural: the banner is one element the painter writes
     // through, so a pilot running wide must not rebuild the strip under them.
-    expect(off.sig).toBe(cut.sig);
+    expect(offSig).toBe(cutSig);
   });
 
   it('withdraws the forfeit control once the race is decided, and moves the signature', () => {
     const racing = buildRealmRacersHudView(info({ match: live({ phase: 'racing' }) }));
+    expect(racing.canForfeit).toBe(true);
+    const racingSig = racing.sig;
     const finished = buildRealmRacersHudView(
       info({
         match: live({
@@ -304,11 +389,10 @@ describe('Realm Racers pure views', () => {
         }),
       }),
     );
-    expect(racing.canForfeit).toBe(true);
     expect(finished.canForfeit).toBe(false);
     // The control lives in the strip's rebuilt markup, so the flip has to move
     // the structural signature or the painter never rebuilds it away.
-    expect(finished.sig).not.toBe(racing.sig);
+    expect(finished.sig).not.toBe(racingSig);
   });
 
   it('keeps a dead heat distinct from a loss', () => {

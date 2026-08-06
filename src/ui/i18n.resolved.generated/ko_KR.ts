@@ -1196,6 +1196,7 @@ export const ko_KR: EnTranslations = {
       "forfeit": "경기 포기",
       "forfeitConfirm": "포기 확인",
       "waiting": "조종사 {count}명이 출발 그리드를 기다리고 있습니다.",
+      "queueNeedsRealm": "대기열 경주에는 온라인 서버의 다른 조종사가 필요합니다. 대신 연습 주행을 해 보세요.",
       "queued": "대기 순번 {position}/{count}. 전차를 준비하고 있습니다.",
       "racingAgainst": "경기가 시작되었습니다. 현재 {total}명 중 {position}위입니다.",
       "practice": "연습",

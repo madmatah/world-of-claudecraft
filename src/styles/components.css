@@ -13886,7 +13886,7 @@
    rally identity lives on the header and the accent border, not on a bespoke
    body background. */
 #realm-racers-window {
-  width: min(560px, calc(100vw - 32px));
+  width: min(560px, calc(var(--app-vw, 100vw) - 32px));
   border-color: #caa859;
   box-shadow:
     0 20px 60px #000a,
@@ -14756,7 +14756,7 @@
     gap: 12px;
     padding: 20px 26px 16px;
     width: max-content;
-    max-width: calc(100vw - 32px);
+    max-width: calc(var(--app-vw, 100vw) - 32px);
     border: 1px solid #dfc36c99;
     border-radius: 12px;
     background: #101c13f2;

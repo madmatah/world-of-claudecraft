@@ -27,7 +27,11 @@ export function realmRacersInterestParticipantIds(
   anchorEntityId: number,
 ): readonly number[] {
   const match = realmRacersMatchOf(ctx, anchorPid);
-  return match
-    ? otherRealmRacersParticipantIds(match.pids, anchorEntityId)
-    : NO_REALM_RACERS_INTEREST_PINS;
+  if (!match) return NO_REALM_RACERS_INTEREST_PINS;
+  // Only pilots still inside the gameplay parenthesis. A returned quitter is
+  // back in the open world while the race runs on: pinning them would stream
+  // their live position to ex-rivals at full rate anywhere in the world, past
+  // both the distance cutoff and the stealth policy the pin bypasses.
+  const seated = match.pids.filter((pid) => match.progress.get(pid)?.returned === false);
+  return otherRealmRacersParticipantIds(seated, anchorEntityId);
 }

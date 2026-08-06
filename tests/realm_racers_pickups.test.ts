@@ -143,7 +143,7 @@ function placeAt(sim: Sim, pid: number, s: number, lap?: number): void {
   // a racer who has pulled off is skipped by the progress pass, so a premise
   // that relied on that tick would leave a retired machine holding whatever
   // ranking key it had at the flag.
-  progress.travelled = travelledFromArc(progress.lap, point.s, track.length);
+  progress.travelled = travelledFromArc(progress.lap, point.s, track.length, point.s);
 }
 
 /**

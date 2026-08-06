@@ -30,6 +30,37 @@ export const RALLY_DEFAULT_PRACTICE_TIER: RallyDriverTier = 'driver';
 export const RALLY_CONTROL_ACTIONS = ['throttle', 'brake', 'steer', 'handbrake'] as const;
 export type RallyControlAction = (typeof RALLY_CONTROL_ACTIONS)[number];
 
+/**
+ * The keybind names behind each taught control, spelled beside
+ * RALLY_CONTROL_ACTIONS so the taught list and the binds that teach it cannot
+ * drift apart. Steering is two bindings by nature; the rest resolve one.
+ */
+const RALLY_CONTROL_BINDS: Record<RallyControlAction, readonly string[]> = {
+  throttle: ['forward'],
+  brake: ['back'],
+  steer: ['turnLeft', 'turnRight'],
+  handbrake: ['jump'],
+};
+
+/**
+ * The bound keys behind one taught rally control, as display labels.
+ * `primaryLabel` is the host's keybind lookup (Hud passes
+ * `Keybinds.primaryLabel`), so a player who drives on the arrow keys is taught
+ * the arrow keys; an unbound control contributes no label rather than an empty
+ * keycap.
+ */
+export function rallyControlKeys(
+  action: RallyControlAction,
+  primaryLabel: (bind: string) => string,
+): string[] {
+  const labels: string[] = [];
+  for (const bind of RALLY_CONTROL_BINDS[action]) {
+    const label = primaryLabel(bind);
+    if (label) labels.push(label);
+  }
+  return labels;
+}
+
 /** One taught control: what it does, and which keys do it right now. `keys` is
  *  empty on a touch HUD, where there are no keys to name. */
 export interface RallyControlRow {
@@ -56,12 +87,21 @@ export interface RealmRacersSetupView {
 }
 
 export type RealmRacersWindowView =
-  | { kind: 'idle'; queueSize: number; practiceAvailable: boolean; sig: string }
+  | {
+      kind: 'idle';
+      queueSize: number;
+      practiceAvailable: boolean;
+      /** False where the queue can never seat a race (the offline world): the
+       *  join button is disabled and the window points at Practice instead. */
+      queueViable: boolean;
+      sig: string;
+    }
   | {
       kind: 'queued';
       position: number;
       queueSize: number;
       practiceAvailable: boolean;
+      queueViable: boolean;
       sig: string;
     }
   | {
@@ -70,7 +110,6 @@ export type RealmRacersWindowView =
        *  over players, and the window says so rather than implying one. */
       practice: boolean;
       phase: 'countdown' | 'racing' | 'finished';
-      lap: number;
       /** Live placing and the frozen grid size: "3 of 4", never "second". */
       position: number;
       gridSize: number;
@@ -157,6 +196,16 @@ const HUD_OFF: RealmRacersHudView = {
   sig: 'off',
 };
 
+/**
+ * The one LIVE strip container, mutated in place every frame (the
+ * allocation-light per-frame contract, src/ui/CLAUDE.md: this view is built
+ * from `RealmRacersUi.update()` each frame of a race, so a fresh object per
+ * call is per-frame garbage). Every field is a primitive, so mutation carries
+ * no identity hazard; a caller reads the frame's values before the next build,
+ * which the synchronous paint in `RealmRacersUi.renderHud` does.
+ */
+const HUD_LIVE: RealmRacersHudView = { ...HUD_OFF };
+
 export function buildRealmRacersWindowView(info: RealmRacersInfo): RealmRacersWindowView {
   const match = info.match;
   if (match) {
@@ -164,28 +213,33 @@ export function buildRealmRacersWindowView(info: RealmRacersInfo): RealmRacersWi
       kind: 'match',
       practice: match.practice,
       phase: match.phase,
-      lap: match.me.lap,
       position: match.me.position,
       gridSize: match.gridSize,
       result: match.result,
-      sig: `match|${match.id}|${match.phase}|${match.me.lap}|${match.me.position}|${match.gridSize}|${match.result ?? '-'}|${match.practice ? 'p' : 'r'}`,
+      // The lap is deliberately absent, from the view AND from the signature:
+      // the window never displays it (the strip does), so carrying it here only
+      // rebuilt the whole queue window once per lap for a number nobody saw.
+      sig: `match|${match.id}|${match.phase}|${match.me.position}|${match.gridSize}|${match.result ?? '-'}|${match.practice ? 'p' : 'r'}`,
     };
   }
   const open = info.practiceAvailable;
+  const viable = info.queueViable;
   if (info.queued) {
     return {
       kind: 'queued',
       position: info.queuePosition,
       queueSize: info.queueSize,
       practiceAvailable: open,
-      sig: `queued|${info.queuePosition}|${info.queueSize}|${open ? 'open' : 'full'}`,
+      queueViable: viable,
+      sig: `queued|${info.queuePosition}|${info.queueSize}|${open ? 'open' : 'full'}|${viable ? 'q' : 'nq'}`,
     };
   }
   return {
     kind: 'idle',
     queueSize: info.queueSize,
     practiceAvailable: open,
-    sig: `idle|${info.queueSize}|${open ? 'open' : 'full'}`,
+    queueViable: viable,
+    sig: `idle|${info.queueSize}|${open ? 'open' : 'full'}|${viable ? 'q' : 'nq'}`,
   };
 }
 
@@ -225,35 +279,35 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
   if (!match) return HUD_OFF;
   const canForfeit = match.phase !== 'finished';
   const canReset = match.phase === 'racing';
-  return {
-    active: true,
-    circuitId: match.circuitId,
-    phase: match.phase,
-    countdown: match.countdown,
-    lap: match.me.lap,
-    totalLaps: match.totalLaps,
-    position: match.me.position,
-    gridSize: match.gridSize,
-    elapsed: match.elapsed,
-    speed: match.speed,
-    wrongWay: match.wrongWay,
-    // The countdown wins over the notice: one is about to happen TO the pilot,
-    // the other has already happened and is only being explained.
-    trackLimit: match.offTrackIn > 0 ? 'offTrack' : match.cutReturned ? 'cutReturned' : 'none',
-    offTrackIn: match.offTrackIn,
-    warded: match.warded,
-    chaseIn: match.chaseIn,
-    decided: match.decided,
-    result: match.result,
-    returnIn: match.returnIn,
-    canForfeit,
-    canReset,
-    resetLocked: match.resetLocked,
-    // Lock state is a live button property, not structure: keeping it out of
-    // the signature preserves keyboard focus when the reset becomes disabled.
-    // The live placing is out for the same reason it is out of the standings
-    // signature: it moves under a close race and the readout row writes it
-    // through the elided writers anyway.
-    sig: `${match.id}|${match.gridSize}|${canForfeit ? 'quit' : 'done'}|${canReset ? 'reset' : 'no-reset'}`,
-  };
+  const view = HUD_LIVE;
+  view.active = true;
+  view.circuitId = match.circuitId;
+  view.phase = match.phase;
+  view.countdown = match.countdown;
+  view.lap = match.me.lap;
+  view.totalLaps = match.totalLaps;
+  view.position = match.me.position;
+  view.gridSize = match.gridSize;
+  view.elapsed = match.elapsed;
+  view.speed = match.speed;
+  view.wrongWay = match.wrongWay;
+  // The countdown wins over the notice: one is about to happen TO the pilot,
+  // the other has already happened and is only being explained.
+  view.trackLimit = match.offTrackIn > 0 ? 'offTrack' : match.cutReturned ? 'cutReturned' : 'none';
+  view.offTrackIn = match.offTrackIn;
+  view.warded = match.warded;
+  view.chaseIn = match.chaseIn;
+  view.decided = match.decided;
+  view.result = match.result;
+  view.returnIn = match.returnIn;
+  view.canForfeit = canForfeit;
+  view.canReset = canReset;
+  view.resetLocked = match.resetLocked;
+  // Lock state is a live button property, not structure: keeping it out of
+  // the signature preserves keyboard focus when the reset becomes disabled.
+  // The live placing is out for the same reason it is out of the standings
+  // signature: it moves under a close race and the readout row writes it
+  // through the elided writers anyway.
+  view.sig = `${match.id}|${match.gridSize}|${canForfeit ? 'quit' : 'done'}|${canReset ? 'reset' : 'no-reset'}`;
+  return view;
 }

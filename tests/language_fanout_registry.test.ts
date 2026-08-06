@@ -118,6 +118,11 @@ const FANOUT_ARMS: readonly string[] = [
   'this.dungeonFinderProposalPopup.relocalize|',
   'this.valeCupWindow.relocalize|',
   'this.realmRacersUi.relocalize|',
+  // Not a relocalize: the pickup splash is a one-second moment whose label was
+  // resolved at show(), so the fan-out TAKES IT DOWN rather than repainting it
+  // (RealmRacersPickupSplash.clear documents this caller). It has no repaint
+  // signature, so half 2 below never sees it; this row is its whole pin.
+  'this.realmRacersSplash.clear|',
   'this.vcupBetting.relocalize|',
   'this.vcupIndicator.relocalize|',
   'this.vcupMatchHud.relocalize|',
@@ -251,7 +256,7 @@ const ANSWERED: readonly AnsweredSurface[] = [
     why: 'the queue state, race phase, lap and result that gate the localized Rally window and race-strip rebuilds',
   },
   {
-    file: 'realm_racers_standings_panel.ts',
+    file: 'realm_racers_standings_painter.ts',
     memos: ['lastSig'],
     // Same arm, one hop: RealmRacersUi owns this panel and its relocalize()
     // forwards, exactly as LockpickController does for LockpickWindow. Handing
@@ -261,7 +266,7 @@ const ANSWERED: readonly AnsweredSurface[] = [
     why: 'the standings order, laps and viewer marker that gate the localized leaderboard rebuild, forwarded by the Rally painter that owns the panel',
   },
   {
-    file: 'realm_racers_podium.ts',
+    file: 'realm_racers_podium_painter.ts',
     memos: ['lastSig'],
     // Same arm, one hop, for the same reason the standings panel is: the Rally
     // painter owns the ceremony and its relocalize() forwards to it.
