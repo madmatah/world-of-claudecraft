@@ -20,6 +20,7 @@ import {
 } from '../src/sim/realm_racers_layout';
 import type { Sim } from '../src/sim/sim';
 import {
+  REALM_RACERS_CHASE_TICKS,
   REALM_RACERS_COUNTDOWN_TICKS,
   type RealmRacersMatch,
   realmRacersFreePracticeSlot,
@@ -418,6 +419,16 @@ describe('Realm Racers online backfill', () => {
     expect(seated).toHaveLength(REALM_RACERS_GRID_SIZE);
     for (const pid of humans) expect(seated).toContain(pid);
     expect(sim.realmRacers.queue).toEqual([]);
+  });
+});
+
+describe('Realm Racers race clock tuning', () => {
+  it('pins the straggler chase window to its shipped literal', () => {
+    // Thirty seconds at the 20 Hz tick: about a lap of struggling off the
+    // racing line, so a real straggler still takes their placing and only a
+    // machine nobody is driving runs the clock out. Every other reading of the
+    // constant is derived, so this is the one that fails on a retune.
+    expect(REALM_RACERS_CHASE_TICKS).toBe(600);
   });
 });
 

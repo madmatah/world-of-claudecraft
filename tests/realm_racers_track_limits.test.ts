@@ -201,6 +201,15 @@ describe('Realm Racers track limits: the referee', () => {
     expect(at(REALM_RACERS_LOITER_TICKS)).toBe(0);
   });
 
+  it('pins the shipped tuning to literals', () => {
+    // Every derived check above moves WITH the constants, so none of them can
+    // notice a retune: at par (1.0, the documented rejected design) they all
+    // still pass. The literal is what says the shipped numbers are the shipped
+    // numbers, the same pattern as the slicks suite's tuning block.
+    expect(REALM_RACERS_OFF_ROAD_EXCHANGE_RATE).toBe(1.6);
+    expect(REALM_RACERS_CUT_TOLERANCE_YD).toBe(25);
+  });
+
   it('reads NOTHING about which side the machine left on', () => {
     // The operator's clincher, made structural: the input carries two arc
     // positions and an odometer and no lateral offset at all, so an outside cut

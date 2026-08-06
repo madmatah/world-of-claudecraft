@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { biomeGroundTint, paintInstanceGround } from '../src/render/instance_surface';
+import { BIOME_PALETTE } from '../src/render/terrain_palette';
 import {
   terrainSplatPresence,
   terrainSplatPresenceMask,
@@ -181,7 +182,17 @@ describe('instanced ground surface', () => {
   });
 
   it('reads the tint off the shared biome palette rather than a copy', () => {
-    // A hand-copied hex is a colour that drifts the day the biome is retuned.
+    // A hand-copied hex is a colour that drifts the day the biome is retuned,
+    // so every layer of every biome is held byte-equal to the palette module's
+    // own entry: the day a copy stops tracking a retune, this is what says so.
+    for (const biome of Object.keys(BIOME_PALETTE) as (keyof typeof BIOME_PALETTE)[]) {
+      const tint = biomeGroundTint(biome);
+      expect(tint.grass, `${biome} grass`).toBe(BIOME_PALETTE[biome].grass);
+      expect(tint.dirt, `${biome} dirt`).toBe(BIOME_PALETTE[biome].dirt);
+      expect(tint.sand, `${biome} sand`).toBe(BIOME_PALETTE[biome].sand);
+    }
+    // ...and the palette really distinguishes what the surfaces distinguish,
+    // or the equality above would be vacuous.
     const garden = biomeGroundTint('garden');
     const vale = biomeGroundTint('vale');
     expect(garden.grass).not.toBe(vale.grass);

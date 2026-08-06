@@ -209,6 +209,14 @@ describe('Ground Blast: where the player may place a shot', () => {
 });
 
 describe('Ground Blast: the blast', () => {
+  it('pins the shipped blast tuning to literals', () => {
+    // The behavioural cases below derive their expectations from these
+    // constants, so on their own they move with a retune. The literal is what
+    // says the shipped numbers are the shipped numbers.
+    expect(GROUND_BLAST_RADIUS).toBe(6);
+    expect(GROUND_BLAST_SHOCK_TICKS).toBe(30);
+  });
+
   it('falls off with distance and stops at the rim', () => {
     const centre = resolveGroundBlastImpact(body({ x: 0, z: 0 }), 0, 0);
     const near = resolveGroundBlastImpact(body({ x: 0, z: GROUND_BLAST_RADIUS * 0.9 }), 0, 0);

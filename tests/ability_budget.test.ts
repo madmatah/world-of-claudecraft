@@ -13,8 +13,15 @@ import {
   isAbilityBudgetSpent,
   isAbilityLockedByActivity,
 } from '../src/sim/ability_budget';
-import { REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
+import {
+  REALM_RACERS_ABILITY_ID,
+  REALM_RACERS_WEAPON_CHARGES,
+} from '../src/sim/content/realm_racers';
+import { REALM_RACERS_COUNTDOWN_TICKS, realmRacersMatchOf } from '../src/sim/social/realm_racers';
+import type { Entity } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
+import type { ActionBarPlayerInput } from '../src/ui/hud/action_bar/action_bar_view';
+import { addAt, makeWorld } from './vale_cup_util';
 
 const WEAPON = REALM_RACERS_ABILITY_ID;
 
@@ -68,5 +75,77 @@ describe('ability budget: locked controls', () => {
         WEAPON,
       ),
     ).toBe(false);
+  });
+});
+
+describe('ability budget: the two shapes that really call it agree', () => {
+  /** The action bar's deliberately narrow player input, rebuilt from the live
+   *  entity the way the HUD's world adapters mirror it: fresh plain objects
+   *  carrying only the declared fields, so the agreement below is about the
+   *  SHAPE and not about two aliases of one object. */
+  function actionBarShape(e: Entity): ActionBarPlayerInput {
+    const charges: NonNullable<ActionBarPlayerInput['abilityCharges']> = {};
+    for (const [id, pool] of Object.entries(e.abilityCharges ?? {})) {
+      if (pool) charges[id] = { charges: pool.charges, fixed: pool.fixed };
+    }
+    return {
+      autoAttack: false,
+      dead: e.dead,
+      resource: e.resource,
+      cooldowns: e.cooldowns,
+      gcdRemaining: 0,
+      potionCdRemaining: 0,
+      queuedOnSwing: null,
+      pos: e.pos,
+      abilityCharges: charges,
+      drive: e.drive ? { controlsLocked: e.drive.controlsLocked } : null,
+      auras: [],
+    };
+  }
+
+  it('answers identically for a REAL seated racer and the narrow bar input, in all three states', () => {
+    const sim = makeWorld();
+    const human = addAt(sim, 'warrior', 'Aster', -5, -40);
+    sim.realmRacersPracticeStart('driver', human);
+    sim.tick();
+    const race = realmRacersMatchOf(sim.ctx, human);
+    if (!race) throw new Error('no practice race');
+    const racer = sim.entities.get(human);
+    if (!racer) throw new Error('no racer entity');
+
+    /** Both shapes through the SAME predicates; failing on disagreement names
+     *  the state and the predicate, then the caller pins the expected truth. */
+    const agreed = (label: string): { locked: boolean; spent: boolean; controls: boolean } => {
+      const narrow = actionBarShape(racer);
+      const locked = isAbilityLockedByActivity(racer, WEAPON);
+      const spent = isAbilityBudgetSpent(racer, WEAPON);
+      const controls = areAbilityControlsLocked(racer);
+      expect(isAbilityLockedByActivity(narrow, WEAPON), `${label}: locked`).toBe(locked);
+      expect(isAbilityBudgetSpent(narrow, WEAPON), `${label}: spent`).toBe(spent);
+      expect(areAbilityControlsLocked(narrow), `${label}: controls`).toBe(controls);
+      return { locked, spent, controls };
+    };
+
+    // LOCKED: held on the grid through the countdown, budget untouched.
+    expect(race.phase).toBe('countdown');
+    expect(agreed('countdown')).toEqual({ locked: true, spent: false, controls: true });
+
+    // CLEAR: the flag drops and the pilot has the machine and the full budget.
+    // One beat past the flip: the tick that turns the phase has already stamped
+    // the countdown lock, so the unlock lands on the following pass.
+    for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS + 5 && race.phase !== 'racing'; i++) {
+      sim.tick();
+    }
+    sim.tick();
+    expect(race.phase).toBe('racing');
+    expect(agreed('racing')).toEqual({ locked: false, spent: false, controls: false });
+
+    // SPENT: the whole fixed budget fired off, controls still in hand.
+    for (let shot = 0; shot < REALM_RACERS_WEAPON_CHARGES; shot++) {
+      racer.cooldowns.delete(WEAPON);
+      sim.castAbility(WEAPON, human);
+    }
+    expect(racer.abilityCharges?.[WEAPON]?.charges).toBe(0);
+    expect(agreed('spent')).toEqual({ locked: true, spent: true, controls: false });
   });
 });

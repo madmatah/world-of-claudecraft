@@ -376,6 +376,14 @@ describe('missing painted ability integration', () => {
     expect(Object.keys(ABILITIES).filter((id) => !ABILITY_IMAGE_IDS.has(id))).toEqual([
       ...ABILITY_ART_PENDING,
     ]);
+    // The debt list itself, pinned to literals: the derivation above keeps the
+    // set honest against the registry, but on its own it lets the debt GROW
+    // silently (a new unpainted ability plus a new pending row still agree).
+    expect([...ABILITY_ART_PENDING].sort()).toEqual([
+      'rally_ground_blast',
+      'rally_nitro',
+      'rally_oil_slick',
+    ]);
     expect(sorted([...ABILITY_IMAGE_IDS].filter((id) => !Object.hasOwn(ABILITIES, id)))).toEqual([
       ...PRESERVED_IMAGE_BACKED_MODIFIER_IDS,
     ]);

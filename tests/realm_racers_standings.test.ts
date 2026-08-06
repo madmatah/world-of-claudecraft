@@ -99,6 +99,21 @@ describe('Realm Racers classification', () => {
     expect(rallyLeadIsDeadHeat(ranked, 0.5)).toBe(true);
     // The pair tied for third changes nothing: a tie back there is a placing.
     expect(rallyLeadIsDeadHeat(rallyClassification(close.slice(2)), 0.5)).toBe(true);
+    // ...and that slice promoted the tail pair into a lead of their own, so on
+    // its own it says nothing about SELECTION. A wide lead over a close third
+    // and fourth is the case that does: an implementation reading any close
+    // pair as a dead heat answers true here.
+    expect(
+      rallyLeadIsDeadHeat(
+        rallyClassification([
+          entry({ pid: 1, travelled: 510.0, slot: 0 }),
+          entry({ pid: 2, travelled: 500.0, slot: 1 }),
+          entry({ pid: 3, travelled: 120.1, slot: 2 }),
+          entry({ pid: 4, travelled: 120.0, slot: 3 }),
+        ]),
+        0.5,
+      ),
+    ).toBe(false);
     expect(rallyLeadIsDeadHeat(ranked, 0.1)).toBe(false);
     // Two machines that actually crossed the line are split by the fraction, so
     // a finish is never a dead heat however close the distances read.

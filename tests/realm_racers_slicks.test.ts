@@ -283,6 +283,7 @@ describe('the oil slick step, on its own', () => {
     expect(REALM_RACERS_SLICK_CAP).toBe(16);
     expect(REALM_RACERS_SLICK_PUSH).toBe(12);
     expect(REALM_RACERS_SLICK_PUSH_SLIP_FLOOR).toBe(1.5);
+    expect(REALM_RACERS_SLICK_SLIP_CAP).toBe(2);
     // Under the loaner's own slide ceiling, which is the load-bearing one: a
     // push over `maxSlip` would be silently rewritten by the kernel's grounded
     // clamp, so the shove a pilot feels would stop being the shove chosen here.

@@ -854,6 +854,13 @@ describe('Realm Racers circuit metrics: the pickup rows', () => {
     expect(bare).not.toContain('pickup_row_lanes_overlap');
   });
 
+  it('pins the pickup catch reach to its shipped literal', () => {
+    // The overlap warning below judges a row against this reach, so a retune
+    // would silently move what the readout warns about. The literal is what
+    // says the shipped number is the shipped number.
+    expect(REALM_RACERS_PICKUP_REACH).toBe(2.3);
+  });
+
   it('warns where a row is narrow enough that its own boxes overlap', () => {
     // A WARNING rather than an error, and it fires on shipped content: what it
     // says is that a pass down the middle of two boxes is inside both, which
