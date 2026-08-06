@@ -48,6 +48,16 @@ function seat(circuit: RealmRacersCircuit, seed: number) {
   // rival spending a nitro, is a different question and this says nothing about
   // it.
   realmRacersStripPickups(match.pickups);
+  // The grid is disarmed for the same reason and by the same argument. Every
+  // machine is seated with its profile's weapon already loaded, independently of
+  // the boxes above, so the ace pilots sharing this circuit will shell whatever
+  // rival they can see: a shot lands a `GROUND_BLAST_YAW_KICK` into the timed
+  // machine's `spin`, and how long that spin runs is a profile number
+  // (`spinDecay`). A stopwatch over geometry cannot have a term in it that moves
+  // when the handling is tuned, and this one did: re-tuning `spinDecay` swung
+  // the number of lines that finish inside the drive window from seven to one on
+  // the practice circuit while the times themselves barely moved.
+  for (const progress of match.progress.values()) progress.heldWeapon = null;
   match.goTick = sim.ctx.tickCount;
   sim.tick();
   if (match.phase !== 'racing') throw new Error('the flag did not drop');
@@ -88,18 +98,45 @@ export function measureRallyRoadPace(circuit: RealmRacersCircuit, seed = 4242): 
   if (bot === undefined) throw new Error('no house pilot on the grid');
   const progress = match.progress.get(bot);
   if (!progress) throw new Error('no bot progress');
+  // Everyone else is parked, through the race's own reset lock. The pilot being
+  // timed is the INSTRUMENT here, so it drives a clean solo lap: a grid trading
+  // paint around it puts contact `spin` into its lap, and how long that spin
+  // runs is a handling number, so the reference road time would move whenever
+  // the machine is tuned. It reaches the cut verdict through a side door, too:
+  // a stretch this lap fails to register has no road time at all, and its
+  // candidate line is dropped before anyone drives it.
+  for (const [other, otherProgress] of match.progress) {
+    if (other !== bot) otherProgress.resetLockedUntilTick = Number.MAX_SAFE_INTEGER;
+  }
 
   const count = track.samples.length;
   const reachedAtTick = new Array<number>(count).fill(-1);
   let speedSum = 0;
   let samples = 0;
+  let previous = -1;
   const start = sim.ctx.tickCount;
   while (sim.ctx.tickCount - start < 120 * TICK_RATE && match.phase === 'racing') {
     sim.tick();
     if (progress.lap < 2) continue;
     if (progress.lap > 2) break;
     const index = Math.round(progress.lastS / track.step) % count;
-    if (reachedAtTick[index] < 0) reachedAtTick[index] = sim.ctx.tickCount;
+    // Stamp the whole INTERVAL the machine covered this tick, not just the
+    // sample it happens to be standing on. The samples are a yard apart and a
+    // racing machine moves about two yards a tick, so stamping one index leaves
+    // half the lap unregistered, and a stretch with no road time has its
+    // candidate line dropped before it is ever driven. That turned every cut
+    // verdict into a parity coin flip: which half of the circuit registered
+    // moved with any perturbation at all, including the handling being tuned.
+    if (previous >= 0) {
+      for (let step = 1; step <= count; step++) {
+        const at = (previous + step) % count;
+        if (reachedAtTick[at] < 0) reachedAtTick[at] = sim.ctx.tickCount;
+        if (at === index) break;
+      }
+    } else if (reachedAtTick[index] < 0) {
+      reachedAtTick[index] = sim.ctx.tickCount;
+    }
+    previous = index;
     speedSum += Math.abs(sim.entities.get(bot)?.drive?.speed ?? 0);
     samples++;
   }
@@ -153,6 +190,18 @@ export function driveRallyChord(
   racer.drive.slip = 0;
   racer.drive.spin = 0;
   progress.lastS = fromS;
+
+  // The rivals are parked for the run, through the race's own reset lock (which
+  // holds a machine where it stands and zeroes it every tick). Stripping the
+  // boxes and the weapons takes the DICE out of this stopwatch; this takes the
+  // other grid out of it. Three ace pilots racing the same circuit will bump the
+  // timed machine, a bump writes `spin`, and how long that spin runs is a
+  // handling number, so leaving them in makes the lab's verdict move whenever
+  // the machine is tuned. The pace measurement above deliberately keeps its bot:
+  // there, the pilot IS the instrument.
+  for (const [other, otherProgress] of match.progress) {
+    if (other !== pid) otherProgress.resetLockedUntilTick = Number.MAX_SAFE_INTEGER;
+  }
 
   const wanted = forwardArcDelta(fromS, toS, track.length);
   let ground = 0;
