@@ -79,6 +79,10 @@ const AUTHENTICATED_NODE_CLIENTS = [
     authSend: 'this.send(worldAuthMessage(token, characterId));',
   },
   {
+    path: 'scripts/realm_racers_e2e.mjs',
+    authSend: 'this.send(worldAuthMessage(token, characterId));',
+  },
+  {
     path: 'scripts/profiler/harness.mjs',
     authSend: 'this.ws.send(JSON.stringify(worldAuthMessage(this.token, this.charId)))',
   },
