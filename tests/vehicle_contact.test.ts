@@ -8,6 +8,8 @@ import {
   type ContactBody,
   MAX_BUMP_IMPULSE,
   resolveVehicleContact,
+  resolveVehicleContactSwept,
+  type SweptContactBody,
 } from '../src/sim/vehicle_contact';
 import {
   createVehicleDrive,
@@ -310,5 +312,112 @@ describe('vehicle contact', () => {
       return { result, a: snapshot(a), b: snapshot(b) };
     };
     expect(run()).toEqual(run());
+  });
+});
+
+describe('swept vehicle contact', () => {
+  // The discrete end-of-tick overlap misses a pair whose combined closing
+  // speed covers more than the contact reach in one 50 ms tick (~68 yd/s):
+  // two machines meeting head-on, or one launched across the road by a shell,
+  // pass through each other between two tests. The swept variant checks the
+  // tick's traversed segments instead.
+  const swept = (opts: BodyOptions & { prevX: number; prevZ: number }): SweptContactBody => ({
+    ...body(opts),
+    prevX: opts.prevX,
+    prevZ: opts.prevZ,
+  });
+
+  it('registers a head-on pair that tunnels straight through the discrete test', () => {
+    // Facing each other, 80 yd/s each: 160 yd/s closing covers 8 yd in one
+    // tick against a 3.4 yd reach. Both endpoints are separated, so the
+    // discrete test sees nothing at all; the paths still crossed.
+    const a = swept({ prevX: 0, prevZ: 0, x: 0, z: 4, facing: 0, speed: 80 });
+    const b = swept({ prevX: 0, prevZ: 4.5, x: 0, z: 0.5, facing: Math.PI, speed: 80 });
+    expect(resolveVehicleContact(a, b).contacted).toBe(false);
+    const result = resolveVehicleContactSwept(a, b);
+    expect(result.contacted).toBe(true);
+    expect(result.impact).toBeGreaterThan(0);
+    // Resolved AT the crossing: both bodies end near the mid-crossing point,
+    // separated by their combined radii, with the impulse and scrub taken.
+    expect(gap(a, b)).toBeGreaterThanOrEqual(LOANER.bodyRadius * 2 - 1e-9);
+    expect(Math.abs((a.z + b.z) / 2 - 2.25)).toBeLessThan(1);
+    expect(Math.abs(a.drive.speed)).toBeLessThan(80);
+    expect(Math.abs(b.drive.speed)).toBeLessThan(80);
+  });
+
+  it('leaves a grazing pass that never comes within reach alone', () => {
+    // Opposite directions on lanes 4 yd apart: the closest approach is the
+    // lane gap, outside the 3.4 yd reach the whole way.
+    const a = swept({ prevX: 0, prevZ: 0, x: 0, z: 4, facing: 0, speed: 80 });
+    const b = swept({ prevX: 4, prevZ: 4.5, x: 4, z: 0.5, facing: Math.PI, speed: 80 });
+    const beforeA = snapshot(a);
+    const beforeB = snapshot(b);
+    const result = resolveVehicleContactSwept(a, b);
+    expect(result.contacted).toBe(false);
+    expect(snapshot(a)).toEqual(beforeA);
+    expect(snapshot(b)).toEqual(beforeB);
+  });
+
+  it('ignores a slow interior graze between two separated endpoints', () => {
+    // Relative distance is convex over the tick, so two endpoints just
+    // outside reach can dip centimeters inside it mid-tick even at rub
+    // speeds. That is not a tunnel (the discrete test catches any converging
+    // pair next tick), and firing on it puts a knife-edge branch in every
+    // side-by-side race: the sweep only wakes when the relative motion
+    // covers the whole reach in one tick.
+    const a = swept({ prevX: 0, prevZ: 0, x: 0, z: 1, facing: 0, speed: 20 });
+    const b = swept({ prevX: 3.39, prevZ: 1, x: 3.39, z: 0, facing: 0, speed: -20 });
+    // Both endpoints sit outside reach; the mid-tick minimum dips 1 cm inside.
+    expect(Math.hypot(3.39, 1)).toBeGreaterThan(2 * LOANER.bodyRadius);
+    const beforeA = snapshot(a);
+    const result = resolveVehicleContactSwept(a, b);
+    expect(result.contacted).toBe(false);
+    expect(snapshot(a)).toEqual(beforeA);
+  });
+
+  it('never re-resolves a pair that STARTED inside reach and separated', () => {
+    // That configuration is last tick's contact finishing its depenetration;
+    // sweeping it would yank two settled machines back together.
+    const a = swept({ prevX: 0, prevZ: 0, x: 0, z: 0, facing: 0, speed: 0 });
+    const b = swept({ prevX: 2, prevZ: 0, x: 6, z: 0, facing: 0, slip: -20 });
+    const beforeA = snapshot(a);
+    const result = resolveVehicleContactSwept(a, b);
+    expect(result.contacted).toBe(false);
+    expect(snapshot(a)).toEqual(beforeA);
+  });
+
+  it('defers byte-identically to the discrete resolve when the endpoints overlap', () => {
+    // The ordinary racing case (side-by-side rub, low closing speed) must not
+    // change AT ALL: the swept arm only exists for the tunnel.
+    const mk = () => ({
+      a: swept({ prevX: -0.5, prevZ: 0, x: 0, z: 0, slip: 6 }),
+      b: swept({ prevX: 3.4, prevZ: 0, x: 2.9, z: 0, slip: -6 }),
+    });
+    const sweptPair = mk();
+    const discretePair = mk();
+    const sweptResult = resolveVehicleContactSwept(sweptPair.a, sweptPair.b);
+    const discreteResult = resolveVehicleContact(discretePair.a, discretePair.b);
+    expect(sweptResult).toEqual(discreteResult);
+    expect(snapshot(sweptPair.a)).toEqual(snapshot(discretePair.a));
+    expect(snapshot(sweptPair.b)).toEqual(snapshot(discretePair.b));
+  });
+
+  it('mirrors when the pair is swapped, and is byte-identical run to run', () => {
+    const mk = (flip: boolean) => {
+      const a = swept({ prevX: 0, prevZ: 0, x: 0, z: 4, facing: 0, speed: 80 });
+      const b = swept({ prevX: 0.4, prevZ: 4.5, x: 0.4, z: 0.5, facing: Math.PI, speed: 80 });
+      const result = flip ? resolveVehicleContactSwept(b, a) : resolveVehicleContactSwept(a, b);
+      return {
+        result: { contacted: result.contacted, impact: result.impact },
+        a: snapshot(a),
+        b: snapshot(b),
+      };
+    };
+    const straight = mk(false);
+    const flipped = mk(true);
+    expect(straight.result).toEqual(flipped.result);
+    expect(straight.a).toEqual(flipped.a);
+    expect(straight.b).toEqual(flipped.b);
+    expect(mk(false)).toEqual(mk(false));
   });
 });

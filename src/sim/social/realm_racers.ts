@@ -119,7 +119,11 @@ import {
 import type { ArenaReturnPools, PlayerMeta } from '../sim';
 import type { SimContext } from '../sim_context';
 import { type Entity, TICK_RATE, type VehicleDrive } from '../types';
-import { type ContactBody, resolveVehicleContact } from '../vehicle_contact';
+import {
+  type ContactBody,
+  resolveVehicleContactSwept,
+  type SweptContactBody,
+} from '../vehicle_contact';
 import {
   addVehicleSlip,
   createVehicleDrive,
@@ -1607,11 +1611,16 @@ function tickGroundBlasts(ctx: SimContext, match: RealmRacersMatch): void {
 /** The contact body behind a seated racer: its live pose plus the two numbers
  *  the profile owns (the SAME radius the movement kernel sweeps, and the mass
  *  the shove is split by). */
-function contactBodyFor(racer: Entity, drive: VehicleDrive): ContactBody {
+function contactBodyFor(racer: Entity, drive: VehicleDrive): SweptContactBody {
   const profile = vehicleProfile(drive.profileKey);
   return {
     x: racer.pos.x,
     z: racer.pos.z,
+    // Where the tick started (stamped by the prologue's runDespawnDecay):
+    // together with pos this is the segment the machine covered this tick,
+    // which is what the swept resolve tests.
+    prevX: racer.prevPos.x,
+    prevZ: racer.prevPos.z,
     facing: racer.facing,
     drive,
     radius: profile.bodyRadius,
@@ -1643,12 +1652,14 @@ function settleContact(ctx: SimContext, racer: Entity, body: ContactBody): void 
  * longer does: since 22b a pickup take draws exactly one value, in
  * `tickPickups`. This pass is upstream of it and unaffected.)
  *
- * The test is a discrete overlap, not a swept one, which is the right trade for
- * racers travelling the same way around a circuit (their closing speed is a few
- * yards per second, far under the body width one tick covers). Two machines
- * meeting head-on at full speed can still pass through each other in the 50 ms
- * between ticks; a wrong-way racer is workstream 07's problem, not a reason to
- * sweep every pair every tick.
+ * The test is SWEPT over the tick's motion: the ordinary same-way rub (closing
+ * speed of a few yards per second, far under the body width one tick covers)
+ * still resolves on the plain end-of-tick overlap, byte-identically, and the
+ * sweep arm only wakes for a pair whose closing speed crosses the whole reach
+ * inside one tick (~68 yd/s): a head-on meeting, or a machine a shell threw
+ * across the road, which used to pass clean through between two discrete
+ * tests (the miss a player reads as "we visibly touched and nothing
+ * happened").
  */
 function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
   for (let i = 0; i < match.pids.length; i++) {
@@ -1658,7 +1669,7 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
       if (!a?.drive || !b?.drive || a.dead || b.dead) continue;
       const bodyA = contactBodyFor(a, a.drive);
       const bodyB = contactBodyFor(b, b.drive);
-      const contact = resolveVehicleContact(bodyA, bodyB);
+      const contact = resolveVehicleContactSwept(bodyA, bodyB);
       if (!contact.contacted) continue;
       settleContact(ctx, a, bodyA);
       settleContact(ctx, b, bodyB);

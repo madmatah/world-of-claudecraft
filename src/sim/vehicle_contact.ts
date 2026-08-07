@@ -167,3 +167,79 @@ export function resolveVehicleContact(a: ContactBody, b: ContactBody): ContactRe
 
   return { contacted: true, impact: relN, x: midX, z: midZ };
 }
+
+/** A contact body plus the position it STARTED the tick at (Entity.prevPos):
+ *  together they are the segment the body covered this tick. */
+export interface SweptContactBody extends ContactBody {
+  prevX: number;
+  prevZ: number;
+}
+
+const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n);
+
+/**
+ * Resolve one contact with the tick's motion swept in, mutating both bodies in
+ * place exactly like `resolveVehicleContact`.
+ *
+ * The discrete end-of-tick overlap misses a pair whose combined closing speed
+ * covers more than the contact reach inside one tick (~68 yd/s at the loaner's
+ * 3.4 yd reach): a head-on meeting at race speed, or a machine a shell threw
+ * across the road, passes clean through between two tests. When the endpoints
+ * are separated, this solves the two traversed segments (linear motion within
+ * the tick, the same assumption every interpolation in this codebase makes)
+ * for their FIRST TOUCH, the earliest instant the pair came within reach;
+ * both bodies are moved a hair past that configuration and the ordinary
+ * resolver runs there, so the impulse, spin, scrub and depenetration are the
+ * ones a same-tick overlap would have produced at the moment of collision.
+ *
+ * First touch, not closest approach, and the distinction is the physics: for
+ * a crossing pair the closest-approach normal is nearly PERPENDICULAR to the
+ * relative motion (two machines meeting head-on read as a zero-impulse side
+ * graze there), while the touch normal carries the honest frontal component.
+ * The hair past it exists because exactly ON the reach the resolver's
+ * `dist >= reach` arm refuses, and it is capped at the closest approach so
+ * the evaluated pose can never re-separate.
+ *
+ * A pair already inside reach at the START of the tick falls out naturally
+ * (its first touch is in the past, outside [0, 1]): that is last tick's
+ * contact finishing its depenetration, and re-resolving it would yank two
+ * settled machines back together every other tick.
+ *
+ * Pure and order-independent like the discrete resolver: swapping the
+ * arguments mirrors every term.
+ */
+export function resolveVehicleContactSwept(
+  a: SweptContactBody,
+  b: SweptContactBody,
+): ContactResult {
+  const discrete = resolveVehicleContact(a, b);
+  if (discrete.contacted) return discrete;
+  const reach = a.radius + b.radius;
+  const px = b.prevX - a.prevX;
+  const pz = b.prevZ - a.prevZ;
+  const vx = b.x - b.prevX - (a.x - a.prevX);
+  const vz = b.z - b.prevZ - (a.z - a.prevZ);
+  const vv = vx * vx + vz * vz;
+  // The sweep arm wakes ONLY for a pair whose relative motion covers the
+  // whole reach inside the tick, the one case the discrete test can actually
+  // tunnel through. Below that, an interior dip under the reach is a
+  // centimeters-deep graze between two separated endpoints: physically
+  // nothing, and firing on it is what broke the relocated-circuit
+  // translation invariance (each such graze sits at the exact threshold,
+  // where the float noise of a big coordinate offset flips it).
+  if (vv < reach * reach) return discrete;
+  const bq = px * vx + pz * vz;
+  if (bq >= 0) return discrete; // never approaching inside this tick
+  // |p + t v|^2 = reach^2, earliest root: the first instant within reach.
+  const c0 = px * px + pz * pz - reach * reach;
+  const disc = bq * bq - vv * c0;
+  if (disc <= 0) return discrete; // the segments never come within reach
+  const tTouch = (-bq - Math.sqrt(disc)) / vv;
+  if (tTouch < 0 || tTouch >= 1) return discrete;
+  const t = Math.min(tTouch + 1e-3, clamp01(-bq / vv));
+  a.x = a.prevX + (a.x - a.prevX) * t;
+  a.z = a.prevZ + (a.z - a.prevZ) * t;
+  b.x = b.prevX + (b.x - b.prevX) * t;
+  b.z = b.prevZ + (b.z - b.prevZ) * t;
+  return resolveVehicleContact(a, b);
+}
