@@ -121,6 +121,7 @@ import type { SimContext } from '../sim_context';
 import { type Entity, TICK_RATE, type VehicleDrive } from '../types';
 import {
   type ContactBody,
+  resolveVehicleContactEarly,
   resolveVehicleContactSwept,
   type SweptContactBody,
 } from '../vehicle_contact';
@@ -298,6 +299,17 @@ export const REALM_RACERS_DEAD_HEAT_YARDS = 0.5;
 export const REALM_RACERS_BUMP_EVENT_MIN_IMPACT = 3;
 /** And even above that threshold, one event per pair per half second. */
 export const REALM_RACERS_BUMP_EVENT_TICKS = TICK_RATE / 2;
+/**
+ * How far ahead the forward contact window fires a touch the pair is about to
+ * make, in ticks: option B's one knob
+ * (docs/prd/realm-racers-contact-lag-compensation.md). Two ticks is 100 ms,
+ * the uplink half plus tick quantization of the pings the game is tuned for;
+ * 0 degrades to the plain swept test. The window reuses the announceable-bump
+ * floor above as its closing-speed gate ON PURPOSE: an early contact is
+ * always a real, announceable hit, so retuning the floor retunes the window
+ * with it, one meaning in one constant.
+ */
+export const REALM_RACERS_CONTACT_EARLY_TICKS = 2;
 
 /** The weapon a racer is holding, and what is left of it. A SLOT rather than a
  *  hardcoded kit: pickups write a different value into it, and a roster of
@@ -1669,10 +1681,30 @@ function tickContacts(ctx: SimContext, match: RealmRacersMatch): void {
       if (!a?.drive || !b?.drive || a.dead || b.dead) continue;
       const bodyA = contactBodyFor(a, a.drive);
       const bodyB = contactBodyFor(b, b.drive);
-      const contact = resolveVehicleContactSwept(bodyA, bodyB);
+      let contact = resolveVehicleContactSwept(bodyA, bodyB);
+      let early = false;
+      if (!contact.contacted) {
+        // The forward window (option B of the contact lag-compensation
+        // spec): fire the touch this pair is about to make within the next
+        // couple of ticks at its current motion, because that touch is the
+        // one the attacker is already SEEING (their server pose trails their
+        // display by the uplink). Impulse-only inside the resolver (the
+        // hulls do not overlap yet, so nothing is depenetrated or settled),
+        // gated on the announceable-bump floor so a slipstream with ~zero
+        // closing speed can never trip it.
+        contact = resolveVehicleContactEarly(
+          bodyA,
+          bodyB,
+          REALM_RACERS_CONTACT_EARLY_TICKS,
+          REALM_RACERS_BUMP_EVENT_MIN_IMPACT,
+        );
+        early = contact.contacted;
+      }
       if (!contact.contacted) continue;
-      settleContact(ctx, a, bodyA);
-      settleContact(ctx, b, bodyB);
+      if (!early) {
+        settleContact(ctx, a, bodyA);
+        settleContact(ctx, b, bodyB);
+      }
       if (contact.impact < REALM_RACERS_BUMP_EVENT_MIN_IMPACT) continue;
       // Deed-tracking only (docs/design/deeds.md): a real, announced bump
       // (the same floor the event above uses) disqualifies a clean race for

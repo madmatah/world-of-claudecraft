@@ -1,7 +1,25 @@
 # Realm Racers: contact under latency, the last mile
 
-Status: DRAFT, awaiting a decision on the option to build. Nothing in this
-document is implemented.
+Status: DECIDED, Option B chosen and implemented, in its FORWARD form:
+`resolveVehicleContactEarly` in `src/sim/vehicle_contact.ts`, wired into
+`tickContacts` behind `REALM_RACERS_CONTACT_EARLY_TICKS`. The window fires
+the touch a pair is ABOUT to make within the horizon at its current motion,
+impulse-only (no depenetration, no position writes), gated on the
+announceable-bump closing-speed floor.
+
+Why forward rather than the history sketch below: the first implementation
+compared the attacker's present hull against the rival's recorded past
+segments, and review measured the flaw before it shipped. Testing against
+where the rival stood K ticks ago forgives the rival's OWN displacement,
+several yards per tick at race speed, so a straight-line follower took a full
+bump from 7 to 12 yards back at 4 yd/s of closing while a genuinely close one
+got nothing (the reach around discrete past segments forms an annulus, not a
+disc). The forward window forgives only the CLOSING distance covered inside
+the horizon, under a yard for a tailgater and a couple of yards in a real
+lunge, which is the actual perception gap; a slipstream with ~zero closing
+can never trip it, and no position history, teleport invalidation, or probe
+ordering exists at all. Awaiting the user's in-game verdict on whether it
+stays.
 
 ## Where the problem stands
 

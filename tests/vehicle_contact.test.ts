@@ -8,6 +8,7 @@ import {
   type ContactBody,
   MAX_BUMP_IMPULSE,
   resolveVehicleContact,
+  resolveVehicleContactEarly,
   resolveVehicleContactSwept,
   type SweptContactBody,
 } from '../src/sim/vehicle_contact';
@@ -400,6 +401,92 @@ describe('swept vehicle contact', () => {
     expect(sweptResult).toEqual(discreteResult);
     expect(snapshot(sweptPair.a)).toEqual(snapshot(discretePair.a));
     expect(snapshot(sweptPair.b)).toEqual(snapshot(discretePair.b));
+  });
+
+  it('fires the touch a closing pair is about to make, without moving anyone', () => {
+    // A lunges laterally at B: the same-tick gap is still outside the 3.4 yd
+    // reach, but at this closing speed the hulls meet inside the horizon.
+    // That touch is the one the attacker is already seeing (their server pose
+    // trails their display by the uplink), so it fires NOW, impulse-only:
+    // both machines keep their positions, only their velocities pay.
+    // A runs alongside B (30 yd/s down the road) and cuts in at 15 yd/s of
+    // pure lateral closing; the touch lands ~1.1 ticks out.
+    const a = swept({
+      prevX: 5.0,
+      prevZ: -1.5,
+      x: 4.25,
+      z: 0,
+      facing: Math.atan2(-15, 30),
+      speed: Math.hypot(15, 30),
+    });
+    const b = swept({ prevX: 0, prevZ: -1.5, x: 0, z: 0, facing: 0, speed: 30 });
+    const posA = { x: a.x, z: a.z };
+    const result = resolveVehicleContactEarly(a, b, 2, 3);
+    expect(result.contacted).toBe(true);
+    expect(result.impact).toBeGreaterThan(3);
+    expect({ x: a.x, z: a.z }).toEqual(posA);
+    expect({ x: b.x, z: b.z }).toEqual({ x: 0, z: 0 });
+    // The lunge cost A speed (the impulse pushed its velocity off the dive).
+    expect(a.drive.speed).toBeLessThan(Math.hypot(15, 30));
+  });
+
+  it('never touches a pair holding station across the horizon', () => {
+    // A slipstream: same velocities, constant gap barely outside reach. Zero
+    // closing speed never reaches the touch inside any horizon, so the
+    // window is a complete no-op however long they hold formation.
+    const a = swept({ prevX: 0, prevZ: -1.5, x: 0, z: 0, facing: 0, speed: 30 });
+    const b = swept({ prevX: 0, prevZ: 2.1, x: 0, z: 3.6, facing: 0, speed: 30 });
+    const before = [snapshot(a), snapshot(b)];
+    const result = resolveVehicleContactEarly(a, b, 2, 3);
+    expect(result.contacted).toBe(false);
+    expect([snapshot(a), snapshot(b)]).toEqual(before);
+  });
+
+  it('leaves a gentle tailgate alone: the rear annulus defect stays dead', () => {
+    // The measured defect of the HISTORY formulation this replaced: a
+    // follower 8 yd back closing at 4 yd/s got a full bump from thin air.
+    // Forward, 4 yd/s covers 0.4 yd inside the 2-tick horizon against a
+    // 4.6 yd shortfall: nothing fires, at 8 yd or anywhere nearer the reach.
+    for (const gap of [4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+      const a = swept({ prevX: 0, prevZ: -1.7, x: 0, z: 0, facing: 0, speed: 34 });
+      const b = swept({ prevX: 0, prevZ: gap - 1.5, x: 0, z: gap, facing: 0, speed: 30 });
+      const before = [snapshot(a), snapshot(b)];
+      const result = resolveVehicleContactEarly(a, b, 2, 3);
+      expect(result.contacted).toBe(false);
+      expect([snapshot(a), snapshot(b)]).toEqual(before);
+    }
+  });
+
+  it('refuses a touch past the horizon', () => {
+    // Closing hard but from far: the touch lands 3+ ticks out, beyond the
+    // 2-tick window, so the same-tick passes of the coming ticks own it.
+    const a = swept({ prevX: 12, prevZ: 0, x: 10.5, z: 0, facing: -Math.PI / 2, speed: 30 });
+    const b = swept({ prevX: 0, prevZ: 0, x: 0, z: 0, facing: 0, speed: 0 });
+    const result = resolveVehicleContactEarly(a, b, 2, 3);
+    expect(result.contacted).toBe(false);
+  });
+
+  it('is translation invariant for a representative lunge', () => {
+    // The knife-edge lesson from the swept arm, pinned directly: the same
+    // relative geometry far from the origin must decide the same way.
+    const mk = (offX: number, offZ: number) => {
+      const a = swept({
+        prevX: offX + 5.0,
+        prevZ: offZ - 1.5,
+        x: offX + 4.25,
+        z: offZ,
+        facing: Math.atan2(-15, 30),
+        speed: Math.hypot(15, 30),
+      });
+      const b = swept({ prevX: offX, prevZ: offZ - 1.5, x: offX, z: offZ, facing: 0, speed: 30 });
+      const result = resolveVehicleContactEarly(a, b, 2, 3);
+      return { contacted: result.contacted, impact: result.impact, a: snapshot(a).speed };
+    };
+    const origin = mk(0, 0);
+    const far = mk(4000, -3200);
+    expect(far.contacted).toBe(origin.contacted);
+    expect(far.impact).toBeCloseTo(origin.impact, 9);
+    expect(far.a).toBeCloseTo(origin.a, 9);
   });
 
   it('mirrors when the pair is swapped, and is byte-identical run to run', () => {

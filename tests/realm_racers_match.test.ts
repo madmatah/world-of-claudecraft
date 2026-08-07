@@ -1392,6 +1392,63 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     expect(progressB.hadRivalContact).toBe(true);
   });
 
+  it('fires an imminent lunge through the forward contact window, impulse-only', () => {
+    // Option B of docs/prd/realm-racers-contact-lag-compensation.md, wired:
+    // A dives laterally at B with the same-tick gap still OUTSIDE the 3.4 yd
+    // reach, closing fast enough that the hulls meet within the 2-tick
+    // horizon (the exact shape of the uplink miss). The window arm must fire
+    // the bump now, impulse-only: both machines keep their positions, only
+    // their velocities pay.
+    const { sim, a, b } = startMatch();
+    match(sim).phase = 'racing';
+    const track = realmRacersTrack(RACE_CIRCUIT);
+    const sample = track.samples[120];
+    const latX = -sample.tz;
+    const latZ = sample.tx;
+    const racerA = entity(sim, a);
+    const racerB = entity(sim, b);
+    const driveA = required(racerA.drive, 'drive A');
+    const driveB = required(racerB.drive, 'drive B');
+    // B runs down the road at 30 yd/s; A sits 4.25 yd to the side, matching
+    // B's forward speed and closing laterally at 15 yd/s.
+    teleport(sim, b, sample.x, sample.z);
+    teleport(sim, a, sample.x + latX * 4.25, sample.z + latZ * 4.25);
+    racerB.prevPos = {
+      x: racerB.pos.x - sample.tx * 1.5,
+      y: racerB.pos.y,
+      z: racerB.pos.z - sample.tz * 1.5,
+    };
+    racerB.facing = Math.atan2(sample.tx, sample.tz);
+    driveB.speed = 30;
+    driveB.slip = 0;
+    racerA.prevPos = {
+      x: racerA.pos.x + latX * 0.75 - sample.tx * 1.5,
+      y: racerA.pos.y,
+      z: racerA.pos.z + latZ * 0.75 - sample.tz * 1.5,
+    };
+    const vAx = -15 * latX + 30 * sample.tx;
+    const vAz = -15 * latZ + 30 * sample.tz;
+    racerA.facing = Math.atan2(vAx, vAz);
+    driveA.speed = Math.hypot(15, 30);
+    driveA.slip = 0;
+    const posA = { x: racerA.pos.x, z: racerA.pos.z };
+    const posB = { x: racerB.pos.x, z: racerB.pos.z };
+    const progressA = required(match(sim).progress.get(a), `progress ${a}`);
+    const progressB = required(match(sim).progress.get(b), `progress ${b}`);
+    expect(progressA.hadRivalContact).toBe(false);
+    sim.tickCount++;
+    updateRealmRacers(sim.ctx);
+    expect(progressA.hadRivalContact).toBe(true);
+    expect(progressB.hadRivalContact).toBe(true);
+    // Impulse-only: the early window never moves a hull.
+    expect(racerA.pos.x).toBe(posA.x);
+    expect(racerA.pos.z).toBe(posA.z);
+    expect(racerB.pos.x).toBe(posB.x);
+    expect(racerB.pos.z).toBe(posB.z);
+    // The dive cost A speed along the touch normal.
+    expect(driveA.speed).toBeLessThan(Math.hypot(15, 30));
+  });
+
   it('tracks a Ground Blast hit on the victim only', () => {
     const { sim, a, b } = startMatch();
     match(sim).phase = 'racing';
