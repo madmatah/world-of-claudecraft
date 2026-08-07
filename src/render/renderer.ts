@@ -262,6 +262,13 @@ import {
   opaqueMaterialFirstSort,
   shouldUseFrontToBackOpaqueSort,
 } from './opaque_draw_order_core';
+import {
+  canMarkOwnShotFeedback,
+  consumeOwnShotFeedback,
+  createOwnShotFeedback,
+  markOwnShotFeedback,
+  type OwnShotFeedbackState,
+} from './own_shot_feedback_core';
 import { projectionScalePixels } from './perceptual_lod_core';
 import { resolveDirectPickEntityId } from './pick_resolution';
 import { PlacedAssetsView } from './placed_assets';
@@ -318,6 +325,12 @@ import {
   isOutsideRealmRacersRetainRange,
   isRealmRacersCoPilot,
 } from './realm_racers_visibility_core';
+import {
+  createRemoteVehicleDisplay,
+  type RemoteVehicleDisplayState,
+  resetRemoteVehicleDisplay,
+  stepRemoteVehicleDisplay,
+} from './remote_vehicle_display_core';
 import {
   RenderBudgetGovernor,
   type RenderBudgetSample,
@@ -986,6 +999,9 @@ export interface EntityView {
   wasMountCasting: boolean;
   /** Display-only vertical smoothing (step-up/step-down presentation). */
   stepSmooth: StepSmoothState;
+  /** Display-only forward projection of a REMOTE racing machine toward the
+   *  present (remote_vehicle_display_core); inactive outside a race. */
+  remoteVehicle: RemoteVehicleDisplayState;
   /** Previous drawn height, for the display-derived fall speed. */
   prevRenderY: number;
   hasPrevY: boolean;
@@ -1474,6 +1490,32 @@ export class Renderer {
     return this.selfMotionActive && this.selfMotionPredictor?.driving
       ? this.selfMotionPredictor.facing
       : null;
+  }
+
+  private readonly selfAimPoseOut = { pos: { x: 0, y: 0, z: 0 }, facing: 0 };
+
+  /**
+   * The DISPLAYED self pose, for aiming affordances (the ground-aim reticle's
+   * cone/range clamp). Online, the mirror pose the HUD reads is one echo old;
+   * at racing speed that is yards behind the machine the player is looking at,
+   * so a clamp measured from it promises a limit the server will not apply.
+   * The predicted display pose is also the closest estimate of the pose the
+   * server WILL hold when the cast command arrives (one uplink from now).
+   * Null while the predictor is inactive (offline, spectating, gated), where
+   * the mirror pose is already the right reference. Returns a reused object:
+   * per-frame reticle redraw path.
+   */
+  get selfAimPose(): { pos: { x: number; y: number; z: number }; facing: number } | null {
+    if (!this.selfMotionActive || !this.selfRenderPositionReady) return null;
+    const out = this.selfAimPoseOut;
+    out.pos.x = this.selfRenderPosition.x;
+    out.pos.y = this.selfRenderPosition.y;
+    out.pos.z = this.selfRenderPosition.z;
+    // Driving, the predictor's steered heading is the zero-latency truth
+    // (selfMotionFacing); on foot the facing channel is client-authoritative
+    // input and the mirror is already current.
+    out.facing = this.selfMotionFacing ?? this.sim.player?.facing ?? 0;
+    return out;
   }
 
   private lastSelfId: number | null = null;
@@ -6075,6 +6117,49 @@ export class Renderer {
     return stats;
   }
 
+  // Latch deduplicating the own Fired event's muzzle cue against the locally
+  // played one (own_shot_feedback_core). Lazily created: hand-built prototype
+  // fixtures (Object.create(Renderer.prototype), see tests/CLAUDE.md) never
+  // run field initializers, and the event path must survive them.
+  private ownShotFeedbackState: OwnShotFeedbackState | undefined;
+  private get ownShotFeedback(): OwnShotFeedbackState {
+    this.ownShotFeedbackState ??= createOwnShotFeedback();
+    return this.ownShotFeedbackState;
+  }
+
+  /**
+   * Instant local feedback for the pilot's OWN rally shot: the muzzle flash
+   * and fire report, played at the press instead of one round trip later.
+   * Display and audio only, from the displayed pose; the shot itself, its
+   * arc, the dodge marker and the crater stay server-authoritative (the Fired
+   * event still drives them, minus the duplicate muzzle, see handleEvent).
+   */
+  predictOwnGroundBlastFire(): void {
+    // One report in flight at a time: a re-commit inside the round trip beats
+    // the not-yet-mirrored cooldown, and its shell will never exist.
+    if (!canMarkOwnShotFeedback(this.ownShotFeedback, performance.now())) return;
+    const pose = this.selfAimPose;
+    const p = this.sim.player;
+    const px = pose ? pose.pos.x : p.pos.x;
+    const pz = pose ? pose.pos.z : p.pos.z;
+    const facing = pose ? pose.facing : p.facing;
+    // The server spawns its muzzle two yards up the nose (social/realm_racers
+    // emit site); match it so the suppressed event leaves no visible gap.
+    const x = px + Math.sin(facing) * 2;
+    const z = pz + Math.cos(facing) * 2;
+    this.vfx.burst(new THREE.Vector3(x, 1.1, z), 'arcane', 14, 0.65);
+    playRealmRacersEventAudio(this.audioSink, this.groundSample, {
+      type: 'realmRacersGroundBlastFired',
+      sourceId: this.sim.playerId,
+      x,
+      z,
+      targetX: x,
+      targetZ: z,
+      flightSeconds: 0,
+    });
+    markOwnShotFeedback(this.ownShotFeedback, performance.now());
+  }
+
   // Visual reactions to sim events (called by the HUD for every event,
   // including those between other players and mobs).
   handleEvent(ev: SimEvent): void {
@@ -6483,8 +6568,20 @@ export class Renderer {
           ev.flightSeconds,
           this.groundSample(ev.targetX, ev.targetZ),
         );
-        this.vfx.burst(new THREE.Vector3(ev.x, 1.1, ev.z), 'arcane', 14, 0.65);
-        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
+        // The local pilot's own muzzle flash and report already played at the
+        // press (predictOwnGroundBlastFire); replaying them one round trip
+        // later reads as a double shot. The arc and the marker above are not
+        // duplicated locally, so they always run.
+        if (
+          !consumeOwnShotFeedback(
+            this.ownShotFeedback,
+            ev.sourceId === this.sim.playerId,
+            performance.now(),
+          )
+        ) {
+          this.vfx.burst(new THREE.Vector3(ev.x, 1.1, ev.z), 'arcane', 14, 0.65);
+          playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
+        }
         break;
       case 'realmRacersGroundBlastHit': {
         // The crater fires whether or not anyone was caught: a miss that lands
@@ -7159,6 +7256,7 @@ export class Renderer {
       lastMountKey: e.mountKey,
       wasMountCasting: e.mountCastRemaining > 0,
       stepSmooth: createStepSmooth(),
+      remoteVehicle: createRemoteVehicleDisplay(),
       groundTilt: createGroundTilt(),
       vehicleLean: createVehicleLean(),
       prevRenderY: 0,
@@ -8779,11 +8877,38 @@ export class Renderer {
       const ea = isSelf
         ? Math.min(1, alpha)
         : remoteEntityAlpha(now, e.netUpdatedAt, e.netInterval, alpha);
-      const x = isSelf ? selfPos.x : e.prevPos.x + (e.pos.x - e.prevPos.x) * ea;
+      let x = isSelf ? selfPos.x : e.prevPos.x + (e.pos.x - e.prevPos.x) * ea;
       const y = isSelf ? selfPos.y : e.prevPos.y + (e.pos.y - e.prevPos.y) * ea;
-      const z = isSelf ? selfPos.z : e.prevPos.z + (e.pos.z - e.prevPos.z) * ea;
-      v.group.position.set(x, y, z);
+      let z = isSelf ? selfPos.z : e.prevPos.z + (e.pos.z - e.prevPos.z) * ea;
       let facing = e.prevFacing + shortestAngle(e.prevFacing, e.facing) * facingAlpha(ea);
+      if (!isSelf && e.drive && e.netUpdatedAt !== undefined) {
+        // A remote racing machine is projected to the PRESENT off its newest
+        // wire pose and wire velocity instead of interpolating the past two:
+        // the interp clock chases arrival gaps, so link jitter froze and
+        // lunged every rival, and the ~(downlink + interval) display lag put
+        // the drawn hull yards behind the server's, which is why a visually
+        // clean lunge never bumped anyone. Display-only, like the self
+        // predictor: server decisions keep using authoritative positions.
+        // The vertical stays on the interpolated wire segment (no vy on the
+        // wire; a blast arc interpolates acceptably at snapshot rate).
+        stepRemoteVehicleDisplay(
+          v.remoteVehicle,
+          e.pos.x,
+          e.pos.z,
+          e.facing,
+          vehicleVelocityX(e.drive, e.facing),
+          vehicleVelocityZ(e.drive, e.facing),
+          e.drive.yawRate + e.drive.spin,
+          now - e.netUpdatedAt + (selfMotion ? selfMotion.echoMs * 0.5 : 0),
+          dt,
+        );
+        x = v.remoteVehicle.x;
+        z = v.remoteVehicle.z;
+        facing = v.remoteVehicle.facing;
+      } else if (v.remoteVehicle.active) {
+        resetRemoteVehicleDisplay(v.remoteVehicle);
+      }
+      v.group.position.set(x, y, z);
       if (id === p.id && this.selfMotionActive && this.selfMotionPredictor?.driving) {
         // Driving, the heading is not camera-driven input: it is steered, and
         // the predictor integrates it with the same kernel the server runs. Its

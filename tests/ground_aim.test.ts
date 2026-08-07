@@ -15,6 +15,7 @@ import {
   createGroundAimState,
   DEFAULT_GROUND_AOE_RADIUS,
   enterGroundAim,
+  localBlastFeedbackAllowed,
   shouldUseGroundAim,
 } from '../src/ui/hud/action_bar/ground_aim';
 
@@ -136,5 +137,38 @@ describe('ground_aim', () => {
       abilityId: 'earthquake',
       state: { activeAbilityId: null, activeSlot: null },
     });
+  });
+});
+
+describe('localBlastFeedbackAllowed', () => {
+  // The gate mirrors the client-visible half of realmRacersFireGroundBlast's
+  // refusal set. Every dimension gets its own negative case: a gate that only
+  // ever ran fully-open would pass while refusing nothing.
+  const allowed = (over: Partial<Record<string, unknown>> = {}) =>
+    localBlastFeedbackAllowed(
+      (over.abilityId as string) ?? REALM_RACERS_ABILITY_ID,
+      (over.casterDead as boolean) ?? false,
+      (over.activityLocked as boolean) ?? false,
+      (over.cooldownRemaining as number) ?? 0,
+      (over.racingPhase as boolean) ?? true,
+      (over.stillRunning as boolean) ?? true,
+    );
+
+  it('allows the shell when every mirror says the sim would accept it', () => {
+    expect(allowed()).toBe(true);
+  });
+
+  it('refuses each client-visible reason the sim refuses on', () => {
+    // The shell ONLY: a future position-targeted rally ability must not
+    // inherit the Ground Blast's muzzle report.
+    expect(allowed({ abilityId: 'rally_nitro' })).toBe(false);
+    expect(allowed({ abilityId: 'flamestrike' })).toBe(false);
+    expect(allowed({ casterDead: true })).toBe(false);
+    expect(allowed({ activityLocked: true })).toBe(false);
+    expect(allowed({ cooldownRemaining: 2.5 })).toBe(false);
+    // Countdown and podium are not the racing phase.
+    expect(allowed({ racingPhase: false })).toBe(false);
+    // A finished or retired pilot keeps the wheel but is done shooting.
+    expect(allowed({ stillRunning: false })).toBe(false);
   });
 });

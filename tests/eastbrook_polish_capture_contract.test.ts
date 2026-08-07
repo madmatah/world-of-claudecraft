@@ -391,7 +391,12 @@ describe('Eastbrook polish capture contract', () => {
       // listener anchor in src/render/renderer.ts moves to the avatar, which
       // moves the rendererIntegration leaf once more. Nothing about Eastbrook
       // changed, no pipeline input or geometry value moved, no capture retaken.
-      fingerprint: 'b9740c09dabbf4717960d17453630e3f2437f7426ad09b9f461ffdeb3852cfe0',
+      // Re-minted for the rally latency-feel pass: the remote-machine display
+      // projection and the own-shot local feedback edit src/render/renderer.ts
+      // again, moving the rendererIntegration leaf and the composite. Nothing
+      // about Eastbrook changed, no pipeline input or geometry value moved,
+      // no capture retaken.
+      fingerprint: '19d050d61e4edab56ed72c00e76a22553c79bc447cefa9b0c48bd40196161c43',
 
       components: {
         captureContract: {

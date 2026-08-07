@@ -332,6 +332,7 @@ import {
   createGroundAimState,
   enterGroundAim,
   type GroundAimState,
+  localBlastFeedbackAllowed,
   shouldUseGroundAim,
 } from './hud/action_bar/ground_aim';
 import {
@@ -6182,6 +6183,14 @@ export class Hud {
     return this.sim.known.find((k) => k.def.id === id) ?? null;
   }
 
+  /** The pose the aim clamp measures from: the DISPLAYED self when the online
+   *  predictor drives it (the mirror pose is an echo old, which at racing
+   *  speed clamps the reticle yards behind the machine the player sees), else
+   *  the world's own player pose (offline it is exact). */
+  private aimCaster(): Pick<Entity, 'pos' | 'facing'> {
+    return this.renderer.selfAimPose ?? this.sim.player;
+  }
+
   updateGroundAimPoint(rawPoint: AimPoint | null): void {
     if (!this.isGroundAimActive() || !rawPoint) {
       this.groundAimPoint = null;
@@ -6193,7 +6202,7 @@ export class Hud {
       this.cancelGroundAim();
       return;
     }
-    const aim = clampAimToRange(this.sim.player, rawPoint, res.def.range, res.def.id);
+    const aim = clampAimToRange(this.aimCaster(), rawPoint, res.def.range, res.def.id);
     this.groundAimPoint = aim.point;
     this.groundAimClamped = aim.clamped;
   }
@@ -6225,8 +6234,9 @@ export class Hud {
       this.cancelGroundAim();
       return true;
     }
+    const barSlot = this.groundAim.activeSlot;
     const point = rawPoint
-      ? clampAimToRange(this.sim.player, rawPoint, res.def.range, res.def.id).point
+      ? clampAimToRange(this.aimCaster(), rawPoint, res.def.range, res.def.id).point
       : this.groundTargetAim();
     const committed = commitGroundAim(this.groundAim);
     this.groundAim = committed.state;
@@ -6234,6 +6244,30 @@ export class Hud {
     this.groundAimClamped = false;
     this.renderer.setGroundAimReticle(null);
     this.sim.castAbilityAt(abilityId, point);
+    // The commit is the fire moment however it arrived (second key press,
+    // mouse click, mobile tap), so the button flash lives here, once, instead
+    // of only on the keyboard path.
+    if (barSlot !== null) this.flashActionSlot(barSlot);
+    // Online, every audible and visible cue of a rally shot used to wait for
+    // the server's Fired event, a full round trip after the press: the weapon
+    // read as firing late. Play the muzzle report NOW when the cast is legal
+    // by every mirror the client can see (the gate mirrors the client-visible
+    // half of realmRacersFireGroundBlast's refusals); the renderer suppresses
+    // the duplicate when the real event lands. The shot itself, the arc and
+    // the dodge marker stay server-authoritative.
+    const race = this.sim.realmRacersInfo.match;
+    if (
+      localBlastFeedbackAllowed(
+        abilityId,
+        this.sim.player.dead,
+        isAbilityLockedByActivity(this.sim.player, abilityId),
+        this.sim.player.cooldowns.get(abilityId) ?? 0,
+        race?.phase === 'racing',
+        race !== null && !race.me.finished && !race.me.retired,
+      )
+    ) {
+      this.renderer.predictOwnGroundBlastFire();
+    }
     return true;
   }
 
@@ -6285,8 +6319,9 @@ export class Hud {
   castSlot(barSlot: number): void {
     if (this.isGroundAimActive()) {
       if (this.groundAim.activeSlot === barSlot) {
+        // The flash rides the commit itself, shared with the mouse and touch
+        // commit paths.
         this.commitGroundAimAt();
-        this.flashActionSlot(barSlot);
         return;
       }
       this.cancelGroundAim();

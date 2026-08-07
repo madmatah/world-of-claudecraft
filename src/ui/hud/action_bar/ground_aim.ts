@@ -1,4 +1,4 @@
-import { REALM_RACERS_ABILITIES } from '../../../sim/content/realm_racers';
+import { REALM_RACERS_ABILITIES, REALM_RACERS_ABILITY_ID } from '../../../sim/content/realm_racers';
 import { resolveGroundBlastAim } from '../../../sim/realm_racers_ground_blast';
 import type { AbilityEffect, Entity } from '../../../sim/types';
 
@@ -97,6 +97,38 @@ export function clampAimToRange(
     },
     clamped: true,
   };
+}
+
+/**
+ * May the client play the INSTANT local muzzle report for this commit? Online,
+ * every audible cue of a rally shot otherwise waits a full round trip for the
+ * server's Fired event, which reads as the weapon firing late.
+ *
+ * The inputs mirror the client-visible half of the refusal set in
+ * `realmRacersFireGroundBlast` (src/sim/social/realm_racers.ts): the shell
+ * ability only (never a future rally ability with its own report), a live
+ * caster, the activity lock (controls locked or out of charges), no running
+ * cooldown, the racing phase, and a pilot whose own race is not over (a
+ * finished or retired pilot keeps the wheel but is done shooting). The server
+ * stays the judge either way: a wrong local yes costs one cosmetic report
+ * whose event never arrives, and the render-side latch simply expires.
+ */
+export function localBlastFeedbackAllowed(
+  abilityId: string,
+  casterDead: boolean,
+  activityLocked: boolean,
+  cooldownRemaining: number,
+  racingPhase: boolean,
+  stillRunning: boolean,
+): boolean {
+  return (
+    abilityId === REALM_RACERS_ABILITY_ID &&
+    !casterDead &&
+    !activityLocked &&
+    cooldownRemaining <= 0 &&
+    racingPhase &&
+    stillRunning
+  );
 }
 
 export function abilityAoeRadius(res: { effects: readonly AbilityEffect[] }): number {
