@@ -5,15 +5,26 @@ import {
   resetRemoteVehicleDisplay,
   stepRemoteVehicleDisplay,
 } from '../src/render/remote_vehicle_display_core';
+import { vehicleProfile } from '../src/sim/content/vehicles';
+import { DT, type VehicleDrive } from '../src/sim/types';
+import {
+  advanceVehicleDrive,
+  createVehicleDrive,
+  vehicleTopSpeedFor,
+  vehicleVelocityX,
+  vehicleVelocityZ,
+} from '../src/sim/vehicle_motion';
 
-// Policy tests for the remote-machine forward projection, driven by scripted
-// trajectories under netem-like delivery (60 ms downlink, +/-20 ms per-packet
-// jitter against the 20 Hz snapshot cadence): the exact conditions under which
-// the plain interpolation path freezes and dashes.
+// Policy tests for the remote-machine forward projection, driven by the REAL
+// vehicle kernel as ground truth and netem-like delivery (60 ms downlink,
+// +/-20 ms per-packet jitter against the 20 Hz snapshot cadence): the exact
+// conditions under which the plain interpolation path froze and dashed, plus
+// the corner-entry window where a constant-yaw projection misses.
 
 const FRAME_MS = 1000 / 60;
 const SNAP_MS = 50;
 const DOWNLINK_MS = 60;
+const PROFILE_KEY = 'tank';
 
 // Deterministic per-packet jitter in [-20, 20] ms (mulberry-style, fixed seed).
 function jitterSequence(count: number, seed: number): number[] {
@@ -29,141 +40,182 @@ function jitterSequence(count: number, seed: number): number[] {
   return out;
 }
 
-interface TrajectoryPoint {
+interface TruthSample {
   x: number;
   z: number;
   facing: number;
-  vx: number;
-  vz: number;
-  yawRate: number;
-}
-
-/** Constant-speed, constant-yaw trajectory (straight when yawRate is 0). */
-function trajectoryAt(tSec: number, speed: number, yawRate: number): TrajectoryPoint {
-  const f = yawRate * tSec;
-  if (yawRate === 0) {
-    return { x: 0, z: speed * tSec, facing: 0, vx: 0, vz: speed, yawRate };
-  }
-  // forward = (sin f, cos f); integrating speed * forward over f = w t gives
-  // a circle of radius speed / w.
-  const r = speed / yawRate;
-  return {
-    x: r * (1 - Math.cos(f)),
-    z: r * Math.sin(f),
-    facing: ((f + Math.PI) % (2 * Math.PI)) - Math.PI,
-    vx: speed * Math.sin(f),
-    vz: speed * Math.cos(f),
-    yawRate,
-  };
+  drive: VehicleDrive;
 }
 
 /**
- * Run the client against jittered deliveries of a trajectory and collect the
- * drawn poses. Wall clock and server clock coincide; delivery k (sampled at
- * k * 50 ms) arrives at k * 50 + DOWNLINK + jitter[k].
+ * Drive the real kernel for `seconds` with a scripted wheel (throttle held,
+ * like a racer), recording one sample per tick: the authoritative trajectory
+ * the server would broadcast.
  */
+function driveTruth(seconds: number, steerAt: (tSec: number) => number): TruthSample[] {
+  const drive = createVehicleDrive(PROFILE_KEY);
+  const profile = vehicleProfile(PROFILE_KEY);
+  let x = 0;
+  let z = 0;
+  let facing = 0;
+  const out: TruthSample[] = [{ x, z, facing, drive: { ...drive } }];
+  const ticks = Math.round(seconds / DT);
+  for (let k = 1; k <= ticks; k++) {
+    facing += advanceVehicleDrive(drive, profile, {
+      throttle: 1,
+      steer: steerAt((k - 1) * DT),
+      handbrake: false,
+      onGround: true,
+      auraMult: 1,
+    });
+    x += vehicleVelocityX(drive, facing) * DT;
+    z += vehicleVelocityZ(drive, facing) * DT;
+    out.push({ x, z, facing, drive: { ...drive } });
+  }
+  return out;
+}
+
+function wrap(d: number): number {
+  let a = d;
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
+}
+
+function truthAt(truth: TruthSample[], tMs: number): { x: number; z: number; facing: number } {
+  const t = Math.max(0, tMs / 1000 / DT);
+  const k = Math.min(truth.length - 1, Math.floor(t));
+  const n = Math.min(truth.length - 1, k + 1);
+  const f = Math.min(1, t - k);
+  return {
+    x: truth[k].x + (truth[n].x - truth[k].x) * f,
+    z: truth[k].z + (truth[n].z - truth[k].z) * f,
+    facing: truth[k].facing + wrap(truth[n].facing - truth[k].facing) * f,
+  };
+}
+
+interface RunResult {
+  /** Per frame: [tMs, position error yd, facing error rad, frame speed yd/s]. */
+  frames: [number, number, number, number][];
+  lastWire: TruthSample;
+}
+
+/** Run the client against jittered deliveries of the truth track. Delivery k
+ *  (sampled at k * 50 ms) arrives at k * 50 + DOWNLINK + jitter[k]. */
 function run(
-  speed: number,
-  yawRate: number,
+  truth: TruthSample[],
   seconds: number,
   opts: { stallFromMs?: number; stallToMs?: number } = {},
-): { errs: number[]; facingErrs: number[]; frameSpeeds: number[]; lastWire: TrajectoryPoint } {
+): RunResult {
   const s = createRemoteVehicleDisplay();
   const frames = Math.round((seconds * 1000) / FRAME_MS);
-  const snapCount = Math.ceil((seconds * 1000) / SNAP_MS) + 1;
-  const jitter = jitterSequence(snapCount, 1234);
-  const arrivals: { atMs: number; sample: TrajectoryPoint }[] = [];
-  for (let k = 0; k < snapCount; k++) {
+  const snapCount = Math.floor((seconds * 1000) / SNAP_MS);
+  const jitter = jitterSequence(snapCount + 1, 1234);
+  const arrivals: { atMs: number; sample: TruthSample }[] = [];
+  for (let k = 0; k <= snapCount; k++) {
     const sentAt = k * SNAP_MS;
     const atMs = sentAt + DOWNLINK_MS + jitter[k];
     if (opts.stallFromMs !== undefined && atMs >= opts.stallFromMs && atMs < (opts.stallToMs ?? 0))
       continue;
-    arrivals.push({ atMs, sample: trajectoryAt(sentAt / 1000, speed, yawRate) });
+    const tick = Math.round(sentAt / 1000 / DT);
+    if (tick < truth.length) arrivals.push({ atMs, sample: truth[tick] });
   }
   arrivals.sort((a, b) => a.atMs - b.atMs);
 
-  const errs: number[] = [];
-  const facingErrs: number[] = [];
-  const frameSpeeds: number[] = [];
+  const out: RunResult = { frames: [], lastWire: arrivals[0].sample };
   let lastX = Number.NaN;
   let lastZ = Number.NaN;
   let wireIdx = -1;
   let wireArrivedAt = 0;
-  let lastWire = arrivals[0].sample;
   for (let i = 0; i < frames; i++) {
     const now = (i + 1) * FRAME_MS;
     while (wireIdx + 1 < arrivals.length && arrivals[wireIdx + 1].atMs <= now) {
       wireIdx++;
       wireArrivedAt = arrivals[wireIdx].atMs;
-      lastWire = arrivals[wireIdx].sample;
+      out.lastWire = arrivals[wireIdx].sample;
     }
     if (wireIdx < 0) continue;
-    const ageMs = now - wireArrivedAt + DOWNLINK_MS;
+    const w = out.lastWire;
     stepRemoteVehicleDisplay(
       s,
-      lastWire.x,
-      lastWire.z,
-      lastWire.facing,
-      lastWire.vx,
-      lastWire.vz,
-      lastWire.yawRate,
-      ageMs,
+      w.x,
+      w.z,
+      w.facing,
+      w.drive,
+      now - wireArrivedAt + DOWNLINK_MS,
       FRAME_MS / 1000,
     );
-    const truth = trajectoryAt(now / 1000, speed, yawRate);
-    errs.push(Math.hypot(s.x - truth.x, s.z - truth.z));
-    let df = s.facing - truth.facing;
-    while (df > Math.PI) df -= 2 * Math.PI;
-    while (df < -Math.PI) df += 2 * Math.PI;
-    facingErrs.push(Math.abs(df));
-    if (!Number.isNaN(lastX))
-      frameSpeeds.push(Math.hypot(s.x - lastX, s.z - lastZ) / (FRAME_MS / 1000));
+    const t = truthAt(truth, now);
+    const speed = Number.isNaN(lastX)
+      ? Number.NaN
+      : Math.hypot(s.x - lastX, s.z - lastZ) / (FRAME_MS / 1000);
+    out.frames.push([
+      now,
+      Math.hypot(s.x - t.x, s.z - t.z),
+      Math.abs(wrap(s.facing - t.facing)),
+      speed,
+    ]);
     lastX = s.x;
     lastZ = s.z;
   }
-  return { errs, facingErrs, frameSpeeds, lastWire };
+  return out;
 }
 
+const inWindow = (r: RunResult, fromMs: number, toMs: number) =>
+  r.frames.filter(([t]) => t >= fromMs && t < toMs);
 const mean = (a: number[]): number => a.reduce((s, v) => s + v, 0) / a.length;
 
 describe('remote vehicle display projection', () => {
   it('tracks the PRESENT pose on a straight instead of showing the past', () => {
     // Plain interpolation shows the machine downlink + one interval in the
-    // past: 30 yd/s * 110 ms = 3.3 yd behind. The projection must beat that
-    // by a wide margin, settled (skip the first half second of adoption).
-    const { errs } = run(30, 0, 4);
-    const settled = errs.slice(60);
-    expect(mean(settled)).toBeLessThan(0.8);
-    expect(Math.max(...settled)).toBeLessThan(1.5);
+    // past: ~110 ms at terminal speed is 5+ yd behind. The kernel projection
+    // must track the present within a yard once up to speed.
+    const truth = driveTruth(6, () => 0);
+    const r = run(truth, 6);
+    const errs = inWindow(r, 3000, 6000).map(([, e]) => e);
+    expect(mean(errs)).toBeLessThan(0.8);
+    expect(Math.max(...errs)).toBeLessThan(1.5);
   });
 
   it('never freezes or dashes under per-packet jitter', () => {
-    // The defect this core replaces: arrival jitter turned into dead stops
-    // (up to ~30 ms at the extrapolation cap) and catch-up lunges. Projected
-    // off the newest pose, the drawn speed must stay near the true 30 yd/s
-    // every single frame.
-    const { frameSpeeds } = run(30, 0, 4);
-    const settled = frameSpeeds.slice(60);
-    expect(Math.min(...settled)).toBeGreaterThan(30 * 0.5);
-    expect(Math.max(...settled)).toBeLessThan(30 * 1.5);
+    // The defect the projection replaces: arrival jitter turned into dead
+    // stops at the extrapolation cap and catch-up lunges. Over the settled
+    // window the drawn per-frame speed must stay near the cruise speed.
+    const truth = driveTruth(6, () => 0);
+    const r = run(truth, 6);
+    const speeds = inWindow(r, 4000, 6000)
+      .map(([, , , v]) => v)
+      .filter((v) => !Number.isNaN(v));
+    const cruise = mean(speeds);
+    expect(Math.min(...speeds)).toBeGreaterThan(cruise * 0.5);
+    expect(Math.max(...speeds)).toBeLessThan(cruise * 1.5);
   });
 
-  it('keeps turning through a hairpin: the yaw is never frozen', () => {
-    // 25 yd/s at 1.8 rad/s is a tight hairpin. Facing must track (the plain
-    // path freezes yaw at the interpolation cap on every late packet), and
-    // the midpoint-rotated projection keeps the position error near the arc.
-    const { errs, facingErrs } = run(25, 1.8, 4);
-    expect(mean(facingErrs.slice(60))).toBeLessThan(0.15);
-    expect(mean(errs.slice(60))).toBeLessThan(1.6);
+  it('holds the line through corner entry, apex and exit', () => {
+    // The wheel goes hard over at 3 s and back to centre at 4.5 s, at speed:
+    // the yaw rate RAMPS through the whole window (servo winding, grip
+    // bleeding the slide), which is exactly where a constant-yaw chord drifts
+    // off the true line. The bounds are DECISIVE against that chord: on this
+    // scenario it measures 0.49 yd mean / 1.02 max over the window, the
+    // kernel 0.25 / 0.62, so a regression back to any yaw-frozen projection
+    // fails both lines while the kernel keeps honest margin.
+    const truth = driveTruth(6, (t) => (t >= 3 && t < 4.5 ? 1 : 0));
+    const r = run(truth, 6);
+    const corner = inWindow(r, 3000, 5000);
+    expect(mean(corner.map(([, e]) => e))).toBeLessThan(0.4);
+    expect(Math.max(...corner.map(([, e]) => e))).toBeLessThan(0.8);
+    expect(mean(corner.map(([, , f]) => f))).toBeLessThan(0.12);
   });
 
   it('snaps outright on a teleport-sized correction', () => {
     const s = createRemoteVehicleDisplay();
-    stepRemoteVehicleDisplay(s, 0, 0, 0, 0, 30, 0, 100, 1 / 60);
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = 30;
+    stepRemoteVehicleDisplay(s, 0, 0, 0, drive, 100, 1 / 60);
     const before = { x: s.x, z: s.z };
-    stepRemoteVehicleDisplay(s, 40, 200, 0, 0, 30, 0, 100, 1 / 60);
+    stepRemoteVehicleDisplay(s, 40, 200, 0, drive, 100, 1 / 60);
     // A 40+ yd move is a track reset, not racing: adopted in one frame.
-    expect(Math.hypot(s.x - 40, s.z - 200 - 3)).toBeLessThan(0.2);
+    expect(Math.hypot(s.x - 40, s.z - 200)).toBeLessThan(5);
     expect(Math.hypot(s.x - before.x, s.z - before.z)).toBeGreaterThan(6);
   });
 
@@ -171,34 +223,39 @@ describe('remote vehicle display projection', () => {
     // Deliveries stop for 600 ms mid-run: the target may advance at most
     // AGE_CAP of projection past the last wire pose, then hold, instead of
     // driving a corner the machine never took.
-    const { lastWire, errs } = run(30, 0, 3, { stallFromMs: 1500, stallToMs: 2100 });
-    void errs;
+    const truth = driveTruth(3, () => 0);
+    const r = run(truth, 3, { stallFromMs: 1500, stallToMs: 2100 });
+    const w = r.lastWire;
     const s = createRemoteVehicleDisplay();
     for (let i = 0; i < 60; i++)
-      stepRemoteVehicleDisplay(
-        s,
-        lastWire.x,
-        lastWire.z,
-        lastWire.facing,
-        lastWire.vx,
-        lastWire.vz,
-        0,
-        1000 + i * FRAME_MS,
-        1 / 60,
-      );
-    const advance = Math.hypot(s.x - lastWire.x, s.z - lastWire.z);
-    expect(advance).toBeLessThanOrEqual(30 * (REMOTE_VEHICLE_AGE_CAP_MS / 1000) + 0.1);
+      stepRemoteVehicleDisplay(s, w.x, w.z, w.facing, w.drive, 1000 + i * FRAME_MS, 1 / 60);
+    const advance = Math.hypot(s.x - w.x, s.z - w.z);
+    const top = vehicleTopSpeedFor(w.drive, 1);
+    expect(advance).toBeLessThanOrEqual(top * (REMOTE_VEHICLE_AGE_CAP_MS / 1000) + 0.1);
   });
 
   it('adopts the target exactly on the first step and after a reset', () => {
     const s = createRemoteVehicleDisplay();
-    stepRemoteVehicleDisplay(s, 5, -3, 0.4, 0, 0, 0, 0, 1 / 60);
+    const still = createVehicleDrive(PROFILE_KEY);
+    stepRemoteVehicleDisplay(s, 5, -3, 0.4, still, 0, 1 / 60);
     expect(s.x).toBeCloseTo(5);
     expect(s.z).toBeCloseTo(-3);
     expect(s.facing).toBeCloseTo(0.4);
     resetRemoteVehicleDisplay(s);
     expect(s.active).toBe(false);
-    stepRemoteVehicleDisplay(s, 100, -3, 0.4, 0, 0, 0, 0, 1 / 60);
+    stepRemoteVehicleDisplay(s, 100, -3, 0.4, still, 0, 1 / 60);
     expect(s.x).toBeCloseTo(100);
+  });
+
+  it('never writes into the mirrored drive object', () => {
+    // The wire mirror is ClientWorld state; the projection owns only its
+    // scratch. Frozen exactly like the self_motion lab freezes its mirror.
+    const s = createRemoteVehicleDisplay();
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = 40;
+    drive.steerAngle = 0.8;
+    const frozen = Object.freeze({ ...drive });
+    stepRemoteVehicleDisplay(s, 0, 0, 0, frozen, 200, 1 / 60);
+    expect(frozen.speed).toBe(40);
   });
 });

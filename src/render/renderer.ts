@@ -8883,22 +8883,21 @@ export class Renderer {
       let facing = e.prevFacing + shortestAngle(e.prevFacing, e.facing) * facingAlpha(ea);
       if (!isSelf && e.drive && e.netUpdatedAt !== undefined) {
         // A remote racing machine is projected to the PRESENT off its newest
-        // wire pose and wire velocity instead of interpolating the past two:
-        // the interp clock chases arrival gaps, so link jitter froze and
-        // lunged every rival, and the ~(downlink + interval) display lag put
-        // the drawn hull yards behind the server's, which is why a visually
-        // clean lunge never bumped anyone. Display-only, like the self
-        // predictor: server decisions keep using authoritative positions.
-        // The vertical stays on the interpolated wire segment (no vy on the
-        // wire; a blast arc interpolates acceptably at snapshot rate).
+        // wire pose, by integrating the real vehicle kernel over the pose's
+        // age, instead of interpolating the past two snapshots: the interp
+        // clock chases arrival gaps, so link jitter froze and lunged every
+        // rival, and the ~(downlink + interval) display lag put the drawn
+        // hull yards behind the server's, which is why a visually clean lunge
+        // never bumped anyone. Display-only, like the self predictor: server
+        // decisions keep using authoritative positions. The vertical stays on
+        // the interpolated wire segment (no vy on the wire; a blast arc
+        // interpolates acceptably at snapshot rate).
         stepRemoteVehicleDisplay(
           v.remoteVehicle,
           e.pos.x,
           e.pos.z,
           e.facing,
-          vehicleVelocityX(e.drive, e.facing),
-          vehicleVelocityZ(e.drive, e.facing),
-          e.drive.yawRate + e.drive.spin,
+          e.drive,
           now - e.netUpdatedAt + (selfMotion ? selfMotion.echoMs * 0.5 : 0),
           dt,
         );

@@ -12,21 +12,41 @@
 // server, so a visually clean lunge lands in empty space (the contact reach
 // is 3.4 yd).
 //
-// A racing machine is the one remote body whose VELOCITY already rides the
-// wire (VehicleDrive speed/slip in the body frame, plus yawRate and carried
-// spin), so its present pose can be projected instead of interpolated: take
-// the NEWEST wire pose, advance it by how old that pose is (time since the
-// snapshot arrived plus half the echo), and glide the drawn pose toward that
-// target. Between snapshots the target moves at the wire velocity, so arrival
-// jitter no longer moves the display at all; on arrival the target steps only
-// by the projection error accrued over one interval (small on a straight,
-// moderate in a hairpin), and the glide absorbs it.
+// A racing machine is the one remote body whose whole DRIVE STATE already
+// rides the wire (speed/slip in the body frame, the wheel angle, yawRate,
+// carried spin, the surface multipliers), so its present pose can be
+// projected instead of interpolated: take the NEWEST wire pose and integrate
+// the REAL vehicle model (`advanceVehicleDrive`, the same pure kernel both
+// hosts drive with) forward by how old that pose is, assuming the pilot holds
+// the throttle and holds the wheel where the wire last saw it. A constant-yaw
+// chord was the first version and it missed exactly where contact aim
+// matters: in corner entry and exit the yaw rate is CHANGING (the wheel
+// winding, grip bleeding the slide), and the chord roughly doubled the
+// corner error (measured 0.49 yd mean / 1.02 max over a hard-over window vs
+// the kernel's 0.25 / 0.62, against a 1.7 yd body radius). The kernel
+// carries the steering servo, the grip model and the spin decay through the
+// horizon instead; its residual error is the rival's own input changes.
+//
+// Between snapshots the target moves continuously (the horizon grows with
+// wall time), so arrival jitter no longer moves the display at all; on
+// arrival the target steps only by the projection error accrued over one
+// interval (now mostly the rival's own INPUT changes), and the glide absorbs
+// it.
 //
 // Display-only, like self_motion.ts: the projected pose feeds the mesh and
 // nothing else. Targeting, range checks and every server decision keep using
 // authoritative positions (src/net/CLAUDE.md), and the projection is bounded:
 // the horizon is capped, and a target far from the drawn pose snaps outright
 // (teleports, track resets, respawns must not glide).
+
+import { vehicleProfile } from '../sim/content/vehicles';
+import { DT, type VehicleDrive } from '../sim/types';
+import {
+  advanceVehicleDrive,
+  type VehicleStepInput,
+  vehicleVelocityX,
+  vehicleVelocityZ,
+} from '../sim/vehicle_motion';
 
 export interface RemoteVehiclePose {
   x: number;
@@ -57,10 +77,40 @@ export const REMOTE_VEHICLE_SNAP_FACING_RAD = Math.PI / 2;
 
 export interface RemoteVehicleDisplayState extends RemoteVehiclePose {
   active: boolean;
+  /** Reused kernel scratch: the wire drive is copied in every step, so the
+   *  projection never allocates and never writes into the mirrored object. */
+  scratch: VehicleDrive;
+  input: VehicleStepInput;
 }
 
 export function createRemoteVehicleDisplay(): RemoteVehicleDisplayState {
-  return { active: false, x: 0, z: 0, facing: 0 };
+  return {
+    active: false,
+    x: 0,
+    z: 0,
+    facing: 0,
+    scratch: {
+      profileKey: '',
+      speed: 0,
+      slip: 0,
+      steerAngle: 0,
+      yawRate: 0,
+      spin: 0,
+      handbrake: 0,
+      gripMult: 1,
+      dragMult: 1,
+      speedCap: 1,
+      slipCap: 1,
+      collisionImpact: 0,
+      controlsLocked: false,
+    },
+    // The held-input assumption: a racer is at the throttle almost every
+    // moment of a race, and the wire carries no intent. A rival braking into
+    // a hairpin is over-projected by well under a yard per horizon and the
+    // glide absorbs the correction. Grounded always: the wire carries no
+    // vertical state, and airborne machines are rare and brief.
+    input: { throttle: 1, steer: 0, handbrake: false, onGround: true, auraMult: 1 },
+  };
 }
 
 export function resetRemoteVehicleDisplay(s: RemoteVehicleDisplayState): void {
@@ -76,48 +126,59 @@ function wrapAngle(d: number): number {
 /**
  * Advance the drawn pose one rendered frame. Writes into `s` and returns it.
  *
- * The projection rotates the velocity by HALF the yaw advance (the midpoint
- * rule): over a 100 to 150 ms horizon a hairpin's arc and its chord diverge
- * visibly, and the midpoint heading recovers most of the arc for the cost of
- * one sin/cos pair.
- *
  * The glide is absorb-then-decay, not a plain pull toward the target: an
  * exponential smoother chasing a target that MOVES lags it by speed/rate in
  * steady state (2+ yd at racing speed), which would quietly reintroduce the
  * past-pose display this core exists to remove. Instead the drawn pose is
- * carried forward by the wire velocity every frame (zero lag while the
- * projection agrees), and only the continuity gap against the fresh target,
- * which is nonzero exactly at snapshot arrivals and jitter wobbles, is
- * absorbed and decayed.
+ * carried forward with the projection every frame (zero lag while it agrees),
+ * and only the continuity gap against the fresh target, which is nonzero
+ * exactly at snapshot arrivals and jitter wobbles, is absorbed and decayed.
  */
 export function stepRemoteVehicleDisplay(
   s: RemoteVehicleDisplayState,
-  // The newest wire state, passed as scalars: this runs in the renderer's
-  // per-entity loop, and a wire object per racer per frame is exactly the
-  // hot-path allocation the render rules ban.
   wireX: number,
   wireZ: number,
   wireFacing: number,
-  /** World velocity of the drive state, yd/s (vehicleVelocityX/Z). */
-  wireVx: number,
-  wireVz: number,
-  /** Total body yaw velocity, rad/s: steering yawRate plus carried spin. */
-  yawRate: number,
+  /** The mirrored wire drive state; read only, copied into the scratch. */
+  drive: Readonly<VehicleDrive>,
   ageMs: number,
   dt: number,
 ): RemoteVehicleDisplayState {
-  const ageSec = Math.min(Math.max(ageMs, 0), REMOTE_VEHICLE_AGE_CAP_MS) / 1000;
-  const halfTurn = yawRate * ageSec * 0.5;
-  const cos = Math.cos(halfTurn);
-  const sin = Math.sin(halfTurn);
-  // Rotating (vx, vz) by a facing advance t maps vx to vx cos t + vz sin t
-  // and vz to vz cos t - vx sin t in this codebase's frame (forward is
-  // (sin f, cos f), facing integrates yawRate + spin).
-  const vx = wireVx * cos + wireVz * sin;
-  const vz = wireVz * cos - wireVx * sin;
-  const tx = wireX + vx * ageSec;
-  const tz = wireZ + vz * ageSec;
-  const tf = wrapAngle(wireFacing + yawRate * ageSec);
+  let remaining = Math.min(Math.max(ageMs, 0), REMOTE_VEHICLE_AGE_CAP_MS) / 1000;
+  const d = s.scratch;
+  d.profileKey = drive.profileKey;
+  d.speed = drive.speed;
+  d.slip = drive.slip;
+  d.steerAngle = drive.steerAngle;
+  d.yawRate = drive.yawRate;
+  d.spin = drive.spin;
+  d.handbrake = drive.handbrake;
+  d.gripMult = drive.gripMult;
+  d.dragMult = drive.dragMult;
+  d.speedCap = drive.speedCap;
+  d.slipCap = drive.slipCap;
+  const profile = vehicleProfile(d.profileKey);
+  const input = s.input;
+  input.handbrake = d.handbrake > 0.5;
+  let tx = wireX;
+  let tz = wireZ;
+  let tf = wireFacing;
+  // Whole kernel ticks over the horizon (at most 5 at the cap), then a linear
+  // tail for the sub-tick remainder: the same integration order as the
+  // composing half in player_motion (rotate the body, then move at the
+  // rotated velocity).
+  while (remaining >= DT) {
+    input.steer = d.steerAngle; // hold the wheel where the wire last saw it
+    tf = wrapAngle(tf + advanceVehicleDrive(d, profile, input));
+    tx += vehicleVelocityX(d, tf) * DT;
+    tz += vehicleVelocityZ(d, tf) * DT;
+    remaining -= DT;
+  }
+  if (remaining > 0) {
+    tf = wrapAngle(tf + (d.yawRate + d.spin) * remaining);
+    tx += vehicleVelocityX(d, tf) * remaining;
+    tz += vehicleVelocityZ(d, tf) * remaining;
+  }
   const step = Math.max(0, Math.min(dt, 1 / 30));
   if (!s.active) {
     s.active = true;
@@ -132,9 +193,9 @@ export function stepRemoteVehicleDisplay(
   // the carry stops too: otherwise the pose would keep sailing speed/rate
   // past the cap before the decay caught it.
   const carrying = ageMs < REMOTE_VEHICLE_AGE_CAP_MS;
-  const carriedX = s.x + (carrying ? vx * step : 0);
-  const carriedZ = s.z + (carrying ? vz * step : 0);
-  const carriedF = wrapAngle(s.facing + (carrying ? yawRate * step : 0));
+  const carriedX = s.x + (carrying ? vehicleVelocityX(d, tf) * step : 0);
+  const carriedZ = s.z + (carrying ? vehicleVelocityZ(d, tf) * step : 0);
+  const carriedF = wrapAngle(s.facing + (carrying ? (d.yawRate + d.spin) * step : 0));
   const offX = carriedX - tx;
   const offZ = carriedZ - tz;
   const offF = wrapAngle(carriedF - tf);

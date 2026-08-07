@@ -395,8 +395,10 @@ describe('Eastbrook polish capture contract', () => {
       // projection and the own-shot local feedback edit src/render/renderer.ts
       // again, moving the rendererIntegration leaf and the composite. Nothing
       // about Eastbrook changed, no pipeline input or geometry value moved,
-      // no capture retaken.
-      fingerprint: '19d050d61e4edab56ed72c00e76a22553c79bc447cefa9b0c48bd40196161c43',
+      // no capture retaken. Re-minted once more when that projection went
+      // kernel-based (the call site hands the whole drive state down), same
+      // reasoning.
+      fingerprint: '2e8963e43031a41f62fb2aa37eb8a99ad0e61db1e47858923b7cf4e8f58f6afa',
 
       components: {
         captureContract: {
