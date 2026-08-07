@@ -1,4 +1,4 @@
-import { REALM_RACERS_ABILITIES, REALM_RACERS_ABILITY_ID } from '../../../sim/content/realm_racers';
+import { REALM_RACERS_ABILITIES } from '../../../sim/content/realm_racers';
 import { resolveGroundBlastAim } from '../../../sim/realm_racers_ground_blast';
 import type { AbilityEffect, Entity } from '../../../sim/types';
 
@@ -100,21 +100,24 @@ export function clampAimToRange(
 }
 
 /**
- * May the client play the INSTANT local muzzle report for this commit? Online,
- * every audible cue of a rally shot otherwise waits a full round trip for the
- * server's Fired event, which reads as the weapon firing late.
+ * May the client play INSTANT local feedback for this rally cast? Online,
+ * every audible and visible cue otherwise waits a full round trip for the
+ * server (the shell's Fired event, the readout's oil patch), which reads as
+ * the kit responding late.
  *
- * The inputs mirror the client-visible half of the refusal set in
- * `realmRacersFireGroundBlast` (src/sim/social/realm_racers.ts): the shell
- * ability only (never a future rally ability with its own report), a live
- * caster, the activity lock (controls locked or out of charges), no running
- * cooldown, the racing phase, and a pilot whose own race is not over (a
- * finished or retired pilot keeps the wheel but is done shooting). The server
- * stays the judge either way: a wrong local yes costs one cosmetic report
- * whose event never arrives, and the render-side latch simply expires.
+ * `expectedAbilityId` names the ONE rally ability the caller's feedback is
+ * built for (the shell's muzzle report, the oil drop's patch), so a future
+ * rally ability can never inherit another's cue. The remaining inputs mirror
+ * the client-visible half of the sim's refusal set
+ * (src/sim/social/realm_racers.ts): a live caster, the activity lock
+ * (controls locked or out of charges), no running cooldown, the racing
+ * phase, and a pilot whose own race is not over (a finished or retired pilot
+ * keeps the wheel but is done acting). The server stays the judge either
+ * way: a wrong local yes costs one cosmetic cue that quietly expires.
  */
-export function localBlastFeedbackAllowed(
+export function localRallyCastFeedbackAllowed(
   abilityId: string,
+  expectedAbilityId: string,
   casterDead: boolean,
   activityLocked: boolean,
   cooldownRemaining: number,
@@ -122,7 +125,7 @@ export function localBlastFeedbackAllowed(
   stillRunning: boolean,
 ): boolean {
   return (
-    abilityId === REALM_RACERS_ABILITY_ID &&
+    abilityId === expectedAbilityId &&
     !casterDead &&
     !activityLocked &&
     cooldownRemaining <= 0 &&

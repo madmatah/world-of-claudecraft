@@ -157,3 +157,57 @@ export function rallySlickListSame(
   }
   return true;
 }
+
+/**
+ * A NEW server patch this close to the provisional one is the same drop
+ * arriving on the readout. Wide, because the server lays the patch under ITS
+ * pose, which trails the display by the uplink at race speed (a handful of
+ * yards, more on a bad link); wide is safe because only an id that was NOT on
+ * the road at drop time can adopt, so the false-adoption case needs a rival
+ * dropping a brand-new patch this close within the timeout.
+ */
+export const RALLY_PROVISIONAL_SLICK_MATCH_RADIUS = 12;
+/** A provisional patch whose real one never arrived was a refused cast (or a
+ *  painful link); past this it quietly vanishes. */
+export const RALLY_PROVISIONAL_SLICK_TIMEOUT_SEC = 1.5;
+
+export type RallyProvisionalSlickState = 'shown' | 'adopted' | 'expired';
+
+/**
+ * The provisional patch the local pilot's own drop paints IMMEDIATELY, before
+ * the readout's round trip: what should it do this frame? It shows until the
+ * server's patch lands nearby (adopted: the real one takes the road over,
+ * same frame, same look, so the handoff is invisible) or until the timeout
+ * says the cast never happened.
+ *
+ * `knownIds` is the set of patch ids already on the road when the drop was
+ * painted. Only an id OUTSIDE it may adopt: oil clusters (a hairpin everyone
+ * slicks, the dropper's own previous lap), and a pre-existing patch nearby
+ * would otherwise adopt on the very first frame, silently turning the feature
+ * off exactly where it is most wanted.
+ */
+export function rallyProvisionalSlickState(
+  list: readonly { id: number; x: number; z: number }[],
+  knownIds: ReadonlySet<number>,
+  x: number,
+  z: number,
+  ageSec: number,
+): RallyProvisionalSlickState {
+  for (const slick of list) {
+    if (knownIds.has(slick.id)) continue;
+    const dx = slick.x - x;
+    const dz = slick.z - z;
+    if (
+      dx * dx + dz * dz <
+      RALLY_PROVISIONAL_SLICK_MATCH_RADIUS * RALLY_PROVISIONAL_SLICK_MATCH_RADIUS
+    ) {
+      return 'adopted';
+    }
+  }
+  return ageSec > RALLY_PROVISIONAL_SLICK_TIMEOUT_SEC ? 'expired' : 'shown';
+}
+
+/** How long the provisional patch takes to shrink away once the real one has
+ *  the road (or the timeout fired): long enough to read as a settle rather
+ *  than a swap, short enough that two patches never linger. */
+export const RALLY_PROVISIONAL_SLICK_FADE_SEC = 0.2;

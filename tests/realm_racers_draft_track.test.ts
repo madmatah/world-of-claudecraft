@@ -55,6 +55,7 @@ function scene() {
   };
 
   let build = 0;
+  const drops: string[] = [];
   const drafts = buildRealmRacersDraftTracks(parent as never, (circuit: RealmRacersCircuit) => {
     built.push(circuit.id);
     const name = `${circuit.id}#${build++}`;
@@ -73,13 +74,16 @@ function scene() {
     groups.set(name, group);
     return {
       group: group as never,
+      dropProvisionalSlick: (circuitId: string) => {
+        drops.push(`${name}:${circuitId}`);
+      },
       update: (px: number) => {
         updates.push({ name, px });
       },
     };
   });
 
-  return { drafts, added, removed, built, updates, groups };
+  return { drafts, added, removed, built, updates, groups, drops };
 }
 
 describe('the draft track arm', () => {
@@ -128,6 +132,17 @@ describe('the draft track arm', () => {
     expect(s.built).toEqual([]);
     expect(s.updates).toEqual([]);
   });
+
+  it('forwards a provisional oil drop to every live draft view', () => {
+    // Each view gates on its own circuit id, so the forward fans out and the
+    // matching draft is the one that paints; deleting the forward would strand
+    // a drop cast on a draft circuit.
+    const s = scene();
+    s.drafts.register(draft('draft_one'));
+    s.drafts.register(draft('draft_two'));
+    s.drafts.dropProvisionalSlick('draft_two', 1, 2, 3);
+    expect(s.drops.sort()).toEqual(['draft_one#0:draft_two', 'draft_two#1:draft_two']);
+  });
 });
 
 describe('the draft view visibility gate', () => {
@@ -152,6 +167,7 @@ describe('the draft view visibility gate', () => {
     let movedTo = -1;
     const drafts = buildRealmRacersDraftTracks(parent as never, (circuit) => ({
       group: { visible: false } as never,
+      dropProvisionalSlick: () => undefined,
       // The shipped view's own gate, restated over the real lookup.
       update: (px: number, pz: number) => {
         const lane = realmRacersLaneAt(px, pz);

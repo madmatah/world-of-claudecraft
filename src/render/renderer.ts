@@ -263,6 +263,15 @@ import {
   shouldUseFrontToBackOpaqueSort,
 } from './opaque_draw_order_core';
 import {
+  bumpClosingSpeed,
+  consumeLocalBumpSuppression,
+  createOwnBumpFeedback,
+  LOCAL_BUMP_MIN_CLOSING,
+  markLocalBump,
+  type OwnBumpFeedbackState,
+  shouldPlayLocalBump,
+} from './own_bump_feedback_core';
+import {
   canMarkOwnShotFeedback,
   consumeOwnShotFeedback,
   createOwnShotFeedback,
@@ -6117,6 +6126,10 @@ export class Renderer {
     return stats;
   }
 
+  /** Mean wait a command spends on the server for the next tick boundary,
+   *  seconds (half of DT): the calibration for the provisional oil drop. */
+  private static readonly SLICK_DROP_MEAN_TICK_WAIT_SEC = 0.025;
+
   // Latch deduplicating the own Fired event's muzzle cue against the locally
   // played one (own_shot_feedback_core). Lazily created: hand-built prototype
   // fixtures (Object.create(Renderer.prototype), see tests/CLAUDE.md) never
@@ -6158,6 +6171,71 @@ export class Renderer {
       flightSeconds: 0,
     });
     markOwnShotFeedback(this.ownShotFeedback, performance.now());
+  }
+
+  /**
+   * Instant local feedback for the pilot's OWN oil drop: paint the patch under
+   * the displayed machine the frame the cast commits, instead of waiting the
+   * readout's round trip (9 to 15 yards of road at race speed). The slick
+   * layer swaps it for the readout's real patch when that lands, or expires it
+   * if the cast was refused. Local screen only; the hazard every other pilot
+   * steers around stays the readout's.
+   */
+  predictOwnSlickDrop(): void {
+    const match = this.sim.realmRacersInfo.match;
+    if (!match) return;
+    const pose = this.selfAimPose;
+    const p = this.sim.player;
+    // The server lays the real patch under its own pose at the tick the
+    // command lands, which trails the displayed machine by the command's wait
+    // for the tick boundary: zero to one tick, half on average. Painting the
+    // provisional that same half-tick of travel BEHIND the display halves the
+    // typical handoff shift.
+    const lag =
+      this.selfMotionActive && this.selfMotionPredictor?.driving
+        ? Renderer.SLICK_DROP_MEAN_TICK_WAIT_SEC
+        : 0;
+    const vx = this.selfMotionPredictor?.velocityX ?? 0;
+    const vz = this.selfMotionPredictor?.velocityZ ?? 0;
+    this.realmRacersTrack.dropProvisionalSlick(
+      match.circuitId,
+      (pose ? pose.pos.x : p.pos.x) - vx * lag,
+      (pose ? pose.pos.z : p.pos.z) - vz * lag,
+      this.time,
+    );
+  }
+
+  // Per-rival latch for the local bump bang (own_bump_feedback_core), lazy
+  // for the same prototype-fixture reason as the shot latch above.
+  private ownBumpFeedbackState: OwnBumpFeedbackState | undefined;
+  private get ownBumpFeedback(): OwnBumpFeedbackState {
+    this.ownBumpFeedbackState ??= createOwnBumpFeedback();
+    return this.ownBumpFeedbackState;
+  }
+
+  /** The rally bump cosmetics (sparks, ring, report, shake), shared by the
+   *  authoritative event and the local display-touch bang. */
+  private playRallyBumpFeedback(
+    x: number,
+    z: number,
+    impact: number,
+    aId: number,
+    bId: number,
+  ): void {
+    const force = Math.min(1, impact / 24);
+    this.vfx.burst(new THREE.Vector3(x, 0.9, z), 'physical', 10 + 18 * force, 0.5 + force);
+    this.spawnAoeRing(x, z, 1.6 + 1.4 * force, 'physical');
+    playRealmRacersEventAudio(this.audioSink, this.groundSample, {
+      type: 'realmRacersBump',
+      aId,
+      bId,
+      x,
+      z,
+      impact,
+    });
+    if (aId === this.sim.playerId || bId === this.sim.playerId) {
+      this.addShake(0.12 + 0.28 * force);
+    }
   }
 
   // Visual reactions to sim events (called by the HUD for every event,
@@ -6611,20 +6689,17 @@ export class Renderer {
       }
       case 'realmRacersBump': {
         // Sparks and a flash off the contact point, scaled by how hard it was.
-        // Deliberately minimal: the full treatment (sound, tyre marks, the
-        // camera's own reaction) rides the same event in a later pass.
-        const force = Math.min(1, ev.impact / 24);
-        this.vfx.burst(
-          new THREE.Vector3(ev.x, 0.9, ev.z),
-          'physical',
-          10 + 18 * force,
-          0.5 + force,
-        );
-        this.spawnAoeRing(ev.x, ev.z, 1.6 + 1.4 * force, 'physical');
-        playRealmRacersEventAudio(this.audioSink, this.groundSample, ev);
+        // For a bump involving the LOCAL machine the same cosmetics may have
+        // already played at the displayed touch (the local bang in the entity
+        // loop); a fresh latch means this event is that bang's echo, and its
+        // physics arrives through the snapshots regardless.
         if (ev.aId === this.sim.playerId || ev.bId === this.sim.playerId) {
-          this.addShake(0.12 + 0.28 * force);
+          const rivalId = ev.aId === this.sim.playerId ? ev.bId : ev.aId;
+          if (consumeLocalBumpSuppression(this.ownBumpFeedback, rivalId, performance.now())) {
+            break;
+          }
         }
+        this.playRallyBumpFeedback(ev.x, ev.z, ev.impact, ev.aId, ev.bId);
         break;
       }
       case 'realmRacersSlicked': {
@@ -8904,6 +8979,52 @@ export class Renderer {
         x = v.remoteVehicle.x;
         z = v.remoteVehicle.z;
         facing = v.remoteVehicle.facing;
+        // The local bump bang: the DISPLAYED hulls are accurate now, so when
+        // they touch with a real closing speed the player sees a collision a
+        // beat before the server's event can say so. Play the bang at the
+        // seen touch (throttled per rival) and let the event's duplicate be
+        // suppressed in handleEvent; the physics still arrives with the
+        // snapshots, untouched. Gated on the rival being a participant of the
+        // LOCAL race in its racing phase: the sim only resolves contacts over
+        // the match's own grid, so a paddock or post-tableau touch must never
+        // bang. The overlap test is the plain instantaneous circle, not the
+        // sim's swept-plus-early window, on purpose: a fast crossing the
+        // circle misses simply plays through the unsuppressed server event.
+        const race = this.sim.realmRacersInfo.match;
+        if (
+          this.selfMotionActive &&
+          this.selfMotionPredictor?.driving &&
+          p.drive &&
+          race?.phase === 'racing' &&
+          race.participantIds.includes(id)
+        ) {
+          const reach =
+            vehicleProfile(e.drive.profileKey).bodyRadius +
+            vehicleProfile(p.drive.profileKey).bodyRadius;
+          const dx = x - selfPos.x;
+          const dz = z - selfPos.z;
+          if (dx * dx + dz * dz < reach * reach) {
+            const closing = bumpClosingSpeed(
+              dx,
+              dz,
+              this.selfMotionPredictor.velocityX - vehicleVelocityX(e.drive, facing),
+              this.selfMotionPredictor.velocityZ - vehicleVelocityZ(e.drive, facing),
+            );
+            if (
+              closing >= LOCAL_BUMP_MIN_CLOSING &&
+              shouldPlayLocalBump(this.ownBumpFeedback, id, now)
+            ) {
+              markLocalBump(this.ownBumpFeedback, id, now);
+              this.playRallyBumpFeedback(
+                (selfPos.x + x) / 2,
+                (selfPos.z + z) / 2,
+                closing,
+                p.id,
+                id,
+              );
+            }
+          }
+        }
       } else if (v.remoteVehicle.active) {
         resetRemoteVehicleDisplay(v.remoteVehicle);
       }

@@ -24,6 +24,8 @@ export interface RealmRacersDraftTracks {
   /** Rebuild the view for a draft id, disposing the one it replaces. */
   register(circuit: RealmRacersCircuit): void;
   update(px: number, pz: number, time: number, match: RealmRacersLaneView | null): void;
+  /** Forward of RealmRacersTrackView.dropProvisionalSlick over the drafts. */
+  dropProvisionalSlick(circuitId: string, worldX: number, worldZ: number, time: number): void;
 }
 
 /** The part of the tracks group this needs. Structural so the lifecycle above
@@ -62,6 +64,9 @@ export function buildRealmRacersDraftTracks(
       // itself unless the viewer stands on the draft's own lane, which the
       // layout leaf hands out after every authored one.
       for (const view of views.values()) view.update(px, pz, time, match);
+    },
+    dropProvisionalSlick(circuitId, worldX, worldZ, time) {
+      for (const view of views.values()) view.dropProvisionalSlick(circuitId, worldX, worldZ, time);
     },
   };
 }

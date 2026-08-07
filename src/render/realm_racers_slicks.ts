@@ -32,11 +32,13 @@ import * as THREE from 'three';
 import { REALM_RACERS_SLICK_RADIUS } from '../sim/realm_racers_slicks';
 import type { RealmRacersLaneView, RealmRacersSlickInfo } from '../world_api/realm_racers';
 import {
+  RALLY_PROVISIONAL_SLICK_FADE_SEC,
   RALLY_SLICK_OPACITY,
   RALLY_SLICK_POOL,
   type RallySlickVisual,
   REALM_RACERS_SLICK_COLOR,
   REALM_RACERS_SLICK_SHEEN_COLOR,
+  rallyProvisionalSlickState,
   rallySlickInitialVisual,
   rallySlickListSame,
   rallySlickScale,
@@ -61,6 +63,16 @@ export interface RealmRacersSlicksView {
    *  race on THIS circuit, or null when they are not racing (a circuit with no
    *  race on it carries no oil: the slicks belong to a race). */
   update(time: number, match: RealmRacersLaneView | null): void;
+  /**
+   * Paint the LOCAL pilot's own drop immediately, in this group's own frame,
+   * instead of waiting the round trip for the readout: online, the patch used
+   * to appear 9 to 15 yards behind the machine that dropped it. The
+   * provisional patch shows until the readout's real one lands nearby (the
+   * handoff is invisible: same look, same frame) or until a timeout says the
+   * cast was refused. Display-only, the local screen only: the hazard every
+   * OTHER pilot steers around is still the readout's patch.
+   */
+  dropProvisional(localX: number, localZ: number, time: number): void;
 }
 
 const NO_SLICKS: readonly RealmRacersSlickInfo[] = [];
@@ -123,6 +135,25 @@ export function buildRealmRacersSlicks(): RealmRacersSlicksView {
     slots.push({ group: slot, id: null, visual: rallySlickInitialVisual(), drawnScale: 1 });
   }
 
+  // The provisional patch: one extra slot off the pool, same shared geometry
+  // and materials (the dispose contract stays one-material-per-build).
+  const provisionalGroup = new THREE.Group();
+  provisionalGroup.visible = false;
+  provisionalGroup.add(new THREE.Mesh(oilGeometry, oilMaterial));
+  const provisionalSheen = new THREE.Mesh(sheenGeometry, sheenMaterial);
+  provisionalSheen.position.y = 0.01;
+  provisionalGroup.add(provisionalSheen);
+  group.add(provisionalGroup);
+  let provisionalAt: number | null = null;
+  // Once the handoff (or the timeout) starts, the provisional shrinks away
+  // over this window instead of vanishing in one frame: the server lays the
+  // real patch under ITS pose, a yard or two from the painted one, and an
+  // instant swap read as the patch teleporting.
+  let provisionalFadeAt: number | null = null;
+  // The patch ids already on the road when the drop was painted: only an id
+  // ARRIVING after it may adopt it (see rallyProvisionalSlickState).
+  let provisionalKnownIds: ReadonlySet<number> = new Set();
+
   let lastTime = 0;
   let started = false;
   let lastList: readonly RealmRacersSlickInfo[] = NO_SLICKS;
@@ -130,6 +161,14 @@ export function buildRealmRacersSlicks(): RealmRacersSlicksView {
 
   return {
     group,
+    dropProvisional(localX, localZ, time) {
+      provisionalAt = time;
+      provisionalFadeAt = null;
+      provisionalKnownIds = new Set(live.keys());
+      provisionalGroup.position.set(localX, LIFT, localZ);
+      provisionalGroup.scale.setScalar(1);
+      provisionalGroup.visible = true;
+    },
     update(time, match) {
       const dt = started ? Math.min(MAX_FRAME_SECONDS, Math.max(0, time - lastTime)) : 0;
       lastTime = time;
@@ -155,6 +194,32 @@ export function buildRealmRacersSlicks(): RealmRacersSlicksView {
           free.drawnScale = 1;
           free.group.position.set(slick.x, LIFT, slick.z);
           free.group.scale.setScalar(1);
+        }
+      }
+      if (provisionalAt !== null) {
+        if (provisionalFadeAt === null) {
+          const state = rallyProvisionalSlickState(
+            list,
+            provisionalKnownIds,
+            provisionalGroup.position.x,
+            provisionalGroup.position.z,
+            time - provisionalAt,
+          );
+          if (state === 'shown') {
+            provisionalGroup.rotation.y = rallySlickSheenSpin(time, -1);
+          } else {
+            provisionalFadeAt = time;
+          }
+        }
+        if (provisionalFadeAt !== null) {
+          const k = (time - provisionalFadeAt) / RALLY_PROVISIONAL_SLICK_FADE_SEC;
+          if (k >= 1) {
+            provisionalAt = null;
+            provisionalFadeAt = null;
+            provisionalGroup.visible = false;
+          } else {
+            provisionalGroup.scale.setScalar(1 - k);
+          }
         }
       }
       for (const slot of slots) {

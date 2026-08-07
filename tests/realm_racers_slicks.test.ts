@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RALLY_SLICK_FADE_SECONDS,
   RALLY_SLICK_POOL,
+  rallyProvisionalSlickState,
   rallySlickInitialVisual,
   rallySlickListSame,
   rallySlickScale,
@@ -994,5 +995,40 @@ describe('the oil slick visual core', () => {
     expect(rallySlickListSame([{ id: 3 }], [{ id: 4 }])).toBe(false);
     expect(rallySlickListSame([{ id: 3 }], [{ id: 3 }, { id: 4 }])).toBe(false);
     expect(rallySlickListSame([{ id: 4 }, { id: 3 }], [{ id: 3 }, { id: 4 }])).toBe(false);
+  });
+});
+
+describe('the provisional slick, the local drop painted before the round trip', () => {
+  const patch = (id: number, x: number, z: number) => ({ id, x, z });
+  const none: ReadonlySet<number> = new Set();
+
+  it('shows until the server patch lands nearby, then hands the road over', () => {
+    expect(rallyProvisionalSlickState([], none, 10, 5, 0.2)).toBe('shown');
+    // The server lays the patch under ITS pose, which trails the display at
+    // race speed: yards off is still the same drop.
+    expect(rallyProvisionalSlickState([patch(3, 16, 5)], none, 10, 5, 0.2)).toBe('adopted');
+  });
+
+  it('never adopts an unrelated patch across the road', () => {
+    expect(rallyProvisionalSlickState([patch(3, 30, 5)], none, 10, 5, 0.2)).toBe('shown');
+  });
+
+  it('never adopts a patch that was already on the road at drop time', () => {
+    // Oil clusters: the dropper's own previous lap, a rival's patch in the
+    // same hairpin. A pre-existing patch nearby must not swallow the fresh
+    // drop on its first frame, or the feature turns itself off exactly where
+    // it is most wanted.
+    const known: ReadonlySet<number> = new Set([3]);
+    expect(rallyProvisionalSlickState([patch(3, 11, 5)], known, 10, 5, 0.2)).toBe('shown');
+    // The NEW id arriving beside it is the drop, and adopts.
+    expect(rallyProvisionalSlickState([patch(3, 11, 5), patch(9, 12, 5)], known, 10, 5, 0.3)).toBe(
+      'adopted',
+    );
+  });
+
+  it('expires a drop whose real patch never arrived (a refused cast)', () => {
+    expect(rallyProvisionalSlickState([], none, 10, 5, 1.6)).toBe('expired');
+    // Adoption wins over the timeout when both hold.
+    expect(rallyProvisionalSlickState([patch(3, 10, 5)], none, 10, 5, 1.6)).toBe('adopted');
   });
 });

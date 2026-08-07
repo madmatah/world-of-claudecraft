@@ -4,6 +4,7 @@ import type { SimEvent, VehicleDrive } from '../src/sim/types';
 const audioSpies = vi.hoisted(() => ({ realmRacersResult: vi.fn() }));
 vi.mock('../src/game/audio', () => ({ audio: audioSpies }));
 
+import { createOwnBumpFeedback, markLocalBump } from '../src/render/own_bump_feedback_core';
 import { Renderer } from '../src/render/renderer';
 import { Hud } from '../src/ui/hud';
 
@@ -181,6 +182,27 @@ describe('Realm Racers coordinator audio wiring', () => {
       ['groundBlastImpact', 4, 9, 5, 0.7],
       ['bump', 6, 13.5, 7, 0.5],
     ]);
+  });
+
+  it('suppresses the own-bump duplicate exactly once, remote pairs untouched', () => {
+    // The local bang already played at the displayed touch; the server
+    // event's cosmetics are its echo and skip ONCE. A second authoritative
+    // bump inside the window is a new contact and plays, and a bump between
+    // two rivals is never suppressed whatever the latch holds.
+    const renderer = rendererHarness();
+    const state = createOwnBumpFeedback();
+    markLocalBump(state, 2, performance.now());
+    markLocalBump(state, 3, performance.now());
+    (renderer as unknown as { ownBumpFeedbackState: unknown }).ownBumpFeedbackState = state;
+    const bump = (aId: number, bId: number) => {
+      renderer.handleEvent({ type: 'realmRacersBump', aId, bId, x: 6, z: 7, impact: 12 });
+    };
+    bump(1, 2); // the echo of the local bang: silent
+    expect(renderer.audioSink.realmRacersEvent).not.toHaveBeenCalled();
+    bump(2, 1); // consumed: a genuinely new bump plays
+    expect(renderer.audioSink.realmRacersEvent).toHaveBeenCalledTimes(1);
+    bump(3, 4); // two rivals: the latch for 3 is not even consulted
+    expect(renderer.audioSink.realmRacersEvent).toHaveBeenCalledTimes(2);
   });
 
   it('executes the renderer vehicle-view coordinator through run and race exit', () => {

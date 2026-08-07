@@ -86,6 +86,10 @@ import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_mat
 export interface RealmRacersTrackView {
   group: THREE.Group;
   update(px: number, pz: number, time: number, match: RealmRacersLaneView | null): void;
+  /** Paint the local pilot's own oil drop immediately on the named circuit's
+   *  slick layer (world coordinates in, the view resolves its own lane frame);
+   *  a no-op for every other circuit. See RealmRacersSlicksView.dropProvisional. */
+  dropProvisionalSlick(circuitId: string, worldX: number, worldZ: number, time: number): void;
 }
 
 /** The whole pool under one group, plus the dev arm that puts a circuit drawn
@@ -1010,8 +1014,18 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
 
   group.visible = false;
 
+  const provisionalTmp = new THREE.Vector3();
   return {
     group,
+    dropProvisionalSlick(circuitId, worldX, worldZ, time) {
+      if (circuitId !== circuit.id) return;
+      // The slick layer lives in the lane frame this group was moved onto;
+      // resolve the world point into it through the live transform.
+      slicks.group.updateWorldMatrix(true, false);
+      provisionalTmp.set(worldX, 0, worldZ);
+      slicks.group.worldToLocal(provisionalTmp);
+      slicks.dropProvisional(provisionalTmp.x, provisionalTmp.z, time);
+    },
     update(px, pz, time, match) {
       // This circuit exists in several identical COPIES stacked along the band
       // (the public lane plus the private practice copies), and a viewer can
@@ -1119,6 +1133,10 @@ export function buildRealmRacersTracks(): RealmRacersTracksView {
   return {
     group,
     registerDraft: (circuit) => drafts.register(circuit),
+    dropProvisionalSlick(circuitId, worldX, worldZ, time) {
+      for (const view of views) view.dropProvisionalSlick(circuitId, worldX, worldZ, time);
+      drafts.dropProvisionalSlick(circuitId, worldX, worldZ, time);
+    },
     update(px, pz, time, match) {
       for (const view of views) view.update(px, pz, time, match);
       drafts.update(px, pz, time, match);

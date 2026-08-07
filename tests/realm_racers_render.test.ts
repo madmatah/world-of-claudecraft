@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { suggestGroundOutline } from '../src/editor/circuit/envelope_core';
-import { RALLY_SLICK_POOL } from '../src/render/realm_racers_slicks_core';
+import {
+  RALLY_PROVISIONAL_SLICK_FADE_SEC,
+  RALLY_SLICK_POOL,
+} from '../src/render/realm_racers_slicks_core';
 import { CIRCUIT_THEMES } from '../src/render/realm_racers_themes';
 import {
   rallyBorderFlowerSpots,
@@ -1629,22 +1632,76 @@ describe('the pickup boxes, drawn', () => {
     async function slicksGroup(): Promise<{
       view: {
         update(px: number, pz: number, time: number, match: RealmRacersMatchInfo | null): void;
+        dropProvisionalSlick(circuitId: string, worldX: number, worldZ: number, time: number): void;
       };
       slots: THREE.Object3D[];
+      group: THREE.Group;
     }> {
       const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
       const view = buildRealmRacersTrack(GARDEN_CIRCUIT);
       const group = view.group.getObjectByName('realm-racers-slicks') as THREE.Group;
       expect(group).toBeDefined();
-      return { view, slots: group.children };
+      return { view, slots: group.children, group };
     }
+
+    it('paints the local drop immediately and hands the road to the readout patch', async () => {
+      const { view, slots, group } = await slicksGroup();
+      const here = REALM_RACERS_ORIGIN;
+      let time = 1;
+      view.update(here.x, here.z, time, matchWithSlicks([]));
+      // The provisional slot is the one child past the fixed pool.
+      const provisional = slots[slots.length - 1];
+      expect(provisional.visible).toBe(false);
+      // A drop for another circuit is a no-op on this one.
+      view.dropProvisionalSlick('someone-elses-circuit', 5, 5, time);
+      expect(provisional.visible).toBe(false);
+      // The drop arrives in WORLD coordinates; the view resolves its own lane
+      // frame, so a round trip through the group's live transform must land
+      // the patch exactly where the machine stood.
+      group.updateWorldMatrix(true, false);
+      const world = group.localToWorld(new THREE.Vector3(12, 0, -7));
+      view.dropProvisionalSlick(GARDEN_CIRCUIT.id, world.x, world.z, time);
+      expect(provisional.visible).toBe(true);
+      expect(provisional.position.x).toBeCloseTo(12, 4);
+      expect(provisional.position.z).toBeCloseTo(-7, 4);
+      // The readout's NEW patch arriving nearby IS the drop: the provisional
+      // hands the road over by SHRINKING away (an instant swap read as the
+      // patch teleporting the yard the server pose trails the display).
+      time += 0.05;
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      expect(provisional.visible).toBe(true);
+      expect(provisional.scale.x).toBeLessThanOrEqual(1);
+      time += 0.1;
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      expect(provisional.scale.x).toBeLessThan(0.8);
+      time += RALLY_PROVISIONAL_SLICK_FADE_SEC;
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      expect(provisional.visible).toBe(false);
+      // A second drop beside the now-KNOWN patch must not be swallowed by it
+      // (oil clusters), and with no new patch ever arriving it expires on the
+      // timeout, through the same shrink.
+      time += 0.05;
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      view.dropProvisionalSlick(GARDEN_CIRCUIT.id, world.x, world.z, time);
+      time += 0.05;
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      expect(provisional.visible).toBe(true);
+      expect(provisional.scale.x).toBeCloseTo(1, 6);
+      time += 2;
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      time += RALLY_PROVISIONAL_SLICK_FADE_SEC;
+      view.update(here.x, here.z, time, matchWithSlicks([{ id: 4, x: 13, z: -7 }]));
+      expect(provisional.visible).toBe(false);
+    });
 
     it('draws nothing on a clean circuit and a patch where the race says one is', async () => {
       const { view, slots } = await slicksGroup();
       const here = REALM_RACERS_ORIGIN;
       // A fixed pool, minted at build time: the cost of the oil is the same
-      // whether or not any is down.
-      expect(slots).toHaveLength(RALLY_SLICK_POOL);
+      // whether or not any is down. Plus ONE slot for the local pilot's own
+      // provisional drop (the patch painted before the readout's round trip),
+      // hidden until a cast commits.
+      expect(slots).toHaveLength(RALLY_SLICK_POOL + 1);
       view.update(here.x, here.z, 1, matchWithSlicks([]));
       for (const slot of slots) expect(slot.visible).toBe(false);
 

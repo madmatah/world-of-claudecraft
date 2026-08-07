@@ -15,7 +15,7 @@ import {
   createGroundAimState,
   DEFAULT_GROUND_AOE_RADIUS,
   enterGroundAim,
-  localBlastFeedbackAllowed,
+  localRallyCastFeedbackAllowed,
   shouldUseGroundAim,
 } from '../src/ui/hud/action_bar/ground_aim';
 
@@ -140,13 +140,14 @@ describe('ground_aim', () => {
   });
 });
 
-describe('localBlastFeedbackAllowed', () => {
-  // The gate mirrors the client-visible half of realmRacersFireGroundBlast's
-  // refusal set. Every dimension gets its own negative case: a gate that only
-  // ever ran fully-open would pass while refusing nothing.
+describe('localRallyCastFeedbackAllowed', () => {
+  // The gate mirrors the client-visible half of the sim's rally refusal set.
+  // Every dimension gets its own negative case: a gate that only ever ran
+  // fully-open would pass while refusing nothing.
   const allowed = (over: Partial<Record<string, unknown>> = {}) =>
-    localBlastFeedbackAllowed(
+    localRallyCastFeedbackAllowed(
       (over.abilityId as string) ?? REALM_RACERS_ABILITY_ID,
+      REALM_RACERS_ABILITY_ID,
       (over.casterDead as boolean) ?? false,
       (over.activityLocked as boolean) ?? false,
       (over.cooldownRemaining as number) ?? 0,

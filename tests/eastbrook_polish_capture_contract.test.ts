@@ -397,8 +397,10 @@ describe('Eastbrook polish capture contract', () => {
       // about Eastbrook changed, no pipeline input or geometry value moved,
       // no capture retaken. Re-minted once more when that projection went
       // kernel-based (the call site hands the whole drive state down), same
-      // reasoning.
-      fingerprint: '2e8963e43031a41f62fb2aa37eb8a99ad0e61db1e47858923b7cf4e8f58f6afa',
+      // reasoning. And again for the local bump bang and the provisional oil
+      // drop, which edit src/render/renderer.ts one more time; Eastbrook is
+      // still untouched by all of it.
+      fingerprint: 'a26383e6e2fe53e52277c353d619baa52d65ce0e95605babb0d3fba53f334377',
 
       components: {
         captureContract: {

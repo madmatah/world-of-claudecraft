@@ -42,6 +42,10 @@ import { DEED_ORDER, DEEDS } from '../sim/content/deeds';
 import { HEROIC_MARK_ITEM_ID } from '../sim/content/dungeon_difficulty';
 import { HEROIC_VENDOR_STOCK } from '../sim/content/heroic_vendor';
 import { isOnMountRaceStartPlatform, MOUNTS } from '../sim/content/mounts';
+import {
+  REALM_RACERS_ABILITY_ID,
+  REALM_RACERS_SLICK_ABILITY_ID,
+} from '../sim/content/realm_racers';
 import { recipeById } from '../sim/content/recipes';
 import { FIRST_TALENT_LEVEL, type TalentAllocation, talentsFor } from '../sim/content/talents';
 import { resolveActiveWeaponSkin } from '../sim/content/weapon_skin_rules';
@@ -332,7 +336,7 @@ import {
   createGroundAimState,
   enterGroundAim,
   type GroundAimState,
-  localBlastFeedbackAllowed,
+  localRallyCastFeedbackAllowed,
   shouldUseGroundAim,
 } from './hud/action_bar/ground_aim';
 import {
@@ -6191,6 +6195,22 @@ export class Hud {
     return this.renderer.selfAimPose ?? this.sim.player;
   }
 
+  /** Every mirror the client can see says the sim will accept this rally
+   *  cast, so its instant local cue (the shell's muzzle report, the oil
+   *  drop's patch) may play now (localRallyCastFeedbackAllowed). */
+  private localRallyFeedbackAllowed(abilityId: string, expectedAbilityId: string): boolean {
+    const race = this.sim.realmRacersInfo.match;
+    return localRallyCastFeedbackAllowed(
+      abilityId,
+      expectedAbilityId,
+      this.sim.player.dead,
+      isAbilityLockedByActivity(this.sim.player, abilityId),
+      this.sim.player.cooldowns.get(abilityId) ?? 0,
+      race?.phase === 'racing',
+      race !== null && !race.me.finished && !race.me.retired,
+    );
+  }
+
   updateGroundAimPoint(rawPoint: AimPoint | null): void {
     if (!this.isGroundAimActive() || !rawPoint) {
       this.groundAimPoint = null;
@@ -6255,17 +6275,7 @@ export class Hud {
     // half of realmRacersFireGroundBlast's refusals); the renderer suppresses
     // the duplicate when the real event lands. The shot itself, the arc and
     // the dodge marker stay server-authoritative.
-    const race = this.sim.realmRacersInfo.match;
-    if (
-      localBlastFeedbackAllowed(
-        abilityId,
-        this.sim.player.dead,
-        isAbilityLockedByActivity(this.sim.player, abilityId),
-        this.sim.player.cooldowns.get(abilityId) ?? 0,
-        race?.phase === 'racing',
-        race !== null && !race.me.finished && !race.me.retired,
-      )
-    ) {
+    if (this.localRallyFeedbackAllowed(abilityId, REALM_RACERS_ABILITY_ID)) {
       this.renderer.predictOwnGroundBlastFire();
     }
     return true;
@@ -6369,6 +6379,18 @@ export class Hud {
             this.sim.castAbilityOn(action.id, this.hoveredPartyPid);
           } else {
             this.sim.castAbility(action.id);
+            // The oil drop's instant patch, the slick twin of the shell's
+            // muzzle report: painted under the displayed machine the frame
+            // the cast commits, swapped for the readout's real patch when it
+            // lands (or expired if the sim refused). Reading the gate AFTER
+            // the cast is deliberate: offline the cast applies synchronously
+            // (the cooldown is already running, the gate refuses, and the
+            // REAL patch is on the road this same tick, so the cue would be
+            // redundant); online the mirror only moves when the server
+            // echoes, so the gate still sees the pre-cast state.
+            if (this.localRallyFeedbackAllowed(action.id, REALM_RACERS_SLICK_ABILITY_ID)) {
+              this.renderer.predictOwnSlickDrop();
+            }
           }
           // Optional QoL: also engage auto-attack when the ability is an offensive
           // attack, so white swings start without a separate Attack press. Gated on
