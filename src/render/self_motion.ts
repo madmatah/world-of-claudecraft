@@ -26,6 +26,7 @@
 // against a real lagging Sim.
 
 import { moverHeight, resolveMovement } from '../sim/colliders';
+import { vehicleProfile } from '../sim/content/vehicles';
 import {
   auraSpeedMult,
   moveSpeedMult,
@@ -43,7 +44,6 @@ import {
 } from '../sim/types';
 import {
   applyAchievedVehicleVelocity,
-  vehicleTopSpeedFor,
   vehicleVelocityX,
   vehicleVelocityZ,
 } from '../sim/vehicle_motion';
@@ -142,9 +142,23 @@ const clamp = (n: number, min: number, max: number): number => Math.max(min, Mat
  * runner's is their run speed; a PILOT's is their machine's top speed, and
  * sizing a driver's leash off run speed instead would clamp the display every
  * frame of a race and read as permanent rubber-banding.
+ *
+ * A driver's budget is FLOORED at the profile's own maximum on purpose: the
+ * surface cap and the slow auras ride `speedCap`/auras and COLLAPSE the
+ * moment the machine crosses onto grass or takes a shell, but the lead the
+ * leash is bounding was built over the LAST latency window, mostly at the
+ * old ceiling. Sizing the budget off the instantaneous cap yanked the
+ * display back several yards on the off-road crossing (and shrank the hard
+ * snap threshold toward an ordinary bump-plus-lead gap, a visible teleport):
+ * the profile maximum is the bound nothing on wheels ever exceeded, and only
+ * a ceiling RAISED above it (the nitro's 1.3 on the same cap channel) raises
+ * the budget with it.
  */
 function displaySpeedBudget(e: Entity): number {
-  if (e.drive) return vehicleTopSpeedFor(e.drive, auraSpeedMult(e));
+  if (e.drive) {
+    const profile = vehicleProfile(e.drive.profileKey);
+    return profile.maxSpeed * Math.max(1, e.drive.speedCap * auraSpeedMult(e));
+  }
   return RUN_SPEED * moveSpeedMult(e, 0);
 }
 

@@ -17,7 +17,7 @@ import {
 } from '../src/sim/realm_racers_ground_blast';
 import { realmRacersStarts } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
-import { type Entity, type MoveInput, RUN_SPEED } from '../src/sim/types';
+import { type Entity, type MoveInput, RUN_SPEED, type VehicleDrive } from '../src/sim/types';
 import { resolveVehicleContact } from '../src/sim/vehicle_contact';
 import { createVehicleDrive, vehicleVelocityX, vehicleVelocityZ } from '../src/sim/vehicle_motion';
 import { groundHeight, terrainHeight } from '../src/sim/world';
@@ -89,12 +89,33 @@ class Lab {
   // a real broadcast gap. Skipping n deliveries makes the wall-clock gap
   // between the last delivery and the resume delivery n plus 1 intervals.
   skipDeliveries = 0;
+  private readonly snapshotDelayMs: number;
+  private readonly snapshotQueue: {
+    atMs: number;
+    pos: { x: number; y: number; z: number };
+    facing: number;
+    dead: boolean;
+    ghost: boolean;
+    drive: VehicleDrive | null;
+  }[] = [];
 
   constructor(
     readonly lagMs: number,
     readonly frameMs = FRAME_MS,
-    opts: { start?: { x: number; z: number }; facing?: number; drive?: boolean } = {},
+    opts: {
+      start?: { x: number; z: number };
+      facing?: number;
+      drive?: boolean;
+      /** Transport delay on SNAPSHOT delivery, ms. The lab's default keeps
+       *  its historical zero-delay shape (inputs lag, snapshots land the
+       *  tick they are minted), which converges the mirror within one tick
+       *  of the server and therefore cannot reproduce the gap a real
+       *  downlink builds after an authority-only impulse. A test about that
+       *  gap (the leash, the resync window) sets a real delay here. */
+      snapshotDelayMs?: number;
+    } = {},
   ) {
+    this.snapshotDelayMs = opts.snapshotDelayMs ?? 0;
     this.srv = new Sim({ seed: SEED, playerClass: 'warrior', autoEquip: true });
     this.srv.setPlayerLevel(60);
     const start = opts.start ?? { x: 0, z: -80 };
@@ -159,6 +180,18 @@ class Lab {
         this.skipDeliveries--;
         continue;
       }
+      if (this.snapshotDelayMs > 0) {
+        // Real transport: the snapshot leaves now and lands one downlink later.
+        this.snapshotQueue.push({
+          atMs: this.nowMs + this.snapshotDelayMs,
+          pos: { ...this.srv.player.pos },
+          facing: this.srv.player.facing,
+          dead: this.srv.player.dead,
+          ghost: this.srv.player.ghost,
+          drive: this.srv.player.drive ? { ...this.srv.player.drive } : null,
+        });
+        continue;
+      }
       // the 20 Hz snapshot: prev pose = last wire pose, pose = fresh server pose
       this.self.prevPos = { ...this.self.pos };
       this.self.pos = { ...this.srv.player.pos };
@@ -171,6 +204,19 @@ class Lab {
       // ClientWorld state (its third safety property), so a write-back that a
       // value comparison could only catch between snapshots throws here instead.
       this.self.drive = this.srv.player.drive ? Object.freeze({ ...this.srv.player.drive }) : null;
+      this.lastSnapMs = this.nowMs;
+      delivered = true;
+    }
+    while (this.snapshotQueue.length > 0 && this.snapshotQueue[0].atMs <= this.nowMs) {
+      const snap = this.snapshotQueue.shift();
+      if (!snap) break;
+      this.self.prevPos = { ...this.self.pos };
+      this.self.pos = { ...snap.pos };
+      this.self.prevFacing = this.self.facing;
+      this.self.facing = snap.facing;
+      this.self.dead = snap.dead;
+      this.self.ghost = snap.ghost;
+      this.self.drive = snap.drive ? Object.freeze({ ...snap.drive }) : null;
       this.lastSnapMs = this.nowMs;
       delivered = true;
     }
@@ -1035,6 +1081,76 @@ describe('SelfMotionPredictor', () => {
     // Either way the pose stays bounded: the resync settles the prediction, it
     // never lets it run away from (or oscillate around) the authority.
     expect(adopted.lead).toBeLessThan((26 * SELF_MOTION_CAP_MAX_MS) / 1000);
+  });
+
+  it('keeps the display steady when the surface cap collapses under a built lead', () => {
+    // Crossing onto deep grass (or taking a shell's slow) drops the SURFACE
+    // speed cap the instant the server says so. The lead the display carries
+    // was built over the last latency window at the OLD ceiling, so a leash
+    // budget sized off the instantaneous cap yanked the machine backward
+    // several yards on every off-road excursion, and shrank the hard snap
+    // threshold toward an ordinary bump gap. The budget is floored at the
+    // profile maximum now: the crossing must read as the server's own gentle
+    // cap decay, never as a backward jump.
+    // The circuit's start straight, for exactly as long as it stays straight:
+    // the open world is too hilly to build racing speed, and holding the grid
+    // heading much past two seconds runs the machine into the garden wall.
+    const start = realmRacersStarts(GARDEN_CIRCUIT)[0];
+    const lab = new Lab(150, FRAME_MS, {
+      start: { x: start.x, z: start.z },
+      facing: start.facing,
+      drive: true,
+      // A real downlink: without it the mirror converges within one tick of
+      // the server and the post-impulse gap this test is about never builds.
+      snapshotDelayMs: 75,
+    });
+    lab.setInput(mi({ forward: true }));
+    for (let i = 0; i < 60; i++) lab.frame(); // rolling, predictor adopted
+    const drive = lab.srv.player.drive;
+    if (!drive) throw new Error('missing drive');
+    // Terminal speed, installed through the announced-impulse channel (the
+    // grid straight is not long enough to reach it organically before the
+    // garden wall): the resync adopts it, and half a second later the full
+    // racing lead stands.
+    drive.speed = 57;
+    lab.driveImpulse = true;
+    for (let i = 0; i < 90; i++) lab.frame(); // resync landed, servo settled
+    expect(drive.speed).toBeGreaterThan(50); // the scenario really is at speed
+    // The off-piste collision, in its real order: a hard hit at racing speed
+    // opens a display-versus-anchor gap of several yards inside one echo (the
+    // predictor cannot know the shove until the resync, a downlink away), and
+    // the machine careens onto the deep off-road band in the same moment.
+    // With the leash budget sized off the collapsed surface cap, the whole
+    // excess used to clamp onto the jumped anchor in single-frame steps (the
+    // yank the seat reads as a big stutter); floored at the profile maximum,
+    // the servo glides it in instead.
+    drive.speed = 12;
+    drive.slip = -25;
+    drive.speedCap = 0.5;
+    lab.driveImpulse = true;
+    let lastX: number | null = null;
+    let lastZ: number | null = null;
+    let maxFrameDisp = 0;
+    let maxLead = 0;
+    for (let i = 0; i < 40; i++) {
+      const r = lab.frame();
+      if (!r.pose) continue;
+      maxLead = Math.max(maxLead, Math.hypot(r.pose.x - r.ac.x, r.pose.z - r.ac.z));
+      if (lastX !== null && lastZ !== null) {
+        maxFrameDisp = Math.max(maxFrameDisp, Math.hypot(r.pose.x - lastX, r.pose.z - lastZ));
+      }
+      lastX = r.pose.x;
+      lastZ = r.pose.z;
+    }
+    // The honest post-hit gap here is ~8 yd (the hit's velocity change over
+    // one downlink). The collapsed-cap budget garrotted it at ~4.7: the
+    // display was clamped onto the jumped anchor instead of gliding, which is
+    // the off-piste collision yank. Floored, the gap is TOLERATED...
+    expect(maxLead).toBeGreaterThan(6);
+    // ...and worked off by the servo, never by a step: legitimate motion at
+    // 57 yd/s is 0.95 yd per 60 Hz frame, and the glide adds a bounded
+    // fraction on top.
+    expect(maxFrameDisp).toBeLessThan(1.45);
   });
 
   it('rides a ground blast pop into the air instead of staying glued to the floor', () => {
