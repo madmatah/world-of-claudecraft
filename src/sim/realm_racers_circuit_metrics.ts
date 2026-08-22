@@ -208,10 +208,16 @@ export type RealmRacersCircuitProblemCode =
    *  short-circuits stop applying at all. */
   | 'fence_outside_region'
   /**
-   * A prop's footprint, SOLID or decorative, reaches into the racing surface
-   * (road, verge, run-off and the whole drivable apron). The check the
-   * fountain-in-the-road defect would have failed: that piece collided with
-   * nothing and was still standing where the race goes.
+   * A prop's footprint reaches into the racing surface (road, verge, run-off
+   * and the whole drivable apron). The check the fountain-in-the-road defect
+   * would have failed.
+   *
+   * Its SEVERITY is the piece's own solidity (`realmRacersPropStanding`): an
+   * error for anything that stops a machine, a warning for anything that does
+   * not. It shipped as an error either way, and that refused the shape it could
+   * not tell from the shape it was written for: an arch spanning the road,
+   * placed to be driven under, reads to a footprint exactly like a fountain
+   * standing in it.
    */
   | 'prop_blocks_racing_surface'
   /** A prop's footprint leaves the collision region, where the rally's own
@@ -619,8 +625,8 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
 
   for (const prop of placements.props) {
     const radius = rallyFootprintRadius(prop.footprint);
-    const { s, clear, surface, clearOfSurface } = realmRacersPropStanding(circuit, prop);
-    if (!clearOfSurface) problem('prop_blocks_racing_surface', 'error', clear, surface, s);
+    const { s, clear, surface, severity } = realmRacersPropStanding(circuit, prop);
+    if (severity !== 'ok') problem('prop_blocks_racing_surface', severity, clear, surface, s);
     if (Math.abs(prop.x) + radius > circuit.regionHalfX) {
       problem(
         'prop_outside_region',
@@ -876,6 +882,18 @@ export interface RealmRacersPropStanding {
   /** The garden edge there: road plus verge plus run-off, the one boundary. */
   surface: number;
   clearOfSurface: boolean;
+  /**
+   * What the readout says about it, which is NOT `clearOfSurface` negated.
+   *
+   * A piece that stops a machine is an ERROR wherever the race goes: an
+   * invisible wall on the racing line is the surprise the whole dressing rule
+   * exists to outlaw. A piece that collides with nothing is a WARNING, because
+   * the arch a circuit is meant to be driven UNDER is authored exactly like the
+   * tree nobody should be able to see through, and only the author knows which
+   * one they placed. The tool says so and the author decides; what it will not
+   * do is refuse a draft over a placement that stops nobody.
+   */
+  severity: 'ok' | 'warning' | 'error';
 }
 
 /**
@@ -951,7 +969,14 @@ export function realmRacersPropStanding(
   // `clear >= surface`, which is the same thing for every real number and NOT
   // the same for NaN: a malformed draft used to raise nothing here and would
   // otherwise start raising a racing-surface error it has no business raising.
-  return { s: projection.s, clear, surface, clearOfSurface: !(clear < surface) };
+  const clearOfSurface = !(clear < surface);
+  return {
+    s: projection.s,
+    clear,
+    surface,
+    clearOfSurface,
+    severity: clearOfSurface ? 'ok' : prop.solid ? 'error' : 'warning',
+  };
 }
 
 export function realmRacersCircuitErrors(

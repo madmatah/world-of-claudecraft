@@ -87,6 +87,7 @@ export const REALM_RACERS_PROP_VISUALS: Record<string, RallyPropVisual> = {
   glowFlower: gltf('flowerGlow'),
 
   oak: gltf('oakTree'),
+  greatTree: gltf('greatTree'),
   shrub: gltf('shrubFlowering'),
   bedRound: gltf('flowerBedRound'),
   bedSquareA: gltf('flowerBedSquareA'),

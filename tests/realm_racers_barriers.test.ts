@@ -19,7 +19,10 @@ import {
   realmRacersBarrierDef,
 } from '../src/sim/content/realm_racers_barriers';
 import type { RallyFence, RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import {
+  REALM_RACERS_CIRCUIT_LIST,
+  REALM_RACERS_PRACTICE_CIRCUIT,
+} from '../src/sim/content/realm_racers_circuits';
 import { DUNGEON_FLOOR_Y } from '../src/sim/data';
 import { realmRacersColliders } from '../src/sim/realm_racers_colliders';
 import {
@@ -237,10 +240,35 @@ describe('the barrier kit catalog', () => {
 
   it('scopes the boot lane to the kits a SHIPPED circuit authors', () => {
     // The lane rule 25 established, applied to the kits: it must never widen to
-    // "everything the catalog could offer", which would pin a
-    // parsed scene per kit on a map that never clears. No shipped circuit
-    // authors a barrier yet, so the honest answer is an empty lane.
-    expect(REALM_RACERS_BARRIER_BOOT_URLS).toEqual([]);
+    // "everything the catalog could offer", which would pin a parsed scene per
+    // kit on a map that never clears.
+    //
+    // Derived from the shipped RECORDS rather than pinned to a list, and that
+    // is the whole rule rather than a convenience. It was pinned to `[]` while
+    // no shipped circuit authored a fence, which read as the rule and was only
+    // ever the empty case: the first circuit to author a hedge turned three
+    // lane guards red at once for doing exactly what the lane exists to serve.
+    const worn = new Set(
+      REALM_RACERS_CIRCUIT_LIST.flatMap((circuit) => circuit.fences ?? []).map(
+        (fence) => fence.kit,
+      ),
+    );
+    expect([...REALM_RACERS_BARRIER_BOOT_URLS].sort()).toEqual(
+      [
+        ...new Set(
+          [...worn].flatMap((kit) => {
+            const visual = REALM_RACERS_BARRIER_VISUALS[kit];
+            expect(visual, `${kit} should be a real kit`).toBeDefined();
+            return visual.corner === 'none'
+              ? [visual.panelUrl]
+              : [visual.panelUrl, visual.corner.url];
+          }),
+        ),
+      ].sort(),
+    );
+    // ...and the scoping bought something: the lane is strictly smaller than the
+    // catalog it is scoped from. Holds until every kit is worn somewhere, and on
+    // that day it is correct that it bought nothing.
     expect(REALM_RACERS_BARRIER_BOOT_URLS.length).toBeLessThan(
       REALM_RACERS_BARRIER_ASSET_URLS.length,
     );

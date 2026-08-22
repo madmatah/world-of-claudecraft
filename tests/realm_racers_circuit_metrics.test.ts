@@ -742,6 +742,38 @@ describe('where one placed piece stands', () => {
       ),
     ).toBe(false);
   });
+
+  it('grades the same geometry by whether the piece stops anyone', () => {
+    // The one thing the ERROR could never say: an arch spanning the road is the
+    // same measurement as a fountain standing in it, and only its solidity
+    // tells the shape a circuit is driven THROUGH from the shape it is stopped
+    // by. Both arms over ONE position, so nothing but the collision answer
+    // moves between them.
+    const centre = realmRacersTrack(GARDEN).pointAt(100);
+    const x = centre.x - REALM_RACERS_ORIGIN.x;
+    const z = centre.z - REALM_RACERS_ORIGIN.z;
+    const graded = (collide?: 'none'): { severity: string; raised: string | undefined } => {
+      const circuit: RealmRacersCircuit = {
+        ...GARDEN,
+        id: `severity_${fixtures++}`,
+        props: [{ asset: 'bench', at: { x, z }, ...(collide ? { collide } : {}) }],
+        scatters: undefined,
+      };
+      const placed = placedOn(circuit);
+      // Not vacuous: both arms really are on the racing surface, and they
+      // really do differ in the one field the rule reads.
+      expect(realmRacersPropStanding(circuit, placed).clearOfSurface).toBe(false);
+      expect(placed.solid).toBe(collide !== 'none');
+      return {
+        severity: realmRacersPropStanding(circuit, placed).severity,
+        raised: realmRacersCircuitMetrics(circuit).problems.find(
+          (problem) => problem.code === 'prop_blocks_racing_surface',
+        )?.severity,
+      };
+    };
+    expect(graded()).toEqual({ severity: 'error', raised: 'error' });
+    expect(graded('none')).toEqual({ severity: 'warning', raised: 'warning' });
+  });
 });
 
 describe('Realm Racers circuit metrics: the pickup rows', () => {

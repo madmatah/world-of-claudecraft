@@ -17,7 +17,10 @@
 // Pure and DOM-free, deterministic, no rng.
 
 import type { RallyProp, RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
-import { realmRacersPropStanding } from '../../sim/realm_racers_circuit_metrics';
+import {
+  type RealmRacersPropStanding,
+  realmRacersPropStanding,
+} from '../../sim/realm_racers_circuit_metrics';
 import { REALM_RACERS_ORIGIN } from '../../sim/realm_racers_layout';
 import type { RallyPlacedProp } from '../../sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../../sim/realm_racers_spline';
@@ -112,7 +115,14 @@ export function resolveSnap(
 
 /** What a placed piece's legality is, straight off the readout's own rule. */
 export interface PlacementLegality {
+  /**
+   * Whether the readout will accept the circuit with this piece on it, which is
+   * NOT "is it clear of the surface": a piece that stops nobody standing on the
+   * racing surface is the readout's WARNING, and an arch meant to be driven
+   * under is exactly that placement. `severity` is what the tint reads.
+   */
   legal: boolean;
+  severity: RealmRacersPropStanding['severity'];
   /** Lateral clearance less the footprint radius, yards. */
   clear: number;
   /** The garden edge it is measured against, yards. */
@@ -127,13 +137,18 @@ export function placementLegality(
 ): PlacementLegality | null {
   if (!placed) return null;
   const standing = realmRacersPropStanding(circuit, placed);
+  const over = (standing.surface - standing.clear).toFixed(1);
   return {
-    legal: standing.clearOfSurface,
+    legal: standing.severity !== 'error',
+    severity: standing.severity,
     clear: standing.clear,
     surface: standing.surface,
-    label: standing.clearOfSurface
-      ? `clear by ${(standing.clear - standing.surface).toFixed(1)} yd`
-      : `on the racing surface by ${(standing.surface - standing.clear).toFixed(1)} yd`,
+    label:
+      standing.severity === 'ok'
+        ? `clear by ${(standing.clear - standing.surface).toFixed(1)} yd`
+        : standing.severity === 'warning'
+          ? `over the racing surface by ${over} yd, and stops nobody`
+          : `on the racing surface by ${over} yd`,
   };
 }
 

@@ -388,6 +388,21 @@ export const PLAN_PALETTE_VARS = {
 export type PlanPaletteId = keyof typeof PLAN_PALETTE_VARS;
 
 /**
+ * Which token a dressing ghost wears, off the readout's own verdict.
+ *
+ * Three states rather than two, because the readout has three: a piece that
+ * stops nobody standing on the racing surface is a WARNING there, and a ghost
+ * drawn red over it would be the tool refusing a placement the panel will
+ * accept, which is the same disagreement the one-predicate rule exists to
+ * prevent, pointing the other way.
+ */
+export function placementTint(severity: 'ok' | 'warning' | 'error' | undefined): PlanPaletteId {
+  if (severity === 'error') return 'bad';
+  if (severity === 'warning') return 'warn';
+  return 'pick';
+}
+
+/**
  * What the tokens hold today, used when nothing answers for them. A page with no
  * stylesheet applied (a test, a failed load) still has to draw, and
  * `fillStyle = ''` is a silent no-op that leaves whatever colour came before it.

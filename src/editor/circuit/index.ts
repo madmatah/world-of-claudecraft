@@ -287,6 +287,7 @@ export {
   type PlanPaletteId,
   PROP_LABEL_MIN_GAP,
   PROP_LABEL_MIN_SCALE,
+  placementTint,
   planBearings,
   resolvePlanPalette,
   STARTER_OVAL,

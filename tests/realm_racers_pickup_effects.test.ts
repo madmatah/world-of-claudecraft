@@ -96,8 +96,31 @@ function standAt(sim: Sim, pid: number, x: number, z: number): void {
 }
 
 function standOnBox(sim: Sim, pid: number, index: number): void {
-  const box = realmRacersPickupBoxes(RACE_CIRCUIT)[index];
+  const box = required(realmRacersPickupBoxes(RACE_CIRCUIT)[index], `box ${index}`);
   standAt(sim, pid, box.x, box.z);
+}
+
+/** Where one box sits round the lap, as a fraction. What a case needs whenever
+ *  it places a FIELD around the take rather than just a taker. */
+function boxLapFraction(index: number): number {
+  const box = required(realmRacersPickupBoxes(RACE_CIRCUIT)[index], `box ${index}`);
+  return box.s / realmRacersTrack(RACE_CIRCUIT).length;
+}
+
+/**
+ * Three boxes as far apart as the circuit's own rows allow.
+ *
+ * A case wanting three machines each on their OWN box cannot name indices: how
+ * many boxes a shipped circuit carries is content (four per row, and the row
+ * count is an authoring decision), so the literals `0, 4, 8` were three rows on
+ * the circuit they were written against and out of range the day it kept one.
+ * Thirds of whatever is there is the same answer on the old shape and an answer
+ * at all on every other.
+ */
+function spreadBoxes(): [number, number, number] {
+  const count = realmRacersPickupBoxes(RACE_CIRCUIT).length;
+  expect(count, 'three boxes to spread across').toBeGreaterThanOrEqual(3);
+  return [0, Math.floor(count / 3), Math.floor((2 * count) / 3)];
 }
 
 function progressOf(sim: Sim, pid: number) {
@@ -329,16 +352,32 @@ describe('the drawn effect, in a race', () => {
     // catch anything, because the taker is last with or without them.
     const { sim, pids } = racingGrid();
     const [leader, middle, taker, quitter] = pids;
-    placeOnLap(sim, leader, 0.45);
-    placeOnLap(sim, middle, 0.35);
-    placeOnLap(sim, taker, 0.25);
-    placeOnLap(sim, quitter, 0.05);
+    // Every position RELATIVE to the box the take happens on, never written as a
+    // constant. The taker has to be last among the live racers or the band read
+    // is not the backmarker's, and where a circuit's pickup rows sit is content:
+    // the row this box belongs to moved from 12 percent of the lap to 42, which
+    // put the taker ahead of two machines placed at fixed fractions and read the
+    // MIDFIELD table while still calling itself a backmarker case.
+    const boxFraction = boxLapFraction(0);
+    // Room either side for the spread below, so it stays inside one lap wherever
+    // the row sits, and the case fails by name rather than by wrapping if not.
+    expect(boxFraction, 'the row leaves room to place a field around it').toBeGreaterThan(0.15);
+    expect(boxFraction, 'the row leaves room to place a field around it').toBeLessThan(0.75);
+    placeOnLap(sim, leader, boxFraction + 0.2);
+    placeOnLap(sim, middle, boxFraction + 0.1);
+    placeOnLap(sim, taker, boxFraction);
+    placeOnLap(sim, quitter, boxFraction - 0.1);
     realmRacersForfeit(sim.ctx, quitter);
     // The premises, asserted: the quitter is out of the race and really is
     // behind the taker, so counting them would put a fourth machine in the
     // field with the taker no longer at the back of it.
     expect(progressOf(sim, quitter).retiredTick).not.toBeNull();
     expect(progressOf(sim, quitter).travelled).toBeLessThan(progressOf(sim, taker).travelled);
+    // ...and the taker is last of the ones still driving, which is the other
+    // half of the same premise and the half the fixed fractions lost.
+    for (const ahead of [leader, middle]) {
+      expect(progressOf(sim, ahead).travelled).toBeGreaterThan(progressOf(sim, taker).travelled);
+    }
 
     // A roll that tells the two tables APART, which most do not: it sits inside
     // the backmarker's nitro slice and inside the midfield's refill.
@@ -699,14 +738,15 @@ describe('the ward', () => {
     // The machine in the oil is deliberately NOT the warded one: a ward absorbs
     // oil, so driving the warded pilot into it would spend the very thing this
     // case is about.
-    takeWithEffect(sim, a, 0, 'ward');
+    const [wardBox, slickBox, nitroBox] = spreadBoxes();
+    takeWithEffect(sim, a, wardBox, 'ward');
     for (let i = 0; i < 21; i++) sim.tick();
-    takeWithEffect(sim, b, 4, 'slick');
+    takeWithEffect(sim, b, slickBox, 'slick');
     sim.castAbility(REALM_RACERS_SLICK_ABILITY_ID, b);
     const live = match(sim);
     const slick = required(live.slicks[0], 'slick');
     for (let i = 0; i < 21; i++) sim.tick();
-    takeWithEffect(sim, c, 8, 'nitro');
+    takeWithEffect(sim, c, nitroBox, 'nitro');
     sim.castAbility(REALM_RACERS_NITRO_ABILITY_ID, c);
     // And the fourth machine into the puddle, so a grip clock is running too.
     standAt(sim, d, slick.x, slick.z);

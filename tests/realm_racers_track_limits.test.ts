@@ -1,6 +1,20 @@
+// The track-limits REFEREE: its rules, which are invariants, and nothing about
+// which circuits happen to satisfy them.
+//
+// A third block used to live here, driving every candidate cut on every shipped
+// circuit and failing when one paid. It is gone, and the reason is a design
+// finding rather than a cost saving (it did cost 33 of this file's 35 seconds):
+// **a cut that pays can be an authoring choice.** A circuit may legitimately
+// offer a shortcut that trades time against the referee's penalty, and a
+// blocking assertion over that is a pin on two shapes, not a rule.
+//
+// What is NOT a choice is a paying cut the referee fails to CATCH: there the
+// anti-cheat simply does not apply to that geometry, which nobody authors on
+// purpose. That verdict moved to `scripts/realm_racers_limits_probe.ts`, which
+// already owned the sweep, and the `qa-checklist` agent runs it when a circuit
+// record is in the diff (docs/qa-gate.md's judgment layer). The measurement
+// itself is unchanged: both still go through `tests/helpers/realm_racers_cut_lab.ts`.
 import { describe, expect, it } from 'vitest';
-import { REALM_RACERS_CIRCUIT_LIST } from '../src/sim/content/realm_racers_circuits';
-import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
   noRallyExcursion,
   type RallyExcursion,
@@ -11,12 +25,6 @@ import {
   rallyLoiterCountdownTicks,
   stepRealmRacersTrackLimits,
 } from '../src/sim/realm_racers_track_limits';
-import {
-  driveRallyChord,
-  measureRallyRoadPace,
-  rallyChordCandidates,
-  rallyRoadSeconds,
-} from './helpers/realm_racers_cut_lab';
 
 const LAP = 400;
 
@@ -273,72 +281,4 @@ describe('Realm Racers track limits: the outfield hole the old containment never
     expect(sawBoth).toBe(1);
     expect(previous).toBe('cutReturn');
   });
-});
-
-describe('Realm Racers track limits: what the shipped circuits actually offer', () => {
-  // The property this whole design rests on, checked by DRIVING rather than by
-  // measuring geometry, because geometry is the wrong question: a chord that
-  // saves a hundred yards of lap can still be slower than the road, since the
-  // off-track bands cost speed the whole way.
-  //
-  // Measured 2026-08-03: the practice circuit offers NO straight line that beats
-  // the road at all, and the Express Tour's best one saves 0.8 s over a whole
-  // race. So on the circuits that ship today the BANDS are the anti-cheat, and
-  // the referee's cut arm fires on nothing. That is a fact about these two
-  // shapes, not about the rule, and the day someone authors a long out-and-back
-  // (where a straight line really would pay) it stops being true. This is what
-  // says so, in the same sweep the constants were set from
-  // (`scripts/realm_racers_limits_probe.ts`).
-  //
-  // It drives real races, so it is slow by the standards of this suite. That is
-  // the price of the only measurement that means anything here.
-  const PAYS_SECONDS = 1.5;
-
-  it.each(REALM_RACERS_CIRCUIT_LIST.map((circuit) => [circuit.id, circuit] as const))(
-    '%s offers no cut that pays, or the referee catches the ones that do',
-    (id, circuit) => {
-      const track = realmRacersTrack(circuit);
-      const pace = measureRallyRoadPace(circuit);
-      expect(pace.cruise, `${id} ace pace`).toBeGreaterThan(20);
-      const candidates = rallyChordCandidates(
-        circuit,
-        Math.max(1, Math.round(track.samples.length / 10)),
-        [60, 110, 180, 260],
-      );
-      let driven = 0;
-      let bestSaving = Number.NEGATIVE_INFINITY;
-      for (const candidate of candidates) {
-        const road = rallyRoadSeconds(pace, candidate.from, candidate.to);
-        if (road === null) continue;
-        const line = driveRallyChord(
-          circuit,
-          track.samples[candidate.from].s,
-          track.samples[candidate.to].s,
-          pace.cruise,
-        );
-        // A line the grip model will not hold off-road is not a cut anyone can
-        // take; counting its flailing would be measuring the probe.
-        if (!line) continue;
-        driven++;
-        const saved = road - line.seconds;
-        bestSaving = Math.max(bestSaving, saved);
-        if (saved <= PAYS_SECONDS) continue;
-        // It pays. Then the referee owes us the catch, which is the backstop's
-        // whole contract and the arm that is dormant today.
-        const unearned = line.arc - REALM_RACERS_OFF_ROAD_EXCHANGE_RATE * line.ground;
-        expect(
-          unearned,
-          `${id}: a cut from ${candidate.from} to ${candidate.to} saves ${saved.toFixed(2)}s ` +
-            `and is NOT caught (unearned ${unearned.toFixed(1)} yd)`,
-        ).toBeGreaterThan(REALM_RACERS_CUT_TOLERANCE_YD);
-      }
-      // Vacuity floor: a sweep that drove nothing would pass every assertion
-      // above by running none of them.
-      expect(driven, `${id} drivable candidate cuts`).toBeGreaterThanOrEqual(4);
-      // ...and the headline number is visible rather than implied, so the day it
-      // moves the reason is in the failure rather than in a git blame.
-      expect(bestSaving, `${id} best cut saving, seconds`).toBeLessThan(PAYS_SECONDS);
-    },
-    60_000,
-  );
 });

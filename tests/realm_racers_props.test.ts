@@ -23,6 +23,7 @@ import {
   REALM_RACERS_CAMERA_BOOM_PROFILE,
 } from '../src/render/camera_boom_core';
 import { PROP_ASSET_DEFS, propPreloadInternalsForTest } from '../src/render/props';
+import { REALM_RACERS_BARRIER_ASSET_URLS } from '../src/render/realm_racers_barrier_visuals';
 import {
   REALM_RACERS_PROP_URLS,
   REALM_RACERS_PROP_VISUALS,
@@ -171,15 +172,24 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
     // circuit cannot draw late) ride the lane.
     const lane = new Set(realmRacersPreloadInternalsForTest.assetUrls);
     const themeKit = new Set(REALM_RACERS_THEME_ASSET_URLS);
-    // The lane is theme-kit urls and nothing else. Stated as a subset rather
-    // than an equality, because the lane is now scoped to the kits a SHIPPED
-    // circuit wears (`tests/realm_racers_themes.test.ts` owns that half, and
-    // pins the unworn ones OUT); what this case owns is the other direction,
-    // that no DRESSING url got in. A subset rather than "no dressing url is in
-    // it" because a handful of models are BOTH (the garden's iron fence is the
-    // Evergarden's perimeter and an authorable piece), and the rule is about
-    // which door put a url in the lane.
-    expect([...lane].filter((url) => !themeKit.has(url))).toEqual([]);
+    // The lane is KIT urls and nothing else. Stated as a subset rather than an
+    // equality, because the lane is scoped to the kits a SHIPPED circuit wears
+    // (`tests/realm_racers_themes.test.ts` owns that half, and pins the unworn
+    // ones OUT); what this case owns is the other direction, that no DRESSING
+    // url got in. A subset rather than "no dressing url is in it" because a
+    // handful of models are BOTH (the garden's iron fence is the Evergarden's
+    // perimeter and an authorable piece), and the rule is about which door put a
+    // url in the lane.
+    //
+    // BOTH kit vocabularies, and the barrier half is not decoration on this
+    // list: the lane opens with `REALM_RACERS_BARRIER_BOOT_URLS` too, and that
+    // list was empty for as long as no shipped circuit authored a fence. The
+    // first one that does is a hedge appearing here, which read as a dressing
+    // model sneaking into the lane while it was the guard being written against
+    // an empty case. A barrier is structure, like a wall and an arch, and rides
+    // the lane for the same stated reason.
+    const kit = new Set([...themeKit, ...REALM_RACERS_BARRIER_ASSET_URLS]);
+    expect([...lane].filter((url) => !kit.has(url))).toEqual([]);
     expect(lane.size).toBeLessThan(20);
 
     const dressingOnly = REALM_RACERS_PROP_URLS.filter((url) => !themeKit.has(url));

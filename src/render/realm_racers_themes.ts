@@ -190,8 +190,11 @@ const EVERGARDEN: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   // The garden's own vocabulary: stonework, ironwork, beds and specimen trees.
+  // `greatTree` IS the Evergarden's specimen elder, the same model and the same
+  // scale band `garden_features.ts` raises over the lawns.
   props: [
     'oak',
+    'greatTree',
     'shrub',
     'bedRound',
     'bedSquareA',
@@ -645,6 +648,9 @@ const WRAITHWOOD: RallyCircuitTheme = {
     'bonfire',
     'banner',
     'oak',
+    // the overgrown giants the Wraithwood is named for: the same elder model
+    // `haunt_features.ts` clones dark over the wood's own greatTrees spots
+    'greatTree',
     'shrub',
     'mushroomTan',
   ],
@@ -897,6 +903,9 @@ const PALMREACH: RallyCircuitTheme = {
     'rockLargeF',
     'mushroomRed',
     'oak',
+    // the vine-hung banyans of the strand: `jungle_features.ts` raises the same
+    // elder model at the Palmreach's own greatTrees spots
+    'greatTree',
     'shrub',
   ],
   water: { shallow: 0x2fa8a0, deep: 0x0d3a4a },

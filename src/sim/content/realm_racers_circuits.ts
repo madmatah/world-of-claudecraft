@@ -620,70 +620,132 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
     { s: 0.955, halfWidth: 10 },
     { s: 1, halfWidth: 10 },
   ],
-  // The ceiling, like every circuit: see the field's own comment.
   regionHalfX: 300,
   regionHalfZ: 150,
-  perimeter: { halfX: 217, halfZ: 124, halfThickness: 0.4, height: 2.2 },
+  perimeter: { halfX: 299, halfZ: 149, halfThickness: 0.4, height: 2.2 },
   basin: { waterY: -0.55, bankSlope: 0.8, depthMax: 6 },
-  /**
-   * Two pools, one in each wide part of the infield, both of them well clear of
-   * the pinch strip.
-   *
-   * This is what replaced a five row `waterBands` table whose whole job was
-   * saying where the derived ribbon must NOT be: samples 133 to 178 face
-   * samples 356 to 400 across a gap that closes to 11 yards, and eleven yards
-   * of water between two shores is a canal, so two of its five rows existed to
-   * paint that stretch dry. Placed water needs no such instruction, because
-   * nothing puts water beside the road in the first place.
-   *
-   * There is a third wide spot, in the pocket beside the first of those two
-   * stretches, and it is deliberately EMPTY: it opens onto the strip, so a pool
-   * there would be the canal again by another route. Same measured discipline
-   * as the practice circuit's two otherwise: each centre is the largest circle
-   * that fits inside the infield's racing-surface ring, and the widest wobbled
-   * radius stays a few yards inside it.
-   */
   ponds: [
     { x: 21, z: 46, rx: 15.5, rz: 14.5, wobble: 0.16, seed: 11 },
     { x: -147, z: -17, rx: 13, rz: 12, wobble: 0.15, seed: 12 },
   ],
-  /**
-   * Three rows over an 829 yard lap, so a competition lap offers the same
-   * refills per lap as the practice circuit does on a lap half its length. They
-   * are spread around the loop rather than bunched near the pinch: the strip is
-   * where a shot is TAKEN, and a row on the way to it is what a pilot arrives
-   * with something to take it with.
-   */
-  pickupRows: [{ s: 0.12 }, { s: 0.42 }, { s: 0.68 }],
+  props: [
+    { asset: 'fountain', at: { x: 21.6, z: 45.5 } },
+    {
+      asset: 'leafyFoxStatue',
+      at: { s: 0.0565, offset: 18.7 },
+      yaw: 4.5,
+      scale: 7,
+      collide: 'none',
+    },
+    { asset: 'leafyFoxStatue', at: { x: 28, z: -95.5 }, yaw: 4.71, scale: 7, collide: 'none' },
+    { asset: 'shrub', at: { x: -81.5, z: -82.1 }, scale: 3.83 },
+    { asset: 'gardenArch', at: { x: -52.1, z: -21.6 }, yaw: 4.45, scale: 8, collide: 'none' },
+    { asset: 'lilyRaft', at: { x: -145.8, z: -9.3 }, scale: 4 },
+    { asset: 'lilyRaft', at: { x: -153.9, z: -19.4 }, scale: 4 },
+    { asset: 'lilyRaft', at: { x: -141.4, z: -23.3 }, scale: 4 },
+    { asset: 'reeds', at: { x: -136.2, z: -14.2 }, scale: 4 },
+    { asset: 'reeds', at: { x: -135.8, z: -21.6 }, scale: 4 },
+    { asset: 'reeds', at: { x: -141.2, z: -29 }, scale: 4 },
+    { asset: 'reeds', at: { x: -151.7, z: -28.1 }, scale: 4 },
+    { asset: 'reeds', at: { x: -139.3, z: -6.9 }, scale: 4 },
+    { asset: 'reeds', at: { x: -152.2, z: -6.1 }, scale: 4 },
+    { asset: 'reeds', at: { x: -158.8, z: -13.5 }, scale: 4 },
+    { asset: 'reeds', at: { x: -158.4, z: -22.7 }, scale: 4 },
+    { asset: 'fountain', at: { x: -145.5, z: -17.1 } },
+    { asset: 'gardenArch', at: { x: 43.7, z: 77.6 }, yaw: 5.5, scale: 8, collide: 'none' },
+    { asset: 'oak', at: { x: -85.9, z: -49.7 }, scale: 2 },
+    { asset: 'oak', at: { x: -0.4, z: -48.5 }, scale: 2 },
+    { asset: 'oak', at: { x: 10.1, z: -23.6 }, scale: 1.3 },
+    { asset: 'oak', at: { x: 41.5, z: -112.1 }, scale: 4 },
+    { asset: 'oak', at: { x: -133.3, z: -114.1 }, scale: 1.8 },
+    { asset: 'oak', at: { x: -214.7, z: -63.3 }, scale: 2.6 },
+    { asset: 'oak', at: { x: -198.3, z: 53.4 }, scale: 3 },
+    { asset: 'oak', at: { x: -69.5, z: 31.8 }, scale: 3 },
+    { asset: 'oak', at: { x: 52.7, z: 124.5 }, scale: 5 },
+    { asset: 'oak', at: { x: 115.6, z: 55.2 }, scale: 3.4 },
+    { asset: 'oak', at: { x: 110, z: -31.8 }, scale: 2 },
+    { asset: 'bench', at: { s: 0.2087, offset: 17.4 }, yaw: 5.5, scale: 3.5 },
+    { asset: 'bedSquareA', at: { x: 30.2, z: -36.1 }, scale: 15.98 },
+    { asset: 'hexTower', at: { x: -108.6, z: -27.5 }, scale: 10 },
+  ],
+  fences: [
+    {
+      kit: 'hedge',
+      points: [
+        { x: -38.4, z: -56.8 },
+        { x: -40, z: -50.2 },
+        { x: -33.5, z: -48.8 },
+        { x: -30.8, z: -59.7 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -46, z: -50.7 },
+        { x: -42.7, z: -62.8 },
+        { x: -24.3, z: -58.7 },
+        { x: -27, z: -46.6 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -68.4, z: -49.8 },
+        { x: -21.6, z: -40.3 },
+        { x: -16.9, z: -62.9 },
+        { x: -28.2, z: -65.6 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -34.9, z: -66.6 },
+        { x: -61.9, z: -72.8 },
+        { x: -68.4, z: -49.9 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -43, z: -62.9 },
+        { x: -58.2, z: -66.1 },
+        { x: -59.6, z: -61.1 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -60.4, z: -57.2 },
+        { x: -62.9, z: -48.9 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -57.2, z: -51.9 },
+        { x: -53.4, z: -65 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -49.3, z: -60 },
+        { x: -52.8, z: -46.8 },
+      ],
+    },
+    {
+      kit: 'hedge',
+      points: [
+        { x: -33.5, z: -48.7 },
+        { x: -34.8, z: -43.1 },
+      ],
+    },
+  ],
+  pickupRows: [{ s: 0.42 }],
   startBack: 7,
   startSpacing: 5,
-  /**
-   * Three, RE-CHECKED against the shipped 829 yard lap rather than the 1100
-   * yard draft the count was first written for. Measured on the real geometry
-   * through the real kernel, house pilots from a standing start (the first lap
-   * carries the grid, so it is the slow one):
-   *
-   *   settled lap    ace 22.8 s   driver 24.3 s   rookie 26.5 s
-   *   three laps     ace 72 to 77 s   driver 75 to 78 s   rookie 82 to 85 s
-   *
-   * The design target for a competition race is about 80 seconds of driving,
-   * which three laps of this circuit lands on without changing the count. The
-   * neighbours, measured the same way by varying only the lap count, are two
-   * laps at 49 s (ace) to 56 s (rookie), which is barely a race, and four at
-   * 94 s (ace) to 109 s (rookie), which is the long race the seat already
-   * rejected once. `tests/realm_racers_circuits.test.ts` races each competition
-   * circuit to the flag and holds the winner inside a band sized to EXCLUDE
-   * both neighbours, so a lap count edited either way fails there rather than
-   * in someone's seat.
-   */
   laps: 3,
   practiceLaps: 3,
-  /**
-   * The deadline is a BACKSTOP, not a challenge: it exists so a race where
-   * nobody can finish still ends. It never binds here. The winner is home by
-   * 72 to 85 s and the 30 s chase window closes the classification by 115 s at
-   * the worst measured pace, comfortably inside 180.
-   */
   timeLimitSeconds: 180,
   musicTrack: 'realm_racers',
   theme: 'evergarden',

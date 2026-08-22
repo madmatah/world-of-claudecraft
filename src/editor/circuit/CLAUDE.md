@@ -261,7 +261,15 @@ outright without `ctx.devCommands`.
   pond on drivable garden (same), and a solid prop too low or too alone to be
   read (a rule about the PIECE, never about where it stands, so a bench forty
   yards from the road tripped it as surely as one at a corner exit). What is left
-  is one error per kind: nothing may stand on the racing surface.
+  is one problem per kind: nothing may stand on the racing surface. For a POND
+  that is an error. For a PROP the severity is the piece's own solidity, decided
+  once in `realmRacersPropStanding` so the ghost and the panel read one answer:
+  an error for anything that stops a machine, a WARNING for anything that does
+  not. It was an error either way and refused the shape it could not tell from
+  the shape it was written for, since an arch spanning the road to be driven
+  under measures exactly like a fountain standing in it. A warning is a sentence
+  the tool says and the author answers; what the readout will not do is refuse a
+  draft over a placement that stops nobody.
 - **A brush paints a STROKE, never a point.** A band table is read piecewise
   linearly, so setting one breakpoint re-slopes the road all the way round the
   lap: one click at 30 percent changed 452 of a 454 yard lap. `paintSpan` takes

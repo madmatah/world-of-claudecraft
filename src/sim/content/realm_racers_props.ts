@@ -124,6 +124,14 @@ export const REALM_RACERS_PROPS: Record<string, RallyPropDef> = {
 
   // --- planting: drivable by design, whatever its size ---
   oak: { footprint: { kind: 'circle', r: 0.55 }, solid: true, height: 9.44 },
+  // The specimen elder the Evergarden's lawns are landmarked with, and the
+  // same giant three other zones raise. Its box is 13.3 by 16.4 by 11.5, and
+  // the height is that box; the radius is the TRUNK, taken from the world's own
+  // answer for this model rather than guessed: `colliders.ts` gives a great
+  // tree `r * 1.45` at a scale of `r * 2.4` to `r * 2.9`, which is 0.55 at
+  // scale 1, the same trim the oak's 1.9 yard crown takes. A circuit places it
+  // at the scale the zones do, 6 to 9.
+  greatTree: { footprint: { kind: 'circle', r: 0.55 }, solid: true, height: 16.4 },
   shrub: { footprint: { kind: 'circle', r: 0.45 }, solid: false, height: 0.45 },
   bedRound: { footprint: { kind: 'circle', r: 0.47 }, solid: false, height: 0.5 },
   bedSquareA: { footprint: { kind: 'obb', hw: 0.49, hd: 0.49 }, solid: false, height: 0.17 },

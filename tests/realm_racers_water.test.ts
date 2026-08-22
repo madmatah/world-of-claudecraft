@@ -27,6 +27,7 @@ import {
   realmRacersCompetitionCircuits,
 } from '../src/sim/content/realm_racers_circuits';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
+import { realmRacersFenceRuns } from '../src/sim/realm_racers_fences';
 import { realmRacersGroundShape } from '../src/sim/realm_racers_ground';
 import {
   REALM_RACERS_LAWN_OVERSHOOT,
@@ -36,7 +37,11 @@ import {
   realmRacersLaneOffset,
   realmRacersPublicLane,
 } from '../src/sim/realm_racers_layout';
-import { realmRacersPlacedPonds } from '../src/sim/realm_racers_props_resolve';
+import {
+  rallyFootprintRadius,
+  realmRacersPlacedPonds,
+  realmRacersPlacedProps,
+} from '../src/sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
 import {
   REALM_RACERS_GARDEN_BAND,
@@ -383,10 +388,41 @@ describe('Realm Racers water: the collision entry point contains nobody', () => 
     // it can. Run over the SHIPPED circuits at their real lanes rather than over
     // a fixture, because the entry point resolves which circuit it is against
     // off the LANE table.
+    //
+    // What it is NOT about is what an author PLACED. A probe landing inside a
+    // solid piece of furniture, or inside a hedge, is moved by that piece, which
+    // is what those pieces are for; the claim here is about a containment LINE,
+    // something that pushes a machine back everywhere along the lap rather than
+    // at one bench. So the sweep skips a point standing in one, hit-tested off
+    // the same two resolvers the collision set is built from. It was written
+    // when no shipped circuit dressed its lawn or drew a barrier, and read as
+    // "nothing collides out here", which the first bench three yards past the
+    // verge contradicted without anything having gone wrong.
+    const MOVER_RADIUS = 0.5;
     let probed = 0;
+    let skipped = 0;
     for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
       const track = realmRacersTrack(circuit);
       const lane = realmRacersLaneOffset(realmRacersPublicLane(circuit));
+      // Both kinds as CIRCLES over their own reach, deliberately generous: this
+      // decides what the sweep declines to judge, so over-covering costs a probe
+      // and under-covering would report an author's hedge as a containment line.
+      const authored = [
+        ...realmRacersPlacedProps(circuit)
+          .filter((prop) => prop.solid)
+          .map((prop) => ({ x: prop.x, z: prop.z, r: rallyFootprintRadius(prop.footprint) })),
+        ...realmRacersFenceRuns(circuit).map(({ run }) => ({
+          x: run.x,
+          z: run.z,
+          r: Math.hypot(run.hw, run.hd),
+        })),
+      ].map((piece) => ({
+        x: piece.x + REALM_RACERS_ORIGIN.x + lane.x,
+        z: piece.z + REALM_RACERS_ORIGIN.z + lane.z,
+        // The piece's own reach plus the mover's, since a body that OVERLAPS one
+        // is pushed exactly as one standing in its centre is.
+        r: piece.r + MOVER_RADIUS,
+      }));
       for (let i = 0; i < track.samples.length; i += 7) {
         const sample = track.samples[i];
         for (const offset of [
@@ -396,7 +432,11 @@ describe('Realm Racers water: the collision entry point contains nobody', () => 
         ]) {
           const x = sample.x - sample.tz * offset + lane.x;
           const z = sample.z + sample.tx * offset + lane.z;
-          const resolved = resolvePosition(SEED, x, z, 0.5);
+          if (authored.some((piece) => Math.hypot(x - piece.x, z - piece.z) < piece.r)) {
+            skipped++;
+            continue;
+          }
+          const resolved = resolvePosition(SEED, x, z, MOVER_RADIUS);
           expect(
             Math.hypot(resolved.x - x, resolved.z - z),
             `${circuit.id} sample ${i} at ${offset.toFixed(1)}`,
@@ -405,7 +445,14 @@ describe('Realm Racers water: the collision entry point contains nobody', () => 
         }
       }
     }
+    // Counts what was JUDGED, not what was walked, so the floor is the whole
+    // non-vacuity guarantee whatever the skip does.
     expect(probed).toBeGreaterThan(300);
+    // ...and the skip stays an exception rather than becoming the sweep. A hedge
+    // maze on the infield is a legitimate handful (the Express Tour's eats about
+    // one probe in thirteen); a lawn dressed densely enough to swallow most of
+    // them would leave this case agreeing about the few points left over.
+    expect(skipped).toBeLessThan(probed / 5);
   });
 
   it('still closes the garden at the perimeter wall, which is the ONLY thing that does', () => {

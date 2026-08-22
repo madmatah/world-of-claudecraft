@@ -659,8 +659,8 @@
       "tick": 223,
       "time": 11.15,
       "nextId": 949,
-      "state": "d582b310",
-      "events": "a8226263",
+      "state": "5d03e65e",
+      "events": "d0e8450a",
       "rng": {
         "draws": 1815,
         "digest": "704d9110"
@@ -914,16 +914,6 @@
               "remaining": 9998.95,
               "school": "physical",
               "sourceId": 945
-            },
-            {
-              "duration": 0.2,
-              "id": "realm_racers_soft_verge",
-              "kind": "slow",
-              "name": "Soft Verge",
-              "remaining": 0.2,
-              "school": "physical",
-              "sourceId": 945,
-              "value": 0.75
             }
           ],
           "blockChance": 0.05,
@@ -934,15 +924,15 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "drive": {
-            "dragMult": 3,
-            "gripMult": 0.7,
+            "dragMult": 1,
+            "gripMult": 1,
             "profileKey": "rally_loaner",
             "slipCap": 1,
             "speed": 36.065263,
             "speedCap": 1
           },
           "facing": 1.329434,
-          "fallStartY": 43.139646,
+          "fallStartY": 53.927152,
           "fiveSecondRule": 110.15,
           "hp": 100,
           "id": 945,
@@ -957,9 +947,9 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 113773.849342,
-            "y": 43.099646,
-            "z": 2953.064499
+            "x": 113684.15957,
+            "y": 53.887152,
+            "z": 3029.927314
           },
           "potionCooldownUntil": -1,
           "resourceType": "rage",
@@ -1194,8 +1184,8 @@
       "tick": 240,
       "time": 12,
       "nextId": 949,
-      "state": "2f72c378",
-      "events": "b63080fe",
+      "state": "059cb0d7",
+      "events": "c9545742",
       "rng": {
         "draws": 1952,
         "digest": "7b758dcc"
@@ -1205,7 +1195,7 @@
       "tick": 260,
       "time": 13,
       "nextId": 949,
-      "state": "c3d4ac81",
+      "state": "d40eb208",
       "events": "741638a5",
       "rng": {
         "draws": 2087,
@@ -1216,7 +1206,7 @@
       "tick": 280,
       "time": 14,
       "nextId": 949,
-      "state": "14f077ca",
+      "state": "b0e6a8a5",
       "events": "741638a5",
       "rng": {
         "draws": 2255,
@@ -1227,7 +1217,7 @@
       "tick": 300,
       "time": 15,
       "nextId": 949,
-      "state": "d5b77d93",
+      "state": "b3ce152e",
       "events": "741638a5",
       "rng": {
         "draws": 2467,
@@ -1238,7 +1228,7 @@
       "tick": 320,
       "time": 16,
       "nextId": 949,
-      "state": "e5d8dec4",
+      "state": "4176f323",
       "events": "741638a5",
       "rng": {
         "draws": 2654,
@@ -1249,7 +1239,7 @@
       "tick": 340,
       "time": 17,
       "nextId": 949,
-      "state": "1fae6165",
+      "state": "cfb8d66c",
       "events": "741638a5",
       "rng": {
         "draws": 2844,
@@ -1260,8 +1250,8 @@
       "tick": 345,
       "time": 17.25,
       "nextId": 949,
-      "state": "32198b07",
-      "events": "018d029a",
+      "state": "bd9145ab",
+      "events": "257212d6",
       "rng": {
         "draws": 2900,
         "digest": "b6de8a27"
@@ -1283,7 +1273,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {
-            "damageTaken": 207,
+            "damageTaken": 283,
             "deaths": 1
           },
           "craftSkills": {},
@@ -1725,7 +1715,7 @@
       "tick": 345,
       "time": 17.25,
       "nextId": 949,
-      "state": "32198b07",
+      "state": "bd9145ab",
       "events": "741638a5",
       "rng": {
         "draws": 2900,
@@ -1748,7 +1738,7 @@
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {
-            "damageTaken": 207,
+            "damageTaken": 283,
             "deaths": 1
           },
           "craftSkills": {},

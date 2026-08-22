@@ -8,20 +8,26 @@
 // never chose. So the only honest measurement of "is this cut worth taking" is
 // a stopwatch: drive the chord, drive the road, compare.
 //
-// Shared on purpose by the content test (`tests/realm_racers_track_limits`,
-// which asserts no shipped circuit offers a cut that pays) and by the sweep
-// that set the referee's constants (`scripts/realm_racers_limits_probe.ts`). A
-// second copy of this in the probe would be a measurement the game does not
-// share, which is exactly how the two would drift apart.
+// It sat in `tests/helpers/` while a content case in
+// `tests/realm_racers_track_limits` drove it over every shipped circuit and
+// failed when a cut paid. That assertion is gone: a circuit MAY legitimately
+// offer a shortcut that trades time against the referee's penalty, so "no cut
+// pays" was a pin on two shapes rather than a rule. The judgment moved to the
+// probe beside this file, which the `qa-checklist` agent runs when a circuit
+// record is in the diff.
+//
+// So it moved too. A helper under `tests/helpers/` that no test imports is
+// misfiled, and the next reader would spend the search working out which suite
+// it serves. It has exactly one consumer now, and it lives next to it.
 
-import type { RealmRacersCircuit } from '../../src/sim/content/realm_racers_circuits';
-import { realmRacersStripPickups } from '../../src/sim/realm_racers_pickups';
-import { forwardArcDelta } from '../../src/sim/realm_racers_progress';
-import { realmRacersTrack } from '../../src/sim/realm_racers_spline';
-import { Sim } from '../../src/sim/sim';
-import { realmRacersMatchOf, realmRacersToCanonical } from '../../src/sim/social/realm_racers';
-import { startRealmRacersDevRace } from '../../src/sim/social/realm_racers_bots';
-import { TICK_RATE } from '../../src/sim/types';
+import type { RealmRacersCircuit } from '../src/sim/content/realm_racers_circuits';
+import { realmRacersStripPickups } from '../src/sim/realm_racers_pickups';
+import { forwardArcDelta } from '../src/sim/realm_racers_progress';
+import { realmRacersTrack } from '../src/sim/realm_racers_spline';
+import { Sim } from '../src/sim/sim';
+import { realmRacersMatchOf, realmRacersToCanonical } from '../src/sim/social/realm_racers';
+import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
+import { TICK_RATE } from '../src/sim/types';
 
 /** A world with one pilot and a full house grid seated on `circuit`, past the
  *  countdown and racing. */

@@ -12,7 +12,10 @@ import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MEDIA_ASSETS } from '../src/render/assets/manifest.generated';
 import { REALM_DAYNIGHT_AMPLITUDE } from '../src/render/day_night_core';
-import { REALM_RACERS_BARRIER_VISUALS } from '../src/render/realm_racers_barrier_visuals';
+import {
+  REALM_RACERS_BARRIER_BOOT_URLS,
+  REALM_RACERS_BARRIER_VISUALS,
+} from '../src/render/realm_racers_barrier_visuals';
 import {
   CIRCUIT_THEMES,
   REALM_RACERS_THEME_ASSET_URLS,
@@ -283,8 +286,19 @@ describe('Realm Racers circuit themes', () => {
     ]);
     // Derived from the circuit list rather than listed, so the day a Frostveil
     // circuit ships, its wall joins the lane without anyone remembering to.
+    //
+    // The BARRIER boot list is in the expectation for the same reason and not
+    // as a loosening: the lane has always opened with both, and that list was
+    // empty for exactly as long as no shipped circuit authored a fence, so the
+    // equality read as "theme urls only" while it was never saying that. The
+    // first circuit to author a hedge is what tells the two apart.
     expect([...lane].sort()).toEqual(
-      [...new Set([...worn].flatMap((themeId) => themeUrls(themeId)))].sort(),
+      [
+        ...new Set([
+          ...[...worn].flatMap((themeId) => themeUrls(themeId)),
+          ...REALM_RACERS_BARRIER_BOOT_URLS,
+        ]),
+      ].sort(),
     );
     for (const themeId of worn) {
       for (const url of themeUrls(themeId)) expect(lane, `${themeId} ${url}`).toContain(url);

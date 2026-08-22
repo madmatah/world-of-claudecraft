@@ -172,6 +172,7 @@ import {
   lapPositionAt,
   lateralAt,
   type PendingYaw,
+  type PlacementLegality,
   pendingYawText,
   placementLegality,
   resolveSnap,
@@ -188,6 +189,7 @@ import {
   type PlanBearing,
   type PlanBearingId,
   PROP_LABEL_MIN_SCALE,
+  placementTint,
   planBearings,
   resolvePlanPalette,
   wheelZoomScale,
@@ -1335,15 +1337,15 @@ function drawDressing(): void {
   const ghost = cursorGhost();
   if (ghost) {
     const legality = placementLegality(record, ghost);
-    const tint = legality && !legality.legal ? planPalette.bad : planPalette.pick;
+    const tint = planPalette[placementTint(legality?.severity)];
     ctx.save();
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = tint;
     ctx.lineWidth = 1.5;
     traceFootprint(ghost);
     ctx.stroke();
-    if (legality && !legality.legal) {
-      ctx.fillStyle = withAlpha(planPalette.bad, 0.3);
+    if (legality && legality.severity !== 'ok') {
+      ctx.fillStyle = withAlpha(tint, 0.3);
       ctx.fill();
     }
     ctx.setLineDash([]);
@@ -1367,7 +1369,7 @@ function drawDressing(): void {
     ctx.setLineDash([2, 3]);
     ctx.lineWidth = 1.5;
     roadRunPreview.placed.forEach((piece, index) => {
-      ctx.strokeStyle = roadRunPreview.legal[index] ? planPalette.pick : planPalette.bad;
+      ctx.strokeStyle = planPalette[placementTint(roadRunPreview.severity[index])];
       traceFootprint(piece);
       ctx.stroke();
     });
@@ -2079,10 +2081,14 @@ const dressingTolerance = (): number => HIT_TOLERANCE_PIXELS.dressing / view.sca
  * unhinted projection to judge. Per frame that is a drag that stops answering on
  * a big circuit; per move it is once per thing the operator actually did.
  */
-let roadRunPreview: { props: RallyProp[]; placed: RallyPlacedProp[]; legal: boolean[] } = {
+let roadRunPreview: {
+  props: RallyProp[];
+  placed: RallyPlacedProp[];
+  severity: (PlacementLegality['severity'] | undefined)[];
+} = {
   props: [],
   placed: [],
-  legal: [],
+  severity: [],
 };
 
 function buildRoadRun(): RallyProp[] {
@@ -2103,7 +2109,7 @@ function refreshRoadRunPreview(): void {
   roadRunPreview = {
     props,
     placed,
-    legal: placed.map((piece) => placementLegality(record, piece)?.legal ?? true),
+    severity: placed.map((piece) => placementLegality(record, piece)?.severity),
   };
 }
 
@@ -2239,7 +2245,9 @@ function placeOne(raw: RallyPoint): void {
     record,
     ghostPlacement(record, armed, snap.x, snap.z, pendingYaw ?? undefined),
   );
-  const verdict = legality && !legality.legal ? `, ${legality.label}` : '';
+  // A warning says its piece on the racing surface too: what changes with the
+  // severity is the CHANNEL, not whether the operator is told.
+  const verdict = legality && legality.severity !== 'ok' ? `, ${legality.label}` : '';
   setStatus(
     `placed ${armed} (${propFrameOf(piece)}, snap: ${snap.label}${verdict})`,
     legality && !legality.legal ? 'err' : 'ok',
@@ -2383,7 +2391,7 @@ function endDressingGesture(): void {
   dressingDrag = null;
   dressingRect = null;
   roadRun = null;
-  roadRunPreview = { props: [], placed: [], legal: [] };
+  roadRunPreview = { props: [], placed: [], severity: [] };
   pondHandle = null;
   propHandle = null;
   propGrab = null;

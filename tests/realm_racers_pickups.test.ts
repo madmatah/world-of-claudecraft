@@ -85,6 +85,15 @@ function racingGrid(): { sim: Sim; pids: number[] } {
  * Stamping `lastS` at the destination is what makes the jump a premise rather
  * than an event: the progress step reads the arc travelled since the last tick,
  * and a teleport across a circuit would otherwise read as a lap.
+ *
+ * `distanceSinceWrap` is stamped for the same reason and was missed, which is
+ * `placeAt`'s rule applied here: a machine standing at that arc has driven that
+ * far since the line. Left at zero it made every case's premise depend on WHERE
+ * the circuit's rows happen to sit, since a lap only wraps on
+ * `REALM_RACERS_MIN_LAP_FRACTION` of accumulated ground: a row at 12 percent of
+ * the lap left enough road to the line to wrap and a row at 42 percent did not,
+ * so moving a row turned three cases about lap bookkeeping red without anything
+ * about lap bookkeeping having changed.
  */
 function standOnBox(sim: Sim, pid: number, index: number): void {
   const live = match(sim);
@@ -96,6 +105,7 @@ function standOnBox(sim: Sim, pid: number, index: number): void {
   const projection = track.project(box.x, box.z, progress.trackIndex);
   progress.lastS = projection.s;
   progress.trackIndex = projection.index;
+  progress.distanceSinceWrap = projection.s;
 }
 
 /**
