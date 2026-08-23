@@ -14,6 +14,7 @@
 import { AREA_TRACK_URLS } from '../../game/music_tracks';
 import {
   REALM_RACERS_THEME_IDS,
+  REALM_RACERS_TIME_OF_DAY_IDS,
   type RealmRacersCircuit,
   type RealmRacersCircuitRole,
 } from '../../sim/content/realm_racers_circuits';
@@ -29,6 +30,14 @@ import { fieldRow, heading, numberOr, type PanelHost } from './panels';
  * picker the moment the game can play it.
  */
 const MUSIC_TRACK_IDS: readonly string[] = Object.keys(AREA_TRACK_URLS);
+
+/**
+ * The hours a circuit may be raced at, led by the one the record spells with no
+ * field at all: the world's own clock, which is what every circuit did before an
+ * hour could be authored and still the right answer for a circuit with no
+ * opinion about its light.
+ */
+const TIME_OF_DAY_CHOICES: readonly string[] = ['', ...REALM_RACERS_TIME_OF_DAY_IDS];
 
 /** The record needs at least one role, and this is the order they are kept in. */
 const ROLE_ORDER: readonly RealmRacersCircuitRole[] = ['competition', 'practice'];
@@ -124,6 +133,11 @@ export class RecordFormPanel {
     read: () => string,
     write: (raw: string) => RealmRacersCircuit | null,
     choices: readonly string[],
+    // What a choice is CALLED, where the id is not the answer an author reads.
+    // The one caller that needs it is the hour, whose empty choice stands for a
+    // field the record does not carry (the world's own clock); an option
+    // labelled with the empty string would be a blank line in the list.
+    labelFor: (choice: string) => string = (choice) => choice,
   ): void {
     const { wrap, name } = fieldRow(label);
     const select = document.createElement('select');
@@ -139,7 +153,9 @@ export class RecordFormPanel {
       for (const choice of known) {
         const option = document.createElement('option');
         option.value = choice;
-        option.textContent = choices.includes(choice) ? choice : `${choice} (not in the list)`;
+        option.textContent = choices.includes(choice)
+          ? labelFor(choice)
+          : `${choice} (not in the list)`;
         select.append(option);
       }
       const other = document.createElement('option');
@@ -315,6 +331,22 @@ export class RecordFormPanel {
       () => record().theme,
       (raw) => ({ ...record(), theme: raw.trim() }),
       REALM_RACERS_THEME_IDS,
+    );
+    // The HOUR the circuit is raced at, beside the art it wears, because that is
+    // what it is: light is the other half of how a circuit looks. The empty
+    // choice is the field being ABSENT, which is a real answer here (the world's
+    // own clock) rather than a missing one, so it leads the list.
+    this.selectField(
+      art,
+      'time of day',
+      () => record().timeOfDay ?? '',
+      (raw) => {
+        const id = raw.trim();
+        const { timeOfDay: _dropped, ...rest } = record();
+        return id ? { ...rest, timeOfDay: id } : rest;
+      },
+      TIME_OF_DAY_CHOICES,
+      (choice) => (choice === '' ? "the world's clock" : choice),
     );
     this.el.append(art);
 

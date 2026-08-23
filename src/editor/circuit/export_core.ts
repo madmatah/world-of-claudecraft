@@ -279,6 +279,9 @@ export function circuitToTypeScript(circuit: RealmRacersCircuit): string {
     `  timeLimitSeconds: ${c.timeLimitSeconds},`,
     `  musicTrack: '${c.musicTrack}',`,
     `  theme: '${c.theme}',`,
+    // Written only when the circuit names one: absent IS the answer "the world's
+    // clock", and a record spelling that out as an id would need a name for it.
+    ...(c.timeOfDay === undefined ? [] : [`  timeOfDay: '${c.timeOfDay}',`]),
     `  roles: [${c.roles.map((role) => `'${role}'`).join(', ')}],`,
     `  practiceCopies: ${c.practiceCopies},`,
     '};',
@@ -543,6 +546,12 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
   // "this is not a circuit" with nothing naming the reason.
   const theme = c.theme === undefined ? REALM_RACERS_DEFAULT_THEME_ID : c.theme;
   if (typeof theme !== 'string' || !TOKEN_RE.test(theme)) return null;
+  // The hour, on the same terms: a SHAPE check, membership left to the readout
+  // (`unknown_time_of_day`). Absent is legal and stays absent, because here it
+  // carries a meaning rather than a default: the circuit takes the world clock.
+  if (c.timeOfDay !== undefined && (typeof c.timeOfDay !== 'string' || !TOKEN_RE.test(c.timeOfDay)))
+    return null;
+  const timeOfDay = c.timeOfDay as string | undefined;
 
   const controlPoints = readPoints(c.controlPoints);
   if (!controlPoints) return null;
@@ -645,6 +654,7 @@ export function validateCircuitPayload(raw: unknown): RealmRacersCircuit | null 
     timeLimitSeconds: c.timeLimitSeconds,
     musicTrack: c.musicTrack,
     theme,
+    ...(timeOfDay === undefined ? {} : { timeOfDay }),
     roles,
     practiceCopies: c.practiceCopies,
   };

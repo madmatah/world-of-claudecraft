@@ -64,6 +64,33 @@ export const REALM_RACERS_THEME_IDS: readonly string[] = [
  *  back to at draw time. */
 export const REALM_RACERS_DEFAULT_THEME_ID = 'evergarden';
 
+/**
+ * Every hour of the day a circuit may be raced at, in clock order from dawn.
+ *
+ * Sim-side and pure data for the same reason `REALM_RACERS_THEME_IDS` is: the
+ * editor offers this list as a picker and the metrics readout flags an id that
+ * is not in it (`unknown_time_of_day`), and neither may import render code. The
+ * PHASES the ids resolve to live in `src/render/realm_racers_daylight_core.ts`,
+ * pinned against this list both ways by `tests/realm_racers_daylight.test.ts`.
+ *
+ * NAMED rather than a raw cycle phase, and that is the whole authoring decision:
+ * a record reading `timeOfDay: 'dusk'` says what it is, a record reading `0.78`
+ * needs the reader to know the cycle's parameterization, and a picker over seven
+ * names is a control an author can use without a preview. The set is the moments
+ * a race is worth staging at rather than an even sampling of the clock: three
+ * daylight hours that differ in shadow direction, the two horizon crossings that
+ * are the whole reason to light a race at all, and two nights.
+ */
+export const REALM_RACERS_TIME_OF_DAY_IDS: readonly string[] = [
+  'dawn',
+  'morning',
+  'noon',
+  'afternoon',
+  'dusk',
+  'night',
+  'midnight',
+];
+
 /** The water's bank, read by BOTH the renderer (per-vertex shore depth,
  *  which drives the colour ramp and the foam band) and the sim (how deep a
  *  racer is standing). Two profiles would mean a racer swimming where the water
@@ -381,6 +408,26 @@ export interface RealmRacersCircuit {
    * shared constants.
    */
   theme: string;
+  /**
+   * The hour this circuit is always raced at: one of
+   * `REALM_RACERS_TIME_OF_DAY_IDS`, resolved to a cycle phase render-side.
+   *
+   * ABSENT means the world's own clock, which is what every circuit did before
+   * this field existed and what keeps the shipped records drawing unchanged.
+   *
+   * A circuit owns its light for the same reason it owns its sky. The band
+   * belongs to no zone, a race is a few minutes long, and the world clock is
+   * UTC-anchored: without this, the same circuit is a bright afternoon or a
+   * near-black night depending on when the queue popped, a practice lap is lit
+   * differently from the race it practises for, and the darkness a pilot has to
+   * read the road through is decided by nothing anybody authored.
+   *
+   * VISUALS ONLY, exactly like `theme`. Nothing a racer feels comes from it: the
+   * grip, the referee and every handling number are untouched by the hour, and
+   * the sim never reads this at all (the day/night cycle is render-side, so this
+   * is a string sim content carries rather than a state sim has).
+   */
+  timeOfDay?: string;
   /** What this circuit is used for; see `RealmRacersCircuitRole`. */
   roles: readonly RealmRacersCircuitRole[];
   /**
@@ -528,6 +575,13 @@ const EVERGARDEN_PRACTICE: RealmRacersCircuit = {
   timeLimitSeconds: 180,
   musicTrack: 'realm_racers',
   theme: 'evergarden',
+  /**
+   * Noon, because this is where the line is LEARNED. A practice lap is the one
+   * session whose light should never be a variable: the same corner at the same
+   * brightness every time, with the shortest shadows the cycle draws, so what a
+   * pilot reads is the road rather than the hour they happened to queue at.
+   */
+  timeOfDay: 'noon',
   roles: ['practice'],
   practiceCopies: 6,
 };
@@ -749,6 +803,19 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
   timeLimitSeconds: 180,
   musicTrack: 'realm_racers',
   theme: 'evergarden',
+  /**
+   * Sunset, and the race is better for it. The sun sits ON the horizon at this
+   * phase, which is where the grade's warm and the longest shadows both are, so
+   * the garden reads as an occasion rather than as an afternoon; the lamps
+   * along the verge are burning by then, which is what the dressing is FOR; and
+   * the light is still half of full daylight, so nothing about the road is
+   * harder to read than it was.
+   *
+   * It is also the field the whole feature exists for. On the world clock this
+   * circuit was a bright noon or an unlit midnight depending on when the queue
+   * popped, which is not a design anybody chose.
+   */
+  timeOfDay: 'dusk',
   roles: ['competition'],
   practiceCopies: 0,
 };

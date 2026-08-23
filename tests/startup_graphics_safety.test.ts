@@ -104,15 +104,25 @@ describe('constrained renderer integration', () => {
 
   it('keys fixed LOW daylight by biome and invalidates it for developer overrides', () => {
     const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
-    expect(source).toContain('if (this.lowGfx && DAY_ONLY && phaseOverride === null) {');
+    // The memo is keyed on the realm and only ever taken while the cycle is
+    // PINNED: `pinDay` is DAY_ONLY with no dev override in force and no circuit
+    // naming its own hour (`realm_racers_daylight_core.ts`), so a `/daynight`
+    // override and an authored circuit hour both fall through to the live rig
+    // rather than being frozen at whatever the memo last cached.
+    expect(source).toContain(
+      'const pinDay = DAY_ONLY && phaseOverride === null && !daylight.authored;',
+    );
+    expect(source).toContain('if (this.lowGfx && pinDay) {');
     expect(source).toContain('if (this.fixedLowDayBiome !== biome) {');
     expect(source).toContain('this.fixedLowDayBiome = biome;');
     expect(source).toContain(`} else {
       this.fixedLowDayBiome = null;`);
-    expect(
-      source.match(
-        /this\.skyView\.setCameraPos\(this\.camera\.position\.x, this\.camera\.position\.z, dt\);\n\s+if \(!this\.lowGfx\) \{/g,
-      ),
-    ).toHaveLength(2);
+    // The sky push is ONE body called from both sync paths. It used to be two
+    // identical blocks, each carrying its own tier gate, which is a fix applied
+    // to one code path waiting to happen; what has to hold is that the gate is
+    // still there and that both paths still go through it.
+    expect(source).toContain(`    this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
+    if (!this.lowGfx) {`);
+    expect(source.match(/this\.pushSkyGrade\(dt\);/g)).toHaveLength(2);
   });
 });

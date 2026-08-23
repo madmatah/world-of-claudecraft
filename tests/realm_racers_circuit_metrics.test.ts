@@ -212,6 +212,30 @@ describe('Realm Racers circuit metrics: the theme', () => {
   });
 });
 
+describe('Realm Racers circuit metrics: the hour', () => {
+  it('calls an hour no vocabulary authors an error, by name', () => {
+    const typo = draft('hour_typo', ring(120), 10, { timeOfDay: 'twilight' });
+    const problem = realmRacersCircuitErrors(realmRacersCircuitMetrics(typo)).find(
+      (p) => p.code === 'unknown_time_of_day',
+    );
+    expect(problem).toBeDefined();
+    expect([problem?.value, problem?.limit]).toEqual([1, 0]);
+  });
+
+  it('leaves an authored hour and an absent one alone', () => {
+    // Absent is a real answer here, not a missing one: the circuit takes the
+    // world's clock, which is what every circuit did before the field existed.
+    const named = draft('hour_ok', ring(120), 10, { timeOfDay: 'dusk' });
+    const absent = draft('hour_absent', ring(120), 10);
+    expect(absent.timeOfDay).toBeUndefined();
+    for (const circuit of [named, absent]) {
+      expect(
+        realmRacersCircuitErrors(realmRacersCircuitMetrics(circuit)).map((p) => p.code),
+      ).not.toContain('unknown_time_of_day');
+    }
+  });
+});
+
 describe('Realm Racers circuit metrics: a corner against its own road', () => {
   it('rejects a corner tighter than the road it carries, and clears when the road narrows', () => {
     // A ring of radius 9 measures about 8.8 through the spline's curvature

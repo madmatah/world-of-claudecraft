@@ -24,7 +24,18 @@
 
 import * as THREE from 'three';
 import { assetsReady, beginDeferredPreloads } from '../../render/assets/preload';
+import {
+  dayNightGrade,
+  duskWarmAmount,
+  effectiveDayness,
+  globalDayness,
+  moonDirection,
+  sunDirection,
+  warmDuskGrade,
+} from '../../render/day_night_core';
 import { initGfxTier, SUN_ANCHOR } from '../../render/gfx';
+import { realmRacersAuthoredPhase } from '../../render/realm_racers_daylight_core';
+import { rallySkyDayNightBiome, realmRacersTheme } from '../../render/realm_racers_themes';
 import { buildRealmRacersTrack } from '../../render/realm_racers_track';
 import { disposeRealmRacersTrackGroup } from '../../render/realm_racers_track_dispose_core';
 import type { RealmRacersCircuit } from '../../sim/content/realm_racers_circuits';
@@ -59,6 +70,13 @@ const MACHINE_TOP_SPEED = VEHICLE_PROFILES.rally_loaner.maxSpeed;
  *  circuit judged against grey reads differently from one judged in game. */
 const SKY_COLOUR = 0x9ac4e8;
 
+// The standing daylight rig, named so the hour grade has something to scale.
+const HEMI_SKY_COLOUR = 0xdcefff;
+const HEMI_GROUND_COLOUR = 0x465f39;
+const HEMI_INTENSITY = 1.15;
+const SUN_COLOUR = 0xffd99a;
+const SUN_INTENSITY = 2.6;
+
 const FOV = 62;
 const NEAR = 0.5;
 const FAR = 2600;
@@ -75,6 +93,9 @@ export class CircuitPreview {
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer | null = null;
+  /** The rig `applyDaylight` grades; built in `buildLights`. */
+  private sun: THREE.DirectionalLight | null = null;
+  private hemi: THREE.HemisphereLight | null = null;
   /** Everything the track builder makes, translated so the circuit sits on the
    *  world origin (see the header). */
   private readonly stage = new THREE.Group();
@@ -133,11 +154,68 @@ export class CircuitPreview {
    * that only wants one group drawn.
    */
   private buildLights(): void {
-    this.scene.add(new THREE.HemisphereLight(0xdcefff, 0x465f39, 1.15));
-    const sun = new THREE.DirectionalLight(0xffd99a, 2.6);
+    this.hemi = new THREE.HemisphereLight(HEMI_SKY_COLOUR, HEMI_GROUND_COLOUR, HEMI_INTENSITY);
+    this.scene.add(this.hemi);
+    const sun = new THREE.DirectionalLight(SUN_COLOUR, SUN_INTENSITY);
     sun.position.copy(SUN_ANCHOR);
     this.scene.add(sun);
     this.scene.add(sun.target);
+    this.sun = sun;
+  }
+
+  /**
+   * Light the preview at the hour the record names.
+   *
+   * The circuit is drawn under its OWN light or the panel is judging a circuit
+   * nobody will race: an hour is the other half of how a circuit looks, and a
+   * night circuit read at noon here is exactly the drawing that shipped dark.
+   *
+   * The grade comes from the game's own `day_night_core`, so what the panel
+   * shows is the curve the renderer applies rather than a second guess at it.
+   * What it cannot show is what the game builds around that grade (the HDRI
+   * dome and its ambient, the star field, the moon): this rig is a flat colour
+   * and two lights by design (see `buildLights`), so the preview reads the hour
+   * rather than reproducing the frame.
+   */
+  private applyDaylight(circuit: RealmRacersCircuit): void {
+    const sun = this.sun;
+    const hemi = this.hemi;
+    if (!sun || !hemi) return;
+    const phase = realmRacersAuthoredPhase(circuit.timeOfDay);
+    if (phase === null) {
+      // No hour authored: the circuit takes the world's clock in game, and the
+      // panel keeps the standing daylight it has always drawn under.
+      sun.position.copy(SUN_ANCHOR);
+      sun.color.setHex(SUN_COLOUR);
+      sun.intensity = SUN_INTENSITY;
+      hemi.color.setHex(HEMI_SKY_COLOUR);
+      hemi.groundColor.setHex(HEMI_GROUND_COLOUR);
+      hemi.intensity = HEMI_INTENSITY;
+      this.setSkyColour(SKY_COLOUR, [1, 1, 1]);
+      return;
+    }
+    const biome = rallySkyDayNightBiome(realmRacersTheme(circuit).sky.biome);
+    const dayness = globalDayness(phase);
+    const direction = sunDirection(phase);
+    const grade = warmDuskGrade(
+      dayNightGrade(effectiveDayness(dayness, biome), biome),
+      duskWarmAmount(direction[1]),
+    );
+    // Below the horizon the key light is the MOON, which is what keeps a night
+    // circuit lit from a direction instead of flatly from the fill.
+    const key = direction[1] > 0 ? direction : moonDirection(phase);
+    sun.position.set(key[0], Math.max(0.08, key[1]), key[2]).multiplyScalar(SUN_ANCHOR.length());
+    sun.intensity = SUN_INTENSITY * grade.lightScale;
+    hemi.intensity = HEMI_INTENSITY * grade.ambientScale;
+    this.setSkyColour(SKY_COLOUR, grade.sky);
+  }
+
+  /** The backdrop and its matching fog, tinted by the grade's sky multiplier. */
+  private setSkyColour(base: number, mul: readonly [number, number, number]): void {
+    const colour = new THREE.Color(base);
+    colour.setRGB(colour.r * mul[0], colour.g * mul[1], colour.b * mul[2]);
+    (this.scene.background as THREE.Color).copy(colour);
+    (this.scene.fog as THREE.Fog).color.copy(colour);
   }
 
   /**
@@ -207,6 +285,7 @@ export class CircuitPreview {
     view.group.visible = true;
     this.stage.add(view.group);
     this.trackGroup = view.group;
+    this.applyDaylight(circuit);
     const track = realmRacersTrack(circuit);
     this.lapLength = track.length;
     if (this.flyS > this.lapLength) this.flyS = 0;

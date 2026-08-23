@@ -41,7 +41,7 @@ import {
 } from '../sim/data';
 import type { DelveModuleId } from '../sim/delve_layout';
 import { GROUND_BLAST_RADIUS } from '../sim/realm_racers_ground_blast';
-import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
+import { isAtRealmRacersXZ, realmRacersLaneAt } from '../sim/realm_racers_layout';
 import { generateRiftFloor, riftLiftAt } from '../sim/rift/rift_gen';
 import type { BiomeId, ZoneDef } from '../sim/types';
 import { ALL_CLASSES, type Entity, isMechWearer, type SimEvent } from '../sim/types';
@@ -219,28 +219,19 @@ import { daisVisualLift } from './dais_lift';
 import { buildDawnholdFeatures, type DawnholdFeaturesView } from './dawnhold_features';
 import { currentDayNightPhase, currentLunarPhase, dayNightPhaseOverride } from './day_night_clock';
 import {
-  aboveHorizon,
   DAY_ONLY,
   type DayNightGrade,
-  dayNightGrade,
   duskWarmAmount,
-  effectiveDayness,
   fullDayGrade,
-  globalDayness,
-  moonDirection,
   moonTerminator,
-  NEUTRAL_DAY_GRADE,
   nightIblScale,
   nightSkyDesat,
-  nightStarAmount,
-  REALM_DAYNIGHT_AMPLITUDE,
   REALM_MOON_TINT,
   realmLightTint,
-  sunDirection,
   sunsetWarmGate,
   usesLiveDayNightLighting,
-  warmDuskGrade,
 } from './day_night_core';
+import { type Direction3, dayNightRig } from './day_night_rig_core';
 import { shouldPlayDeedFirework } from './deed_fx_gate';
 import { DelveInteriorTracker } from './delve_interior_tracker';
 import { buildDelveInteractable, syncDelveInteractableVisibility } from './delve_props';
@@ -433,7 +424,6 @@ import { collectBodyNightLights, type NightLightSite } from './night_light_field
 import {
   lampGlowAmount,
   mobGlowAmount,
-  nightLightAmount,
   nightRimBoost,
   wildGlowAmount,
 } from './night_lighting_core';
@@ -576,6 +566,7 @@ import {
   playRealmRacersScrapeAudio,
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
+import { realmRacersDaylight } from './realm_racers_daylight_core';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { REALM_RACERS_SLICK_SHEEN_COLOR } from './realm_racers_slicks_core';
 import { type RallySkyKey, rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
@@ -1011,6 +1002,9 @@ const hemiOutdoorIntensity = (): number =>
       : HEMI_INTENSITY_FLAT;
 
 const SUN_INTENSITY = 3.5;
+/** `SUN_DIR` as a tuple, minted once: a fresh array per frame in the ambience
+ *  pass is an allocation for nothing. */
+const FIXED_SUN: Direction3 = [SUN_DIR.x, SUN_DIR.y, SUN_DIR.z];
 const ENV_INTENSITY = 0.37;
 // raw HDRI PMREMs integrate the real sun the dome shader clamps away,
 // rescale so ambient matches the dome-capture look (see lookdev-hookup.md)
@@ -1705,6 +1699,8 @@ export class Renderer {
   // rim lift) all key off this one number so they light up together in every
   // realm; see night_lighting_core.ts for why it is the global amount.
   private dnGlobalNight = 0;
+  /** Does the circuit under the player name its own hour (daylight core)? */
+  private rallyAuthoredHour = false;
   private fixedLowDayBiome: BiomeId | null = null;
   private dnColorScratch = new THREE.Color();
   private dnMoonScratch = new THREE.Color();
@@ -5129,26 +5125,7 @@ export class Renderer {
       this.gatherNodes.updateShadowVisibility(this.camera, this.shadowLightDirection, true);
       this.valeCupStadium.updateShadowVisibility(this.camera, this.shadowLightDirection, true);
     }
-    this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
-    // The dome rides the camera, so it serves every open-air state: the
-    // overworld, Wildheart's field, the Thornhollow Fields hollow (hiding it
-    // there left a black void above the ramparts), and a rally circuit, which
-    // flies its theme's dome.
-    this.sky.visible = this.fogState === 'rally' || isOpenAirFogState(this.fogState);
-    if (this.sky.visible) {
-      this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
-      if (!this.lowGfx) {
-        this.skyView.setDayNight(this.dnGrade.sky);
-        this.skyView.setCycle(
-          this.sunDir,
-          duskWarmAmount(this.sunDir.y),
-          nightSkyDesat(this.dnGrade.nightAmt),
-        );
-        this.skyView.setFog((this.scene.fog as THREE.Fog).color);
-        this.skyView.setStars(this.starAmt, this.time);
-        this.updateEnvBiome(dt);
-      }
-    }
+    this.pushSkyGrade(dt);
     this.updateCelestialSprites();
     this.updateGodRays();
     this.nameplatePainter.update(true);
@@ -9874,6 +9851,54 @@ export class Renderer {
     return ((id * 2654435761) >>> 0) % this.valeCupSky.variantCount;
   }
 
+  /** The dome, once per frame, from EITHER sync path (one body rather than the
+   *  copy each kept: a fix to one of two identical blocks fixes one code path).
+   *  It rides the camera, so it serves every open-air state: the overworld,
+   *  Wildheart's field, the Thornhollow hollow (hiding it there left a black
+   *  void above the ramparts), and a circuit's theme dome. */
+  private pushSkyGrade(dt: number): void {
+    this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
+    this.sky.visible = this.fogState === 'rally' || isOpenAirFogState(this.fogState);
+    if (!this.sky.visible) return;
+    this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
+    if (!this.lowGfx) {
+      this.skyView.setDayNight(this.dnGrade.sky);
+      this.skyView.setCycle(
+        this.sunDir,
+        duskWarmAmount(this.sunDir.y),
+        nightSkyDesat(this.dnGrade.nightAmt),
+      );
+      this.skyView.setFog((this.scene.fog as THREE.Fog).color);
+      this.skyView.setStars(this.starAmt, this.time);
+      this.updateEnvBiome(dt);
+    } else if (this.rallyAuthoredHour) {
+      // The Lambert tier's canvas dome has no cycle, right for a world it never
+      // darkens; a circuit at an authored hour IS darkened there, so its dome
+      // takes the grade instead of standing at noon over a dark road.
+      this.skyView.setDayNight(this.dnGrade.sky);
+    }
+  }
+
+  /** Take one frame's lighting answer (`day_night_rig_core.ts`) onto the live
+   *  scene objects. Nothing here decides anything. */
+  private applyDayNightRig(phase: number, biome: BiomeId, pinDay: boolean, layers: boolean): void {
+    const rig = dayNightRig({
+      phase,
+      biome,
+      moonLitFrac: moonTerminator(currentLunarPhase()).litFrac,
+      pinDay,
+      nightLayers: layers,
+      fixedSun: FIXED_SUN,
+    });
+    this.dnGrade = rig.grade;
+    this.dnGlobalNight = rig.globalNight;
+    this.sunDir.set(rig.sun[0], rig.sun[1], rig.sun[2]);
+    this.moonDir.set(rig.moon[0], rig.moon[1], rig.moon[2]);
+    this.sunUp = rig.sunUp;
+    this.moonUp = rig.moonUp;
+    this.starAmt = rig.starAmt;
+  }
+
   private updateAmbience(px: number, camY: number, dt: number): void {
     const inside = px > DUNGEON_X_THRESHOLD;
     const pz = this.sim.player.pos.z;
@@ -9906,6 +9931,9 @@ export class Renderer {
     // jungle, night, amber, ember), so a practice lap was lit by a different
     // sky than the race it practises for.
     const rallyTheme = inRally ? realmRacersThemeAt(this.sim.player.pos.x, pz) : null;
+    // ...and raced at the hour its RECORD names: no zone owns the band, so no
+    // clock out here was authored by anybody.
+    const rallyCircuit = inRally ? (realmRacersLaneAt(px, pz)?.circuit ?? null) : null;
     // The DOME and the day/night GRADE are two questions, and the Farshore is
     // where they stop having one answer: its sky is place-keyed rather than
     // biome-keyed, so the grade tables (which are keyed by biome) take the
@@ -9920,55 +9948,27 @@ export class Renderer {
     this.godRayZoneScale +=
       (shaftTarget - this.godRayZoneScale) * (1 - Math.exp(-2 * Math.max(0, dt)));
     const phaseOverride = dayNightPhaseOverride();
-    if (this.lowGfx && DAY_ONLY && phaseOverride === null) {
+    // Which hour lights this frame: the circuit's own when it names one, the
+    // world's clock otherwise, the dev override over both. An authored hour is
+    // not the CYCLE (so DAY_ONLY misses it) and is graded on EVERY tier: nobody
+    // gets a brighter road, or darker lamps, by turning the graphics down.
+    const daylight = realmRacersDaylight(
+      rallyCircuit?.timeOfDay,
+      currentDayNightPhase(),
+      phaseOverride,
+    );
+    const pinDay = DAY_ONLY && phaseOverride === null && !daylight.authored;
+    this.rallyAuthoredHour = daylight.authored;
+    // This is render-only, so the clock read never touches sim parity.
+    const nightLayers = !this.lowGfx || daylight.authored;
+    if (this.lowGfx && pinDay) {
       if (this.fixedLowDayBiome !== biome) {
-        this.dnGrade = NEUTRAL_DAY_GRADE;
-        this.dnGlobalNight = 0;
-        this.sunDir.copy(SUN_DIR);
-        this.moonDir.set(0, -1, 0);
-        this.sunUp = aboveHorizon(SUN_DIR.y) * REALM_DAYNIGHT_AMPLITUDE[biome];
-        this.moonUp = 0;
-        this.starAmt = 0;
+        this.applyDayNightRig(daylight.phase, biome, pinDay, nightLayers);
         this.fixedLowDayBiome = biome;
       }
     } else {
       this.fixedLowDayBiome = null;
-      // This is render-only, so the clock read never touches sim parity. The
-      // dev override still drives the real grade even while DAY_ONLY ships.
-      const phase = currentDayNightPhase();
-      const gday = globalDayness(phase);
-      const amp = REALM_DAYNIGHT_AMPLITUDE[biome];
-      if (DAY_ONLY && phaseOverride === null) {
-        this.dnGrade = NEUTRAL_DAY_GRADE;
-        this.dnGlobalNight = 0;
-        this.sunDir.copy(SUN_DIR);
-        this.moonDir.set(0, -1, 0);
-        this.sunUp = aboveHorizon(SUN_DIR.y) * amp;
-        this.moonUp = 0;
-        this.starAmt = 0;
-      } else {
-        const sd = sunDirection(phase);
-        const md = moonDirection(phase);
-        this.sunDir.set(sd[0], sd[1], sd[2]);
-        this.moonDir.set(md[0], md[1], md[2]);
-        this.sunUp = aboveHorizon(sd[1]) * amp;
-        this.moonUp = aboveHorizon(md[1]) * Math.max(amp, 0.6);
-        this.starAmt = nightStarAmount(gday);
-        // Moon phase lifts the night floor (full brighter, new darker), epoch-anchored.
-        const moonLit = moonTerminator(currentLunarPhase()).litFrac;
-        // the whole grade warms as the sun crosses the horizon, so the fog,
-        // sky dome, and water all take the sunrise/sunset orange rather than
-        // just the key light
-        this.dnGrade = warmDuskGrade(
-          dayNightGrade(effectiveDayness(gday, biome), biome, moonLit),
-          duskWarmAmount(sd[1]),
-        );
-        // The night-visibility layers read the world clock, not the realm's
-        // compressed grade, so lamps light at the same instant everywhere. The
-        // Lambert tier never applies the grade at all (see the outdoor branch
-        // below), so it reports full day and its lamps stay dark.
-        this.dnGlobalNight = nightLightAmount(1 - gday, !this.lowGfx);
-      }
+      this.applyDayNightRig(daylight.phase, biome, pinDay, nightLayers);
     }
     // The distant-zone haze rides the settled grade and the live camera: a
     // neighbouring realm's air darkens and cools through the cycle exactly
@@ -10342,12 +10342,21 @@ export class Renderer {
     }
     // Every open-air state follows the live grade. Thornhollow keeps its
     // authored fog range while sharing the overworld's color and light grade.
-    if (usesLiveDayNightLighting(desired)) {
+    //
+    // A circuit is open-air too and was left out: its rig was posed ONCE on
+    // entry while the dome and IBL over it followed the clock, so a race held a
+    // daylight key under a night sky, and its fog never took the grade at all.
+    if (usesLiveDayNightLighting(desired) || desired === 'rally') {
       const g = this.dnGrade;
+      // A circuit's air is its THEME's, out of the same record as its ground.
+      const rally = desired === 'rally' ? (rallyTheme ?? realmRacersThemeAt(px, pz)) : null;
       const preset =
-        desired === 'battleground' ? Renderer.BATTLEGROUND_FOG : this.outdoorFogPreset();
+        rally?.sky.fog ??
+        (desired === 'battleground' ? Renderer.BATTLEGROUND_FOG : this.outdoorFogPreset());
       const k = transitionAlpha(dt, ZONE_ENVIRONMENT_RESPONSE);
-      if (this.lowGfx) return;
+      // On a CIRCUIT the Lambert tier's permanent daylight is not a look but an
+      // edge, so an authored hour is graded there too, at no per-frame cost.
+      if (this.lowGfx && !(desired === 'rally' && daylight.authored)) return;
       // fog color: the biome hue multiplied by the day/night color (a dark
       // dusk-blue by night)
       this.fogScratch.setHex(preset.color);
@@ -13023,26 +13032,7 @@ export class Renderer {
     // sky dome + sun disc ride along with the camera. The battleground is
     // OPEN-AIR: dome, sun, and weather render over the band exactly like the
     // overworld (hiding them left a black void above the ramparts).
-    this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
-    // The dome rides the camera, so it serves every open-air state: the
-    // overworld, Wildheart's field, the Thornhollow Fields hollow (hiding it
-    // there left a black void above the ramparts), and a rally circuit, which
-    // flies its theme's dome.
-    this.sky.visible = this.fogState === 'rally' || isOpenAirFogState(this.fogState);
-    if (this.sky.visible) {
-      this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
-      if (!this.lowGfx) {
-        this.skyView.setDayNight(this.dnGrade.sky);
-        this.skyView.setCycle(
-          this.sunDir,
-          duskWarmAmount(this.sunDir.y),
-          nightSkyDesat(this.dnGrade.nightAmt),
-        );
-        this.skyView.setFog((this.scene.fog as THREE.Fog).color);
-        this.skyView.setStars(this.starAmt, this.time);
-        this.updateEnvBiome(dt);
-      }
-    }
+    this.pushSkyGrade(dt);
     // precipitation only falls outdoors; indoors/underwater pass null to clear.
     // The sampler lets a neighbouring zone's weather fall inside the box while
     // the player stands outside it (weather_field_core.ts).

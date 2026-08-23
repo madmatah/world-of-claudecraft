@@ -14,7 +14,11 @@
 //
 // Pure leaf: no SimContext, no rng, no clock, no DOM, no three.
 
-import { REALM_RACERS_THEME_IDS, type RealmRacersCircuit } from './content/realm_racers_circuits';
+import {
+  REALM_RACERS_THEME_IDS,
+  REALM_RACERS_TIME_OF_DAY_IDS,
+  type RealmRacersCircuit,
+} from './content/realm_racers_circuits';
 import { polygonContainsPoint, polygonSelfIntersects } from './geometry2d';
 import {
   rallyFenceRunSamples,
@@ -183,6 +187,13 @@ export type RealmRacersCircuitProblemCode =
    * readout and never through the record test.
    */
   | 'unknown_theme'
+  /**
+   * The circuit names an hour no vocabulary authors, so it silently falls back
+   * to the world's clock and the race is lit by whenever the queue popped.
+   * Flagged for the same reason as the theme: a hand-typed id reaches the game
+   * through this readout and never through the record test.
+   */
+  | 'unknown_time_of_day'
   | 'road_outside_perimeter'
   | 'perimeter_outside_region'
   | 'region_outside_band'
@@ -568,6 +579,16 @@ export function realmRacersCircuitMetrics(circuit: RealmRacersCircuit): RealmRac
     // problem as "value against limit", so a count against a ceiling of zero
     // reads as "one of these, and none is allowed".
     problem('unknown_theme', 'error', 1, 0);
+  }
+  // The hour is the same shape of mistake one field over. ABSENT is legal and
+  // means the world's clock, so only a NAMED id nothing authors is flagged: the
+  // author asked for an hour the game does not have and would get the clock
+  // back with nothing saying so.
+  if (
+    circuit.timeOfDay !== undefined &&
+    !REALM_RACERS_TIME_OF_DAY_IDS.includes(circuit.timeOfDay)
+  ) {
+    problem('unknown_time_of_day', 'error', 1, 0);
   }
 
   if (roadHalfX > circuit.perimeter.halfX) {

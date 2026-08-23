@@ -1036,6 +1036,7 @@ describe('problems on the plan', () => {
       region_deeper_than_lane_budget: 'the region is deeper than the gap between two lanes',
       pond_requires_basin: 'a pond on a circuit with no water authored',
       unknown_theme: 'the theme is not one the game authors',
+      unknown_time_of_day: 'the time of day is not one the game authors',
       unknown_prop_asset: 'a prop names a catalog key nothing draws',
       prop_blocks_racing_surface: 'a prop stands on the racing surface',
       prop_outside_region: 'a prop stands outside the collision region',

@@ -207,6 +207,29 @@ outright without `ctx.devCommands`.
   typed in and previewed. Drawing a draft against a theme no circuit ships is
   the intended way to look at one: set the field, and the 3D preview rebuilds
   through the real track builder wearing it.
+- **The HOUR is authored beside the art, and ABSENT is one of its answers.**
+  `timeOfDay` names one of `REALM_RACERS_TIME_OF_DAY_IDS` and the circuit is
+  raced at that hour on every graphics tier, wherever the world's clock happens
+  to be; the phases live render-side (`src/render/realm_racers_daylight_core.ts`)
+  and the readout names an id nobody authors (`unknown_time_of_day`), the same
+  division of labour the theme takes. The empty choice in the picker writes NO
+  field, which is the world's own clock and what every circuit did before the
+  field existed, so the export writes `timeOfDay` only when one is named. The 3D
+  preview grades its own rig off the same phase, because a circuit judged at noon
+  and raced at dusk is the drawing that shipped dark.
+- **A circuit lit after dark is lit by LAMPS, placed by hand.** The catalog
+  carries the world's fourteen streetlamp fixtures (one key per style, since the
+  collider radius is measured per style) and each theme offers its own zone's
+  lamp first in the library. They are ordinary props: armed from the palette,
+  snapped to the road edge, judged by the readout. What makes them different is
+  what the draw path does with them (`src/render/realm_racers_lamps.ts`): each
+  one joins the night light field from its own authored socket, so the track
+  brightens because something above it is burning. Nothing derives a row of them
+  along the centerline, for the reason the dressing ring was deleted: a spacing
+  tuned on one circuit's shape is a bug on the next one's. Expect
+  `prop_in_camera_reach` on a lamp close enough to light the road, and read it as
+  the sentence it is: a lamp post is a thin pole, not the tree canopy that rule
+  was written for.
 - **The LAND is authored too, and it is a different object from the barriers.**
   `groundOutline` is one closed SMOOTHED curve drawn with the circuit's own
   gesture (freehand stroke, RDP fit, then handles through `handles_core.ts`), and

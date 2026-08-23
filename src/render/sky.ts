@@ -1155,7 +1155,16 @@ export function buildSky(
       setCameraPos: (x, z) => {
         current = biomeBlendAt(x, z);
       },
-      setDayNight: () => {},
+      // The canvas dome has no cycle of its own, but it CAN take the grade's
+      // sky multiplier: a MeshBasicMaterial's colour multiplies its map, and a
+      // colour is a uniform, so nothing here relinks. It exists for the one
+      // caller that needs this tier graded, a Realm Racers circuit racing at an
+      // authored hour: the light rig over that circuit is graded on every tier
+      // so a low-tier pilot never gets a brighter road than the field, and a
+      // dark road under a noon dome is the look that would leave.
+      setDayNight: (mul) => {
+        (dome.material as THREE.MeshBasicMaterial).color.setRGB(mul[0], mul[1], mul[2]);
+      },
       setCycle: () => {},
       setFog: () => {},
       setStars: () => {},

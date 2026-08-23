@@ -78,6 +78,33 @@ describe('circuit editor export: the pasteable literal', () => {
     expect(validateCircuitPayload(payload(unknown))?.theme).toBe('frostveil');
   });
 
+  it('carries the authored hour, and carries its absence as an absence', () => {
+    // The hour is written only when the record names one, because absent is
+    // what "the world's clock" is spelled as. Membership is the readout's call
+    // (`unknown_time_of_day`), exactly like the theme above, so an hour being
+    // written in the same change still saves and still previews.
+    const dusk: RealmRacersCircuit = { ...DRAFT, id: 'draft_export_hour', timeOfDay: 'dusk' };
+    expect(circuitToTypeScript(dusk)).toContain("timeOfDay: 'dusk',");
+    expect(circuitFromTypeScript(circuitToTypeScript(dusk))?.timeOfDay).toBe('dusk');
+    expect(validateCircuitPayload(payload(dusk))?.timeOfDay).toBe('dusk');
+    expect(validateCircuitPayload(payload({ ...dusk, timeOfDay: 'eclipse' }))?.timeOfDay).toBe(
+      'eclipse',
+    );
+
+    // The shipped circuits all name an hour now, so the absence case is built
+    // rather than borrowed: a record with no `timeOfDay` at all.
+    const { timeOfDay: _none, ...rest } = DRAFT;
+    const clockless: RealmRacersCircuit = rest;
+    expect(clockless.timeOfDay).toBeUndefined();
+    expect(circuitToTypeScript(clockless)).not.toContain('timeOfDay');
+    expect(circuitFromTypeScript(circuitToTypeScript(clockless))?.timeOfDay).toBeUndefined();
+    expect(validateCircuitPayload(payload(clockless))?.timeOfDay).toBeUndefined();
+
+    // A value of the wrong SHAPE is refused, the way every other token is.
+    expect(validateCircuitPayload({ ...payload(dusk), timeOfDay: 'Not An Id' })).toBeNull();
+    expect(validateCircuitPayload({ ...payload(dusk), timeOfDay: 7 })).toBeNull();
+  });
+
   it('round-trips a dry circuit, carrying the ABSENCE of a basin', () => {
     const text = circuitToTypeScript(DRY);
     expect(text).not.toContain('basin:');
