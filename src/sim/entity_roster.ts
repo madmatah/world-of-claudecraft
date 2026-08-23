@@ -21,6 +21,10 @@
 // (enforced by tests/architecture.test.ts).
 
 import { tickHunterTrap } from './combat/hunter_trap';
+import { isTemporaryNecromancyUndead } from './combat/necromancy';
+import { cleanupPaladinAegis } from './combat/paladin_aegis';
+import { stripSunGodVerdicts } from './combat/paladin_sun_verdict';
+import { stripPaladinDevotionsFromSource } from './combat/paladin_support';
 import { tickRingOfFrost } from './combat/ring_of_frost';
 import { tickTemporalHourglassGround } from './combat/temporal_hourglass';
 import { DELVES, DUNGEON_X_THRESHOLD, dungeonAt, zoneAt } from './data';
@@ -34,8 +38,23 @@ import { CAST_COMPLETE_EPS, DT, emptyMoveInput } from './types';
 // Mobs that despawn after sitting out of combat too long (boss adds that should not
 // litter the world). The idle timer is reset to DAMAGE_IDLE_DESPAWN_SECONDS whenever
 // they take damage (that reset still lives on Sim in the damage path, C1).
+//
+// `dragonkin_whelp` is here because a hatchling is the one summoned add with no
+// summoner to clean it up. mob/locomotion.ts acts on `summonedAdd` only in the
+// DEAD branch (a slain add unravels with its corpse), and the brood hatch does
+// not register the whelp on the egg's `summonedIds`, so respawnMob's
+// despawnSummonedAdds cannot reach one either. A whelp nobody killed therefore
+// lived forever while its egg re-clutched on the trash cadence and hatched
+// another for the next passer-by: measured at 92 live whelps after one walk of
+// the Drakemaw belt, 184 after two, 267 after three, out of 75 authored eggs.
+// The idle timer only runs out of combat, so an engaged whelp is never yanked
+// out of a fight (pinned by tests/dragonkin_whelp_litter.test.ts).
 export const DAMAGE_IDLE_DESPAWN_SECONDS = 60;
-export const DAMAGE_IDLE_DESPAWN_MOB_IDS = new Set(['varkas_boneguard', 'bound_guardian']);
+export const DAMAGE_IDLE_DESPAWN_MOB_IDS = new Set([
+  'varkas_boneguard',
+  'bound_guardian',
+  'dragonkin_whelp',
+]);
 
 // A ticking ground hazard (e.g. Consecration). Scheduled by the damage/effect path
 // (C1/C4b, still on Sim) and drained here by tickGroundAoEs.
@@ -68,6 +87,10 @@ export type GroundAoE = {
   slowMult?: number;
   slowDuration?: number;
   orbCdr?: boolean;
+  threat?: { flat?: number; mult?: number };
+  devotionOnFirstHit?: number;
+  devotionGranted?: boolean;
+  consecration?: { id: string; duration: number; protectionDamageReduction?: number };
   // Ring of Frost: annular contact trap state. Its duration uses `remaining`;
   // targets are remembered so standing on or re-entering one ring cannot chain-root.
   frostRing?: {
@@ -85,6 +108,9 @@ export type GroundAoE = {
     armRemaining: number;
     freezeDuration: number;
     triggered: boolean;
+    rootInstead?: boolean;
+    slowMult?: number;
+    slowDuration?: number;
   };
   temporalHourglass?: {
     id: string;
@@ -102,10 +128,11 @@ export type GroundAoE = {
   };
 };
 
-// A SimEvent scheduled to fire at a future sim time, optionally gated by a live-
-// reference guard checked at fire time. Scheduled by N1/M3 (still on Sim), drained
-// here by drainDelayedEvents.
-export type DelayedEvent = { at: number; event: SimEvent; guard?: () => boolean };
+// A SimEvent or deterministic simulation callback scheduled for a future sim time,
+// optionally gated by a live-reference guard checked at fire time.
+export type DelayedEvent =
+  | { at: number; event: SimEvent; guard?: () => boolean; resolve?: never }
+  | { at: number; resolve: () => void; guard?: () => boolean; event?: never };
 
 // In-place vector copy (the engine mutates entity positions; see immutability waiver).
 function copyPos(
@@ -134,6 +161,15 @@ export function dropEntityFromRoster(ctx: SimContext, id: number): void {
   ctx.clearEntityMarker(id); // a despawned entity keeps no raid marker
   const e = ctx.entities.get(id);
   if (!e) return;
+  // Paladin-sourced cleanup only when the despawner could have sourced any of
+  // it (review 3050): each of these walks the full roster, two with a nested
+  // per-aura loop, and a mass-despawn tick paid all three in a world with no
+  // paladin in it.
+  if (e.kind === 'player' && e.templateId === 'paladin') {
+    cleanupPaladinAegis(ctx, id);
+    stripSunGodVerdicts(ctx, id);
+    stripPaladinDevotionsFromSource(ctx, id);
+  }
   // A despawned mob keeps no per-attempt Book of Deeds state: freeInstance,
   // freeDelveRun, and spawnDelveModule drop boss mobs without a kill, so a leaked
   // encounter/taint entry (entity ids are monotonic and never reused) would linger
@@ -196,7 +232,11 @@ export function runDespawnDecay(ctx: SimContext): void {
       e.overheadEmoteUntil = 0;
     }
   }
-  for (const id of despawnIds) dropEntityFromRoster(ctx, id);
+  for (const id of despawnIds) {
+    const entity = ctx.entities.get(id);
+    if (entity && isTemporaryNecromancyUndead(entity)) ctx.despawnPet(entity);
+    else dropEntityFromRoster(ctx, id);
+  }
 }
 
 // Fire delayed events whose time has come (subject to their guard), keep the rest.
@@ -206,7 +246,10 @@ export function drainDelayedEvents(ctx: SimContext): void {
   const pending: DelayedEvent[] = [];
   for (const delayed of ctx.delayedEvents) {
     if (delayed.at <= ctx.time) {
-      if (!delayed.guard || delayed.guard()) ctx.emit(delayed.event);
+      if (!delayed.guard || delayed.guard()) {
+        if (delayed.resolve) delayed.resolve();
+        else ctx.emit(delayed.event);
+      }
     } else pending.push(delayed);
   }
   ctx.delayedEvents = pending;
@@ -262,7 +305,7 @@ export function tickGroundAoEs(ctx: SimContext): void {
     effect.tickTimer -= DT;
     while (effect.tickTimer <= CAST_COMPLETE_EPS && effect.remaining > CAST_COMPLETE_EPS) {
       effect.tickTimer += effect.interval;
-      ctx.pulseGroundAoE(effect);
+      ctx.pulseGroundAoE(effect, effect.threat);
     }
     if (effect.remaining <= CAST_COMPLETE_EPS) ctx.groundAoEs.splice(i, 1);
   }
@@ -315,7 +358,7 @@ export function releaseSpiritInDelve(ctx: SimContext, pid: number): void {
   p.resource =
     p.resourceType === 'mana'
       ? Math.round(p.maxResource * 0.5)
-      : p.resourceType === 'energy'
+      : p.resourceType === 'energy' || p.resourceType === 'focus'
         ? 100
         : 0;
   p.targetId = null;

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   ACTION_BAR_SLOTS,
@@ -69,6 +70,7 @@ describe('registry', () => {
     expect(actionKind('emoteWheel')).toBe('held');
     expect(actionKind('autorun')).toBe('edge');
     expect(actionKind('target')).toBe('edge');
+    expect(actionKind('targetPrev')).toBe('edge');
     expect(actionKind('slot0')).toBe('edge');
     expect(actionKind('nope')).toBe(null);
   });
@@ -159,6 +161,9 @@ describe('Keybinds defaults', () => {
     expect(kb.actionForCode('KeyD')).toBe('turnRight');
     expect(kb.actionForCode('Space')).toBe('jump');
     expect(kb.actionForCode('Tab')).toBe('target');
+    // Shift+Tab is the backward half of the same cycle: a distinct chord, so it
+    // never shadows bare Tab and bare Tab never shadows it.
+    expect(kb.actionForCode('Shift+Tab')).toBe('targetPrev');
     expect(kb.actionForCode('KeyB')).toBe('bags');
     expect(kb.actionForCode('KeyX')).toBe('emoteWheel');
     expect(kb.actionForCode('Digit1')).toBe('slot0'); // Attack
@@ -195,6 +200,28 @@ describe('binding', () => {
     expect(kb.actionForCode('KeyR')).toBe('slot0');
     expect(kb.primaryLabel('slot0')).toBe('R');
     expect(kb.actionForCode('Digit1')).toBe(null); // old key freed
+  });
+
+  // Tab is rebindable, so its backward twin must be too: same registry, same
+  // bind()/clear() path, and rebinding one leaves the other alone.
+  it('rebinds the backward target cycle independently of Tab', () => {
+    const kb = new Keybinds();
+    expect(kb.bind('targetPrev', 0, 'KeyM')).toBe(true);
+    expect(kb.actionForCode('KeyM')).toBe('targetPrev');
+    expect(kb.primaryLabel('targetPrev')).toBe('M');
+    expect(kb.actionForCode('Shift+Tab')).toBe(null); // old chord freed
+    expect(kb.actionForCode('Tab')).toBe('target'); // forward cycle untouched
+  });
+
+  // The converse arm: rebinding the FORWARD cycle must not evict the backward
+  // one. This is what would break if the eviction sweep ever compared bare
+  // physical codes instead of full chords.
+  it('rebinding Tab leaves Shift+Tab bound to the backward cycle', () => {
+    const kb = new Keybinds();
+    expect(kb.bind('target', 0, 'KeyN')).toBe(true);
+    expect(kb.actionForCode('KeyN')).toBe('target');
+    expect(kb.actionForCode('Tab')).toBe(null);
+    expect(kb.actionForCode('Shift+Tab')).toBe('targetPrev');
   });
 
   it('rebinds a movement key', () => {
@@ -377,6 +404,9 @@ describe('persistence', () => {
     expect(kb.actionForCode('Equal')).toBe('slot11');
     // sheathe postdates this save: it keeps its default Z, not unbound.
     expect(kb.actionForCode('KeyZ')).toBe('sheathe');
+    // Same for the backward target cycle: an existing player gets Shift+Tab
+    // without touching their saved profile.
+    expect(kb.actionForCode('Shift+Tab')).toBe('targetPrev');
     expect(kb.actionForCode('Backquote')).toBe('mount');
   });
 
@@ -823,5 +853,37 @@ describe('mouse buttons as bindable keys', () => {
     const reloaded = new Keybinds();
     expect(reloaded.codeAt('slot3', 0)).toBe(null);
     expect(reloaded.edgeActionForCombo('Mouse1')).toBe(null);
+  });
+});
+
+// Every bindable action's Key Bindings row must localize. actionDisplayName
+// (src/ui/options_window.ts) resolves a row's label through BIND_ACTION_LABEL_KEYS
+// and falls back to the RAW ENGLISH BindAction.label when the id is absent, so a
+// missing entry ships hard-coded English in all 22 locales and silently orphans the
+// catalog key someone added for it. Nothing else catches that: the i18n gates check
+// that keys EXIST, not that a key is reachable, and every keybind test before this
+// one asserted on codes rather than labels. Scanned from source because the map is
+// module-private in a DOM window module this Node suite cannot import.
+describe('every bind action has a localized label key', () => {
+  const optionsWindowSrc = readFileSync(
+    new URL('../src/ui/options_window.ts', import.meta.url),
+    'utf8',
+  );
+  const mapBody = optionsWindowSrc.slice(
+    optionsWindowSrc.indexOf('const BIND_ACTION_LABEL_KEYS'),
+    optionsWindowSrc.indexOf('};', optionsWindowSrc.indexOf('const BIND_ACTION_LABEL_KEYS')),
+  );
+
+  it('reads a non-empty map (the scan would pass vacuously on a rename)', () => {
+    expect(mapBody).toContain('BIND_ACTION_LABEL_KEYS');
+    expect(mapBody.split('\n').filter((l) => /^\s+\w+:\s+'/.test(l)).length).toBeGreaterThan(30);
+  });
+
+  // Action-bar slots resolve through their own numeric branch in actionDisplayName,
+  // never the map, so they are the one exempt family.
+  const mapped = BIND_ACTIONS.filter((a) => !a.id.startsWith('slot'));
+
+  it.each(mapped.map((a) => [a.id] as const))('%s is in BIND_ACTION_LABEL_KEYS', (id) => {
+    expect(new RegExp(`^\\s+${id}:\\s+'`, 'm').test(mapBody)).toBe(true);
   });
 });

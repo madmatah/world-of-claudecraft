@@ -42,17 +42,57 @@ describe('bag_item_context_menu: enchant reagent detection', () => {
 
 describe('bag_item_context_menu: action eligibility', () => {
   it('offers Disenchant AND Salvage on a common+ weapon or armor', () => {
-    expect(bagItemNewActions(def('weapon', 'common'), 'sword')).toEqual(['disenchant', 'salvage']);
-    expect(bagItemNewActions(def('armor', 'rare'), 'plate')).toEqual(['disenchant', 'salvage']);
+    expect(bagItemNewActions(def('weapon', 'common'), 'sword')).toEqual([
+      'disenchant',
+      'salvage',
+      'lock',
+    ]);
+    expect(bagItemNewActions(def('armor', 'rare'), 'plate')).toEqual([
+      'disenchant',
+      'salvage',
+      'lock',
+    ]);
   });
-  it('offers nothing on a poor-quality or non-gear item', () => {
-    expect(bagItemNewActions(def('weapon', 'poor'), 'stick')).toEqual([]);
-    expect(bagItemNewActions(def('material'), 'iron_ore')).toEqual([]);
-    expect(bagItemHasContextActions(def('material'), 'iron_ore')).toBe(false);
+  // A held offhand (a shield-less caster orb/tome or a hunter quiver) is
+  // equipment exactly like a weapon or armor piece: it carries quality and
+  // requiredClass, and a piece looted by the wrong class is otherwise stuck
+  // with no way to break it down for materials. Missing this offered only
+  // Equip (which fails the class check) and Lock, so this must mirror the
+  // weapon/armor row above verbatim.
+  it('offers Disenchant AND Salvage on a common+ held offhand too', () => {
+    expect(bagItemNewActions(def('held_offhand', 'uncommon'), 'lantern')).toEqual([
+      'disenchant',
+      'salvage',
+      'lock',
+    ]);
+  });
+  // Every item now offers at least lock/unlock (issue #3042), so a
+  // poor-quality or non-gear item is never truly empty; "offers nothing NEW
+  // beyond the lock toggle" is the honest claim for a plain item today.
+  it('offers only the lock toggle on a poor-quality or non-gear item', () => {
+    expect(bagItemNewActions(def('weapon', 'poor'), 'stick')).toEqual(['lock']);
+    expect(bagItemNewActions(def('material'), 'iron_ore')).toEqual(['lock']);
+    expect(bagItemHasContextActions(def('material'), 'iron_ore')).toBe(true);
   });
   it('offers Apply Enchant on an enchant reagent material', () => {
-    expect(bagItemNewActions(def('material'), 'arcane_dust')).toEqual(['applyEnchant']);
+    expect(bagItemNewActions(def('material'), 'arcane_dust')).toEqual(['applyEnchant', 'lock']);
     expect(bagItemHasContextActions(def('material'), 'arcane_dust')).toBe(true);
+  });
+  it('offers Unlock instead of Lock, and never Salvage, on a locked copy', () => {
+    const locked = { locked: true } as ItemInstancePayload;
+    // Salvage would destroy the copy, so a locked one never offers it (mirrors
+    // the sim's evaluateSalvageAdmission 'locked' deny).
+    expect(bagItemNewActions(def('weapon', 'common'), 'sword', locked)).toEqual([
+      'disenchant',
+      'unlock',
+    ]);
+    // Disenchant and Apply Enchant stay available: the lock protects against
+    // salvage, craft consumption, and vendor sale only (the issue's own
+    // first-pass scope).
+    expect(bagItemNewActions(def('material'), 'arcane_dust', locked)).toEqual([
+      'applyEnchant',
+      'unlock',
+    ]);
   });
 });
 
@@ -60,11 +100,11 @@ describe('bag_item_context_menu: menu row ordering', () => {
   it('always leads with the classic default action', () => {
     const gear = bagItemContextActions(def('weapon', 'common'), 'sword');
     expect(gear[0]).toEqual({ id: 'default', labelKey: 'hudChrome.itemMenu.equip' });
-    expect(gear.map((r) => r.id)).toEqual(['default', 'disenchant', 'salvage']);
+    expect(gear.map((r) => r.id)).toEqual(['default', 'disenchant', 'salvage', 'lock']);
 
     const reagent = bagItemContextActions(def('material'), 'arcane_dust');
     expect(reagent[0]).toEqual({ id: 'default', labelKey: 'hudChrome.itemMenu.use' });
-    expect(reagent.map((r) => r.id)).toEqual(['default', 'applyEnchant']);
+    expect(reagent.map((r) => r.id)).toEqual(['default', 'applyEnchant', 'lock']);
   });
 });
 

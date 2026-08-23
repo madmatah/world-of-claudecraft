@@ -551,8 +551,11 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
   { file: 'aura_overlay_painter.ts', allow: {}, reflowAllow: {} },
   { file: 'cast_bar_painter.ts', allow: {}, reflowAllow: {} },
   { file: 'unit_frame_painter.ts', allow: {}, reflowAllow: {} },
+  { file: 'paladin_devotion_painter.ts', allow: {}, reflowAllow: {} },
   { file: 'hud/action_bar/action_bar_painter.ts', allow: {}, reflowAllow: {} },
   { file: 'hud/action_bar/mobile_action_ring_painter.ts', allow: {}, reflowAllow: {} },
+  { file: 'hud/cross_hotbar/cross_hotbar_painter.ts', allow: {}, reflowAllow: {} },
+  { file: 'hud/warlock/doom_meter_painter.ts', allow: {}, reflowAllow: {} },
   { file: 'party_frames_painter.ts', allow: {}, reflowAllow: {} },
   // party_below_target measures the target frame, its #tf-debuffs strip, the
   // party container, and (on mobile) the rows wrapper + move zone (five rect
@@ -617,6 +620,35 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
     allow: { '.innerHTML': 1, '.setAttribute': 2 },
     reflowAllow: {},
   },
+  // reliquary_tracker is the same painter contract on the same budget: ONE
+  // constructor innerHTML write for the whole skeleton, every refresh write
+  // facet-routed (the fill-flash class rides toggleClass), and the three
+  // setAttribute/removeAttribute pairs only on a chip-mode transition.
+  {
+    file: 'reliquary_tracker_painter.ts',
+    allow: { '.innerHTML': 1, '.setAttribute': 3, '.removeAttribute': 3 },
+    reflowAllow: {},
+  },
+  // The Thornhollow Fields scoreboard rebuilds its skeleton in ONE innerHTML write
+  // only when the STRUCTURAL sig changes (new match / roster change). Every
+  // per-frame write is facet-routed.
+  {
+    file: 'hud/battleground/battleground_scoreboard_painter.ts',
+    // The expanded/pinned state now rides ONE elided applier (applyExpanded),
+    // so the three raw classList calls and the raw aria-expanded write are gone;
+    // what is left is the four build-time role/aria-live attributes on the two
+    // self-mounted roots plus the one skeleton innerHTML.
+    allow: { '.innerHTML': 1, '.setAttribute': 4 },
+    reflowAllow: {},
+  },
+  // The bg kill feed rebuilds its tiny stack in ONE innerHTML write, on a
+  // death or an expiry only (the per-frame update elides on the pure core's
+  // reference equality); the setAttribute runs once at mount.
+  {
+    file: 'hud/battleground/battleground_kill_feed_painter.ts',
+    allow: { '.innerHTML': 1, '.setAttribute': 1 },
+    reflowAllow: {},
+  },
 ];
 
 // BUCKET 2 of 3: the src/ui painters that are NOT facet-routed because they draw to a 2D
@@ -637,16 +669,30 @@ const HOT_PAINTERS: ReadonlyArray<ScannedPainter> = [
 // are intentionally outside this HUD-painter file.)
 //
 // The counted reads are the token resolves this file's prose used to merely assert: each of
-// the three map-family painters holds ONE getComputedStyle pass over the document element,
+// the map-family painters holds ONE getComputedStyle pass over the document element,
 // reading its whole --color-* group in one go. Their cadences differ and the old flat "once
-// per redraw" hid it: minimap caches the resolve for the session, while map and delve
+// per redraw" hid it: minimap and lastkeep (the walk-in castle floor plan, which caches by
+// the MinimapPainter rule) resolve once for the session, while map and delve
 // re-resolve on every redraw. unit_portrait keys its decode-race guard off
 // canvas.dataset.portrait, 4 accesses around one async image decode, two of them writes at
 // the start of a decode and two of them reads that abandon a decode whose unit changed;
 // perf_graph is handed both its context and its color and reaches for neither.
+// battleground_atlas_marks_painter is handed its context AND its projection and owns no
+// element at all: it is the mark read the M-map plate and the minimap's cached battleground
+// raster share, so it resolves nothing and reads nothing.
 const CANVAS_PAINTERS: ReadonlyArray<ScannedPainter> = [
   { file: 'continent_map_painter.ts', allow: {}, reflowAllow: { getComputedStyle: 1 } },
   { file: 'hud/delve/delve_map_painter.ts', allow: {}, reflowAllow: { getComputedStyle: 1 } },
+  { file: 'hud/rift/rift_map_painter.ts', allow: {}, reflowAllow: { getComputedStyle: 1 } },
+  { file: 'hud/battleground/battleground_atlas_marks_painter.ts', allow: {}, reflowAllow: {} },
+  // the M-map Thornhollow Fields plan: canvas-only, redrawn on the map cadence;
+  // like minimap it caches its one --color-* group resolve for the session
+  {
+    file: 'hud/battleground/battleground_map_painter.ts',
+    allow: {},
+    reflowAllow: { getComputedStyle: 1 },
+  },
+  { file: 'lastkeep_map_painter.ts', allow: {}, reflowAllow: { getComputedStyle: 1 } },
   { file: 'map_window_painter.ts', allow: {}, reflowAllow: { getComputedStyle: 1 } },
   { file: 'minimap_painter.ts', allow: {}, reflowAllow: { getComputedStyle: 1 } },
   { file: 'perf_graph_painter.ts', allow: {}, reflowAllow: {} },
@@ -766,6 +812,10 @@ const COLD_PAINTER_ALLOWANCES: ReadonlyArray<ColdPainter> = [
     reflowAllow: { '.scrollTop': 6, '.scrollLeft': 2 },
     driverAllow: {},
   },
+  // Same scroll pair as the vendor family's cold windows above: read the
+  // position before the rebuild, write it back after, so the order list
+  // does not jump under the player on their own action's repaint.
+  { file: 'commission_order_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
   // Two polls that repaint an OPEN window only: a 15s refresh of the reward state and a 30s
   // countdown tick. Page cadence rather than frame cadence, and both no-op while closed.
   {
@@ -807,6 +857,7 @@ const COLD_PAINTER_ALLOWANCES: ReadonlyArray<ColdPainter> = [
     ],
   },
   { file: 'deeds_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
+  { file: 'reliquary_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
   { file: 'dungeon_finder_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
   // The lockpick clock: a 100ms tick that repaints the remaining-time bar for the duration
   // of one attempt, generation-guarded and cleared on stop. The fastest module-owned driver
@@ -859,11 +910,24 @@ const COLD_PAINTER_ALLOWANCES: ReadonlyArray<ColdPainter> = [
     },
     driverAllow: {},
   },
+  // One map-canvas projection read at the bounded map-paint boundary. Pointer hover and
+  // touch hit tests consume only the controller-owned cache, so no pointer event can force
+  // layout.
+  {
+    file: 'hud/map/map_marker_interaction_controller.ts',
+    reflowAllow: { '.getBoundingClientRect': 1 },
+    driverAllow: {},
+  },
   { file: 'hud/fiesta/fiesta_controller.ts', reflowAllow: { '.offsetWidth': 1 }, driverAllow: {} },
   { file: 'hud/vendor/heroic_vendor_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
   { file: 'hud/vendor/train_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
   { file: 'hud/vendor/unbind_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
   { file: 'hud/vendor/vendor_window.ts', reflowAllow: { '.scrollTop': 2 }, driverAllow: {} },
+  {
+    file: 'hud/vendor/warfare_vendor_window.ts',
+    reflowAllow: { '.scrollTop': 2 },
+    driverAllow: {},
+  },
   // A body/wrap rect pair, read once when the mail body is laid out to fit.
   { file: 'mailbox_window.ts', reflowAllow: { '.getBoundingClientRect': 2 }, driverAllow: {} },
   // The trigger + popover rect pair that positions a filter popover, plus the two border
@@ -1281,6 +1345,7 @@ describe('hud_perf_budget ARM 1: every src/ui painter holds its bucket contract 
     const controllers = ON_DISK_PAINTERS.filter((f) => f.endsWith('_controller.ts'));
     expect(controllers.length, 'the HUD controllers vanished from the sweep').toBeGreaterThan(10);
     expect(controllers).toContain('hud/chat/chat_geometry_controller.ts');
+    expect(COLD_PAINTERS).toContain('hud/map/map_marker_interaction_controller.ts');
     expect(COLD_PAINTERS).toContain('hud/fiesta/fiesta_controller.ts');
   });
 
@@ -2525,7 +2590,12 @@ function buildHarnesses(shape: WorldShape, facet: PainterHostWriters): PainterHa
           queued: false,
           procGlow: false,
           empowered: false,
+          ascensionSpender: false,
+          ascensionCostLabel: '',
+          fateConsumeReady: false,
+          fateSentenceReady: false,
           ariaLabel: 'A',
+          ariaDescription: '',
           keybindLabel: 'K',
         },
       ],
@@ -2597,12 +2667,15 @@ function actionBarDeps(): ActionBarDeps {
 function idleWorld(): ActionBarWorldInput {
   return {
     player: {
+      id: 1,
       autoAttack: false,
       dead: false,
       resource: 100,
       cooldowns: new Map(),
       gcdRemaining: 0,
       potionCdRemaining: 0,
+      resourceType: 'mana' as const,
+      savedMana: 0,
       queuedOnSwing: null,
       auras: [],
       pos: { x: 0, y: 0, z: 0 },
@@ -2610,6 +2683,7 @@ function idleWorld(): ActionBarWorldInput {
     target: null,
     inventory: [],
     stealthed: false,
+    entities: [],
   };
 }
 

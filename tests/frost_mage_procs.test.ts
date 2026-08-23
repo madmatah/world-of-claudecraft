@@ -23,6 +23,7 @@ import type { PlayerMeta } from '../src/sim/sim';
 import { Sim } from '../src/sim/sim';
 import type { SimContext } from '../src/sim/sim_context';
 import type { Aura, Entity, SimEvent } from '../src/sim/types';
+import { EMPTY_TEST_WORLD } from './sim_shared';
 
 // Frost mage proc engine (owner design 2026-07-11, combat/frost_mage.ts):
 // Rimelance (frostbolt) impacts roll Fingers of Frost (15%, 2 stacks) and
@@ -36,11 +37,18 @@ type TestSim = Sim & {
   addEntity(entity: Entity): void;
 };
 
+// This suite never reads ambient camps, npcs, or ground objects: the target
+// is always a hand-spawned training dummy (spawnTarget) and the only other
+// player is a hand-added druid (sim.addPlayer). EMPTY_TEST_WORLD (same
+// fixture as tests/sim_shared.ts) skips the full built-in world's camp/npc
+// spawns, which is what made Sim construction and every sim.tick() call in
+// the long proc-hunting loops below expensive (Phase 9, subsystem worlds).
 function makeSim(opts?: { spec?: string | null; seed?: number }): { sim: TestSim; p: Entity } {
   const sim = new Sim({
     seed: opts?.seed ?? 1,
     playerClass: 'mage',
     autoEquip: true,
+    world: EMPTY_TEST_WORLD,
   }) as unknown as TestSim;
   sim.setPlayerLevel(20);
   const spec = opts?.spec === undefined ? 'frost' : opts.spec;
@@ -195,7 +203,12 @@ describe('frostbolt proc generation', () => {
   // wait) is a lot of synchronous sim work for vitest's 5s default: fine on an
   // idle machine, but tight under worker-pool CPU contention. Real execution is
   // sub-second in isolation; give this one real headroom instead of flaking.
-  const PROC_TEST_TIMEOUT_MS = 20_000;
+  // 20 s proved to be exactly the contention envelope, not headroom: when the
+  // Phase 4 long-sims lane re-partitioned the shard packs, this test timed
+  // out at 20 s on the same recomposed shard in two consecutive CI runs
+  // (31107474546, 31110001519) while passing everywhere else, so the budget
+  // now carries the same loaded-CI margin the other long walkers get.
+  const PROC_TEST_TIMEOUT_MS = 60_000;
 
   it(
     'a committed-frost mage eventually rolls both procs, capped at 2 stacks',

@@ -236,12 +236,14 @@ describe('buildGateProfileSteps', () => {
     const names = steps.map((s) => s.name);
     // Phase 8: pure artifacts via turbo; typecheck + env/server parallel multi-task.
     expect(names).toEqual([
-      'i18n artifacts',
+      'i18n + wiki + sfx artifacts',
       'i18n freshness',
-      'wiki content',
+      'sfx manifest regen',
+      'media manifest regen',
+      'manifest trackedness',
+      'manifest freshness',
       'malware scan',
       'biome (changed files)',
-      'sfx check',
       'vitest (full suite)',
       'browser regressions',
       'typecheck + env/server/bot builds',
@@ -251,12 +253,14 @@ describe('buildGateProfileSteps', () => {
     expect(vitest?.args).toEqual(['test', '--', '--maxWorkers=8']);
     // Generate-once: skip pretest after i18n + wiki; client build is turbo build:bundle.
     expect(vitest?.env).toEqual({ WOC_SKIP_PRETEST: '1' });
-    const i18n = steps.find((s) => s.name === 'i18n artifacts');
-    expect(i18n?.cmd).toBe('npx');
-    expect(i18n?.args).toEqual(expect.arrayContaining(['turbo', 'run', 'i18n:gen']));
+    const i18n = steps.find((s) => s.name === 'i18n + wiki + sfx artifacts');
+    expect(i18n?.cmd).toMatch(/(?:^|[\\/])turbo(?:\.cmd)?$/);
+    expect(i18n?.args).toEqual(
+      expect.arrayContaining(['run', 'i18n:gen', 'wiki:content', 'sfx:check']),
+    );
     const client = steps.find((s) => s.name === 'client build');
-    expect(client?.cmd).toBe('npx');
-    expect(client?.args).toEqual(expect.arrayContaining(['turbo', 'run', 'build:bundle']));
+    expect(client?.cmd).toMatch(/(?:^|[\\/])turbo(?:\.cmd)?$/);
+    expect(client?.args).toEqual(expect.arrayContaining(['run', 'build:bundle']));
   });
 
   it('honors skip flags without dropping unskipped steps', () => {
@@ -267,12 +271,14 @@ describe('buildGateProfileSteps', () => {
       skipTypes: true,
     });
     expect(steps.map((s) => s.name)).toEqual([
-      'i18n artifacts',
+      'i18n + wiki + sfx artifacts',
       'i18n freshness',
-      'wiki content',
+      'sfx manifest regen',
+      'media manifest regen',
+      'manifest trackedness',
+      'manifest freshness',
       'malware scan',
       'biome (changed files)',
-      'sfx check',
     ]);
   });
 });

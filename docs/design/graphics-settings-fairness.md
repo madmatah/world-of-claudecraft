@@ -24,9 +24,11 @@ ACTIONABLE (must be identical across every tier; never tiered):
 - The fishing bobber and its bite state. The reel window is a timed reaction; the bite
   affordance must read identically on every preset (splash richness may vary, the state
   may not).
-- The minimap gather-node markers: spotting, the per-viewer ready/cooldown state, and the
-  lock strike (the non-hue lock cue), plus the node tooltip's respawn countdown and
-  fine-grade preview lines.
+- The minimap and zone-map gather-node markers: spotting, the per-viewer ready/cooldown
+  state, and the lock strike (the non-hue lock cue), plus the node tooltip's respawn
+  countdown and fine-grade preview lines. Both surfaces (`minimap_markers` /
+  `minimap_painter` and `map_window_view` / `map_window_painter`) are pinned
+  profile-free by `tests/professions_graphics_fairness.test.ts`.
 - The node prop tier ladder in the 3D world (`nodeTierScale`): tier is actionable
   information expressed as SIZE, static on every preset.
 
@@ -41,6 +43,48 @@ COSMETIC (may be tiered down on lower presets):
 - Buff-icon overflow when the bar is full. A buff is active whether or not its icon is on
   screen, so hiding a buff icon removes no actionable information.
 - Portrait and HP-bar redraw smoothness within human reaction tolerance (about 200 ms).
+- Sun-shadow refresh cadence under budget pressure (`src/render/shadow_cadence_core.ts`).
+  Under sustained over-budget readings the shadow map updates every other frame instead of
+  every frame; shadows are never removed, and a one-frame-stale shadow (50 ms at 20 FPS)
+  conveys nothing a player acts on. This is a GOVERNOR-driven shed by design, like the
+  weapon-VFX `vfx` bucket arm below: a perf-governor output, not a UI tier knob, so the
+  static-preset rule at the bottom of this doc does not apply to it.
+  VFX-bearing weapon skin (glow, motes, aurora, shell, cast light) FADES on two inputs.
+  Neither reaches zero: what removes a rig is the character LOD swap, which replaces the whole
+  articulated rig with one baked mesh and is shared by the entire render path. The fade exists
+  so that removal is not a pop.
+  - VIEWER DISTANCE, measured against `CHARACTER_LOD_RANGE_SQ`, the articulated-rig range
+    BEFORE the crowd and per-tier factors scale it. Deliberately that fixed constant and not
+    the live band edge: the live edge reads a per-client, per-frame count of visible rigs, so
+    a fade keyed to it would pulse as unrelated players wander past a viewer's frustum and
+    would differ between two viewers standing in the same spot. Against the constant this arm
+    is identical for every player on every preset.
+  - The frame-budget governor's `vfx` bucket, the same lever the pooled particle cloud and the
+    ability VFX already answer to, floored at `WEAPON_VFX_GOVERNOR_FLOOR`. It is the one input
+    that differs between two players looking at the same wearer, and it can only dim.
+  What is faded is decoration ON a weapon. The wearer, their nameplate, their cast bar, their
+  auras, their position and the weapon model itself are untouched at every scale.
+- The deed border accent's decorative bloom (the Book of Deeds border rewards worn in-world).
+  The accent is IDENTITY: it encodes no health, range, rank, or threat, so it may never be
+  hidden, but its outer glow is pure richness. The identity arms are tier-invariant by
+  construction: the nameplate cartouche is canvas shapes resolved from entity state on the
+  same cadence as the title text (no tier input on the accent path, pinned by the path scan
+  in `tests/deed_border_accent.test.ts`), and the portrait ring's frame border, edge outline,
+  and inset shadow never read a tier token (pinned by the CSS arm of the same suite). The ONE
+  tier-scaled quantity is the ring's outer box-shadow bloom, which rides `--fx-shadow` (0 at
+  low) exactly like the sibling portrait combat glow. The ring also repaints on the existing
+  low-tier target-frame body throttle (about 10 Hz, target swap bypasses), a redraw-smoothness
+  shed this list already sanctions for the portrait.
+
+- Edge anti-aliasing, and WHICH edge anti-aliasing a tier gets. High and above run the SMAA
+  tail; medium (and any mix that resolves to the grade-only chain) runs the FXAA arm fused
+  into `OutputGradePass`; low and the memory-constrained WebKit rungs run none, because they
+  have no grade pass to fuse into. All three arms filter the display-space image AFTER
+  everything a player reads has been drawn into it, and none of them removes, hides, delays,
+  or repositions anything: an aliased silhouette and an anti-aliased one carry the same
+  information at the same time. Which arm a session gets is a pure function of the STATIC
+  device policy (`gfxAaPolicy`) plus the Anti-Aliasing dial, never of the frame-budget
+  governor, so it cannot vary between two players standing in the same spot.
 
 The test for any new tier knob: if a knob hides or delays something a player READS AND REACTS
 TO, it is not allowed. If it only reduces visual richness or redraw smoothness, it is fine.
@@ -123,6 +167,43 @@ cosmetic surface as though it carried the read. `tests/map_terrain.test.ts` pins
 both directions, including that no pixel near the limit is drawn brighter than the water inside
 it, so the boundary cannot creep back in as decoration.
 
+### Low-tier rocks with a real collider stayed invisible (2026-08-15)
+
+Not a HUD tier this time: the same principle applies to a WORLD-scenery LOD trim, and the
+answer is that a physical collision is the sharpest form of actionable information there is,
+sharper than anything on this list so far.
+
+`src/render/foliage.ts` sheds triangle count on `GFX.leanFoliage` tiers (Low, and Medium on a
+weak integrated GPU) by randomly dropping a fraction of scatter decorations from rendering. That
+trim treated every rock the same, with no awareness that `src/sim/colliders.ts` had already given
+some of them a real physical collider (rocks at or above `ROCK_COLLIDER_MIN_SCALE`). The sim side
+is correctly tier-agnostic (the server is authoritative and knows nothing about a client's
+graphics preset), so the collider always existed; only the client's decision about what to draw
+was missing the check. A player on Low could walk into an empty-looking patch of ground and be
+stopped by a rock they could not see.
+
+The fix is a shared predicate, `decorationHasCollider` (`src/sim/decoration_dims.ts`), consumed
+by both `colliders.ts` (which already had the same check inline; it now calls the named,
+shared version instead) and a new pure core, `src/render/foliage_decimation_core.ts`
+(`survivesLeanDecimation`), which exempts any rock the predicate calls solid from the trim before
+falling back to the previous tuned keep rates for everything else. Trees carry the identical
+architectural gap (every tree/tree2 trunk gets an unconditional collider, with no size gate at
+all), but a correct fix there would exempt effectively every tree from the trim, a much larger
+triangle-count and frame-time tradeoff on the weak/software GPUs this tier targets than the rock
+fix is, so it is tracked separately rather than folded in blind: see
+levy-street/world-of-claudecraft#3415. A second, unrelated invisible-collision gap was found in
+the same review, in the Evergarden's parterre beds and garden-biome pines (a zone-curation
+exclusion, unconditional on every preset, not this tier trim), tracked at
+levy-street/world-of-claudecraft#3417.
+
+The rule this adds to the list at the top: ACTIONABLE now explicitly includes "the presence of
+any entity a player can physically collide with", not only HUD/map reads. A render-side decision
+about what to draw must never diverge from what the sim decides a player can be blocked by.
+`tests/foliage_decimation_core.test.ts` pins the predicate itself, and
+`tests/foliage_decimation_wiring.test.ts` source-scans `foliage.ts` so a future re-inlining of
+the old hash-vs-keep-rate filter (which is exactly what caused this) fails loudly instead of
+silently reopening the bug behind a green core test.
+
 ## Enforcing guards
 
 - `tests/auras_painter.test.ts`: a debuff past the buff cap still renders; an all-debuff bar
@@ -149,6 +230,57 @@ it, so the boundary cannot creep back in as decoration.
   cap path for the sap).
 - `tests/auras_view.test.ts`: `isAuraDebuff` classifies a negative-value `buff_*` sap identically
   for the Sim aura and its `ClientWorld` mirror.
+- `tests/shadow_cadence_core.test.ts` + `tests/shadow_render_wiring.test.ts`: the sun-shadow
+  cadence shed. The policy core imports nothing (preset, tier, and profile blind; its only
+  inputs are the governor's pressure/enabled plus dt), the dwell thresholds are
+  literal-pinned, the shed is strictly every-other-frame (never a removal: the application
+  writes only the `shadowMap.autoUpdate`/`needsUpdate` flags), and the wiring scan pins the
+  renderer call sites.
+- `tests/weapon_vfx_shed.test.ts`: the weapon-skin fade. Neither arm reaches zero and the
+  lever's floor is proven to stay clear of the multiplier at which a part would stop drawing,
+  so the fade can never be mistaken for a cull; the distance arm is anchored to the fixed
+  `CHARACTER_LOD_RANGE_SQ` rather than the live band edge, and the policy is scanned free of
+  any tier, preset or device-profile input and pinned to its two arguments; the applied fade is
+  proven to dim the rig light WITHOUT clearing its `visible` flag, because three counts visible
+  point lights into every lit material's program cache key and dropping one is the open-world
+  recompile freeze; and the far-LOD skip is pinned to require a baked stand-in mesh, since
+  `setFar` leaves the rig drawing when there is none.
+- `tests/drape_lod_core.test.ts`: the ground-VFX drape LOD reads viewer distance and the mark's
+  own geometry only (pinned to its two arguments), every sample it takes is one the exact drape
+  would also have taken, and the marks it is allowed to thin at all are bounded by a world-space
+  sample-spacing cap, so no mark's footprint, radius or position can move with it.
+- `tests/ability_vfx_cc_bands.test.ts`: the held crowd-control bands (the "why can't I act"
+  tell: yellow stars over a stunned victim, violet wisps over a feared one, green shards at a
+  rooted one's ankles, each keyed off what the SIM says the victim wears so every source reads,
+  mob stomps and ensnare affixes included) occupy the FIRST overlay slots, draw identically at
+  vfx quality 0, hold an alpha floor for the aura's whole life, and are bounded by a band cap
+  instead of a tier shed. One band per victim, the most severe worn, and ONE shared cap across
+  all three types (`MAX_CC_BANDS`), so adding types never widens the batch claim. The cap ranks
+  by severity first, then bands in front of the camera ahead of ones behind it, which is a
+  fairness rule and not just polish: character self-culling is enabled only on the tier that
+  casts no sun shadow (`GFX.dynamicShadows` -> `cullCharacters`), so on medium and above every
+  controlled entity in interest range competes for a slot, behind-camera ones included, while
+  on low the offscreen non-actionable ones are slept first. Ranking on raw camera distance
+  would let a medium-tier player lose an on-screen CC read that a low-tier player keeps. A band
+  that still loses its slot is not dark: the cast-moment sequence stands down only for bands
+  that WON a slot, so a dropped one keeps reading through the burst. Pinned skips: a dead body,
+  a frustum-culled non-actionable rig, and a cast-moment sequence for a band that is actually
+  being drawn.
+- `tests/decoration_dims.test.ts`: `decorationHasCollider` classifies a rock at or above
+  `ROCK_COLLIDER_MIN_SCALE` as solid, one below it as dressing, and every tree/tree2 as solid
+  (colliders.ts gives every trunk a collider unconditionally).
+- `tests/foliage_decimation_core.test.ts`: `survivesLeanDecimation` never drops a solid rock
+  regardless of its hash draw, still decimates sub-floor dressing rocks at the tuned keep rates,
+  and leaves tree/tree2 decimation numerically unchanged.
+- `tests/foliage_decimation_wiring.test.ts`: source-scans `foliage.ts` to prove the leanFoliage
+  decoration filter actually calls `survivesLeanDecimation` and that the old bare
+  `hashAt(d.x, d.z, 83) < keep` shape has not been re-inlined.
+  The band's TYPE is itself actionable, not decoration, which is why the cast-moment stand-down
+  answers on any band type rather than stun alone: the `cc` archetype flashes the same yellow
+  stars for every control ability, so a rooted victim would otherwise read as stunned for the
+  burst's length. Each band is also separated from the others on two axes at once, colour and
+  motion signature (ring position, sprite shape, and the fear band's vertical bob), so the
+  distinction survives for a colourblind player rather than resting on hue alone.
 
 ## Resolved: negative-value stat-sap auras now classify as debuffs in both worlds
 

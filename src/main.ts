@@ -2,12 +2,14 @@
 // index.html and play.html both bootstrap through this module, so this one import
 // styles both game entries; admin/guide use their own entries and inline CSS.
 import './styles/index.css';
+import { captureFirstTouch, registerAttributionPayload } from './attribution';
 import { markEntryTightMode } from './device_memory_hint';
 import { startDiscordLogin } from './discord_login_start';
 import {
   syncAppViewport as syncAppViewportShared,
   syncSettledAppViewport,
 } from './game/app_viewport';
+import { runBlockingArrivalWarmup, settleWorldEntryCover } from './game/arrival_warmup';
 import { audio } from './game/audio';
 import { AutoLoot } from './game/autoloot';
 import {
@@ -38,10 +40,22 @@ import {
 import { clientEnvBits, installPageStateTracking, pageStateBits } from './game/client_env';
 import { getClientSeed } from './game/client_seed';
 import { localPartyMemberIds } from './game/corpse_loot_availability';
+import { createCrossHotbar, measureCrossHotbarLift } from './game/cross_hotbar_wiring';
 import { shouldClearAutorunOnDeath } from './game/death_input_reset';
+import { setDisplayChangeTarget } from './game/desktop_display_change';
+import {
+  desktopDisplayModeSupported,
+  pushDesktopDisplayMode,
+  syncDesktopDisplayModeSetting,
+} from './game/desktop_display_mode_sync';
 import { initDesktopDownload } from './game/desktop_download';
+import { pushDesktopGpuPref, syncDesktopGpuPrefSetting } from './game/desktop_gpu_pref_sync';
+import { desktopNotifyOnSimEvents } from './game/desktop_notifications';
+import { desktopPresentationHidden } from './game/desktop_presentation';
 import { initDesktopShellIntegration } from './game/desktop_shell_integration';
 import { installDevTeleports } from './game/dev_shortcuts';
+import { desktopPresenceOnFrame, pushDiscordPresenceEnabled } from './game/discord_presence';
+import { cycleHudFocus } from './game/dpad_focus_nav';
 import { takeEditorPlaytestRequest } from './game/editor_playtest';
 import {
   clearEntryProbe,
@@ -59,10 +73,14 @@ import {
   suspendActiveEntryDiagnostics,
 } from './game/entry_diagnostics';
 import { GamepadManager } from './game/gamepad';
+import { createGamepadActivityNotifier } from './game/gamepad_activity_notify';
 import { GamepadBindings } from './game/gamepad_bindings';
+import { GAMEPAD_CANCEL, GAMEPAD_CYCLE_HUD, GAMEPAD_SUBCOMMANDS } from './game/gamepad_map';
 import { shouldUseGamepadPointerMode } from './game/gamepad_pointer_mode';
+import { isGameplayInputBlocked } from './game/gameplay_input_gate';
 import { handleGatherNodeInteract } from './game/gather_node_interact';
 import { gatherToolProfessionFor, nearestGatherNodeForProfession } from './game/gather_tool_use';
+import { publishGpuHitchRuntimeReceipt } from './game/gpu_hitch_receipt';
 import { GraphicsRebuildCoordinator } from './game/graphics_rebuild_coordinator';
 import {
   type GraphicsSettingsSnapshot,
@@ -99,6 +117,15 @@ import { applyMobileKeyboardViewport } from './game/keyboard_viewport_applier';
 import { shouldUseStaticBackdrop } from './game/landing_backdrop';
 import { createLandingThemeAudio } from './game/landing_theme';
 import {
+  collectLoadSpans,
+  loadPhaseEnd,
+  loadPhaseStart,
+  loadSpan,
+  loadSpanAsync,
+  resetLoadProfile,
+  summarizeLoadProfile,
+} from './game/load_profiler';
+import {
   interfaceModeFromSetting,
   isPhoneTouchDevice,
   MobileControls,
@@ -112,11 +139,16 @@ import { mouselookReleaseFacing } from './game/mouselook_release';
 import { diagonalMovementVisualFacing } from './game/movement_visual';
 import { music } from './game/music';
 import { tryNearbyInteraction } from './game/nearby_interaction';
+import { nextNpcTarget } from './game/npc_cycle';
 import { isOfflineModeAvailable } from './game/offline_mode_gate';
 import { padReelItemId } from './game/pad_reel';
+import { openTargetSubcommands } from './game/pad_subcommands';
+import { createPadTargetPick } from './game/pad_target_pick';
 import { createPerfMonitor } from './game/perf';
 import { initPerfNudge } from './game/perf_nudge';
 import { startPerfReporter } from './game/perf_reporter';
+import { kickCharacterPreloadStream, runPostEntryWarmups } from './game/post_entry_warmups_core';
+import { newPresentationGateInput, presentationGate } from './game/presentation_gate';
 import {
   fetchRealmRacersDraft,
   parseRealmRacersDraftCommand,
@@ -146,10 +178,11 @@ import {
 import { safeStartupGraphicsPreset } from './game/startup_graphics_safety';
 import { shouldClearTargetOnGroundClick } from './game/target_click';
 import { loadingCurtainFadeMs, resolveUiEffectsProfile } from './game/ui_effects_profile';
-import { currentUtcDay } from './game/utc_day';
+import { currentResetDay, currentUtcDay } from './game/utc_day';
 import { voice } from './game/voice';
 import { telemetryZoneId } from './game/world_telemetry';
 import { zoneWarmupMode } from './game/zone_transition';
+import { createZoneWarmTracker } from './game/zone_warm_tracker';
 import {
   CHAR_SORT_MODES,
   type CharSortMode,
@@ -196,6 +229,7 @@ import {
   isAuthError,
   NATIVE_APP,
 } from './net/online';
+import { installOtaUpdateGate } from './net/ota_update_gate';
 import { realmPopulation } from './net/realm_population';
 import { RECONNECT_CONFLICT_ERROR } from './net/reconnect_policy';
 import {
@@ -216,24 +250,51 @@ import {
   prepareGraphicsProfileAssets,
   resetGraphicsProfileDerivedCaches,
 } from './render/assets/graphics_profile';
+import {
+  enableKtx2MipRelease,
+  ktx2MipsOnContextLost,
+  ktx2MipsRestored,
+} from './render/assets/ktx2_mip_release';
+import { assetUrl } from './render/assets/media';
 import { assetsReady, beginDeferredPreloads } from './render/assets/preload';
-import { CharacterPreview, type PreviewAppearance } from './render/characters';
+import { battlegroundAssetPrewarm } from './render/battleground';
+import {
+  CharacterPreview,
+  npcLookFor,
+  type PreviewAppearance,
+  setModularLookProvider,
+} from './render/characters';
 import {
   charactersReady,
   ensureCharacterUrl,
+  modularCacheStats,
   preloadMechAssets,
   startStreamedCharacterPreloads,
 } from './render/characters/assets';
 import { skinCount, weaponSkinModelUrl } from './render/characters/manifest';
 import {
-  onPortraitsReady,
+  ARMOR_SETS,
+  type ArmorLoadout,
+  type ArmorSetId,
+  classArmorSet,
+  fullSet,
+  type ModularAppearance,
+  type ModularLook,
+  normalizeAppearance,
+} from './render/characters/modular';
+import {
+  armorSetSourceFor,
+  charselectLook,
+  inWorldLookFor,
+} from './render/characters/player_look_core';
+import {
   onPortraitUpdate,
   playerPortraitDataUrl,
   resetPortraitRendererForGraphicsRebuild,
 } from './render/characters/portrait';
 import { type RecycledRendererContext, recycleWebGL2Context } from './render/context_recycle';
 import { installWebGLContextRelease } from './render/context_release';
-import { setDayNightPhaseOverride } from './render/day_night_clock';
+import { setDayNightPhaseOverride, setLunarPhaseOverride } from './render/day_night_clock';
 import {
   activateGfxProfile,
   captureGfxCapabilities,
@@ -243,6 +304,7 @@ import {
   graphicsPresetLabel,
   resolveGfxProfile,
 } from './render/gfx';
+import { createInitialPrewarmResumeStartGate } from './render/prewarm_resume_start_gate';
 import { Renderer } from './render/renderer';
 import {
   authoritativeVerticalPop,
@@ -252,16 +314,19 @@ import {
 import { ensureSkyAssetsAt, navigatorSaveData } from './render/sky';
 import { ARRIVAL_NEIGHBOR_STREAM_RADIUS } from './render/zone_streaming';
 import { desktopBridge } from './runtime';
+import { breathFraction, stepBreathUsedSeconds } from './sim/breath';
 import { pathCrossesFence } from './sim/colliders';
 import { isStunned } from './sim/combat/cc';
 import { ABILITIES, CLASSES } from './sim/content/classes';
 import { HEROIC_VENDOR_STOCK } from './sim/content/heroic_vendor';
+import { MECH_CHROMAS } from './sim/content/skins';
 import { rowTreeFor } from './sim/content/talents';
 import {
   GATHER_NODES,
   ITEMS,
   isDelvePos,
   isRiftPos,
+  MOBS,
   QUESTS,
   questRewardItem,
   setActiveWorldContent,
@@ -271,6 +336,7 @@ import { canEquipItem } from './sim/equipment_rules';
 import { MARKET_HOUSE_STOCK } from './sim/market';
 import { bagOwnedMounts } from './sim/mounts';
 import { findPlayerPath, resolvePlayerDestination } from './sim/pathfind';
+import { isSubmerged } from './sim/player_motion';
 import { Sim } from './sim/sim';
 import { TAB_NEAR_RADIUS, TAB_QUERY_RADIUS, tabConeHalfAt } from './sim/tab_target';
 import {
@@ -278,6 +344,7 @@ import {
   DT,
   dist2d,
   MELEE_RANGE,
+  PLAYER_INTEREST_DROP_RADIUS,
   type PlayerClass,
   RUN_SPEED,
   type WorldContent,
@@ -293,6 +360,14 @@ import {
 } from './ui/account_portal';
 import { technicalErrorMessage, userFacingApiError } from './ui/api_error_i18n';
 import { formatFooterVersion } from './ui/app_version';
+import { type AppearanceCustomizer, mountAppearanceCustomizer } from './ui/appearance_customizer';
+import {
+  appearancePanelIsStale,
+  forgetAppearancePanel,
+  noteAppearancePanelMounted,
+  relocalizeAppearancePanels,
+} from './ui/appearance_panel_locale';
+import { setThornhollowPrewarmHooks } from './ui/arena_window';
 import {
   handleKeyboardActivation,
   syncInputAriaState,
@@ -300,6 +375,7 @@ import {
   validateCharacterName,
   validateForm,
 } from './ui/auth_utils';
+import { BreathBar } from './ui/breath_bar';
 import { assembleBugReportMeta } from './ui/bug_report';
 import {
   cameraPromptOpen,
@@ -307,11 +383,13 @@ import {
   maybeShowFirstRunCameraPrompt,
 } from './ui/camera_prompt';
 import { deleteCharButtonHtml } from './ui/char_delete_button';
+import { resetComposedRows, trackComposedChipRow } from './ui/charselect_composed_refresh';
 import { loadCharselectNews } from './ui/charselect_news';
+import { CharselectRedesignEditor } from './ui/charselect_redesign';
 import { ChatCommandMenu } from './ui/chat_command_menu';
 import { CLASS_DETAILS, SIGNATURE_ABILITIES } from './ui/class_details_data';
+import { classIconUrl } from './ui/class_icon_art';
 import { claudiumBalanceAddress, currentWocDiscountBps } from './ui/claudium_view';
-import { ensureDeedLocalesLoaded } from './ui/deed_i18n';
 import { isDevGuiCommand } from './ui/dev_command_view';
 import { devTierByIndex, devTierDisplayName } from './ui/dev_tier';
 import {
@@ -364,20 +442,28 @@ import {
   t,
   tPlural,
 } from './ui/i18n';
-import { defaultIconPrewarmPlan, type IconPrewarmEntry, prewarmIconCache } from './ui/icon_prewarm';
+import {
+  contextualIconPrewarmEntries,
+  defaultIconPrewarmPlan,
+  prewarmIconCache,
+} from './ui/icon_prewarm';
 import { iconDataUrl } from './ui/icons';
+import { LoadingBackdropController } from './ui/loading_backdrop';
 import {
   noteLoadingProgress,
   startSlowConnectionWatch,
   stopSlowConnectionWatch,
 } from './ui/loading_slow_hint';
 import { createLoadingTipRotation, type LoadingTipRotation } from './ui/loading_tips';
+import { CONTENT_LOCALE_CHANNEL_ENSURERS } from './ui/locale_channels';
+import { installMapMarkerPaletteLifecycle } from './ui/map_marker_palette_lifecycle';
 import { applyMinimapOrnamentVars } from './ui/minimap_gilded_ornament';
 import { showMobileWalletLauncher } from './ui/mobile_wallet_launcher';
 import { mobileMountAction } from './ui/mount_quick_summon';
 import { applyNativeDeviceLanguage } from './ui/native_language';
 import { scheduleNativeUpdateCheck } from './ui/native_update_prompt';
 import { loadNewsInto } from './ui/news_feed';
+import { hideOtaUpdateOverlay, renderOtaUpdateOverlay } from './ui/ota_update_overlay';
 import { createMetricsSampler } from './ui/perf_metrics_sampler';
 import { applyPerfOrnamentVars } from './ui/perf_ornament_svg';
 import { PerfOverlay } from './ui/perf_overlay';
@@ -398,7 +484,7 @@ import {
   isCompleteTotpCode,
 } from './ui/two_factor_setup';
 import { UiEffectsApplier } from './ui/ui_effects_applier';
-import { hydrateIcons } from './ui/ui_icons';
+import { hydrateIcons, svgIcon } from './ui/ui_icons';
 import {
   resolveWocBalanceUpdate,
   setWalletConnectionAddresses,
@@ -408,8 +494,8 @@ import {
   shouldDisconnectUnverifiedWallet,
 } from './ui/wallet_balance';
 import { buildWalletConnectionView } from './ui/wallet_connection_view';
-import { formatXp } from './ui/xp_bar';
-import type { IWorld, LeaderboardEntry } from './world_api';
+import type { IWorld } from './world_api';
+import { ONLINE_WORLD_INCOMPATIBLE_MESSAGE } from './world_api';
 
 const CLICK_MOVE_TURN_RATE = 4.2; // rad/sec; responsive turning while the camera stays decoupled from click spam
 const CLICK_MOVE_WAYPOINT_STOP = 0.8; // yards; intermediate A* corners should roll through, not stutter-stop
@@ -443,10 +529,36 @@ if (NATIVE_APP) document.body.classList.add('mobile-touch');
 // Electron shell integration: push t()-localized crash-dialog strings to the
 // main process and render the auto-update toast (no-op without the bridge).
 if (DESKTOP_APP) initDesktopShellIntegration();
+// Reflect the shell's STORED GPU preference into the local setting, so the
+// desktop-only options row shows what the next launch will do rather than a
+// local guess. Writes nothing without the bridge method (older shell, browser).
+// The store is resolved by the factory AFTER the bridge answers: a snapshot
+// taken before the round trip would rewrite the whole settings blob over any
+// write that landed while it was in flight. And when a fast entry path has
+// already built startGame's long-lived store, the factory answers with THAT
+// instance instead of a fresh snapshot: a fresh one would land the reflection
+// only in localStorage, where the live store's next unrelated save() (a
+// whole-blob rewrite) would silently revert it.
+let liveSettings: Settings | null = null;
+const settingsForShellReflection = (): Settings => liveSettings ?? new Settings();
+if (DESKTOP_APP) void syncDesktopGpuPrefSetting(desktopBridge(), settingsForShellReflection);
+if (DESKTOP_APP) void syncDesktopDisplayModeSetting(desktopBridge(), settingsForShellReflection);
 // Free every WebGL context (game renderer, character preview, portrait rig) when
 // the page is torn down, so logout/login reload cycles don't exhaust the GPU
 // context pool and break the next renderer with "Error creating WebGL context".
 installWebGLContextRelease();
+// World-only GLB textures (props, dungeon, biome, ...) drop their CPU-side
+// transcoded mip chains after GPU upload. Only the GAME entry opts in: here,
+// every renderer that can draw those categories is the world renderer, whose
+// context loss and recycle paths route through the re-transcode hook below.
+// The editor and guide entries never call this, so their extra renderers
+// (asset thumbnails, wiki viewer) keep resident mips. Runs at module
+// evaluation so no deferred-preload GLB can classify before the switch is on.
+// The probe reads the LIVE GFX binding (initGfxTier and graphics rebuilds
+// reassign it): constrained-memory profiles (the whole iOS WebKit ladder plus
+// phone-class browsers) keep resident mips, because their semi-routine
+// in-place context loss has no curtain for the restore's re-transcode window.
+enableKtx2MipRelease(() => GFX.constrainedMemory);
 let pendingDeleteCharacter: CharacterSummary | null = null;
 // The desktop roster shows one shared "Enter World" button (in .cs-list-actions)
 // instead of a per-row one; it acts on whichever character is selected. Mobile
@@ -497,6 +609,7 @@ const RESOURCE_KEYS = {
   mana: 'classDetails.resources.mana',
   energy: 'classDetails.resources.energy',
   rage: 'classDetails.resources.rage',
+  focus: 'classDetails.resources.focus',
 } satisfies Record<string, TranslationKey>;
 
 function classDisplayDescription(className: PlayerClass): string {
@@ -706,10 +819,26 @@ syncAppViewport();
 syncBuildInfo();
 scheduleNativeUpdateCheck(__APP_VERSION__);
 void notifyOtaAppReady();
+// Visible OTA gate (native shells only; installOtaUpdateGate is inert
+// elsewhere): shows the auto-updater's download progress over the start
+// screens, applies a finished download immediately pre-world instead of
+// waiting for a backgrounding, and upgrades the incompatible-version dead end
+// into "updating now" (the onDisconnect arm consults it before fatalOverlay).
+const otaUpdateGate = installOtaUpdateGate({
+  overlay: {
+    render: renderOtaUpdateOverlay,
+    hide: hideOtaUpdateOverlay,
+  },
+  isInWorld: () => document.body.classList.contains('game-active'),
+  onFatalRecoveryFailed: () => fatalOverlay(userFacingApiError(ONLINE_WORLD_INCOMPATIBLE_MESSAGE)),
+});
 preventMobileZoom();
 syncPhoneTouchClass();
 window.matchMedia(PHONE_TOUCH_QUERY).addEventListener?.('change', syncPhoneTouchClass);
 window.addEventListener('resize', syncAppViewport);
+// The cross hotbar's lift depends on how tall it renders, which changes with the
+// window and the interface scale, so it is re-measured rather than assumed.
+window.addEventListener('resize', measureCrossHotbarLift);
 window.addEventListener('orientationchange', () => {
   syncAppViewport();
   window.setTimeout(syncAppViewport, 250);
@@ -910,6 +1039,8 @@ function exitBrowserFullscreen(): void {
 
 function requestPreferredFullscreen(): void {
   if (NATIVE_APP) return;
+  // The shell's own display mode owns the window (older shells fail the check).
+  if (desktopDisplayModeSupported(desktopBridge())) return;
   if (useTouchInterface()) {
     requestMobileFullscreenLandscape();
     return;
@@ -926,6 +1057,8 @@ const LOADING_TIP_ROTATE_MS = 5000;
 let loadingHideTimer: number | null = null;
 let loadingTipRotation: LoadingTipRotation | null = null;
 let loadingTipTimer: number | null = null;
+const loadingBackdrop = new LoadingBackdropController($('#loading-screen'), assetUrl);
+loadingBackdrop.prepareInitial();
 
 function loadingCurtainFadeDelayMs(): number {
   const osReducedMotion =
@@ -943,6 +1076,7 @@ function showLoadingScreen(statusText: string): void {
   }
   el.classList.remove('fade');
   el.classList.add('visible');
+  if (!wasVisible) loadingBackdrop.enterNewCycle();
   if (!wasVisible) $('#ls-fill').style.width = '0%';
   setLoadingStatus(statusText);
   startLoadingTips();
@@ -1003,6 +1137,7 @@ function hideLoadingScreen(): void {
   loadingHideTimer = window.setTimeout(() => {
     el.classList.remove('visible', 'fade');
     loadingHideTimer = null;
+    loadingBackdrop.prepareNextCycle();
   }, loadingCurtainFadeDelayMs());
 }
 
@@ -1108,6 +1243,14 @@ async function startGame(
   // hoisting them ahead of mountGameUi is safe; everything DOM-bound (canvas
   // lookups, the context-lost listeners) stays below, after the template mounts.
   const settings = new Settings();
+  // Publish the long-lived store for the boot-time shell reflections
+  // (settingsForShellReflection): a bridge read resolving after this line
+  // writes into THIS instance rather than a doomed parallel snapshot.
+  liveSettings = settings;
+  // "Stop Auto-Attack on Target Switch" (issue #1358) is authoritative on the
+  // sim, so a stored player preference must be re-pushed on every world entry
+  // (offline sim or online server), not just when the Options toggle changes.
+  world.setStopAutoAttackOnTargetSwitch(settings.get('stopAutoAttackOnTargetSwitch'));
   // First-run graphics default: until a device default has been applied (the dedicated
   // graphicsDefaultApplied marker, NOT the graphicsPreset key, which save() def-fills the moment
   // any unrelated setting is stored), probe the device (GPU name, memory, cores, touch) and
@@ -1179,7 +1322,7 @@ async function startGame(
       ...baseEntryDiagnostics(),
       tier: stats.tier,
       constrainedMemory: GFX.constrainedMemory,
-      nativeIosMemoryProfile: GFX.nativeIosMemoryProfile,
+      iosMemoryProfile: GFX.iosMemoryProfile,
       tightMemory: GFX.tightMemory,
       dynamicShadows: GFX.dynamicShadows,
       shadowMap: GFX.shadowMap,
@@ -1244,25 +1387,37 @@ async function startGame(
   // now reads as checkpoint=assets-await instead of masquerading as a scene-build
   // death (start() stamps scene-build-start; the real one is re-stamped below).
   entryDiagnostics.checkpoint('assets-await', baseEntryDiagnostics());
-  // Lazy locale flip: fetch the active locale's chunk (plus the deed locale chunk the HUD's
-  // deed surfaces read) and make both resident before the HUD renders (mountGameUi ->
+  // Open the deferred preload lane BEFORE the locale fetch below, not after: the
+  // world's assets are local bundle files while the locale/deed chunks are a real
+  // network request, so starting both together overlaps two independent boot-time
+  // fetches instead of paying their durations back to back. This must still run
+  // before the assetsReady() await further down, which snapshots the task list, so
+  // the Renderer still cannot outrun a load (the world's assets do not fetch at
+  // module import any more, because decoding them merely to show the LAUNCHER
+  // crossed WKWebView's per-process ceiling: a 12 GB iPhone 17 Pro was killed
+  // 1.6 s in and reloaded forever).
+  const deferredStarted = beginDeferredPreloads();
+  console.info(`[entry-guard] world assets: started ${deferredStarted} deferred preloads`);
+  // Lazy locale flip: fetch the active locale's chunk (plus the deed and reliquary locale
+  // chunks the HUD's deed and collection surfaces read) and make them all resident before
+  // the HUD renders (mountGameUi ->
   // translatePage fans out hundreds of t() calls). It sits behind the loading screen (already
   // painted above), so a stored non-en visitor never sees an English flash. This is now a
   // REAL per-locale network request, so guard it: startGame is void-invoked (see the call
   // sites) with no .catch, and English is always resident, so a failed fetch must fall back
-  // to English and keep booting rather than reject unhandled.
+  // to English and keep booting rather than reject unhandled. Runs concurrently with the
+  // deferred asset preloads started just above.
+  loadPhaseStart('locale-fetch');
   try {
-    await Promise.all([ensureLocaleLoaded(getLanguage()), ensureDeedLocalesLoaded(getLanguage())]);
+    await Promise.all([
+      ensureLocaleLoaded(getLanguage()),
+      ...CONTENT_LOCALE_CHANNEL_ENSURERS.map((ensure) => ensure(getLanguage())),
+    ]);
   } catch {
     // Soft fallback: English is statically resident; boot in English (the picker can retry).
   }
-  // Open the deferred preload lane: the world's assets do not fetch at module
-  // import any more, because decoding them merely to show the LAUNCHER crossed
-  // WKWebView's per-process ceiling (a 12 GB iPhone 17 Pro was killed 1.6 s in and
-  // reloaded forever). This must run BEFORE the await below, which snapshots the
-  // task list, so the Renderer still cannot outrun a load.
-  const deferredStarted = beginDeferredPreloads();
-  console.info(`[entry-guard] world assets: started ${deferredStarted} deferred preloads`);
+  loadPhaseEnd('locale-fetch');
+  loadPhaseStart('assets-ready');
   try {
     await assetsReady((done, total) => setLoadingProgressRange(done, total, 0, 35));
   } catch (err) {
@@ -1277,8 +1432,10 @@ async function startGame(
   // speak to; everything after this is synchronous CPU-bound scene build, so
   // stop watching here rather than leaving it armed through hideLoadingScreen.
   stopSlowConnectionWatch();
+  loadPhaseEnd('assets-ready');
   const spectateBadge = createSpectateBadge();
   setLoadingStatus(t('loading.enteringWorld'));
+  loadPhaseStart('mount-ui');
   // Let the final status + full progress bar paint before the synchronous
   // Renderer/Hud build freezes the main thread for a beat.
   await nextPaint();
@@ -1291,10 +1448,12 @@ async function startGame(
   // UI theming: apply the persisted theme's CSS variables to :root, then keep a
   // hook so the Options panel can switch preset / override colours live.
   const themeStore = new ThemeStore();
+  let mapMarkerPaletteLifecycle: ReturnType<typeof installMapMarkerPaletteLifecycle> | null = null;
   function applyTheme(): void {
     const vars = themeStore.cssVars();
     for (const name of Object.keys(vars))
       document.documentElement.style.setProperty(name, vars[name]);
+    mapMarkerPaletteLifecycle?.notify();
   }
   applyTheme();
   // Graphics-tier HUD effects: publish the resolved effect profile (data-fx-level +
@@ -1316,8 +1475,13 @@ async function startGame(
   });
   uiEffectsApplier.applyNow();
   const autoLoot = new AutoLoot();
-  const perf = createPerfMonitor(null);
+  const perf = createPerfMonitor(null, DESKTOP_APP);
   canvas.addEventListener('webglcontextlost', () => {
+    // Start re-transcoding released KTX2 mip chains NOW: the restored (or
+    // recycled) context re-uploads from texture.mipmaps, and the sooner the
+    // worker starts the shorter any stub-black window. Fires for in-place GPU
+    // loss AND the graphics-rebuild recycle (both dispatch on this canvas).
+    ktx2MipsOnContextLost();
     entryDiagnostics.checkpoint('webgl-context-lost', {
       ...renderEntryDiagnostics(),
       contextLost: rendererReady ? renderer.perfStats().contextLost + 1 : 1,
@@ -1331,16 +1495,43 @@ async function startGame(
   // The probe was armed before the locale/asset awaits above; mark that the await
   // window ended and the synchronous scene build is what runs next.
   entryDiagnostics.checkpoint('scene-build-start', baseEntryDiagnostics());
+  loadPhaseEnd('mount-ui');
   try {
     setLoadingPercent(37, t('loading.enteringWorld'));
-    await ensureSkyAssetsAt(world.player.pos.x, world.player.pos.z);
+    await loadSpanAsync('sky-assets', () =>
+      ensureSkyAssetsAt(world.player.pos.x, world.player.pos.z),
+    );
     setLoadingPercent(40, t('loading.enteringWorld'));
-    renderer = new Renderer(world, canvas, nameplates);
+    // Compose EVERY player's body from their authored appearance: the look
+    // now rides the identity wire (`app`, set at join from the character's
+    // own DB column), so peers compose exactly what the owner designed,
+    // local player included, from the same server truth. An entity with no
+    // authored look (a pre-creator character) keeps the fixed class rig, and
+    // a Combat Mech wearer keeps the mech (createCharacterVisual gates it).
+    // The kit's helm follows each entity's OWN `helmHidden` wire bit (the
+    // paperdoll eye toggle), so peers see the owner's choice. Per-entity
+    // wire JSON is normalized at compose time (visual build, not per frame):
+    // hostile or stale payloads clamp to a valid body.
+    // Non-players compose too: NPCs resolve authored looks by templateId
+    // (static data on every host; the why lives in characters/npc_looks.ts).
+    setModularLookProvider((e) =>
+      e.kind === 'player'
+        ? inWorldLookFor(e, armorSetForEntity(e.id === world.playerId))
+        : npcLookFor(e.templateId, e.kind),
+    );
+    // No helmet re-assert here on purpose. The preference is per CHARACTER
+    // now: set from the creator's toggle at creation, changed by the paperdoll
+    // eye afterwards, and serialized into that character's own saved state.
+    // The device-global localStorage key this used to read forced ONE
+    // character's choice onto every character on the machine.
+    renderer = loadSpan('renderer-ctor', () => new Renderer(world, canvas, nameplates));
     rendererReady = true;
+    publishGpuHitchRuntimeReceipt({ search: location.search, renderer: renderer.perfStats() });
     renderer.setAudioSink(sfx);
     renderer.showDevBadges = settings.get('showDevBadges');
     renderer.showOwnNameplate = settings.get('showOwnNameplate');
     renderer.showPlayerNameplates = settings.get('showPlayerNameplates');
+    renderer.setWaterRipples(settings.get('waterRipples'));
     // Dev-only: ?targetcone=1 draws the Tab-target front cone on the ground in
     // front of the player, for tuning the targeting angle/radius (tab_target.ts).
     if (import.meta.env.DEV && new URLSearchParams(location.search).get('targetcone') === '1') {
@@ -1351,7 +1542,7 @@ async function startGame(
     // was ACTUALLY built at (vs the preset logged above), plus the memory-profile knobs.
     console.info(
       `[entry-guard] scene built: tier=${GFX.tier} constrainedMemory=${GFX.constrainedMemory} ` +
-        `nativeIosMemoryProfile=${GFX.nativeIosMemoryProfile} ` +
+        `iosMemoryProfile=${GFX.iosMemoryProfile} ` +
         `pooledVisualCap=${GFX.maxPooledCharacterVisuals} ` +
         `dynamicShadows=${GFX.dynamicShadows} shadowMap=${GFX.shadowMap} ` +
         `msaa=${GFX.msaaSamples} dprCap=${GFX.pixelRatioCap}`,
@@ -1360,16 +1551,27 @@ async function startGame(
     // One-time software-rendering notice (WARP/SwiftShader): the Renderer
     // constructor ran initGfxTier, so the adapter verdict is resolved by now.
     initSoftwareRenderNotice(DESKTOP_APP);
+    loadPhaseStart('hud-ctor');
     hud = new Hud(world, renderer, keybinds, {
       dailyRewardsEnabled: NATIVE_APP ? await walletCapabilityReady : true,
       devCommandsEnabled: import.meta.env.DEV,
       constrainedMemory: GFX.constrainedMemory,
     });
+    setThornhollowPrewarmHooks({
+      startPreview: () => battlegroundAssetPrewarm.startPreview(),
+      pausePreview: () => battlegroundAssetPrewarm.pausePreview(),
+      commit: () => void battlegroundAssetPrewarm.commit(),
+    });
+    mapMarkerPaletteLifecycle = installMapMarkerPaletteLifecycle(window, () =>
+      hud.refreshMapMarkerArtPalette(),
+    );
+    loadPhaseEnd('hud-ctor');
     perf.setHud(hud);
     // Every zone the renderer makes resident (boot, teleport warmup, or the
     // background streaming lane) also prewarms its world-map background, so
     // opening the map right after a crossing never pays the terrain render.
     renderer.onZonePrepared = (zoneId) => hud.queueMapBgPrewarm(zoneId);
+    loadPhaseStart('icon-plan');
     hydrateIcons(); // swap [data-icon] placeholders (micro-menu, mobile bar, meters) for inline SVG
     applyPerfOrnamentVars(); // Performance Overlay window's gilded corner/edge masks
     applyMinimapOrnamentVars(); // minimap disc's gilded ring
@@ -1380,49 +1582,49 @@ async function startGame(
     // rest of the catalog stays in the idle lane. This removes synchronous PNG
     // encoding from the first bags/character/spellbook/vendor open without
     // moving that work onto the main thread.
-    const iconPriorities: IconPrewarmEntry[] = [];
-    const prioritizeItem = (id: string | null | undefined): void => {
-      if (id) iconPriorities.push({ kind: 'item', id });
-    };
-    for (const id of Object.values(world.equipment)) prioritizeItem(id);
     // Party frames render compact 20px crests, while profile/Inspect chips use
     // 96px badges. Cache keys include size, so warm both exact consumer
     // dimensions; otherwise the first inspected player synchronously encodes a
     // procedural crest even though its 3D portrait is already cached.
-    for (const cls of ALL_CLASSES) {
-      iconPriorities.push({ kind: 'crest', id: `class_${cls}`, size: 20 });
-      iconPriorities.push({ kind: 'crest', id: `class_${cls}`, size: 96 });
-    }
-    for (const slot of world.inventory) prioritizeItem(slot.itemId);
-    for (const id of world.bags) prioritizeItem(id);
-    for (const ability of world.known) iconPriorities.push({ kind: 'ability', id: ability.def.id });
-    // Spellbook paints the whole class kit, including not-yet-learned rows.
-    for (const id of CLASSES[world.cfg.playerClass].abilities)
-      iconPriorities.push({ kind: 'ability', id });
     // Talent row options also use procedural crest ids that are absent from
     // ABILITIES, plus granted abilities not guaranteed to be in the base kit.
-    for (const row of rowTreeFor(world.cfg.playerClass) ?? []) {
-      for (const option of row.options) iconPriorities.push(talentRowOptionIconRef(option));
-    }
-    for (const recipe of world.recipeList) prioritizeItem(recipe.resultItemId);
-    for (const id of finderLootItemIds()) prioritizeItem(id);
     // Gossip/quest-log reward rows and the heroic marks shop can be opened from
     // navigation chrome before the all-items idle sweep reaches their ids.
-    for (const entity of world.entities.values()) {
-      for (const questId of entity.questIds) {
-        const quest = QUESTS[questId];
-        if (quest) prioritizeItem(questRewardItem(quest, world.cfg.playerClass));
-      }
-    }
-    for (const offer of HEROIC_VENDOR_STOCK) prioritizeItem(offer.itemId);
-    for (const listing of world.marketInfo?.listings ?? []) prioritizeItem(listing.itemId);
-    for (const slot of world.marketInfo?.collectionItems ?? []) prioritizeItem(slot.itemId);
-    for (const listing of MARKET_HOUSE_STOCK) prioritizeItem(listing.itemId);
-    for (const entity of world.entities.values())
-      for (const id of entity.vendorItems) prioritizeItem(id);
+    const worldEntities = [...world.entities.values()];
+    const iconPriorities = contextualIconPrewarmEntries({
+      equipmentItemIds: Object.values(world.equipment),
+      classIds: ALL_CLASSES,
+      inventoryItemIds: world.inventory.map((slot) => slot.itemId),
+      bagItemIds: world.bags,
+      knownAbilityIds: world.known.map((ability) => ability.def.id),
+      // Spellbook paints the whole class kit, including not-yet-learned rows.
+      classAbilityIds: CLASSES[world.cfg.playerClass].abilities,
+      talentIconRefs: (rowTreeFor(world.cfg.playerClass) ?? []).flatMap((row) =>
+        row.options
+          .map(talentRowOptionIconRef)
+          // Paladin talent art is a real .webp the browser fetches directly;
+          // only procedural icon-cache refs participate in the prewarm plan.
+          .filter((ref) => ref.kind !== 'image'),
+      ),
+      recipeResultItemIds: world.recipeList.map((recipe) => recipe.resultItemId),
+      finderLootItemIds: finderLootItemIds(),
+      questRewardItemIds: worldEntities.flatMap((entity) =>
+        entity.questIds.flatMap((questId) => {
+          const quest = QUESTS[questId];
+          return quest ? [questRewardItem(quest, world.cfg.playerClass)] : [];
+        }),
+      ),
+      heroicVendorItemIds: HEROIC_VENDOR_STOCK.map((offer) => offer.itemId),
+      marketListingItemIds: (world.marketInfo?.listings ?? []).map((listing) => listing.itemId),
+      marketCollectionItemIds: (world.marketInfo?.collectionItems ?? []).map((slot) => slot.itemId),
+      marketHouseItemIds: MARKET_HOUSE_STOCK.map((listing) => listing.itemId),
+      vendorItemIds: worldEntities.flatMap((entity) => entity.vendorItems),
+    });
     const iconPrewarm = defaultIconPrewarmPlan(iconPriorities);
     prewarmIconCache(iconPrewarm.entries, { eagerCount: iconPrewarm.priorityCount });
+    loadPhaseEnd('icon-plan');
     entryDiagnostics.checkpoint('hud-built');
+    loadPhaseStart('wiring');
   } catch (err) {
     // e.g. WebGL context creation failure: surface it instead of leaving the
     // loading screen up forever. A HANDLED failure is not a process kill, so the
@@ -1440,8 +1642,6 @@ async function startGame(
     entryDiagnostics.markStable('[entry-guard] world entry stable; runtime probe armed');
   }, ENTRY_PROBE_STABLE_MS);
 
-  // Offline only: expose the dev "2v2 Fiesta vs Bots" practice toggle to the HUD.
-  if (offlineSim) hud.setFiestaPracticeHook(() => offlineSim.startFiestaPractice());
   // The Vale Cup practice-vs-bots button (the window calls world.vcupPracticeStart
   // through IWorld). Private instanced practice works online AND offline, so the
   // button is always available.
@@ -1564,9 +1764,18 @@ async function startGame(
   });
   // Dev-only chat command to scrub the world day/night cycle for testing:
   //   /daynight night|dawn|day|dusk|<0..1>|auto   (also /dev daynight, /dev time)
+  //   /daynight moon new|crescent|half|full|<0..1>|auto   (the lunar phase)
   // Render-only: it just overrides the shared clock phase (day_night_clock), so
   // the sky lighting and the minimap dial both jump to the chosen time of day.
   // Returns true when it handled the input (so it is not also sent to chat).
+  const MOON_PRESETS: Record<string, number> = {
+    new: 0,
+    crescent: 0.125,
+    half: 0.25,
+    quarter: 0.25,
+    gibbous: 0.375,
+    full: 0.5,
+  };
   const DAY_NIGHT_PRESETS: Record<string, number> = {
     midnight: 0,
     night: 0,
@@ -1591,6 +1800,31 @@ async function startGame(
     const arg = m[1].trim().toLowerCase();
     if (!arg) {
       hud.log('[dev] usage: /daynight night|dawn|day|dusk|<0..1>|auto', '#ffcf6a');
+      hud.log('[dev]        /daynight moon new|crescent|half|full|<0..1>|auto', '#ffcf6a');
+      return true;
+    }
+    const moonArg = arg.match(/^moon\s*(.*)$/);
+    if (moonArg) {
+      const moonWord = moonArg[1].trim();
+      if (!moonWord || ['auto', 'off', 'real', 'resume', 'clear'].includes(moonWord)) {
+        setLunarPhaseOverride(null);
+        hud.log('[dev] moon resumed (real lunar clock)', '#8fd0ff');
+        return true;
+      }
+      let moonPhase: number | null = moonWord in MOON_PRESETS ? MOON_PRESETS[moonWord] : null;
+      if (moonPhase === null) {
+        const n = Number.parseFloat(moonWord);
+        if (Number.isFinite(n)) moonPhase = ((n % 1) + 1) % 1;
+      }
+      if (moonPhase === null) {
+        hud.log(
+          `[dev] unknown moon "${moonWord}" - try new|crescent|half|full|<0..1>|auto`,
+          '#ffcf6a',
+        );
+        return true;
+      }
+      setLunarPhaseOverride(moonPhase);
+      hud.log(`[dev] moon set to ${moonWord} (lunar phase ${moonPhase.toFixed(2)})`, '#8fd0ff');
       return true;
     }
     if (['auto', 'off', 'real', 'resume', 'clear'].includes(arg)) {
@@ -1705,18 +1939,24 @@ async function startGame(
   chatDismiss?.addEventListener('click', () => chatInput.blur());
 
   // One keyboard/gamepad action gate for every blocking client surface. The
-  // camera prompt lives outside Hud, so it reports its open state explicitly.
+  // camera prompt lives outside Hud, so it reports its open state explicitly, and
+  // chat reports both its presence and its focus (only the latter blocks; see
+  // gameplay_input_gate.ts).
   const gameplayInputBlocked = () =>
-    graphicsRebuildPaused ||
-    hud.isModalOpen() ||
-    hud.promptModalOpen() ||
-    cameraPromptOpen() ||
-    chatInput.style.display === 'block';
+    isGameplayInputBlocked({
+      graphicsRebuildPaused,
+      modalOpen: hud.isModalOpen(),
+      promptModalOpen: hud.promptModalOpen(),
+      cameraPromptOpen: cameraPromptOpen(),
+      chatComposerVisible: chatInput.style.display === 'block',
+      chatComposerFocused: document.activeElement === chatInput,
+    });
 
   const input = new Input(
     canvas,
     {
       onTab: () => world.tabTarget(),
+      onTabPrev: () => world.tabTargetPrev(),
       onTargetFriendly: () => world.targetNearestFriendly(),
       onCycleFriendly: () => world.friendlyTabTarget(),
       // Pet bar (Ctrl+1..5 by default): drive the existing IWorld pet commands.
@@ -1726,6 +1966,10 @@ async function startGame(
         else if (action === 'stop') world.setPetMode('passive');
         else world.setPetMode(action); // 'defensive' | 'aggressive'
       },
+      // Ctrl+6 by default: select your own pet, the keyboard route to what clicking
+      // the pet frame does (one implementation, on the Hud, which owns the roster
+      // scan that resolves the pet).
+      onTargetPet: () => hud.targetOwnPet(),
       // slot 0 (key 1) is Attack for every class, auto-attack without needing
       // right-click; keys and clicks share the Hud's remappable slot layout
       onAbility: (slot) => hud.castSlot(slot),
@@ -1783,6 +2027,9 @@ async function startGame(
           case 'rally':
             hud.toggleRealmRacers();
             break;
+          case 'bgFlag':
+            bgFlagKey();
+            break;
           case 'mount':
             // Ride the pick immediately (every player always has one; the
             // character sheet's picker is where the pick changes).
@@ -1802,6 +2049,9 @@ async function startGame(
             break;
           case 'professions':
             hud.toggleProfessions();
+            break;
+          case 'reliquary':
+            hud.toggleReliquary();
             break;
           case 'sheathe': {
             // Cosmetic sheathe toggle (Z). The world owns the rule (dead-gate,
@@ -1884,6 +2134,7 @@ async function startGame(
     onSocial: () => hud.toggleSocial(),
     onDiscord: () => openDiscordEntry(),
     onDonate: () => window.open(DONATE_URL, '_blank', 'noopener,noreferrer'),
+    onWiki: () => hud.openWiki(),
     onEmotes: () => hud.toggleEmoteWheel(),
     onArena: () => hud.toggleArena(),
     onDungeonFinder: () => hud.toggleDungeonFinder(),
@@ -1902,6 +2153,7 @@ async function startGame(
     onLeaderboard: () => hud.toggleLeaderboard(),
     onDailyRewards: () => hud.toggleDailyRewards(),
     onDeeds: () => hud.toggleDeeds(),
+    onReliquary: () => hud.toggleReliquary(),
     onMountToggle: () => {
       // Dismount is the shared toggleMounted() path (unchanged); summoning an
       // owned mount from a single tap goes through its reins item directly,
@@ -1985,8 +2237,21 @@ async function startGame(
     });
   }, APM_BEAT_MS);
   const gamepadBindings = new GamepadBindings();
+  const crossHotbar = createCrossHotbar(() => hud, keybindScope);
   const canUseGameKeysNow = () => !gameplayInputBlocked();
   function dispatchGamepadAction(id: string): void {
+    // Cancel backs out one step at a time: the top window, then the target. Only
+    // once there is nothing left to leave does the game menu come up, which is
+    // what keeps this distinct from the menu button rather than a second copy.
+    if (id === GAMEPAD_CANCEL) {
+      if (dismissCameraPrompt() || hud.cancelGroundAim() || hud.closeAll()) return;
+      world.targetEntity(null);
+      return;
+    }
+    if (id === GAMEPAD_CYCLE_HUD) {
+      cycleHudFocus();
+      return;
+    }
     if (id === 'escape') {
       if (dismissCameraPrompt()) return;
       if (hud.cancelGroundAim()) return;
@@ -2003,9 +2268,26 @@ async function startGame(
       case 'target':
         world.tabTarget();
         break;
+      case 'targetPrev':
+        world.tabTargetPrev();
+        break;
       case 'targetFriendly':
         world.targetNearestFriendly();
         break;
+      // Selecting the people you talk to. The sim's friendly cycle answers heal
+      // eligibility and so skips every quest giver, which left a pad player with
+      // no way to pick one; targetEntity is the seam that already exists for it.
+      case 'targetNpcNext':
+      case 'targetNpcPrev': {
+        const next = nextNpcTarget(
+          world.entities.values(),
+          world.player.pos,
+          world.player.targetId ?? null,
+          id === 'targetNpcNext' ? 1 : -1,
+        );
+        if (next !== null) world.targetEntity(next);
+        break;
+      }
       case 'targetFriendlyNext':
         world.friendlyTabTarget();
         break;
@@ -2021,7 +2303,7 @@ async function startGame(
           world.useItem(reelRod);
           break;
         }
-        interactKey();
+        padTargetPick.interact();
         break;
       }
       case 'bags':
@@ -2039,6 +2321,14 @@ async function startGame(
       case 'map':
         hud.toggleMap();
         break;
+      // The target's subcommands, or the map when there is no target: one button
+      // for "what can I do with this", the way a console MMO spends its left face
+      // button. The menu itself is the one the mouse opens by right-clicking, so
+      // there is no second menu to keep in step with it.
+      case GAMEPAD_SUBCOMMANDS: {
+        if (!openTargetSubcommands()) hud.toggleMap();
+        break;
+      }
       case 'nameplates':
         renderer.showNameplates = !renderer.showNameplates;
         break;
@@ -2063,6 +2353,9 @@ async function startGame(
       case 'rally':
         hud.toggleRealmRacers();
         break;
+      case 'bgFlag':
+        bgFlagKey();
+        break;
       case 'mount':
         world.toggleMounted();
         break;
@@ -2080,6 +2373,9 @@ async function startGame(
         break;
       case 'professions':
         hud.toggleProfessions();
+        break;
+      case 'reliquary':
+        hud.toggleReliquary();
         break;
       case 'crafting':
         // The controller panel has always OFFERED this bind (it lists every
@@ -2104,6 +2400,9 @@ async function startGame(
         break;
       case 'petAggressive':
         world.setPetMode('aggressive');
+        break;
+      case 'targetPet':
+        hud.targetOwnPet();
         break;
       case 'dungeonFinder':
         hud.toggleDungeonFinder();
@@ -2134,8 +2433,16 @@ async function startGame(
         document.getElementById('race-start-btn')?.style.display === 'block',
       ),
     getPlayerHealth: () => (world.player.dead ? 0 : world.player.hp),
-    onConnectionChange: () => hud.refreshControllerLabels(),
+    onConnectionChange: () => crossHotbar.syncPadMode(gamepad),
+    onActivity: createGamepadActivityNotifier(desktopBridge()),
+    onCrossHotbarCast: (action) => {
+      padTargetPick.autoTarget(action);
+      hud.castCrossHotbarAction(action);
+    },
+    onOpenSpellbook: () => hud.openSpellbook(),
+    ...crossHotbar.padCallbacks(() => gamepad.getKind()),
   });
+  crossHotbar.attach(gamepad);
   // The startup apply-all loop (below) calls applySetting('gamepadEnabled', ...)
   // which starts/stops the manager and pushes the saved deadzone/speed/vibration.
 
@@ -2260,6 +2567,13 @@ async function startGame(
       settings.set('startAttackOnAbilityUse', !!value);
       return;
     }
+    if (key === 'stopAutoAttackOnTargetSwitch') {
+      // Authoritative on the sim (issue #1358): persist locally AND mirror the
+      // live value onto the player, so the very next target switch honors it.
+      const v = settings.set('stopAutoAttackOnTargetSwitch', !!value);
+      world.setStopAutoAttackOnTargetSwitch(v);
+      return;
+    }
     if (key === 'showAttackButton') {
       // Slot-0 mode switch, read LIVE by the HUD (attackSlotIsAttack): ON keeps the
       // classic Attack toggle; OFF turns the first slot into a normal assignable one
@@ -2272,10 +2586,17 @@ async function startGame(
       if (!v) hud.cancelGroundAim();
       return;
     }
+    if (key === 'waterRipples') {
+      // The wake height field lives renderer-side (render modules never read
+      // the settings store), so the flip is pushed rather than read live.
+      renderer.setWaterRipples(settings.set('waterRipples', !!value));
+      return;
+    }
     if (
       key === 'partyFrameShowResource' ||
       key === 'partyFrameShowAbsorbs' ||
       key === 'partyFrameShowAuras' ||
+      key === 'partyFrameShowPets' ||
       key === 'partyFrameShowSelf'
     ) {
       // Read live by Hud.updatePartyFrames (its config is rebuilt from settings each
@@ -2317,6 +2638,15 @@ async function startGame(
       document.body.classList.toggle('compact-chat', settings.set('compactChat', !!value));
       return;
     }
+    if (key === 'hideUnusedActionSlots') {
+      // Purely presentational (issue 2429): a body class the action-bar CSS reads
+      // to strip the empty-slot chrome. No live subsystem to update.
+      document.body.classList.toggle(
+        'hide-unused-action-slots',
+        settings.set('hideUnusedActionSlots', !!value),
+      );
+      return;
+    }
     if (key === 'showSecondaryActionBar' || key === 'showThirdActionBar') {
       const visibility = resolveActionBarVisibility(
         {
@@ -2334,6 +2664,10 @@ async function startGame(
     }
     if (key === 'showTargetOfTarget') {
       hud.setShowTargetOfTarget(settings.set('showTargetOfTarget', !!value));
+      return;
+    }
+    if (key === 'showPetFrame') {
+      hud.setShowPetFrame(settings.set('showPetFrame', !!value));
       return;
     }
     if (key === 'showDailyRewardsChest') {
@@ -2357,6 +2691,26 @@ async function startGame(
       settings.set('showWalletOnPlayerCard', !!value);
       return;
     }
+    if (key === 'showPlaytime') {
+      settings.set('showPlaytime', !!value);
+      // The character sheet is a cold window (no repeating driver), so repaint
+      // it now; this is also the repaint the sheet's own privacy eye relies on
+      // (its toggle routes through this arm).
+      hud.renderCharIfOpen();
+      return;
+    }
+    if (key === 'forceHighPerfGpu') {
+      // The push owns the inversion (the shell stores the opt-out) and swallows
+      // a failed write; the shell applies it at its next launch, so nothing in
+      // the running session changes.
+      pushDesktopGpuPref(desktopBridge(), settings.set('forceHighPerfGpu', !!value));
+      return;
+    }
+    if (key === 'discordPresence') {
+      // Same polarity on both sides: the shell drops its RPC connection on false.
+      pushDiscordPresenceEnabled(desktopBridge(), settings.set('discordPresence', !!value));
+      return;
+    }
     if (key === 'showDevBadges') {
       renderer.showDevBadges = settings.set('showDevBadges', !!value);
       return;
@@ -2377,12 +2731,17 @@ async function startGame(
       const v = settings.set('gamepadEnabled', !!value);
       if (v) gamepad.start();
       else gamepad.stop();
+      // stop() releases the pad without an onConnectionChange, so pad mode has to
+      // be re-read here or the player who just turned the controller off is left
+      // with the desktop rows hidden behind a dead cross hotbar.
+      crossHotbar.syncPadMode(gamepad);
       return;
     }
     if (key === 'gamepadInvertY') {
       gamepad.setInvertY(settings.set('gamepadInvertY', !!value));
       return;
     }
+    if (crossHotbar.applySetting(gamepad, settings, key, value)) return;
     if (key === 'voiceEnabled') {
       voice.setEnabled(settings.set('voiceEnabled', !!value));
       return;
@@ -2436,6 +2795,9 @@ async function startGame(
         break;
       case 'fullscreen':
         v >= 0.5 ? requestPreferredFullscreen() : exitBrowserFullscreen();
+        break;
+      case 'displayMode':
+        pushDesktopDisplayMode(desktopBridge(), v >= 0.5 ? 'borderless' : 'windowed');
         break;
       case 'clickToMove':
         if (v < 0.5) input.clearClickMove();
@@ -2607,7 +2969,10 @@ async function startGame(
     },
     showOpaqueCurtain: () => showLoadingScreen(t('hudChrome.options.graphicsApplying')),
     awaitCurtainPaint: nextPaint,
-    hideOpaqueCurtain: hideLoadingScreen,
+    hideOpaqueCurtain: () => {
+      renderer.markGpuHitchReveal();
+      hideLoadingScreen();
+    },
     prepareTargetAssets: async (target, onProgress) => {
       const profile = resolveGfxProfile(graphicsCapabilities, target, location.search);
       await prepareGraphicsProfileAssets(profile.settings, world.player.pos, onProgress);
@@ -2665,6 +3030,14 @@ async function startGame(
       ),
     prewarmRenderer: async (next) => {
       await next.prewarmInitialScene();
+      // Same law as the boot gate: the rebuilt renderer's far grid built
+      // eagerly behind this opaque curtain; hold (bounded) so the commit
+      // reveals a finished horizon instead of easing the fog out on screen.
+      await next.farVistaReady();
+      // Released KTX2 mip chains re-transcode after the recycle's context
+      // loss; hold the curtain until they are back so the reveal never shows
+      // stub-black world textures (settles on failure too, never hangs).
+      await ktx2MipsRestored();
     },
     validateRenderer: (next) => {
       next.sync(1, 0, null, 0, null);
@@ -2678,6 +3051,7 @@ async function startGame(
       next.setAudioSink(sfx);
       renderer = next;
       rendererReady = true;
+      publishGpuHitchRuntimeReceipt({ search: location.search, renderer: next.perfStats() });
       hud.replaceRenderer(next);
       perf.setRenderer(next);
       perf.reset();
@@ -2821,6 +3195,7 @@ async function startGame(
       entries: () => gamepadBindings.entries(),
       bind: (button, action) => gamepadBindings.bind(button, action),
       reset: () => gamepadBindings.reset(),
+      ...crossHotbar.hooks,
       // The connected pad's brand lives on the manager, not the (hardware-agnostic)
       // bindings, so surface it here for the Controller panel's glyph labels.
       kind: () => gamepad.getKind(),
@@ -2840,6 +3215,15 @@ async function startGame(
     online.onReconnected = () => {
       priorOnReconnected?.();
       hud.marketResyncAfterReconnect();
+      // A fresh join (as opposed to a resume within the linkdead grace window)
+      // hands the server a brand-new PlayerMeta with stopAutoAttackOnTargetSwitch
+      // undefined, so the stored preference needs a re-push, the same way it is
+      // pushed once on world entry above. onReconnected fires before ClientWorld
+      // marks itself connected again, so any send from here would be silently
+      // dropped; ClientWorld owns the re-push itself (it remembers the last
+      // value passed to setStopAutoAttackOnTargetSwitch and replays it right
+      // after connected flips true, and again after spectate ends), so nothing
+      // needs to happen on this side.
     };
     // A hosted dev/PBE realm booted with ALLOW_DEV_COMMANDS=1 lights the /dev GUI
     // even in a production client build, where import.meta.env.DEV is false. That
@@ -3112,6 +3496,14 @@ async function startGame(
       }
     }
   }
+  // The deliberate Thornhollow Fields flag press. Inside a live match the bare interact
+  // key also routes here (the field has no other interactables), which gives
+  // the mobile interact button flag parity for free; the world owns every rule
+  // (radius, team, the return-beats-press race), so a stray press is a no-op.
+  function bgFlagKey(): void {
+    if (world.bgInfo?.match) world.bgFlagAction();
+  }
+
   // The R40 per-use effect confirm gate, shared by every gather entry point
   // (world click, interact key, gathering-tool use): the pure question from
   // the view core, the ask through the HUD's confirm-dialog family. The
@@ -3121,7 +3513,11 @@ async function startGame(
     ask: (prompt: { effectId: string; charges: number }, proceed: (confirmed: boolean) => void) =>
       hud.confirmToolEffectUse(prompt, proceed),
   };
-  function interactKey(): void {
+  function interactKey(preferNpcId?: number | null): void {
+    if (world.bgInfo?.match?.state === 'active') {
+      world.bgFlagAction();
+      return;
+    }
     stopAutorunForInteraction(
       tryNearbyInteraction(
         world,
@@ -3134,11 +3530,16 @@ async function startGame(
         t('errors.nothingInteract'),
         undefined,
         gatherEffectConfirm,
+        preferNpcId,
       ),
       input,
       mobileControls,
     );
   }
+
+  // The pad's own selection rules (which npc a talk press addresses, which enemy
+  // a cast picks) live in src/game/pad_target_pick.ts; this carries the calls.
+  const padTargetPick = createPadTargetPick({ world, interactKey });
 
   function attackNearest(): void {
     const p = world.player;
@@ -3373,7 +3774,8 @@ async function startGame(
         }
       }
       if (best !== null) {
-        const e = world.entities.get(best)!;
+        const e = world.entities.get(best);
+        if (!e) return;
         world.targetEntity(best);
         const target = resolvedClickMoveTarget({ x: e.pos.x, z: e.pos.z });
         input.setClickMoveTarget(
@@ -3503,30 +3905,33 @@ async function startGame(
   let gameInputReady = false;
   let zoneWarmup: Promise<void> | null = null;
 
-  let lastWarmCheckX = Number.NaN;
-  let lastWarmCheckZ = Number.NaN;
-  // Rift-band exit tracking. Leaving the instance band teleports back into an
-  // overworld zone that is usually still RESIDENT, so the ready-bail below
-  // would skip the loading screen entirely and drop the player inside the
-  // residency fog clamp while the surrounding zones stream back in: a tight
-  // teal fog wall easing open over seconds that reads as "standing in water".
-  // A rift exit therefore always takes the blocking path, and it streams a
-  // WIDER arrival neighbourhood than an ordinary teleport: the rift band sits
-  // outside the overworld entirely, so the whole ring around the exit point
-  // may have been evicted rather than just the border the player lands next
-  // to (ARRIVAL_NEIGHBOR_STREAM_RADIUS covers that ordinary case).
-  let lastWarmInRiftBand = false;
+  // Displacement and rift-band-exit tracking (src/game/zone_warm_tracker.ts
+  // owns the state and the hidden-freeze semantics). Rift-exit background: the
+  // instance band teleports back into an overworld zone that is usually still
+  // RESIDENT, so the ready-bail below would skip the loading screen entirely
+  // and drop the player inside the residency fog clamp while the surrounding
+  // zones stream back in: a tight teal fog wall easing open over seconds that
+  // reads as "standing in water". A rift exit therefore always takes the
+  // blocking path, and it streams a WIDER arrival neighbourhood than an
+  // ordinary teleport: the rift band sits outside the overworld entirely, so
+  // the whole ring around the exit point may have been evicted rather than
+  // just the border the player lands next to (ARRIVAL_NEIGHBOR_STREAM_RADIUS
+  // covers that ordinary case).
+  const warmTracker = createZoneWarmTracker(isRiftPos);
   const RIFT_EXIT_STREAM_RADIUS = 240;
   const maybeWarmCurrentZone = (): void => {
     const player = world.player;
-    const displacement = Number.isFinite(lastWarmCheckX)
-      ? Math.hypot(player.pos.x - lastWarmCheckX, player.pos.z - lastWarmCheckZ)
-      : 0;
-    lastWarmCheckX = player.pos.x;
-    lastWarmCheckZ = player.pos.z;
-    const wasInRiftBand = lastWarmInRiftBand;
-    lastWarmInRiftBand = isRiftPos(player.pos.x);
-    const riftExit = wasInRiftBand && !lastWarmInRiftBand;
+    // A hidden desktop shell must not pay zone-warm GPU work for a view
+    // nobody sees (the presentation gate stops render, not this lane, and
+    // this is its heaviest recurring producer). The tracker freezes whole
+    // while hidden, so the reveal frame computes the accumulated displacement
+    // as if the transition just happened; a rift crossing keeps its exit edge
+    // unless it entered AND left the band inside the hidden span (no rift
+    // session was rendered then, so no eviction happened, and the
+    // displacement arms cover that reveal; see zone_warm_tracker.ts).
+    const warm = warmTracker(player.pos.x, player.pos.z, desktopPresentationHidden());
+    if (!warm) return;
+    const { displacement, riftExit } = warm;
     if (zoneWarmup) return;
     if (!riftExit && renderer.isZoneReadyAt(player.pos.x, player.pos.z)) return;
     const zoneX = player.pos.x;
@@ -3539,8 +3944,14 @@ async function startGame(
       // procedural math, so gameplay on not-yet-rendered ground stays correct;
       // the chunks under the player stream in first (prepareZoneAt priority),
       // and the fog residency clamp keeps the unbuilt remainder hidden.
+      // A PREPARED zone only reaches here when its sky was evicted: that
+      // sky-only recovery must take prepareZoneSky's idle arm, because there
+      // is no curtain and the fast arm pays a synchronous PMREM plus full
+      // uploads in live play. An unprepared zone keeps the historic
+      // escalating join so the ground under the player still fills fast.
+      const skyOnlyRecovery = renderer.isZonePreparedAt(zoneX, zoneZ);
       zoneWarmup = renderer
-        .prepareZoneAt(zoneX, zoneZ)
+        .prepareZoneAt(zoneX, zoneZ, undefined, skyOnlyRecovery ? { pace: 'idle' } : undefined)
         .then(() => renderer.prewarmZoneAt(zoneX, zoneZ, { background: true }))
         .catch((err) => {
           console.warn('Background zone warmup failed', err);
@@ -3553,56 +3964,39 @@ async function startGame(
         });
       return;
     }
-    // A teleport-sized jump (rift exit, dungeon door, hearthstone) can land
-    // anywhere: keep the classic blocking loading screen instead of dropping
-    // the player into a not-yet-built void. The destination rectangle is only
-    // half of it, so the arrival NEIGHBOURHOOD streams behind the same screen
-    // on every such jump, not just a rift exit: landing near a zone border
-    // with the neighbour unprepared leaves the residency clamp holding the
-    // view at MIN_OUTDOOR_FOG_FAR long after the screen lifts.
+    // A teleport-sized jump (rift exit, dungeon door, hearthstone) can land anywhere:
+    // keep the classic blocking loading screen instead of dropping the player into a
+    // not-yet-built void. The destination rectangle is only half of it, so the arrival
+    // NEIGHBOURHOOD streams behind the same screen on every such jump, not just a rift
+    // exit: a border landing with the neighbour unprepared leaves the fog clamp held.
     const resumeInput = gameInputReady;
     gameInputReady = false;
-    showLoadingScreen(t('loading.world'));
-    zoneWarmup = nextPaint()
-      .then(() =>
-        renderer.prepareZoneAt(zoneX, zoneZ, (done, total) =>
-          setLoadingProgressRange(done, total, 0, 55),
-        ),
-      )
-      .then(() =>
-        renderer.prepareZonesAround(
-          zoneX,
-          zoneZ,
-          riftExit ? RIFT_EXIT_STREAM_RADIUS : ARRIVAL_NEIGHBOR_STREAM_RADIUS,
-          (done, total) => setLoadingProgressRange(done, total, 55, 94),
-        ),
-      )
-      // An arrival with no overworld neighbourhood at all (a dungeon or rift
-      // interior, 99k yards off the strip) reports no progress above, so fill
-      // the band explicitly rather than letting the bar sit at 55.
-      .then(() => setLoadingProgressRange(1, 1, 55, 94))
-      .then(async () => {
-        setLoadingPercent(96, t('loading.enteringWorld'));
-        try {
-          await renderer.prewarmZoneAt(zoneX, zoneZ);
-        } catch (err) {
-          console.warn('Zone shader prewarm failed', err);
-        }
-      })
-      .then(() => setLoadingPercent(100, t('loading.enteringWorld')))
-      .then(nextPaint)
-      .then(() => {
-        hideLoadingScreen();
+    zoneWarmup = runBlockingArrivalWarmup({
+      renderer,
+      holdWorldDraw: gateInput.holdWorldDraw,
+      ui: {
+        showLoadingScreen,
+        setLoadingProgressRange,
+        setLoadingPercent,
+        hideLoadingScreen,
+        nextPaint,
+        fatalOverlay,
+      },
+      t,
+      technicalErrorMessage,
+      zoneX,
+      zoneZ,
+      online: online !== null,
+      neighborRadiusYd: riftExit ? RIFT_EXIT_STREAM_RADIUS : ARRIVAL_NEIGHBOR_STREAM_RADIUS,
+      onRevealed: () => {
         gameInputReady = resumeInput;
         last = performance.now();
         acc = 0;
-      })
-      .catch((err) => {
-        fatalOverlay(t('loading.rendererFailed', { error: technicalErrorMessage(err) }));
-      })
-      .finally(() => {
+      },
+      onSettled: () => {
         zoneWarmup = null;
-      });
+      },
+    });
   };
 
   // Camera follow state: keyboard turning advances facing in 20Hz sim steps,
@@ -3856,6 +4250,24 @@ async function startGame(
     }
   }
 
+  // WoW-style breath mirror bar. Display-only: the HUD steps its own copy of
+  // the sim's breath clock (sim/breath.ts constants) from the DISPLAYED self
+  // state, so it works identically offline and online with no wire traffic;
+  // the sim deals the authoritative drowning damage on its own copy.
+  const breathBar = new BreathBar(document.getElementById('ui') ?? document.body);
+  let breathUsedSeconds = 0;
+  function updateBreathBar(dt: number): void {
+    const self = world.entities.get(world.playerId);
+    if (!self || self.dead) {
+      breathUsedSeconds = 0;
+      breathBar.update(1, false, dt);
+      return;
+    }
+    const submerged = isSubmerged(self, world.cfg.seed);
+    breathUsedSeconds = stepBreathUsedSeconds(breathUsedSeconds, submerged, dt);
+    breathBar.update(breathFraction(breathUsedSeconds), submerged, dt);
+  }
+
   // Desktop-only gather-node hover tooltip (Professions 2.0): the
   // module owns the listener/throttle/paint; this is thin wiring only.
   attachGatherNodeHoverTooltip(
@@ -3959,9 +4371,19 @@ async function startGame(
   };
   const selfMotionFrameBuffer = new SelfMotionFrameBuffer();
 
+  // Reused across frames: the rAF hot path must not allocate (the frame
+  // allocation guard polices the loop body), and the gate reads it
+  // synchronously before returning a shared frozen decision.
+  const gateInput = newPresentationGateInput(DESKTOP_APP);
   function frame(now: number): void {
     requestAnimationFrame(frame);
-    if (graphicsRebuildPaused) {
+    // The desktop shell keeps rAF running while hidden (backgroundThrottling is
+    // off), so document.hidden never flips there and the shell push is the only
+    // truthful hidden signal.
+    gateInput.hidden = document.hidden || desktopPresentationHidden();
+    gateInput.graphicsRebuildPaused = graphicsRebuildPaused;
+    const gate = presentationGate(gateInput);
+    if (!gate.tick) {
       last = now;
       acc = 0;
       return;
@@ -3970,9 +4392,23 @@ async function startGame(
     let frameDt = (now - last) / 1000;
     last = now;
     if (frameDt > 0.25) frameDt = 0.25;
-    perf.frame(frameDt);
-    syncPerfOverlay(frameDt, now);
-    syncOverlayDiagnostics();
+    // Not sampling a renderless frame reproduces the web hidden-tab shape (rAF
+    // pauses there, so hidden frames never reach the sampler, and the reporter
+    // is gated on this same shell signal via its shellHidden option below): the
+    // fleet beacon keeps its meaning, where sampling these would fake a healthy
+    // fps and p95. The switch extends that shape to EVERY per-frame sample: a
+    // web hidden tab fills no sim/events bucket either, so the hidden desktop
+    // frame must not grow a hidden-only ring population (phase 4 QA F10). The
+    // tick-level fleet trackers stay behind gate.render for the same parity:
+    // their rulings made them independent of the woc_perf opt-in, not of
+    // visibility, and no web hidden tab ever ran them.
+    perf.setFrameSampling(gate.render);
+    if (gate.render) perf.frame(frameDt);
+    else perf.noteHiddenPresentSkip();
+    if (gate.paint) {
+      syncPerfOverlay(frameDt, now);
+      syncOverlayDiagnostics();
+    }
 
     // Freeze movement while the game menu is up, during the first-spawn intro,
     // the camera prompt, and through the race countdown. The sim independently
@@ -4022,6 +4458,7 @@ async function startGame(
     } finally {
       perf.finishTrace('input.hoverCursor', traceStart, 'active', hoverActive);
     }
+    updateBreathBar(frameDt);
     perf.markInputFrame(performance.now());
 
     const mouselook = intro === null && input.isMouselookActive() && !movementFrozen();
@@ -4060,6 +4497,7 @@ async function startGame(
       // Supply the UTC day for the delve daily reset (the sim never reads the wall
       // clock itself, to stay deterministic).
       offlineSim.utcDay = currentUtcDay();
+      offlineSim.resetDay = currentResetDay();
       while (acc >= DT) {
         const { mi, facing } = resolveMove(
           mouselook,
@@ -4089,6 +4527,8 @@ async function startGame(
           perf.finishTime('sim', simStart);
         }
         const eventsLength = events.length;
+        desktopNotifyOnSimEvents(events, offlineSim.playerId);
+        desktopPresenceOnFrame(offlineSim);
         const eventsStart = perf.startTime();
         traceStart = perf.startTrace();
         try {
@@ -4134,17 +4574,22 @@ async function startGame(
       renderer.camYaw = input.camYaw;
       renderer.camPitch = input.camPitch;
       renderer.camDist = input.camDist;
-      syncGroundAimReticle();
+      // Cursor-driven renderer state: no cursor reaches a hidden window,
+      // and the reticle is only consumed by the skipped draw (phase 4 QA F7).
+      if (gate.render) syncGroundAimReticle();
       perf.setNetwork(null);
       const offlineRenderFacing =
         visualFacingFor(input.readMoveInput(), movementFacing ?? offlineSim.player.facing) ??
         movementFacing;
       const offlineAlpha = acc / DT;
       const offlineViews = renderer.views.size;
-      const rendererStart = perf.startTime();
+      // A hidden frame's draw is not timed (it never ran); the world draw is
+      // re-read here: maybeWarmCurrentZone above may have held it this frame.
+      const rendererStart = gate.render ? perf.startTime() : 0;
+      const drawWorld = presentationGate(gateInput).drawWorld;
       traceStart = perf.startTrace();
       try {
-        renderer.sync(acc / DT, frameDt, offlineRenderFacing, 0, null);
+        renderer.sync(acc / DT, frameDt, offlineRenderFacing, 0, null, false, drawWorld);
       } finally {
         perf.finishTrace(
           'renderer.sync',
@@ -4156,32 +4601,45 @@ async function startGame(
           'alpha',
           offlineAlpha,
         );
-        perf.finishTime('renderer', rendererStart);
+        if (gate.render) perf.finishTime('renderer', rendererStart);
       }
-      traceStart = perf.startTrace();
-      try {
-        updateClickMoveMarker();
-      } finally {
-        perf.finishTrace('ui.clickMoveMarker', traceStart);
+      // Click-driven renderer marker: no clicks reach a hidden window, and the
+      // marker is only consumed by the skipped draw (phase 4 QA F7).
+      if (gate.render) {
+        traceStart = perf.startTrace();
+        try {
+          updateClickMoveMarker();
+        } finally {
+          perf.finishTrace('ui.clickMoveMarker', traceStart);
+        }
       }
-      perf.markInputVisible(performance.now());
+      if (gate.render) perf.markInputVisible(performance.now());
       if (settings.get('walkByAutoloot')) autoLoot.run(world, now);
-      const hudStart = perf.startTime();
-      traceStart = perf.startTrace();
-      try {
-        hud.update();
-      } finally {
-        perf.finishTrace('hud.update', traceStart, 'mode', 'offline');
-        perf.finishTime('hud', hudStart);
-      }
-      perf.tick(now);
+      if (gate.paint) {
+        const hudStart = perf.startTime();
+        traceStart = perf.startTrace();
+        try {
+          hud.update();
+        } finally {
+          perf.finishTrace('hud.update', traceStart, 'mode', 'offline');
+          perf.finishTime('hud', hudStart);
+        }
+      } else hud.update(false);
+      if (gate.render) perf.tick(now);
+      // Liveness breadcrumb the NEXT launch reads as a load-failure report: a
+      // client launched minimized is alive, not stuck building the scene, so
+      // this stays at tick level. Under gate.render it would leave the stale
+      // pre-first-frame checkpoint on disk and report a phantom failure.
       entryDiagnostics.renderedFrame(now);
       return;
     }
 
     // online: inputs stream on a timer inside ClientWorld; here we mirror state
-    const net = online!;
-    spectateBadge.update(net.spectating);
+    const net = online;
+    if (!net) return;
+    // Stateless DOM badge: paint work; the first painted frame after a
+    // restore re-syncs it from the live value (phase 4 QA F7).
+    if (gate.paint) spectateBadge.update(net.spectating);
     const spectateFacing = net.consumeSpectateFacing();
     if (spectateFacing !== null) input.camYaw = spectateFacing;
     const resolved = resolveMove(
@@ -4266,6 +4724,11 @@ async function startGame(
     const selfDriveImpulse = hasAuthoritativeDriveImpulse(drainedEvents, net.playerId);
     const selfPopVelocity = authoritativeVerticalPop(drainedEvents, net.playerId);
     const drainedEventsLength = drainedEvents.length;
+    // A spectating session remaps net.playerId to the watched player's pid, so
+    // their personal events would read as addressed to us; never notify there.
+    if (net.spectating === null) desktopNotifyOnSimEvents(drainedEvents, net.playerId);
+    // Same gate, second reason: a spectator's zone must not leak to presence.
+    if (net.spectating === null) desktopPresenceOnFrame(net);
     const eventsStart = perf.startTime();
     traceStart = perf.startTrace();
     try {
@@ -4308,8 +4771,8 @@ async function startGame(
     }
     perfNetworkStats.connected = net.connected;
     perfNetworkStats.snapInterval = Math.round(net.snapInterval);
-    perfNetworkStats.lastSnapAge =
-      net.lastSnapAt > 0 ? Math.round(performance.now() - net.lastSnapAt) : -1;
+    const cameraLastSnapAge = net.lastSnapAt > 0 ? performance.now() - net.lastSnapAt : -1;
+    perfNetworkStats.lastSnapAge = Math.round(cameraLastSnapAge);
     perfNetworkStats.alpha = Math.round(alpha * 100) / 100;
     perf.setNetwork(perfNetworkStats);
     // Always-on net-pipeline counters (net_pipeline_stats.ts): fold the
@@ -4354,8 +4817,9 @@ async function startGame(
           frameDt,
           selfDriveImpulse,
           selfPopVelocity,
+          Math.max(0, cameraLastSnapAge),
+          net.snapInterval,
         );
-    const cameraLastSnapAge = net.lastSnapAt > 0 ? performance.now() - net.lastSnapAt : -1;
     const onlineCameraFacing = cameraFollowFacing(
       driving,
       renderer.selfMotionFacing,
@@ -4384,9 +4848,12 @@ async function startGame(
     renderer.camYaw = input.camYaw;
     renderer.camPitch = input.camPitch;
     renderer.camDist = input.camDist;
-    syncGroundAimReticle();
+    // Cursor-driven renderer state: no cursor reaches a hidden window,
+    // and the reticle is only consumed by the skipped draw (phase 4 QA F7).
+    if (gate.render) syncGroundAimReticle();
     const onlineViews = renderer.views.size;
-    const rendererStart = perf.startTime();
+    const rendererStart = gate.render ? perf.startTime() : 0;
+    const drawWorld = presentationGate(gateInput).drawWorld;
     traceStart = perf.startTrace();
     try {
       renderer.sync(
@@ -4400,6 +4867,7 @@ async function startGame(
         adaptiveSelfAlphaLead(onlineInputEchoMs, onlineJitterMs, net.snapInterval),
         selfMotion,
         selfAuthoritativeDiscontinuity,
+        drawWorld,
       );
     } finally {
       perf.finishTrace(
@@ -4414,26 +4882,41 @@ async function startGame(
         'frameDtMs',
         frameDtMs,
       );
-      perf.finishTime('renderer', rendererStart);
+      if (gate.render) perf.finishTime('renderer', rendererStart);
     }
-    traceStart = perf.startTrace();
-    try {
-      updateClickMoveMarker();
-    } finally {
-      perf.finishTrace('ui.clickMoveMarker', traceStart);
+    // Click-driven renderer marker: no clicks reach a hidden window, and the
+    // marker is only consumed by the skipped draw (phase 4 QA F7).
+    if (gate.render) {
+      traceStart = perf.startTrace();
+      try {
+        updateClickMoveMarker();
+      } finally {
+        perf.finishTrace('ui.clickMoveMarker', traceStart);
+      }
     }
-    maybeShowImmobileNote(now);
-    perf.markInputVisible(performance.now());
+    // HUD DOM write plus a throttle stamp: paint work, and no movement
+    // input reaches a hidden window anyway (phase 4 QA F7). updateBreathBar
+    // stays UNGATED on purpose: it accumulates the client-side breath
+    // timer, and freezing it while hidden would show a restored player
+    // more breath than they have (the lootRolls timer doctrine).
+    if (gate.paint) maybeShowImmobileNote(now);
+    if (gate.render) perf.markInputVisible(performance.now());
     if (settings.get('walkByAutoloot')) autoLoot.run(world, now);
-    const hudStart = perf.startTime();
-    traceStart = perf.startTrace();
-    try {
-      hud.update();
-    } finally {
-      perf.finishTrace('hud.update', traceStart, 'mode', 'online');
-      perf.finishTime('hud', hudStart);
-    }
-    perf.tick(now);
+    if (gate.paint) {
+      const hudStart = perf.startTime();
+      traceStart = perf.startTrace();
+      try {
+        hud.update();
+      } finally {
+        perf.finishTrace('hud.update', traceStart, 'mode', 'online');
+        perf.finishTime('hud', hudStart);
+      }
+    } else hud.update(false);
+    if (gate.render) perf.tick(now);
+    // Liveness breadcrumb the NEXT launch reads as a load-failure report: a
+    // client launched minimized is alive, not stuck building the scene, so
+    // this stays at tick level. Under gate.render it would leave the stale
+    // pre-first-frame checkpoint on disk and report a phantom failure.
     entryDiagnostics.renderedFrame(now);
   }
   const controller = {
@@ -4544,7 +5027,6 @@ async function startGame(
     seen: introSeen,
     playerLevel: world.player.level,
     reducedMotion: settings.get('reduceMotion') || osReducedMotion,
-    native: isNativeRuntime(),
     platform: mobilePlatform(),
     engine: startupBrowserEnv.engine,
     constrainedMemory: GFX.constrainedMemory,
@@ -4565,20 +5047,23 @@ async function startGame(
   } else {
     if (introPolicy.reason === 'constrained-ios-webkit') {
       console.info(
-        `[entry-guard] spawn cinematic suppressed: constrained native iOS WebKit ` +
+        `[entry-guard] spawn cinematic suppressed: constrained iOS WebKit ` +
           `preset=${settings.get('graphicsPreset')} tier=${GFX.tier}`,
       );
     }
   }
   input.setSuspendMovement(true);
+  loadPhaseEnd('wiring');
   await nextPaint();
   entryDiagnostics.checkpoint('prewarm-start', {
     ...renderEntryDiagnostics(),
     prewarmEntry: 'initial',
   });
   try {
-    await renderer.prepareZoneAt(world.player.pos.x, world.player.pos.z, (done, total) =>
-      setLoadingProgressRange(done, total, 40, 70),
+    await loadSpanAsync('prepare-zone', () =>
+      renderer.prepareZoneAt(world.player.pos.x, world.player.pos.z, (done, total) =>
+        setLoadingProgressRange(done, total, 40, 70),
+      ),
     );
     // A character logged out near a zone border (Thornpeak's south edge sits
     // 40 yd from the Mirefen rectangle) would otherwise enter the world inside
@@ -4587,19 +5072,25 @@ async function startGame(
     // haze for the first minute of every session. Stream the same arrival
     // neighbourhood a teleport gets, behind the loading screen that is already
     // up. Costs nothing when the logout spot is mid-rectangle.
-    await renderer.prepareZonesAround(
-      world.player.pos.x,
-      world.player.pos.z,
-      ARRIVAL_NEIGHBOR_STREAM_RADIUS,
-      (done, total) => setLoadingProgressRange(done, total, 70, 88),
+    await loadSpanAsync('prepare-neighbors', () =>
+      renderer.prepareZonesAround(
+        world.player.pos.x,
+        world.player.pos.z,
+        ARRIVAL_NEIGHBOR_STREAM_RADIUS,
+        (done, total) => setLoadingProgressRange(done, total, 70, 88),
+      ),
     );
   } catch (err) {
     fatalOverlay(t('loading.rendererFailed', { error: technicalErrorMessage(err) }));
     return;
   }
   setLoadingPercent(90, t('loading.enteringWorld'));
+  loadPhaseStart('prewarm-initial');
+  const initialPrewarmResumeStartGate = createInitialPrewarmResumeStartGate();
+  renderer.armEntryDetailHorizon();
   try {
     const prewarm = await renderer.prewarmInitialScene({
+      resumeAfterFirstPaint: initialPrewarmResumeStartGate.wait,
       onEntryStart: (id, category) =>
         entryDiagnostics.checkpoint('prewarm-start', {
           ...renderEntryDiagnostics(),
@@ -4607,6 +5098,7 @@ async function startGame(
           prewarmCategory: category,
         }),
     });
+    publishGpuHitchRuntimeReceipt({ search: location.search, renderer: renderer.perfStats() });
     entryDiagnostics.checkpoint('prewarm-complete', {
       ...renderEntryDiagnostics(),
       prewarmElapsedMs: prewarm.elapsedMs,
@@ -4628,111 +5120,193 @@ async function startGame(
     // has been materialized successfully.
     console.warn('Renderer prewarm failed', err);
   }
-  // The entry allocation spike is over: start streaming the mob bodies the
-  // packaged iOS boot gate deliberately excluded (empty everywhere else). A mob
-  // whose GLB is still arriving renders a beat late through the fail-soft
-  // view-create path, instead of its decode competing with the scene build for
-  // the WebContent memory ceiling.
-  const streamedCount = startStreamedCharacterPreloads();
-  if (streamedCount > 0) {
-    console.info(`[entry-guard] streaming ${streamedCount} deferred character assets`);
-  }
-  // Each preview prewarm mints a SECONDARY WebGL context beside the world
-  // renderer: real WebKit GPU-process residency held for a window the player
-  // may never open. The 4 GB-class tight profile skips both and keeps their
-  // documented lazy first-open path instead (the catch arms below already
-  // promise exactly that fallback).
+  initialPrewarmResumeStartGate.armBackstop();
+  loadPhaseEnd('prewarm-initial');
+  // Paperdoll and portrait preview prewarms start after reveal as paced background
+  // GPU units. Measured on the reference desktop, awaiting the paperdoll,
+  // armory and portrait prewarms here cost 11 to 26 s of the entry, spent on
+  // secondary contexts for windows the player may never open. The ARMORY is
+  // no longer in that set at all and is warmed nowhere ahead of time: it
+  // builds per inspected card, on the click that opens it
+  // (docs/design/armory-preview-warming.md).
+  // Only the paperdoll SHELL still builds here (~700 ms): it is the one coarse
+  // step the paced lane cannot split, and behind the curtain it costs nothing
+  // a player can feel. The tight profile keeps skipping every secondary
+  // context and retains the documented lazy first-open path.
   if (!GFX.tightMemory) {
     try {
-      await hud.prewarmCharacterPreview();
+      loadSpan('char-preview-shell', () => hud.prewarmCharPreviewShell());
     } catch (err) {
-      // The paperdoll preview is optional UI. If its secondary WebGL context
-      // cannot prewarm, opening the window can still take the normal lazy path.
-      console.warn('Character preview prewarm failed', err);
-    }
-    try {
-      await hud.prewarmArmoryPreview();
-    } catch (err) {
-      // The store is optional and online-only. A secondary-context failure must
-      // never prevent entering the world; opening it can retain the lazy path.
-      console.warn('Armory preview prewarm failed', err);
+      console.warn('Character preview shell prewarm failed', err);
     }
   }
+  // The mob-body stream and far-vista settle no longer hold the curtain either.
+  // The mob-body stream starts at the
+  // first-paint checkpoint below (on iOS these are the actionable creature
+  // bodies, and the entry allocation spike has cleared by first paint), while
+  // runPostEntryWarmups (revealWorld below) starts the other two fail-soft once
+  // the revealed world is interactive.
   setLoadingPercent(100, t('loading.enteringWorld'));
+  loadPhaseStart('first-frame-wait');
   await nextPaint();
   last = performance.now();
   // A hidden tab pauses rAF while snapshots keep arriving; reset the pending
   // snapshots-per-rAF count on visibility flips so the first foreground frame
   // does not fold the backlog into the 3plus histogram bucket (ruling R9).
   document.addEventListener('visibilitychange', () => online?.netPipeline().noteVisibilityChange());
+  setDisplayChangeTarget(() => {
+    if (rendererReady) renderer.noteDisplayChanged();
+  });
   requestAnimationFrame(frame);
   // cut to the game only once the first frame is actually on screen
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       entryDiagnostics.checkpoint('first-paint');
-      hideLoadingScreen();
-      // Start the intro clock as the loading screen begins to fade: the camera
-      // holds the opening pose until now, so the fade doubles as the cut in.
-      if (intro) intro.startedAt = performance.now();
-      window.setTimeout(() => {
-        gameInputReady = true;
-        perf.reset();
-        startPerfReporter({
-          perf,
-          settings,
-          tokenProvider: () => api.token,
-          characterIdProvider: () => online?.characterId ?? null,
-          worldTelemetryProvider: () => ({
-            zoneId: telemetryZoneId(world.player.pos.x, world.player.pos.z),
-            simEntities: world.entities.size,
-          }),
-          desktopShell: DESKTOP_APP,
-        });
-        // One-time machine-local performance nudge (packet 0 rulings R14-R16):
-        // the assembler polls the same PerfMonitor the reporter reads.
-        initPerfNudge({ perf, desktopShell: DESKTOP_APP });
-        // First-run camera-mode prompt (issue #1727): show once per browser on a
-        // mouse-driven interface, after any spawn cinematic has finished. Applies
-        // the choice through the same applySetting path as the Key Bindings toggle.
-        maybeShowFirstRunCameraPrompt({
-          applyMouseCamera: (enabled) => applySetting('mouseCamera', enabled),
-          isBlocked: () => intro !== null,
-        });
-        (window as any).__game = {
-          sim: world,
-          world,
-          renderer,
-          input,
-          hud,
-          online,
-          controller,
-          perf,
-          gamepad,
-          music,
-          /** Opens the board and drains queued sim events. Do not call sim.lockpickEngage directly offline. */
-          lockpickEngage: (objectId: number, ante: number) =>
-            hud.submitLockpickEngage(objectId, ante as 1 | 2 | 3),
-          /** Syncs HUD col/row from sim before acting; always drains step events. Use instead of sim.lockpickAction. */
-          lockpickAction: (action: string) =>
-            hud.submitLockpickAction(action as import('./sim/lockpick').PickAction),
-          flushLockpickEvents: () => hud.flushLockpickEvents(),
-        };
-        // Console realm teleports (go.vale() ... go.fen()): offline dev only,
-        // never online (server-authoritative movement) and never production.
-        if (import.meta.env.DEV && offlineSim && !online) {
-          installDevTeleports(
-            ZONES.map((zn) => ({ id: zn.id, town: zn.hub.name, x: zn.hub.x, z: zn.hub.z })),
-            (x, z) => {
-              const me = offlineSim.entities.get(offlineSim.playerId);
-              if (!me) return;
-              me.pos.x = x;
-              me.pos.z = z;
-              me.prevPos = { ...me.pos };
-              me.hp = me.maxHp;
+      initialPrewarmResumeStartGate.release();
+      loadPhaseEnd('first-frame-wait');
+      // Kick the deferred creature-body fetches now, before the settle cover and
+      // the curtain fade: until a creature GLB arrives its view, nameplate, and
+      // click target do not exist, so every ms the stream waits past first paint
+      // widens the pop-in window on the tight-memory profile (desktop's stream
+      // set is empty). The allocation spike the stream was deferred past has
+      // cleared by this frame.
+      kickCharacterPreloadStream({
+        startCharacterPreloads: startStreamedCharacterPreloads,
+        onCharacterPreloadsStarted: (count) => {
+          if (count > 0) {
+            console.info(`[entry-guard] streaming ${count} deferred character assets`);
+          }
+        },
+      });
+      loadPhaseStart('settle-cover');
+      const revealWorld = (): void => {
+        loadPhaseEnd('settle-cover');
+        loadPhaseStart('curtain-fade');
+        renderer.markGpuHitchReveal();
+        hideLoadingScreen();
+        // Start the intro clock as the loading screen begins to fade: the camera
+        // holds the opening pose until now, so the fade doubles as the cut in.
+        if (intro) intro.startedAt = performance.now();
+        window.setTimeout(() => {
+          gameInputReady = true;
+          loadPhaseEnd('curtain-fade');
+          loadPhaseEnd('entry');
+          const loadProfile = {
+            context: renderEntryDiagnostics(),
+            summary: summarizeLoadProfile(collectLoadSpans(), 'entry'),
+            prewarm: renderer.perfStats().prewarm ?? null,
+          };
+          (window as Window & typeof globalThis & { __loadProfile?: unknown }).__loadProfile =
+            loadProfile;
+          // Dev-channel diagnostic (English on purpose, like [entry-guard]): one
+          // greppable line carrying the whole phase breakdown for probes/devices.
+          console.info(`[load-profile] ${JSON.stringify(loadProfile.summary)}`);
+          perf.reset();
+          startPerfReporter({
+            perf,
+            settings,
+            tokenProvider: () => api.token,
+            characterIdProvider: () => online?.characterId ?? null,
+            worldTelemetryProvider: () => ({
+              zoneId: telemetryZoneId(world.player.pos.x, world.player.pos.z),
+              simEntities: world.entities.size,
+            }),
+            desktopShell: DESKTOP_APP,
+            shellHidden: desktopPresentationHidden,
+          });
+          // One-time machine-local performance nudge (packet 0 rulings R14-R16):
+          // the assembler polls the same PerfMonitor the reporter reads.
+          initPerfNudge({ perf, desktopShell: DESKTOP_APP });
+          // Post-entry preview prewarm (paperdoll and portrait caches; the
+          // armory catalog is NOT warmed, it builds per inspected card): one
+          // bounded unit per idle slot on the renderer's background GPU queue,
+          // paused while the owning window is open. The
+          // 4 GB-class tight profile still skips the secondary contexts
+          // entirely and keeps their documented lazy first-open path.
+          if (!GFX.tightMemory) hud.startPostEntryPreviewPrewarm();
+          // First-run camera-mode prompt (issue #1727): show once per browser on a
+          // mouse-driven interface, after any spawn cinematic has finished. Applies
+          // the choice through the same applySetting path as the Key Bindings toggle.
+          maybeShowFirstRunCameraPrompt({
+            applyMouseCamera: (enabled) => applySetting('mouseCamera', enabled),
+            isBlocked: () => intro !== null,
+          });
+          (
+            window as Window &
+              typeof globalThis & {
+                __game?: Record<string, unknown>;
+              }
+          ).__game = {
+            sim: world,
+            world,
+            renderer,
+            input,
+            hud,
+            online,
+            controller,
+            perf,
+            gamepad,
+            music,
+            // The live content table, for E2E rigs that stage a template state
+            // shipped content cannot reach (scripts/shot_2513_unmapped_corpse.mjs
+            // retags a template all-unmapped, the tests' withUnmappedTemplate
+            // idiom). Debug surface only; never written by game code.
+            MOBS,
+            /** Composed-body cache occupancy: how many part sets are cached,
+             *  how many are pinned by a character on screen, and how many
+             *  recoloured materials are warm. Every player composes now, so
+             *  these are keyed by the POPULATION rather than by the asset
+             *  list, and are read beside `renderer.webgl.info` when checking
+             *  the caps hold in a throng. Debug surface only. */
+            modularCacheStats,
+            /** Opens the board and drains queued sim events. Do not call sim.lockpickEngage directly offline. */
+            lockpickEngage: (objectId: number, ante: number) =>
+              hud.submitLockpickEngage(objectId, ante as 1 | 2 | 3),
+            /** Syncs HUD col/row from sim before acting; always drains step events. Use instead of sim.lockpickAction. */
+            lockpickAction: (action: string) =>
+              hud.submitLockpickAction(action as import('./sim/lockpick').PickAction),
+            flushLockpickEvents: () => hud.flushLockpickEvents(),
+          };
+          // Console realm teleports (go.vale() ... go.fen()): offline dev only,
+          // never online (server-authoritative movement) and never production.
+          if (import.meta.env.DEV && offlineSim && !online) {
+            installDevTeleports(
+              ZONES.map((zn) => ({ id: zn.id, town: zn.hub.name, x: zn.hub.x, z: zn.hub.z })),
+              (x, z) => {
+                const me = offlineSim.entities.get(offlineSim.playerId);
+                if (!me) return;
+                me.pos.x = x;
+                me.pos.z = z;
+                me.prevPos = { ...me.pos };
+                me.hp = me.maxHp;
+              },
+            );
+          }
+          // The far-vista stand-in settles after the revealed world is
+          // interactive (the mob-body stream already left at first paint above).
+          // The classic fog remains the complete fallback while the far grid
+          // finishes in parallel. Optional secondary WebGL previews stay lazy:
+          // warming them here would contend with the player's first input.
+          void runPostEntryWarmups({
+            settleFarVista: () => renderer.farVistaReady(),
+            onFarVistaSettled: (farVistaReady) => {
+              entryDiagnostics.checkpoint('far-vista-ready', {
+                ...renderEntryDiagnostics(),
+                farVistaReady,
+              });
             },
-          );
-        }
-      }, loadingCurtainFadeDelayMs());
+            onWarmupError: (source, error) => {
+              if (source === 'far-vista') console.warn('Far vista settlement failed', error);
+            },
+          });
+        }, loadingCurtainFadeDelayMs());
+      };
+      settleWorldEntryCover({
+        adaptiveBudget: GFX.autoGovernor,
+        constrainedMemory: GFX.constrainedMemory,
+        online: online !== null,
+        revealWorld,
+      });
     }),
   );
   // Now in-game: fade the home-page theme out (it kept playing through loading).
@@ -4762,27 +5336,62 @@ async function startOffline(
   seedOverride?: number,
 ): Promise<void> {
   if (!(await prepareWorldEntry())) return;
+  resetLoadProfile();
+  loadPhaseStart('entry');
   enterLoadingState(t('loading.world'));
   // Editor play-test: route terrain + props at the custom world too (the renderer
   // reaches it by module global), in addition to the Sim reading cfg.world.
   if (world) setActiveWorldContent(world);
-  const sim = new Sim({
-    seed: seedOverride ?? WORLD_SEED,
-    playerClass,
-    playerName: name,
-    devCommands: import.meta.env.DEV,
-    // The offline world runs the ranked rift portal scheduler like the live
-    // server (custom editor play-test maps keep it off: their zones differ).
-    riftPortals: world === undefined,
-    valeCupShowcase: true, // idle Sowfield auto-runs a bot exhibition to watch/bet on
-    world,
-  });
+  const sim = loadSpan(
+    'sim-build',
+    () =>
+      new Sim({
+        seed: seedOverride ?? WORLD_SEED,
+        playerClass,
+        playerName: name,
+        devCommands: import.meta.env.DEV,
+        // The offline world runs the ranked rift portal scheduler like the live
+        // server (custom editor play-test maps keep it off: their zones differ).
+        riftPortals: world === undefined,
+        valeCupShowcase: true, // idle Sowfield auto-runs a bot exhibition to watch/bet on
+        // Match the live server's proven-safe idle-AI interest throttle. Ordinary
+        // entity rigs are gone by 96 yd and mob aggro caps at 20 yd, so this removes
+        // full-world wilderness AI from the browser's 20 Hz tick without changing
+        // anything visible or interactable.
+        idleMobTickRadius: PLAYER_INTEREST_DROP_RADIUS,
+        world,
+      }),
+  );
   sim.setPlayerSkin(sim.playerId, skin);
+  // Offline has no account and no character row, so the local draft IS this
+  // character's authored look and the creator's toggle IS its helm choice.
+  // Stamped onto the entity because that is where every consumer reads a look
+  // from now (the wire fills this field online); without it an offline session
+  // composes nothing and falls back to the fixed class rig.
+  const offlinePlayer = sim.entities.get(sim.playerId);
+  if (offlinePlayer) {
+    // The entity field is deliberately opaque (the sim must not depend on the
+    // render layer's ModularAppearance), so the interface needs the cast an
+    // online wire payload does not.
+    offlinePlayer.modularAppearance = modularAppearance as unknown as Record<string, unknown>;
+    offlinePlayer.helmHidden = !creationHelm;
+  }
   // Dev convenience: ?mech drops an offline session straight into the Combat Mech
   // cosmetic body holding a spread of class-usable weapons, to eyeball the held
   // weapon model on the mech (swap them in the bag to see each one). DEV builds
   // only (mirrors devCommands gating); inert in production.
   if (import.meta.env.DEV && new URLSearchParams(location.search).has('mech')) {
+    // Own every chroma before wearing one. Without this the Character window's
+    // skin row filters to the OWNED chromas, finds none and collapses to
+    // nothing: the session spawns inside the mech with no way to switch chroma
+    // or get back out of it. Unlocking the set makes the real in-game path
+    // exercisable -- click a swatch to change chroma, Unequip to return to your
+    // own body, then right-click the returned armor plate in the bag to put it
+    // back on.
+    sim.accountCosmetics = {
+      ...sim.accountCosmetics,
+      mechChromaIds: MECH_CHROMAS.map((c) => c.id),
+    };
     sim.setPlayerSkin(sim.playerId, 0, 'mech');
     // One weapon per held-model family (sword / axe / mace / dagger / staff / wand
     // / polearm); only the ones this class can wield are granted, so every bag
@@ -4843,6 +5452,10 @@ const REFERRAL_SLUG = (() => {
   const slug = raw.trim().toLowerCase();
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(slug) ? slug : '';
 })();
+
+// First-touch attribution capture (fbclid/utm/landing/referrer), write-once at
+// load like the referral slug above; the register call sends it to the server.
+captureFirstTouch();
 
 // Password-reset token: a visitor who follows the emailed link arrives with
 // ?reset=<64-hex-token>. Read it once at load and validate the shape so a junk
@@ -4918,10 +5531,13 @@ function renderSkinPicker(
   });
 }
 
-/** Give each class button a small portrait preview of that class. Wired to
- *  {@link onPortraitsReady} so it runs once portrait.ts's own asset barrier
- *  resolves (portraits render synchronously from then on); one-shot per chip
- *  via the .mini-class-portrait guard below, so it is safe to call again. */
+/** Give each class button its painted class emblem (class_icon_art.ts), so the
+ *  rail reads as "pick a class" rather than "pick a face" - the 3D headshot this
+ *  once showed was the same subject as the turntable directly above it. Falls
+ *  back to the procedural crest for an id with no art, which for the static
+ *  markup in both entry documents means never. A plain <img src> needs no asset
+ *  barrier; one-shot per chip via the .mini-class-portrait guard below, so it is
+ *  safe to call again. */
 function decorateClassChips(): void {
   document
     .querySelectorAll<HTMLElement>('#charcreate-panel .mini-class, #offline-select .mini-class')
@@ -4933,13 +5549,13 @@ function decorateClassChips(): void {
       label.className = 'mini-class-label';
       if (key) label.dataset.i18n = key;
       label.textContent = (li.textContent ?? '').trim();
-      li.removeAttribute('data-i18n'); // moved onto the label so i18n won't wipe the portrait
+      li.removeAttribute('data-i18n'); // moved onto the label so i18n won't wipe the emblem
       li.textContent = '';
       const img = document.createElement('img');
       img.className = 'mini-class-portrait';
       img.alt = '';
-      const url = playerPortraitDataUrl(cls, 0);
-      if (url) img.src = url;
+      img.decoding = 'async';
+      img.src = classIconUrl(cls) ?? iconDataUrl('crest', `class_${cls}`, 96);
       li.appendChild(img);
       li.appendChild(label);
       li.classList.add('has-portrait');
@@ -4953,10 +5569,227 @@ function selectedSkin(rowId: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+// ---------------------------------------------------------------------------
+// Modular character appearance
+//
+// Every class's body is COMPOSED from parts (see render/characters/modular.ts)
+// rather than cloned from a finished class rig, so the creation preview is
+// driven by a stored appearance instead of setClass(). Each class renders
+// through its own `player_<class>_modular` def (its clips and hand layout) and
+// wears its class kit by default.
+// ---------------------------------------------------------------------------
+const MODULAR_APPEARANCE_KEY = 'woc.modularAppearance';
+const MODULAR_ARMOR_KEY = 'woc.modularArmorSet';
+/** Host element per class-details panel that the customizer mounts into. */
+const APPEARANCE_HOSTS: Record<string, string> = {
+  'charcreate-class-details': '#charcreate-appearance',
+  'offline-class-details': '#offline-appearance',
+};
+
+let modularAppearance: ModularAppearance = readStoredAppearance();
+const appearanceUis = new Map<string, AppearanceCustomizer>();
+
+function readStoredAppearance(): ModularAppearance {
+  try {
+    const raw = localStorage.getItem(MODULAR_APPEARANCE_KEY);
+    return normalizeAppearance(raw ? (JSON.parse(raw) as Partial<ModularAppearance>) : null);
+  } catch {
+    // private mode / corrupt value: a default body is always better than none
+    return normalizeAppearance(null);
+  }
+}
+
+// The creator emits on every `input` and every `pointermove` (the colour
+// wheels), and localStorage.setItem is synchronous: a wheel drag would pay a
+// stringify plus a store write per pointer sample. Coalesce to one trailing
+// write, flushed on pagehide so a refresh mid-drag still keeps the look.
+const APPEARANCE_STORE_DEBOUNCE_MS = 200;
+let appearancePendingStore: ModularAppearance | null = null;
+let appearanceStoreTimer: number | null = null;
+
+function flushAppearanceStore(): void {
+  if (appearanceStoreTimer !== null) {
+    window.clearTimeout(appearanceStoreTimer);
+    appearanceStoreTimer = null;
+  }
+  const pending = appearancePendingStore;
+  appearancePendingStore = null;
+  if (!pending) return;
+  try {
+    localStorage.setItem(MODULAR_APPEARANCE_KEY, JSON.stringify(pending));
+  } catch {
+    /* storage unavailable: the look still applies for this session */
+  }
+}
+
+function storeAppearance(a: ModularAppearance): void {
+  appearancePendingStore = a;
+  if (appearanceStoreTimer !== null) return;
+  appearanceStoreTimer = window.setTimeout(flushAppearanceStore, APPEARANCE_STORE_DEBOUNCE_MS);
+}
+
+/** Which kit a class's composed body wears: its own class kit by default
+ *  (classArmorSet), overridable per class from storage.
+ *
+ *  There is no picker for the override yet - reading it from storage keeps
+ *  every set reachable (and the fit verifiable) without new strings, and is
+ *  exactly the value a picker would write when one is added. The legacy
+ *  un-scoped key (`woc.modularArmorSet`, the warrior-test-bed knob) still
+ *  applies to the warrior only, so a set left there cannot dress all nine
+ *  classes as knights. */
+function readStoredArmorSet(cls: PlayerClass): ArmorSetId {
+  try {
+    const raw =
+      localStorage.getItem(`${MODULAR_ARMOR_KEY}.${cls}`) ??
+      (cls === 'warrior' ? localStorage.getItem(MODULAR_ARMOR_KEY) : null);
+    return (ARMOR_SETS as readonly string[]).includes(raw ?? '')
+      ? (raw as ArmorSetId)
+      : classArmorSet(cls);
+  } catch {
+    return classArmorSet(cls);
+  }
+}
+
+/** The composed appearance a class renders with. Reads `modularAppearance`
+ *  live, so editing the look in creation is reflected the next time a visual
+ *  is built. */
+function modularLookForClass(cls: PlayerClass): ModularLook | null {
+  return { app: modularAppearance, worn: creationLoadout(cls) };
+}
+
+/** The armour set an entity's composed body wears: the core's decision
+ *  (armorSetSourceFor), fed the two sources only this file knows: the
+ *  localStorage dev override for the local player, the class kit for peers. */
+function armorSetForEntity(isSelf: boolean): (cls: PlayerClass) => ArmorSetId {
+  return armorSetSourceFor(isSelf, readStoredArmorSet, classArmorSet);
+}
+
+/** Whether the creation turntable shows the set's helm. A view of the
+ *  character, not a property of them, so it lives here and not in the stored
+ *  appearance - a saved look must not carry "was previewing the helmet". */
+let creationHelm = false;
+
+/** The creation loadout for a class's set: everything it has, MINUS the helm
+ *  unless it has been switched back on, so the player can see the face, hair
+ *  and skin tone they are picking. */
+function creationLoadout(cls: PlayerClass): ArmorLoadout {
+  const set = readStoredArmorSet(cls);
+  const full = fullSet(set);
+  return creationHelm ? full : { ...full, head: null };
+}
+
+/** Drive the creation/offline turntable for a class chip: every class composes
+ *  from the stored appearance, wearing its class kit, through its own modular
+ *  def (class clips + starter weapons). */
+function previewClassBody(cls: PlayerClass): void {
+  if (!characterPreview) return;
+  const look = modularLookForClass(cls);
+  if (look) characterPreview.setModular(look.app, look.worn, cls);
+  else characterPreview.setClass(cls);
+}
+
+/** The class each panel's customizer is currently editing. The customizer
+ *  mounts ONCE per panel and survives class switches (its rows are class-
+ *  agnostic), so its closures must read the panel's live class from here
+ *  rather than capture the class they mounted under; a captured one would
+ *  keep previewing the first class's kit and weapons after a switch. */
+const appearancePanelClass = new Map<string, PlayerClass>();
+
+/** Mount (or tear down) the appearance customizer under a class-details panel.
+ *  Locale staleness (the customizer bakes its labels at mount, and the create
+ *  panel mounts before the locale chunk resolves) is tracked by
+ *  src/ui/appearance_panel_locale.ts, which the redesign editor registers with
+ *  too so one relocalize pass covers both. */
+function syncAppearanceUi(panelId: string, cls: PlayerClass): void {
+  const hostSel = APPEARANCE_HOSTS[panelId];
+  if (!hostSel) return;
+  const host = document.querySelector(hostSel) as HTMLElement | null;
+  if (!host) return;
+  appearancePanelClass.set(panelId, cls);
+  const existing = appearanceUis.get(panelId);
+  if (!modularLookForClass(cls)) {
+    existing?.destroy();
+    appearanceUis.delete(panelId);
+    forgetAppearancePanel(panelId);
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+  if (existing && !appearancePanelIsStale(panelId)) {
+    // The panel survives class switches; poke it so live-coloured chips (the
+    // outfit swatches read the class kit) repaint for the new class.
+    existing.set({});
+    return;
+  }
+  if (existing) {
+    // The locale resolved differently than when this panel was built (see
+    // appearance_panel_locale): its labels are baked, so relabelling means a rebuild.
+    existing.destroy();
+    appearanceUis.delete(panelId);
+  }
+  const panelClass = () => appearancePanelClass.get(panelId) ?? cls;
+  noteAppearancePanelMounted(panelId, () => syncAppearanceUi(panelId, panelClass()));
+  appearanceUis.set(
+    panelId,
+    mountAppearanceCustomizer(host, {
+      value: modularAppearance,
+      onChange: (next) => {
+        modularAppearance = next;
+        storeAppearance(next);
+        const c = panelClass();
+        characterPreview?.setModular(next, creationLoadout(c), c);
+      },
+      helm: creationHelm,
+      onHelm: (on) => {
+        creationHelm = on;
+        const c = panelClass();
+        characterPreview?.setModular(modularAppearance, creationLoadout(c), c);
+      },
+      // The chips must preview against the set the composed body actually
+      // wears: the stored override when one exists, not the class default.
+      armorSet: () => readStoredArmorSet(panelClass()),
+    }),
+  );
+}
+
+/**
+ * Whether creation offers the class's ready-made looks.
+ *
+ * OFF for now (Troy, 2026-08-03). The row predates the appearance customizer
+ * and offers a different answer to the same question (it picks a whole
+ * finished character, while the customizer builds one), so with both on screen
+ * the creator asks you to choose your look twice. Presets come back once the
+ * hair set is finished, and will then be whole authored appearances rather than
+ * per-class chromas.
+ *
+ * Only the two CREATION rows are gated. The in-game character window has its
+ * own picker (`#char-skin-row`, char_skin_window.ts) and is untouched: a skin
+ * already owned must stay reachable. Nothing else changes: the pickers still
+ * exist, still render, and the skin the player enters with is simply the
+ * default (0), which is what `selectedSkin` falls back to with no row mounted.
+ */
+const CREATION_SKIN_PRESETS = false;
+
+/** Hide a creation skin row, leaving the machinery in place. Only the row: the
+ *  online row shares its .skin-picker wrapper with the appearance customizer's
+ *  host, and an inline display:none on the wrapper also overrides the cs-wow
+ *  layout's display:contents, which is how the create panel lost its
+ *  customizer entirely when this hid the whole picker. */
+function hideSkinPicker(rowId: string): void {
+  const row = $(rowId) as HTMLElement | null;
+  if (!row) return;
+  row.innerHTML = '';
+  row.style.display = 'none';
+}
+
 /** Reset to the default skin and (re)render the offline picker for a class. */
 function refreshOfflineSkins(cls: PlayerClass): void {
   offlineSkin = 0;
   characterPreview?.setSkin(0);
+  if (!CREATION_SKIN_PRESETS) {
+    hideSkinPicker('#offline-skin-row');
+    return;
+  }
   renderSkinPicker('#offline-skin-row', cls, 0, (i) => {
     offlineSkin = i;
     characterPreview?.setSkin(i);
@@ -4967,6 +5800,10 @@ function refreshOfflineSkins(cls: PlayerClass): void {
 function refreshOnlineSkins(cls: PlayerClass): void {
   onlineSkin = 0;
   characterPreview?.setSkin(0);
+  if (!CREATION_SKIN_PRESETS) {
+    hideSkinPicker('#online-skin-row');
+    return;
+  }
   renderSkinPicker('#online-skin-row', cls, 0, (i) => {
     onlineSkin = i;
     characterPreview?.setSkin(i);
@@ -4991,13 +5828,16 @@ function updatePreviewContainer(panelId: string): void {
 
   if (panelId === '#charselect-panel') {
     // The selected roster row drives the showcase: its full real appearance
-    // (class or Combat Mech body + chroma + equipped mainhand), matching the world.
-    if (charselectSelected) {
-      characterPreview.setAppearance(charselectAppearance(charselectSelected));
+    // (class or Combat Mech body + chroma + equipped mainhand), matching the
+    // world. An open redesign editor wins: its draft IS the stage's subject.
+    if (redesignEditor.isOpen) {
+      redesignEditor.drivePreview();
+    } else if (charselectSelected) {
+      showCharselectCharacter(charselectSelected);
     } else {
       const row = document.querySelector('#char-list .char-row.sel') as HTMLElement | null;
       const cls = (row?.dataset.class as PlayerClass) ?? 'warrior';
-      characterPreview.setClass(cls);
+      previewClassBody(cls);
       characterPreview.setSkin(Number(row?.dataset.skin ?? 0) || 0);
     }
     syncPreviewAfterPanelLayout();
@@ -5011,7 +5851,7 @@ function updatePreviewContainer(panelId: string): void {
   const selEl = document.querySelector(selSelector) as HTMLElement | null;
   if (selEl) {
     const cls = selEl.dataset.class as PlayerClass;
-    characterPreview.setClass(cls);
+    previewClassBody(cls);
     if (panelId === '#charcreate-panel') refreshOnlineSkins(cls);
     else refreshOfflineSkins(cls);
   }
@@ -5157,12 +5997,14 @@ function show(el: string): void {
   // Reset currently rendered classes to force re-render/animation when opening a panel
   for (const key of ['offline-class-details', 'charcreate-class-details']) {
     currentlyRenderedClass[key] = null;
-    if (revertTimeouts[key] !== null && revertTimeouts[key] !== undefined) {
-      window.clearTimeout(revertTimeouts[key]!);
+    const revertTimeout = revertTimeouts[key];
+    if (revertTimeout !== null && revertTimeout !== undefined) {
+      window.clearTimeout(revertTimeout);
       revertTimeouts[key] = null;
     }
-    if (hoverTimeouts[key] !== null && hoverTimeouts[key] !== undefined) {
-      window.clearTimeout(hoverTimeouts[key]!);
+    const hoverTimeout = hoverTimeouts[key];
+    if (hoverTimeout !== null && hoverTimeout !== undefined) {
+      window.clearTimeout(hoverTimeout);
       hoverTimeouts[key] = null;
     }
   }
@@ -6016,6 +6858,9 @@ async function refreshCharacters(): Promise<void> {
   // Drop any stale selection from a previous realm; the default first-row
   // selection below re-arms the shared Enter World button and the preview name.
   charselectSelected = null;
+  // A redesign in progress is a draft against the OLD roster; discard it
+  // (nothing was saved) rather than let it edit a row that may be gone.
+  redesignEditor.close(false);
   syncCharselectEnterButton();
   setCharselectPreviewName('');
   try {
@@ -6026,6 +6871,7 @@ async function refreshCharacters(): Promise<void> {
     if (chars.some((c) => c.skinCatalog === 'mech')) void preloadMechAssets();
     if (api.realm) $('#charselect-realm').textContent = api.realm;
     listEl.innerHTML = '';
+    resetComposedRows();
     // Boot resume: a WebView reload during play sent us here with a persisted
     // active-play marker. If that character still exists on the marker's realm,
     // re-enter the world directly instead of showing char-select (a linkdead
@@ -6068,7 +6914,27 @@ async function refreshCharacters(): Promise<void> {
       const inWorldHint = c.online
         ? `<span class="char-inworld-hint">${escapeHtml(t('character.inWorldHint'))}</span>`
         : '';
-      row.innerHTML = `${portraitChipHtml({ cls: c.class, skin: c.skin ?? 0, name: c.name, variant: 'sm' })}
+      // One-shot redesign token (server-decided: pre-creator character, token
+      // unspent). Rendered on every action arm; gone for good once spent.
+      const rerollBtn = c.appearanceRerollAvailable
+        ? `<button type="button" class="btn reroll-char-btn" title="${escapeHtml(t('character.redesignHint'))}" aria-label="${escapeHtml(t('character.redesignTitle', { name: c.name }))}">${escapeHtml(t('character.redesign'))}</button>`
+        : '';
+      // The chip draws the character's REAL body: their authored modular look
+      // (or the mech cosmetic), matching the 3D stage and the world.
+      const chipHtml = () =>
+        portraitChipHtml({
+          cls: c.class,
+          skin: c.skin ?? 0,
+          name: c.name,
+          variant: 'sm',
+          look: charselectLook(c),
+          catalog: c.skinCatalog ?? 'class',
+        });
+      // A composed chip cannot hydrate from data attributes, so the row
+      // repaints its own chip once the assets land and again once the composed
+      // capture behind it lands (the crest shows until then).
+      if (charselectLook(c)) trackComposedChipRow(row, chipHtml, () => hydratePortraits(row));
+      row.innerHTML = `${chipHtml()}
         <div class="char-id">
           <span class="char-name">${escapeHtml(c.name)}</span>
           <span class="char-sub">${escapeHtml(t('character.levelClass', { level: c.level, className }))}${escapeHtml(statusText)}</span>
@@ -6076,10 +6942,10 @@ async function refreshCharacters(): Promise<void> {
         </div>
         ${
           c.forceRename
-            ? `<input class="rename-input" placeholder="${escapeHtml(t('character.newNamePlaceholder'))}" maxlength="16" /><span class="char-actions"><button class="btn rename-btn">${escapeHtml(t('character.rename'))}</button>${deleteCharButtonHtml(c.online)}</span>`
+            ? `<input class="rename-input" placeholder="${escapeHtml(t('character.newNamePlaceholder'))}" maxlength="16" /><span class="char-actions"><button class="btn rename-btn">${escapeHtml(t('character.rename'))}</button>${rerollBtn}${deleteCharButtonHtml(c.online)}</span>`
             : c.online
-              ? `<span class="char-actions"><button class="btn take-over-btn" title="${escapeHtml(t('character.takeOverConfirm'))}" aria-label="${escapeHtml(t('character.takeOverConfirm'))}">${escapeHtml(t('character.takeOver'))}</button>${deleteCharButtonHtml(true)}</span>`
-              : `<span class="char-actions"><button class="btn enter-world-btn">${escapeHtml(t('auth.enterWorld'))}</button>${deleteCharButtonHtml(false)}</span>`
+              ? `<span class="char-actions"><button class="btn take-over-btn" title="${escapeHtml(t('character.takeOverConfirm'))}" aria-label="${escapeHtml(t('character.takeOverConfirm'))}">${escapeHtml(t('character.takeOver'))}</button>${rerollBtn}${deleteCharButtonHtml(true)}</span>`
+              : `<span class="char-actions"><button class="btn enter-world-btn">${escapeHtml(t('auth.enterWorld'))}</button>${rerollBtn}${deleteCharButtonHtml(false)}</span>`
         }`;
 
       row.querySelector('.delete-char-btn')?.addEventListener('click', (e) => {
@@ -6112,6 +6978,13 @@ async function refreshCharacters(): Promise<void> {
       }
 
       const selectRow = () => {
+        // A redesign in progress belongs to the row it was opened FROM. Leaving
+        // it up while the selection moves splits the screen: the panel says
+        // "Redesign A" holding A's draft, the stage and name label show B, and
+        // Save writes A. Close it (draft discarded, nothing saved) before the
+        // selection moves; the reroll button's own click re-opens it after its
+        // selectRow() call, so redesigning the new row still works.
+        redesignEditor.close(false);
         // Deselect other characters
         document.querySelectorAll('#char-list .char-row').forEach((r) => {
           r.classList.remove('sel');
@@ -6122,8 +6995,9 @@ async function refreshCharacters(): Promise<void> {
         row.setAttribute('aria-selected', 'true');
         // The class-details sheet is gone from this screen (the news panel sits
         // there now), so drive the 3D preview directly: two characters of the
-        // same class can still differ in gear, skin, or cosmetic body.
-        characterPreview?.setAppearance(charselectAppearance(c));
+        // same class can still differ in gear, skin, cosmetic body, or their
+        // authored modular look.
+        showCharselectCharacter(c);
         charselectSelected = c;
         syncCharselectEnterButton();
         setCharselectPreviewName(c.name);
@@ -6135,6 +7009,19 @@ async function refreshCharacters(): Promise<void> {
           e.preventDefault();
           selectRow();
         }
+      });
+      row.querySelector('.reroll-char-btn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Captured before selectRow(), whose own close(false) call (on
+        // whatever editor is already open) would otherwise leave
+        // document.activeElement pointing at the OLD row's button by the
+        // time open() ran. Passing this button explicitly is the fix (see
+        // charselect_redesign.ts open()).
+        const opener = e.currentTarget as HTMLButtonElement;
+        // Select the row first so the stage, name, and Enter World button all
+        // agree on which character is being redesigned.
+        selectRow();
+        redesignEditor.open(c, opener);
       });
       // Double-click a row to jump straight into the world (classic-select
       // muscle memory). It routes through the shared desktop Enter World button
@@ -6164,7 +7051,7 @@ async function refreshCharacters(): Promise<void> {
     if (firstRow) {
       firstRow.click();
     } else {
-      characterPreview?.setClass('warrior');
+      previewClassBody('warrior');
     }
   } catch (err) {
     // A failed roster load must also drop any boot resume intent: leaving it
@@ -6274,7 +7161,11 @@ async function enterWorld(c: CharacterSummary, button?: HTMLButtonElement): Prom
       button.textContent = t('auth.enterWorld');
     }
   }
-  const world = new ClientWorld(api.token!, c.id, c.class, api.base, getClientSeed());
+  if (!api.token) throw new Error('online world entry requires an auth token');
+  resetLoadProfile();
+  loadPhaseStart('entry');
+  loadPhaseStart('realm-connect');
+  const world = new ClientWorld(api.token, c.id, c.class, api.base, getClientSeed());
   // Wire shareable player cards for this online session: publishing uploads the
   // composited PNG to this realm and returns an absolute public page URL, and
   // the referral provider feeds the card footer. Both are cleared on disconnect.
@@ -6298,6 +7189,7 @@ async function enterWorld(c: CharacterSummary, button?: HTMLButtonElement): Prom
     if (started) return;
     started = true;
     clearInterval(poll);
+    loadPhaseEnd('realm-connect');
     void startGame(world, null, world, `char:${c.id}`, true);
   };
   enterLoadingState(t('loading.connectingRealm'));
@@ -6333,6 +7225,13 @@ async function enterWorld(c: CharacterSummary, button?: HTMLButtonElement): Prom
     stopActiveEntryDiagnostics();
     clearEntryProbe();
     console.warn('[entry-diag] connection ended; entry probe cleared');
+    // A native shell rejected for a stale world-layout epoch while an OTA
+    // bundle is downloading or staged: the gate takes the screen (progress,
+    // then an immediate reload-apply) instead of the dead-end overlay below,
+    // whose Reload button would just boot the same stale bundle. The resume
+    // marker deliberately survives here: after the update applies, the reload
+    // resumes straight into the world on the NEW bundle.
+    if (otaUpdateGate.handleIncompatibleDisconnect(reason)) return;
     // The session ended for good (retries exhausted, kick, takeover, auth fail):
     // fatalOverlay clears the resume marker so a reload does not loop back into
     // a dead session. Exception: a duplicate-session conflict means the
@@ -6366,9 +7265,60 @@ async function enterWorld(c: CharacterSummary, button?: HTMLButtonElement): Prom
 
 const activeClassDetailsTimeouts: Record<string, number | null> = {};
 
+/** Drive the char-select stage with a roster character's REAL body: their own
+ *  authored modular look when they have one (previously every roster row
+ *  showed the legacy class rig regardless of the design it was created
+ *  with), the mech cosmetic or legacy rig otherwise.
+ *
+ *  Stays here rather than moving into the redesign module because it needs the
+ *  coordinator's own singletons (the shared stage, the legacy appearance
+ *  builder). The DECISION it rests on, what a roster row composes, is
+ *  charselectLook, which does not, and lives in render/characters/player_look.ts
+ *  with a unit test. */
+function showCharselectCharacter(c: CharacterSummary): void {
+  if (!characterPreview) return;
+  const look = charselectLook(c);
+  if (!look) {
+    characterPreview.setAppearance(charselectAppearance(c));
+    return;
+  }
+  // Same on-demand weapon-skin warmup the legacy path performs (see
+  // charselectAppearance): the composed turntable holds the skinned weapon too.
+  ensureCharacterUrl(weaponSkinModelUrl(c.weaponSkinId ?? null));
+  characterPreview.setModular(
+    look.app,
+    look.worn,
+    c.class,
+    c.mainhandItemId ?? null,
+    c.offhandItemId ?? null,
+  );
+  characterPreview.setWeaponSkin(c.weaponSkinId ?? null);
+}
+
+/** The one-shot appearance redesign editor (the char-select "Redesign"
+ *  button). Owns its own panel, draft and customizer in
+ *  src/ui/charselect_redesign.ts; everything it needs from this file arrives
+ *  through these deps. */
+const redesignEditor = new CharselectRedesignEditor({
+  previewModular: (app, worn, cls, mainhandItemId, offhandItemId, weaponSkinId) => {
+    if (!characterPreview) return;
+    ensureCharacterUrl(weaponSkinModelUrl(weaponSkinId));
+    characterPreview.setModular(app, worn, cls, mainhandItemId, offhandItemId);
+    characterPreview.setWeaponSkin(weaponSkinId);
+  },
+  restoreStage: () => {
+    if (charselectSelected) showCharselectCharacter(charselectSelected);
+  },
+  setPreviewName: setCharselectPreviewName,
+  saveAppearance: (characterId, app, helmHidden) =>
+    api.rerollAppearance(characterId, app, helmHidden).then(() => undefined),
+  refreshRoster: () => refreshCharacters(),
+  errorText: userFacingApiError,
+});
+
 // The char-select roster row's real, in-world appearance for the 3D preview.
 function charselectAppearance(c: CharacterSummary): PreviewAppearance {
-  // The packaged iOS shell streams the Armory weapon-skin GLBs after world
+  // Every iOS WebKit host streams the Armory weapon-skin GLBs after world
   // entry instead of holding all of them at the launcher, so the preview of a
   // character wearing one needs ITS skin fetched on demand (the mech lazy-load
   // pattern). Memoized and a no-op when resident or on eager platforms; a
@@ -6400,8 +7350,13 @@ function renderClassDetails(
   // offline pickers pass none and rebuild the class body only when the class changes.
   if (characterPreview) {
     if (preview) characterPreview.setAppearance(preview);
-    else if (currentlyRenderedClass[panelId] !== className) characterPreview.setClass(className);
+    else if (currentlyRenderedClass[panelId] !== className) previewClassBody(className);
   }
+
+  // Show the part/colour pickers for a composed body, hide them for a fixed
+  // class rig. Runs BEFORE the redundancy return so the first render of a
+  // panel mounts them (the class has not "changed" at that point).
+  if (!preview) syncAppearanceUi(panelId, className);
 
   // Redundant render check (class details panel content only)
   if (currentlyRenderedClass[panelId] === className) return;
@@ -6543,7 +7498,7 @@ function renderClassDetails(
             // A combo-point bleed finisher (rupture, rip): `total` alone is the
             // damage at zero combo points, a state the caster can never reach.
             // Render base plus per-combo-point, the same composition the
-            // finisherDamage arm above and abilityEffectText in the HUD use.
+            // finisherDamage arm above and the shared abilityEffectText formatter use.
             dmgText = t('abilityUi.tooltip.finisherDamage', {
               base: formatClassDetailNumber(secondaryEffect.total),
               perCombo: formatClassDetailNumber(secondaryEffect.perCombo),
@@ -6796,6 +7751,11 @@ function translatePage(): void {
 
 function refreshLocalizedDynamicShell(): void {
   updateWalletButton();
+  // Relabel the appearance customizers BEFORE the per-panel arms below: each
+  // arm returns early for the panel that happens to be on screen, so a language
+  // switch made from char-select would otherwise leave the create panel's baked
+  // labels in the old language until a class chip was clicked.
+  relocalizeAppearancePanels();
   const activePanel = document.body.dataset.startPanel;
   if (activePanel === 'realm-panel') {
     showRealmList();
@@ -6840,7 +7800,10 @@ async function changeLanguage(
 ): Promise<boolean> {
   onStatus?.(t('settings.languageLoading'));
   try {
-    await Promise.all([ensureLocaleLoaded(selected), ensureDeedLocalesLoaded(selected)]);
+    await Promise.all([
+      ensureLocaleLoaded(selected),
+      ...CONTENT_LOCALE_CHANNEL_ENSURERS.map((ensure) => ensure(selected)),
+    ]);
   } catch {
     // A locale chunk failed to load. Keep the already-resident locale and tell the user.
     onStatus?.(t('settings.languageLoadFailed'));
@@ -7261,7 +8224,7 @@ function showWalletPicker(
     closeBtn.type = 'button';
     closeBtn.className = 'x-btn wallet-picker-close';
     closeBtn.setAttribute('aria-label', t('skinEvent.close'));
-    closeBtn.textContent = '×';
+    closeBtn.innerHTML = svgIcon('close');
     titleRow.append(title, closeBtn);
 
     const help = document.createElement('p');
@@ -7922,7 +8885,7 @@ async function refreshGithubLinkStatus(): Promise<void> {
   } catch (err) {
     console.error('[github] could not load status', err);
   }
-  if (!status || status.enabled !== true) {
+  if (status?.enabled !== true) {
     group.hidden = true;
     return;
   }
@@ -8807,15 +9770,20 @@ function wireStartScreens(): void {
     // homepage permanently hidden - a worse failure than the English flash this gate prevents.
     try {
       translatePage();
+      // The create panel mounted its appearance customizer during boot, before
+      // this chunk resolved, so its baked labels are still English.
+      relocalizeAppearancePanels();
     } finally {
       if (gated && startScreen) startScreen.style.visibility = '';
     }
   };
   void ensureLocaleLoaded(bootLang).then(revealLocalized, revealLocalized);
-  // The deed locale chunk renders no homepage text, so it never gates the reveal; warm it in
-  // parallel so entering the world does not pay the fetch. The rejection is swallowed: the
-  // startGame await re-runs the load (in-flight cleared on reject) and owns the fallback.
-  void ensureDeedLocalesLoaded(bootLang).catch(() => {});
+  // The content-channel chunks (deed names, reliquary page names) render no
+  // homepage text, so they never gate the reveal; warm them in parallel so
+  // entering the world does not pay the fetch. Each rejection is swallowed:
+  // the startGame await re-runs the load (in-flight cleared on reject) and
+  // owns the fallback.
+  for (const ensure of CONTENT_LOCALE_CHANNEL_ENSURERS) void ensure(bootLang).catch(() => {});
   hydrateIcons();
   void loadProjectStats();
   wireContractAddressCopy();
@@ -9273,6 +10241,8 @@ function wireStartScreens(): void {
         }
       } else {
         const email = ($('#login-email') as unknown as HTMLInputElement).value.trim();
+        const optIn =
+          ($('#login-marketing') as unknown as HTMLInputElement | null)?.checked === true;
         const registered = await api.register(
           username,
           password,
@@ -9280,6 +10250,11 @@ function wireStartScreens(): void {
           token,
           REFERRAL_SLUG,
           nativeAttestation,
+          {
+            attribution: registerAttributionPayload(),
+            marketingOptIn: optIn,
+            locale: getLanguage(),
+          },
         );
         trackMetaPixel(
           'AccountCreated',
@@ -9355,6 +10330,10 @@ function wireStartScreens(): void {
     const emailField = $('#login-email-field') as HTMLElement;
     const emailInput = $('#login-email') as HTMLInputElement;
     emailField.hidden = isLogin;
+    // The marketing opt-in is register-only too; never required, so the
+    // wrapper's hidden is enough.
+    const marketingField = $('#login-marketing-field') as HTMLElement | null;
+    if (marketingField) marketingField.hidden = isLogin;
     if (isLogin) {
       emailInput.removeAttribute('required');
       emailInput.classList.remove('user-invalid-fallback');
@@ -9533,6 +10512,14 @@ function wireStartScreens(): void {
   // New Character opens the dedicated create screen; create's Back returns here.
   $('#btn-new-character').addEventListener('click', () => show('#charcreate-panel'));
   $('#btn-charcreate-back').addEventListener('click', () => show('#charselect-panel'));
+  // One-shot appearance redesign: Save spends the token (server-authoritative),
+  // Cancel discards the draft and restores the selected character's stage.
+  document
+    .getElementById('btn-reroll-save')
+    ?.addEventListener('click', () => void redesignEditor.save());
+  document
+    .getElementById('btn-reroll-cancel')
+    ?.addEventListener('click', () => redesignEditor.close(true));
   // Close the realm dropdown on outside click or Escape.
   document.addEventListener('click', (e) => {
     if (!realmDropdownOpen) return;
@@ -9747,6 +10734,15 @@ function wireStartScreens(): void {
         name,
         clsEl.dataset.class as PlayerClass,
         selectedSkin('#online-skin-row', onlineSkin),
+        // The look designed on this panel becomes THIS character's stored
+        // appearance (its own DB column). The localStorage draft stays what
+        // it is, the creator's working copy for the NEXT creation, and can
+        // never restyle characters that already exist.
+        modularAppearance,
+        // The turntable's helmet toggle is a real wardrobe choice at creation
+        // time: it becomes the character's standing helm preference, so the
+        // face just authored is the one that walks into the world.
+        !creationHelm,
       );
       newCharNameInput.value = '';
       charselectError.textContent = '';
@@ -10294,6 +11290,7 @@ function wireStartScreens(): void {
     refreshPlayMarker(Date.now());
     stopActiveEntryDiagnostics();
     clearEntryProbe();
+    flushAppearanceStore();
   });
   window.addEventListener('error', (event) => {
     const errorType = event.error instanceof Error ? event.error.name : 'unknown';
@@ -10493,15 +11490,11 @@ function wireStartScreens(): void {
     syncLandingGraphicsSelect();
   });
 
-  // Give each class chip its portrait as soon as portrait.ts's own (separate,
-  // wider) character-asset barrier resolves, independent of the 3D preview
-  // below. portraitsReady() latches once and decorateClassChips() is one-shot
-  // per chip, so gating this off charactersReady()'s narrower, retried set
-  // (as the 3D preview below does) left it permanently false whenever a
-  // transient failure landed in the wider set portrait.ts actually waits on:
-  // the preview would recover (that is charactersReady()'s job) but every
-  // class chip stayed a plain label for the rest of the page's life.
-  onPortraitsReady(decorateClassChips);
+  // Give each class chip its crest immediately: crests are drawn procedurally
+  // on a canvas, so unlike the 3D headshots this once waited on they need no
+  // character-asset barrier at all - and no asset failure can leave a chip a
+  // plain label for the rest of the page's life.
+  decorateClassChips();
 
   // Initialize 3D character preview once its assets are ready. Gated on the
   // narrower charactersReady() (with its own retries), not the site-wide
@@ -10528,13 +11521,18 @@ function wireStartScreens(): void {
       const canvas = $('#char-preview-canvas') as HTMLCanvasElement | null;
       if (container && canvas) {
         characterPreview = new CharacterPreview(container, canvas, {
-          constrainedMemory: NATIVE_APP,
+          // GFX.constrainedMemory covers every iOS WebKit host (Safari and other iOS
+          // browsers, not just the packaged app) plus the general touch/coarse-pointer
+          // detector, not just NATIVE_APP: the launcher's char-select preview sits in the
+          // same entry-allocation window the boot preload defers/streams for
+          // (assets/preload.ts: "a 12 GB iPhone 17 Pro was killed 1.6s into the LAUNCHER").
+          constrainedMemory: GFX.constrainedMemory,
         });
         // If a token auto-login already rendered the roster and selected a
         // character before assets finished, show its real appearance; otherwise
         // fall back to the selected class chip (create/offline panels).
         if (charselectSelected) {
-          characterPreview.setAppearance(charselectAppearance(charselectSelected));
+          showCharselectCharacter(charselectSelected);
         } else {
           const selSelector =
             activePanelId === '#offline-select'
@@ -10542,7 +11540,7 @@ function wireStartScreens(): void {
               : '#charcreate-panel .mini-class.sel';
           const selEl = document.querySelector(selSelector) as HTMLElement | null;
           const cls = selEl ? (selEl.dataset.class as PlayerClass) : 'warrior';
-          characterPreview.setClass(cls);
+          previewClassBody(cls);
         }
       }
     })
@@ -10614,6 +11612,11 @@ function fadeOutHomepageMusic(durationMs = 1600): void {
 // here, boot straight into that offline world and skip the start screen. Any
 // malformed/absent request falls through to the normal home flow.
 const editorPlaytest = takeEditorPlaytestRequest();
+const startupParams = new URLSearchParams(location.search);
+const diagnosticsAutoOffline =
+  import.meta.env.DEV &&
+  startupParams.get('diagnostics') === '1' &&
+  startupParams.get('diagnosticsAuto') === '1';
 if (editorPlaytest) {
   startSitePresence('home');
   void startOffline(
@@ -10623,6 +11626,9 @@ if (editorPlaytest) {
     editorPlaytest.content,
     editorPlaytest.seed,
   );
+} else if (diagnosticsAutoOffline) {
+  startSitePresence('home');
+  void startOffline('warrior', 'Diagnostics', 0);
 } else {
   startSitePresence('home');
   wireStartScreens();

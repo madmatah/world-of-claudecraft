@@ -4,6 +4,7 @@
 // proxy). The DOM half (the keyed pool, the mutable-slot tooltip) is in
 // tests/auras_painter.test.ts.
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { auraEffectDescriptor } from '../src/ui/aura_effect';
 import {
@@ -11,6 +12,8 @@ import {
   type AuraMode,
   type AurasDeps,
   type AurasEntityInput,
+  auraCancelNeedsConfirm,
+  CARRIED_FLAG_AURA_ID,
   compactAuraDuration,
   createAurasView,
   DEBUFF_AURA_KINDS,
@@ -73,30 +76,41 @@ describe('isAuraDebuff: the allowlist classification (lifted into the core)', ()
   it('matches the exact shared set of harmful kinds', () => {
     expect([...DEBUFF_AURA_KINDS].sort()).toEqual(
       [
+        'affliction_eye',
+        'affliction_eye_secondary',
+        'affliction_violence',
         'attackspeed',
         'blind',
         'bleed_vuln',
         'cauterize_fatigue',
+        // Cosmetic and mechanically inert: listed only so the operator-applied
+        // Cheater mark's countdown sorts into the debuff bar.
+        'cheater_mark',
         'corrode',
         'cost_tax',
         'critvuln',
         'debuff_ap',
         'disarm',
+        'duskfire_claim',
         'dot',
         'expose',
         'faerie_fire',
+        'forced_move',
         'heal_absorb',
         'hex',
         'incapacitate',
         'lockout',
         'mortal_wound',
+        'necromancy_harvest_mark',
         'polymorph',
         'root',
+        'ruinous_brand',
         'sated',
         'silence',
         'slow',
         'spellvuln',
         'stun',
+        'sun_verdict',
         'sunder',
         'tongues',
         'vulnerability',
@@ -211,6 +225,28 @@ describe('createAurasView: derivation per mode', () => {
     const debuffs = createAurasView('debuffs', deps()).tick(entity(auras));
     expect(debuffs.count).toBe(2);
     expect(debuffs.slots.slice(0, 2).map((s) => s.key)).toEqual(['deep_wounds', 'sunder']);
+  });
+
+  it('surfaces Divine Ascension as a charged buff', () => {
+    const state = createAurasView('buffs', deps()).tick(
+      entity([
+        aura({
+          id: 'divine_ascension',
+          name: 'Divine Ascension',
+          kind: 'internal_cd',
+          remaining: 45,
+          charges: 5,
+          value: 0,
+        }),
+      ]),
+    );
+
+    expect(state.count).toBe(1);
+    expect(state.slots[0]).toMatchObject({
+      key: 'divine_ascension',
+      isDebuff: false,
+      stacksText: '5',
+    });
   });
 
   it('renders bleed vulnerability as a non-cancelable debuff, never a helpful buff', () => {
@@ -414,6 +450,27 @@ describe('createAurasView: derivation per mode', () => {
     ).toBe('20s');
   });
 
+  it('hides fake one-day timers for persistent class engine states', () => {
+    const v = createAurasView('all', deps());
+    for (const id of [
+      'hunter_overdraw_counter',
+      'shaman_flow_state_progress',
+      'shaman_flow_state_ready',
+      'shaman_thunder_charges',
+      'shaman_warspirit_cadence',
+      'moontide',
+      'sunwake',
+      'old_blood',
+      'verdance',
+    ]) {
+      expect(
+        v.tick(entity([aura({ id, kind: 'internal_cd', remaining: 86_400 })])).slots[0]
+          .durationText,
+        id,
+      ).toBe('');
+    }
+  });
+
   it('compactAuraDuration boundaries: seconds round UP, larger units to nearest', () => {
     const U = { s: 's', m: 'm', h: 'h', d: 'd' };
     expect(compactAuraDuration(59.9, U)).toBe('60s');
@@ -430,6 +487,12 @@ describe('createAurasView: derivation per mode', () => {
     expect(v.tick(entity([aura({ id: 'a', stacks: undefined })])).slots[0].stacksText).toBe('');
     expect(v.tick(entity([aura({ id: 'a', stacks: 1 })])).slots[0].stacksText).toBe('');
     expect(v.tick(entity([aura({ id: 'a', stacks: 4 })])).slots[0].stacksText).toBe('4');
+  });
+
+  it('always badges Druid engine stages, including zero and one', () => {
+    const v = createAurasView('all', deps());
+    expect(v.tick(entity([aura({ id: 'moontide', stacks: 0 })])).slots[0].stacksText).toBe('0');
+    expect(v.tick(entity([aura({ id: 'old_blood', stacks: 1 })])).slots[0].stacksText).toBe('1');
   });
 
   it('badges remaining charges (shown even at 1) and prefers charges over stacks', () => {
@@ -644,5 +707,137 @@ describe('allocation budget (the reused-reference proxy)', () => {
     const tick = drive('debuffs');
     expect(() => assertAllocationStable(tick)).not.toThrow();
     expect(() => assertAllocationStable(() => tick().slots)).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Thornhollow Fields' carried-flag buff. Its icon is not upkeep decoration: it is
+// the ONLY affordance for the voluntary flag drop, so three properties are
+// load-bearing and each is asserted under BOTH a Sim-shaped aura and the leaner
+// ClientWorld mirror (the wire omits stacks/duration/sourceId), because the two
+// hosts must derive the same slot.
+// ---------------------------------------------------------------------------
+describe('auras_view: the carried-flag buff', () => {
+  // Sim-shaped: every optional field present, exactly as src/sim applies it.
+  const simShaped = (): AuraInput => ({
+    id: CARRIED_FLAG_AURA_ID,
+    name: 'Carrying the Flag',
+    kind: 'flag_carried',
+    value: 0,
+    remaining: 720,
+    duration: 720,
+    sourceId: OWN_PLAYER_ID,
+    stacks: 1,
+    school: 'physical',
+  });
+  // ClientWorld-mirror-shaped: the sparse wire omits stacks (1), duration, sourceId
+  // and the physical school entirely (server/game.ts WireAura).
+  const mirrorShaped = (): AuraInput => ({
+    id: CARRIED_FLAG_AURA_ID,
+    name: 'Carrying the Flag',
+    kind: 'flag_carried',
+    value: 0,
+    remaining: 720,
+  });
+  const shapes: Array<[string, () => AuraInput]> = [
+    ['Sim-shaped', simShaped],
+    ['ClientWorld-mirror-shaped', mirrorShaped],
+  ];
+
+  for (const [label, build] of shapes) {
+    it(`shows NO countdown (${label}): it is a mode, not a 12-minute timer`, () => {
+      const slot = createAurasView('buffs', deps()).tick(entity([build()])).slots[0];
+      expect(slot.key).toBe(CARRIED_FLAG_AURA_ID);
+      // The sim backs it with a longer-than-any-match duration purely so nothing can
+      // expire it; rendering "12m" would read as "the flag leaves me in 12 minutes".
+      expect(slot.durationText).toBe('');
+      expect(slot.toggle).toBe(true);
+      expect(slot.expiring).toBe(false);
+      // Contrast, so the assertion is not just "this view never labels anything".
+      const timed = createAurasView('buffs', deps()).tick(
+        entity([aura({ id: 'bg_sprint_rune', kind: 'buff_speed', remaining: 15 })]),
+      ).slots[0];
+      expect(timed.durationText).toBe('15s');
+      expect(timed.toggle).toBe(false);
+    });
+
+    it(`is CANCELABLE in buffs mode (${label}): the drop affordance exists`, () => {
+      const slot = createAurasView('buffs', deps()).tick(entity([build()])).slots[0];
+      // Same predicate the sim's cancel path answers to, so the offered cancel is
+      // never one the server refuses.
+      expect(slot.cancelable).toBe(true);
+      expect(slot.isDebuff).toBe(false);
+    });
+
+    it(`is never shed by the low-tier buff cap (${label})`, () => {
+      const slot = createAurasView('buffs', deps()).tick(entity([build()])).slots[0];
+      // The painter keys its fairness exemption on this flag; an ordinary buff
+      // carries it false, so the cap still sheds cosmetic upkeep.
+      expect(slot.alwaysRender).toBe(true);
+      const plain = createAurasView('buffs', deps()).tick(
+        entity([aura({ id: 'battle_shout', kind: 'buff_ap' })]),
+      ).slots[0];
+      expect(plain.alwaysRender).toBe(false);
+    });
+  }
+
+  it('derives an IDENTICAL slot from both host shapes (the parity assertion)', () => {
+    const sim = createAurasView('buffs', deps()).tick(entity([simShaped()])).slots[0];
+    const pick = (s: typeof sim) => ({
+      key: s.key,
+      durationText: s.durationText,
+      stacksText: s.stacksText,
+      toggle: s.toggle,
+      alwaysRender: s.alwaysRender,
+      cancelable: s.cancelable,
+      isDebuff: s.isDebuff,
+    });
+    const simPick = pick(sim);
+    const mirror = createAurasView('buffs', deps()).tick(entity([mirrorShaped()])).slots[0];
+    expect(pick(mirror)).toEqual(simPick);
+  });
+
+  it('cancelling it needs a touch confirm; an ordinary buff does not', () => {
+    // The gate the HUD reads: on touch the cancel gesture is a long press, which is
+    // also the tooltip-peek gesture, so this one cancel must not fire by accident.
+    expect(auraCancelNeedsConfirm(CARRIED_FLAG_AURA_ID)).toBe(true);
+    expect(auraCancelNeedsConfirm('battle_shout')).toBe(false);
+    expect(auraCancelNeedsConfirm('ghost_wolf')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The HUD half of the touch confirm. The buff-bar cancel listener lives inside the
+// Hud class (no seam a Node test can drive), so the DECISION is pinned above as a
+// pure predicate and the WIRING is pinned here against the real source, which is
+// what stops the two drifting into a long-press that drops the flag with no prompt.
+// ---------------------------------------------------------------------------
+describe('hud.ts: the buff-bar cancel routes a flag drop through the touch confirm', () => {
+  const hud = readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8');
+  const start = hud.indexOf('attachCancel: (el, cancelableAuraId) => {');
+  const handler = hud.slice(start, hud.indexOf('private readonly buffBarPainter', start));
+
+  it('gates on BOTH the predicate and the touch host, then confirms before cancelling', () => {
+    expect(start).toBeGreaterThan(-1);
+    expect(handler).toContain('auraCancelNeedsConfirm(auraId)');
+    // body.mobile-touch is the canonical touch-interface signal main.ts toggles.
+    expect(handler).toContain("document.body.classList.contains('mobile-touch')");
+    // The shared focus-trapped confirm family, not a bespoke prompt.
+    expect(handler).toContain('this.confirmDialog(');
+    expect(handler).toContain("t('hudChrome.bg.dropFlagConfirmTitle')");
+    expect(handler).toContain("t('hudChrome.bg.dropFlagConfirmBody')");
+    expect(handler).toContain("t('hudChrome.bg.dropFlagConfirmAccept')");
+    // The cancel only fires from the OK callback on that arm...
+    expect(handler).toContain('() => this.sim.cancelAura(auraId)');
+    // ...and the arm returns, so it can never also fall through to the instant call.
+    expect(handler).toMatch(/\);\s*return;\s*}\s*this\.sim\.cancelAura\(auraId\);/);
+  });
+
+  it('a desktop right-click stays instant (no confirm on the non-touch path)', () => {
+    // The unconditional cancel is the LAST statement, outside the gated block: an
+    // ordinary buff, and the flag on desktop, cancel with no prompt.
+    const gate = handler.indexOf('auraCancelNeedsConfirm');
+    const instant = handler.lastIndexOf('this.sim.cancelAura(auraId);');
+    expect(instant).toBeGreaterThan(gate);
   });
 });

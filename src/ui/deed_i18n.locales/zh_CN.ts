@@ -7,6 +7,98 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  exp_dawnhold_castle: {
+    name: '花园中敞开的门',
+    desc: '造访晨曦堡，漫步于它洒满阳光的花园厅堂。',
+  },
+  exp_the_last_keep: {
+    name: '寂静厅堂',
+    desc: '步入最后的堡垒，走过它寂静的厅堂。',
+  },
+  pvp_bg_first_capture: {
+    name: '旗帜在手',
+    desc: '在荆谷原野夺取一面旗帜。',
+  },
+  pvp_bg_first_win: {
+    name: '荆谷首胜',
+    desc: '赢得一场荆谷原野战场。',
+  },
+  pvp_bg_wins_25: {
+    name: '荆谷守护者',
+    desc: '赢得25场荆谷原野战场。',
+    title: '旗手',
+  },
+  pvp_bg_captures_100: {
+    name: '百面战旗',
+    desc: '生涯累计在荆谷原野夺取100面旗帜。',
+  },
+  dgn_rift: {
+    name: '裂隙行者',
+    desc: '击败裂隙的楼层首领，清除该裂隙。',
+  },
+  dgn_rift_s_rank: {
+    name: '裂隙君主',
+    desc: '清除一个S级裂隙，这是裂隙传送门能够生成的最高难度等级。',
+  },
+  col_reliquary_rank_2: {
+    name: '战利品保管者',
+    desc: '在圣物库达到策展人等级 2（收录 10 件不同圣物）。',
+    title: '战利品保管者',
+  },
+  col_reliquary_rank_3: {
+    name: '编目师',
+    desc: '在圣物库达到策展人等级 3（收录 25 件不同圣物）。',
+    title: '编目师',
+  },
+  col_reliquary_rank_4: {
+    name: '首席策展人',
+    desc: '在圣物库达到策展人等级 4（收录 50 件不同圣物）。',
+    title: '首席策展人',
+  },
+  col_reliquary_rank_5: {
+    name: '永恒的战利品',
+    desc: '在圣物库达到策展人等级 5（收录 100 件不同圣物）。',
+  },
+  pvp_honor_sergeant: {
+    name: '破阵者',
+    desc: '生涯累计获得10,000点荣誉。花费荣誉不会剥夺你的军阶。',
+    title: '破阵者',
+  },
+  pvp_honor_knight_lieutenant: {
+    name: '掠野者',
+    desc: '生涯累计获得40,000点荣誉，那是一整个赛季真枪实弹的战争。',
+    title: '掠野者',
+  },
+  pvp_honor_field_marshal: {
+    name: '战冠者',
+    desc: '生涯累计获得150,000点荣誉。在任何王国都十分罕见，理应如此。',
+    title: '战冠者',
+  },
+  col_reliquary_complete: {
+    name: '圣物库大全',
+    desc: '将角色能够保有的圣物库中每一件圣物收录在册。此后目录再增添，也不会收回这份记录。',
+    title: '宝库策展人',
+  },
+  col_reliquary_conquerors: {
+    name: '征服者书架',
+    desc: '将圣物库征服者书架上的每一件圣物收录在册。此后目录再增添，也不会收回这份记录。',
+    title: '破库者',
+  },
+  col_reliquary_illum_nythraxis_heroic: {
+    name: '点亮尼思拉克西斯',
+    desc: '点亮圣物库的“英雄：尼思拉克西斯团队副本”页面。',
+    title: '尼思拉克西斯之光',
+  },
+  col_reliquary_illum_thunzharr: {
+    name: '点亮桑扎尔',
+    desc: '点亮圣物库的“桑扎尔，觉醒之峰”页面。',
+    title: '桑扎尔之光',
+  },
+  col_reliquary_illum_gravewyrm_heroic: {
+    name: '点亮圣所',
+    desc: '点亮圣物库的“英雄：墓龙圣所”页面。',
+    title: '圣所之光',
+  },
   chr_drakemaw_broodlord: {
     name: '碎卵者',
     desc: '在满是龙卵的巢穴中击杀一头龙喉巢主，挺过它的怒吼、顺劈与烈焰。',
@@ -14,6 +106,54 @@ export const table: DeedLocaleTable = {
   chr_maw_matriarch: {
     name: '长空归寂',
     desc: '在龙喉上空的火山口栖地中，击杀辛德拉蕾丝，龙喉之母。',
+  },
+  chr_frostveil_gatherer: {
+    name: '梯田收获',
+    desc: '在Frostveil采集一处矿脉、一片木料和一块草药地。',
+  },
+  chr_frostveil_first_cast: {
+    name: '山湖初冰',
+    desc: '在Frostveil水域钓上一条鱼。',
+  },
+  chr_amberfall_gatherer: {
+    name: 'Amberfall的收获',
+    desc: '在Amberfall采集一处矿脉、一片木料和一块草药地。',
+  },
+  chr_amberfall_first_cast: {
+    name: '大沼泽之获',
+    desc: '在Amberfall水域钓上一条鱼。',
+  },
+  chr_nightbloom_gatherer: {
+    name: '梦中收获',
+    desc: '在Nightbloom采集一处矿脉、一片木料和一块草药地。',
+  },
+  chr_nightbloom_first_cast: {
+    name: '月井涟漪',
+    desc: '在Nightbloom水域钓上一条鱼。',
+  },
+  chr_wraithwood_gatherer: {
+    name: '树冠下的收获',
+    desc: '在Wraithwood采集一处矿脉、一片木料和一块草药地。',
+  },
+  chr_wraithwood_first_cast: {
+    name: '镜湾一投',
+    desc: '在Wraithwood水域钓上一条鱼。',
+  },
+  chr_palmreach_gatherer: {
+    name: '棕榈滩收获',
+    desc: '在Palmreach采集一处矿脉、一片木料和一块草药地。',
+  },
+  chr_palmreach_first_cast: {
+    name: '蓝宝石潟湖垂钓',
+    desc: '在Palmreach水域钓上一条鱼。',
+  },
+  chr_evergarden_gatherer: {
+    name: '花坛馈赠',
+    desc: '在Evergarden采集一处矿脉、一片木料和一块草药地。',
+  },
+  chr_evergarden_first_cast: {
+    name: '花瓣池一投',
+    desc: '在Evergarden水域钓上一条鱼。',
   },
   pvp_card_duel_first_win: {
     name: '以牌为规',
@@ -544,5 +684,33 @@ export const table: DeedLocaleTable = {
   chr_farshore_first_cast: {
     name: '海鸥知晓',
     desc: '在远岸的水域钓起一条鱼。',
+  },
+  prog_engineering_rare: {
+    name: '精密工程',
+    desc: '在工程学中制作你的第一件稀有品质物品。',
+  },
+  prog_alchemy_rare: {
+    name: '稀世佳酿',
+    desc: '在炼金术中制作你的第一件稀有品质物品。',
+  },
+  prog_cooking_rare: {
+    name: '令人难忘的佳肴',
+    desc: '在烹饪中制作你的第一件稀有品质物品。',
+  },
+  prog_leatherworking_rare: {
+    name: '精细鞣制',
+    desc: '在制皮中制作你的第一件稀有品质物品。',
+  },
+  prog_tailoring_rare: {
+    name: '大师的针脚',
+    desc: '在裁缝中制作你的第一件稀有品质物品。',
+  },
+  prog_weaponcrafting_rare: {
+    name: '淬炼至光亮',
+    desc: '在武器锻造中制作你的第一件稀有品质物品。',
+  },
+  prog_armorcrafting_rare: {
+    name: '锻造至完美',
+    desc: '在护甲锻造中制作你的第一件稀有品质物品。',
   },
 };

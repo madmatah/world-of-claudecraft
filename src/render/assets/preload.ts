@@ -21,9 +21,11 @@
 //
 // This does NOT weaken the tier-independent superset invariant that props.ts and
 // characters/manifest.ts document (the v0.16.0 farmCrate P0): assetsReady() still
-// awaits every registered task before the Renderer is constructed, so placement
-// still cannot outrun a load. Only the start time moved. The ordering that makes
-// that true (begin, then await) is pinned by tests/defer_launcher_preloads.test.ts.
+// awaits every CRITICAL registered task before the Renderer is constructed, so
+// placement still cannot outrun a load. Only the start time moved. The ordering
+// that makes that true (begin, then await) is pinned by
+// tests/defer_launcher_preloads.test.ts.
+//
 import { assetLoadStarted, recordPreloadWait } from './stats';
 
 const tasks: Promise<unknown>[] = [];
@@ -54,12 +56,12 @@ export function registerPreload(task: Promise<unknown>): void {
 
 /**
  * Register a world-content fetch that must NOT run on the launcher. The thunk is
- * held until beginDeferredPreloads(); it must CREATE the promise when called, not
- * close over one that is already in flight, or nothing is actually deferred.
+ * held until its lane opens; it must CREATE the promise when called, not close
+ * over one that is already in flight, or nothing is actually deferred.
  *
  * Registering after the lane has already been opened (a module imported lazily
- * mid-session) starts immediately, so a late import can never strand its assets
- * behind a gate that has already been lifted.
+ * mid-session) starts immediately, so a late import can
+ * never strand its assets behind a gate that has already been lifted.
  */
 export function registerDeferredPreload(start: () => Promise<unknown>): void {
   if (deferredBegun) {

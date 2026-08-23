@@ -11,6 +11,8 @@ export interface BufferedSelfMotionFrame {
   frameDt: number;
   driveImpulse: boolean;
   popVelocity: number;
+  snapAgeMs: number;
+  snapIntervalMs: number;
 }
 
 export class SelfMotionFrameBuffer {
@@ -27,6 +29,8 @@ export class SelfMotionFrameBuffer {
     frameDt: number,
     driveImpulse: boolean,
     popVelocity: number,
+    snapAgeMs: number,
+    snapIntervalMs: number,
   ): BufferedSelfMotionFrame {
     if (this.frame === null) {
       this.frame = {
@@ -40,6 +44,8 @@ export class SelfMotionFrameBuffer {
         frameDt,
         driveImpulse,
         popVelocity,
+        snapAgeMs,
+        snapIntervalMs,
       };
     } else {
       this.frame.enabled = enabled;
@@ -52,6 +58,8 @@ export class SelfMotionFrameBuffer {
       this.frame.frameDt = frameDt;
       this.frame.driveImpulse = driveImpulse;
       this.frame.popVelocity = popVelocity;
+      this.frame.snapAgeMs = snapAgeMs;
+      this.frame.snapIntervalMs = snapIntervalMs;
     }
     return this.frame;
   }

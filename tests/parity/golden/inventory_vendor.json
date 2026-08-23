@@ -20,7 +20,7 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 945,
+      "nextId": 967,
       "state": "5bc471b0",
       "events": "741638a5",
       "rng": {
@@ -34,8 +34,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "cec82aa9",
+      "nextId": 968,
+      "state": "6e8c0a5c",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -55,12 +55,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 1000,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -73,7 +73,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -91,6 +91,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "talents": {
             "rows": {}
           },
@@ -109,7 +113,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             }
           ],
           "blockChance": 0.05,
@@ -122,7 +126,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -166,9 +170,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "8ae53c22",
-      "events": "2a07b3ad",
+      "nextId": 968,
+      "state": "7b1598eb",
+      "events": "c3317951",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -187,12 +191,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -207,7 +211,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -233,6 +237,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "talents": {
             "rows": {}
           },
@@ -251,7 +259,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             }
           ],
           "blockChance": 0.05,
@@ -264,7 +272,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -308,9 +316,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "31dd6369",
-      "events": "ce256953",
+      "nextId": 968,
+      "state": "084f040f",
+      "events": "49ddbae5",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -329,12 +337,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -351,7 +359,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "helmet": "cryptbone_helm",
@@ -382,6 +390,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -400,7 +419,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             }
           ],
           "blockChance": 0.05,
@@ -413,7 +432,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 130,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -457,9 +476,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "9a467c76",
-      "events": "69d1547f",
+      "nextId": 968,
+      "state": "a27c2996",
+      "events": "102514d7",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -478,12 +497,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -500,7 +519,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "helmet": "roadwardens_helm",
@@ -531,6 +550,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -549,7 +579,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             }
           ],
           "blockChance": 0.05,
@@ -562,7 +592,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 120,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -606,9 +636,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "5d4a63fc",
-      "events": "6554f806",
+      "nextId": 968,
+      "state": "b465e102",
+      "events": "5f9a5dce",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -627,12 +657,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -649,7 +679,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -683,6 +713,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -701,7 +742,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             }
           ],
           "blockChance": 0.05,
@@ -714,7 +755,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -758,9 +799,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "3a6aaed6",
-      "events": "ba122617",
+      "nextId": 968,
+      "state": "27857612",
+      "events": "9bcf50f7",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -779,12 +820,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -801,7 +842,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -835,6 +876,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -853,7 +905,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             }
           ],
           "blockChance": 0.05,
@@ -878,7 +930,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -923,9 +975,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "102944e7",
-      "events": "0c94d7be",
+      "nextId": 968,
+      "state": "b13101d1",
+      "events": "40beaa42",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -944,12 +996,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -966,7 +1018,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -996,6 +1048,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -1014,7 +1077,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             }
           ],
           "blockChance": 0.05,
@@ -1039,7 +1102,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -1084,9 +1147,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "65d2aaf6",
-      "events": "88d8ddfc",
+      "nextId": 968,
+      "state": "02a75f2a",
+      "events": "27eb8fbd",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -1105,12 +1168,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -1128,7 +1191,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -1158,6 +1221,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -1176,7 +1250,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             },
             {
               "duration": 900,
@@ -1185,7 +1259,7 @@
               "name": "Might of the Bear",
               "remaining": 900,
               "school": "nature",
-              "sourceId": 945,
+              "sourceId": 967,
               "value": 12
             }
           ],
@@ -1211,7 +1285,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 220,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -1256,9 +1330,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "60c087e3",
-      "events": "ed786785",
+      "nextId": 968,
+      "state": "782830b9",
+      "events": "305fdb61",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -1277,12 +1351,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -1304,7 +1378,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -1334,6 +1408,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -1352,7 +1437,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             },
             {
               "duration": 900,
@@ -1361,7 +1446,7 @@
               "name": "Might of the Serpent",
               "remaining": 900,
               "school": "nature",
-              "sourceId": 945,
+              "sourceId": 967,
               "value": 12
             }
           ],
@@ -1387,7 +1472,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 220,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -1432,9 +1517,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "acc5c236",
-      "events": "24b5f61c",
+      "nextId": 968,
+      "state": "7a31a2fc",
+      "events": "32424d20",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -1453,12 +1538,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 710,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -1481,7 +1566,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -1515,6 +1600,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -1533,7 +1629,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             },
             {
               "duration": 900,
@@ -1542,7 +1638,7 @@
               "name": "Might of the Serpent",
               "remaining": 900,
               "school": "nature",
-              "sourceId": 945,
+              "sourceId": 967,
               "value": 12
             }
           ],
@@ -1568,7 +1664,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 220,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -1613,9 +1709,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "b29b19cb",
-      "events": "f2001d30",
+      "nextId": 968,
+      "state": "76de62f1",
+      "events": "e0d370bc",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -1634,12 +1730,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 714,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -1662,7 +1758,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -1696,6 +1792,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -1720,7 +1827,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             },
             {
               "duration": 900,
@@ -1729,7 +1836,7 @@
               "name": "Might of the Serpent",
               "remaining": 900,
               "school": "nature",
-              "sourceId": 945,
+              "sourceId": 967,
               "value": 12
             }
           ],
@@ -1755,7 +1862,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 220,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -1800,9 +1907,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "ed4802dc",
-      "events": "006604ca",
+      "nextId": 968,
+      "state": "e15af8c4",
+      "events": "670ccbae",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -1821,12 +1928,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 720,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -1850,7 +1957,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -1884,6 +1991,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -1912,7 +2030,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             },
             {
               "duration": 900,
@@ -1921,7 +2039,7 @@
               "name": "Might of the Serpent",
               "remaining": 900,
               "school": "nature",
-              "sourceId": 945,
+              "sourceId": 967,
               "value": 12
             }
           ],
@@ -1947,7 +2065,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 220,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -1992,9 +2110,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "e320c021",
-      "events": "15f4702d",
+      "nextId": 968,
+      "state": "8a9e48a7",
+      "events": "f3111079",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -2013,12 +2131,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 716,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -2042,7 +2160,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -2076,6 +2194,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -2100,7 +2229,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             },
             {
               "duration": 900,
@@ -2109,7 +2238,7 @@
               "name": "Might of the Serpent",
               "remaining": 900,
               "school": "nature",
-              "sourceId": 945,
+              "sourceId": 967,
               "value": 12
             }
           ],
@@ -2135,7 +2264,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 220,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -2180,8 +2309,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "e320c021",
+      "nextId": 968,
+      "state": "8a9e48a7",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -2201,12 +2330,12 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "copper": 716,
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -2230,7 +2359,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 945,
+          "entityId": 967,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -2264,6 +2393,17 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {
+              "cryptbone_helm": 1
+            },
+            "firstFind": {
+              "cryptbone_helm": {}
+            },
+            "recent": [
+              "cryptbone_helm"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -2288,7 +2428,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 945
+              "sourceId": 967
             },
             {
               "duration": 900,
@@ -2297,7 +2437,7 @@
               "name": "Might of the Serpent",
               "remaining": 900,
               "school": "nature",
-              "sourceId": 945,
+              "sourceId": 967,
               "value": 12
             }
           ],
@@ -2323,7 +2463,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 220,
-          "id": 945,
+          "id": 967,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",

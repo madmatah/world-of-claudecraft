@@ -20,6 +20,7 @@ export class OverlaySprites {
   private count = 0;
   private wasEmpty = true;
   private tmpColor = new THREE.Color();
+  private disposed = false;
 
   constructor(scene: THREE.Scene, tex: AbilityVfxTextures) {
     this.geo.setAttribute(
@@ -122,6 +123,7 @@ export class OverlaySprites {
   }
 
   commit(): void {
+    if (this.disposed) return;
     if (this.count === 0) {
       if (!this.wasEmpty) {
         this.wasEmpty = true;
@@ -130,11 +132,31 @@ export class OverlaySprites {
       return;
     }
     this.wasEmpty = false;
-    (this.geo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.aCell as THREE.BufferAttribute).needsUpdate = true;
-    (this.geo.attributes.aAlpha as THREE.BufferAttribute).needsUpdate = true;
+    // Upload only the prefix this frame wrote (the pooled cloud's idiom,
+    // ../vfx.ts packRenderCloud): a frame showing two windup orbs re-uploaded
+    // all CAPACITY points otherwise. Points past the prefix are stale by
+    // design and unreachable, because setDrawRange below stops at this.count.
+    this.upload(this.geo.attributes.position as THREE.BufferAttribute, this.count * 3);
+    this.upload(this.geo.attributes.aColor as THREE.BufferAttribute, this.count * 3);
+    this.upload(this.geo.attributes.aSize as THREE.BufferAttribute, this.count);
+    this.upload(this.geo.attributes.aCell as THREE.BufferAttribute, this.count);
+    this.upload(this.geo.attributes.aAlpha as THREE.BufferAttribute, this.count);
     this.geo.setDrawRange(0, this.count);
+  }
+
+  // clearUpdateRanges first, so a range queued on a frame this cloud was never
+  // submitted (nothing drawn, nothing uploaded) cannot pile up.
+  private upload(attr: THREE.BufferAttribute, components: number): void {
+    attr.clearUpdateRanges();
+    attr.addUpdateRange(0, components);
+    attr.needsUpdate = true;
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.points.removeFromParent();
+    this.geo.dispose();
+    (this.points.material as THREE.Material).dispose();
   }
 }

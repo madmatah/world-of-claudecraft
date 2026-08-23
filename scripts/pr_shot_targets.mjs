@@ -6,6 +6,8 @@
 // Adding coverage is one entry here, not a new script. Keep recipes offline-only (they
 // drive window.__game directly: sim.addItem, hud.toggleBags/toggleMap, sim.player.pos).
 
+import { dismissEntryOverlays } from './enter_offline_game.mjs';
+
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Poll up to ~10s for `selector` to report a non-zero layout size, checking every
@@ -25,6 +27,31 @@ async function pollForSize(page, selector, attempts = 20, intervalMs = 500) {
   }
   return false;
 }
+
+// Seed the theme preset BEFORE the document loads (variant.beforeLoad), in string
+// form because this script runs under tsx (keepNames breaks nested functions inside
+// evaluate callbacks). Every themed variant seeds explicitly, never relies on a
+// clean default: the harness profile's localStorage outlives page.close, so a
+// prior variant's preset would silently leak into the next shot otherwise.
+const themeSeed = (preset) => async (page) => {
+  await page.evaluateOnNewDocument(
+    `try { localStorage.setItem('woc_theme', JSON.stringify({ preset: '${preset}', custom: {} })); } catch {}`,
+  );
+};
+
+// Seed the LOWEST graphics preset before the document loads, the same beforeLoad
+// storage slot themeSeed uses and for the same reason: the renderer reads
+// woc_settings.graphicsPreset during startup (tier choice gates preload), so a
+// staging-time write lands too late. graphicsDefaultApplied rides along because
+// main.ts otherwise probes the device on a first run and PERSISTS its own tier
+// over the seed. A window/HUD shot is evidence about the DOM, never about render
+// fidelity, so tier 1 is what it should cost: less to software-render under
+// SwiftShader on a host that usually has other work on it.
+const lowGraphicsSeed = async (page) => {
+  await page.evaluateOnNewDocument(
+    `try { const k = 'woc_settings'; const s = JSON.parse(localStorage.getItem(k) || '{}'); s.graphicsPreset = 1; s.graphicsDefaultApplied = true; localStorage.setItem(k, JSON.stringify(s)); } catch {}`,
+  );
+};
 
 // Teleport onto the Merchant's stall (zone1, {0, 11.5}) so marketOpen's proximity gate
 // passes, then open the Browse tab. Shared by the market filter-chrome targets below.
@@ -158,7 +185,507 @@ async function stubDesktopUpdateBridge(page) {
   })()`);
 }
 
+// ---------------------------------------------------------------------------
+// The Reliquary HUD tracker (#reliquary-tracker) bring-up, shared by every
+// variant of the reliquary-tracker target below. The strip paints only when it
+// HAS lines, so a capture has to earn them the way a player does: fill a few
+// pages part-way, then pin them through the window's own pin buttons (the real
+// path, storage and repaint included) rather than poking the view core.
+// ---------------------------------------------------------------------------
+
+/** Pages the capture pins. Under RELIQUARY_TRACK_CAP on purpose, so the shot
+ *  shows a tracked set rather than the cap refusal. */
+const RELIQUARY_TRACKER_PINS = 3;
+
+/** Share of a page's item relics to grant, so every tracked line shows a
+ *  PARTIAL bar: an empty one proves nothing and a full one illuminates the
+ *  page, which retires it from the strip. */
+const RELIQUARY_TRACKER_FILL = 0.5;
+
+/** Wipe the per-character pin store before the document loads. The harness
+ *  profile's localStorage outlives page.close, so an earlier variant's pins
+ *  would otherwise decide what the next one shows, and the pin control is a
+ *  TOGGLE: a second click on an already-pinned page unpins it. */
+async function clearReliquaryPins(page) {
+  await page.evaluateOnNewDocument(
+    `try { for (const k of Object.keys(localStorage)) { if (k.indexOf('woc_reliquary_pins') === 0) localStorage.removeItem(k); } } catch {}`,
+  );
+}
+
+/** Seed the LOW graphics preset before the document loads (the capture rule:
+ *  every rig shoots the lowest preset so shots stay comparable across
+ *  machines; only deliberate gfx-comparison shots keep their own preset).
+ *  Merges over any existing woc_settings so unrelated persisted options
+ *  survive; graphicsPreset 1 is PRESET_LOW in src/render/gfx.ts. */
+async function seedLowGraphicsPreset(page) {
+  await page.evaluateOnNewDocument(
+    `try { const s = JSON.parse(localStorage.getItem('woc_settings') ?? '{}') || {}; s.graphicsPreset = 1; localStorage.setItem('woc_settings', JSON.stringify(s)); } catch {}`,
+  );
+}
+
+/** The tracker variants need BOTH pre-load seeds: the pin-store wipe and the
+ *  low preset (a variant carries one beforeLoad, so this composes the pair). */
+async function clearPinsOnLowPreset(page) {
+  await clearReliquaryPins(page);
+  await seedLowGraphicsPreset(page);
+}
+
+/** Open The Reliquary on the Conquerors shelf and return its page ids in shelf
+ *  order. That shelf is item-only, which is what makes the partial fill below
+ *  predictable (marks, mounts, titles and skins live in other stores). */
+async function openReliquaryConquerorsShelf(page) {
+  await page.evaluate(() => {
+    document.querySelector('#gpu-notice')?.remove();
+    document.querySelector('.camera-prompt-confirm')?.click();
+    window.__game?.hud?.openReliquary?.();
+  });
+  const opened = await pollForSize(page, '#reliquary-window');
+  if (!opened) throw new Error('reliquary window did not open');
+  await page.evaluate(() => {
+    document.querySelector('#reliquary-window [data-nav="conquerors"]')?.click();
+  });
+  await wait(300);
+  return page.evaluate(() =>
+    [...document.querySelectorAll('#reliquary-window .reliquary-page-row')].map(
+      (row) => row.dataset.page,
+    ),
+  );
+}
+
+/** Grant part of one page's item relics by reading the page detail's OWN cells
+ *  (data-cell-id / data-cell-kind), never a hard-coded relic list that content
+ *  re-authoring would rot, then return to the shelf. Returns how many landed. */
+async function fillReliquaryPagePartway(page, pageId) {
+  await page.evaluate((id) => {
+    document.querySelector(`#reliquary-window [data-page="${id}"]`)?.click();
+  }, pageId);
+  await wait(250);
+  const granted = await page.evaluate((fraction) => {
+    const cells = [...document.querySelectorAll('#reliquary-window .reliquary-cell')];
+    const missing = [];
+    for (const cell of cells) {
+      if (cell.dataset.cellKind === 'item' && cell.dataset.cellOwned === '0') missing.push(cell);
+    }
+    // itemsDiscovered is the set every completion read folds; the offline Sim
+    // hands out the live object, so adding to it is exactly what a real find
+    // does minus the event.
+    const discovered = window.__game?.sim?.deedStats?.itemsDiscovered;
+    const want = Math.min(missing.length, Math.max(1, Math.round(cells.length * fraction)));
+    let count = 0;
+    for (const cell of missing) {
+      if (count >= want) break;
+      const relicId = cell.dataset.cellId;
+      if (!relicId) continue;
+      discovered?.add(relicId);
+      count++;
+    }
+    document.querySelector('#reliquary-window [data-back]')?.click();
+    return count;
+  }, RELIQUARY_TRACKER_FILL);
+  await wait(250);
+  return granted;
+}
+
+/** Fill and pin RELIQUARY_TRACKER_PINS pages, leaving the window OPEN on the
+ *  shelf list with its pin buttons in their pinned state. Small pages first, so
+ *  every bar reads as progress rather than a sliver on a thirty-slot page. */
+async function pinReliquaryTrackerPages(page) {
+  const pageIds = await openReliquaryConquerorsShelf(page);
+  if (pageIds.length === 0) throw new Error('reliquary shelf listed no pages');
+  const sized = await page.evaluate((ids) => {
+    const sim = window.__game?.sim;
+    const rows = [];
+    for (const id of ids) {
+      const c = sim?.reliquaryPageCompletion?.(id);
+      if (!c || c.complete || c.total < 4 || c.total > 14) continue;
+      rows.push({ pageId: id, total: c.total });
+    }
+    rows.sort((a, b) => a.total - b.total || (a.pageId < b.pageId ? -1 : 1));
+    return rows;
+  }, pageIds);
+  const picks = (sized.length > 0 ? sized.map((r) => r.pageId) : pageIds).slice(
+    0,
+    RELIQUARY_TRACKER_PINS,
+  );
+  for (const pageId of picks) await fillReliquaryPagePartway(page, pageId);
+  // Pin only what is NOT already pinned: the control toggles, so a blind click
+  // on a pinned page would take the line straight back off the strip.
+  const pinned = await page.evaluate((ids) => {
+    let count = 0;
+    for (const id of ids) {
+      const btn = document.querySelector(`#reliquary-window [data-pin="${id}"]`);
+      // The at-cap refusal renders aria-disabled (still clickable, refused in
+      // the handler), so honor both forms: a refused click would inflate the
+      // pinned count and defeat the nothing-pinned throw below. (An at-cap
+      // control is by construction unpinned, so no stale pin can flip.)
+      if (
+        !btn ||
+        btn.disabled ||
+        btn.getAttribute('aria-disabled') === 'true' ||
+        btn.getAttribute('aria-pressed') === 'true'
+      )
+        continue;
+      btn.click();
+      count++;
+    }
+    return count;
+  }, picks);
+  if (pinned === 0) throw new Error('no reliquary page could be pinned');
+  await wait(400);
+  return picks;
+}
+
+// Standard-mapping button indices the cross-hotbar shots press (mirrors GP in
+// src/game/gamepad_map.ts; duplicated as literals because this script cannot import
+// from src/).
+const GP_Y = 3;
+const GP_LB = 4;
+const GP_LT = 6;
+const GP_RT = 7;
+
+// Install a fake standard-mapping pad before the document loads. The cross hotbar
+// only appears while one is connected, and headless Chrome exposes no Gamepad API,
+// so without this every cross-hotbar shot is just the keyboard HUD. `window.__fakePad`
+// is the handle the capture drives: the manager re-reads getGamepads every frame, so
+// writing `pressed` is enough to hold a trigger. String form because this script runs
+// under tsx (keepNames breaks nested functions inside evaluate callbacks).
+const fakePadSeed = async (page) => {
+  await page.evaluateOnNewDocument(
+    `window.__fakePad = { pressed: [] };
+     var fakeGetGamepads = function () {
+       var down = window.__fakePad.pressed;
+       var buttons = [];
+       for (var i = 0; i < 17; i++) {
+         var on = down.indexOf(i) >= 0;
+         buttons.push({ pressed: on, touched: on, value: on ? 1 : 0 });
+       }
+       return [{
+         index: 0,
+         id: 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)',
+         connected: true,
+         mapping: 'standard',
+         buttons: buttons,
+         axes: [0, 0, 0, 0],
+         timestamp: performance.now(),
+       }];
+     };
+     // getGamepads lives on Navigator.prototype and is not writable through a
+     // plain assignment on the instance, so define it on both.
+     try { Object.defineProperty(Navigator.prototype, 'getGamepads', { value: fakeGetGamepads, configurable: true, writable: true }); } catch (e) {}
+     try { Object.defineProperty(navigator, 'getGamepads', { value: fakeGetGamepads, configurable: true, writable: true }); } catch (e) {}
+     // Headless pages can report themselves unfocused, and the pad manager takes
+     // no input from an unfocused window. Say focused so the poll runs.
+     try { Object.defineProperty(document, 'hasFocus', { value: function () { return true; }, configurable: true, writable: true }); } catch (e) {}`,
+  );
+};
+
 export const TARGETS = [
+  {
+    key: 'ravenrift',
+    label:
+      'Thornhollow Fields 5v5 battleground: field, gatehouse, carry, queue window, mobile scoreboard',
+    // Match the SOURCE files (the `.ts` suffixes keep the sim/render tests from
+    // classifying as visual).
+    when: [
+      'sim/battleground_layout.ts',
+      'render/battleground.ts',
+      'render/battleground_core.ts',
+      'ui/hud/battleground/',
+      'sim/social/battleground.ts',
+    ],
+    variants: [
+      { key: 'queue-window', scene: 'queue' },
+      // First staged scene on purpose: the match seating just placed the
+      // player on their real spawn point, and the DEFAULT chase camera is the
+      // honest witness for the spawn-clearance contract (no camDist override).
+      { key: 'spawn-camera', scene: 'spawn' },
+      { key: 'field', scene: 'field' },
+      { key: 'gatehouse', scene: 'gatehouse' },
+      { key: 'carry-scoreboard', scene: 'carry' },
+      { key: 'scoreboard-mobile', scene: 'carry', mobile: true },
+      { key: 'match-board', scene: 'board' },
+      // The kill feed carries PLAYER NAMES, which run to 24 characters, so the
+      // shot deliberately uses long ones: the shearing this scene exists to
+      // witness only shows up once a name is wider than the banner.
+      { key: 'kill-feed', scene: 'killfeed' },
+      { key: 'field-map', scene: 'map' },
+      // last on purpose: it kills the player, which would pollute later scenes
+      { key: 'graveyard', scene: 'graveyard' },
+    ],
+    async capture(page, variant) {
+      const scene = variant?.scene ?? 'field';
+      if (scene === 'queue') {
+        const opened = await page.evaluate(() => {
+          const game = window.__game;
+          if (!game?.sim) return { ok: false, reason: 'offline world is unavailable' };
+          game.hud.toggleBattleground();
+          return { ok: true };
+        });
+        if (!opened.ok) return { skip: opened.reason };
+        const ready = await pollForSize(page, '#arena-window');
+        if (!ready) return { skip: 'the PvP window never became visible' };
+        return { clip: '#arena-window' };
+      }
+      // Stage a live 5v5 offline: nine bots + the player queue, the form-up is
+      // fast-forwarded, and the camera frames the requested scene. Idempotent:
+      // a match already staged by an earlier variant is reused.
+      const staged = await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        if (!sim?.player) return { ok: false, reason: 'offline world is unavailable' };
+        if (!sim.bgMatchFor(sim.player.id)) {
+          const classes = [
+            'warrior',
+            'paladin',
+            'hunter',
+            'rogue',
+            'mage',
+            'priest',
+            'shaman',
+            'warlock',
+            'druid',
+          ];
+          const names = ['Bryn', 'Cael', 'Dax', 'Eira', 'Finn', 'Gust', 'Hale', 'Ivo', 'Jor'];
+          const botPids = [];
+          for (let i = 0; i < 9; i++) {
+            const pid = sim.addPlayer(classes[i], names[i]);
+            const e = sim.entities.get(pid);
+            e.level = 20;
+            sim.bgQueueJoin(pid);
+            botPids.push(pid);
+          }
+          sim.player.level = Math.max(20, sim.player.level);
+          sim.bgQueueJoin();
+          window.__bgShotBotPids = botPids;
+        }
+        return { ok: true };
+      });
+      if (!staged.ok) return { skip: staged.reason };
+      await wait(400); // one tick pops the queue and opens the ready-check proposal
+      // The queue pop is a ready-check now, not a direct seat: every one of the
+      // ten has to accept before the match seats, which is also why a capture
+      // that skipped this step shot the Accept/Decline popup instead of the
+      // field. Answer for the player and all nine bots.
+      await page.evaluate(() => {
+        const sim = window.__game.sim;
+        sim.bgRespond(true);
+        for (const pid of window.__bgShotBotPids ?? []) sim.bgRespond(true, pid);
+      });
+      await wait(400); // one tick seats the accepted proposal
+      const live = await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game.sim;
+        const match = sim.bgMatchFor(sim.player.id);
+        if (!match) return { ok: false, reason: 'match never seated' };
+        if (match.state === 'countdown') match.timer = 0.05; // skip the form-up
+        return { ok: true };
+      });
+      if (!live.ok) return { skip: live.reason };
+      await wait(600);
+      await page.evaluate((sceneKey) => {
+        const game = window.__game;
+        const sim = game.sim;
+        const match = sim.bgMatchFor(sim.player.id);
+        const myTeam = match.teams[0].includes(sim.player.id) ? 0 : 1;
+        const p = sim.player;
+        const tp = (x, z) => {
+          p.pos.x = x;
+          p.pos.z = z;
+          p.prevPos = { ...p.pos };
+        };
+        if (sceneKey === 'spawn') {
+          // No teleport: the seating placed us on the spawn ring. Face the
+          // enemy keep and put the chase camera behind at its defaults.
+          p.facing = myTeam === 0 ? 0 : Math.PI;
+          game.input.camYaw = p.facing;
+        } else if (sceneKey === 'field') {
+          // mid-field, camera pulled up and back over my keep's approach;
+          // offset east of the approach rune so the shot shows it LIVE
+          // instead of seizing it by standing on it
+          const home = match.flags[myTeam].home;
+          tp(home.x + 6, home.z + (myTeam === 0 ? 26 : -26));
+          game.input.camYaw = p.facing = myTeam === 0 ? 0 : Math.PI;
+          game.input.camDist = 24;
+          game.input.camPitch = 0.72;
+        } else if (sceneKey === 'gatehouse') {
+          // inside the south gatehouse, on the courtyard-door line (x -30,
+          // the 4yd door at x -32..-28), looking south through the room: the
+          // ambush crates, the offset field-side door beyond. The camera backs
+          // out through the courtyard door, so it never clips a wall.
+          const home = match.flags[0].home;
+          tp(home.x - 30, home.z + 66);
+          p.facing = Math.PI;
+          game.input.camYaw = Math.PI;
+          game.input.camDist = 11;
+          game.input.camPitch = 0.6;
+        } else {
+          // carry: stand on the ENEMY flag; the deliberate press follows
+          const foe = match.flags[myTeam === 0 ? 1 : 0];
+          tp(foe.pos.x, foe.pos.z);
+        }
+      }, scene);
+      if (scene === 'carry' || scene === 'board') {
+        await wait(300);
+        await page.evaluate(() => {
+          window.__game.sim.bgFlagAction();
+          window.__game.input.camDist = 11;
+          window.__game.input.camPitch = 0.4;
+        });
+        await wait(800);
+      }
+      if (scene === 'killfeed') {
+        // Push straight at the feed rather than staging real deaths: the banner
+        // is the subject, and real kills give no control over the NAME LENGTHS
+        // that decide whether it shears.
+        await page.evaluate(() => {
+          const feed = window.__game.hud.bgKillFeed;
+          const now = performance.now() / 1000;
+          feed.push(
+            { killerName: 'MYTxMeykolZ', victimName: 'PEEKOMAXIMUS', killerTeam: 1, victimTeam: 0 },
+            now,
+          );
+          feed.push(
+            { killerName: 'Nine', victimName: 'NUNCHUCKS', killerTeam: 0, victimTeam: 1 },
+            now,
+          );
+          feed.push(
+            {
+              killerName: 'Bramblethornwick',
+              victimName: 'Stormhammerfel',
+              killerTeam: 1,
+              victimTeam: 0,
+            },
+            now,
+          );
+        });
+        await wait(400);
+        return { clip: '#bg-killfeed' };
+      }
+      if (scene === 'board') {
+        // pin the hover-expanded match board open and shoot just the strip
+        await page.evaluate(() => {
+          document.querySelector('#bg-scoreboard')?.classList.add('expanded');
+        });
+        await wait(400);
+        return { clip: '#bg-scoreboard' };
+      }
+      if (scene === 'map') {
+        // the M-key world map's Thornhollow Fields surface (schematic + honest markers)
+        const mapOk = await page.evaluate(() => {
+          const game = window.__game;
+          if (!game.sim.bgMatchFor(game.sim.player.id)) return false; // staging lost
+          game.hud.toggleMap();
+          return true;
+        });
+        if (!mapOk) return { skip: 'match staging lost before the map scene' };
+        await wait(600);
+        return { clip: '#map-window' };
+      }
+      if (scene === 'graveyard') {
+        await page.evaluate(() => {
+          const sim = window.__game.sim;
+          const p = sim.player;
+          sim.ctx.dealDamage(null, p, 9_999_999, false, 'physical', null, 'hit');
+        });
+        await wait(400);
+        await page.evaluate(() => {
+          // Drive the REAL death-overlay button, not the sim hook: this shot
+          // is also the regression check that the Release path works in a
+          // battleground (the sim-hook version masked a dead button once).
+          document.querySelector('#release-btn')?.click();
+          window.__game.input.camDist = 13;
+          window.__game.input.camPitch = 0.55;
+        });
+        await wait(600);
+        await page.evaluate(() => {
+          const game = window.__game;
+          game.input.camYaw = game.sim.player.facing; // chase behind the spirit
+        });
+        await wait(1200);
+      }
+      await wait(2600); // let the field build + banners settle
+      return {};
+    },
+  },
+  {
+    key: 'skill-milestone-plate',
+    label: 'Banner: gathering skill milestone plate (#2934)',
+    when: ['ui/skill_level_toast_view'],
+    // Drives the REAL observation path: the handleEvents tail baselines the
+    // live meta proficiency on one drain, then a later mutation crosses 25 (a
+    // milestone, safely below the 100/200 deed bands so no deed plate
+    // contends for the slot) and the copper plate paints through the live
+    // 20 Hz drain with its crest, fade, and chime. On a base build without
+    // the feature nothing paints and the shot falls back to the whole HUD,
+    // which is the honest BEFORE frame.
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    async capture(page) {
+      // The camera choice, tutorial prompt, and GPU notice each appear on
+      // their own schedule after entry, so sweep the dismissals through the
+      // settle window instead of clicking once. The window also lets the
+      // zone-entry banner clear: a live ambient banner would hold the slot
+      // and queue the celebration plate past the shot.
+      for (let i = 0; i < 12; i++) {
+        await page.evaluate(() => {
+          document.querySelector('.camera-prompt-confirm')?.click();
+          document.querySelector('.tut-skip')?.click();
+          document.querySelector('.gpu-notice-dismiss')?.click();
+        });
+        await wait(500);
+      }
+      // The offline world can lag the page's load event by several seconds on
+      // a cold transform cache, so poll for the player meta instead of
+      // failing one probe.
+      let staged = { ok: false, reason: 'player meta is unavailable' };
+      for (let i = 0; i < 20 && !staged.ok; i++) {
+        staged = await page.evaluate(() => {
+          const sim = window.__game?.sim;
+          const meta = sim?.players?.get?.(sim?.playerId);
+          if (!meta?.gatheringProficiency)
+            return { ok: false, reason: 'player meta is unavailable' };
+          meta.gatheringProficiency.mining = 24.2;
+          return { ok: true };
+        });
+        if (!staged.ok) await wait(500);
+      }
+      if (!staged.ok) throw new Error(staged.reason);
+      // One drain observes 24.2 (a chat line, no plate), then the crossing
+      // below celebrates.
+      await wait(600);
+      const crossed = await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        const meta = sim?.players?.get?.(sim?.playerId);
+        if (!meta?.gatheringProficiency) return { ok: false, reason: 'world went away' };
+        meta.gatheringProficiency.mining = 25.1;
+        return { ok: true };
+      });
+      if (!crossed.ok) throw new Error(crossed.reason);
+      // Poll for the SKILL plate at full opacity and shoot immediately: the
+      // class check keeps a live ambient banner (the Ravenpost mail line has
+      // raced this shot) from satisfying the poll while the celebration sits
+      // queued behind it, and the generous window covers that queued case
+      // (ambient hold plus advance gap plus the 1.2s fade). On a base build
+      // without the feature the poll exhausts and the frame is the honest
+      // BEFORE. Whole HUD, not a tight '#banner' crop: the plate reads in
+      // context and the BEFORE frame keeps identical framing.
+      for (let i = 0; i < 60; i++) {
+        const visible = await page.evaluate(() => {
+          // Overlays keep their own schedules (the tutorial re-prompts), so
+          // keep dismissing right up to the shot.
+          document.querySelector('.camera-prompt-confirm')?.click();
+          document.querySelector('.tut-skip')?.click();
+          document.querySelector('.gpu-notice-dismiss')?.click();
+          const el = document.querySelector('#banner');
+          return (
+            el?.classList.contains('banner-skill') && Number(getComputedStyle(el).opacity) > 0.95
+          );
+        });
+        if (visible) break;
+        await wait(100);
+      }
+      return { clip: '#ui' };
+    },
+  },
   {
     key: 'longbuff-vfx',
     label: 'Long-worn buff read: buffed character idle past the cast moment',
@@ -251,6 +778,411 @@ export const TARGETS = [
       await page.evaluate(
         () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
       );
+      return {};
+    },
+  },
+  {
+    key: 'cc-bands',
+    label: 'Held crowd-control bands (stun, root, fear) worn past the cast moment',
+    // How long to wait for the cast to land its aura. Generous on purpose:
+    // the offline sim advances on the client's own frame loop, which under
+    // headless SwiftShader runs in stalled bursts, so a 1.5s cast has taken
+    // anywhere from 3s to past 12s of wall clock on a loaded host. Expiring
+    // early reports "aura never applied", which reads as bad target data
+    // rather than a slow machine.
+    ccAuraPollBudgetMs: 25000,
+    // One token, and it covers the whole shipping surface: the bands live in
+    // 'render/ability_vfx_core.ts' plus 'render/ability_vfx/{fx,painter,
+    // sequencer}.ts', all of which this prefix matches. (An earlier
+    // 'stun_stars' token named no shipping module at all, so it only ever
+    // matched the test file.)
+    when: ['render/ability_vfx'],
+    variants: [
+      // One variant per band type, each staged on a class that actually owns
+      // the ability. `level` is the ability's own learn level (the rank the
+      // duration below refers to), `auraKind`/`auraId` are exactly what the
+      // band rule keys off, and `settleMs` is how long past the aura landing
+      // the shutter waits.
+      //
+      // settleMs is set per variant against ONE constraint: land inside the
+      // band's full-alpha read (the alpha fades over the aura's final second)
+      // while clearing the sequencer's cast-moment burst (~1.8s). The capture
+      // pipeline spends another ~0.7s between the aura poll and the shutter.
+      {
+        // Sundering Gavel rank 2 (4s stun) rather than Storm Bolt (3s): the
+        // longer stun is what keeps the shot inside the full-alpha read.
+        key: 'sundering-gavel-desktop',
+        charClass: 'paladin',
+        charName: 'Aurelius',
+        abilityId: 'hammer_of_justice',
+        level: 16,
+        auraKind: 'stun',
+        settleMs: 1900,
+      },
+      {
+        // Icebind (frost_nova): 8s, instant, and self-centred, so the nearby
+        // victim is rooted with no cast to stall on. Chosen over Gripping
+        // Roots deliberately. Every player root ability has an authored vfx
+        // spec, so all of them ALREADY wear a spec-coloured worn-debuff
+        // ground band, and shot against the nature-green Gripping Roots the
+        // new band is green on green and proves nothing. Icebind's spec is
+        // frost BLUE, so the green ankle shards this change adds are
+        // unmistakably the new read. (The genuinely uncovered root sources
+        // are the unspec'd ones, above all the mob ensnare affix, but those
+        // land on an rng chance during a mob swing and cannot be staged
+        // deterministically in a screenshot.)
+        // Staged wider off-axis and a yard further out than the head-space
+        // variants: a first capture put the victim's feet behind the
+        // player's own rig.
+        key: 'icebind-desktop',
+        charClass: 'mage',
+        charName: 'Frosthollow',
+        abilityId: 'frost_nova',
+        level: 5,
+        auraKind: 'root',
+        offsetAngle: 1,
+        distance: 5.5,
+        settleMs: 1900,
+      },
+      {
+        // Harrow: 8s. A feared mob RUNS, and that is the one framing problem
+        // in this family: a first capture at 1.1s found the victim already
+        // across the square and illegible. So this variant shoots as soon as
+        // the aura lands rather than settling past the cast-moment burst,
+        // which is safe precisely because of the handoff this change adds:
+        // the held band stands the cast stars down the frame it wins a slot,
+        // so what is on screen is already the violet band, not yellow stars.
+        // (On the BEFORE side of the pair that same moment shows the yellow
+        // stun stars this archetype flashed for every control ability alike,
+        // which is exactly the misread the band replaces.)
+        key: 'harrow-desktop',
+        charClass: 'warlock',
+        charName: 'Vexmoor',
+        abilityId: 'fear',
+        level: 14,
+        auraKind: 'incapacitate',
+        auraId: 'fear_incap',
+        // Left on the default off-axis placement. Swinging it to the player's
+        // other side to clear the town NPCs from the flee path stopped the
+        // cast landing at all (two runs, "aura never applied"), so the
+        // occasional frame where the victim ends up behind a guard is the
+        // better trade against a variant that does not capture.
+        pollMs: 150,
+        settleMs: 0,
+      },
+    ],
+    async capture(page, variant) {
+      await page.waitForFunction(
+        () => {
+          const loading = document.querySelector('#loading-screen');
+          const ui = document.querySelector('#ui');
+          return (
+            document.body.classList.contains('game-active') &&
+            !!ui &&
+            getComputedStyle(ui).display !== 'none' &&
+            !!loading &&
+            !loading.classList.contains('visible')
+          );
+        },
+        { timeout: 90000, polling: 200 },
+      );
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      // Stage: level to the ability's learn level, stand a durable mob in
+      // front of the player (pumped hp so stray aggro damage cannot kill it:
+      // the shot needs the mob ALIVE and controlled), and arm the ability on
+      // slot 1. The control aura itself is applied by the real cast click
+      // below, never injected.
+      const staged = await page.evaluate((shot) => {
+        // The entry overlays can race the shared dismissal on a cold profile;
+        // clear them here too (the bags-target idiom) so they cannot sit over
+        // the world at shutter time.
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!game || !sim || !player) return { ok: false, reason: 'offline world is unavailable' };
+        sim.setPlayerLevel?.(shot.level, player.id);
+        player.resource = player.maxResource;
+        let mob = null;
+        let best = Infinity;
+        for (const e of sim.entities.values()) {
+          if (e.kind !== 'mob' || e.hp <= 0 || e.id === player.id) continue;
+          const d = (e.pos.x - player.pos.x) ** 2 + (e.pos.z - player.pos.z) ** 2;
+          if (d < best) {
+            best = d;
+            mob = e;
+          }
+        }
+        if (!mob) return { ok: false, reason: 'no living mob in the offline world' };
+        mob.maxHp = 4000;
+        mob.hp = 4000;
+        // Re-home the mob in front of the player (spawn/leash anchors too, or
+        // its AI walks it back home during the banner wait below, out of the
+        // Gavel's 10 yd range; the corpse-target recipe's idiom).
+        mob.pos.x = player.pos.x + Math.sin(player.facing) * 6;
+        mob.pos.z = player.pos.z + Math.cos(player.facing) * 6;
+        mob.pos.y = player.pos.y;
+        if (mob.prevPos) {
+          mob.prevPos.x = mob.pos.x;
+          mob.prevPos.y = mob.pos.y;
+          mob.prevPos.z = mob.pos.z;
+        }
+        mob.spawnPos = { ...mob.pos };
+        mob.leashAnchor = { ...mob.pos };
+        sim.rebucket?.(mob);
+        player.targetId = mob.id;
+        game.hud.hotbarActions[0] = { type: 'ability', id: shot.abilityId };
+        game.hud.saveSlotMap?.();
+        return { ok: true, mobId: mob.id };
+      }, variant);
+      if (!staged.ok) throw new Error(staged.reason);
+      // The level-up deed banners occupy mid-screen for a few seconds.
+      await wait(5200);
+
+      // Exercise the same click a player uses; poll the MOB's auras for the
+      // worn control aura (the kind, plus the shared fear id where the kind
+      // alone does not say fear: exactly what the band rule keys off).
+      let ccApplied = false;
+      for (let attempt = 0; attempt < 2 && !ccApplied; attempt++) {
+        const clicked = await page.evaluate(
+          (shot) => {
+            document.querySelector('.camera-prompt-confirm')?.click();
+            document.querySelector('.tut-skip')?.click();
+            const game = window.__game;
+            const sim = game?.sim;
+            const player = sim?.player;
+            const mob = sim?.entities?.get(shot.mobId);
+            const button = document.querySelector('.action-btn[data-hotbar-slot="1"]');
+            if (!game || !player || !mob || !button) return false;
+            // The banner wait gave the mob seconds to drift: re-place it just
+            // before the click, at melee-cast range and nudged off the facing
+            // axis so the player's own rig cannot occlude it, and pull the
+            // chase camera in so the band reads at PR-screenshot size. Melee
+            // range suits the ranged casts here too (Gripping Roots is 30 yd,
+            // Harrow 20 yd). The ROOT variant swings further off-axis than the
+            // others because its band rides the ANKLES, the one screen region
+            // the player's own body reliably covers at this camera distance.
+            game.input.camDist = 6;
+            const offAxis = shot.offsetAngle ?? 0.5;
+            const range = shot.distance ?? 4.5;
+            mob.pos.x = player.pos.x + Math.sin(player.facing + offAxis) * range;
+            mob.pos.z = player.pos.z + Math.cos(player.facing + offAxis) * range;
+            mob.pos.y = player.pos.y;
+            if (mob.prevPos) {
+              mob.prevPos.x = mob.pos.x;
+              mob.prevPos.y = mob.pos.y;
+              mob.prevPos.z = mob.pos.z;
+            }
+            mob.spawnPos = { ...mob.pos };
+            mob.leashAnchor = { ...mob.pos };
+            sim.rebucket?.(mob);
+            player.resource = player.maxResource;
+            player.targetId = shot.mobId;
+            button.click();
+            return true;
+          },
+          { ...variant, mobId: staged.mobId },
+        );
+        if (!clicked) throw new Error('primary action slot 1 is unavailable');
+        // ~12s of polling, not the 4.8s an instant stun needed. Harrow has a
+        // 1.5s cast, and the offline sim advances on the client's own frame
+        // loop, which under headless SwiftShader runs in stalled bursts: a
+        // measured 1.5s cast took over 4s of wall clock to spend its first
+        // 1.1s of cast time. The old window expired mid-cast and reported
+        // "aura never applied", which reads as a target-data bug rather than
+        // a slow host.
+        //
+        // The poll INTERVAL is the shutter latency for a victim that moves,
+        // so the fear variant tightens it: a feared mob starts running the
+        // moment the aura lands, and at a 200ms interval how far it got by
+        // the shot was pure luck (one capture framed it, the next lost it
+        // across the square). Everything else holds still and keeps the
+        // cheaper interval.
+        const pollMs = variant.pollMs ?? 200;
+        const budgetMs = this.ccAuraPollBudgetMs;
+        for (let poll = 0; poll < Math.ceil(budgetMs / pollMs) && !ccApplied; poll++) {
+          await wait(pollMs);
+          ccApplied = await page.evaluate(
+            (shot) =>
+              !!window.__game?.sim?.entities
+                ?.get(shot.mobId)
+                ?.auras.some(
+                  (a) => a.kind === shot.auraKind && (!shot.auraId || a.id === shot.auraId),
+                ),
+            { ...variant, mobId: staged.mobId },
+          );
+        }
+      }
+      if (!ccApplied) throw new Error(`${variant.auraKind} aura never applied to the mob`);
+
+      // Settle past the sequencer's cast-moment burst (see settleMs on each
+      // variant): what remains on screen is the held, aura-driven band this
+      // change adds.
+      await wait(variant.settleMs);
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      return { clip: '#ui' };
+    },
+  },
+  {
+    key: 'weapon-vfx-shed',
+    label: 'Weapon-skin VFX fade with wearer distance (a legendary skin worn by another player)',
+    when: ['render/weapon_vfx', 'render/characters/visual.ts'],
+    variants: [
+      // Inside the full-strength band the pair must be IDENTICAL in rig
+      // strength: that is the fairness half of the shed's contract.
+      { key: 'near-12yd-desktop', charClass: 'warrior', charName: 'Thorgar', wearerDist: 12 },
+      // Past the ease-in knee and still well inside the articulated-rig band
+      // on every tier (58yd at this crowd size), so the fade is unmistakable
+      // while the rig on screen is the real one, not the baked far mesh.
+      { key: 'far-52yd-desktop', charClass: 'warrior', charName: 'Thorgar', wearerDist: 52 },
+    ],
+    async capture(page, variant) {
+      await page.waitForFunction(
+        () => {
+          const loading = document.querySelector('#loading-screen');
+          const ui = document.querySelector('#ui');
+          return (
+            document.body.classList.contains('game-active') &&
+            !!ui &&
+            getComputedStyle(ui).display !== 'none' &&
+            !!loading &&
+            !loading.classList.contains('visible')
+          );
+        },
+        { timeout: 90000, polling: 200 },
+      );
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      // Stage: a second offline player wearing the legendary solheim_sword
+      // skin (the loudest shipped rig, so the fade is legible at range), stood
+      // a fixed distance along the entry camera's own facing (so no camera
+      // steering is needed), on open ground east of town where the sightline
+      // is clear. The skin id is written directly: it is the display-only
+      // cosmetic the render diff applies; ownership and loadout resolution
+      // are sim-side concerns a staged dummy has no business exercising.
+      const staged = await page.evaluate((shot) => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!game || !sim || !player) return { ok: false, reason: 'offline world is unavailable' };
+        if (typeof sim.addPlayer !== 'function')
+          return { ok: false, reason: 'sim.addPlayer is unavailable offline' };
+        // Flattest dry stretch with a clear 55yd sightline along the entry
+        // facing (probed against the fixed-seed terrain: relief under a yard).
+        player.pos.x = 100;
+        player.pos.z = -80;
+        const wearerId = sim.addPlayer('warrior', 'Frostbearer', { autoEquip: true });
+        const w = sim.entities.get(wearerId);
+        if (!w) return { ok: false, reason: 'wearer entity missing after addPlayer' };
+        const ray = player.facing + 0.1; // nudged off-axis so the local rig cannot occlude
+        w.pos.x = player.pos.x + Math.sin(ray) * shot.wearerDist;
+        w.pos.z = player.pos.z + Math.cos(ray) * shot.wearerDist;
+        w.pos.y = player.pos.y;
+        if (w.prevPos) {
+          w.prevPos.x = w.pos.x;
+          w.prevPos.y = w.pos.y;
+          w.prevPos.z = w.pos.z;
+        }
+        // Face the wearer at the camera so the skinned blade reads, computed
+        // explicitly in the sim's forward = (sin f, cos f) convention.
+        w.facing = Math.atan2(player.pos.x - w.pos.x, player.pos.z - w.pos.z);
+        w.weaponSkinId = 'solheim_sword';
+        sim.rebucket?.(w);
+        // The stage sits in the open world, so wandering hostiles walk through
+        // the frame and aggro the pair mid-shot (a bandit occluding the wearer,
+        // FCT over the local player). Relocate every mob near the sightline;
+        // the re-home mirrors the stun-stars idiom, just pointed away.
+        for (const e of sim.entities.values()) {
+          if (e.kind !== 'mob' || e.id === player.id) continue;
+          const dx = e.pos.x - player.pos.x;
+          const dz = e.pos.z - player.pos.z;
+          if (dx * dx + dz * dz > 90 * 90) continue;
+          e.pos.x += 400;
+          if (e.prevPos) {
+            e.prevPos.x = e.pos.x;
+            e.prevPos.y = e.pos.y;
+            e.prevPos.z = e.pos.z;
+          }
+          if (e.spawnPos) e.spawnPos = { ...e.pos };
+          if (e.leashAnchor) e.leashAnchor = { ...e.pos };
+          sim.rebucket?.(e);
+        }
+        player.hp = player.maxHp;
+        game.input.camDist = shot.wearerDist > 25 ? 8 : 6.5;
+        return { ok: true, wearerId };
+      }, variant);
+      if (!staged.ok) throw new Error(staged.reason);
+      // The skin apply rides the deferred per-frame queue; hold until the
+      // wearer's view carries it, AND until the VFX rig itself exists: the
+      // skin model arrives over an async GLB load, so the blade can be on
+      // screen seconds before the rig (light, motes, aurora) is built, and a
+      // shutter in that gap captures a bare blade on both sides of a pair.
+      await page.waitForFunction(
+        (id) => window.__game?.renderer?.views?.get(id)?.weaponSkinId === 'solheim_sword',
+        { timeout: 30000, polling: 250 },
+        staged.wearerId,
+      );
+      await page.waitForFunction(
+        (id) => (window.__game?.renderer?.views?.get(id)?.visual?.weaponVfx?.length ?? 0) > 0,
+        { timeout: 45000, polling: 400 },
+        staged.wearerId,
+      );
+      await wait(1800);
+      // The frame-budget governor's vfx bucket also feeds the fade. A
+      // software-GL host can sit shedding after entry, which would taint the
+      // pair with dim that is NOT the distance arm; hold the shutter until
+      // the applied level reads 1 so distance is the only live input. On a
+      // host where the governor never settles (swiftshader at full size),
+      // run the capture with GAME_URL=...?governor=off, the sanctioned
+      // debug override (gfx.ts shouldUseAutoGovernor), which pins every
+      // bucket at 1 and leaves distance as the only input by construction.
+      let calm = false;
+      for (let poll = 0; poll < 40 && !calm; poll++) {
+        calm = await page.evaluate(
+          () => (window.__game?.renderer?.appliedBudgetLevels?.vfx ?? 1) >= 1,
+        );
+        if (!calm) await wait(500);
+      }
+      if (!calm)
+        throw new Error('frame-budget governor never settled; the pair would overstate the fade');
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      // Companion crop around the wearer: at range the full frame leaves the
+      // rig a few dozen pixels tall, and the pair is about the rig.
+      const spot = await page.evaluate((id) => {
+        const r = window.__game?.renderer;
+        const v = r?.views?.get?.(id);
+        if (!r || !v) return null;
+        const p = v.group.position.clone();
+        p.y += (v.height ?? 1.8) * 0.6;
+        p.project(r.camera);
+        return {
+          x: (p.x * 0.5 + 0.5) * window.innerWidth,
+          y: (-p.y * 0.5 + 0.5) * window.innerHeight,
+          w: window.innerWidth,
+          h: window.innerHeight,
+        };
+      }, staged.wearerId);
+      if (spot) {
+        const box = variant.wearerDist > 25 ? { w: 320, h: 360 } : { w: 560, h: 560 };
+        const width = Math.min(box.w, spot.w);
+        const height = Math.min(box.h, spot.h);
+        const x = Math.max(0, Math.min(spot.w - width, spot.x - width / 2));
+        const y = Math.max(0, Math.min(spot.h - height, spot.y - height / 2));
+        await page.screenshot({
+          path: `${process.env.SHOTS_DIR ?? 'pr-shots'}/weapon-vfx-shed-${variant.key}-closeup.png`,
+          clip: { x, y, width, height },
+        });
+      }
       return {};
     },
   },
@@ -504,15 +1436,22 @@ export const TARGETS = [
   },
   {
     key: 'tank-defensive-cds',
-    label: 'Tank defensive cooldowns',
-    when: ['tests/tank_defensive_cds.test.ts'],
+    // Widened past the tank when Dawnreaver grew a defensive of its own: the recipe
+    // is the same (learn it, arm it, shoot the spellbook row plus the armed slot),
+    // so the spec rides in as a variant rather than a copy of the capture body.
+    label: 'Defensive cooldowns',
+    when: ['tests/tank_defensive_cds.test.ts', 'combat/paladin_debt_of_light'],
     variants: [
       {
         key: 'paladin-desktop',
         charClass: 'paladin',
         charName: 'Dawnward',
-        abilityId: 'sacred_bulwark',
-        nearbyAbilityId: 'divine_protection',
+        // Faithwarden's authored defensives. Sacred Bulwark is retired kit
+        // (PALADIN_LEGACY_ABILITY_IDS), and the replacements are spec-gated, so
+        // the recipe specializes before it resolves them.
+        spec: 'protection',
+        abilityId: 'holy_shield',
+        nearbyAbilityId: 'bastion_rite',
       },
       {
         key: 'druid-desktop',
@@ -525,9 +1464,19 @@ export const TARGETS = [
         key: 'paladin-mobile',
         charClass: 'paladin',
         charName: 'Sunward',
-        abilityId: 'sacred_bulwark',
-        nearbyAbilityId: 'divine_protection',
+        spec: 'protection',
+        abilityId: 'holy_shield',
+        nearbyAbilityId: 'bastion_rite',
         mobile: true,
+      },
+      {
+        // Dawnreaver's Debt of Light: armed before the blow, answers one hit.
+        key: 'paladin-retribution-desktop',
+        charClass: 'paladin',
+        charName: 'Dawnreaver',
+        spec: 'retribution',
+        abilityId: 'faithforged_guard',
+        nearbyAbilityId: 'final_edict',
       },
     ],
     async capture(page, variant) {
@@ -544,6 +1493,7 @@ export const TARGETS = [
         const player = sim?.player;
         if (!sim || !player) return { known: false };
         sim.setPlayerLevel?.(20, player.id);
+        if (shot.spec) sim.setSpec?.(shot.spec);
         player.gm = true;
         player.resource = player.maxResource;
         const resolved = sim.resolvedAbility?.(shot.abilityId);
@@ -620,6 +1570,13 @@ export const TARGETS = [
           'minor_mana_potion',
           'boar_hide',
           'glade_pelt',
+          // Fine grades beside their base materials: the fine-grade rim/wash/
+          // seal (bag_fine_mark_view) must be visible against the unmarked
+          // base stack in the same grid.
+          'copper_ore',
+          'fine_copper_ore',
+          'silverleaf_herb',
+          'fine_silverleaf_herb',
         ];
         for (const id of ids) {
           try {
@@ -634,6 +1591,17 @@ export const TARGETS = [
           sim?.addItemInstance?.('wolf_fang', { signer: 'Toralin' });
           sim?.addItemInstance?.('wolf_fang', { signer: 'Toralin' });
         } catch {}
+        // Lock one plain-gear stack (issue 3042, item_lock.ts): the padlock
+        // badge (bottom-left) must be visible in the same grid as the other
+        // instance marks above, composing rather than fighting for a corner.
+        // Resolved by itemId rather than a hardcoded index, since the exact
+        // slot a fresh bag lands an item in is an implementation detail.
+        try {
+          const slotIndex = sim?.inventory?.findIndex((s) => s.itemId === 'cryptbone_helm');
+          if (typeof slotIndex === 'number' && slotIndex >= 0) {
+            sim?.setItemLocked?.('cryptbone_helm', true, { slotIndex });
+          }
+        } catch {}
         // Force-hide then toggle so the open is deterministic regardless of prior state
         // (the same trick the bag_filter screenshot harness uses).
         const el = document.querySelector('#bags');
@@ -641,6 +1609,48 @@ export const TARGETS = [
         window.__game?.hud?.toggleBags?.();
       });
       await wait(700);
+      return { clip: '#bags' };
+    },
+  },
+  {
+    key: 'inventory-sort',
+    label: 'Bags after the one-shot Sort (stacks consolidated, ladder order)',
+    when: ['sim/inventory_sort', 'ui/bags_window'],
+    // A deliberately messy bag (scattered partial stacks of the same material,
+    // fine grades split from their base, gear and trash interleaved), then the
+    // REAL Sort button press. On a base checkout the button does not exist and
+    // the click is skipped, so the same recipe shoots the honest BEFORE state.
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    async capture(page) {
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        const meta = sim?.players?.values?.().next?.()?.value;
+        const scramble = [
+          { itemId: 'copper_ore', count: 12 },
+          { itemId: 'baked_bread', count: 3 },
+          { itemId: 'copper_ore', count: 7 },
+          { itemId: 'fine_copper_ore', count: 4 },
+          { itemId: 'silverleaf_herb', count: 9 },
+          { itemId: 'copper_ore', count: 5 },
+          { itemId: 'fine_silverleaf_herb', count: 2 },
+          { itemId: 'silverleaf_herb', count: 6 },
+        ];
+        if (meta) for (const s of scramble) meta.inventory.push({ ...s });
+        for (const id of ['eastbrook_arming_sword', 'cryptbone_helm', 'minor_healing_potion']) {
+          try {
+            sim?.addItem(id, 1);
+          } catch {}
+        }
+        const el = document.querySelector('#bags');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.toggleBags?.();
+      });
+      await wait(500);
+      await page.evaluate(() => {
+        document.querySelector('button.bag-sort-btn')?.click();
+      });
+      // Past the settle ripple (160ms + capped stagger) so the shot is stable.
+      await wait(900);
       return { clip: '#bags' };
     },
   },
@@ -717,6 +1727,83 @@ export const TARGETS = [
     },
   },
   {
+    key: 'bank-instance-marks',
+    label: 'Bank grid corner marks: masterwork seal, per-copy glyphs, and the fine-grade mark',
+    when: [
+      'ui/bank_window',
+      'ui/guild_bank_window',
+      'ui/item_instance_glyph_mark',
+      'ui/bag_fine_mark',
+      'ui/bag_corner_mark',
+    ],
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    async capture(page) {
+      await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        // One copy per corner-mark kind plus a plain control stack, so the
+        // vault shows the masterwork seal and the enchanted / signed / bound
+        // glyphs beside an unmarked cell. The personal bank has no transfer
+        // lock, so every copy deposits. A fine grade beside its base material
+        // shows the fine rim/wash/seal surviving deposit against the unmarked
+        // base stack (the bags `inventory` target's contrast idiom).
+        try {
+          sim?.addItemInstance?.('worn_sword', {
+            signer: 'Thorgar',
+            rolled: { masterwork: true, stats: { str: 2, sta: 1 } },
+          });
+          sim?.addItemInstance?.('wolf_fang', { enchant: 'enchant_chest_stamina' });
+          sim?.addItemInstance?.('wolf_fang', { signer: 'Toralin' });
+          // rough_hide, not a quest-kind hide: the bank refuses quest items,
+          // so a quest-flagged fixture would silently drop the bound cell.
+          sim?.addItemInstance?.('rough_hide', { bindOnTrade: true });
+          sim?.addItem?.('baked_bread', 3);
+          sim?.addItem?.('copper_ore', 2);
+          sim?.addItem?.('fine_copper_ore', 2);
+        } catch {}
+        // Stand beside the banker so the proximity-gated bank snapshot is
+        // live (bankInfo is null out of reach; the bank-chips recipe idiom).
+        try {
+          for (const e of sim.entities.values()) {
+            if (e.kind === 'npc' && e.templateId === 'bursar_fernando') {
+              const p = sim.entities.get(sim.playerId);
+              p.pos = { ...e.pos };
+              p.prevPos = { ...p.pos };
+              sim.rebucket(p);
+              break;
+            }
+          }
+        } catch {}
+        game?.hud?.openBank?.();
+      });
+      if (!(await pollForSize(page, '#bank-window'))) {
+        throw new Error('bank window did not open');
+      }
+      // Deposit through the real world command. Indices shift as slots empty,
+      // so always re-find the first instanced slot; the plain stack follows as
+      // the unmarked contrast cell.
+      await page.evaluate(() => {
+        const world = window.__game?.sim;
+        for (let guard = 0; guard < 8; guard++) {
+          const idx = world.inventory.findIndex((s) => s?.instance);
+          if (idx < 0) break;
+          world.bankDeposit(idx);
+        }
+        for (const id of ['baked_bread', 'copper_ore', 'fine_copper_ore']) {
+          const at = world.inventory.findIndex((s) => s?.itemId === id);
+          if (at >= 0) world.bankDeposit(at);
+        }
+      });
+      // Poll for the deposited cells, not the marks: the same recipe shoots
+      // the BEFORE tree, where the bank paints no corner mark at all.
+      if (!(await pollForSize(page, '#bank-window .bank-item'))) {
+        throw new Error('bank grid never filled after deposits');
+      }
+      await wait(700);
+      return { clip: '#bank-window' };
+    },
+  },
+  {
     key: 'fishing-rod-ladder',
     label: 'The rod ladder in the bags, with the top rung hovered',
     when: ['professions/fishing', 'fishing_zones', 'gather_tool_tooltip', 'content/recipes'],
@@ -752,8 +1839,204 @@ export const TARGETS = [
           const bg = c instanceof HTMLElement ? c.style.backgroundImage : '';
           const img = c.querySelector?.('img');
           return (
-            (bg && bg.includes('tidewrought_fishing_rod')) ||
-            (img && img.getAttribute('src')?.includes('tidewrought_fishing_rod'))
+            bg?.includes('tidewrought_fishing_rod') ||
+            img?.getAttribute('src')?.includes('tidewrought_fishing_rod')
+          );
+        });
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        for (const type of [
+          'pointerenter',
+          'pointerover',
+          'mouseenter',
+          'mouseover',
+          'pointermove',
+          'mousemove',
+        ]) {
+          el.dispatchEvent(
+            new MouseEvent(type, {
+              bubbles: true,
+              clientX: r.left + r.width / 2,
+              clientY: r.top + r.height / 2,
+            }),
+          );
+        }
+      });
+      await wait(600);
+      return { clip: '#ui' };
+    },
+  },
+  {
+    key: 'stack-size-tooltip',
+    label: 'A single potion hovered in the bags, with the Max stack line',
+    when: ['stack_size_tooltip'],
+    // Desktop only, the material-usedby precedent: the synthetic hover path
+    // does not raise #tooltip on the touch layout, and the tooltip content is
+    // byte-identical on mobile anyway. ONE copy on purpose: the line exists
+    // for the player with no stack badge to learn from.
+    async capture(page) {
+      // Same SwiftShader boot patience as the material-usedby recipe: wait
+      // for the boot hook, then clear the overlays a late boot re-raises.
+      await page.waitForFunction(() => window.__game?.sim?.player, { timeout: 90000 });
+      await dismissEntryOverlays(page);
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        try {
+          sim?.addItem('silverleaf_healing_draught', 1);
+        } catch {}
+        const el = document.querySelector('#bags');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.toggleBags?.();
+      });
+      await pollForSize(page, '#bags');
+      // Hover through the REAL pointer path so the tooltip is the one a
+      // player sees, not a hand-built string.
+      await page.evaluate(() => {
+        const cells = [...document.querySelectorAll('#bags *')];
+        const el = cells.find((c) => {
+          const bg = c instanceof HTMLElement ? c.style.backgroundImage : '';
+          const img = c.querySelector?.('img');
+          return (
+            bg?.includes('silverleaf_healing_draught') ||
+            img?.getAttribute('src')?.includes('silverleaf_healing_draught')
+          );
+        });
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        for (const type of [
+          'pointerenter',
+          'pointerover',
+          'mouseenter',
+          'mouseover',
+          'pointermove',
+          'mousemove',
+        ]) {
+          el.dispatchEvent(
+            new MouseEvent(type, {
+              bubbles: true,
+              clientX: r.left + r.width / 2,
+              clientY: r.top + r.height / 2,
+            }),
+          );
+        }
+      });
+      await wait(600);
+      return { clip: '#ui' };
+    },
+  },
+  {
+    key: 'material-usedby-tooltip',
+    label: 'Rough Hide tooltip with the Used-by craft affinity line',
+    when: [
+      'material_profession_hint_view',
+      'material_profession_affinity',
+      'craft_name_view',
+      'ui/material_hint',
+    ],
+    // Classic AND Parchment presets: the line's craft tint is a theme-emitted
+    // token repaired per preset (src/ui/theme.ts --color-material-use), and the light
+    // Parchment panel is where an unrepaired accent mix fell below the
+    // large-text contrast floor, so it is the preset worth proving. Desktop
+    // only: the synthetic hover path does not raise #tooltip on the touch
+    // layout, and the tooltip content is byte-identical on mobile anyway.
+    variants: [
+      { key: 'classic', beforeLoad: themeSeed('classic') },
+      { key: 'parchment', beforeLoad: themeSeed('parchment') },
+    ],
+    async capture(page) {
+      // Under SwiftShader the offline world can outlast enterOfflineGame's
+      // default boot patience (the loading bar sits at "Entering the world"
+      // past its 30s waitForFunction), and that fallback is silent: staging
+      // against a world that never booted shoots the loading screen. Wait for
+      // the boot hook here with real patience, then clear the entry overlays
+      // that a LATE boot re-raises after the shared flow already tried.
+      await page.waitForFunction(() => window.__game?.sim?.player, { timeout: 90000 });
+      await dismissEntryOverlays(page);
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        // Rough Hide is the multi-craft exemplar; the neighbors cover the
+        // single-craft, fine-grade, and superseded-enchanting shapes so the
+        // bag itself documents the feature's range.
+        for (const id of ['rough_hide', 'game_meat', 'fine_iron_ore', 'arcane_dust']) {
+          try {
+            sim?.addItem(id, id === 'rough_hide' ? 5 : 1);
+          } catch {}
+        }
+        const el = document.querySelector('#bags');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.toggleBags?.();
+      });
+      await pollForSize(page, '#bags');
+      // Hover Rough Hide through the REAL pointer path so the tooltip is the
+      // one a player sees, not a hand-built string (the rod-ladder recipe).
+      await page.evaluate(() => {
+        const cells = [...document.querySelectorAll('#bags *')];
+        const el = cells.find((c) => {
+          const bg = c instanceof HTMLElement ? c.style.backgroundImage : '';
+          const img = c.querySelector?.('img');
+          return bg?.includes('rough_hide') || img?.getAttribute('src')?.includes('rough_hide');
+        });
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        for (const type of [
+          'pointerenter',
+          'pointerover',
+          'mouseenter',
+          'mouseover',
+          'pointermove',
+          'mousemove',
+        ]) {
+          el.dispatchEvent(
+            new MouseEvent(type, {
+              bubbles: true,
+              clientX: r.left + r.width / 2,
+              clientY: r.top + r.height / 2,
+            }),
+          );
+        }
+      });
+      await wait(600);
+      return { clip: '#ui' };
+    },
+  },
+  {
+    key: 'elixir-use-tooltip',
+    label: 'Elixir of the Boar tooltip with its Use line',
+    when: ['ui/elixir_tooltip_view'],
+    // Desktop only, the material-usedby-tooltip rationale: the synthetic
+    // hover path does not raise #tooltip on the touch layout, and the
+    // tooltip content is byte-identical on mobile.
+    async capture(page) {
+      // Same SwiftShader boot patience as the material-usedby recipe: wait
+      // for the boot hook, then clear the overlays a late boot re-raises.
+      await page.waitForFunction(() => window.__game?.sim?.player, { timeout: 90000 });
+      await dismissEntryOverlays(page);
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        // The boar elixir is the reported item; the serpent rung beside it
+        // shows the ladder's top numbers on the same shot.
+        for (const id of ['elixir_of_the_boar', 'elixir_of_the_serpent']) {
+          try {
+            sim?.addItem(id, 1);
+          } catch {}
+        }
+        const el = document.querySelector('#bags');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.toggleBags?.();
+      });
+      await pollForSize(page, '#bags');
+      // Hover the boar elixir through the REAL pointer path so the tooltip
+      // is the one a player sees, not a hand-built string.
+      await page.evaluate(() => {
+        const cells = [...document.querySelectorAll('#bags *')];
+        const el = cells.find((c) => {
+          const bg = c instanceof HTMLElement ? c.style.backgroundImage : '';
+          const img = c.querySelector?.('img');
+          const aria = c.getAttribute?.('aria-label') ?? '';
+          return (
+            bg?.includes('elixir_of_the_boar') ||
+            img?.getAttribute('src')?.includes('elixir_of_the_boar') ||
+            aria.startsWith('Elixir of the Boar')
           );
         });
         if (!el) return;
@@ -1441,6 +2724,13 @@ export const TARGETS = [
       // granted AFTERWARDS (the shopkeeper handing it over). The shot is taken
       // a slow band later. Before the fix the row is still disabled and the
       // reagent still reads 0/2; after it, the row is live.
+      // Craft Cast System: the mid-cast scene, the PR's whole point: the
+      // in-window strip (gold fill, recipe label in the bar, timer, batch
+      // counter) as the SINGLE craft-cast progress surface. The desktop
+      // framing shoots the FULL viewport so the suppressed overlay #castbar
+      // is provably absent; mobile clips the window with its 40px controls.
+      { key: 'desktop-mid-cast', midCast: true },
+      { key: 'mobile-mid-cast', midCast: true, mobile: true },
       { key: 'desktop-bag-freshness', bagFreshness: true, selectTab: 'alchemy' },
       { key: 'mobile-bag-freshness', bagFreshness: true, mobile: true, selectTab: 'alchemy' },
       // Phase 22 (crafting identity table legibility): the identity card at
@@ -1590,6 +2880,30 @@ export const TARGETS = [
         });
         await wait(900);
       }
+      if (open && variant?.midCast) {
+        // Start a real batch through the REAL control: walk the tabs until a
+        // row's Create All is enabled (the granted reagents feed several
+        // crafts; the persisted-tab localStorage can point anywhere), click
+        // it, then shoot mid-cast so the fill, timer, and batch counter are
+        // live entity-field truth, never a staged style.
+        await page.evaluate(() => {
+          const win = document.querySelector('#crafting-window');
+          if (!win) return;
+          const enabledCreateAll = () =>
+            [...win.querySelectorAll('.crafting-create-all-btn')].find((b) => !b.disabled);
+          let btn = enabledCreateAll();
+          if (!btn) {
+            for (const tab of win.querySelectorAll('.crafting-tab')) {
+              tab.click();
+              btn = enabledCreateAll();
+              if (btn) break;
+            }
+          }
+          btn?.click();
+        });
+        // Field casts run 1.75s: 900ms in, the strip reads about half full.
+        await wait(900);
+      }
       if (open && variant?.identity && variant?.mobile) {
         // The stacked mobile card caps its height and scrolls internally
         // (hud.mobile.css), which leaves the skill rows below the fold; the
@@ -1620,7 +2934,53 @@ export const TARGETS = [
         });
         await wait(300);
       }
+      if (open && variant?.midCast && !variant?.mobile) {
+        // Full viewport on purpose: the shot must also prove the overlay
+        // #castbar stays hidden while the window owns the craft cast.
+        return {};
+      }
       return open ? { clip: '#crafting-window' } : {};
+    },
+  },
+  {
+    key: 'commission-board',
+    label: 'Commission order board (issue #1298)',
+    when: [
+      'ui/commission_order_view',
+      'ui/commission_order_window',
+      'sim/professions/commission_order',
+    ],
+    // Stages one order per section: an open request the viewer posted
+    // ("My Requests"), an order a second player accepted from the viewer
+    // ("My Requests" showing Accepted), and an open-board order from a third
+    // player the viewer could take ("Open Board"). The "open a new order"
+    // form is always visible above the sections.
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        const sim = window.__game?.sim;
+        if (!sim) return;
+        const pid = sim.primaryId;
+        const meta = sim.players?.get(pid);
+        if (meta) meta.knownRecipes.add('recipe_eastbrook_arming_sword');
+        // A second, offline "player" the shot can show as the board's
+        // requester (no server needed offline: addPlayer seats a bot-like
+        // entity the sim otherwise ignores).
+        let otherPid;
+        try {
+          otherPid = sim.addPlayer('warrior', 'Borin');
+        } catch {}
+        sim.openCommissionOrder?.('recipe_eastbrook_arming_sword', 'open', undefined, pid);
+        if (otherPid !== undefined) {
+          sim.openCommissionOrder?.('recipe_eastbrook_arming_sword', 'open', undefined, otherPid);
+        }
+        const el = document.querySelector('#commission-board-window');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.openCommissionBoard?.();
+      });
+      const open = await pollForSize(page, '#commission-board-window');
+      return open ? { clip: '#commission-board-window' } : {};
     },
   },
   {
@@ -1964,6 +3324,186 @@ export const TARGETS = [
     },
   },
   {
+    key: 'market-collapse-toggle',
+    label: 'World Market Browse "lowest price only" toggle (issue 3103)',
+    when: ['ui/market_window', 'sim/market', 'sim/market_query', 'sim/market_collapse'],
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    // Offline there is only one player, so four DIFFERENT sellers of the same item can
+    // only be staged by seeding the book directly (the market-collect-ledger precedent),
+    // not by driving four real marketList commands. Same seeded data on both commits: on
+    // the base commit the toggle does not exist yet, so the shot is the full uncollapsed
+    // list; on this branch the toggle exists, checking it collapses those four rows down
+    // to the one cheapest, which is the contrast this pair is for.
+    async capture(page) {
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        const p = sim?.player;
+        if (p?.pos) {
+          p.pos.x = 0;
+          p.pos.z = 11.5;
+        }
+        const book = sim?.market?.marketListings;
+        if (book) {
+          book.length = 0;
+          book.push(
+            {
+              id: 1,
+              sellerKey: 'Bramblefoot',
+              sellerName: 'Bramblefoot',
+              itemId: 'worn_sword',
+              count: 1,
+              price: 600,
+              expiresAt: (sim?.time ?? 0) + 1000,
+              house: false,
+            },
+            {
+              id: 2,
+              sellerKey: 'Rhaelin',
+              sellerName: 'Rhaelin',
+              itemId: 'worn_sword',
+              count: 1,
+              price: 400,
+              expiresAt: (sim?.time ?? 0) + 1000,
+              house: false,
+            },
+            {
+              id: 3,
+              sellerKey: 'Torvald',
+              sellerName: 'Torvald',
+              itemId: 'worn_sword',
+              count: 1,
+              price: 250,
+              expiresAt: (sim?.time ?? 0) + 1000,
+              house: false,
+            },
+            {
+              id: 4,
+              sellerKey: 'Mirelle',
+              sellerName: 'Mirelle',
+              itemId: 'worn_sword',
+              count: 1,
+              price: 100,
+              expiresAt: (sim?.time ?? 0) + 1000,
+              house: false,
+            },
+          );
+        }
+        const el = document.querySelector('#market-window');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.openMarket?.();
+        const bags = document.querySelector('#bags');
+        if (bags) bags.style.display = 'none';
+      });
+      if (!(await pollForSize(page, '#market-window'))) return {};
+      // Present only on this branch; absent on the base commit, which leaves the
+      // seeded four rows uncollapsed as the "before" half of the pair.
+      await page.evaluate(() => {
+        const box = document.querySelector('.mkt-collapse-checkbox');
+        if (box instanceof HTMLInputElement) {
+          box.checked = true;
+          box.dispatchEvent(new Event('change'));
+        }
+      });
+      await wait(300);
+      return { clip: '#market-window' };
+    },
+  },
+  {
+    key: 'market-sell-price-ref',
+    label: 'World Market Sell tab (current lowest listing price reference, issue 3043)',
+    when: ['ui/market_window', 'ui/market_view', 'sim/market'],
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    // Grant a house-stocked food item (roasted_boar, seeded at 700c/5 = 140c/unit
+    // by market.ts's standing stock, so the reference always has a real, non-zero
+    // price to show), open the Sell tab, then stage the item through the REAL bag
+    // click path (isMarketSell -> stageMarketSell), not a debug-hook shortcut:
+    // bag rows carry a stable `bag:<itemId>:<ordinal>` focus key.
+    async capture(page) {
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        const p = sim?.player;
+        if (p?.pos) {
+          p.pos.x = 0;
+          p.pos.z = 11.5;
+        }
+        sim?.addItem?.('roasted_boar', 5, p?.id);
+        const el = document.querySelector('#market-window');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.openMarket?.();
+      });
+      if (!(await pollForSize(page, '#market-window'))) return {};
+      const staged = await page.evaluate(() => {
+        const tab = document.querySelector('#market-window [data-tab="sell"]');
+        if (!tab) return false;
+        tab.click();
+        const row = document.querySelector('[data-focus-key^="bag:roasted_boar:"]');
+        if (!row) return false;
+        row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return true;
+      });
+      if (!staged) return {};
+      await wait(300);
+      return { clip: '#market-window' };
+    },
+  },
+  {
+    key: 'market-collect-ledger',
+    label: 'World Market Collect tab (itemized sale ledger under the proceeds line)',
+    when: ['ui/market_window', 'ui/market_view', 'sim/market'],
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    // Offline there is only one player and nobody can buy their own listing, so a real
+    // sale cannot be driven from the client: seed the seller's collection directly (the
+    // snapshots-fixture precedent) with proceeds, an itemized ledger, and one returned
+    // stack, then open the Collect tab. The `sales` key is simply ignored on the BASE
+    // commit, which is the contrast this pair is for: same purse, no itemization.
+    async capture(page) {
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        const p = sim?.player;
+        if (p?.pos) {
+          p.pos.x = 0;
+          p.pos.z = 11.5;
+        }
+        const meta = sim?.players?.get(p?.id);
+        const key = String(meta?.characterId ?? meta?.entityId ?? p?.id);
+        const sale = (itemId, count, price, buyerName) => ({
+          itemId,
+          count,
+          price,
+          proceeds: Math.floor(price * 0.95),
+          buyerName,
+        });
+        sim?.market?.marketCollections?.set(key, {
+          copper: 950 + 2850 + 1140,
+          items: [{ itemId: 'bone_fragments', count: 3 }],
+          sales: {
+            entries: [
+              sale('wolf_fang', 1, 1000, 'Rhaelin'),
+              sale('greyjaw_pelt_cloak', 1, 3000, 'Torvald'),
+              sale('roasted_boar', 4, 1200, 'Mirelle'),
+            ],
+            omitted: 0,
+          },
+        });
+        const el = document.querySelector('#market-window');
+        if (el) el.style.display = 'none';
+        window.__game?.hud?.openMarket?.();
+        const bags = document.querySelector('#bags');
+        if (bags) bags.style.display = 'none';
+      });
+      if (!(await pollForSize(page, '#market-window'))) return {};
+      const opened = await page.evaluate(() => {
+        const tab = document.querySelector('#market-window [data-tab="collect"]');
+        if (!tab) return false;
+        tab.click();
+        return true;
+      });
+      if (!opened) return {};
+      await wait(300);
+      return { clip: '#market-window' };
+    },
+  },
+  {
     key: 'market-buy-confirm',
     label: 'World Market buy confirmation prompt (Browse tab, Buy pressed)',
     when: ['ui/market_window', 'ui/market_buy_confirm_core'],
@@ -2030,6 +3570,28 @@ export const TARGETS = [
       if (!(await openMarketBrowse(page))) return {};
       const opened = await page.evaluate(() => {
         const menu = document.querySelector('[data-market-filter-menu="itemType"]');
+        const btn = menu?.querySelector('.mkt-select-btn');
+        if (!btn) return false;
+        btn.click();
+        return true;
+      });
+      if (!opened) return {};
+      await wait(250);
+      return { clip: '#market-window' };
+    },
+  },
+  {
+    key: 'market-sort-filter-list',
+    label: 'World Market sort control (name / price ascending, open)',
+    // Same keying as market-type-filter-list above: the shared query module (which
+    // now carries the sort axis, issue #3102) plus the view core, not ui/market_window,
+    // so an unrelated painter layout change does not drag this along.
+    when: ['sim/market_query', 'ui/market_view'],
+    variants: [{ key: 'desktop' }, { key: 'mobile', mobile: true }],
+    async capture(page) {
+      if (!(await openMarketBrowse(page))) return {};
+      const opened = await page.evaluate(() => {
+        const menu = document.querySelector('[data-market-filter-menu="sort"]');
         const btn = menu?.querySelector('.mkt-select-btn');
         if (!btn) return false;
         btn.click();
@@ -2388,6 +3950,96 @@ export const TARGETS = [
     },
   },
   {
+    key: 'threat-meter',
+    label: 'Threat tab: per-entity hate bars, the aggro marker, and the damage fallback',
+    // The threat tab reads its bars from the row model and its SUBJECT from the
+    // live-resolution core, so a change to either reshoots this. `ui/meters.ts`
+    // is matched by the bare `ui/meters` prefix the other meters targets avoid,
+    // which is deliberate: the subtitle and the row labels are painted there.
+    when: ['ui/meters.ts', 'ui/meters_rows_view', 'ui/threat_subject_core'],
+    variants: [
+      { key: 'live', charClass: 'warlock', charName: 'Nyxaris', scene: 'live' },
+      { key: 'fallback', charClass: 'warlock', charName: 'Nyxaris', scene: 'fallback' },
+    ],
+    // A warlock with a real summoned Emberkin, because the pet is the whole
+    // point: its hate is its own hate-table entry and the mob is swinging at it.
+    // The hate values are written onto the real mob entity and the damage rides
+    // the real Meters.onEvent path, so the panel resolves everything itself.
+    async capture(page, variant) {
+      await page.evaluate((scene) => {
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!sim || !player) return;
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        let mob = null;
+        for (const e of sim.entities.values()) {
+          if (e.kind === 'mob' && e.ownerId == null && !e.dead) {
+            mob = e;
+            break;
+          }
+        }
+        if (!mob) return;
+        sim.summonPet?.(player, 'emberkin');
+        let pet = null;
+        for (const e of sim.entities.values()) {
+          if (e.kind === 'mob' && e.ownerId === player.id && !e.dead) {
+            pet = e;
+            break;
+          }
+        }
+        const meters = game?.hud?.meters;
+        if (!meters) return;
+        meters.dock?.('heal');
+        meters.dock?.('threat');
+        meters.resetFrames?.();
+        const hit = (sourceId, amount, ability) =>
+          meters.onEvent({
+            type: 'damage',
+            sourceId,
+            targetId: mob.id,
+            amount,
+            crit: false,
+            school: 'shadow',
+            ability,
+            kind: 'hit',
+          });
+        hit(player.id, 2400, 'Shadow Bolt');
+        hit(player.id, 800, 'Corruption');
+        if (pet) hit(pet.id, 2600, 'Ashbolt');
+
+        // The hate table the mob really compares: the Emberkin is ahead of its
+        // owner and is the one the mob is swinging at.
+        mob.threat.clear();
+        mob.threat.set(player.id, 3200);
+        if (pet) mob.threat.set(pet.id, 4100);
+        mob.aggroTargetId = pet ? pet.id : player.id;
+
+        if (scene === 'fallback') {
+          // Nothing live left: the tab has only the latched mob's damage to
+          // show, and must say so rather than pass it off as hate.
+          mob.dead = true;
+          mob.threat.clear();
+        }
+        const el = document.querySelector('#meters-window');
+        if (el) el.style.display = 'none';
+        game?.hud?.toggleMeters?.();
+        const banner = document.querySelector('#banner');
+        if (banner) banner.style.opacity = '0';
+      }, variant.scene);
+      const open = await pollForSize(page, '#meters-window');
+      if (!open) return {};
+      await wait(600);
+      await page.evaluate(() => {
+        const el = document.querySelector('#meters-window .mt-tab[data-tab="threat"]');
+        if (el) el.click();
+      });
+      await wait(800);
+      return { clip: '#meters-window' };
+    },
+  },
+  {
     key: 'meters',
     label: 'Damage meters: bars plus the per-ability hover breakdown',
     when: ['ui/meters', 'meters_breakdown'],
@@ -2487,6 +4139,230 @@ export const TARGETS = [
     },
   },
   {
+    key: 'hunter-quiver-paperdoll',
+    label: 'Hunter paperdoll: a two-hander and a quiver worn together',
+    // Quivers are the first items that put anything in a hunter's off-hand, so
+    // the paperdoll is the view that shows the change. Keyed on the quiver
+    // records themselves rather than a ui/ path: the diff is content-only.
+    //
+    // The recipe equips a TWO-HANDER before the quiver on purpose. A quiver on
+    // its own paints the same paperdoll either way, so it cannot show the
+    // two-hand exclusion: on the base tree the quiver benches the greatblade and
+    // the main hand shoots up EMPTY, which is the reported bug. Both slots
+    // filled is the fix.
+    when: ['content/zone3', 'content/items', 'equipment_rules', 'item_budget'],
+    variants: [
+      { key: 'desktop', charClass: 'hunter', charName: 'Fletcher' },
+      { key: 'mobile', mobile: true, charClass: 'hunter', charName: 'Fletcher' },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        // The epic rung derives a required level from its quality, so raise the
+        // player before equipping or the equip silently refuses.
+        try {
+          sim?.setPlayerLevel?.(20);
+        } catch {}
+        for (const id of [
+          'moggers_hide_quiver',
+          'cragmaw_huntquiver',
+          'gravewyrm_bone_quiver',
+          'direfang_quiver',
+          'direfang_greatblade',
+        ]) {
+          try {
+            sim?.addItem(id, 1);
+          } catch {}
+        }
+        // Two-hander FIRST, then the quiver: this is the exact order a player
+        // hits the bug in, and the order that leaves the main hand empty on the
+        // base tree.
+        try {
+          sim?.equipItem('direfang_greatblade');
+        } catch {}
+        try {
+          sim?.equipItem('direfang_quiver');
+        } catch {}
+        const el = document.querySelector('#char-window');
+        if (el) el.style.display = 'none';
+        game?.hud?.toggleChar?.();
+      });
+      await wait(900);
+      const open = await page.evaluate(() => {
+        const w = document.querySelector('#char-window');
+        return !!w && getComputedStyle(w).display !== 'none';
+      });
+      return open ? { clip: '#char-window' } : {};
+    },
+  },
+  {
+    key: 'pet-frame',
+    label: 'Pet frame: the pet health strip under the player frame',
+    when: ['ui/pet_frame_view', 'pet_frame_paint'],
+    // Hunter on purpose: it is the pet class players ask about most, and its pet is
+    // the one that survives the owner's death as a revivable corpse.
+    variants: [
+      { key: 'desktop', charClass: 'hunter', charName: 'Rhoswen' },
+      { key: 'mobile', charClass: 'hunter', charName: 'Rhoswen', mobile: true },
+    ],
+    // Summon a pet and wait for it to actually land, reusing the retry shape the
+    // meters target established: the summon mints its own entity, so scanning for
+    // it in the same evaluate races the spawn, and on the mobile page window.__game
+    // is sometimes not published on the first try.
+    //
+    // The clip is #actionbar-stack (desktop), NOT #pet-frame: the BEFORE run shoots
+    // this same target against a tree with no pet frame in it at all, and clipping
+    // to an element that does not exist there would silently fall back to a
+    // full-frame shot, making the pair uncomparable. The stack exists in both and
+    // holds the player frame, the new strip, and the pet bar together, which is
+    // exactly the region under review. Mobile takes the full frame instead, because
+    // there the player and pet frames are position:fixed OUT of the stack.
+    async capture(page, variant) {
+      const hasPet = () =>
+        page.evaluate(() => {
+          const sim = window.__game?.sim;
+          if (!sim?.player) return false;
+          for (const e of sim.entities.values()) {
+            if (e.kind === 'mob' && e.ownerId === sim.player.id) return true;
+          }
+          return false;
+        });
+      for (let attempt = 0; attempt < 30 && !(await hasPet()); attempt++) {
+        await page.evaluate(() => {
+          const sim = window.__game?.sim;
+          document.querySelector('#gpu-notice')?.remove();
+          document.querySelector('.camera-prompt-confirm')?.click();
+          if (!sim?.player) return;
+          try {
+            sim.summonPet?.(sim.player, 'forest_wolf');
+          } catch {}
+        });
+        await wait(500);
+      }
+      // Damage the pet so the health bar reads as a bar rather than a full block:
+      // a strip pinned at 100% cannot show that the fill tracks anything.
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        if (!sim?.player) return;
+        for (const e of sim.entities.values()) {
+          if (e.kind === 'mob' && e.ownerId === sim.player.id) {
+            e.hp = Math.max(1, Math.round(e.maxHp * 0.62));
+          }
+        }
+        const banner = document.querySelector('#banner');
+        if (banner) banner.style.opacity = '0';
+      });
+      await wait(600);
+      // #bottom-bar, not #actionbar-stack: the pet ACTION bar is absolutely
+      // positioned above the stack's top edge, so a stack-clipped shot drops it
+      // and cuts the player frame's health bar with it.
+      return variant?.mobile ? {} : { clip: '#bottom-bar' };
+    },
+  },
+  {
+    key: 'party-pets',
+    label: 'Party frames: pet health slivers on the rows of members with pets',
+    when: ['party_frame_row', 'party_frames.ts'],
+    variants: [
+      { key: 'desktop', charClass: 'priest', charName: 'Lumina' },
+      { key: 'mobile', charClass: 'priest', charName: 'Lumina', mobile: true },
+    ],
+    // A mixed party staged on the PartyMachine (same recipe as the class-color
+    // target below), deliberately mixing pet classes with a petless one so the shot
+    // shows both a row that grows a sliver and a row that does not. The local player
+    // is the PETLESS priest, so every sliver in frame belongs to somebody else,
+    // which is the case this change is actually about.
+    async capture(page, variant) {
+      // Party rows are ~170px wide, so a native-resolution clip of them is a
+      // postage stamp and the sliver (5px tall) is unreadable in review. Render the
+      // desktop shot at 2x device pixels: same layout and same CSS pixel geometry,
+      // just a crisper PNG. Mobile already runs at deviceScaleFactor 2.
+      if (!variant?.mobile) {
+        const vp = page.viewport() ?? { width: 1600, height: 900 };
+        await page.setViewport({ ...vp, deviceScaleFactor: 2 });
+      }
+      await page.evaluate(() => {
+        const sim = window.__game.sim;
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        const me = sim.primaryId;
+        const p = sim.player;
+        const pm = sim.party;
+        const roster = [
+          ['Rhoswen', 'hunter', 'forest_wolf'],
+          ['Nyxaris', 'warlock', 'emberkin'],
+          ['Thorgar', 'warrior', null],
+        ];
+        const pids = roster.map(([name, cls, pet], i) => {
+          const pid = sim.addPlayer(cls, name);
+          const e = sim.entities.get(pid);
+          if (e) {
+            e.pos = { x: p.pos.x + (i % 4) * 2 - 3, y: p.pos.y, z: p.pos.z + 2 };
+            e.prevPos = { ...e.pos };
+            if (pet) {
+              try {
+                sim.summonPet(e, pet);
+              } catch {}
+            }
+          }
+          return pid;
+        });
+        const party = {
+          id: pm.nextPartyId++,
+          leader: me,
+          members: [me, ...pids],
+          raid: false,
+          raidGroups: new Map(),
+          lootStrategies: {},
+        };
+        pm.parties.set(party.id, party);
+        pm.partyByPid.set(me, party.id);
+        for (const q of pids) pm.partyByPid.set(q, party.id);
+      });
+      await wait(1500);
+      // Damage each staged pet to a different fraction: a row of bars all pinned at
+      // full cannot show that the sliver tracks anything.
+      await page.evaluate(() => {
+        const sim = window.__game.sim;
+        const fracs = [0.42, 0.71];
+        let i = 0;
+        for (const e of sim.entities.values()) {
+          if (e.kind === 'mob' && e.ownerId !== null && e.ownerId !== sim.primaryId) {
+            e.hp = Math.max(1, Math.round(e.maxHp * (fracs[i % fracs.length] ?? 0.5)));
+            i++;
+          }
+        }
+        const banner = document.querySelector('#banner');
+        if (banner) banner.style.opacity = '0';
+        // Becoming party leader auto-opens Loot Settings, which sits over the party
+        // frames. The id here is the REAL one: an earlier '#party-loot-settings'
+        // matched nothing in the repo, so the hide was a silent no-op and the panel
+        // covered the very rows this target exists to show.
+        const loot = document.querySelector('#loot-settings-window');
+        if (loot) loot.style.display = 'none';
+      });
+      // Mobile party frames default to COLLAPSED (party_collapse.ts: anything but a
+      // stored '0' collapses), so without expanding them the mobile shot has no rows
+      // in it at all and cannot show the sliver. Expand via the real chip control.
+      if (variant?.mobile) {
+        await page.evaluate(() => {
+          const rowsVisible = () => {
+            const w = document.querySelector('.party-rows');
+            return !!w && getComputedStyle(w).display !== 'none' && w.childNodes.length > 0;
+          };
+          if (rowsVisible()) return;
+          document
+            .querySelector('#party-chip')
+            ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+        await wait(600);
+      }
+      await wait(800);
+      return variant?.mobile ? {} : { clip: '#party-frames' };
+    },
+  },
+  {
     key: 'char-window',
     label: 'Character window',
     when: ['ui/char_window', 'ui/char_view', 'ui/stat_tooltip_view'],
@@ -2531,6 +4407,568 @@ export const TARGETS = [
         await wait(400);
       }
       return open ? { clip: '#char-window' } : {};
+    },
+  },
+  {
+    key: 'reliquary-window',
+    label: 'The Reliquary: Overview shelf with completion and Curator rank',
+    when: [
+      'ui/reliquary_view',
+      'ui/reliquary_window',
+      'ui/reliquary_labels',
+      'ui/reliquary_sheet_view',
+      'sim/content/reliquary',
+      'sim/reliquary',
+      'reliquary_phase22_closeout',
+    ],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        // Seed a few catalogued discoveries so Overview is not an empty museum.
+        // Phase 14: also fill the recent ring AND the firstFind record the
+        // same way a live find would, so the recent strip shows its icon jump
+        // chips resolving through the primary hinted path (a ring without
+        // firstFind exercises only the authored-order fallback). The pageIds
+        // are the pages that hold these items in src/sim/content/reliquary.ts.
+        const game = window.__game;
+        const sim = game?.sim;
+        if (sim?.primary?.deedStats?.itemsDiscovered) {
+          const finds = [
+            ['cryptbone_helm', 'conquerors_hollow_crypt'],
+            ['boundstone_helm', 'conquerors_gravewyrm_sanctum'],
+            ['cryptbone_pauldrons', 'conquerors_hollow_crypt'],
+          ];
+          for (const [id, pageId] of finds) {
+            sim.primary.deedStats.itemsDiscovered.add(id);
+            sim.primary.reliquary?.recent?.push(id);
+            const firstFind = sim.primary.reliquary?.firstFind;
+            if (firstFind && !firstFind[id]) firstFind[id] = { pageId };
+          }
+        }
+        game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      return { clip: '#reliquary-window' };
+    },
+  },
+  {
+    key: 'reliquary-overview-fresh',
+    label: 'The Reliquary: fresh-character Overview (strip hints + shelf cards)',
+    when: ['ui/reliquary_view', 'ui/reliquary_window'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      // Deliberately NO seeding: the acceptance shot is the fresh character's
+      // front door (both strip labels with their hints, three shelf cards, the
+      // reconciliation note, no dead-space stub).
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        window.__game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      return { clip: '#reliquary-window' };
+    },
+  },
+  {
+    key: 'reliquary-page',
+    label: 'The Reliquary: multi-boss page detail with a focused missing cell',
+    when: [
+      'ui/reliquary_view',
+      'ui/reliquary_window',
+      'ui/reliquary_labels',
+      'sim/content/reliquary',
+      'sim/reliquary',
+      'reliquary_phase22_closeout',
+    ],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        // Same seed set as the overview target so the page shows a mix of
+        // catalogued and missing cells.
+        const game = window.__game;
+        const sim = game?.sim;
+        if (sim?.primary?.deedStats?.itemsDiscovered) {
+          for (const id of ['cryptbone_helm', 'boundstone_helm', 'cryptbone_pauldrons']) {
+            sim.primary.deedStats.itemsDiscovered.add(id);
+          }
+        }
+        game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      await page.evaluate(() => {
+        const win = document.querySelector('#reliquary-window');
+        win?.querySelector('[data-nav="conquerors"]')?.click();
+        win?.querySelector('[data-page="conquerors_gravewyrm_sanctum"]')?.click();
+      });
+      await wait(200);
+      await page.evaluate(() => {
+        // Prefer a missing cell that actually HAS an authored source, so the
+        // capture shows the source lines rather than a relic still on the
+        // pending-ruling list (which paints the plain missing tooltip and makes
+        // the screenshot look like the feature did not land). The painter stamps
+        // data-cell-source on exactly those cells, carrying HOW MANY lines they
+        // resolve; selecting on it survives copy rewords and non-English capture
+        // locales, where the old aria-text match ('Drops from') silently
+        // degraded to the fallback.
+        //
+        // Highest count wins, so the shot lands on whichever cell resolves the
+        // most doors on the target page (content re-authoring moves the pick
+        // automatically; no relic is named here) instead of a one-line cell
+        // that shows nothing the previous release did not. A cell
+        // with the attribute but no parseable number still beats one without,
+        // and the first missing cell remains the last resort.
+        const missing = [
+          ...document.querySelectorAll('#reliquary-window .reliquary-cell[data-cell-owned="0"]'),
+        ];
+        const sourceCount = (node) => {
+          if (!node.hasAttribute('data-cell-source')) return 0;
+          const parsed = Number.parseInt(node.getAttribute('data-cell-source') ?? '', 10);
+          return Number.isNaN(parsed) ? 1 : parsed;
+        };
+        let best = null;
+        let bestCount = 0;
+        for (const node of missing) {
+          const count = sourceCount(node);
+          if (count > bestCount) {
+            best = node;
+            bestCount = count;
+          }
+        }
+        const cell = best ?? missing[0];
+        if (cell) {
+          // attachTooltip binds mouseenter/focusin (never pointerenter); focus
+          // is the sturdier trigger here since no synthetic pointerdown has set
+          // pointerFocusPending.
+          cell.focus?.();
+        }
+      });
+      await wait(300);
+      return { clip: '#reliquary-window' };
+    },
+  },
+  // ---- Phase 21 catalog-growth surfaces. Each variant seeds the LOW graphics
+  // preset (the capture rule: every rig shoots the lowest preset so shots stay
+  // comparable; only gfx-comparison rigs keep their own). ----
+  {
+    key: 'reliquary-rift-page',
+    label:
+      'The Rift page: dual clear meters (lifetime clears + S-rank clears) over the 16-slot chase',
+    when: ['sim/content/reliquary', 'reliquary_phase21_qa'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        const sim = window.__game?.sim;
+        // Both meters non-zero so the header shows the dual readout.
+        if (sim?.primary?.deedStats?.counters) {
+          sim.primary.deedStats.counters.riftClears = 12;
+          sim.primary.deedStats.counters.riftSRankClears = 3;
+        }
+        window.__game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      await page.evaluate(() => {
+        const win = document.querySelector('#reliquary-window');
+        win?.querySelector('[data-nav="conquerors"]')?.click();
+        win?.querySelector('[data-page="conquerors_the_rift"]')?.click();
+      });
+      await wait(300);
+      return { clip: '#reliquary-window' };
+    },
+  },
+  {
+    key: 'reliquary-rares-page',
+    label: 'Rares of the Realm: slain kill proofs with the trophy glyph on filled marks',
+    when: ['sim/content/reliquary', 'reliquary_phase21_qa'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        const sim = window.__game?.sim;
+        // Three slain proofs through both ledgers, the way the kill site
+        // writes them, so the grid mixes trophy fills and silhouettes.
+        if (sim?.primary) {
+          for (const id of ['slain:old_greyjaw', 'slain:mogger', 'slain:sister_nhalia']) {
+            sim.primary.deedStats?.visited?.add(id);
+            sim.primary.reliquary?.marks?.add(id);
+          }
+        }
+        window.__game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      await page.evaluate(() => {
+        const win = document.querySelector('#reliquary-window');
+        win?.querySelector('[data-nav="conquerors"]')?.click();
+        win?.querySelector('[data-page="conquerors_rares_of_the_realm"]')?.click();
+      });
+      await wait(300);
+      return { clip: '#reliquary-window' };
+    },
+  },
+  {
+    key: 'reliquary-vault-shelf',
+    label: 'The Horizons shelf: the Vault of Ages row wearing the muted Retired chip',
+    when: ['sim/content/reliquary', 'reliquary_phase21_qa'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        window.__game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      await page.evaluate(() => {
+        document.querySelector('#reliquary-window [data-nav="horizons"]')?.click();
+      });
+      await wait(300);
+      await page.evaluate(() => {
+        document
+          .querySelector('#reliquary-window [data-page="horizons_vault_of_ages"]')
+          ?.scrollIntoView({ block: 'center' });
+      });
+      await wait(200);
+      return { clip: '#reliquary-window' };
+    },
+  },
+  {
+    key: 'reliquary-vault-page',
+    label: 'Vault of Ages page: the Retired chip on the header over the four retired relics',
+    when: ['sim/content/reliquary', 'reliquary_phase21_qa'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        window.__game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      await page.evaluate(() => {
+        const win = document.querySelector('#reliquary-window');
+        win?.querySelector('[data-nav="horizons"]')?.click();
+        win?.querySelector('[data-page="horizons_vault_of_ages"]')?.click();
+      });
+      await wait(300);
+      return { clip: '#reliquary-window' };
+    },
+  },
+  {
+    key: 'reliquary-riftbound-page',
+    label: 'Riftbound page: the Personal chip, holding your own band among the three',
+    when: ['sim/content/reliquary', 'reliquary_phase21_qa'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        const sim = window.__game?.sim;
+        // The realistic personal holding: exactly ONE band owned (the page can
+        // never fill past 1 of 3 for a single character, which is its point).
+        sim?.primary?.deedStats?.itemsDiscovered?.add('riftbound_band_of_might');
+        window.__game?.hud?.openReliquary?.();
+      });
+      const opened = await pollForSize(page, '#reliquary-window');
+      if (!opened) throw new Error('reliquary window did not open');
+      await page.evaluate(() => {
+        const win = document.querySelector('#reliquary-window');
+        win?.querySelector('[data-nav="horizons"]')?.click();
+        win?.querySelector('[data-page="horizons_riftbound"]')?.click();
+      });
+      await wait(300);
+      return { clip: '#reliquary-window' };
+    },
+  },
+  {
+    key: 'reliquary-tracker',
+    label: 'The Reliquary HUD tracker: pinned pages with live progress, and its compact count chip',
+    // Scoped to the tracker's own two modules. The window targets above already
+    // cover the shelf and page surfaces, and a wider when list would double the
+    // capture set of every Reliquary window change.
+    when: [
+      'ui/reliquary_tracker_view',
+      'ui/reliquary_tracker_painter',
+      'reliquary_phase22_closeout',
+    ],
+    variants: [
+      // The strip itself, expanded, with a line per pinned page.
+      { key: 'desktop', beforeLoad: clearPinsOnLowPreset },
+      // The same frame uncropped: where the strip actually sits in the HUD,
+      // under the quest and deed trackers in #right-tracker-stack.
+      { key: 'hud-desktop', beforeLoad: clearPinsOnLowPreset },
+      // Compact touch tier (844x390 landscape lands there): the rows fold away
+      // and the header becomes a count chip that opens The Reliquary.
+      { key: 'mobile', mobile: true, beforeLoad: clearPinsOnLowPreset },
+      // The pin control that feeds all of the above, on its shelf rows.
+      { key: 'pin-desktop', beforeLoad: clearPinsOnLowPreset },
+    ],
+    async capture(page, variant) {
+      const picks = await pinReliquaryTrackerPages(page);
+      if (variant?.key === 'pin-desktop') {
+        // Land the shelf on the rows that are actually pinned: the list is long
+        // and its top rows are all unpinned, which would show the control in
+        // one state only. Held on an interval because the window repaints on
+        // world changes and a repaint resets the scroll (the char-window
+        // target's idiom), cleared after 5s.
+        await page.evaluate((pageId) => {
+          const pin = () => {
+            document
+              .querySelector(`#reliquary-window [data-pin="${pageId}"]`)
+              ?.scrollIntoView({ block: 'center' });
+          };
+          pin();
+          const iv = setInterval(pin, 50);
+          setTimeout(() => clearInterval(iv), 5000);
+        }, picks[0]);
+        await wait(400);
+        return { clip: '#reliquary-window' };
+      }
+      // Close the window: the tracker is the always-on surface, and the open
+      // window covers it.
+      await page.evaluate(() => window.__game?.hud?.toggleReliquary?.());
+      await wait(600);
+      const shown = await pollForSize(page, '#reliquary-tracker');
+      if (!shown) throw new Error('reliquary tracker painted no lines');
+      if (variant?.key === 'mobile') {
+        // Prove the compact tier is really on before shooting it: without
+        // hud-mobile-compact this is the desktop disclosure strip, not the chip.
+        const chip = await page.evaluate(
+          () =>
+            document.body.classList.contains('mobile-touch') &&
+            document.body.classList.contains('hud-mobile-compact') &&
+            document
+              .querySelector('#reliquary-tracker .dt-header')
+              ?.getAttribute('aria-haspopup') === 'dialog',
+        );
+        if (!chip) throw new Error('reliquary tracker is not in compact chip mode');
+        return {};
+      }
+      return variant?.key === 'desktop' ? { clip: '#reliquary-tracker' } : {};
+    },
+  },
+  {
+    key: 'inspect-curator-standing',
+    label: 'Inspect card: Reliquary standing line, border accent, Curator sigil',
+    when: [
+      'ui/inspect_view',
+      'ui/inspect_window',
+      'ui/curator_sigil',
+      'ui/reliquary_sheet_view',
+      'reliquary_phase22_closeout',
+    ],
+    // SELF-inspect, which is the only arm that renders offline: no server ever
+    // stamps the crk/cro/crt wire fields in a single-player world, so a spawned
+    // bystander would show an empty standing no matter what is seeded. Hud gates
+    // the live read on the inspected pid being the viewer's, so opening the card
+    // on sim.playerId is what exercises selfCuratorStanding.
+    variants: [
+      { key: 'desktop', beforeLoad: lowGraphicsSeed },
+      { key: 'mobile', mobile: true, beforeLoad: lowGraphicsSeed },
+    ],
+    async capture(page) {
+      const seeded = await page.evaluate(`(async () => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        const sim = window.__game?.sim;
+        if (!sim) return { ok: false, reason: 'no sim' };
+        // Own enough of the catalog to reach the top rung. The ids come from the
+        // live page table rather than a hand-copied list, so a content edit that
+        // renames or re-shelves a relic cannot quietly leave this seeding short
+        // of the rank-5 threshold.
+        const mod = await import('/src/sim/content/reliquary.ts');
+        const itemIds = new Set();
+        for (const page of mod.RELIQUARY_PAGES) {
+          for (const relic of page.relics) if (relic.kind === 'item') itemIds.add(relic.itemId);
+        }
+        for (const id of itemIds) sim.primary.deedStats.itemsDiscovered.add(id);
+        // Wear the rank-5 border through the REAL validator (which demands the
+        // deed be earned and its reward be a border), so the accent on the name
+        // row is the one a rank-5 Curator actually gets rather than a field
+        // written past the gate.
+        sim.deedsEarned.set('col_reliquary_rank_5', '2026-08-01');
+        sim.setActiveBorder('col_reliquary_rank_5');
+        window.__game.hud.openInspect(sim.playerId);
+        return { ok: true, rank: sim.reliquaryCuratorRank() };
+      })()`);
+      if (!seeded.ok) throw new Error(`inspect standing seeding failed: ${seeded.reason}`);
+      if (seeded.rank !== 5) throw new Error(`seeded Curator rank ${seeded.rank}, expected 5`);
+      const opened = await pollForSize(page, '#inspect-window');
+      if (!opened) throw new Error('inspect window did not open');
+      return { clip: '#inspect-window' };
+    },
+  },
+  {
+    key: 'char-sheet-reliquary',
+    label: 'Character sheet framed on the Reliquary progression row',
+    when: ['ui/reliquary_sheet_view', 'ui/char_view', 'reliquary_phase22_closeout'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        // The same three-find seed as the window targets, so the pair reads a
+        // real non-zero completion instead of a fresh 0/N.
+        const sim = window.__game?.sim;
+        if (sim?.primary?.deedStats?.itemsDiscovered) {
+          for (const id of ['cryptbone_helm', 'boundstone_helm', 'cryptbone_pauldrons']) {
+            sim.primary.deedStats.itemsDiscovered.add(id);
+          }
+        }
+        window.__game?.hud?.toggleChar?.();
+      });
+      const opened = await pollForSize(page, '#char-window');
+      if (!opened) throw new Error('char window did not open');
+      // Frame ON the row: the sheet scrolls on small frames and the
+      // progression block sits below the equipment columns.
+      await page.evaluate(() => {
+        document.querySelector('#char-window .cp-reliquary')?.scrollIntoView({ block: 'center' });
+      });
+      await wait(200);
+      const hasRow = await page.evaluate(
+        () => !!document.querySelector('#char-window .cp-reliquary'),
+      );
+      if (!hasRow) throw new Error('char sheet reliquary progression row not found');
+      return { clip: '#char-window' };
+    },
+  },
+  {
+    key: 'nameplate-border',
+    label: 'Rank-5 Curator border on the own nameplate and portrait ring, in world',
+    when: ['ui/deed_border_view', 'render/nameplate_view', 'reliquary_phase22_closeout'],
+    // Desktop only: the plate paints identically on the compact tier and the
+    // full frame is the evidence (a canvas plate cannot be DOM-clipped).
+    variants: [{ key: 'desktop', beforeLoad: seedLowGraphicsPreset }],
+    async capture(page) {
+      const seeded = await page.evaluate(`(async () => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        const sim = window.__game?.sim;
+        if (!sim) return { ok: false, reason: 'no sim' };
+        // Wear the rank-5 border through the REAL validator (the
+        // inspect-curator-standing idiom): earn the catalog, earn the deed,
+        // then pick the border, so the plate shows what a rank-5 Curator
+        // actually gets.
+        const mod = await import('/src/sim/content/reliquary.ts');
+        for (const pageDef of mod.RELIQUARY_PAGES) {
+          for (const relic of pageDef.relics) {
+            if (relic.kind === 'item') sim.primary.deedStats.itemsDiscovered.add(relic.itemId);
+          }
+        }
+        sim.deedsEarned.set('col_reliquary_rank_5', '2026-08-01');
+        sim.setActiveBorder('col_reliquary_rank_5');
+        return { ok: true, border: sim.players?.get?.(sim.playerId)?.activeBorder ?? null };
+      })()`);
+      if (!seeded.ok) throw new Error(`nameplate border seeding failed: ${seeded.reason}`);
+      if (seeded.border !== 'col_reliquary_rank_5') {
+        throw new Error(`activeBorder is ${seeded.border}, expected col_reliquary_rank_5`);
+      }
+      // Let the world render a few frames so the plate and the portrait ring
+      // repaint with the border before the frame is taken.
+      await wait(1200);
+      return {};
+    },
+  },
+  {
+    key: 'cheater-mark',
+    label: 'Operator Cheater tag: own plate, a peer plate, the target frame, and the debuff',
+    // Narrow on purpose: only this feature touches src/sim/moderation or
+    // src/ui/cheater_tag, so the pair of shots below is the whole evidence for
+    // it and no unrelated diff pays for the run.
+    when: ['sim/moderation', 'ui/cheater_tag'],
+    variants: [
+      { key: 'desktop', beforeLoad: seedLowGraphicsPreset },
+      { key: 'mobile', mobile: true, beforeLoad: seedLowGraphicsPreset },
+    ],
+    async capture(page) {
+      // Brand BOTH the viewer and a staged peer, then target the peer: one full
+      // frame then carries every surface the tag reaches (the peer's overhead
+      // plate, the viewer's own plate, the target frame's name line, and the
+      // countdown debuff on the viewer's own bar).
+      //
+      // setCheaterMark is the REAL operator entry point (the server calls
+      // exactly this on a sanction and at join restore), so the frame shows what
+      // a marked account actually looks like, not a hand-stamped flag.
+      const staged = await page.evaluate(() => {
+        document.querySelector('#gpu-notice')?.remove();
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!game || !sim || !player) return { ok: false, reason: 'offline world is unavailable' };
+        if (typeof sim.setCheaterMark !== 'function') {
+          return { ok: false, reason: 'sim.setCheaterMark is unavailable' };
+        }
+        const peerId = sim.addPlayer('mage', 'Aldwin');
+        const peer = sim.entities.get(peerId);
+        if (!peer) return { ok: false, reason: 'peer spawn failed' };
+        peer.level = 18;
+        // In front of the camera's focal point (the player-tooltip recipe's
+        // placement): the renderer sits the camera behind the player along the
+        // opposite of this vector, so the peer's plate faces us.
+        peer.pos.x = player.pos.x + Math.sin(game.input.camYaw) * 4;
+        peer.pos.z = player.pos.z + Math.cos(game.input.camYaw) * 4;
+        const threeHours = 3 * 60 * 60;
+        sim.setCheaterMark(threeHours, peerId);
+        sim.setCheaterMark(threeHours);
+        sim.targetEntity(peerId);
+        return {
+          ok: true,
+          peerId,
+          peerMarked: peer.cheaterMark === true,
+          selfMarked: player.cheaterMark === true,
+          debuffed: player.auras.some((a) => a.id === 'cheater_mark'),
+          targeted: player.targetId === peerId,
+        };
+      });
+      if (!staged.ok) throw new Error(staged.reason);
+      // Gate on the SANCTION being applied, never on the tag being rendered:
+      // this same recipe shoots the BEFORE frame on a build where the sim core
+      // exists and no client surface renders it yet.
+      if (!staged.peerMarked || !staged.selfMarked || !staged.debuffed || !staged.targeted) {
+        throw new Error(`cheater mark staging failed: ${JSON.stringify(staged)}`);
+      }
+      // The plate repaints on the nameplate cadence, not per frame.
+      await wait(1500);
+      return {};
     },
   },
   {
@@ -2697,6 +5135,34 @@ export const TARGETS = [
     },
   },
   {
+    key: 'graphics-options-shadow-dial',
+    label: 'Graphics options panel (Shadow Quality dial)',
+    when: ['ui/options_view'],
+    variants: [{ key: 'desktop' }],
+    async capture(page) {
+      await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        const hud = window.__game?.hud;
+        if (!hud) return;
+        const win = document.querySelector('#options-menu');
+        if (win && getComputedStyle(win).display !== 'none') hud.toggleOptionsMenu();
+        hud.toggleOptionsMenu();
+        // Graphics is the third button on the main options menu (offline).
+        const buttons = Array.from(document.querySelectorAll('#options-menu .opt-btn'));
+        buttons[2]?.click();
+      });
+      const open = await pollForSize(page, '#options-menu .set-rows');
+      if (!open) return {};
+      // Bring the lighting dial card (Shadow Quality row) into the clip.
+      await page.evaluate(() => {
+        document
+          .querySelector('[data-focus-key="shadowQuality:1"]')
+          ?.scrollIntoView({ block: 'center' });
+      });
+      return { clip: '#options-menu' };
+    },
+  },
+  {
     key: 'interface-options-tabs',
     label: 'Interface options panel (four-tab split)',
     when: ['ui/options_window', 'ui/options_view'],
@@ -2797,6 +5263,79 @@ export const TARGETS = [
       });
       const open = await pollForSize(page, '#confirm-dialog');
       return open ? { clip: '#confirm-dialog' } : {};
+    },
+  },
+  {
+    // Cheap Trick (rogue row 11) retires Gut Punch's stealth requirement. The
+    // bar's usable gate and the tooltip's requirement line both read the
+    // RESOLVED ability, so this shoots the talented rogue standing in the open,
+    // where the slot must paint live and the tooltip must carry no
+    // "Requires stealth" row. Deliberately never enters Duskveil: out of
+    // stealth is the entire point of the talent.
+    key: 'cheap-trick-gut-punch',
+    label: 'Gut Punch out of Duskveil with Cheap Trick: live slot + stealth-free tooltip',
+    when: ['ui/hud/action_bar/ability_requirement_keys', 'ui/hud/action_bar/action_bar_view.ts'],
+    // Two frames because the two surfaces cannot share one: the tooltip opens
+    // OVER the bar, hiding the very slot whose usable state is the other half
+    // of the fix.
+    variants: [
+      { key: 'slot', charClass: 'rogue', charName: 'Sly', beforeLoad: lowGraphicsSeed },
+      {
+        key: 'tooltip',
+        charClass: 'rogue',
+        charName: 'Sly',
+        hover: true,
+        beforeLoad: lowGraphicsSeed,
+      },
+    ],
+    async capture(page, variant) {
+      await page.waitForFunction(() => window.__game?.sim?.player, { timeout: 90000 });
+      await dismissEntryOverlays(page);
+      await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        const hud = window.__game?.hud;
+        sim?.setPlayerLevel?.(20);
+        sim?.applyTalents?.({ spec: null, rows: { 11: 'rog_r11_cheap_trick' } });
+        hud?.addAbilityToHotbar?.('cheap_shot');
+      });
+      await wait(800);
+      // Levelling to the talent tier fires a run of deed banners over the
+      // scene. They are unrelated to this change and would only obscure it.
+      await page.evaluate(() => {
+        for (const sel of ['#banner', '#quest-banner', '#subzone-banner']) {
+          const el = document.querySelector(sel);
+          if (el) el.style.display = 'none';
+        }
+      });
+      if (!variant?.hover) return { clip: '#bottom-bar' };
+      // Hover through the REAL pointer path so the tooltip is the one a player
+      // sees, not a hand-built string (the stack-size-tooltip precedent).
+      const hovered = await page.evaluate(() => {
+        const slots = [...document.querySelectorAll('#actionbar .action-btn')];
+        const btn = slots.find((b) => (b.getAttribute('aria-label') ?? '').includes('Gut Punch'));
+        if (!btn) return false;
+        const r = btn.getBoundingClientRect();
+        for (const type of [
+          'pointerenter',
+          'pointerover',
+          'mouseenter',
+          'mouseover',
+          'pointermove',
+          'mousemove',
+        ]) {
+          btn.dispatchEvent(
+            new MouseEvent(type, {
+              bubbles: true,
+              clientX: r.left + r.width / 2,
+              clientY: r.top + r.height / 2,
+            }),
+          );
+        }
+        return true;
+      });
+      if (!hovered) throw new Error('Gut Punch never reached the action bar');
+      await wait(800);
+      return { clip: '#tooltip' };
     },
   },
   {
@@ -3501,6 +6040,35 @@ export const TARGETS = [
     },
   },
   {
+    key: 'ota-update',
+    label: 'Native OTA update overlay',
+    when: ['ui/ota_update_overlay', 'net/ota_update_gate'],
+    variants: [
+      { key: 'downloading', model: { phase: 'downloading', percent: 42, fatal: false } },
+      {
+        key: 'downloading-mobile',
+        model: { phase: 'downloading', percent: 42, fatal: false },
+        mobile: true,
+      },
+      { key: 'incompatible-fatal', model: { phase: 'downloading', percent: 70, fatal: true } },
+    ],
+    // The overlay only mounts on a native shell mid-OTA-download (installOtaUpdateGate
+    // is inert off NATIVE_APP), which a browser capture never is; import the painter
+    // directly (Vite serves /src in dev) and render the model the gate would reduce,
+    // the gpu-notice recipe exactly. The model carries showContinue and the second
+    // argument carries an inert action so the SAME recipe renders the pre-removal
+    // painter during a before/after flip; the current painter ignores both extras.
+    async capture(page, variant) {
+      await page.evaluate(async (model) => {
+        const mod = await import('/src/ui/ota_update_overlay.ts');
+        mod.hideOtaUpdateOverlay();
+        mod.renderOtaUpdateOverlay({ showContinue: true, ...model }, { onContinue: () => {} });
+      }, variant?.model ?? { phase: 'downloading', percent: 42, fatal: false });
+      const open = await pollForSize(page, '#ota-update-backdrop');
+      return open ? { clip: '.ota-update-dialog' } : {};
+    },
+  },
+  {
     key: 'perf-nudge',
     label: 'Performance nudge toast (perf-doctor machine-local causes)',
     when: ['ui/perf_nudge', 'game/perf_nudge'],
@@ -3950,6 +6518,165 @@ export const TARGETS = [
     },
   },
   {
+    key: 'tool-charm-cards',
+    label: 'Tool charm explainer cards: bag item tooltip and Professions live-row hover card',
+    when: ['src/ui/tool_effect_tooltip.ts'],
+    variants: [{ key: 'bag-tooltip' }, { key: 'professions-live-row' }],
+    async capture(page, variant) {
+      // The entry helper RETURNS false rather than throwing when the world
+      // boot outlasts its budget on a contended machine, and every step
+      // below silently no-ops without __game; gate on the hook so a slow
+      // boot reads as a retryable error, not a missing window.
+      let booted = false;
+      for (let attempt = 0; attempt < 60 && !booted; attempt++) {
+        booted = await page.evaluate(() =>
+          Boolean(window.__game?.hud && window.__game?.sim?.player),
+        );
+        if (!booted) await wait(1000);
+      }
+      if (!booted) throw new Error('world did not boot');
+      await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        document.querySelector('.gpu-notice-dismiss')?.click();
+      });
+      await wait(300);
+      if (variant?.key === 'bag-tooltip') {
+        // Grant the charm, open bags, hover its row: the tooltip card is the
+        // whole change, so the clip is the shared #tooltip box itself.
+        await page.evaluate(() => {
+          const game = window.__game;
+          if (!game) return;
+          try {
+            game.sim?.addItem('gatherers_cache', 1);
+          } catch {}
+          const el = document.querySelector('#bags');
+          if (el) el.style.display = 'none';
+          game.hud.toggleBags?.();
+        });
+        const bagsOpen = await pollForSize(page, '#bags');
+        if (!bagsOpen) throw new Error('bags window did not open');
+        // Poll for the granted charm's row: the grant and the bag paint can
+        // land a beat after the toggle on a cold contended run.
+        let hovered = false;
+        for (let attempt = 0; attempt < 10 && !hovered; attempt++) {
+          hovered = await page.evaluate(() => {
+            // The exact handle: bag rows key their focus by item id
+            // (bags_window.ts stackOrdinal mint), so the charm cannot be
+            // confused with any other rare the starter kit carries.
+            const row = document.querySelector('#bags [data-focus-key^="bag:gatherers_cache:"]');
+            if (!row) return false;
+            row.dispatchEvent(new MouseEvent('mouseenter'));
+            return true;
+          });
+          if (!hovered) await wait(500);
+        }
+        if (!hovered) {
+          const diag = await page.evaluate(() => ({
+            rows: document.querySelectorAll('#bags .bag-item').length,
+            classes: [...document.querySelectorAll('#bags .bag-item')]
+              .slice(0, 8)
+              .map((r) => r.className),
+          }));
+          throw new Error(`charm bag row not found to hover: ${JSON.stringify(diag)}`);
+        }
+        await wait(400);
+        return { clip: '#tooltip' };
+      }
+      // The live-row card: stage a slotted effect through the IWorld read (the
+      // professions target's renown-board precedent), open the window, hover
+      // the row the wiring marked with data-effect-tip.
+      await page.evaluate(() => {
+        const game = window.__game;
+        if (!game) return;
+        // Gathering (and its effect lines) renders only in FULL mode, and the
+        // sandbox character is unattuned (simplified), so stage an attuned
+        // identity plus a mining row (the professions target's stub precedent).
+        Object.defineProperty(game.world, 'craftingIdentity', {
+          value: {
+            version: 1,
+            synced: true,
+            craftSkills: {
+              weaponcrafting: 125,
+              armorcrafting: 87,
+              tailoring: 0,
+              leatherworking: 0,
+              cooking: 26,
+              alchemy: 0,
+              engineering: 0,
+              enchanting: 0,
+              jewelcrafting: 0,
+              inscription: 0,
+            },
+            activeArchetype: 'weaponcrafting',
+            pairedMajor: 'armorcrafting',
+            hobbyCraft: 'cooking',
+            attunedPairs: ['weaponcrafting+armorcrafting'],
+            switchCount: 1,
+            amendsProgress: 2,
+            amendsRequired: 8,
+            knownRecipes: [],
+          },
+          configurable: true,
+        });
+        Object.defineProperty(game.world, 'professionsState', {
+          value: { skills: [{ professionId: 'mining', skill: 88, maxSkill: 100 }] },
+          configurable: true,
+        });
+        Object.defineProperty(game.world, 'toolEffectSlots', {
+          value: [
+            {
+              professionId: 'mining',
+              effectId: 'gatherers_cache',
+              charges: 12,
+              maxCharges: 30,
+              confirmMode: 'always',
+            },
+          ],
+          configurable: true,
+        });
+        const el = document.querySelector('#professions-window');
+        if (el) el.style.display = 'none';
+        game.hud.toggleProfessions?.();
+      });
+      const open = await pollForSize(page, '#professions-window');
+      if (!open) throw new Error('professions window did not open');
+      // Repaint to pick the stubs up in case the first paint raced them, then
+      // poll for the marked row.
+      await page.evaluate(() => {
+        window.__game?.hud?.toggleProfessions?.();
+        window.__game?.hud?.toggleProfessions?.();
+      });
+      let hovered = false;
+      for (let attempt = 0; attempt < 10 && !hovered; attempt++) {
+        hovered = await page.evaluate(() => {
+          const row = document.querySelector('#professions-window [data-effect-tip]');
+          if (!row) return false;
+          row.scrollIntoView({ block: 'center' });
+          row.dispatchEvent(new MouseEvent('mouseenter'));
+          return true;
+        });
+        if (!hovered) await wait(500);
+      }
+      if (!hovered) {
+        const diag = await page.evaluate(() => ({
+          effects: document.querySelectorAll('#professions-window .prof-effect').length,
+          gatherRows: document.querySelectorAll('#professions-window .prof-gather-row').length,
+          slots: (() => {
+            try {
+              return JSON.stringify(window.__game?.world?.toolEffectSlots);
+            } catch (e) {
+              return String(e);
+            }
+          })(),
+        }));
+        throw new Error(`live effect row with data-effect-tip not found: ${JSON.stringify(diag)}`);
+      }
+      await wait(400);
+      return { clip: '#tooltip' };
+    },
+  },
+  {
     key: 'vendor-tool-gate',
     label: 'Vendor goods: advisory wield-requirement lines on the tool ladder (R22)',
     when: [
@@ -4152,6 +6879,347 @@ export const TARGETS = [
         if (!after.ariaNamesCount) throw new Error('a count row aria-label does not name the qty');
       }
       return { clip: '#vendor-window' };
+    },
+  },
+  {
+    key: 'warfare-tier',
+    label: 'WARFARE honor tier: the sectioned shop, the Highwatch quartermaster, the sheet line',
+    when: [
+      'ui/hud/vendor/warfare_vendor',
+      'sim/content/pvp_honor',
+      'sim/pvp/power',
+      'content/zone3',
+    ],
+    // Four scenes behind one entry, because they are four views of ONE change
+    // and each has to be shot the same way on both trees for the pair to mean
+    // anything. `scene` selects the recipe, the battleground target's precedent.
+    //
+    //   shop          FURY in Eastbrook, the vendor both trees carry, so the
+    //                 before (flat #vendor-window grid) and the after (sectioned
+    //                 #warfare-window) are the same NPC and the same stock.
+    //   quartermaster Warmarshal Draven Kole in Highwatch. He does not exist on
+    //                 the base tree, so the recipe frames the AUTHORED POINT
+    //                 rather than the entity: the before frame is the same
+    //                 corner of the hub with nobody in it.
+    //   sheet         The character sheet with a complete 11-slot WARFARE kit
+    //                 worn, which is where the Warfare rating line moved (the
+    //                 0.20 caps went to 0.30 and a full kit now reaches them).
+    //   tooltip       A WARFARE armor piece hovered in the bag while a PARTIAL
+    //                 kit is worn, so the tooltip's set block shows a lit tier
+    //                 beside two dim ones. AFTER only, and honestly so: the base
+    //                 tree tags no WARFARE item with a set, so there is no set
+    //                 block to shoot on that side at all.
+    variants: [
+      { key: 'shop-desktop', scene: 'shop', charClass: 'warrior', charName: 'Warbrand' },
+      {
+        key: 'shop-mobile',
+        scene: 'shop',
+        charClass: 'warrior',
+        charName: 'Warbrand',
+        mobile: true,
+      },
+      {
+        key: 'quartermaster-desktop',
+        scene: 'quartermaster',
+        charClass: 'warrior',
+        charName: 'Warbrand',
+      },
+      { key: 'char-sheet-desktop', scene: 'sheet', charClass: 'warrior', charName: 'Warbrand' },
+      {
+        key: 'item-tooltip-set-bonuses-desktop',
+        scene: 'tooltip',
+        charClass: 'warrior',
+        charName: 'Warbrand',
+      },
+    ],
+    async capture(page, variant) {
+      // The overlays that can outlive entry, the vendor-tool-gate sweep. No
+      // Escape: that OPENS the game menu over the frame.
+      await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        document.querySelector('.gpu-notice-dismiss')?.click();
+        document.querySelector('#gpu-notice')?.remove();
+      });
+      await wait(300);
+
+      if (variant.scene === 'shop') {
+        // One evaluate for state, teleport and open: the HUD closes an honor
+        // shop once the player is out of range of the merchant (the
+        // openWarfareVendorNpcId proximity check mirrors openVendorNpcId), so
+        // the move and the open must land against the same ticking frame.
+        //
+        // The open is FEATURE-DETECTED rather than branched on a flag: the base
+        // tree has no openWarfareVendor at all, and falling back to openVendor
+        // at the same NPC is what makes this a like-for-like pair instead of
+        // two unrelated frames.
+        const setup = await page.evaluate(() => {
+          const game = window.__game;
+          const sim = game?.sim;
+          if (!sim) return { ok: false, reason: 'no sim' };
+          const fury = [...sim.entities.values()].find((e) => e.templateId === 'fury');
+          if (!fury) return { ok: false, reason: 'no fury entity' };
+          const p = sim.player;
+          if (!p?.pos) return { ok: false, reason: 'no player' };
+          const meta = sim.players.get(sim.primaryId);
+          if (!meta) return { ok: false, reason: 'no primary player meta' };
+          // Honor well past the dearest tile so every price reads affordable
+          // and the disabled state cannot be mistaken for the owned marker.
+          meta.honor = 250000;
+          // The tier is level 20, so raise the player before equipping or the
+          // equip silently refuses and no tile can read as owned.
+          try {
+            sim.setPlayerLevel?.(20);
+          } catch {}
+          // Part of ONE family owned, and worn: the per-tile Owned marker needs
+          // a viewer who is part way through a set, never an empty or a
+          // finished one, so one section carries both treatments at once.
+          for (const id of [
+            'furyforged_warhelm',
+            'furyforged_warspaulders',
+            'furyforged_warplate',
+          ]) {
+            try {
+              sim.addItem(id, 1);
+              sim.equipItem(id);
+            } catch {}
+          }
+          p.pos.x = fury.pos.x + 2;
+          p.pos.z = fury.pos.z;
+          p.prevPos = { ...p.pos };
+          // Force both windows hidden first so the size poll cannot pass on a
+          // window left up by an earlier target (the market recipe's precedent).
+          for (const sel of ['#vendor-window', '#warfare-window']) {
+            const el = document.querySelector(sel);
+            if (el) el.style.display = 'none';
+          }
+          if (typeof game.hud.openWarfareVendor === 'function') {
+            game.hud.openWarfareVendor(fury.id);
+            return { ok: true, sectioned: true };
+          }
+          game.hud.openVendor(fury.id);
+          return { ok: true, sectioned: false };
+        });
+        if (!setup.ok) throw new Error(`warfare shop setup failed: ${setup.reason}`);
+        const sel = setup.sectioned ? '#warfare-window' : '#vendor-window';
+        if (!(await pollForSize(page, sel))) throw new Error(`${sel} did not open`);
+        await wait(400);
+        // Verify the frame carries what the shot claims, on the AFTER side only:
+        // on the base tree there is no sectioned window at all, and the flat
+        // grid is the correct before frame.
+        if (setup.sectioned) {
+          const shape = await page.evaluate(() => ({
+            sections: document.querySelectorAll('#warfare-window .vendor-section-title').length,
+            progress: document.querySelectorAll('#warfare-window .warfare-set-progress').length,
+            bonuses: document.querySelectorAll('#warfare-window .warfare-set-bonus').length,
+            tiles: document.querySelectorAll('#warfare-window .vendor-goods-grid .vendor-item')
+              .length,
+            owned: document.querySelectorAll('#warfare-window .vendor-item.warfare-owned').length,
+            balance: Boolean(document.querySelector('#warfare-window .warfare-balance')),
+          }));
+          if (shape.sections < 4) {
+            throw new Error(`expected the four armor sections at least, saw ${shape.sections}`);
+          }
+          // A section is now a name header straight onto its item tiles, so the
+          // tiles are what the header has to be verified against: a headers-only
+          // window would otherwise pass on the section count alone.
+          if (shape.tiles === 0) throw new Error('no section renders any item tile');
+          // Both set-text lines were CUT from the window (the item tooltip's set
+          // block carries the tiers, and the per-tile Owned marker carries the
+          // count), so the frame is only honest when neither renders. Asserted
+          // as absences rather than dropped, or a re-added line would slip back
+          // into the shot unnoticed.
+          if (shape.progress > 0) {
+            throw new Error('the owned-count progress line is still rendered');
+          }
+          if (shape.bonuses > 0) throw new Error('the set bonus tier lines are still rendered');
+          if (shape.owned === 0) throw new Error('no tile is marked owned');
+          if (!shape.balance) throw new Error('the shop shows no honor balance');
+        }
+        // The Ravenpost mail toast lands a few seconds into every offline
+        // session and can straddle the capture.
+        await page.evaluate(() => {
+          const banner = document.querySelector('#banner');
+          if (banner) banner.style.display = 'none';
+        });
+        return { clip: sel };
+      }
+
+      if (variant.scene === 'quartermaster') {
+        // Frame the authored POINT (content/zone3.ts warmarshal_draven_kole),
+        // never the entity: he is new on this branch, and a recipe that resolved
+        // the entity would simply fail on the base tree instead of producing the
+        // before frame that shows the same corner of Highwatch empty.
+        const framed = await page.evaluate(() => {
+          const game = window.__game;
+          const sim = game?.sim;
+          const p = sim?.player;
+          if (!game || !sim || !p?.pos) return { ok: false, reason: 'offline world unavailable' };
+          const spot = { x: -11, z: 669 };
+          // Stand off the spot along the camera axis so the chase camera looks
+          // past the player straight at it (the quest-marker target's
+          // placement), pulled in from the 12yd default so the NPC reads at
+          // PR-thumbnail size. The extra step SIDEWAYS is this scene's own
+          // correction: dead on the axis the player model stands directly in
+          // front of the NPC and occludes exactly the thing under review.
+          const yaw = game.input.camYaw;
+          p.pos.x = spot.x - Math.sin(yaw) * 4.5 + Math.cos(yaw) * 2.2;
+          p.pos.z = spot.z - Math.cos(yaw) * 4.5 - Math.sin(yaw) * 2.2;
+          p.prevPos = { ...p.pos };
+          game.input.camDist = 7;
+          const npc = [...sim.entities.values()].find(
+            (e) => e.templateId === 'warmarshal_draven_kole',
+          );
+          return { ok: true, present: Boolean(npc) };
+        });
+        if (!framed.ok) throw new Error(`quartermaster framing failed: ${framed.reason}`);
+        // The teleport crosses two zones, so give the renderer time to stream
+        // the hub in and the camera time to settle behind the player.
+        await wait(2500);
+        // The zone crossing fires the subzone plate over the middle of the
+        // frame, on its own hold timer, and the Ravenpost mail toast lands a
+        // few seconds into every offline session: both would sit on top of the
+        // NPC under review.
+        await page.evaluate(() => {
+          for (const sel of ['#banner', '#subzone-banner']) {
+            const el = document.querySelector(sel);
+            if (el) el.style.display = 'none';
+          }
+        });
+        return {};
+      }
+
+      if (variant.scene === 'tooltip') {
+        // The item tooltip's set block, which is the surface the shop's
+        // owned-count sentence was cut in favor of. A PARTIAL kit is the whole
+        // point of the frame: three pieces worn lights the 2-piece tier and
+        // leaves the 4- and 7-piece tiers dim, so one shot carries both
+        // treatments. A complete kit would light every row and prove nothing.
+        //
+        // The HOVERED piece is deliberately not one of the worn three: it sits
+        // in the bag, so the hover runs the real bag tooltip path and the
+        // header's count stays the honest worn count.
+        const staged = await page.evaluate(() => {
+          const game = window.__game;
+          const sim = game?.sim;
+          if (!sim) return { ok: false, reason: 'no sim' };
+          // The tier is level 20, so raise the player before equipping or the
+          // equip silently refuses and no tier can read as met.
+          try {
+            sim.setPlayerLevel?.(20);
+          } catch {}
+          for (const id of ['furyforged_warhelm', 'furyforged_warspaulders', 'furyforged_girdle']) {
+            try {
+              sim.addItem(id, 1);
+              sim.equipItem(id);
+            } catch {}
+          }
+          try {
+            sim.addItem('furyforged_warplate', 1);
+          } catch {}
+          const meta = sim.players.get(sim.primaryId);
+          const worn = Object.values(meta?.equipment ?? {}).filter((id) =>
+            String(id).startsWith('furyforged_'),
+          ).length;
+          const el = document.querySelector('#bags');
+          if (el) el.style.display = 'none';
+          game?.hud?.toggleBags?.();
+          return { ok: true, worn };
+        });
+        if (!staged.ok) throw new Error(`warfare tooltip setup failed: ${staged.reason}`);
+        if (staged.worn !== 3) {
+          throw new Error(`expected the partial 3-piece kit, saw ${staged.worn} worn`);
+        }
+        // toggleBags tracks logical open state, so a page where the bags are
+        // already logically open needs a second toggle to reopen (the
+        // masterwork-tooltip target's precedent).
+        let open = await pollForSize(page, '#bags');
+        if (!open) {
+          await page.evaluate(() => window.__game?.hud?.toggleBags?.());
+          open = await pollForSize(page, '#bags');
+        }
+        if (!open) throw new Error('the bags window did not open');
+        await page.evaluate(() => {
+          document.querySelector('.camera-prompt-confirm')?.click();
+          // The Ravenpost mail toast lands a few seconds into every offline
+          // session and can straddle the capture.
+          const banner = document.querySelector('#banner');
+          if (banner) banner.style.display = 'none';
+          // Real focus fires attachTooltip's focusin arm (the keyboard-nav
+          // path), a sturdier trigger than a synthetic mouseenter in headless.
+          const cell = Array.from(document.querySelectorAll('#bags button')).find((b) =>
+            b.getAttribute('aria-label')?.includes('Furyforged Warplate'),
+          );
+          cell?.scrollIntoView({ block: 'center' });
+          cell?.focus();
+        });
+        if (!(await pollForSize(page, '#tooltip'))) {
+          throw new Error('the item tooltip never appeared through the hover path');
+        }
+        await wait(300);
+        // Verify the frame carries exactly what the shot claims: the set
+        // header, the three tiers, and ONE of them lit. No contrast, no shot.
+        const block = await page.evaluate(() => {
+          const tip = document.querySelector('#tooltip');
+          const rows = [...(tip?.querySelectorAll('.tt-set-bonus') ?? [])];
+          return {
+            header: tip?.querySelector('.tt-set-name')?.textContent ?? '',
+            rows: rows.length,
+            lit: rows.filter((r) => r.classList.contains('active')).length,
+          };
+        });
+        if (!block.header) throw new Error('the tooltip carries no set-name header');
+        if (block.rows !== 3) {
+          throw new Error(`expected the 2, 4 and 7 piece tiers, saw ${block.rows} rows`);
+        }
+        if (block.lit !== 1) throw new Error(`expected one lit tier, saw ${block.lit}`);
+        return { clip: '#tooltip' };
+      }
+
+      // scene 'sheet': a complete 11-slot WARFARE kit worn, which is the only
+      // state in which the sheet's Warfare line reads the tier's new ceiling.
+      // Warrior on purpose: the plate family and the two-hander are the one kit
+      // a single class can wear end to end.
+      const kitted = await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        if (!sim) return { ok: false, reason: 'no sim' };
+        try {
+          sim.setPlayerLevel?.(20);
+        } catch {}
+        const kit = [
+          'furyforged_warhelm',
+          'furyforged_warspaulders',
+          'furyforged_warplate',
+          'furyforged_girdle',
+          'furyforged_legguards',
+          'furyforged_gauntlets',
+          'furyforged_sabatons',
+          'final_argument_greatblade',
+          'final_oath_medallion',
+          'iron_vow_band',
+          'unbroken_circle',
+        ];
+        for (const id of kit) {
+          try {
+            sim.addItem(id, 1);
+            sim.equipItem(id);
+          } catch {}
+        }
+        const meta = sim.players.get(sim.primaryId);
+        const worn = Object.values(meta?.equipment ?? {}).filter((id) => kit.includes(id)).length;
+        const el = document.querySelector('#char-window');
+        if (el) el.style.display = 'none';
+        game?.hud?.toggleChar?.();
+        return { ok: true, worn };
+      });
+      if (!kitted.ok) throw new Error(`warfare kit setup failed: ${kitted.reason}`);
+      if (kitted.worn < 11) {
+        throw new Error(`only ${kitted.worn} of the 11 WARFARE pieces equipped`);
+      }
+      if (!(await pollForSize(page, '#char-window'))) throw new Error('char window did not open');
+      await wait(500);
+      return { clip: '#char-window' };
     },
   },
   {
@@ -5835,6 +8903,851 @@ export const TARGETS = [
         throw new Error('desktop update card did not render');
       }
       return { clip: '#desktop-update-toast' };
+    },
+  },
+  {
+    key: 'bow-cast-pose',
+    label: 'Hunter mid-cast with a bow: the drawn hold, not the caster gesture',
+    when: ['render/characters/skin_attack', 'players/bow_hold_anim', 'build_bow_hold_anim'],
+    variants: [{ key: 'long-draw-desktop', charClass: 'hunter', charName: 'Drawick' }],
+    async capture(page, _variant) {
+      // Entry is async: stage against the world global, not a fixed settle.
+      await page.waitForFunction(() => !!window.__game?.sim?.player, {
+        timeout: 90000,
+        polling: 250,
+      });
+      await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        document.querySelector('#gpu-notice')?.remove();
+      });
+      await wait(300);
+      const staged = await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!game || !sim || !player) return { ok: false, reason: 'offline world unavailable' };
+        sim.setPlayerLevel?.(60, player.id);
+        sim.addItem('direfang_greatblade', 1);
+        sim.equipItem('direfang_greatblade');
+        sim.changeWeaponSkin('winterbite');
+        return { ok: true };
+      });
+      if (!staged.ok) throw new Error(`bow cast staging failed: ${staged.reason}`);
+      // Level-up deed banners cross mid-screen for seconds after the grant.
+      await wait(9000);
+      await page.evaluate(() => {
+        const b = document.querySelector('#banner');
+        if (b) b.style.display = 'none';
+        const game = window.__game;
+        const sim = game?.sim;
+        const p = sim?.player;
+        if (game?.input) game.input.camDist = 6;
+        // Long Draw is a 35yd damage cast and the nearest spawn sits past it.
+        let best = null;
+        let bestD = Infinity;
+        for (const e of sim?.entities?.values?.() ?? []) {
+          if (e === p || e.kind !== 'mob' || e.dead) continue;
+          const d = Math.hypot(e.pos.x - p.pos.x, e.pos.z - p.pos.z);
+          if (d < bestD) {
+            bestD = d;
+            best = e;
+          }
+        }
+        if (best) {
+          // 15yd: outside Long Draw's minRange 8 dead zone (the classic ranged
+          // rule casting_lifecycle enforces, and the reason a 6yd stance was
+          // refused with no error line) and well inside its 35yd range.
+          p.pos.x = best.pos.x - 15;
+          p.pos.z = best.pos.z;
+          // prevPos MUST follow the teleport (tests/CLAUDE.md's recipe). Without
+          // it the next tick sees a 40yd delta, reads the player as moving, and
+          // movement cancels the cast: the whole reason this shot would not fire.
+          p.prevPos = { ...p.pos };
+          p.facing = Math.atan2(best.pos.x - p.pos.x, best.pos.z - p.pos.z);
+          p.prevFacing = p.facing;
+          sim.targetEntity(best.id);
+        }
+        // Assign the slot in the SAME evaluate as the click: the HUD repaints
+        // from its saved slot map and drops an older assignment.
+        game.hud.hotbarActions[0] = { type: 'ability', id: 'aimed_shot' };
+        game.hud.saveSlotMap?.();
+      });
+      await page.click('.action-btn[data-hotbar-slot="1"]');
+      // Shoot INSIDE the 3s cast, past the fade-in so the pose is fully driven.
+      await wait(1200);
+      const cast = await page.evaluate(() => {
+        const p = window.__game?.sim?.player;
+        return { casting: !!p?.castingAbility, ability: p?.castingAbility ?? null };
+      });
+      if (!cast.casting && process.env.SHOT_BASELINE !== '1') {
+        throw new Error(`the cast never started: ${JSON.stringify(cast)}`);
+      }
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      return {};
+    },
+  },
+  {
+    key: 'mech-weapon-skins',
+    label: 'Weapon skins on the Combat Mech: which weapon shows, and in which hand',
+    // The rule module decides WHICH types apply, the manifest and assets decide
+    // what the body actually holds, and skin_attack decides how it is swung.
+    when: [
+      'sim/content/weapon_skin_rules',
+      'render/characters/skin_attack',
+      'render/characters/manifest',
+      'render/characters/assets',
+    ],
+    // One hunter, one greatblade, four looks. The class-rig variant is the
+    // CONTROL: it must be pixel-identical before and after, since the whole
+    // change is scoped to the body that shows the equipped weapon.
+    variants: [
+      {
+        key: 'hunter-classrig-bow-desktop',
+        charClass: 'hunter',
+        charName: 'Fenwick',
+        catalog: 'class',
+        skinId: 'winterbite',
+      },
+      {
+        key: 'hunter-mech-bow-desktop',
+        charClass: 'hunter',
+        charName: 'Fenwick',
+        catalog: 'mech',
+        skinId: 'winterbite',
+      },
+      {
+        key: 'hunter-mech-gun-desktop',
+        charClass: 'hunter',
+        charName: 'Fenwick',
+        catalog: 'mech',
+        skinId: 'encore_bow',
+      },
+      {
+        key: 'hunter-mech-sword-desktop',
+        charClass: 'hunter',
+        charName: 'Fenwick',
+        catalog: 'mech',
+        skinId: 'ice_fang_sword',
+      },
+    ],
+    async capture(page, variant) {
+      await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        document.querySelector('.gpu-notice-dismiss')?.click();
+        document.querySelector('#gpu-notice')?.remove();
+      });
+      await wait(300);
+      const staged = await page.evaluate((shot) => {
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!game || !sim || !player) return { ok: false, reason: 'offline world unavailable' };
+        // Level for the equip gate, then equip through the real inventory path
+        // so the mainhand lands the way a player's would.
+        sim.setPlayerLevel?.(60, player.id);
+        sim.addItem('direfang_greatblade', 1);
+        sim.equipItem('direfang_greatblade');
+        sim.changeSkin(0, shot.catalog);
+        sim.changeWeaponSkin(shot.skinId);
+        return {
+          ok: sim.equipment?.mainhand === 'direfang_greatblade',
+          reason: 'the greatblade did not equip',
+          // Reported, never asserted: on the BEFORE pass a mech sword skin is
+          // legitimately rejected, which is the regression being shown.
+          applied: player.weaponSkinId ?? null,
+        };
+      }, variant);
+      if (!staged.ok) throw new Error(`mech weapon skin staging failed: ${staged.reason}`);
+      // The mech body is lazy-loaded and every skin model is streamed, so the
+      // first frames after staging can still show the class rig or the plain
+      // item model. Poll for the swap rather than trusting a fixed wait.
+      if (variant.catalog === 'mech') {
+        await page.waitForFunction(() => window.__game?.sim?.player?.skinCatalog === 'mech', {
+          timeout: 30000,
+          polling: 250,
+        });
+      }
+      // Levelling to 60 fires a cascade of deed banners plus the Ravenpost mail
+      // banner across mid-screen, exactly where the character stands. Let them
+      // run out, then hide the plate so a late one cannot land on the frame.
+      await wait(9000);
+      // Shoot the character sheet's paperdoll turntable, not the world.
+      // The in-world camera was tried first and is the wrong instrument here:
+      // the body drifts to face nearby mobs between variants, the world camera
+      // frames a 2.6yd character inside a whole town, and the held weapon came
+      // out a smudge at the default distance while a closer camera clipped it
+      // against the unit frame. The paperdoll is centered, lit, uncluttered,
+      // identical across variants, and it runs the same resolveActiveWeaponSkin
+      // call the world does (hud.ts mountCharPreview), so it is a real read of
+      // this change rather than a staged one.
+      await page.evaluate(() => {
+        const banner = document.querySelector('#banner');
+        if (banner) banner.style.display = 'none';
+        window.__game?.hud?.toggleChar?.();
+      });
+      if (!(await pollForSize(page, '#char-model-preview'))) {
+        throw new Error('character sheet paperdoll did not open');
+      }
+      // The turntable needs a beat to mount the rig, stream the skin GLB and
+      // settle its pose before it is worth shooting.
+      await wait(3500);
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      return { clip: '#char-model-preview' };
+    },
+  },
+  {
+    key: 'auto-acquire-target',
+    label: 'Target frame after auto-acquiring the nearest attacking mob (issue #2787)',
+    when: ['casting_lifecycle', 'auto_acquire_target'],
+    variants: [{ key: 'desktop', charClass: 'mage', charName: 'Cassia' }],
+    async capture(page) {
+      const staged = await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        const p = sim?.player;
+        if (!game || !sim || !p) return { ok: false, reason: 'offline world unavailable' };
+        p.resource = p.maxResource;
+        p.targetId = null;
+        p.gcdRemaining = 0;
+        p.castingAbility = null;
+        if (p.cooldowns?.clear) p.cooldowns.clear();
+        const mob = [...sim.entities.values()].find(
+          (e) => e.kind === 'mob' && e.hostile && !e.dead,
+        );
+        if (!mob) return { ok: false, reason: 'no hostile mob fixture available' };
+        // A quiet open lane away from the Eastbrook Vale town clutter.
+        p.pos.x = 0;
+        p.pos.z = -1000;
+        if (sim.groundPos) p.pos.y = sim.groundPos(0, -1000).y;
+        p.facing = 0;
+        mob.pos.x = p.pos.x;
+        mob.pos.y = p.pos.y;
+        mob.pos.z = p.pos.z + 8;
+        mob.maxHp = Math.max(mob.maxHp, 5000);
+        mob.hp = mob.maxHp;
+        mob.aiState = 'chase';
+        mob.aggroTargetId = p.id;
+        mob.inCombat = true;
+        // A real threat-table entry, not just aggroTargetId, so the live tick
+        // loop's mob-AI retarget pass does not reset the staged "attacking"
+        // state back to null before the click below fires.
+        mob.threat = new Map([[p.id, 100]]);
+        mob.spawnPos = { ...mob.pos };
+        mob.leashAnchor = { ...mob.pos };
+        sim.rebucket?.(mob);
+        sim.rebucket?.(p);
+        game.hud.hotbarActions[0] = { type: 'ability', id: 'fireball' };
+        game.hud.saveSlotMap?.();
+        return { ok: true, mobId: mob.id };
+      });
+      if (!staged.ok) throw new Error(staged.reason);
+      await wait(2000); // let the long-distance teleport's zone stream settle
+
+      // Exercise the same click handler a player uses on the primary action bar,
+      // like the target-auras target above: no offensive ability was pressed with
+      // a target already selected, so a successful cast here IS the auto-acquire
+      // proof, not just a state injection.
+      const clicked = await page.evaluate(() => {
+        const button = document.querySelector('.action-btn[data-hotbar-slot="1"]');
+        if (!button) return false;
+        button.click();
+        return true;
+      });
+      if (!clicked) throw new Error('primary action slot 1 is unavailable');
+      await wait(1200);
+
+      const proof = await page.evaluate(
+        (mobId) => window.__game?.sim?.player?.targetId === mobId,
+        staged.mobId,
+      );
+      if (!proof) throw new Error('auto-acquire did not select the attacking mob');
+      return {};
+    },
+  },
+  {
+    key: 'bow-skin-scale',
+    label: 'Bow skin size against the character, on the paperdoll turntable',
+    when: ['characters/weapon_grip'],
+    variants: [
+      { key: 'winterbite-desktop', charClass: 'hunter', charName: 'Sizewick', skin: 'winterbite' },
+      {
+        key: 'fletcher-desktop',
+        charClass: 'hunter',
+        charName: 'Sizewick',
+        skin: 'fletcher_s_guild_bow',
+      },
+    ],
+    async capture(page, variant) {
+      await page.waitForFunction(() => !!window.__game?.sim?.player, {
+        timeout: 90000,
+        polling: 250,
+      });
+      await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        document.querySelector('#gpu-notice')?.remove();
+      });
+      const staged = await page.evaluate((shot) => {
+        const sim = window.__game?.sim;
+        const player = sim?.player;
+        if (!sim || !player) return { ok: false, reason: 'offline world unavailable' };
+        sim.setPlayerLevel?.(60, player.id);
+        sim.addItem('direfang_greatblade', 1);
+        sim.equipItem('direfang_greatblade');
+        sim.changeWeaponSkin(shot.skin);
+        return { ok: true };
+      }, variant);
+      if (!staged.ok) throw new Error(`bow scale staging failed: ${staged.reason}`);
+      // The level grant fires a run of deed banners across mid-screen.
+      await wait(9000);
+      // The paperdoll turntable frames the character identically every run, so
+      // the weapon's size against the BODY is comparable shot to shot, which a
+      // world camera at a variable distance is not.
+      await page.evaluate(() => {
+        const b = document.querySelector('#banner');
+        if (b) b.style.display = 'none';
+        window.__game?.hud?.toggleChar?.();
+      });
+      if (!(await pollForSize(page, '#char-model-preview'))) {
+        throw new Error('character sheet paperdoll did not open');
+      }
+      await wait(3500);
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      return { clip: '#char-model-preview' };
+    },
+  },
+  {
+    key: 'pick-priority-live-over-corpse',
+    label: 'Click-pick prefers a live mob over an overlapping corpse (issue #2787)',
+    when: ['pick_resolution'],
+    variants: [{ key: 'desktop', charClass: 'warrior', charName: 'Thorgar' }],
+    async capture(page) {
+      const staged = await page.evaluate(() => {
+        const game = window.__game;
+        const sim = game?.sim;
+        const p = sim?.player;
+        if (!game || !sim || !p) return { ok: false, reason: 'offline world unavailable' };
+        const mobs = [...sim.entities.values()].filter((e) => e.kind === 'mob' && e.hostile);
+        if (mobs.length < 2) return { ok: false, reason: 'need two mob fixtures' };
+        const [corpse, live] = mobs;
+        const yaw = game.input.camYaw;
+        const dx = Math.sin(yaw);
+        const dz = Math.cos(yaw);
+        const dist = 5;
+        // The corpse sits nearer the camera; the live mob is placed a touch
+        // FARTHER along the very same bearing, so their capsules overlap on
+        // screen with the corpse's body visually in front, the exact bug
+        // shape issue #2787 describes.
+        corpse.pos.x = p.pos.x + dx * dist;
+        corpse.pos.y = p.pos.y;
+        corpse.pos.z = p.pos.z + dz * dist;
+        corpse.dead = true;
+        corpse.hp = 0;
+        corpse.lootable = true;
+        corpse.tappedById = p.id;
+        corpse.harvestClaimedBy = p.id;
+        corpse.loot = { copper: 12, items: [] };
+        corpse.aiState = 'dead';
+
+        live.pos.x = p.pos.x + dx * (dist + 0.4);
+        live.pos.y = p.pos.y;
+        live.pos.z = p.pos.z + dz * (dist + 0.4);
+        live.dead = false;
+        live.maxHp = Math.max(live.maxHp, 5000);
+        live.hp = live.maxHp;
+        live.hostile = true;
+        live.aiState = 'chase';
+        live.aggroTargetId = p.id;
+        live.inCombat = true;
+        live.threat = new Map([[p.id, 100]]);
+        live.spawnPos = { ...live.pos };
+        live.leashAnchor = { ...live.pos };
+
+        p.targetId = null;
+        p.facing = Math.atan2(dx, dz);
+        sim.rebucket?.(corpse);
+        sim.rebucket?.(live);
+        sim.rebucket?.(p);
+        return { ok: true, corpseId: corpse.id, liveId: live.id };
+      });
+      if (!staged.ok) throw new Error(staged.reason);
+      await wait(800);
+
+      // Find a screen point where the direct raycast currently sees the
+      // corpse, proving the two capsules genuinely overlap at that pixel (the
+      // same technique the player-tooltip target above uses to locate a click
+      // point from a world position).
+      const point = await page.evaluate(({ corpseId }) => {
+        const game = window.__game;
+        const corpse = game?.sim?.entities.get(corpseId);
+        if (!game || !corpse) return null;
+        const anchor = game.renderer.worldToScreen(corpse.pos.x, corpse.pos.y + 0.6, corpse.pos.z);
+        if (anchor.behind) return null;
+        for (let dy = -100; dy <= 100; dy += 8) {
+          for (let dx = -80; dx <= 80; dx += 8) {
+            const x = anchor.x + dx;
+            const y = anchor.y + dy;
+            if (game.renderer.pickDirect(x, y) === corpseId) return { x, y };
+          }
+        }
+        return null;
+      }, staged);
+      if (!point) throw new Error('no screen point resolves the corpse via pickDirect');
+
+      await page.mouse.move(point.x, point.y);
+      await page.mouse.click(point.x, point.y, { button: 'left' });
+      await wait(1000);
+
+      const proof = await page.evaluate(
+        ({ liveId }) => window.__game?.sim?.player?.targetId === liveId,
+        staged,
+      );
+      if (!proof) throw new Error('click did not resolve to the live mob over the corpse');
+      return {};
+    },
+  },
+  {
+    key: 'wiki-launcher',
+    label: 'Wiki launcher: micro-bar button, Esc game-menu row, confirm dialog, mobile More tray',
+    when: ['ui/wiki_link'],
+    variants: [
+      { key: 'microbar' },
+      { key: 'game-menu' },
+      { key: 'confirm' },
+      { key: 'more-tray', mobile: true },
+    ],
+    async capture(page, variant) {
+      const scene = variant?.key ?? 'microbar';
+      if (scene === 'microbar') {
+        const ready = await pollForSize(page, '#side-buttons');
+        if (!ready) return { skip: 'the micro-button bar never became visible' };
+        return { clip: '#side-buttons' };
+      }
+      if (scene === 'game-menu') {
+        await page.evaluate(() => window.__game?.hud?.toggleOptionsMenu?.());
+        const ready = await pollForSize(page, '#options-menu');
+        if (!ready) return { skip: 'the game menu never became visible' };
+        return { clip: '#options-menu' };
+      }
+      if (scene === 'confirm') {
+        // Guarded so a BEFORE capture on the base build (no hud.openWiki yet)
+        // skips cleanly instead of throwing.
+        const opened = await page.evaluate(() => {
+          const hud = window.__game?.hud;
+          if (!hud?.openWiki) return { ok: false, reason: 'hud.openWiki is not present' };
+          hud.openWiki();
+          return { ok: true };
+        });
+        if (!opened.ok) return { skip: opened.reason };
+        const ready = await pollForSize(page, '#confirm-dialog');
+        if (!ready) return { skip: 'the wiki confirm dialog never became visible' };
+        return { clip: '#confirm-dialog' };
+      }
+      // more-tray (mobile): open the tray through the real More button handler,
+      // the same path a player taps, so the shot proves the binding is live.
+      await page.evaluate(() => document.getElementById('mobile-more')?.click());
+      const ready = await pollForSize(page, '#mobile-extra-controls');
+      if (!ready) return { skip: 'the mobile More tray never opened' };
+      return { clip: '#mobile-extra-controls' };
+    },
+  },
+  {
+    // Auto-unshift (src/sim/combat/form_auto_unshift.ts). The change is a
+    // behavior, so the evidence is a MOMENT, not a window: the same press, one
+    // second in. Before the change the druid is still wearing the beast and the
+    // refusal is on screen; after it, the beast is gone and the heal is casting.
+    // Both variants press through sim.castAbility rather than a bar slot,
+    // because the bear bar is a separate page a player has to populate and the
+    // shot must not depend on that.
+    key: 'druid-auto-unshift',
+    label: 'Wildmend pressed while shapeshifted: the form falls away and the cast runs',
+    when: ['sim/combat/form_auto_unshift', 'ui/hud/action_bar/action_bar_view.ts'],
+    variants: [
+      {
+        key: 'bruin-form-desktop',
+        charClass: 'druid',
+        charName: 'Thornmane',
+        formAbility: 'bear_form',
+        beforeLoad: lowGraphicsSeed,
+      },
+      {
+        key: 'fleet-form-desktop',
+        charClass: 'druid',
+        charName: 'Thornmane',
+        formAbility: 'travel_form',
+        beforeLoad: lowGraphicsSeed,
+      },
+      {
+        key: 'bruin-form-mobile',
+        charClass: 'druid',
+        charName: 'Thornmane',
+        formAbility: 'bear_form',
+        mobile: true,
+        beforeLoad: lowGraphicsSeed,
+      },
+    ],
+    async capture(page, variant) {
+      await page.waitForFunction(
+        () => {
+          const loading = document.querySelector('#loading-screen');
+          const ui = document.querySelector('#ui');
+          return (
+            document.body.classList.contains('game-active') &&
+            !!ui &&
+            getComputedStyle(ui).display !== 'none' &&
+            !!loading &&
+            !loading.classList.contains('visible')
+          );
+        },
+        { timeout: 90000, polling: 200 },
+      );
+      // Stage: high enough to know every rank of the kit, full mana, self-targeted
+      // so the friendly heal has somewhere to land, then shift through the REAL
+      // cast so the form aura, the parked mana, and the beast model are all live.
+      const staged = await page.evaluate((formAbility) => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        const sim = window.__game?.sim;
+        const player = sim?.player;
+        if (!sim || !player) return { ok: false, reason: 'offline world is unavailable' };
+        sim.setPlayerLevel?.(20, player.id);
+        player.resource = player.maxResource;
+        sim.targetEntity?.(player.id, player.id);
+        sim.castAbility?.(formAbility, player.id);
+        return { ok: true };
+      }, variant.formAbility);
+      if (!staged.ok) throw new Error(staged.reason);
+      // Wait for the shift to resolve AND its global cooldown to lapse. Polled,
+      // not slept: the offline sim advances on animation frames, so the seconds
+      // just after game-active run at whatever rate the loading tail leaves, and
+      // a press inside the GCD returns silently (classic spams that button), which
+      // would shoot a frame where nothing happened at all.
+      await page.waitForFunction(
+        () => {
+          const player = window.__game?.sim?.player;
+          return (
+            !!player &&
+            player.auras.some((a) => a.kind.startsWith('form_')) &&
+            player.gcdRemaining <= 0 &&
+            player.castingAbility === null
+          );
+        },
+        { timeout: 30000, polling: 100 },
+      );
+      // The press, with an explicit pid (an omitted one is a silent no-op here,
+      // which shoots a frame where nothing happened at all). Read the event
+      // buffer's LENGTH around the call rather than draining it: draining would
+      // eat the very refusal the before-arm frame is supposed to show, and both
+      // arms must run this same recipe.
+      const pressed = await page.evaluate(() => {
+        const sim = window.__game?.sim;
+        const player = sim?.player;
+        if (!sim || !player) return { ok: false, reason: 'offline world is unavailable' };
+        const before = sim.events?.length ?? 0;
+        sim.castAbility?.('healing_touch', player.id);
+        return {
+          ok: (sim.events?.length ?? 0) > before || player.castingAbility !== null,
+          reason: 'the press reached no gate: no cast started and the sim said nothing',
+        };
+      });
+      if (!pressed.ok) throw new Error(pressed.reason);
+      // One second in: long enough for the refusal to be painted on the old
+      // behavior, and short enough that the 2.5s heal is still visibly casting
+      // on the new one.
+      await wait(1000);
+      return { clip: '#ui' };
+    },
+  },
+  {
+    key: 'swing-timer',
+    label: 'Swing-timer bar sweep for a Wolf Form druid on a slow staff',
+    when: ['src/ui/swing_timer', 'src/sim/combat/form_swing'],
+    variants: [
+      {
+        key: 'wolf-form-desktop',
+        charClass: 'druid',
+        charName: 'Pawsteps',
+        beforeLoad: lowGraphicsSeed,
+      },
+    ],
+    async capture(page, variant) {
+      await page.waitForFunction(
+        () => {
+          const loading = document.querySelector('#loading-screen');
+          const ui = document.querySelector('#ui');
+          return (
+            document.body.classList.contains('game-active') &&
+            !!ui &&
+            getComputedStyle(ui).display !== 'none' &&
+            !!loading &&
+            !loading.classList.contains('visible')
+          );
+        },
+        { timeout: 90000, polling: 200 },
+      );
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      );
+      // Stage: level to Wolf Form's learn level, shift through the real cast,
+      // stand a durable mob at melee range, and engage auto-attack through the
+      // public toggle. The proof is the BAR'S SWEEP between swings, so the
+      // burst below samples the #swingbar element at off-period intervals: on
+      // the fixed 1.0s Wolf Form cadence the fill sweeps the whole range,
+      // while a period wrongly stretched to the staff speed never empties.
+      const staged = await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!game || !sim || !player) return { ok: false, reason: 'offline world is unavailable' };
+        sim.setPlayerLevel?.(5, player.id);
+        player.resource = player.maxResource;
+        sim.castAbility?.('cat_form', player.id);
+        let mob = null;
+        let best = Infinity;
+        for (const e of sim.entities.values()) {
+          if (e.kind !== 'mob' || e.hp <= 0 || e.id === player.id) continue;
+          const d = (e.pos.x - player.pos.x) ** 2 + (e.pos.z - player.pos.z) ** 2;
+          if (d < best) {
+            best = d;
+            mob = e;
+          }
+        }
+        if (!mob) return { ok: false, reason: 'no living mob in the offline world' };
+        mob.maxHp = 4000;
+        mob.hp = 4000;
+        mob.hostile = true;
+        mob.pos.x = player.pos.x + Math.sin(player.facing) * 2;
+        mob.pos.z = player.pos.z + Math.cos(player.facing) * 2;
+        mob.pos.y = player.pos.y;
+        if (mob.prevPos) {
+          mob.prevPos.x = mob.pos.x;
+          mob.prevPos.y = mob.pos.y;
+          mob.prevPos.z = mob.pos.z;
+        }
+        mob.spawnPos = { ...mob.pos };
+        mob.leashAnchor = { ...mob.pos };
+        sim.rebucket?.(mob);
+        player.targetId = mob.id;
+        return { ok: true, mobId: mob.id };
+      });
+      if (!staged.ok) throw new Error(staged.reason);
+      // Let the level-up deed banners clear the mid-screen before the burst.
+      await wait(5200);
+      const engaged = await page.evaluate((mobId) => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        const mob = sim?.entities?.get(mobId);
+        if (!game || !sim || !player || !mob) return { ok: false, reason: 'staged mob vanished' };
+        mob.hp = mob.maxHp;
+        mob.pos.x = player.pos.x + Math.sin(player.facing) * 2;
+        mob.pos.z = player.pos.z + Math.cos(player.facing) * 2;
+        mob.pos.y = player.pos.y;
+        if (mob.prevPos) {
+          mob.prevPos.x = mob.pos.x;
+          mob.prevPos.y = mob.pos.y;
+          mob.prevPos.z = mob.pos.z;
+        }
+        mob.spawnPos = { ...mob.pos };
+        mob.leashAnchor = { ...mob.pos };
+        sim.rebucket?.(mob);
+        player.targetId = mob.id;
+        player.hp = player.maxHp;
+        sim.startAutoAttack?.(player.id);
+        const inForm = player.auras.some((a) => a.kind === 'form_cat');
+        const bar = document.getElementById('swingbar');
+        if (!bar) return { ok: false, reason: '#swingbar is not in the DOM' };
+        const r = bar.getBoundingClientRect();
+        return { ok: true, inForm, rect: { x: r.x, y: r.y, w: r.width, h: r.height } };
+      }, staged.mobId);
+      if (!engaged.ok) throw new Error(engaged.reason);
+      if (!engaged.inForm) throw new Error('Wolf Form never landed');
+      // 12 samples at 170ms (~2s): off-period for both the 1.0s cadence and
+      // the old staff-stretched period, so the burst catches the full sweep.
+      const pad = 10;
+      for (let shotIndex = 0; shotIndex < 12; shotIndex++) {
+        await wait(170);
+        const r = await page.evaluate(() => {
+          const bar = document.getElementById('swingbar');
+          if (!bar) return null;
+          const rect = bar.getBoundingClientRect();
+          return rect.width > 0 ? { x: rect.x, y: rect.y, w: rect.width, h: rect.height } : null;
+        });
+        if (!r) continue;
+        await page.screenshot({
+          path: `${process.env.SHOTS_DIR ?? 'pr-shots'}/swing-timer-${variant.key}-t${String(shotIndex).padStart(2, '0')}.png`,
+          clip: {
+            x: Math.max(0, r.x - pad),
+            y: Math.max(0, r.y - pad),
+            width: r.w + pad * 2,
+            height: r.h + pad * 2,
+          },
+        });
+      }
+      return {};
+    },
+  },
+  {
+    key: 'cross-hotbar',
+    label: 'Cross hotbar: resting, a held trigger, the expanded set, arrange mode',
+    when: [
+      'game/cross_hotbar',
+      'game/pad_focus_action',
+      'game/gamepad.ts',
+      'game/gamepad_map.ts',
+      'ui/hud/cross_hotbar/',
+    ],
+    // The bar only exists while a pad is connected, and headless Chrome has no
+    // Gamepad API surface at all, so every variant except `no-pad` installs a
+    // fake pad before the document loads. `no-pad` is the honest BEFORE frame:
+    // it is what a keyboard player still sees, in the same run.
+    variants: [
+      { key: 'no-pad' },
+      { key: 'resting', beforeLoad: fakePadSeed, pad: [] },
+      { key: 'left-trigger', beforeLoad: fakePadSeed, pad: [GP_LT] },
+      { key: 'expanded', beforeLoad: fakePadSeed, expand: true },
+      { key: 'arranging', beforeLoad: fakePadSeed, pad: [], arrange: true },
+    ],
+    async capture(page, variant) {
+      for (let i = 0; i < 12; i++) {
+        await page.evaluate(() => {
+          document.querySelector('.camera-prompt-confirm')?.click();
+          document.querySelector('.tut-skip')?.click();
+          document.querySelector('.gpu-notice-dismiss')?.click();
+        });
+        await wait(500);
+      }
+      if (!variant?.beforeLoad) return {};
+      // Arrange mode is a CHORD, so it has to be pressed and released like one
+      // rather than set as a steady state; the poll runs on the render loop, so
+      // each step needs frames either side of it.
+      // The expanded set is reached by HOLDING one trigger and TAPPING the other,
+      // not by pressing both: pressed in the same poll they tie and resolve to the
+      // left half, which is why setting both at once photographed the plain bar.
+      if (variant.expand) {
+        await page.evaluate(`window.__fakePad.pressed = [${GP_LT}]`);
+        await wait(300);
+        await page.evaluate(`window.__fakePad.pressed = [${GP_LT}, ${GP_RT}]`);
+        await wait(300);
+        await page.evaluate(`window.__fakePad.pressed = [${GP_LT}]`);
+        await wait(500);
+      } else if (variant.arrange) {
+        await page.evaluate(`window.__fakePad.pressed = [${GP_LB}]`);
+        await wait(200);
+        await page.evaluate(`window.__fakePad.pressed = [${GP_LB}, ${GP_Y}]`);
+        await wait(200);
+        await page.evaluate('window.__fakePad.pressed = []');
+        await wait(400);
+      } else {
+        await page.evaluate(`window.__fakePad.pressed = ${JSON.stringify(variant.pad ?? [])}`);
+        await wait(600);
+      }
+      // A fake pad that never reached the manager produces a frame identical to
+      // the no-pad one, which reads as "no change" rather than as a broken rig.
+      const seen = await page.evaluate(() => {
+        const el = document.querySelector('#cross-hotbar');
+        return {
+          pads: navigator.getGamepads?.().filter(Boolean).length ?? 0,
+          focused: document.hasFocus(),
+          padMode: document.body.classList.contains('xhb-mode'),
+          barShown: !!el && getComputedStyle(el).display !== 'none',
+        };
+      });
+      if (!seen.barShown) {
+        console.log(`SHOT cross-hotbar: bar not shown (${JSON.stringify(seen)})`);
+      }
+      return {};
+    },
+  },
+  {
+    key: 'practice-row',
+    label: 'The Highwatch practice row seen from the approach',
+    when: ['practice_dummies'],
+    // Deliberately branch-agnostic: the camera is staged from FIXED world
+    // coordinates and the target frame locks onto whichever dummy stands
+    // furthest west (the heroic end of the row; engine east is minus x), so the
+    // same recipe runs unchanged on the base commit (one training dummy) and on
+    // the branch (four). That is what makes the before and after frames
+    // comparable instead of two differently-composed shots.
+    variants: [
+      { key: 'desktop', charClass: 'priest', charName: 'Wardmara', beforeLoad: lowGraphicsSeed },
+      {
+        key: 'mobile',
+        charClass: 'priest',
+        charName: 'Wardmara',
+        mobile: true,
+        beforeLoad: lowGraphicsSeed,
+      },
+    ],
+    async capture(page) {
+      await page.waitForFunction(
+        () => {
+          const loading = document.querySelector('#loading-screen');
+          const ui = document.querySelector('#ui');
+          return (
+            document.body.classList.contains('game-active') &&
+            !!ui &&
+            getComputedStyle(ui).display !== 'none' &&
+            !!loading &&
+            !loading.classList.contains('visible')
+          );
+        },
+        { timeout: 90000, polling: 200 },
+      );
+      const staged = await page.evaluate(() => {
+        document.querySelector('.camera-prompt-confirm')?.click();
+        document.querySelector('.tut-skip')?.click();
+        const game = window.__game;
+        const sim = game?.sim;
+        const player = sim?.player;
+        if (!game || !sim || !player) return { ok: false, reason: 'offline world is unavailable' };
+        sim.setPlayerLevel?.(20, player.id);
+        // The anchor is the shipped training dummy, which exists on both sides
+        // of this comparison; its ground height is what the viewpoint stands on.
+        const anchor = [...sim.entities.values()].find(
+          (e) => e.templateId === 'training_dummy' && !e.dead && e.name !== 'Healing Dummy',
+        );
+        if (!anchor) return { ok: false, reason: 'the training dummy is unavailable' };
+        // Ten yards south of the row, looking north up the hill, so all of it is
+        // in frame with room for the nameplates.
+        player.pos.x = anchor.pos.x + 1;
+        player.pos.y = anchor.pos.y;
+        player.pos.z = anchor.pos.z - 10;
+        player.prevPos = { ...player.pos };
+        player.facing = 0;
+        player.prevFacing = 0;
+        sim.rebucket?.(player);
+        const westmost = [...sim.entities.values()]
+          .filter((e) => e.kind === 'mob' && !e.dead && e.name.toLowerCase().includes('dummy'))
+          .sort((a, b) => b.pos.x - a.pos.x)[0];
+        if (westmost) sim.targetEntity(westmost.id, player.id);
+        return { ok: true, targetName: westmost?.name ?? '', dummies: westmost ? 1 : 0 };
+      });
+      if (!staged.ok) throw new Error(staged.reason);
+      // Moving across zones can start the streaming overlay on the next frame.
+      await wait(1500);
+      await page.waitForFunction(
+        () => !document.querySelector('#loading-screen')?.classList.contains('visible'),
+        { timeout: 90000, polling: 200 },
+      );
+      // The dummy body is lazy-preloaded (manifest.ts mob_training_dummy): the
+      // fetch only starts once one is in view, so a short settle races it and
+      // the mobile frame shot an empty hillside. This settle is sized for that
+      // round trip under SwiftShader, not for the HUD.
+      await wait(15000);
+      return {};
     },
   },
 ];

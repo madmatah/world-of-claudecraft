@@ -19,12 +19,12 @@ feature spec), or its program's dir; the top level is only for a living runbook.
 |---|---|
 | `design/` | How systems are/should be built (notes below). |
 | `prd/` | Feature specs: requirements + `file:line` hook points + acceptance criteria. |
-| `qa-gate.md` | The QA-gate reference (Stop hook, pre-push floor, `npm run gate`, `/qa`); root CLAUDE.md points here. Living. |
+| `qa-gate.md` | The QA-gate reference (Stop hook, pre-push floor, the `gate_select.mjs` merge bar, `npm run gate`, `/qa`); root CLAUDE.md points here. Living. |
+| `merge-queue.md` | The merge queue + required-check contract on `main` and `release/**` (the ruleset settings are not in git; this is their written contract, and the operator note for queue rejections). Living. |
 | `image-to-glb-asset-workflow.md` | Living runbook for reference-image intake, procedural Three.js authoring, optimized GLB export, renderer integration, performance gates, and in-game visual proof. |
-| `ai-pr-bot.md` | The non-blocking PR CI review helper (`prepare_ai_review.mjs`/`post_ai_review.mjs`), plus the local diff-scoped screenshot capture (`scripts/pr_shot_targets.mjs`). Living. |
 | `desktop-release.md`, `desktop-ship-notes.md`, `mobile-store-release.md` | Release runbooks (Electron/Steam; iOS/Android). Living. |
 | `sfx-studio-tutorial.md`, `codex.md` | Operator guides: the SFX Studio; the Codex support layer. Living. |
-| `security/` | `malware-scan-catalog.md`: the path-aware triage priors behind `scripts/malware_scan.mjs --gate`. Living. |
+| `security/` | `malware-scan-catalog.md`: the path-aware triage priors behind `scripts/malware_scan.mjs --gate`. `dependency-audit-catalog.md`: the `pnpm audit` gate model plus the accepted-advisory register `tests/dependency_audit_gate.test.ts` requires an entry in. Both living. |
 | `i18n/` | Localized contributor docs: per-locale translations of the root `README.md` and `CONTRIBUTING.md` (see i18n note below). |
 | `i18n-scaling/` | i18n architecture + workflow docs. `translation-workflow.md` is the canonical contributor/maintainer roles reference (root and `src/ui/CLAUDE.md` point here); `lazy-locales-and-contributor-workflow.md` is the lazy-locale/hygiene design package. |
 | `achievements/` | Book of Deeds handoff: maintainer notes (open decisions, deferrals, follow-ups) and the deed icon art brief. |
@@ -40,7 +40,11 @@ ones worth knowing: `design/master-spec.md` is the big design doc (levels 6 to 2
 expansion: story arc, zones, dungeons, XP math, ids); `design/spell-ranks.md` is the
 classic-era ability-rank reference for sim ability content; `design/deeds.md` is the
 Book of Deeds achievements system plus the authoring contract every new deed (and
-every new piece of conquerable content) follows. `design/design-language/` holds the
+every new piece of conquerable content) follows; `design/reliquary.md` is the same
+kind of living authoring contract for Reliquary pages (new conquerable unique loot
+authors its pages in the SAME change, pinned by `tests/reliquary_content.test.ts`);
+`design/warfare.md` is the shipped PvP honor/rating reference that
+`src/sim/pvp/CLAUDE.md` requires be kept current. `design/design-language/` holds the
 approved desktop reference renders (images only, no local doc) that the repo-root
 `DESIGN.md` design-language spec names as its primary references and links by path,
 so keep the filenames stable. **TRAP:**
@@ -53,6 +57,12 @@ code is the flat `src/ui/icons.ts`, so re-verify against code.
 `prd/frontier-pvp-honor.md` (Frostreach Frontier PvP zone, honor, $WOC stakes layer)
 pairs with `prd/FRONTIER_PHASE1_HANDOFF.md`, a slice-by-slice implementation handoff
 whose slices are specced but NOT yet implemented; read the handoff before starting one.
+**Partially superseded:** the honor layer of that PRD shipped independently as WARFARE
+(`src/sim/pvp/` honor/rating plus battlegrounds); `design/warfare.md` is the live honor
+source of truth, and the PRD remains the plan only for the unbuilt Frostreach zone
+itself. `prd/woc/` holds the $WOC/web3 specs, another shipped-vs-plan mix: for example
+`prd/woc/wallet-link.md` backs the shipped wallet-handoff entry, while other specs
+there are still plans.
 
 ## screenshots/
 JPG/PNG assets embedded by the repo-root `README.md` (title screen, zones, dungeons, UI),

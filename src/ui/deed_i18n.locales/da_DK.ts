@@ -7,6 +7,54 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  exp_dawnhold_castle: {
+    name: 'En Åben Dør i Haven',
+    desc: 'Besøg Dawnhold Slot og vandr gennem dets solbeskinnede havesale.',
+  },
+  exp_the_last_keep: {
+    name: 'De Stille Sale',
+    desc: 'Træd ind ad Den Sidste Borgs døre og gå gennem dens tavse sale.',
+  },
+  pvp_bg_first_capture: {
+    name: 'Banner i Hånden',
+    desc: 'Erobr et flag i Tornehulemarkerne.',
+  },
+  pvp_bg_first_win: {
+    name: 'Den Hule Holder Stand',
+    desc: 'Vind en Tornehulemarkerne-slagmark.',
+  },
+  pvp_bg_wins_25: {
+    name: 'Hulens Vogter',
+    desc: 'Vind 25 Tornehulemarkerne-slagmarke.',
+    title: 'Flagbærer',
+  },
+  pvp_bg_captures_100: {
+    name: 'Hundrede Bannere',
+    desc: 'Erobr 100 flag i Tornehulemarkerne i løbet af din karriere.',
+  },
+  dgn_rift: {
+    name: 'Riftvandrer',
+    desc: 'Ryd en Rift ved at besejre dens etageboss.',
+  },
+  dgn_rift_s_rank: {
+    name: 'Riftsuveræn',
+    desc: 'Ryd en S-rangs Rift, det hårdeste niveau en Rift-portal kan spawne.',
+  },
+  pvp_honor_sergeant: {
+    name: 'Linjebryder',
+    desc: 'Optjen 10.000 Ære i din levetid. At bruge den koster dig aldrig rangen.',
+    title: 'Linjebryder',
+  },
+  pvp_honor_knight_lieutenant: {
+    name: 'Markhærger',
+    desc: 'Optjen 40.000 Ære i din levetid, en hel sæsons rigtig krig bag dig.',
+    title: 'Markhærger',
+  },
+  pvp_honor_field_marshal: {
+    name: 'Krigskronet',
+    desc: 'Optjen 150.000 Ære i din levetid. Sjælden på ethvert rige, og sådan bør det være.',
+    title: 'Krigskronet',
+  },
   chr_drakemaw_broodlord: {
     name: 'Yngelknuseren',
     desc: 'Dræb en Dragegabets Yngelherre midt blandt dens æg, gennem brølet, kløvningen og ilden.',
@@ -14,6 +62,54 @@ export const table: DeedLocaleTable = {
   chr_maw_matriarch: {
     name: 'Himlen Bliver Stille',
     desc: 'Dræb Cindraleth Gabmatriarken i hendes kraterrede over Dragegabet.',
+  },
+  chr_frostveil_gatherer: {
+    name: 'Host pa terrasserne',
+    desc: 'Host en malmare, en traestand og et urtebed i Frostveil.',
+  },
+  chr_frostveil_first_cast: {
+    name: 'Forste is pa tarnen',
+    desc: 'Fang en fisk i Frostveils vande.',
+  },
+  chr_amberfall_gatherer: {
+    name: 'Amberfalls host',
+    desc: 'Host en malmare, en traestand og et urtebed i Amberfall.',
+  },
+  chr_amberfall_first_cast: {
+    name: 'En fangst fra den store mose',
+    desc: 'Fang en fisk i Amberfalls vande.',
+  },
+  chr_nightbloom_gatherer: {
+    name: 'Den drommende host',
+    desc: 'Host en malmare, en traestand og et urtebed i Nightbloom.',
+  },
+  chr_nightbloom_first_cast: {
+    name: 'En ring pa manebronden',
+    desc: 'Fang en fisk i Nightblooms vande.',
+  },
+  chr_wraithwood_gatherer: {
+    name: 'Host under kronerne',
+    desc: 'Host en malmare, en traestand og et urtebed i Wraithwood.',
+  },
+  chr_wraithwood_first_cast: {
+    name: 'Et kast i spejlbugten',
+    desc: 'Fang en fisk i Wraithwoods vande.',
+  },
+  chr_palmreach_gatherer: {
+    name: 'Host pa palmstranden',
+    desc: 'Host en malmare, en traestand og et urtebed i Palmreach.',
+  },
+  chr_palmreach_first_cast: {
+    name: 'Kast i safirlagunen',
+    desc: 'Fang en fisk i Palmreachs vande.',
+  },
+  chr_evergarden_gatherer: {
+    name: 'Parterrets rigdom',
+    desc: 'Host en malmare, en traestand og et urtebed i Evergarden.',
+  },
+  chr_evergarden_first_cast: {
+    name: 'Et kast pa kronbladsdammen',
+    desc: 'Fang en fisk i Evergardens vande.',
   },
   pvp_card_duel_first_win: {
     name: 'Husets Regler',
@@ -803,5 +899,77 @@ export const table: DeedLocaleTable = {
   chr_farshore_first_cast: {
     name: 'Hvad Mågerne Ved',
     desc: 'Fang en fisk i Fjernkystens vande.',
+  },
+  prog_engineering_rare: {
+    name: 'Præcisionsingeniørkunst',
+    desc: 'Skab dit første sjældne udstyrsstykke i Ingeniørkunst.',
+  },
+  prog_alchemy_rare: {
+    name: 'En sjælden årgang',
+    desc: 'Skab dit første sjældne udstyrsstykke i Alkymi.',
+  },
+  prog_cooking_rare: {
+    name: 'En ret at huske',
+    desc: 'Skab dit første sjældne udstyrsstykke i Madlavning.',
+  },
+  prog_leatherworking_rare: {
+    name: 'Fin garvning',
+    desc: 'Skab dit første sjældne udstyrsstykke i Læderhåndværk.',
+  },
+  prog_tailoring_rare: {
+    name: 'Et mesterligt sting',
+    desc: 'Skab dit første sjældne udstyrsstykke i Skræderi.',
+  },
+  prog_weaponcrafting_rare: {
+    name: 'Hærdet til glans',
+    desc: 'Skab dit første sjældne udstyrsstykke i Våbenfremstilling.',
+  },
+  prog_armorcrafting_rare: {
+    name: 'Pladet til perfektion',
+    desc: 'Skab dit første sjældne udstyrsstykke i Rustningsfremstilling.',
+  },
+  col_reliquary_rank_2: {
+    name: 'Byttevogter',
+    desc: 'Nå Kurator-rang 2 i Relikvariet (10 enestående katalogiserede relikvier).',
+    title: 'Byttevogter',
+  },
+  col_reliquary_rank_3: {
+    name: 'Katalogisatoren',
+    desc: 'Nå Kurator-rang 3 i Relikvariet (25 enestående katalogiserede relikvier).',
+    title: 'Katalogisatoren',
+  },
+  col_reliquary_rank_4: {
+    name: 'Ærkekurator',
+    desc: 'Nå Kurator-rang 4 i Relikvariet (50 enestående katalogiserede relikvier).',
+    title: 'Ærkekurator',
+  },
+  col_reliquary_rank_5: {
+    name: 'Evigt bytte',
+    desc: 'Nå Kurator-rang 5 i Relikvariet (100 enestående katalogiserede relikvier).',
+  },
+  col_reliquary_complete: {
+    name: 'Det Store Relikvarium',
+    desc: 'Katalogiser hver relikvie i Relikvariet, som en figur kan beholde. At kataloget vokser senere, tager det aldrig fra dig.',
+    title: 'Hvælvingens kurator',
+  },
+  col_reliquary_conquerors: {
+    name: 'Erobrernes hylde',
+    desc: 'Katalogiser hver relikvie på Relikvariets hylde Erobrere. At kataloget vokser senere, tager det aldrig fra dig.',
+    title: 'Hvælvingsbryder',
+  },
+  col_reliquary_illum_nythraxis_heroic: {
+    name: 'Nythraxis illumineret',
+    desc: 'Illuminer siden Heroisk: Nythraxis-raid i Relikvariet.',
+    title: "Nythraxis' lys",
+  },
+  col_reliquary_illum_thunzharr: {
+    name: 'Thunzharr illumineret',
+    desc: 'Illuminer siden Thunzharr, den Vågnende Tinde i Relikvariet.',
+    title: 'Thunzharrs lys',
+  },
+  col_reliquary_illum_gravewyrm_heroic: {
+    name: 'Helligdommen illumineret',
+    desc: 'Illuminer siden Heroisk: Gravormens Helligdom i Relikvariet.',
+    title: 'Helligdommens lys',
   },
 };

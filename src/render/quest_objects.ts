@@ -13,6 +13,7 @@ import {
   fenbridgeSurfaceRoughnessTexture,
 } from './fenbridge_surface_atlas';
 import { GFX, surfaceMat } from './gfx';
+import { markSharedGeometry, markSharedMaterial } from './shared_resource';
 import { applySurfaceDetail, wornFamilyFor } from './worn_stone';
 
 /** Target max height after normalization (~sparkle anchor at 1.35). */
@@ -229,22 +230,26 @@ function convertMaterial(src: THREE.Material, itemId: string): THREE.Material {
           roughnessMap: fenbridgeSurfaceRoughnessTexture(),
         }
       : { normalMap: undefined, roughnessMap: undefined };
+  // The muster order's aged-iron arm packs metalness in the response map's
+  // blue channel. It rides in the OPTIONS, never as a write on the returned
+  // material: surfaceMat dedupes by key and metalnessMap is a program-cache-key
+  // input, so a post-hoc write relinked every other prop sharing that entry.
+  const musterIron = fenbridgePbr.normalMap !== undefined;
   const mat = surfaceMat({
     color: color.getHex(),
     map: fenbridgeAtlas ?? s.map ?? undefined,
     vertexColors: fenbridgeAtlas ? false : s.vertexColors,
     normalMap: fenbridgePbr.normalMap ?? s.normalMap ?? undefined,
     roughnessMap: fenbridgePbr.roughnessMap ?? s.roughnessMap ?? undefined,
+    metalnessMap: musterIron ? fenbridgePbr.roughnessMap : undefined,
     roughness: s.roughness ?? 0.88,
-    metalness: Math.min(s.metalness ?? 0, 0.75),
+    metalness: musterIron ? 1 : Math.min(s.metalness ?? 0, 0.75),
     emissive: ov?.emissive,
     emissiveIntensity: ov?.emissiveIntensity,
     flatShading: !GFX.standardMaterials,
   });
-  if (itemId === 'fen_muster_order' && mat instanceof THREE.MeshStandardMaterial && mat.normalMap) {
+  if (musterIron && mat instanceof THREE.MeshStandardMaterial) {
     mat.normalScale.setScalar(FENBRIDGE_SURFACE_NORMAL_SCALE);
-    mat.metalness = 1;
-    mat.metalnessMap = mat.roughnessMap;
   }
   if (
     !AUTHORED_SCROLL_CUE_IDS.has(itemId) &&
@@ -402,7 +407,7 @@ function buildRitualCircleTemplate(): THREE.Group {
   light.position.set(0, 1.2, 0);
   root.add(light);
 
-  proceduralByItem.set('crypt_ritual_circle', root);
+  proceduralByItem.set('crypt_ritual_circle', markTemplateShared(root));
   return root;
 }
 
@@ -533,7 +538,7 @@ function buildRoyalSealTemplate(): THREE.Group {
   claspStud.position.set(bookWidth * 0.5 + 0.01, bookHeight * 0.5, 0);
   root.add(claspStud);
 
-  proceduralByItem.set('royal_seal', root);
+  proceduralByItem.set('royal_seal', markTemplateShared(root));
   return root;
 }
 
@@ -559,6 +564,22 @@ const PROCEDURAL_ITEM_IDS = new Set([
  */
 const measuredHeightByItem = new Map<string, number>();
 
+/** Tag a forever-cached template's geometry + materials shared BEFORE the
+ * first clone ships. Ground-object clones share both by reference, and the
+ * renderer's terminal teardown traverses views disposing unshared resources;
+ * untagged, the first teardown poisons the template for every renderer built
+ * after it (the WebGL context-recycle path). */
+function markTemplateShared<T extends THREE.Object3D>(root: T): T {
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    markSharedGeometry(mesh.geometry);
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) markSharedMaterial(m);
+  });
+  return root;
+}
+
 function prepareItem(itemId: string): THREE.Group | null {
   const cached = preparedByItem.get(itemId);
   if (cached) return cached;
@@ -569,7 +590,7 @@ function prepareItem(itemId: string): THREE.Group | null {
     const template = build();
     const measuredHeight = normalizeRoot(template, QUEST_OBJECT_HEIGHTS[itemId] ?? TARGET_HEIGHT);
     measuredHeightByItem.set(itemId, measuredHeight);
-    preparedByItem.set(itemId, template);
+    preparedByItem.set(itemId, markTemplateShared(template));
     return template;
   }
   const gltf = gltfByUrl.get(url);
@@ -605,7 +626,7 @@ function prepareItem(itemId: string): THREE.Group | null {
   if (SCROLL_ITEM_IDS.has(itemId) && !AUTHORED_SCROLL_CUE_IDS.has(itemId)) {
     decorateScroll(root, itemId);
   }
-  preparedByItem.set(itemId, root);
+  preparedByItem.set(itemId, markTemplateShared(root));
   return root;
 }
 

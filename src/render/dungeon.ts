@@ -21,6 +21,7 @@ import {
   arenaMapForSlot,
   CRYPT_LAYOUT,
   DAIS_HEIGHT,
+  DAWNHOLD_LAYOUT,
   DUNGEON_END_WALL_HW,
   DUNGEON_WALL_HEIGHT,
   DUNGEON_WALL_HW,
@@ -48,6 +49,7 @@ import { loadGltf, releaseGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { fitAuthoredWallSegment } from './authored_walls_core';
 import { DAIS_PLATFORM_HEIGHT } from './dais_lift';
+import { buildDawnholdDressing, ensureDawnholdDressing } from './dawnhold_dressing';
 import {
   placeLitanyMarshDressing,
   placeMarshBlackwaterPools,
@@ -57,11 +59,22 @@ import {
   placeMarshWallDressing,
 } from './delve_marsh_dressing';
 import { rectShellWallSegments, stubFaceSegments } from './dungeon_wall_segments';
-import { EMISSIVE_LIGHT, GFX, sharedUniforms } from './gfx';
+import { attachSceneGroupGated } from './gated_scene_attach';
+import { EMISSIVE_LIGHT, sharedUniforms } from './gfx';
+import {
+  collectOwnedInteriorResources,
+  createOwnedInteriorResourceRegistry,
+  type InteriorResourceDisposalReport,
+  type OwnedInteriorResourceRegistry,
+  runInteriorBuildTransaction,
+} from './interior_resource_lifecycle';
 import { buildLastKeepDressing, ensureLastKeepDressing } from './lastkeep_dressing';
+import { cloneMaterialWithHooks } from './material_clone_hooks';
 import { applyOccluderFade, type OccluderFadeMat, occluderFadeMat } from './occluder_fade';
 import { occluderFadeSettled, stepOccluderFade } from './occluder_fade_core';
+import type { FireLightSink } from './point_light_budget';
 import { buildInfernalDecor, ensureInfernalDecorAssets } from './rift_decor';
+import { markSharedGeometry, markSharedMaterial, markSharedTexture } from './shared_resource';
 import { radialGlowTexture } from './textures';
 import { buildWildheartFieldInterior } from './wildheart_props';
 import { applySurfaceDetail } from './worn_stone';
@@ -91,6 +104,11 @@ export type DungeonInteriorVariant =
   // warm candle torchlight, and the kcas furniture dressing on stories 1-2;
   // only its undercroft rooms keep the crypt's cracked stone and cold flame.
   | 'lastkeep'
+  // Dawnhold Castle: the Evergarden garden palace. The lastkeep grammar but
+  // BRIGHTER and greener-warm (daylight through a garden palace, no cold
+  // undercroft anywhere), furnished by the dawnhold dressing pass with
+  // planters and flowers.
+  | 'dawnhold'
   | 'nythraxis'
   // Collapsed Reliquary delve sub-themes (share the ember crypt-stone base, see
   // isDelveVariant; differ only in wall-side props, clutter, and the dais).
@@ -155,6 +173,9 @@ const TORCH_COLORS: Record<Variant, TorchColors> = {
   // and paler than the arena's hard ember (its undercroft alone burns the
   // crypt's cold blue, split per story in the authored build path).
   lastkeep: { flame: 0xffc27a, emissive: 0xcc6a1e, light: 0xffa14e },
+  // Dawnhold Castle is a garden palace in DAYLIGHT: paler, golder candle
+  // flames than the keep's torchlit halls, closer to sun through blossom.
+  dawnhold: { flame: 0xffd98f, emissive: 0xd08428, light: 0xffc061 },
   nythraxis: { flame: 0x8f5cff, emissive: 0x4b1c9a, light: 0x7b4dff },
   // delve reliquaries burn with grave-ember red: warm coals over cold stone
   delve_ossuary: { flame: 0xff7a3c, emissive: 0xcc3a14, light: 0xff6a3c },
@@ -198,6 +219,13 @@ const DROWNED_FLOOR_TINT = 0x93a2b4;
 // rift style uses, so no other interior is touched.
 const KEEP_WALL_TINT = 0xe4d6bd;
 const KEEP_FLOOR_TINT = 0xdccdb2;
+
+// Dawnhold Castle grades the same crypt-stone pack BRIGHTER and greener-warm
+// than the Last Keep: cream sandstone walls and pale honey-sage flags, so the
+// garden palace reads sunlit even before its warm light rig lands. Same
+// tintedMaterial path; no other interior is touched.
+const DAWNHOLD_WALL_TINT = 0xf0e7ca;
+const DAWNHOLD_FLOOR_TINT = 0xe2ddb8;
 
 // The Drowned Temple is flooded — a translucent, self-animating water sheet
 // (driven by the shared uTime so it needs no per-frame plumbing) with cheap
@@ -365,14 +393,14 @@ function extractModule(name: string, pack: Pack, gltf: GLTF): void {
     if (!packSourceMaterial.has(pack)) {
       const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
       if ((mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
-        packSourceMaterial.set(pack, mat as THREE.MeshStandardMaterial);
+        packSourceMaterial.set(pack, markSharedMaterial(mat as THREE.MeshStandardMaterial));
       }
     }
   });
   if (!geos.length) throw new Error(`dungeon module has no meshes: ${name}`);
   const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
   if (!merged) throw new Error(`dungeon module merge failed: ${name}`);
-  moduleAssets.set(name, { geo: merged, pack });
+  moduleAssets.set(name, { geo: markSharedGeometry(merged), pack });
 }
 
 function loadModuleAsset(name: string, pack: Pack): Promise<void> {
@@ -665,12 +693,23 @@ export class DungeonInteriors {
   private tintedMats = new Map<string, THREE.Material>();
   private waterMat: THREE.ShaderMaterial | null = null;
   private arenaHideables: ArenaHideable[] = [];
+  private readonly interiorResources = new Map<THREE.Group, OwnedInteriorResourceRegistry>();
 
   constructor(
     private scene: THREE.Scene,
     private lowGfx: boolean,
     private flames: THREE.Mesh[],
-    private fireLights: THREE.PointLight[],
+    private fireLights: FireLightSink,
+    // The renderer's live compile gate. A live interior build (first dungeon
+    // approach, delve module, rift floor) attaches through it hidden until its
+    // programs are linked: the boot prewarm covers the base pack materials,
+    // but the lazily minted tinted grades (tintedMats) and bespoke shaders
+    // otherwise link synchronously at first draw.
+    private compileGate?: (target: THREE.Object3D) => Promise<unknown>,
+    // The renderer removes lights, flames, and hideable-wall entries that are
+    // registered outside the interior root when a build fails. The resource
+    // registry itself is always cleaned here, even for direct/off-screen users.
+    private onBuildFailure?: (group: THREE.Group) => void,
   ) {}
 
   // Instantiate every distinct interior material once so the startup prewarm's
@@ -783,125 +822,200 @@ export class DungeonInteriors {
                   // rooms/doors/decor route the build through the authored path
                   // below, exactly like the citadel's set-piece floors.
                   LASTKEEP_LAYOUT
-                : CRYPT_LAYOUT);
+                : interior === 'dawnhold'
+                  ? // Dawnhold Castle: the Evergarden garden palace, same
+                    // authored room-graph path at a smaller, warmer scale.
+                    DAWNHOLD_LAYOUT
+                  : CRYPT_LAYOUT);
     const variant = opts?.style?.kit ?? opts?.variant ?? this.variantFor(interior, ox, oz);
     const torch = opts?.style?.torch ?? TORCH_COLORS[variant];
     const daisRaised = opts?.style?.daisRaised;
     const group = new THREE.Group();
-    const p = new Placements();
-    // Every standard-layout interior routes its outer walls through the
-    // hideable-wall path (formerly arena-only), so any wall crossing the
-    // eye-to-camera segment fades to 20% opacity instead of blanking the view.
-    const arenaWalls = this.pendingArenaWalls(layout, ox, oz);
+    const registry = createOwnedInteriorResourceRegistry();
+    this.interiorResources.set(group, registry);
+    return runInteriorBuildTransaction(
+      this.scene,
+      group,
+      registry,
+      async () => {
+        const p = new Placements();
+        // Every standard-layout interior routes its outer walls through the
+        // hideable-wall path (formerly arena-only), so any wall crossing the
+        // eye-to-camera segment fades to 20% opacity instead of blanking the view.
+        const arenaWalls = this.pendingArenaWalls(layout, ox, oz);
 
-    // Authored room-graph floor (the set-piece citadel): its rooms/doors/decor
-    // replace the single-room shell entirely. Walls come from the SAME segment
-    // helper the sim derives collision from, so they cannot drift apart.
-    if (layout.rooms) {
-      await ensureInfernalDecorAssets();
-      this.placeAuthoredFloor(p, layout, variant);
-      this.placeAuthoredWalls(p, layout, variant);
-      this.placeAuthoredRelief(group, layout);
-      const liftAt = (x: number, z: number): number =>
-        authoredLiftAt(layout.rooms ?? [], layout.doors ?? [], x, z);
-      const light = (x: number, z: number, color: number, y?: number, scale?: number): void =>
-        this.addInfernalLight(group, x, z, color, y, scale);
-      if (variant === 'lastkeep') {
-        // The keep's stories light differently: the undercroft (the one
-        // dungeon-flavored story) keeps the crypt's cold blue flame while the
-        // lived-in floors above burn warm candle-orange, so the same decor
-        // list splits by the story its position sits on.
-        const decor = layout.decor ?? [];
-        buildInfernalDecor(
-          group,
-          decor.filter((d) => liftAt(d.x, d.z) < 1.6),
-          TORCH_COLORS.crypt,
-          light,
-          liftAt,
-        );
-        buildInfernalDecor(
-          group,
-          decor.filter((d) => liftAt(d.x, d.z) >= 1.6),
-          torch,
-          light,
-          liftAt,
-        );
-        // The lived-in furnishing: kcas bookcases, tables, benches, kegs,
-        // banners, and mounted torches instanced along the authored room walls.
-        await ensureLastKeepDressing();
-        buildLastKeepDressing(group, light, this.lowGfx);
-      } else {
-        buildInfernalDecor(group, layout.decor ?? [], torch, light, liftAt);
-      }
-      this.placeDais(group, p, layout, variant, torch, daisRaised);
-      if (opts?.hazards?.length) {
-        this.placeBlackwaterPools(group, opts.hazards, opts?.hazardStyle ?? 'lava', liftAt);
-      }
-      if (layout.illusionWalls?.length) {
-        this.placeIllusionWalls(group, layout.illusionWalls, variant);
-      }
-      // The authored floor honours its InteriorStyle's stone grade (the base kit
-      // reads as grey crypt otherwise). Scoped to this path: the procedural rift
-      // floors keep the look they shipped with; the keep grades its stone warm.
-      this.emit(group, p, variant, {
-        wall: opts?.style?.wallTint ?? (variant === 'lastkeep' ? KEEP_WALL_TINT : undefined),
-        floor: opts?.style?.floorTint ?? (variant === 'lastkeep' ? KEEP_FLOOR_TINT : undefined),
-      });
-      group.position.set(ox, 0, oz);
-      group.userData.renderCategory = 'dungeon';
-      this.scene.add(group);
-      return group;
-    }
+        // Authored room-graph floor (the set-piece citadel): its rooms/doors/decor
+        // replace the single-room shell entirely. Walls come from the SAME segment
+        // helper the sim derives collision from, so they cannot drift apart.
+        if (layout.rooms) {
+          await ensureInfernalDecorAssets();
+          this.placeAuthoredFloor(p, layout, variant);
+          this.placeAuthoredWalls(p, layout, variant);
+          this.placeAuthoredRelief(group, layout);
+          this.placeAuthoredLedges(group, layout);
+          const liftAt = (x: number, z: number): number =>
+            authoredLiftAt(layout.rooms ?? [], layout.doors ?? [], x, z);
+          const light = (x: number, z: number, color: number, y?: number, scale?: number): void =>
+            this.addInfernalLight(group, x, z, color, y, scale);
+          if (variant === 'lastkeep') {
+            // The keep's stories light differently: the undercroft (the one
+            // dungeon-flavored story) keeps the crypt's cold blue flame while the
+            // lived-in floors above burn warm candle-orange, so the same decor
+            // list splits by the story its position sits on.
+            const decor = layout.decor ?? [];
+            buildInfernalDecor(
+              group,
+              decor.filter((d) => liftAt(d.x, d.z) < 1.6),
+              TORCH_COLORS.crypt,
+              light,
+              liftAt,
+            );
+            buildInfernalDecor(
+              group,
+              decor.filter((d) => liftAt(d.x, d.z) >= 1.6),
+              torch,
+              light,
+              liftAt,
+            );
+            // The lived-in furnishing: kcas bookcases, tables, benches, kegs,
+            // banners, and mounted torches instanced along the authored room walls.
+            await ensureLastKeepDressing();
+            buildLastKeepDressing(group, light, this.lowGfx);
+          } else if (variant === 'dawnhold') {
+            // Dawnhold Castle has NO cold story: every room burns the same warm
+            // garden-gold flame, and the dressing pass fills it with kcas
+            // furniture, planters, and flowers.
+            buildInfernalDecor(group, layout.decor ?? [], torch, light, liftAt);
+            await ensureDawnholdDressing();
+            buildDawnholdDressing(group, light, this.lowGfx);
+          } else {
+            buildInfernalDecor(group, layout.decor ?? [], torch, light, liftAt);
+          }
+          this.placeDais(group, p, layout, variant, torch, daisRaised);
+          if (opts?.hazards?.length) {
+            this.placeBlackwaterPools(group, opts.hazards, opts?.hazardStyle ?? 'lava', liftAt);
+          }
+          if (layout.illusionWalls?.length) {
+            this.placeIllusionWalls(group, layout.illusionWalls, variant);
+          }
+          // The authored floor honours its InteriorStyle's stone grade (the base kit
+          // reads as grey crypt otherwise). Scoped to this path: the procedural rift
+          // floors keep the look they shipped with; the keep grades its stone warm.
+          this.emit(group, p, variant, {
+            wall:
+              opts?.style?.wallTint ??
+              (variant === 'lastkeep'
+                ? KEEP_WALL_TINT
+                : variant === 'dawnhold'
+                  ? DAWNHOLD_WALL_TINT
+                  : undefined),
+            floor:
+              opts?.style?.floorTint ??
+              (variant === 'lastkeep'
+                ? KEEP_FLOOR_TINT
+                : variant === 'dawnhold'
+                  ? DAWNHOLD_FLOOR_TINT
+                  : undefined),
+          });
+          group.position.set(ox, 0, oz);
+          group.userData.renderCategory = 'dungeon';
+          this.collectInteriorResources(group);
+          await attachSceneGroupGated(
+            this.scene,
+            group,
+            this.compileGate,
+            () => registry.isRetired,
+          );
+          return group;
+        }
 
-    this.placeFloor(p, layout, variant);
-    this.placeWalls(p, layout, variant, arenaWalls);
-    this.placePillarsAndTorches(group, p, layout, variant, torch);
-    this.placeTombs(p, layout, variant);
-    this.placeStubs(p, layout.stubs, variant);
-    this.placeDais(group, p, layout, variant, torch, daisRaised);
-    this.placeAisleClutter(p, layout, variant);
-    this.placeWallDressing(p, layout, variant, arenaWalls);
-    if (variant === 'temple') {
-      this.placeFloodwater(group, layout);
-      this.placeAquaticDressing(group, layout);
-    }
-    if (variant === 'arena_drowned') {
-      this.placeArenaWaterBands(group, layout);
-      // kelp climbing the colonnades and lily pads drifting on the flooded
-      // aisles: the temple's aquatic dressing reads straight off the layout,
-      // and its placement ranges (pads |x| 9..18, kelp |x| 13..20) land
-      // entirely inside the flooded aisles here.
-      this.placeAquaticDressing(group, layout);
-    }
-    if (opts?.hazards?.length) {
-      if (variant === 'delve_marsh' || variant === 'delve_marsh_apse') {
-        placeMarshBlackwaterPools(group, opts.hazards, (x, z, color, y, scale) =>
-          this.addTorchGlow(group, x, z, color, y, scale),
-        );
-      } else {
-        this.placeBlackwaterPools(group, opts.hazards, opts?.hazardStyle ?? 'blackwater');
-      }
-    }
-    if (opts?.iceZone) this.placeIceSheet(group, opts.iceZone);
-    if (opts?.platform) this.placeRiftPlatform(group, layout, opts.platform);
-    if (layout.illusionWalls?.length) this.placeIllusionWalls(group, layout.illusionWalls, variant);
-    if (variant === 'delve_marsh' || variant === 'delve_marsh_apse') {
-      if (opts?.moduleId && isLitanyModuleId(opts.moduleId)) {
-        // Dry islands render ON TOP of the pool overlays so the sim's
-        // dry-ground exemption is readable (safe ground must not read lethal).
-        placeMarshDryIslands(group, opts.moduleId);
-        placeLitanyMarshDressing(p, group, opts.moduleId, layout, variant);
-      }
-    }
+        this.placeFloor(p, layout, variant);
+        this.placeWalls(p, layout, variant, arenaWalls);
+        this.placePillarsAndTorches(group, p, layout, variant, torch);
+        this.placeTombs(p, layout, variant);
+        this.placeStubs(p, layout.stubs, variant);
+        this.placeDais(group, p, layout, variant, torch, daisRaised);
+        this.placeAisleClutter(p, layout, variant);
+        this.placeWallDressing(p, layout, variant, arenaWalls);
+        if (variant === 'temple') {
+          this.placeFloodwater(group, layout);
+          this.placeAquaticDressing(group, layout);
+        }
+        if (variant === 'arena_drowned') {
+          this.placeArenaWaterBands(group, layout);
+          // kelp climbing the colonnades and lily pads drifting on the flooded
+          // aisles: the temple's aquatic dressing reads straight off the layout,
+          // and its placement ranges (pads |x| 9..18, kelp |x| 13..20) land
+          // entirely inside the flooded aisles here.
+          this.placeAquaticDressing(group, layout);
+        }
+        if (opts?.hazards?.length) {
+          if (variant === 'delve_marsh' || variant === 'delve_marsh_apse') {
+            placeMarshBlackwaterPools(group, opts.hazards, (x, z, color, y, scale) =>
+              this.addTorchGlow(group, x, z, color, y, scale),
+            );
+          } else {
+            this.placeBlackwaterPools(group, opts.hazards, opts?.hazardStyle ?? 'blackwater');
+          }
+        }
+        if (opts?.iceZone) this.placeIceSheet(group, opts.iceZone);
+        if (opts?.platform) this.placeRiftPlatform(group, layout, opts.platform);
+        if (layout.illusionWalls?.length)
+          this.placeIllusionWalls(group, layout.illusionWalls, variant);
+        if (variant === 'delve_marsh' || variant === 'delve_marsh_apse') {
+          if (opts?.moduleId && isLitanyModuleId(opts.moduleId)) {
+            // Dry islands render ON TOP of the pool overlays so the sim's
+            // dry-ground exemption is readable (safe ground must not read lethal).
+            placeMarshDryIslands(group, opts.moduleId);
+            placeLitanyMarshDressing(p, group, opts.moduleId, layout, variant);
+          }
+        }
 
-    this.emit(group, p, variant);
-    if (arenaWalls) {
-      for (const wall of arenaWalls.all) this.emitArenaHideable(group, wall, variant);
+        this.emit(group, p, variant);
+        if (arenaWalls) {
+          for (const wall of arenaWalls.all) this.emitArenaHideable(group, wall, variant);
+        }
+        group.position.set(ox, 0, oz);
+        group.userData.renderCategory = 'dungeon';
+        this.collectInteriorResources(group);
+        await attachSceneGroupGated(this.scene, group, this.compileGate, () => registry.isRetired);
+        return group;
+      },
+      (failedGroup, report) => {
+        this.interiorResources.delete(failedGroup);
+        this.onBuildFailure?.(failedGroup);
+        if (report.errors.length) {
+          console.warn(
+            'Failed to dispose dungeon interior resources after build failure',
+            report.errors,
+          );
+        }
+      },
+    );
+  }
+
+  private collectInteriorResources(group: THREE.Group): void {
+    const registry = this.interiorResources.get(group);
+    if (registry) collectOwnedInteriorResources(group, registry);
+  }
+
+  /** Retire one streamed root after its scene nodes and light registries are detached. */
+  disposeInteriorResources(group: THREE.Group): InteriorResourceDisposalReport {
+    const registry = this.interiorResources.get(group);
+    this.interiorResources.delete(group);
+    return registry?.dispose() ?? { attempted: 0, disposed: 0, errors: [] };
+  }
+
+  /** Terminal renderer cleanup for roots that never streamed out during play. */
+  disposeAllInteriorResources(): InteriorResourceDisposalReport {
+    const report: InteriorResourceDisposalReport = { attempted: 0, disposed: 0, errors: [] };
+    for (const [group] of this.interiorResources) {
+      const next = this.disposeInteriorResources(group);
+      report.attempted += next.attempted;
+      report.disposed += next.disposed;
+      report.errors.push(...next.errors);
     }
-    group.position.set(ox, 0, oz);
-    group.userData.renderCategory = 'dungeon';
-    this.scene.add(group);
-    return group;
+    return report;
   }
 
   /**
@@ -942,20 +1056,22 @@ export class DungeonInteriors {
 
   private templeWaterMaterial(): THREE.ShaderMaterial {
     if (this.waterMat) return this.waterMat;
-    this.waterMat = new THREE.ShaderMaterial({
-      uniforms: {
-        ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
-        uTime: sharedUniforms.uTime,
-        uShallow: { value: new THREE.Color(0x49c9bd) },
-        uDeep: { value: new THREE.Color(0x07303c) },
-        uGlow: { value: new THREE.Color(0x76f0dd) },
-      },
-      vertexShader: TEMPLE_WATER_VERT,
-      fragmentShader: TEMPLE_WATER_FRAG,
-      transparent: true,
-      depthWrite: false,
-      fog: true,
-    });
+    this.waterMat = markSharedMaterial(
+      new THREE.ShaderMaterial({
+        uniforms: {
+          ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+          uTime: sharedUniforms.uTime,
+          uShallow: { value: new THREE.Color(0x49c9bd) },
+          uDeep: { value: new THREE.Color(0x07303c) },
+          uGlow: { value: new THREE.Color(0x76f0dd) },
+        },
+        vertexShader: TEMPLE_WATER_VERT,
+        fragmentShader: TEMPLE_WATER_FRAG,
+        transparent: true,
+        depthWrite: false,
+        fog: true,
+      }),
+    );
     return this.waterMat;
   }
 
@@ -1130,6 +1246,36 @@ export class DungeonInteriors {
    * door that joins rooms of different lift. Box tops follow the same linear
    * ramp authoredLiftAt gives the sim, so what you climb is what the sim
    * stands you on (the sub-step mismatch is the platform stairs' own). */
+  /**
+   * The parkour shelves. A ledge is a real standable collider in the sim, so
+   * it MUST be drawn: an invisible surface a player vaults onto is worse
+   * than no surface at all. Each is a plain stone slab whose TOP sits
+   * exactly on the collider's moveTopY, so what the eye reads and what the
+   * body stands on are the same plane.
+   */
+  private placeAuthoredLedges(group: THREE.Group, layout: DungeonLayout): void {
+    const ledges = layout.ledges ?? [];
+    if (ledges.length === 0) return;
+    const rooms = layout.rooms ?? [];
+    const doors = layout.doors ?? [];
+    const mat = new THREE.MeshLambertMaterial({ color: 0x6a6270, emissive: 0x0c0a10 });
+    const THICK = 0.5;
+    for (const l of ledges) {
+      const top = authoredLiftAt(rooms, doors, l.x, l.z) + l.top;
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(l.hw * 2, THICK, l.hd * 2), mat);
+      slab.position.set(l.x, top - THICK / 2, l.z);
+      slab.castShadow = true;
+      slab.receiveShadow = true;
+      group.add(slab);
+      // the bracket under it, so the shelf reads as corbelled off the wall
+      // rather than floating in the room
+      const post = new THREE.Mesh(new THREE.BoxGeometry(l.hw * 0.7, top - THICK, l.hd * 0.7), mat);
+      post.position.set(l.x, (top - THICK) / 2, l.z);
+      post.receiveShadow = true;
+      group.add(post);
+    }
+  }
+
   private placeAuthoredRelief(group: THREE.Group, layout: DungeonLayout): void {
     const rooms = layout.rooms ?? [];
     const doors = layout.doors ?? [];
@@ -1313,6 +1459,8 @@ export class DungeonInteriors {
     // kcas furniture). Explicit so the overflow band's origin x can never
     // accidentally trip the bastion-band check below.
     if (interior === 'lastkeep') return 'lastkeep';
+    // Dawnhold Castle, same reasoning in the overflow band.
+    if (interior === 'dawnhold') return 'dawnhold';
     const bastionX = instanceOrigin(1, 0).x;
     if (Math.abs(ox - bastionX) < 250) return 'bastion';
     return 'crypt';
@@ -1340,7 +1488,7 @@ export class DungeonInteriors {
     // the high/ultra parallax height response.
     if ((mat as THREE.MeshStandardMaterial).isMeshStandardMaterial)
       applySurfaceDetail(mat as THREE.MeshStandardMaterial, 'stone');
-    this.packMats.set(pack, mat);
+    this.packMats.set(pack, markSharedMaterial(mat));
     return mat;
   }
 
@@ -1370,13 +1518,14 @@ export class DungeonInteriors {
     const base = this.material(pack).clone() as
       | THREE.MeshLambertMaterial
       | THREE.MeshStandardMaterial;
+    delete base.userData.sharedRendererResource;
     base.color.multiply(new THREE.Color(tint));
     // Material.clone() drops the onBeforeCompile hook, so the tinted clone
     // re-applies the stone layer (identity-keyed guard: clones are fresh).
     if ((base as THREE.MeshStandardMaterial).isMeshStandardMaterial)
       applySurfaceDetail(base as THREE.MeshStandardMaterial, 'stone');
     mat = base;
-    this.tintedMats.set(key, mat);
+    this.tintedMats.set(key, markSharedMaterial(mat));
     return mat;
   }
 
@@ -1469,7 +1618,17 @@ export class DungeonInteriors {
           : isMarsh && RECEIVER_KINDS.has(kind)
             ? this.marshMaterial(asset.pack, 'floor')
             : this.material(asset.pack);
-      const material = base.clone();
+      // Program-preserving clone: the pack material carries the triplanar
+      // stone surface-detail layer (see this.material), and a bare material
+      // copy drops onBeforeCompile, so every hideable arena wall would draw as flat
+      // untextured plastic AND link its own program on first sight. The
+      // sibling tintedMaterial re-applies the same layer by hand for the same
+      // reason; this site takes the shared helper.
+      const material = cloneMaterialWithHooks(base);
+      // The source is a shared pack or tint-cache material. Material copying
+      // also copies userData, so clear that marker before this root's wall copy is
+      // collected as an owned resource.
+      delete material.userData.sharedRendererResource;
       // Hideable walls bypass emit(), so the Drowned Court's wet-stone tint is
       // applied to this per-wall clone directly (structural stone only: the
       // banners keep their true colors, same scoping as the marsh tint).
@@ -1562,6 +1721,19 @@ export class DungeonInteriors {
         t,
       );
     }
+    if (variant === 'dawnhold') {
+      // the garden palace floor: whole pale flags, even fewer breaks than the
+      // keep and a richer decorated share (sun-catching insets), no dirt, no
+      // weeds, no grates anywhere
+      return pickKind(
+        [
+          ['floor_tile_large', 70],
+          ['floor_tile_large_rocks', 2],
+          ['quad', 28],
+        ],
+        t,
+      );
+    }
     if (isDelveVariant(variant)) {
       // collapsed reliquary: grave-dust over cracked flags, more dirt and rubble
       return pickKind(
@@ -1639,6 +1811,21 @@ export class DungeonInteriors {
           ['floor_tile_small_decorated', 12],
           ['floor_tile_small_broken_A', 9],
           ['floor_tile_small_broken_B', 9],
+        ],
+        t,
+      );
+    }
+    if (variant === 'dawnhold') {
+      // garden-palace flags: swept whole slabs with soft weed tufts breaking
+      // through between them (green growing INTO the palace is the identity;
+      // the decorated votive tile stays a rare accent, same vigil rule)
+      return pickKind(
+        [
+          ['floor_tile_small', 62],
+          ['floor_tile_small_weeds_A', 13],
+          ['floor_tile_small_weeds_B', 13],
+          ['floor_tile_small_decorated', 8],
+          ['floor_tile_small_broken_A', 4],
         ],
         t,
       );
@@ -1755,7 +1942,9 @@ export class DungeonInteriors {
     const rooms = layout.rooms ?? [];
     const doors = layout.doors ?? [];
     const bannerEvery = variant === 'crypt' ? 4 : 3;
-    const isKeep = variant === 'lastkeep';
+    // Both walk-in castles suppress the kit's crypt hangings (their dressing
+    // passes hang the kcas banners) and stack a second wall storey below.
+    const isKeep = variant === 'lastkeep' || variant === 'dawnhold';
     const openAt = (x: number, z: number): boolean =>
       rooms.some((r) => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1);
     // Highest lift among the rooms a wall segment borders: says which story the
@@ -1782,7 +1971,10 @@ export class DungeonInteriors {
       const cells = fitAuthoredWallSegment(seg.a, seg.b, 8);
       // Face the wall detail into an adjacent room (either one, when it is shared).
       const ry = segRy(seg);
-      const segVariant: Variant = isKeep && segMaxLift(seg) < 1.6 ? 'crypt' : variant;
+      // Only the Last Keep has a dungeon-flavored undercroft to re-key to the
+      // crypt mix; Dawnhold's ground floor stays warm palace stone.
+      const segVariant: Variant =
+        variant === 'lastkeep' && segMaxLift(seg) < 1.6 ? 'crypt' : variant;
       for (const cell of cells) {
         const t = cell.center;
         const x = seg.axis === 'x' ? t : seg.fixed;
@@ -1800,11 +1992,12 @@ export class DungeonInteriors {
       }
     }
     if (!isKeep) return;
-    // ---- The Last Keep's SECOND wall storey ----
-    // One 8u module row is only wall-top 8, which the residence floor (lift 6)
-    // and tower would poke straight through. Stack a second row at y=8 so the
-    // state floor soars (13u of wall over its 3.0 floor) and the residence
-    // keeps 10u. The row is cut by the SAME door openings as the base row:
+    // ---- The walk-in castles' SECOND wall storey ----
+    // One 8u module row is only wall-top 8, which the keep's residence floor
+    // (lift 6) and tower would poke straight through. Stack a second row at
+    // y=8 so the state floor soars (13u of wall over its 3.0 floor) and the
+    // residence keeps 10u; Dawnhold's solar story (lift 3.0) gets the same
+    // tall, airy read. The row is cut by the SAME door openings as the base row:
     // capping a low doorway looks like a lintel but puts the chase camera
     // inside the solid cap whenever it trails the player through a door (the
     // cap carries no collider, so the boom happily enters it and the frame
@@ -1814,7 +2007,7 @@ export class DungeonInteriors {
     for (const seg of authoredWallSegments(rooms, doors)) {
       const maxLift = segMaxLift(seg);
       const ry = segRy(seg);
-      const upperVariant: Variant = maxLift < 1.6 ? 'crypt' : 'lastkeep';
+      const upperVariant: Variant = variant === 'lastkeep' && maxLift < 1.6 ? 'crypt' : variant;
       const sy = maxLift >= 8 ? 0.75 : MODULE_SCALE; // lookout parapet: 3u, not 8u
       for (const cell of fitAuthoredWallSegment(seg.a, seg.b, 8)) {
         const t = cell.center;
@@ -1876,6 +2069,20 @@ export class DungeonInteriors {
           ['wall_pillar', 24],
           ['wall_arched', 13],
           ['wall_archedwindow_gated', 7],
+        ],
+        t,
+      );
+    }
+    if (variant === 'dawnhold') {
+      // the garden palace: clean masonry thrown OPEN to the light: nearly a
+      // third of every run is arched bays and windows so the halls read
+      // daylit, and no cracked stone anywhere
+      return pickKind(
+        [
+          ['wall', 42],
+          ['wall_pillar', 26],
+          ['wall_arched', 20],
+          ['wall_archedwindow_gated', 12],
         ],
         t,
       );
@@ -2095,7 +2302,7 @@ export class DungeonInteriors {
     const dir = pt.x < 0 ? 1 : -1; // toward the centre aisle
     p.add('torch_mounted', pt.x + dir * 0.98, 5.5, pt.z, dir > 0 ? Math.PI / 2 : -Math.PI / 2, 1.6);
 
-    this.flameGeo ??= new THREE.ConeGeometry(0.22, 0.6, 6);
+    this.flameGeo ??= markSharedGeometry(new THREE.ConeGeometry(0.22, 0.6, 6));
     const flame = new THREE.Mesh(
       this.flameGeo,
       new THREE.MeshLambertMaterial({
@@ -2135,18 +2342,22 @@ export class DungeonInteriors {
     scale = 1,
   ): void {
     if (this.lowGfx) return;
-    this.glowDecalGeo ??= new THREE.CircleGeometry(6.6, 20).rotateX(-Math.PI / 2);
-    this.glowDecalTex ??= radialGlowTexture();
+    this.glowDecalGeo ??= markSharedGeometry(
+      new THREE.CircleGeometry(6.6, 20).rotateX(-Math.PI / 2),
+    );
+    this.glowDecalTex ??= markSharedTexture(radialGlowTexture());
     let mat = this.glowDecalMats.get(colorHex);
     if (!mat) {
-      mat = new THREE.MeshBasicMaterial({
-        map: this.glowDecalTex,
-        color: colorHex,
-        transparent: true,
-        opacity: 0.46,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
+      mat = markSharedMaterial(
+        new THREE.MeshBasicMaterial({
+          map: this.glowDecalTex,
+          color: colorHex,
+          transparent: true,
+          opacity: 0.46,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
       this.glowDecalMats.set(colorHex, mat);
     }
     const glow = new THREE.Mesh(this.glowDecalGeo, mat);

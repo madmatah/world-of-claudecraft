@@ -11,6 +11,7 @@
 // DOM-free and i18n-free so tests/crafting_view.test.ts can drive it directly.
 
 import { ALL_RECIPES } from '../sim/content/recipes';
+import { countUnlockedInSlots } from '../sim/item_lock';
 import { craftSkillGainMultiplier } from '../sim/professions/archetype';
 import {
   type ComboEligibilityReason,
@@ -28,6 +29,7 @@ import { trainingStationTypeFor } from '../sim/professions/training';
 import type { ProfessionRecipeRecord } from '../sim/professions/types';
 import { MINIMAL_TIER_MULTIPLIER, REDUCED_TIER_MULTIPLIER } from '../sim/professions/wheel';
 import type { InvSlot, ItemDef, StationDef } from '../sim/types';
+import { recipeDurationSec } from './craft_cast_view';
 import { isRecipeKnownForViewer } from './hud/vendor/train_view';
 
 export interface RecipeDefLike {
@@ -113,6 +115,10 @@ export interface CraftingRecipeRow {
    *  flag would be ignored). The painter renders the per-craft checkbox only
    *  on these rows; the server re-validates eligibility on craft. */
   commissionEligible: boolean;
+  /** Expected craft-cast duration in sim seconds (Craft Cast System Phase 2).
+   *  Content table via craftCastDurationSec; actionable info, identical on
+   *  every graphics preset (duration chip is never tier-gated). */
+  durationSec: number;
 }
 
 export interface CraftingView {
@@ -126,10 +132,14 @@ export interface CraftingIdentityLike {
   hobbyCraft: string | null;
 }
 
+// Lock-aware (issue 3042): a player-locked reagent copy is not spendable, so
+// it must never count toward "you have enough" here either, or the Craft
+// button would light up green for a craft the sim then refuses. The same
+// count the sim's own hasRecipeMaterials/resolveCraftForRecipe gate on
+// (src/sim/item_lock.ts countUnlockedInSlots), so the two can never disagree
+// about whether a recipe is craftable.
 function countInInventory(inventory: readonly InvSlot[], itemId: string): number {
-  let n = 0;
-  for (const slot of inventory) if (slot.itemId === itemId) n += slot.count;
-  return n;
+  return countUnlockedInSlots(inventory, itemId);
 }
 
 /** The two per-item inventory facts a reagent row needs (see the memo in
@@ -288,6 +298,7 @@ export function buildCraftingView(
       difficulty,
       station,
       commissionEligible: isCommissionEligible(items[recipe.resultItemId]),
+      durationSec: recipeDurationSec(recipe),
       craftable:
         reagentRows.every((r) => r.satisfied) &&
         eligibility?.ok !== false &&

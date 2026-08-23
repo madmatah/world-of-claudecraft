@@ -21,7 +21,10 @@ import {
   abilityBuffValue,
   abilityDamageBonus,
   abilityTemporalHourglassValues,
+  auraBuffDisplayValue,
 } from '../src/ui/ability_damage';
+import { abilityEffectAuraInput, abilityEffectText } from '../src/ui/ability_description';
+import { auraEffectDescriptor } from '../src/ui/aura_effect';
 
 function known(cls: Parameters<typeof abilitiesKnownAt>[0], id: string, mods?: TalentModifiers) {
   const ability = abilitiesKnownAt(cls, MAX_LEVEL, mods).find((k) => k.def.id === id);
@@ -37,12 +40,67 @@ function required<T>(value: T | undefined): T {
 const SC: AbilityScaling = { spellPower: 80, rangedPower: 200, attackPower: 140 };
 const ARCANE_MODS = { ...emptyModifiers(), spec: 'arcane' as const };
 const FROST_MODS = { ...emptyModifiers(), spec: 'frost' as const };
+const SURVIVAL_MODS = computeTalentModifiers('hunter', {
+  ...emptyAllocation(),
+  spec: 'survival',
+} as never);
+const SPIRITMEND_MODS = computeTalentModifiers('shaman', {
+  ...emptyAllocation(),
+  spec: 'restoration',
+} as never);
+const DESTRUCTION_MODS = computeTalentModifiers('warlock', {
+  ...emptyAllocation(),
+  spec: 'destruction',
+} as never);
+const AFFLICTION_MODS = computeTalentModifiers('warlock', {
+  ...emptyAllocation(),
+  spec: 'affliction',
+} as never);
 const PROT_MODS = computeTalentModifiers('warrior', {
   ...emptyAllocation(),
   spec: 'prot',
 } as never);
 
 describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
+  it('shows Hexcraft-resolved Litany of Guilt damage at every rank', () => {
+    for (const [level, expectedDamage] of [
+      [8, 6],
+      [11, 10],
+      [20, 15],
+    ] as const) {
+      const litany = abilitiesKnownAt('warlock', level, AFFLICTION_MODS).find(
+        (ability) => ability.def.id === 'litany_of_guilt',
+      );
+      expect(litany, `missing Litany of Guilt at level ${level}`).toBeDefined();
+      if (!litany) continue;
+      const effect = litany.effects.find((candidate) => candidate.type === 'afflictionLitany');
+      if (effect?.type !== 'afflictionLitany') throw new Error('missing Litany damage effect');
+
+      expect(effect.damage).toBe(expectedDamage);
+      const damageText = abilityEffectText(litany, {
+        spellPower: 500,
+        rangedPower: 700,
+        attackPower: 900,
+      });
+      expect(damageText).toBe(String(expectedDamage));
+      const auraInput = abilityEffectAuraInput(effect);
+      expect(auraInput).toEqual({
+        kind: 'affliction_litany',
+        value: expectedDamage,
+        value2: effect.radius,
+        value3: effect.maxTargets,
+      });
+      expect(auraInput && auraEffectDescriptor(auraInput)).toEqual({
+        key: 'hudChrome.auraEffect.afflictionLitany',
+        nums: {
+          damage: expectedDamage,
+          targets: effect.maxTargets,
+          radius: effect.radius,
+        },
+      });
+    }
+  });
+
   it('renders Direhowl from its percentage damage reduction, not the retired AP amount', () => {
     expect(abilityBuffValue(known('warrior', 'demoralizing_shout', PROT_MODS))).toBe(20);
   });
@@ -103,6 +161,19 @@ describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
     );
   });
 
+  it('Bloodhook uses the same Ranged Attack Power wound bonus that combat snapshots', () => {
+    const bloodhook = known('hunter', 'bloodhook', SURVIVAL_MODS);
+    const effect = required(
+      bloodhook.effects.find((candidate) => candidate.type === 'hunterBloodhook'),
+    );
+    expect(abilityDamageBonus(bloodhook, effect, { ...SC, rangedPower: 0 })).toBe(0);
+    // 2026-08-09 120s band round: the survival baseline meleeDmgPct stepped
+    // 0.06 to 0.3 (the rest of the raise rides the baseline agiPct), so the 34
+    // base and 200*0.26 rider re-derive at 1.3x.
+    expect(abilityDamageBonus(bloodhook, effect, SC)).toBe(68);
+    expect(abilityEffectText(bloodhook, SC)).toBe('44.2 (+68)');
+  });
+
   it('a channelled directDamage (Arcane Missiles) uses the per-tick CHANNEL coefficient', () => {
     const am = known('mage', 'arcane_missiles', ARCANE_MODS);
     const eff = required(am.effects.find((e) => e.type === 'directDamage'));
@@ -138,6 +209,17 @@ describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
     expect(abilityDamageBonus(heal, eff, SC)).toBeGreaterThan(0);
   });
 
+  it('Cascading Mend shows the same Spell Power bonus as its first combat heal', () => {
+    const chain = known('shaman', 'chain_heal', SPIRITMEND_MODS);
+    const effect = required(chain.effects.find((candidate) => candidate.type === 'chainHeal'));
+    expect(abilityDamageBonus(chain, effect, { ...SC, spellPower: 0 })).toBe(0);
+    expect(abilityDamageBonus(chain, effect, { ...SC, spellPower: 100 })).toBe(
+      directHealBonus(100, chain.castTime),
+    );
+    expect(abilityEffectText(chain, { ...SC, spellPower: 0 })).toBe('120 to 145');
+    expect(abilityEffectText(chain, { ...SC, spellPower: 100 })).toMatch(/^120 to 145 \(\+\d+\)$/);
+  });
+
   it('a personal mage barrier shows the same Spell Power bonus combat applies', () => {
     const barrier = known('mage', 'ice_barrier', FROST_MODS);
     const eff = required(barrier.effects.find((e) => e.type === 'absorb'));
@@ -161,16 +243,33 @@ describe('abilityDamageBonus (tooltip scaling mirrors combat)', () => {
   });
 
   it('a ground AoE pulse folds the AoE-penalised direct coefficient (combat spBonus)', () => {
-    const cons = known('paladin', 'consecration');
+    const protection = computeTalentModifiers(
+      'paladin',
+      { spec: 'protection', ranks: {}, choices: {} },
+      MAX_LEVEL,
+    );
+    const cons = known('paladin', 'consecration', protection);
     const eff = required(cons.effects.find((e) => e.type === 'groundAoE'));
     expect(abilityDamageBonus(cons, eff, SC)).toBe(
       directHitBonus(SC.spellPower, cons.def, cons.castTime, true),
     );
   });
 
-  it('a channelled AoE (Rain of Fire) uses the per-tick CHANNEL coefficient, not the cast one', () => {
-    const rof = known('warlock', 'rain_of_fire');
-    const eff = required(rof.effects.find((e) => e.type === 'aoeDamage'));
-    expect(abilityDamageBonus(rof, eff, SC)).toBe(channelTickBonus(SC.spellPower, rof.def));
+  it('the reworked Rain of Fire ground pulse uses the AoE-penalised direct coefficient', () => {
+    const rof = known('warlock', 'rain_of_fire', DESTRUCTION_MODS);
+    const eff = required(rof.effects.find((e) => e.type === 'groundAoE'));
+    expect(abilityDamageBonus(rof, eff, SC)).toBe(
+      directHitBonus(SC.spellPower, rof.def, rof.castTime, true),
+    );
+  });
+});
+
+describe("auraBuffDisplayValue (an APPLIED aura, not the viewer's resolved ability)", () => {
+  it('reads a flat buff straight off the aura value', () => {
+    expect(auraBuffDisplayValue({ kind: 'buff_armor', value: 160 })).toBe(160);
+  });
+
+  it('converts a form_fireball speed multiplier to a whole percent, like abilityBuffValue', () => {
+    expect(auraBuffDisplayValue({ kind: 'form_fireball', value: 1.4 })).toBeCloseTo(40);
   });
 });

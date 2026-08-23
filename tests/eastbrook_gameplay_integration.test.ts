@@ -87,7 +87,7 @@ function expectWalkableRoute(
     seed: SEED,
     bodyRadius,
     maxClimbSlope: PLAYER_MAX_CLIMB_SLOPE,
-    minGround: (x: number, z: number) => waterLevelAt(x, z) - PLAYER_SWIM_DEPTH,
+    minGround: (x: number, z: number) => waterLevelAt(x, z, SEED) - PLAYER_SWIM_DEPTH,
     maxSpan: 128,
   } as const;
   let route = findPath(from, to, options);
@@ -130,7 +130,7 @@ function expectWalkableRoute(
     const previousGround = groundHeight(current.x, current.z, SEED);
     const nextGround = groundHeight(resolved.x, resolved.z, SEED);
     expect(nextGround, `${label} enters deep water`).toBeGreaterThanOrEqual(
-      waterLevelAt(resolved.x, resolved.z) - PLAYER_SWIM_DEPTH,
+      waterLevelAt(resolved.x, resolved.z, SEED) - PLAYER_SWIM_DEPTH,
     );
     expect(
       (nextGround - previousGround) / Math.max(moved, Number.EPSILON),
@@ -331,6 +331,10 @@ describe('Eastbrook authored gameplay data integration', () => {
       'weaver_ottilie',
       'tinker_gizzel',
     ]);
+    // Reminted for the paladin-only Dawnbound Tome chain, which hangs q_divine_tome
+    // off Brother Aldric. The payload covers everything but pos/facing, so a quest
+    // added to a town NPC moves it; the placement assertions below still pin every
+    // position independently.
     // Everything except pos/facing, hashed: the placement rebuild must not have
     // touched any other NpcDef field. Re-minted deliberately when the gathered
     // materials came off the station masters' vendorItems rows (the ruling that
@@ -376,7 +380,7 @@ describe('Eastbrook authored gameplay data integration', () => {
       'arcanite_bar',
     ]);
     expect(createHash('sha256').update(JSON.stringify(stableTownNpcPayload())).digest('hex')).toBe(
-      '253d5927ed17e438faa5d66b57e031cc1ab3af61370b773e0d714bc3426226e8',
+      '4c9400baeef7c04572881440cd4ba97e231f23f08ea0af355a3e7bac249cd1c2',
     );
     expect(ZONE1_TOWN_NPC_IDS).toHaveLength(15);
     for (const id of ZONE1_TOWN_NPC_IDS) {
@@ -891,7 +895,10 @@ describe('Eastbrook runtime collision, spawn, and services', () => {
   });
 
   it('keeps the fixed-seed world projection stable through wandering and respawn', {
-    timeout: 90000,
+    // Two complete shipped-world simulations run through wandering and respawn.
+    // Loaded five-worker CI can exceed the old 90s budget while the bounded
+    // projection still completes deterministically.
+    timeout: 180000,
   }, () => {
     const stabilitySeed = 4_242;
     const legacyWorld = {
@@ -1001,7 +1008,7 @@ describe('the first sixty seconds: starter pull lanes from spawn', () => {
         seed: SEED,
         bodyRadius: 0.5,
         maxClimbSlope: PLAYER_MAX_CLIMB_SLOPE,
-        minGround: (x: number, z: number) => waterLevelAt(x, z) - PLAYER_SWIM_DEPTH,
+        minGround: (x: number, z: number) => waterLevelAt(x, z, SEED) - PLAYER_SWIM_DEPTH,
         maxSpan: 160,
       });
       expect(route.length, `${camp.mobId} has a route from spawn`).toBeGreaterThan(0);
@@ -1026,7 +1033,7 @@ describe('the first sixty seconds: starter pull lanes from spawn', () => {
         seed: SEED,
         bodyRadius: 0.5,
         maxClimbSlope: PLAYER_MAX_CLIMB_SLOPE,
-        minGround: (x: number, z: number) => waterLevelAt(x, z) - PLAYER_SWIM_DEPTH,
+        minGround: (x: number, z: number) => waterLevelAt(x, z, SEED) - PLAYER_SWIM_DEPTH,
         maxSpan: 160,
       });
       expect(route.length, `${camp.mobId} at ${camp.center.x},${camp.center.z}`).toBeGreaterThan(0);

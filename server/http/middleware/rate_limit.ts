@@ -365,6 +365,10 @@ export const CHARACTER_TAKEOVER_POLICY: RateLimitPolicy = characterMutationPolic
   'character_takeover',
   'takeover',
 );
+export const CHARACTER_REROLL_POLICY: RateLimitPolicy = characterMutationPolicy(
+  'character_reroll',
+  'reroll',
+);
 
 // The report-creation limiter. 'ip+account' (so it mounts BEHIND the
 // route's auth guard, which populates ctx.account), running the fused per-IP AND
@@ -387,8 +391,10 @@ export const MAP_MUTATION_POLICY: RateLimitPolicy = {
   tier2: 'global',
 };
 
-// The GLB asset upload limiter (v0.20.0 merge migration). Same posture as
-// MAP_MUTATION_POLICY: fused bucket shared with the legacy POST /api/assets arm,
+// The GLB asset mutation limiter (v0.20.0 merge migration). Same posture as
+// MAP_MUTATION_POLICY: ONE fused bucket shared across every /api/assets
+// mutation (the legacy POST /api/assets upload arm AND the legacy DELETE
+// /api/assets/:id arm both check the same assetUploadRateLimited function),
 // coded 429 on the new path recorded as the same deviation class.
 export const ASSET_UPLOAD_POLICY: RateLimitPolicy = {
   name: 'asset_upload',

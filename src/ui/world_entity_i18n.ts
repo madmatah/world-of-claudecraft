@@ -48,6 +48,10 @@ const MOB_IDS = [
   'gravecaller_mender',
   'deacon_voss',
   'training_dummy',
+  // The rest of the Highwatch practice row (sim/content/practice_dummies.ts).
+  'friendly_player_dummy',
+  'normal_boss_dummy',
+  'heroic_boss_dummy',
   'ridge_stalker',
   'deeprock_kobold',
   'thornpeak_ogre',
@@ -253,6 +257,7 @@ const NPC_IDS = [
   'armorer_hode',
   'heroic_quartermaster', // Heroic Marks vendor (Highwatch, zone 3)
   'fury', // Honor Quartermaster and WARFARE vendor (Eastbrook, zone 1)
+  'warmarshal_draven_kole', // Master of the Warfare Stores, the WARFARE vendor (Highwatch, zone 3)
   'loremaster_caddis',
   'auctioneer_voss', // second World Market auctioneer (Highwatch, zone 3)
   'bursar_fernando', // Gilded Strongbox banker (Eastbrook, zone 1)
@@ -351,6 +356,7 @@ const QUEST_IDS = [
   'q_hollow',
   'q_sexton',
   'q_gravecallers_trail',
+  'q_divine_tome',
   'q_bandits',
   'q_ringleader',
   'q_fenbridge_muster',
@@ -366,6 +372,7 @@ const QUEST_IDS = [
   'q_drowned',
   'q_drowned_censers',
   'q_no_rest',
+  'q_rite_of_redemption',
   'q_trolls',
   'q_troll_fetishes',
   'q_grubjaw',
@@ -568,6 +575,7 @@ const DUNGEON_IDS = [
   'nythraxis_boss_arena',
   'wildheart_basin',
   'the_last_keep',
+  'dawnhold_castle',
 ] as const;
 const DELVE_IDS = ['collapsed_reliquary', 'drowned_litany'] as const;
 // Ravenpost authored letters (src/sim/content/letters.ts): the welcome letter

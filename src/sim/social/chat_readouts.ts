@@ -30,6 +30,7 @@ import {
   zoneAt,
 } from '../data';
 import { formatMoney } from '../format_money';
+import { COMBAT_SPIRIT_REGEN_FRACTION, FIVE_SECOND_RULE_SECONDS } from '../mana_regen';
 import { MARKET_MAX_LISTINGS } from '../market';
 import * as petCommands from '../pet/pet_commands';
 import { FALL_SAFE_DISTANCE, type PlayerMeta } from '../sim';
@@ -38,7 +39,10 @@ import { threatEntries } from '../threat';
 import {
   type ArenaFormat,
   type Aura,
+  CRAFT_CAST_ID,
+  DISENCHANT_CAST_ID,
   dist2d,
+  ENCHANT_CAST_ID,
   type Entity,
   type EquipSlot,
   FISHING_CAST_ID,
@@ -47,6 +51,8 @@ import {
   MAX_LEVEL,
   MELEE_RANGE,
   questObjectiveRequired,
+  SALVAGE_CAST_ID,
+  TOOL_RECHARGE_CAST_ID,
   xpForLevel,
 } from '../types';
 import { UNSTUCK_COOLDOWN_ID } from '../unstuck_cooldown';
@@ -126,16 +132,24 @@ export function zonesReadout(currentX: number, currentZ: number): string {
   return `Zones (${zones.length}): ${parts.join(', ')}.`;
 }
 // Self-only readout of a character's Ashen Coliseum standing. Reads only the
-// persisted PlayerMeta arena fields (no new state). Draws count as neither a
-// win nor a loss (see resolveArena), so "matches played" is wins + losses.
+// persisted PlayerMeta arena fields (no new state). A draw IS a match played:
+// it moves the rating and it is the third figure of the record every other
+// arena surface shows, so counting it only in the denominator here would leave
+// /arena saying "no matches played yet" to someone the ladder already lists.
 export function arenaReadout(meta: PlayerMeta): string {
-  const part = (label: ArenaFormat, rating: number, wins: number, losses: number): string => {
-    const played = wins + losses;
+  const part = (
+    label: ArenaFormat,
+    rating: number,
+    wins: number,
+    losses: number,
+    draws: number,
+  ): string => {
+    const played = wins + losses + draws;
     if (played <= 0) return `${label} Rating ${rating} - no matches played yet`;
     const pct = Math.round((wins / played) * 100);
-    return `${label} Rating ${rating} - ${wins} wins, ${losses} losses (${pct}% win rate)`;
+    return `${label} Rating ${rating} - ${wins} wins, ${losses} losses, ${draws} draws (${pct}% win rate)`;
   };
-  return `Arena: ${part('1v1', meta.arenaRating, meta.arenaWins, meta.arenaLosses)}. ${part('2v2', meta.arena2v2Rating, meta.arena2v2Wins, meta.arena2v2Losses)}.`;
+  return `Arena: ${part('1v1', meta.arenaRating, meta.arenaWins, meta.arenaLosses, meta.arenaDraws)}. ${part('2v2', meta.arena2v2Rating, meta.arena2v2Wins, meta.arena2v2Losses, meta.arena2v2Draws)}.`;
 }
 export function buybackReadout(meta: PlayerMeta): string {
   const slots = meta.vendorBuyback.filter((s) => ITEMS[s.itemId] && s.count > 0);
@@ -310,20 +324,21 @@ export function formReadout(e: Entity): string {
   return `You are in ${form.name}.`;
 }
 // Self-only readout of the five-second-rule mana state (#103 out-of-combat
-// regen). `fiveSecondRule` is the seconds elapsed since the player last spent
-// mana on an ability (reset to 0 at sim.ts cast path, bumped by DT each tick);
-// out-of-combat mana regen only ticks once it reaches FSR_THRESHOLD. Only
-// mana users have meaningful state here — rage/energy classes never spend mana.
+// regen, plus the Spirit-in-combat "mp5" regen). `fiveSecondRule` is the seconds
+// elapsed since the player last spent mana on an ability (reset to 0 at sim.ts
+// cast path, bumped by DT each tick). Spirit regen runs at the reduced combat
+// rate (COMBAT_SPIRIT_REGEN_FRACTION) while the rule is active, then at full rate
+// once it reaches FIVE_SECOND_RULE_SECONDS. Only mana users have meaningful state
+// here: rage/energy classes never spend mana.
 export function manaRegenReadout(e: Entity): string {
-  const FSR_THRESHOLD = 5; // matches the `fiveSecondRule >= 5` gate in updateRegen
   if (e.resourceType !== 'mana') {
     return 'Mana regeneration does not apply to your class.';
   }
-  if (e.fiveSecondRule >= FSR_THRESHOLD) {
-    return 'Your mana is regenerating (out of combat for 5s+).';
+  if (e.fiveSecondRule >= FIVE_SECOND_RULE_SECONDS) {
+    return 'Your mana is regenerating at full rate (out of combat for 5s+).';
   }
-  const resumesIn = Math.ceil(FSR_THRESHOLD - e.fiveSecondRule);
-  return `Mana regen is paused — resumes in ${resumesIn}s (you spent mana recently).`;
+  const resumesIn = Math.ceil(FIVE_SECOND_RULE_SECONDS - e.fiveSecondRule);
+  return `Your mana is regenerating at ${Math.round(COMBAT_SPIRIT_REGEN_FRACTION * 100)}% while in combat, full rate in ${resumesIn}s (you spent mana recently).`;
 }
 // Self-only readout of vertical/fall state — surfaces the otherwise-invisible
 // jump physics (sim.ts updatePlayerMovement). Reads only live Entity fields and
@@ -576,6 +591,21 @@ export function castingReadout(e: Entity): string {
     // The gather cast is public state (castRemaining/castTotal broadcast),
     // so an honest countdown is safe here, unlike the fishing arm above.
     return `You are gathering: ${remaining}s of ${total}s remaining.`;
+  }
+  if (e.castingAbility === CRAFT_CAST_ID) {
+    return `You are crafting: ${remaining}s of ${total}s remaining.`;
+  }
+  if (e.castingAbility === DISENCHANT_CAST_ID) {
+    return `You are disenchanting: ${remaining}s of ${total}s remaining.`;
+  }
+  if (e.castingAbility === ENCHANT_CAST_ID) {
+    return `You are enchanting: ${remaining}s of ${total}s remaining.`;
+  }
+  if (e.castingAbility === SALVAGE_CAST_ID) {
+    return `You are salvaging: ${remaining}s of ${total}s remaining.`;
+  }
+  if (e.castingAbility === TOOL_RECHARGE_CAST_ID) {
+    return `You are recharging a tool effect: ${remaining}s of ${total}s remaining.`;
   }
   const name = ABILITIES[e.castingAbility]?.name ?? e.castingAbility;
   const verb = e.channeling ? 'Channeling' : 'Casting';

@@ -1,19 +1,31 @@
 // Per-entity character visual: a SkeletonUtils clone of a manifest asset with
 // its own AnimationMixer, a clip-driven state machine fed by renderer-derived
 // state, a baked static idle-pose far LOD, and a shadow-only proxy for the
-// mid-distance band. All geometry/materials are shared caches, dispose()
-// only releases mixer bindings.
+// mid-distance band. All geometry/materials are shared caches; dispose()
+// releases mixer bindings, this clone's Skeletons, and the visual's claims
+// on the shared tinted-material cache (which disposes a clone only once no
+// visual mounts it).
 import * as THREE from 'three';
 import { offhandMirrorsWeaponSkin } from '../../sim/content/weapon_skin_rules';
 import { WEAPON_SKINS } from '../../sim/content/weapon_skins';
 import type { OverheadEmoteId } from '../../world_api';
+import { recordBuildSpan, timeBuildSpan } from '../build_spans';
 import { GFX } from '../gfx';
-import { createWeaponVfx, WEAPON_VFX, type WeaponVfxHandle } from '../weapon_vfx';
+import { cloneMaterialWithHooks } from '../material_clone_hooks';
+import {
+  createWeaponVfx,
+  DEFAULT_TUNING,
+  WEAPON_VFX,
+  type WeaponVfxHandle,
+  type WeaponVfxTuning,
+} from '../weapon_vfx';
+import { scaleWeaponVfxTuning } from '../weapon_vfx_shed_core';
 import { weaponVfxTuningFor } from '../weapon_vfx_tuning';
 import {
   type AnimActionWeight,
   type AnimState,
   advanceSwimBlend,
+  advanceTreadBlend,
   type BaseState,
   desiredBaseState,
   drivesPose,
@@ -23,24 +35,66 @@ import {
   shouldPlayLanding,
 } from './anim_state';
 import {
+  type AssembleOptions,
   applyMaterials,
+  applyModularSliderMorphs,
   assembleModel,
+  attachDeferredFaceDecals,
   ensureSkinTexture,
+  farSourceMaterials,
+  modularFarBake,
+  peekModularFarBake,
   prepareVisual,
+  releaseModularVariant,
+  releaseTintedMaterials,
   setHeldOffhand,
   setHeldWeapon,
   setWeaponsStowed,
   skinEmissiveTexture,
   skinTexture,
+  type TintedMaterialClaims,
+  takeFarBakeBudget,
   tintedFarMaterials,
 } from './assets';
+import {
+  createGhostEffectMaterial,
+  createMoonkinEffectMaterial,
+  createShadowformEffectMaterial,
+  type GhostStyle,
+  ghostEffectOpacity,
+} from './effect_materials';
+import { farMeshShown, shadowProxyShown } from './far_lod_reveal_core';
+import { HairSwayDriver } from './hair_sway';
 import { buildHalo } from './halo';
+import { noteLookAttached } from './look_pieces';
 import type { EmoteClipSpec, VisualDef, WeaponLayoutOverride } from './manifest';
+import { createMetamorphWingPose, metamorphWingPoseInto } from './metamorph_wing_motion_core';
+import type { ModularAppearance, ModularLook } from './modular';
+import {
+  PALADIN_BASTION_SWEEP_CLIP,
+  PALADIN_BASTION_SWEEP_DURATION,
+} from './paladin_bastion_sweep_clip';
+import { PaladinBastionSweepFx } from './paladin_bastion_sweep_fx';
+import {
+  PALADIN_TEMPLARS_VERDICT_CLIP,
+  PALADIN_TEMPLARS_VERDICT_DURATION,
+} from './paladin_templars_verdict_clip';
+import { PaladinTemplarsVerdictFx } from './paladin_templars_verdict_fx';
+import { attachSharedDepthMaterials } from './shadow_depth_materials';
 import { SkeletonUpdateCache, type SkeletonUpdateStats } from './skeleton_update_cache';
-import { SKIN_ATTACK_CLIP_NAMES, weaponSkinAttackClips, weaponSkinOrientPin } from './skin_attack';
+import {
+  type OneShotKind,
+  pickSkinAttackClips,
+  rangedSkinAiming,
+  SKIN_ATTACK_CLIP_NAMES,
+  weaponSkinCastClip,
+  weaponSkinOrientPin,
+} from './skin_attack';
 import { configureTightBoneTextures } from './skin_gpu_layout';
+import { applySoulRendOverlay } from './soul_rend_overlay';
+import { soulRendPrewarmTargets } from './soul_rend_prewarm_core';
 import { createStowTransition, forceStow, requestStow, tickStow } from './stow_transition';
-import { weaponAttackStyle } from './weapon_attack_style_core';
+import { SPIN_ATTACK_VISUAL_DURATION, weaponAttackStyle } from './weapon_attack_style_core';
 import {
   disposeOwnedWeaponSkinMaterials,
   markOwnedWeaponSkinMaterials,
@@ -48,9 +102,17 @@ import {
 
 export type { AnimState, BaseState } from './anim_state';
 
+/** The renderer's live compile gate for a far LOD minted (or re-skinned) after
+ *  the view's own creation gate ran: compile `target` hidden, off-thread, and
+ *  call `onSettled` once its programs are linked (or immediately when async
+ *  compile is unsupported). Mirrors renderer `gateSwapFlagOnCompile`. */
+export type FarBakeGate = (target: THREE.Object3D, onSettled: () => void) => void;
+
 // Current canvas height in device pixels, pushed by the renderer on resolution
 // changes so newly created weapon-skin VFX rigs size their point sprites right.
 let weaponVfxViewportHeight = 1080;
+const STONEBOUND_SHARD_GEOMETRY = new THREE.OctahedronGeometry(1, 0);
+type WeaponAuraMode = 'none' | 'sanguine' | 'stonebound';
 
 export function setWeaponVfxViewportHeight(heightPx: number): void {
   weaponVfxViewportHeight = Math.max(1, Math.round(heightPx));
@@ -183,35 +245,55 @@ const CLIMB_HANDOFF_END = 0.72;
 /** Climb phase by which the top-out stands fully upright. */
 const CLIMB_TOPOUT_END = 0.98;
 
-// Lie_Idle already lays the rig flat, a touch of extra pitch reads as a
+// Lie_Idle already lays the rig flat — a touch of extra pitch reads as a
+// surface glide; clip-less rigs (creatures) get the full procedural prone.
+// The AUTHORED player strokes need neither: they were built prone, head
+// leading and face down, so any pitch here would over-rotate them (see
+// tmp/swim/build_swim.py). They also carry the body at hip height already,
+// so they need only a nudge of lift to break the surface rather than the
+// near-a-yard hoist Lie_Idle's ground-level pose does.
 const SWIM_PITCH_CLIP = 0.35;
 const SWIM_PITCH_PROCEDURAL = 1.18;
+const SWIM_PITCH_AUTHORED = 0;
 const SWIM_RISE = 0.95; // body must break the surface or only the hat floats
+const SWIM_RISE_AUTHORED = 0.3;
+// Treading is the one UPRIGHT water pose, so it needs the opposite of a lift:
+// the strokes float a body lying at hip height, while a standing one has to
+// SINK or it wades on the surface with its knees dry. Sized so the waterline
+// lands at the chest, and no deeper — the swim latch allows a bed only 0.8
+// under the line, and a diver's tucked feet have to clear it.
+const SWIM_RISE_TREAD = -0.34;
+// Nosing over reads as intent on a prone stroke and as a faceplant on an
+// upright tread, so the pitch is largely held back while treading.
+const TREAD_PITCH_SCALE = 0.35;
+// Water transitions cross whole postures — prone to upright, dry stride to
+// wade — so they get a longer crossfade than the land states, where a fast cut
+// reads as responsive.
+const WATER_FADE = 0.34;
+const WATER_STATES = new Set<BaseState>(['swim', 'swimSurface', 'swimIdle', 'wade']);
+
+/** Crossfade for a base-state edge: longer whenever water is on either side. */
+function waterFade(from: BaseState, to: BaseState): number {
+  return WATER_STATES.has(from) || WATER_STATES.has(to) ? WATER_FADE : FADE;
+}
 const MIXER_DT_CAP = 0.3; // throttled entities never integrate a huge step
 const SPIN_RATE = 14;
 const SPIN_ATTACK_TIMESCALE = 1.6;
-const SPIN_ONCE_DURATION = 0.55;
 const SPIN_ONCE_RATE = 18;
-const GHOST_OPACITY = 0.34;
-// Stealth (Duskveil/Smokestep) reads as a faded-but-solid silhouette, a touch
-// denser than the spirit run's 0.34 (owner: stealth was "too transparent").
-const STEALTH_OPACITY = 0.45;
-const SOUL_REND_OPACITY = 0.58;
-const SOUL_REND_TINT = new THREE.Color(0x4f0505);
-const SHADOWFORM_OPACITY = 0.9;
-const SHADOWFORM_TINT = new THREE.Color(0x5a2a8f);
-// Moonkin Form: a brighter, more luminous violet than the ghost run (owner's brief: a
-// purplish tint like ghost form but a bit brighter).
-const MOONKIN_OPACITY = 0.72;
-const MOONKIN_TINT = new THREE.Color(0x9d6bff);
 // Metamorphosis: a monstrous demon shell, deep fel-purple body with a hot glow
 // (the fire aura around it comes from vfx.formAura, not the material). Kept
 // dark enough that the body still shades and the flames read against it.
-const METAMORPH_TINT = new THREE.Color(0x4f2170);
+const FEROCITY_TINTS = [
+  new THREE.Color(0xd98a62),
+  new THREE.Color(0xd84a35),
+  new THREE.Color(0xd62418),
+] as const;
+const FEROCITY_TINT_STRENGTH = [0.18, 0.32, 0.48] as const;
+const FEROCITY_EMISSIVE = [0x2a0802, 0x4a0803, 0x6a0803] as const;
+const FEROCITY_EMISSIVE_STRENGTH = [0.08, 0.15, 0.23] as const;
+const ASCENSION_TINT = new THREE.Color(0xffe49a);
 
-/** Translucent-rig flavor: 'spirit' is the thin ghost run (released spirits,
- *  ghost wolf, the graveyard angel); 'stealth' is the denser Duskveil fade. */
-export type GhostStyle = 'spirit' | 'stealth';
+export type { GhostStyle } from './effect_materials';
 
 /** The live mixer facts the pure watchdog decides on (see anim_state.ts). */
 function readActionWeight(a: THREE.AnimationAction, into?: AnimActionWeight): AnimActionWeight {
@@ -242,7 +324,10 @@ function clickMat(): THREE.Material {
 // rasterizes nothing while the shadow pass still renders the proxy
 let shadowOnlySingleton: THREE.Material | null = null;
 function shadowOnlyMat(): THREE.Material {
-  shadowOnlySingleton ??= new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+  shadowOnlySingleton ??= new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    depthWrite: false,
+  });
   return shadowOnlySingleton;
 }
 
@@ -320,8 +405,95 @@ export class CharacterVisual {
   private skinIndex: number;
   private weaponItemId: string | null;
   private offhandItemId: string | null;
+  /** Composition inputs for a `modular` def (null for a fixed class rig).
+   *  Changing a look means changing GEOMETRY, so callers rebuild the visual
+   *  rather than mutating it; this is kept so they can tell whether they must. */
+  private look: ModularLook | null = null;
+
+  /** The composition this visual was built from (null for a fixed class rig). */
+  get modularLook(): ModularLook | null {
+    return this.look;
+  }
+
+  /** Move the face/body sliders on the LIVE body: morph influences are
+   *  per-instance over shared geometry, so a slider drag repaints without the
+   *  dispose-and-recompose a geometry change needs (which is why the sliders
+   *  are deliberately outside `modularBuildSignature`). No-op on a fixed rig. */
+  applyModularSliders(app: ModularAppearance): void {
+    if (!this.look) return;
+    this.look = { ...this.look, app };
+    applyModularSliderMorphs(this.model, app);
+  }
+
+  /** Attach the face decals a deferred build left off (AssembleOptions
+   *  .deferDecals, once the look's pieces are resident): the same decals the
+   *  synchronous compose adds, given everything the constructor's sweeps give
+   *  a mesh (the tier tint and its lease, the effect-swap snapshot and the
+   *  effect the body wears now, the caster flags), born hidden and revealed
+   *  through the compile gate so their first draw never links inside a live
+   *  frame (immediately without a gate: previews, tests). False when there is
+   *  nothing to attach: disposed, no deferral on the model, or a fixed rig. */
+  attachDeferredDecals(): boolean {
+    if (this.disposed || !this.look || !this.model.userData.deferredDecals) return false;
+    const decals = attachDeferredFaceDecals(this.model, this.look);
+    for (const decal of decals) {
+      applyMaterials(
+        decal,
+        this.def,
+        this.entityColor,
+        skinTexture(this.key, this.skinIndex),
+        skinEmissiveTexture(this.key, this.skinIndex),
+        this.tintedRigClaims,
+      );
+      this.originalMaterials.set(decal, decal.material);
+      decal.material = this.effectMaterial(decal.material);
+      // Against what is MOUNTED, same rule and same reason as
+      // commitVisualMaterials: applyMaterials chose this caster's shared depth
+      // material from the pre-effect material a line ago, and the effect swap
+      // can be one that getDepthMaterial would write a non-default alphaTest
+      // onto. Benign today only because no effect material sets alphaTest.
+      attachSharedDepthMaterials(decal, decal.material);
+      decal.castShadow = this.shadowOn;
+      decal.receiveShadow = false;
+      decal.frustumCulled = false;
+      this.casters.push(decal);
+      this.revealDecalOnCompile(decal);
+    }
+    if (decals.length > 0) noteLookAttached();
+    return true;
+  }
+
+  private revealDecalOnCompile(decal: THREE.Mesh): void {
+    const gate = this.farBakeGate;
+    if (!gate) return;
+    decal.visible = false;
+    try {
+      gate(decal, () => {
+        // A visual disposed, or its decal detached, while the link was in
+        // flight: the settle belongs to a mesh this visual no longer draws.
+        if (this.disposed || decal.parent === null) return;
+        decal.visible = true;
+      });
+    } catch (err) {
+      // A gate that rejects outright (a lane shut down under a graphics
+      // rebuild) reveals now: a decal linking on its first draw beats one that
+      // never shows, and the swap must not throw out of the attach.
+      decal.visible = true;
+      console.warn('[decals] compile gate refused a face decal, revealed ungated:', err);
+    }
+  }
+
   private weaponSkinId: string | null = null;
   private weaponVfx: WeaponVfxHandle[] = [];
+  // The skin's authored tuning row (the rig's 1.0 look) plus the shed
+  // multiplier last applied over it, and one scratch the scaled row is written
+  // into so a shed step allocates nothing.
+  private weaponVfxAuthored: Partial<WeaponVfxTuning> = {};
+  private weaponVfxShed = 1;
+  private readonly weaponVfxTuningScratch: WeaponVfxTuning = { ...DEFAULT_TUNING };
+  /** Long-hair secondary motion (modular styles with sway morphs; empty and
+   *  free on every other rig). */
+  private hairSway = new HairSwayDriver();
   // Skin payloads whose orientation blends to a root-relative pin (see
   // applySkinOrientation): bows aim upright DURING the shot, bow-slot guns
   // carry forward OUTSIDE it. qGrip is the authored grip-local orientation.
@@ -351,7 +523,54 @@ export class CharacterVisual {
   private poseWrap = new THREE.Group();
   private farMesh: THREE.Mesh | null = null;
   private farMaterials: THREE.Material | THREE.Material[] | null = null;
+  /** A composed far LOD is baked on the first crossing into the far band, not
+   *  at construction: most of a crowd stands close and never needs one. This
+   *  latches so a bake that yields nothing is not retried every crossing. */
+  private farBakeTried = false;
+  /** Waiting on the per-frame bake budget (takeFarBakeBudget): the band
+   *  crossed but this part set's slot was taken, so update() retries. The
+   *  visual stays articulated meanwhile (correct, just not yet cheap). */
+  private farBakePending = false;
   private shadowProxy: THREE.Mesh | null = null;
+  /** The far mesh and its shadow proxy under one node, so the compile gate
+   *  walks both (colour + depth arms) in one pass. */
+  private farWrap: THREE.Group | null = null;
+  /** The far LOD's freshly minted materials are still linking off-thread
+   *  behind the renderer's compile gate (setFarBakeGate). While true the far
+   *  mesh counts as absent: the articulated rig keeps drawing and the far
+   *  mesh + shadow proxy stay hidden (far_lod_reveal_core). */
+  private farCompilePending = false;
+  /** The compile gate the renderer installs. ONE injected gate serves both
+   *  uses: a fresh far bake (below) and the transparent effect-clone swap
+   *  (stageEffectSwap). Null (previews, tests, hosts without one) keeps the
+   *  immediate behaviour both paths had before the gate. */
+  private farBakeGate: FarBakeGate | null = null;
+  /** Effect clones (ghost / stealth / shadowform / moonkin) whose programs are
+   *  known linked: either a gate settle landed on them, or they were mounted
+   *  with no gate at all. A later toggle of an effect on the same source
+   *  materials swaps immediately, so a ghost run or a death treatment that
+   *  MUST show is never held back twice. */
+  private linkedEffectMaterials = new WeakSet<THREE.Material>();
+  /** The hidden scratch group staging effect clones that are still linking.
+   *  Never contains the rig's own meshes: the BODY IS NEVER HIDDEN, it keeps
+   *  drawing its current (already linked) materials until the swap commits. */
+  private effectSwapScratch: THREE.Group | null = null;
+  /** Set by the gate callback, consumed by update(): committing materials from
+   *  inside the callback can land between frames, and a swap that changes what
+   *  three counts for a frame belongs on the per-frame path (the
+   *  numPointLights hazard the far-bake mint reveal documents). */
+  private effectSwapSettled = false;
+  /** The renderer's per-frame shadow-plan answer for the far shadow proxy,
+   *  kept so a proxy that could not show yet (mint still linking) reveals on
+   *  settle without waiting for the next plan write. */
+  private proxyShadowWanted = false;
+  /** Skin swap-on-settle: the far material set a skin change rebuilt is
+   *  compiled hidden on `farSkinScratch` (same geometry and flags as the far
+   *  mesh, so three keys the same programs) while the far mesh keeps drawing
+   *  its current set, and swapped in when the gate settles. `pendingFarClaims`
+   *  is that set's tinted-material lease until then. */
+  private farSkinScratch: THREE.Mesh | null = null;
+  private pendingFarClaims: TintedMaterialClaims | null = null;
   private casters: THREE.Mesh[] = [];
   private originalMaterials = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
   /** The halo's build-time shared additive material. Re-snapshots after a
@@ -362,11 +581,36 @@ export class CharacterVisual {
   private weaponAuraMeshes: THREE.Mesh[] = [];
   private weaponAuraColor: number | null = null;
   private weaponAuraTip = false;
+  private weaponAuraMode: WeaponAuraMode = 'none';
+  private bastionSweepFx: PaladinBastionSweepFx | null = null;
+  private bastionSweepAction: THREE.AnimationAction | null = null;
+  private templarsVerdictFx: PaladinTemplarsVerdictFx | null = null;
+  private templarsVerdictAction: THREE.AnimationAction | null = null;
   private ghostMaterials = new Map<THREE.Material, THREE.Material>();
   private soulRendMaterials = new Map<THREE.Material, THREE.Material>();
   private shadowformMaterials = new Map<THREE.Material, THREE.Material>();
   private moonkinMaterials = new Map<THREE.Material, THREE.Material>();
-  private metamorphMaterials = new Map<THREE.Material, THREE.Material>();
+  private ferocityMaterials = [
+    new Map<THREE.Material, THREE.Material>(),
+    new Map<THREE.Material, THREE.Material>(),
+    new Map<THREE.Material, THREE.Material>(),
+  ];
+  private ascensionMaterials = new Map<THREE.Material, THREE.Material>();
+  // Thornhollow Fields rune buffs: a slight whole-body lean toward the rune's color
+  // (weakest treatment: every form/death tint above wins). Keyed per source
+  // material, one clone each (the live rune color rides the clone's userData);
+  // chaining to a different rune replaces and disposes the old clone inside
+  // the same applyVisualMaterials sweep that unmounts it, and dispose()
+  // releases whatever remains, so rune wear can never strand materials.
+  private runeTintMaterials = new Map<THREE.Material, THREE.Material>();
+  // Leases over the shared tinted-material cache (assets.ts): every cache
+  // clone mounted on the rig (and, separately, on the far LOD) stays claimed
+  // through these sets so the cache can never dispose a mounted material. A
+  // full re-apply sweep claims into a fresh lease first and releases the old
+  // one after (shared keys never dip to zero claims mid-swap); dispose()
+  // releases both.
+  private tintedRigClaims: TintedMaterialClaims = new Set();
+  private tintedFarClaims: TintedMaterialClaims = new Set();
   // Ability VFX body glow (the gallery rim read): per-visual material clones
   // carrying an emissive tint while a spec'd cast or buff aura is live. Cloned
   // once per original because base materials are SHARED per-asset caches;
@@ -379,6 +623,14 @@ export class CharacterVisual {
   private current: THREE.AnimationAction | null = null;
   private currentIsOneShot = false;
   private currentOneShotIsEmote = false;
+  // Whether the live one-shot is the ATTACK, as opposed to a hit react, a
+  // landing, the sheathe gesture or any other one-shot. Only the aim pin needs
+  // the distinction (skin_attack.ts rangedSkinAiming); a stale true is harmless
+  // because every read gates on currentIsOneShot first.
+  private currentOneShotIsAttack = false;
+  /** The ability driving the cast base state, mirrored from AnimState so the
+   *  aim pin can tell a drawn shot from a pet utility cast. */
+  private castingAbility: string | null = null;
   private deadLock = false;
   /** consecutive frames with no action driving the pose (the T-pose watchdog) */
   private starvedFrames = 0;
@@ -406,6 +658,10 @@ export class CharacterVisual {
   private leanRecoil = 0;
   private pendingDt = 0;
   private swimBlend = 0;
+  // How far into the upright TREAD posture the body is, 0..1. Separate from
+  // swimBlend because it eases between two swim poses rather than in and out of
+  // the water, and it is what keeps the body-height swap off the state edge.
+  private treadBlend = 0;
   private swimBobTime = 0;
   // Ledge-climb pose: `blend` fades the whole gesture, `phase` runs 0..1 over
   // the pull so the arms plant early and the body clears late. `target` is
@@ -430,7 +686,20 @@ export class CharacterVisual {
   private soulRend = false;
   private shadowform = false;
   private moonkin = false;
-  private metamorph = false;
+  private ferocityStage = 0;
+  private presentationScale = 1;
+  private ascended = false;
+  private metamorphLeftWing: THREE.Object3D | null = null;
+  private metamorphRightWing: THREE.Object3D | null = null;
+  private metamorphLeftWingRest = new THREE.Euler();
+  private metamorphRightWingRest = new THREE.Euler();
+  private metamorphLeftHand: THREE.Object3D | null = null;
+  private metamorphRightHand: THREE.Object3D | null = null;
+  private metamorphWingPose = createMetamorphWingPose();
+  private metamorphElapsed = 0;
+  private metamorphPulse = 0;
+  private metamorphWasVisible = false;
+  private runeTint: number | null = null;
   private bobPhase = Math.random() * Math.PI * 2;
 
   constructor(
@@ -440,6 +709,8 @@ export class CharacterVisual {
     weaponItemId: string | null = null,
     weaponOverride: WeaponLayoutOverride | null = null,
     offhandItemId: string | null = null,
+    look: ModularLook | null = null,
+    opts?: AssembleOptions,
   ) {
     const prep = prepareVisual(key);
     // A cosmetic body (the Combat Mech) keeps its model/clips but can adopt the
@@ -464,113 +735,177 @@ export class CharacterVisual {
     // model: yaw/scale/feet normalization wrapper around the skinned clone. The
     // equipped mainhand item (if the class swaps; see VisualDef.weaponSlot) picks
     // the held weapon model, so the visual is born holding the right weapon.
-    this.model = assembleModel(this.def, weaponItemId, offhandItemId);
-    configureTightBoneTextures(this.model);
-    applyMaterials(
-      this.model,
-      this.def,
-      entityColor,
-      skinTexture(key, skinIndex),
-      skinEmissiveTexture(key, skinIndex),
+    // THE MECH IS A REPLACEMENT BODY, NOT A LAYER. Only a `modular` def can
+    // compose a character, so a look handed to a fixed rig is dropped here
+    // rather than carried: the mech cosmetic must never end up with a second
+    // body inside it (Troy, 2026-08-07). assembleModel already ignores `look`
+    // for a non-modular def, this makes the visual agree, so nothing
+    // downstream can read a look the geometry never used.
+    this.look = prep.def.modular ? look : null;
+    this.model = timeBuildSpan('view-part:assemble', () =>
+      assembleModel(this.def, weaponItemId, offhandItemId, look, opts),
     );
-    // Class halo (the priest's Light): a glowing ring behind the head bone.
-    // Added AFTER applyMaterials (its additive material must not be re-mapped)
-    // and BEFORE the originalMaterials snapshot, so ghost/stealth material
-    // swaps restore it like any other mesh.
-    if (this.def.halo !== undefined) {
-      const head = this.model.getObjectByName('head');
-      if (head) {
-        const halo = buildHalo(this.def.halo, this.def.haloUpOffset, this.def.haloRadius);
-        this.haloBaseMaterial = halo.material;
-        head.add(halo);
-      }
-    }
-    this.model.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.isMesh) this.originalMaterials.set(mesh, mesh.material);
-    });
-    this.modelWrap.rotation.y = prep.def.yaw ?? 0;
-    this.modelWrap.scale.setScalar(prep.normScale);
-    this.modelWrap.position.y = prep.yOffset;
-    this.modelWrap.add(this.model);
-    this.poseWrap.add(this.modelWrap);
-    this.root.add(this.poseWrap);
-
-    this.model.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      // the halo is an unlit additive FX quad: keep it out of the caster list
-      // or this sweep overwrites buildHalo's castShadow = false
-      if (!mesh.isMesh || mesh.name === 'class_halo') return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = false;
-      // skinned bounds drift outside bind-pose spheres; entity-level culling
-      // (80u draw range) already bounds the cost
-      if ((mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh) mesh.frustumCulled = false;
-      this.casters.push(mesh);
-    });
-
-    // far LOD + shadow proxy share the baked idle-pose geometry per key. Skin
-    // aware from the start (see applySkinMaterials): a character that spawns
-    // already wearing a non-default skin must not LOD out to the embedded one.
-    if (prep.idleGeo) {
-      this.farMesh = new THREE.Mesh(
-        prep.idleGeo,
-        tintedFarMaterials(
-          prep.def,
+    // Release-on-throw for everything below: the retry gate re-runs this whole
+    // constructor when a streamed asset lands late (a designed path, not an
+    // edge case), and assembleModel above RETAINED the composed part set.
+    // Nothing on the failed path ever reaches dispose(), so without this each
+    // retry pins the variant a little harder until it can never be evicted.
+    // No-op for a fixed rig.
+    try {
+      configureTightBoneTextures(this.model);
+      timeBuildSpan('view-part:materials', () =>
+        applyMaterials(
+          this.model,
+          this.def,
           entityColor,
-          prep.idleSrcMats,
-          prep.idleSrcIsBody,
           skinTexture(key, skinIndex),
           skinEmissiveTexture(key, skinIndex),
+          this.tintedRigClaims,
         ),
       );
-      this.farMaterials = this.farMesh.material;
-      this.farMesh.visible = false;
-      this.poseWrap.add(this.farMesh);
-      if (GFX.tier !== 'low') {
-        this.shadowProxy = new THREE.Mesh(prep.idleGeo, shadowOnlyMat());
-        this.shadowProxy.castShadow = true;
-        this.shadowProxy.visible = false;
-        this.poseWrap.add(this.shadowProxy);
+      if (key === 'form_metamorph') {
+        this.metamorphLeftWing = this.model.getObjectByName('metamorph_wing_left_hinge') ?? null;
+        this.metamorphRightWing = this.model.getObjectByName('metamorph_wing_right_hinge') ?? null;
+        if (this.metamorphLeftWing) {
+          this.metamorphLeftWingRest.copy(this.metamorphLeftWing.rotation);
+        }
+        if (this.metamorphRightWing) {
+          this.metamorphRightWingRest.copy(this.metamorphRightWing.rotation);
+        }
+        this.metamorphLeftHand =
+          this.model.getObjectByName('handslotl') ??
+          this.model.getObjectByName('handslot.l') ??
+          this.model.getObjectByName('L_Hand') ??
+          null;
+        this.metamorphRightHand =
+          this.model.getObjectByName('handslotr') ??
+          this.model.getObjectByName('handslot.r') ??
+          this.model.getObjectByName('R_Hand') ??
+          null;
       }
-    }
+      // Class halo (the priest's Light): a glowing ring behind the head bone.
+      // Added AFTER applyMaterials (its additive material must not be re-mapped)
+      // and BEFORE the originalMaterials snapshot, so ghost/stealth material
+      // swaps restore it like any other mesh.
+      const haloDef = this.def.halo;
+      if (haloDef !== undefined) {
+        const head = this.model.getObjectByName('head');
+        if (head) {
+          const halo = timeBuildSpan('view-part:halo', () =>
+            buildHalo(haloDef, this.def.haloUpOffset, this.def.haloRadius),
+          );
+          this.haloBaseMaterial = halo.material;
+          head.add(halo);
+        }
+      }
+      this.model.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) this.originalMaterials.set(mesh, mesh.material);
+      });
+      this.modelWrap.rotation.y = prep.def.yaw ?? 0;
+      this.modelWrap.name = 'character_model_wrap';
+      this.modelWrap.scale.setScalar(prep.normScale);
+      this.modelWrap.position.y = prep.yOffset;
+      this.hairSway.build(this.model);
+      this.modelWrap.add(this.model);
+      this.poseWrap.add(this.modelWrap);
+      this.root.add(this.poseWrap);
 
-    // capsule from measured body extents, long/wide creatures (wolves,
-    // dragons) were nearly unclickable with a height-derived sliver
-    const r = prep.clickRadius;
-    this.clickRadius = r;
-    this.clickProxy = new THREE.Mesh(clickGeo(), clickMat());
-    this.clickProxy.scale.set(r * 2, this.height, r * 2);
-    this.clickProxy.visible = false;
-    this.root.add(this.clickProxy);
+      this.model.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        // the halo is an unlit additive FX quad: keep it out of the caster list
+        // or this sweep overwrites buildHalo's castShadow = false
+        if (!mesh.isMesh || mesh.name === 'class_halo') return;
+        mesh.castShadow = true;
+        mesh.receiveShadow = false;
+        // skinned bounds drift outside bind-pose spheres; entity-level culling
+        // (80u draw range) already bounds the cost
+        if ((mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh) mesh.frustumCulled = false;
+        this.casters.push(mesh);
+      });
 
-    this.mixer = new THREE.AnimationMixer(this.model);
-    this.skeletonUpdates = new SkeletonUpdateCache(this.model);
-    for (const name of [...clipNamesOf(prep.def), ...SKIN_ATTACK_CLIP_NAMES]) {
-      const clip = prep.clips.get(name);
-      if (clip) this.actions.set(name, this.mixer.clipAction(clip));
-    }
-    this.mixer.addEventListener('finished', (ev) => this.onFinished(ev.action));
+      // far LOD + shadow proxy share the baked idle-pose geometry per key. Skin
+      // aware from the start (see applySkinMaterials): a character that spawns
+      // already wearing a non-default skin must not LOD out to the embedded one.
+      //
+      // A COMPOSED body cannot use the key's bake: prepareVisual measures
+      // DEFAULT_LOOK, so a peer crossing into the far band would change gender,
+      // hair and outfit. Theirs is baked from their own part set instead, and
+      // lazily (buildComposedFar), because most of a crowd stands close enough
+      // that the mesh would never be drawn.
+      const idleGeo = prep.idleGeo;
+      if (idleGeo && !this.look) {
+        timeBuildSpan('view-part:far-bake', () =>
+          this.buildFarMeshes(
+            idleGeo,
+            tintedFarMaterials(
+              prep.def,
+              entityColor,
+              prep.idleSrcMats,
+              prep.idleSrcIsBody,
+              skinTexture(key, skinIndex),
+              skinEmissiveTexture(key, skinIndex),
+              this.tintedFarClaims,
+            ),
+          ),
+        );
+      }
 
-    const idle = this.action(this.def.clips.idle);
-    if (idle) {
-      idle.play();
-      this.current = idle;
-    }
+      // capsule from measured body extents, long/wide creatures (wolves,
+      // dragons) were nearly unclickable with a height-derived sliver
+      const r = prep.clickRadius;
+      this.clickRadius = r;
+      this.clickProxy = new THREE.Mesh(clickGeo(), clickMat());
+      this.clickProxy.scale.set(r * 2, this.height, r * 2);
+      this.clickProxy.visible = false;
+      this.root.add(this.clickProxy);
 
-    // The atlas for a non-default skin may not be resident at construction: the
-    // packaged iOS shell defers the boot atlas sweep (assets.ts), so a visual
-    // born with a cosmetic skin applies the embedded default above and heals
-    // here once the atlas arrives - the same ensure + re-apply round-trip
-    // setSkin() already runs for live swaps. No-op when the atlas is resident
-    // (ensureSkinTexture returns null), so eager platforms are unchanged.
-    const pendingAtlas = ensureSkinTexture(this.key, skinIndex);
-    if (pendingAtlas) {
-      void pendingAtlas
-        .then(() => {
-          if (!this.disposed && this.skinIndex === skinIndex) this.applySkinMaterials(skinIndex);
-        })
-        .catch((err) => console.error('failed to load skin atlas:', err));
+      const mixerStarted = performance.now();
+      this.mixer = new THREE.AnimationMixer(this.model);
+      this.skeletonUpdates = new SkeletonUpdateCache(this.model);
+      for (const name of [...clipNamesOf(prep.def), ...SKIN_ATTACK_CLIP_NAMES]) {
+        const clip = prep.clips.get(name);
+        if (clip) this.actions.set(name, this.mixer.clipAction(clip));
+      }
+      this.mixer.addEventListener('finished', (ev) => this.onFinished(ev.action));
+      recordBuildSpan('view-part:mixer', performance.now() - mixerStarted, mixerStarted);
+      if (key === 'player_paladin') {
+        this.bastionSweepFx = new PaladinBastionSweepFx(this.model);
+        this.templarsVerdictFx = new PaladinTemplarsVerdictFx(this.model);
+      }
+
+      const idle = this.action(this.def.clips.idle);
+      if (idle) {
+        idle.play();
+        this.current = idle;
+      }
+
+      // The atlas for a non-default skin may not be resident at construction: every
+      // iOS WebKit host defers the boot atlas sweep (assets.ts), so a visual
+      // born with a cosmetic skin applies the embedded default above and heals
+      // here once the atlas arrives - the same ensure + re-apply round-trip
+      // setSkin() already runs for live swaps. No-op when the atlas is resident
+      // (ensureSkinTexture returns null), so eager platforms are unchanged.
+      const pendingAtlas = ensureSkinTexture(this.key, skinIndex);
+      if (pendingAtlas) {
+        void pendingAtlas
+          .then(() => {
+            if (!this.disposed && this.skinIndex === skinIndex) this.applySkinMaterials(skinIndex);
+          })
+          .catch((err) => console.error('failed to load skin atlas:', err));
+      }
+    } catch (err) {
+      releaseModularVariant(this.model);
+      // ...and the tinted-material leases applyMaterials and the far build
+      // already took above, for the same reason and with the same shape as
+      // dispose(). A constructor that throws never reaches dispose, so on the
+      // streamed-asset retry path every attempt would strand its leases and pin
+      // shared materials against the tinted cache's idle bound forever.
+      releaseTintedMaterials(this.tintedRigClaims);
+      this.tintedRigClaims.clear();
+      releaseTintedMaterials(this.tintedFarClaims);
+      this.tintedFarClaims.clear();
+      throw err;
     }
   }
 
@@ -580,8 +915,18 @@ export class CharacterVisual {
 
   /** `animate=false` skips mixer integration (distance throttling); state
    *  edges still latch so the pose catches up when the entity nears. */
-  update(dt: number, s: AnimState, animate: boolean): void {
+  update(dt: number, s: AnimState, animate: boolean, reducedMotion = false): void {
+    // A transparent effect whose clones finished linking: swap them in HERE,
+    // on the per-frame path, never in the gate callback (see effectSwapSettled).
+    if (this.effectSwapSettled) this.commitPendingEffectSwap();
+    // A far crossing that lost the bake-budget race retries here until its
+    // part set gets a slot (or someone else bakes it, making the peek free).
+    if (this.farBakePending && this.far && !this.farBakeTried) {
+      this.attemptComposedFar();
+      this.syncFarVisibility();
+    }
     this.hitCooldown = Math.max(0, this.hitCooldown - dt);
+    this.updateMetamorphWings(dt, s, reducedMotion);
     if (this.holdCooldown > 0) this.holdCooldown = Math.max(0, this.holdCooldown - dt);
     // Deferred sheathe swap: lands at the gesture's windup peak (see
     // setWeaponStowed), where the clip is also cut so the chop's downswing never
@@ -609,16 +954,19 @@ export class CharacterVisual {
       this.playOneShot(landClip, 1);
     this.wasAirborne = s.airborne;
 
+    this.castingAbility = s.casting ? (s.castingAbility ?? null) : null;
     if (!this.deadLock) {
       const desired = this.desiredBase(s);
       const baseChanged = desired !== this.baseState;
+      const previousBase = this.baseState;
       if (baseChanged) this.baseState = desired;
       if (this.currentOneShotIsEmote && this.shouldInterruptEmote(s)) {
         this.currentIsOneShot = false;
         this.currentOneShotIsEmote = false;
-        this.fadeTo(this.baseAction(), FADE, false);
+        this.fadeTo(this.baseAction(), this.baseTransitionFade(desired), false);
       } else if (baseChanged && !this.currentIsOneShot) {
-        this.fadeTo(this.baseAction(), FADE, false);
+        this.fadeTo(this.baseAction(), this.baseTransitionFade(desired), false);
+        this.fadeTo(this.baseAction(), waterFade(previousBase, desired), false);
       }
       // foot-speed matching on locomotion cycles
       if (!this.currentIsOneShot && this.current) {
@@ -657,8 +1005,24 @@ export class CharacterVisual {
     }
     this.poseWrap.rotation.y = this.spinAngle;
 
-    // swim pose: Lie_Idle (when the rig has it) + pitch and surface bob
-    const proneAngle = this.action(this.def.clips.swim) ? SWIM_PITCH_CLIP : SWIM_PITCH_PROCEDURAL;
+    // swim pose: the clip's own posture + whatever pitch and lift it still needs
+    const authoredSwim = !!this.action(this.def.clips.swimSurface);
+    const proneAngle = authoredSwim
+      ? SWIM_PITCH_AUTHORED
+      : this.action(this.def.clips.swim)
+        ? SWIM_PITCH_CLIP
+        : SWIM_PITCH_PROCEDURAL;
+    // Treading swaps the body between two postures that sit at different
+    // heights, so the swap has to EASE: switching the offset on the state edge
+    // would pop the model a third of a yard while the clips are still
+    // crossfading into each other.
+    this.treadBlend = advanceTreadBlend(
+      this.treadBlend,
+      this.baseState === 'swimIdle' && !!this.action(this.def.clips.swimIdle),
+      dt,
+    );
+    const strokeRise = authoredSwim ? SWIM_RISE_AUTHORED : SWIM_RISE;
+    const swimRise = strokeRise + (SWIM_RISE_TREAD - strokeRise) * this.treadBlend;
     this.swimBlend = advanceSwimBlend(this.swimBlend, s.swimming && !s.dead, dt);
     this.swimBobTime += dt;
     // windup lean/recoil spring: while fed (setWindupLean each ceremony frame)
@@ -683,15 +1047,22 @@ export class CharacterVisual {
     // Pitch into the wall through the pull, level out as the body tops the
     // lip so the plant lands upright.
     const climbLevel = 1 - env01(this.climbPhase, 0.62, 0.98);
-    // Both pose contributions ride the SAME channel and are additive offsets:
-    // the windup lean/recoil spring above and the ledge-climb pitch. Writing
-    // either one alone here would silently stomp the other (main's note: this
-    // line is rewritten every frame, so a pose written elsewhere is lost).
+    // ...and nose over into a dive or a climb. The renderer eased this toward
+    // the body's real vertical travel (advanceSwimPitch), so it arrives already
+    // smooth; it rides the swim blend like the prone angle it adds to, and so
+    // unwinds with the rest of the swim pose on the way out of the water.
+    // Every pose contribution on this channel is an additive offset (swim
+    // prone+pitch, the windup lean/recoil spring, the ledge-climb pitch):
+    // writing any one alone here would silently stomp the others.
+    // The dive nose-over is largely held back while treading: the same tilt
+    // that reads as aiming on a prone stroke reads as a faceplant on an
+    // upright body.
+    const swimPitch = s.swimPitch * (1 + (TREAD_PITCH_SCALE - 1) * this.treadBlend);
     this.poseWrap.rotation.x =
-      proneAngle * this.swimBlend + this.lean + CLIMB_BODY_PITCH * climb * climbLevel;
+      (proneAngle + swimPitch) * this.swimBlend + this.lean + CLIMB_BODY_PITCH * climb * climbLevel;
     this.poseWrap.rotation.z = 0;
     this.poseWrap.position.y =
-      this.swimBlend * (SWIM_RISE + Math.sin(this.swimBobTime * 2 + this.bobPhase) * 0.08) +
+      this.swimBlend * (swimRise + Math.sin(this.swimBobTime * 2 + this.bobPhase) * 0.08) +
       // Compress at the start of the pull, back to neutral as the body rises.
       CLIMB_BODY_DUCK * climb * (1 - env01(this.climbPhase, 0.1, 0.55));
 
@@ -716,17 +1087,69 @@ export class CharacterVisual {
       if (this.holdT <= 0) this.holdCooldown = HOLD_REFRACTORY_S;
     }
     if (animate) {
+      const animationDt = this.pendingDt;
       // BEFORE the mixer integrates: scrub the climb's baked clips (weights
       // and frozen times are mixer INPUTS, unlike the additive lifts below).
       this.driveClimbClips();
-      this.updateMixer(this.pendingDt);
+      this.updateMixer(animationDt);
       this.pendingDt = 0;
       // AFTER the mixer wrote the sampled pose: the sheathe gesture's additive
       // arm raise (never applied on skipped-mixer frames, so it cannot accumulate).
       this.applyStowArmLift(dt);
       // Same rule for the climb's overhead reach.
       this.applyClimbPose();
+      const verdictTime =
+        this.templarsVerdictAction &&
+        this.current === this.templarsVerdictAction &&
+        this.currentIsOneShot
+          ? Math.min(PALADIN_TEMPLARS_VERDICT_DURATION, this.templarsVerdictAction.time)
+          : null;
+      const bastionTime =
+        this.bastionSweepAction && this.current === this.bastionSweepAction && this.currentIsOneShot
+          ? Math.min(PALADIN_BASTION_SWEEP_DURATION, this.bastionSweepAction.time)
+          : null;
+      this.bastionSweepFx?.update(bastionTime, animationDt);
+      this.templarsVerdictFx?.update(verdictTime, animationDt);
+      // Morph influences, not bone writes, so mixer order is irrelevant, but
+      // it rides the animated branch: a throttled far rig has no business
+      // integrating a hair spring.
+      this.hairSway.update(dt, s);
     }
+  }
+
+  private updateMetamorphWings(dt: number, s: AnimState, reducedMotion: boolean): void {
+    if (!this.metamorphLeftWing || !this.metamorphRightWing) return;
+    const visible = this.root.visible && !this.far;
+    if (visible && !this.metamorphWasVisible) this.metamorphElapsed = 0;
+    this.metamorphWasVisible = visible;
+    this.metamorphPulse = Math.max(0, this.metamorphPulse - dt);
+    if (!visible) return;
+
+    this.metamorphElapsed += dt;
+    const attacking = this.currentIsOneShot || this.metamorphPulse > 0;
+    const pose = metamorphWingPoseInto(
+      this.metamorphElapsed,
+      s.moving,
+      s.running,
+      s.airborne,
+      s.casting,
+      attacking,
+      this.metamorphWingPose,
+      reducedMotion,
+    );
+    const fold = (1 - pose.unfold) * 0.82;
+    const sweep = pose.sweepBack - pose.open;
+
+    this.metamorphLeftWing.rotation.set(
+      this.metamorphLeftWingRest.x + pose.breath + pose.open * 0.12,
+      this.metamorphLeftWingRest.y + fold + sweep,
+      this.metamorphLeftWingRest.z + (1 - pose.unfold) * 0.2 - pose.breath,
+    );
+    this.metamorphRightWing.rotation.set(
+      this.metamorphRightWingRest.x + pose.breath + pose.open * 0.12,
+      this.metamorphRightWingRest.y - fold - sweep,
+      this.metamorphRightWingRest.z - (1 - pose.unfold) * 0.2 + pose.breath,
+    );
   }
 
   /**
@@ -991,29 +1414,61 @@ export class CharacterVisual {
 
   playAttack(abilityId?: string): void {
     if (this.deadLock) return;
-    const override = abilityId ? this.def.clips.attackByAbility?.[abilityId] : undefined;
+    // Resolved against THIS rig's bound clips: a rig without the substitute
+    // (every body but the hunter) keeps its own authored attack instead of
+    // swinging with no animation at all.
+    const skinAttack = pickSkinAttackClips(this.weaponSkinId, (c) => this.action(c) !== null);
+    // A displayed bow skin substitutes Bow_Draw_Shot for the hunter's RANGED
+    // attacks, including the ranged per-ability overrides: the crossbow-
+    // shoulder ability poses (Hunter_Shot_Snap etc.) are authored for the
+    // class's authored crossbow and would look backwards with a bow visibly
+    // drawn. It must NOT substitute for a non-ranged override: the three
+    // melee abilities (raptor_strike, mongoose_bite, wing_clip) play a
+    // bespoke Hunter_Melee_* swing regardless of a displayed bow, since a bow
+    // skin never changes how a melee hit is thrown, and the self-buff aspect
+    // toggles / Fevered Draw (rapid_fire) play the class's own baked
+    // Spellcast_Raise raise/buff ceremony through this same playAttack path
+    // (the ability-VFX painter triggers non-contact authored gestures here
+    // too), never a draw-shot. Both are identified by their clip-name
+    // convention rather than a hardcoded ability list, so any future
+    // non-ranged override keeps its authored clip automatically
+    // (tests/weapon_skins.test.ts).
+    const rawOverride = abilityId ? this.def.clips.attackByAbility?.[abilityId] : undefined;
+    const overrideIsNonRanged =
+      rawOverride?.startsWith('Hunter_Melee_') || rawOverride === 'Spellcast_Raise';
+    const override = !skinAttack || overrideIsNonRanged ? rawOverride : undefined;
     if (override && this.action(override)) {
-      this.playOneShot(override, this.def.attackTimeScale ?? 1.3);
+      const authoredTimeScale = abilityId
+        ? this.def.clips.attackTimeScaleByAbility?.[abilityId]
+        : undefined;
+      this.playOneShot(override, authoredTimeScale ?? this.def.attackTimeScale ?? 1.3);
+      this.currentOneShotIsAttack = true;
+      if (override === PALADIN_TEMPLARS_VERDICT_CLIP) {
+        this.templarsVerdictAction = this.action(override);
+      } else if (override === PALADIN_BASTION_SWEEP_CLIP) {
+        this.bastionSweepAction = this.action(override);
+      }
       return;
     }
-    const skinAttack = weaponSkinAttackClips(this.weaponSkinId);
     const style = weaponAttackStyle(this.weaponItemId, this.offhandItemId);
     const handClip = style ? this.def.clips.attackByHand?.[style] : undefined;
     if (!skinAttack && handClip && this.action(handClip)) {
       this.playOneShot(handClip, this.def.attackTimeScale ?? 1.3);
+      this.currentOneShotIsAttack = true;
       return;
     }
     const clips = skinAttack?.clips ?? this.def.clips.attack;
     if (clips.length === 0) return;
     const name = clips[this.attackIdx++ % clips.length];
     this.playOneShot(name, skinAttack?.timeScale ?? this.def.attackTimeScale ?? 1.3);
+    this.currentOneShotIsAttack = true;
   }
 
   /** Bladed Gyre is instant, so it uses one short body spin instead of the
    *  held Bladestorm channel pose. Repeated AoE hits only refresh the timer. */
   playWhirl(): void {
     if (this.deadLock) return;
-    this.spinOnceTimer = SPIN_ONCE_DURATION;
+    this.spinOnceTimer = SPIN_ATTACK_VISUAL_DURATION;
     const clips = this.def.clips.attack;
     if (clips.length > 0) {
       this.playOneShot(clips[this.attackIdx++ % clips.length], SPIN_ATTACK_TIMESCALE);
@@ -1161,14 +1616,181 @@ export class CharacterVisual {
   }
 
   setProxyShadow(on: boolean): void {
-    if (this.shadowProxy && this.shadowProxy.visible !== on) this.shadowProxy.visible = on;
+    this.proxyShadowWanted = on;
+    this.syncShadowProxyVisibility();
+  }
+
+  setActive(on: boolean): void {
+    const changed = this.root.visible !== on;
+    this.root.visible = on;
+    if (!this.metamorphLeftWing || !this.metamorphRightWing) return;
+    if (!on) {
+      this.metamorphWasVisible = false;
+      this.metamorphPulse = 0;
+      return;
+    }
+    if (changed || !this.metamorphWasVisible) {
+      this.metamorphElapsed = 0;
+      this.metamorphWasVisible = true;
+    }
   }
 
   setFar(far: boolean): void {
-    if (far === this.far) return;
-    this.far = far;
-    this.modelWrap.visible = !far || !this.farMesh;
-    if (this.farMesh) this.farMesh.visible = far;
+    if (far !== this.far) {
+      this.far = far;
+      // First crossing of a composed body: mint its far LOD, BUDGETED. Cached
+      // per part set, so a crowd in one haircut pays for one bake between them,
+      // but a camera leaving a capital crosses every peer in one frame, so only
+      // one genuinely new part set bakes per window and the rest go pending and
+      // retry from update(). A part set someone already baked is free (the peek)
+      // and never competes for the slot.
+      if (far && !this.farMesh && this.look && !this.farBakeTried) this.attemptComposedFar();
+      if (!far) this.farBakePending = false;
+    }
+    // Every frame, not only on the edge: the compile gate's settle only clears
+    // its flag (below), and the reveal it unlocks must land HERE, inside the
+    // renderer's per-frame pass, never in the settle callback. A rig hidden
+    // between frames takes its budgeted weapon lights out of three's counted
+    // set behind the light budget's back, and numPointLights sits in every
+    // program cache key (the measured relink storm). Write-elided, so the
+    // steady state costs three compares.
+    this.syncFarVisibility();
+  }
+
+  /** The one place the rig/far-mesh handoff is written (far_lod_reveal_core):
+   *  the LOD edge, the budget retry and the per-frame setFar all land here, so
+   *  a far mesh whose materials are still linking never draws early and the
+   *  articulated rig never hides without a ready stand-in. */
+  private syncFarVisibility(): void {
+    const showFar = farMeshShown(this.far, this.farMesh !== null, this.farCompilePending);
+    const showRig = !showFar;
+    if (this.modelWrap.visible !== showRig) this.modelWrap.visible = showRig;
+    if (this.farMesh && this.farMesh.visible !== showFar) this.farMesh.visible = showFar;
+    this.syncShadowProxyVisibility();
+  }
+
+  private syncShadowProxyVisibility(): void {
+    if (!this.shadowProxy) return;
+    const show = shadowProxyShown(
+      this.proxyShadowWanted,
+      this.farMesh !== null,
+      this.farCompilePending,
+    );
+    if (this.shadowProxy.visible !== show) this.shadowProxy.visible = show;
+  }
+
+  /** Install (or clear) the renderer's compile gate for far bakes minted after
+   *  the view's creation gate ran. Installing also resets any bake or re-skin
+   *  still pending from a previous life (pool re-acquire): a settle the old
+   *  renderer generation dropped must not strand this visual articulated or
+   *  keep a superseded far set's tinted lease. */
+  setFarBakeGate(gate: FarBakeGate | null): void {
+    this.farBakeGate = gate;
+    this.dropPendingFarMaterials();
+    this.farCompilePending = false;
+    // Same reason as the far arm: a settle the old renderer generation dropped
+    // must not leave this visual waiting forever on an effect it already wears.
+    this.dropPendingEffectSwap();
+  }
+
+  /** Route a freshly minted far bake (mesh + shadow proxy) through the compile
+   *  gate: hidden until its programs link, the articulated rig standing in
+   *  meanwhile. Without a gate the bake reveals immediately (previous
+   *  behaviour, and what previews and tests without a renderer get). */
+  private gateFarMint(): void {
+    const wrap = this.farWrap;
+    if (!wrap || !this.farBakeGate) return;
+    this.farCompilePending = true;
+    this.farBakeGate(wrap, () => {
+      // A visual disposed, or re-baked, while the link was in flight: the
+      // settle belongs to a node this visual no longer draws. Flag only: the
+      // next per-frame setFar reveals (see setFar for why not here).
+      if (this.disposed || this.farWrap !== wrap) return;
+      this.farCompilePending = false;
+    });
+  }
+
+  /** One budgeted attempt at the composed far LOD. Free when the part set is
+   *  already baked; otherwise takes the frame slot or goes pending. */
+  private attemptComposedFar(): void {
+    if (!this.look) return;
+    const cached = peekModularFarBake(this.key, this.look);
+    if (!cached && !takeFarBakeBudget()) {
+      this.farBakePending = true;
+      return;
+    }
+    this.farBakePending = false;
+    this.buildComposedFar();
+  }
+
+  /** Hang a baked far mesh (and, off the low tier, its shadow proxy) on the
+   *  pose wrapper. Shared by the fixed-rig path in the constructor and the
+   *  composed path below so the two cannot drift. */
+  private buildFarMeshes(geo: THREE.BufferGeometry, mats: THREE.Material[]): void {
+    const wrap = new THREE.Group();
+    wrap.name = 'character_far_wrap';
+    this.farWrap = wrap;
+    this.farMesh = new THREE.Mesh(geo, mats);
+    this.farMaterials = this.farMesh.material;
+    this.farMesh.name = 'character_far_mesh';
+    this.farMesh.visible = false;
+    wrap.add(this.farMesh);
+    if (GFX.tier !== 'low') {
+      this.shadowProxy = new THREE.Mesh(geo, shadowOnlyMat());
+      this.shadowProxy.name = 'character_shadow_proxy';
+      this.shadowProxy.castShadow = true;
+      this.shadowProxy.visible = false;
+      wrap.add(this.shadowProxy);
+    }
+    this.poseWrap.add(wrap);
+  }
+
+  /** Bake (or reuse) this composed body's far LOD. Leaves farMesh null if the
+   *  look bakes to nothing, in which case the character simply keeps its
+   *  articulated model at distance (correct, just not as cheap). */
+  private buildComposedFar(): void {
+    this.farBakeTried = true;
+    if (!this.look) return;
+    const bake = modularFarBake(this.key, this.look);
+    if (!bake) return;
+    const prep = prepareVisual(this.key);
+    this.buildFarMeshes(
+      bake.geo,
+      tintedFarMaterials(
+        prep.def,
+        this.entityColor,
+        farSourceMaterials(this.model, bake.isBody.length),
+        bake.isBody,
+        skinTexture(this.key, this.skinIndex),
+        skinEmissiveTexture(this.key, this.skinIndex),
+        // Claimed like the fixed-rig far materials, so the tinted cache
+        // refcounts a composed body's far tints too. Nothing to release first:
+        // the constructor builds no far mesh for a composed body (this is the
+        // lazy path), so the claim set is empty until here.
+        this.tintedFarClaims,
+      ),
+    );
+    // This mesh is minted lazily, on the first crossing into the far band, so
+    // any effect state (ghost, soul rend, shadowform, moonkin, metamorph, rune
+    // tint) that edged on before that crossing never touched it: every setter
+    // that writes an overlay onto farMesh early-returns on no state change, and
+    // this is the only place a fresh farMesh comes from outside the constructor.
+    // Catch it up now, on the same material set the rig itself is already wearing.
+    this.applyVisualMaterials();
+    // The far clones of a ghosted / stealthed body would otherwise STAGE behind
+    // the effect gate while the mint gate below reveals the far mesh on its own
+    // settle: an opaque baked body for a stealther until the swap lands. The
+    // far mesh is hidden by the mint gate anyway, so mount its effect clones
+    // now and let them link inside that gate; deferral buys nothing here.
+    if (this.farMesh && this.farMaterials) {
+      this.farMesh.material = this.effectMaterial(this.farMaterials);
+    }
+    // Brand-new programs (the near body's minus the skinning bit, plus the
+    // proxy's depth arm): link them hidden, the rig standing in until then.
+    // The reveal itself is the caller's syncFarVisibility, since the shadow
+    // proxy also answers to the renderer's per-frame plan (setProxyShadow),
+    // which already ran this frame against a null proxy.
+    this.gateFarMint();
   }
 
   get isFar(): boolean {
@@ -1213,7 +1835,11 @@ export class CharacterVisual {
       this.writeAuraGlow(cached);
       return cached;
     }
-    const glow = material.clone();
+    // Program-preserving clone: a bare clone() drops the source's
+    // onBeforeCompile layers, so it both renders un-patched and links a fresh
+    // program on its first draw (material_clone_hooks.ts). That first draw is
+    // the first spec'd hit on this rig, i.e. mid-combat for every mob.
+    const glow = cloneMaterialWithHooks(material);
     this.writeAuraGlow(glow);
     this.auraGlowMaterials.set(material, glow);
     return glow;
@@ -1222,6 +1848,43 @@ export class CharacterVisual {
   setSoulRend(on: boolean): void {
     if (on === this.soulRend) return;
     this.soulRend = on;
+    this.applyVisualMaterials();
+  }
+
+  /** The Soul Rend clones this body will need, built without flipping the mark
+   *  (no `soulRend` flag, no material application): the encounter prewarm only
+   *  wants the program linked. Selection lives in `soul_rend_prewarm_core`; the
+   *  disposed arm matters because the queue defers this past the frame that
+   *  built the view. */
+  prewarmSoulRendSlots(): Array<{
+    source: THREE.Mesh;
+    overlay: THREE.Material | THREE.Material[];
+  }> {
+    return soulRendPrewarmTargets<THREE.Mesh, THREE.Material>({
+      originalMaterials: this.originalMaterials,
+      farMesh: this.farMesh,
+      farMaterials: this.farMaterials,
+      disposed: this.disposed,
+    }).map(({ source, original }) => ({
+      source,
+      overlay: Array.isArray(original)
+        ? original.map((material) => this.soulRendMaterial(material))
+        : this.soulRendMaterial(original),
+    }));
+  }
+
+  /** Scale only the drawn pose. The click proxy remains at its authoritative size. */
+  setPresentationScale(scale: number): void {
+    const next = Number.isFinite(scale) ? Math.min(1.2, Math.max(1, scale)) : 1;
+    if (next === this.presentationScale) return;
+    this.presentationScale = next;
+    this.poseWrap.scale.setScalar(next);
+  }
+
+  setFerocityStage(stage: number): void {
+    const next = Number.isFinite(stage) ? Math.min(3, Math.max(0, Math.trunc(stage))) : 0;
+    if (next === this.ferocityStage) return;
+    this.ferocityStage = next;
     this.applyVisualMaterials();
   }
 
@@ -1237,19 +1900,225 @@ export class CharacterVisual {
     this.applyVisualMaterials();
   }
 
-  setMetamorph(on: boolean): void {
-    if (on === this.metamorph) return;
-    this.metamorph = on;
+  pulseMetamorphosis(strength = 1): void {
+    this.metamorphPulse = Math.max(this.metamorphPulse, 0.24 + strength * 0.12);
+  }
+
+  metamorphHandWorldPositions(left: THREE.Vector3, right: THREE.Vector3): boolean {
+    if (!this.root.visible || this.far || !this.metamorphLeftHand || !this.metamorphRightHand) {
+      return false;
+    }
+    const owner = this.root.parent;
+    if (owner && (!owner.visible || !owner.matrixWorldAutoUpdate)) return false;
+    owner?.updateWorldMatrix(true, false);
+    this.metamorphLeftHand.updateWorldMatrix(true, false);
+    this.metamorphRightHand.updateWorldMatrix(true, false);
+    this.metamorphLeftHand.getWorldPosition(left);
+    this.metamorphRightHand.getWorldPosition(right);
+    return true;
+  }
+
+  setAscended(on: boolean): void {
+    if (on === this.ascended) return;
+    this.ascended = on;
     this.applyVisualMaterials();
   }
 
-  private applyVisualMaterials(): void {
+  /** Slight whole-body color lean while a Thornhollow Fields rune buff rides (null = off). */
+  setRuneTint(color: number | null): void {
+    if (color === this.runeTint) return;
+    this.runeTint = color;
+    this.applyVisualMaterials();
+  }
+
+  /** Mount the material set the current effect state asks for. This is the
+   *  synchronous half; applyVisualMaterials decides whether it runs now or
+   *  after a compile gate settles. */
+  private commitVisualMaterials(): void {
     for (const [mesh, original] of this.originalMaterials) {
       mesh.material = this.effectMaterial(original);
+      // Re-evaluated against what is ACTUALLY mounted, not against the
+      // pre-effect material applyMaterials saw. attachSharedDepthMaterials
+      // excludes any caster whose material would make three's getDepthMaterial
+      // write a non-default alphaTest, because alternating values on a SHARED
+      // depth material bump its version per draw, which is the exact rebuild
+      // that module exists to remove, on a material every caster of that shape
+      // is pointed at. No effect material sets alphaTest today, so leaving the
+      // attach at applyMaterials happened to be correct; this makes it correct
+      // by construction rather than by luck.
+      attachSharedDepthMaterials(mesh, mesh.material);
     }
     if (this.farMesh && this.farMaterials) {
       this.farMesh.material = this.effectMaterial(this.farMaterials);
     }
+  }
+
+  /**
+   * An overlay that flips `transparent` is a NEW program per rig material
+   * (three keys `opaque`), and swapping it onto a visible rig links it on the
+   * next draw: the 4808 ms `paladin_metallic` stall of the 2026-08-17 crowd
+   * capture. So the first time a given clone set is mounted, the rig keeps
+   * drawing its current materials and the clones compile hidden on a scratch
+   * mesh set, exactly the shape stageFarMaterials uses for a re-skin.
+   *
+   * The body is NEVER hidden by this: it is a deferred SWAP, not a gate on the
+   * entity. Stealth or a shapeshift tint reading a few frames late is the whole
+   * cost, and it is paid once per clone set: the second toggle is immediate.
+   */
+  private applyVisualMaterials(): void {
+    // A newer effect supersedes anything still linking (a stale settle must
+    // never commit over a state the visual has already left).
+    this.dropPendingEffectSwap();
+    const staged = this.collectUnlinkedEffectMaterials();
+    if (staged.length === 0) {
+      this.commitVisualMaterials();
+      return;
+    }
+    this.stageEffectSwap(staged);
+  }
+
+  /**
+   * The clone/source-mesh pairs this effect state would mount whose program is
+   * not known linked yet. Only clones that flip `transparent` qualify: every
+   * other overlay (ferocity, ascension, rune tint, aura glow) keeps the source's
+   * program cache key through cloneMaterialWithHooks, so it costs no link and
+   * must not be delayed. Empty without a gate, which keeps previews, tests and
+   * hosts with no async compile on the immediate path.
+   */
+  private collectUnlinkedEffectMaterials(): {
+    source: THREE.Mesh;
+    material: THREE.Material;
+  }[] {
+    const staged: { source: THREE.Mesh; material: THREE.Material }[] = [];
+    if (!this.farBakeGate) return staged;
+    // Nythraxis' Soul Rend mark is ACTIONABLE raid information (the marked
+    // player has to see it to react), so it is exempt from the deferral and
+    // swaps in on the frame it lands, whatever the link state
+    // (docs/design/graphics-settings-fairness.md). Its one-time link is the
+    // accepted cost, and the encounter prewarm (soulRendPrewarmTargets) is
+    // what usually pays it before the first mark.
+    if (this.soulRend) return staged;
+    const consider = (mesh: THREE.Mesh | null, source: THREE.Material): void => {
+      if (!mesh?.geometry) return;
+      const next = this.effectSingleMaterial(source);
+      if (next === source || next.transparent === source.transparent) return;
+      if (this.linkedEffectMaterials.has(next)) return;
+      staged.push({ source: mesh, material: next });
+    };
+    for (const [mesh, original] of this.originalMaterials) {
+      for (const source of Array.isArray(original) ? original : [original]) {
+        consider(mesh, source);
+      }
+    }
+    if (this.farMesh && this.farMaterials) {
+      const farMats = this.farMaterials;
+      for (const source of Array.isArray(farMats) ? farMats : [farMats]) {
+        consider(this.farMesh, source);
+      }
+    }
+    return staged;
+  }
+
+  /** Compile the staged clones hidden, on meshes carrying the same geometry and
+   *  skinning as the rig so three keys the same programs, and let update()
+   *  commit the swap once the gate settles. */
+  private stageEffectSwap(
+    staged: readonly { source: THREE.Mesh; material: THREE.Material }[],
+  ): void {
+    const gate = this.farBakeGate;
+    if (!gate) {
+      this.commitVisualMaterials();
+      return;
+    }
+    const scratch = new THREE.Group();
+    scratch.name = 'character_effect_compile_scratch';
+    scratch.visible = false;
+    for (const entry of staged) {
+      // Mirror the SOURCE mesh's kind: three keys `skinning` on isSkinnedMesh,
+      // so a SkinnedMesh twin of a plain source (an attached weapon, the class
+      // halo, the baked far mesh) links a variant the real draw never binds and
+      // the commit frame pays the synchronous link anyway. The shadow flags ride
+      // along for the same reason on the depth arm.
+      const source = entry.source;
+      const mesh = (source as THREE.SkinnedMesh).isSkinnedMesh
+        ? new THREE.SkinnedMesh(source.geometry, entry.material)
+        : new THREE.Mesh(source.geometry, entry.material);
+      mesh.castShadow = source.castShadow;
+      mesh.receiveShadow = source.receiveShadow;
+      mesh.visible = false;
+      mesh.frustumCulled = false;
+      scratch.add(mesh);
+    }
+    this.effectSwapScratch = scratch;
+    this.poseWrap.add(scratch);
+    try {
+      gate(scratch, () => {
+        if (this.disposed || this.effectSwapScratch !== scratch) return;
+        this.effectSwapSettled = true;
+      });
+    } catch (err) {
+      // A gate that rejects outright leaves the rig on its current, linked
+      // materials rather than throwing out of a material sweep; the next state
+      // change retries. Dev channel on purpose.
+      console.warn('character effect compile gate rejected', err);
+      this.dropPendingEffectSwap();
+    }
+  }
+
+  /** Take the settled clone set live, and remember it as linked so every later
+   *  toggle of that effect swaps immediately. */
+  private commitPendingEffectSwap(): void {
+    this.effectSwapSettled = false;
+    const scratch = this.effectSwapScratch;
+    if (!scratch) return;
+    this.recordLinkedEffectMaterials(scratch);
+    this.dropPendingEffectSwap();
+    this.commitVisualMaterials();
+  }
+
+  /** A settled scratch set's programs ARE compiled, whether or not the swap
+   *  reached its commit frame, so record them: without this a set superseded
+   *  after its gate settled (stealth chained into a shapeshift) re-stages and
+   *  re-queues a compile-lane slot on every later toggle, forever. */
+  private recordLinkedEffectMaterials(scratch: THREE.Group): void {
+    for (const child of scratch.children) {
+      const mats = (child as THREE.Mesh).material;
+      for (const material of Array.isArray(mats) ? mats : [mats]) {
+        this.linkedEffectMaterials.add(material);
+      }
+    }
+  }
+
+  /** Detach a scratch set without disposing anything: its materials ARE the
+   *  live clones the effect caches own, so a set that already settled stays
+   *  recorded as linked. `keepLinked = false` is for the paths that dispose
+   *  those clones on the way out (skin rebuild, teardown). */
+  private dropPendingEffectSwap(keepLinked = true): void {
+    const scratch = this.effectSwapScratch;
+    if (scratch && keepLinked && this.effectSwapSettled) {
+      this.recordLinkedEffectMaterials(scratch);
+    }
+    this.effectSwapSettled = false;
+    if (!scratch) return;
+    scratch.removeFromParent();
+    scratch.clear();
+    this.effectSwapScratch = null;
+  }
+
+  /** Re-tint this visual for a new owner entity (pooled reuse across per-instance
+   *  colors: rift spawns jitter mob.color per instance, so the reuse-pool key is
+   *  per-template and color is applied at acquire time; see
+   *  characters/visual_pool.ts). Runs the same shared-material sweep setSkin
+   *  does, so the reused visual picks the exact tinted-material clones a fresh
+   *  construction with this color would, re-snapshots the ghost/restore map, and
+   *  re-applies any active overlay. No-op when the color already matches; a def
+   *  that ignores entity color (fixed or absent tint) only records the new
+   *  color, because no material reads it. */
+  setEntityColor(color: number): void {
+    if (color === this.entityColor) return;
+    this.entityColor = color;
+    if (this.def.tint !== 'entity') return;
+    this.applySkinMaterials(this.skinIndex);
   }
 
   /** Swap the body skin (alternate texture atlas) at runtime; no-op if unchanged.
@@ -1277,13 +2146,33 @@ export class CharacterVisual {
   }
 
   private applySkinMaterials(skinIndex: number): void {
+    // Full-rig sweep: claim the new material set into a fresh lease BEFORE
+    // releasing the old one, so a key kept across the swap (same source, same
+    // tint) never dips to zero claims and can never be evicted mid-swap. Old
+    // keys nothing re-claimed (a previous entity color's tints, a previous
+    // skin's atlas variants) go idle and age out of the shared cache.
+    const prevRigClaims = this.tintedRigClaims;
+    this.tintedRigClaims = new Set();
     applyMaterials(
       this.model,
       this.def,
       this.entityColor,
       skinTexture(this.key, skinIndex),
       skinEmissiveTexture(this.key, skinIndex),
+      this.tintedRigClaims,
     );
+    releaseTintedMaterials(prevRigClaims);
+    // The per-effect clone maps (ghost/soul-rend/shadowform/moonkin/
+    // metamorph/rune-tint/aura-glow) key by SOURCE material, and this sweep
+    // just swapped every source (a new entity color or skin atlas), so
+    // clones derived from the old sources are unreachable from here on.
+    // Dispose them now, in the same synchronous pass that unmounts them (no
+    // render in between, the rune-chain precedent); the applyVisualMaterials
+    // call below re-derives any active overlay from the new sources, so a
+    // live effect survives the swap. Without this, a pooled visual
+    // accumulated one clone set per rift color worn (the maps only emptied
+    // in dispose()).
+    this.disposeEffectMaterials();
     // re-snapshot the material map ghost/restore relies on, then re-ghost if stealthed
     this.originalMaterials.clear();
     this.model.traverse((o) => {
@@ -1299,19 +2188,84 @@ export class CharacterVisual {
     });
     // The far LOD mesh is a separate baked geometry (see the constructor):
     // it needs its own skin-aware material rebuild or a distant player LOD
-    // pop reverts to the model's embedded default skin.
+    // pop reverts to the model's embedded default skin. A composed body rebuilds
+    // from ITS bake, not the key's DEFAULT_LOOK one.
     if (this.farMesh) {
       const prep = prepareVisual(this.key);
-      this.farMaterials = tintedFarMaterials(
+      const composed = this.look ? modularFarBake(this.key, this.look) : null;
+      const claims: TintedMaterialClaims = new Set();
+      const mats = tintedFarMaterials(
         this.def,
         this.entityColor,
-        prep.idleSrcMats,
-        prep.idleSrcIsBody,
+        composed ? farSourceMaterials(this.model, composed.isBody.length) : prep.idleSrcMats,
+        composed ? composed.isBody : prep.idleSrcIsBody,
         skinTexture(this.key, skinIndex),
         skinEmissiveTexture(this.key, skinIndex),
+        claims,
       );
+      this.stageFarMaterials(mats, claims);
     }
     this.applyVisualMaterials();
+  }
+
+  /** Take a rebuilt far material set live: claim the new lease, release the
+   *  old one AFTER (a key kept across the swap never dips to zero claims). */
+  private commitFarMaterials(mats: THREE.Material[], claims: TintedMaterialClaims): void {
+    const prevFarClaims = this.tintedFarClaims;
+    this.tintedFarClaims = claims;
+    this.farMaterials = mats;
+    releaseTintedMaterials(prevFarClaims);
+  }
+
+  /** A re-skinned far set is new programs too (an emissive atlas toggles a
+   *  define). Behind a gate it links hidden on a scratch mesh while the far
+   *  mesh keeps drawing its current, linked set, and swaps in on settle: no
+   *  hole and no LOD pop for a distant player who changes skin. A newer skin
+   *  before settle supersedes the one in flight. */
+  private stageFarMaterials(mats: THREE.Material[], claims: TintedMaterialClaims): void {
+    const farMesh = this.farMesh;
+    const wrap = this.farWrap;
+    // A newer set supersedes one still linking on either path (a stale settle
+    // must never commit over a set that already landed).
+    this.dropPendingFarMaterials();
+    if (!this.farBakeGate || !farMesh || !wrap) {
+      this.commitFarMaterials(mats, claims);
+      return;
+    }
+    // The far mesh draws effectMaterial(farMaterials), the overlay clones when
+    // a ghost/soul-rend/rune tint is on, and a clone is a different program
+    // key: gate the set the mesh will actually wear (the mint path applies
+    // its overlays before gating for the same reason).
+    const scratch = new THREE.Mesh(farMesh.geometry, this.effectMaterial(mats));
+    scratch.name = 'character_far_skin_scratch';
+    scratch.visible = false;
+    scratch.castShadow = farMesh.castShadow;
+    scratch.receiveShadow = farMesh.receiveShadow;
+    this.farSkinScratch = scratch;
+    this.pendingFarClaims = claims;
+    wrap.add(scratch);
+    this.farBakeGate(scratch, () => {
+      if (this.disposed || this.farSkinScratch !== scratch) return;
+      // Unlike the mint's reveal (see setFar), this settle may land between
+      // frames: it swaps materials on a mesh and detaches a hidden node, and
+      // neither changes an ancestor's visibility or three's counted light set.
+      this.farSkinScratch = null;
+      this.pendingFarClaims = null;
+      scratch.removeFromParent();
+      this.commitFarMaterials(mats, claims);
+      this.applyVisualMaterials();
+    });
+  }
+
+  private dropPendingFarMaterials(): void {
+    if (this.farSkinScratch) {
+      this.farSkinScratch.removeFromParent();
+      this.farSkinScratch = null;
+    }
+    if (this.pendingFarClaims) {
+      releaseTintedMaterials(this.pendingFarClaims);
+      this.pendingFarClaims = null;
+    }
   }
 
   /** Swap the held mainhand weapon model at runtime (gear equip/unequip); no-op if
@@ -1355,15 +2309,19 @@ export class CharacterVisual {
     );
     for (const payload of payloads) {
       configureTightBoneTextures(payload);
+      // Payload-subtree sweep: claim ADDITIVELY into the live rig lease (the
+      // rest of the rig keeps its mounts). Keys of the removed offhand's
+      // materials overstay in the lease until the next full sweep or dispose;
+      // an overstay only pins, it can never dispose a mounted material.
       applyMaterials(
         payload,
         this.def,
         this.entityColor,
         skinTexture(this.key, this.skinIndex),
         skinEmissiveTexture(this.key, this.skinIndex),
+        this.tintedRigClaims,
       );
     }
-    this.originalMaterials.clear();
     this.rebuildCasters();
     this.applyVisualMaterials();
     return payloads;
@@ -1377,6 +2335,24 @@ export class CharacterVisual {
   setWeaponSkin(weaponSkinId: string | null): THREE.Object3D[] | null {
     if (weaponSkinId === this.weaponSkinId) return null;
     this.weaponSkinId = weaponSkinId;
+    const payloads = this.reattachHeldWeapon();
+    // The CAST pose depends on the displayed skin (a drawn bow holds its draw),
+    // but the base action is only re-selected on a base-state EDGE. A skin
+    // applied or removed mid-cast does not edge the state, so without this the
+    // rig keeps Spellcasting after equipping the bow, or keeps Bow_Draw_Hold
+    // after removing it, for the rest of the cast. Reported by review on 2950.
+    if (!this.deadLock && !this.currentIsOneShot && this.baseState === 'cast') {
+      const next = this.baseAction();
+      if (next && next !== this.current) this.fadeTo(next, FADE, false);
+    }
+    return payloads;
+  }
+
+  /** Rebuild the current weapon-skin attachments after its on-demand GLB
+   *  arrives. The logical skin id stays unchanged; only its fail-soft base
+   *  weapon payload is replaced. */
+  refreshWeaponSkin(): THREE.Object3D[] | null {
+    if (!this.weaponSkinId) return null;
     return this.reattachHeldWeapon();
   }
 
@@ -1406,9 +2382,15 @@ export class CharacterVisual {
     );
     if (offhandMirrorsWeaponSkin(this.weaponSkinId, this.offhandItemId)) {
       payloads.push(...offPayloads);
+      this.finishWeaponAttach(payloads);
+      return payloads;
     }
+    // The non-mirrored offhand stays OUT of the skin material/VFX set
+    // (pixel-untouched), but its freshly attached nodes must still reach the
+    // caller's compile gate: dropped from the return, a re-attached shield's
+    // first draw linked its programs synchronously.
     this.finishWeaponAttach(payloads);
-    return payloads;
+    return [...payloads, ...offPayloads];
   }
 
   /** The shared tail of every re-attach (slot swap, skin change, sheathe swap):
@@ -1434,13 +2416,20 @@ export class CharacterVisual {
           }))
         : [];
     }
+    // Full-rig sweep (the whole model graph, weapon meshes included): swap
+    // the rig lease like applySkinMaterials does, so the removed weapon's
+    // material claims release and can age out of the shared cache.
+    const prevRigClaims = this.tintedRigClaims;
+    this.tintedRigClaims = new Set();
     applyMaterials(
       this.model,
       this.def,
       this.entityColor,
       skinTexture(this.key, this.skinIndex),
       skinEmissiveTexture(this.key, this.skinIndex),
+      this.tintedRigClaims,
     );
+    releaseTintedMaterials(prevRigClaims);
     // A VFX-tier skin's emissive derive mutates its payload materials in place,
     // so give each payload exclusive clones BEFORE the caster snapshot: the
     // shared tinted-material cache must never carry derived state (two players
@@ -1460,12 +2449,20 @@ export class CharacterVisual {
       }
     }
     // the model graph changed (weapon meshes added/removed): rebuild the caster
-    // list and re-snapshot originals, then re-apply ghost/stealth overlays.
-    this.originalMaterials.clear();
+    // list and re-snapshot originals (rebuildCasters un-applies live overlays
+    // first, so a stealthed equip never bakes the ghost material in).
     this.rebuildCasters();
     this.applyVisualMaterials();
     this.buildWeaponVfx(payloads);
     this.rebuildWeaponAura();
+    this.rebuildTemplarsVerdictFx();
+  }
+
+  private rebuildTemplarsVerdictFx(): void {
+    this.templarsVerdictFx?.dispose();
+    this.templarsVerdictFx =
+      this.key === 'player_paladin' ? new PaladinTemplarsVerdictFx(this.model) : null;
+    this.templarsVerdictAction = null;
   }
 
   /** Hold the imbued-weapon overlay in `colorHex` (null clears it). Driven per
@@ -1481,15 +2478,59 @@ export class CharacterVisual {
     this.rebuildWeaponAura();
   }
 
+  /** Structural weapon/body presentation (Stonebound's stone shell + armor
+   *  shards). Orthogonal to the imbue COLOR overlay above: a shaman can carry
+   *  both, so they are separate channels that both feed rebuildWeaponAura. */
+  setWeaponAuraMode(mode: WeaponAuraMode): void {
+    if (mode === this.weaponAuraMode) return;
+    this.weaponAuraMode = mode;
+    this.rebuildWeaponAura();
+  }
+
   private rebuildWeaponAura(): void {
     this.disposeWeaponAura();
-    if (this.weaponAuraColor === null) return;
-    const auraColor = this.weaponAuraColor;
+    const stonebound = this.weaponAuraMode === 'stonebound';
+    if (this.weaponAuraColor === null && !stonebound) return;
 
     const weaponHolders: THREE.Object3D[] = [];
     this.model.traverse((o) => {
       if (o.userData.swapWeaponHolder) weaponHolders.push(o);
     });
+
+    // Structural channel: Stonebound sheathes EVERY held weapon in a wireframe
+    // stone shell and plates the body with shards. Independent of the imbue
+    // color below, which only ever soaks the mainhand.
+    if (stonebound) {
+      for (const holder of weaponHolders) {
+        holder?.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh || !mesh.userData.weaponMesh || !mesh.parent) return;
+          const aura = new THREE.Mesh(
+            mesh.geometry,
+            new THREE.MeshBasicMaterial({
+              color: 0x9a9384,
+              transparent: true,
+              opacity: 0.72,
+              depthWrite: false,
+              blending: THREE.NormalBlending,
+              side: THREE.DoubleSide,
+              wireframe: true,
+            }),
+          );
+          aura.position.copy(mesh.position);
+          aura.quaternion.copy(mesh.quaternion);
+          aura.scale.copy(mesh.scale).multiplyScalar(1.14);
+          aura.renderOrder = 3;
+          aura.userData.weaponVfxMesh = true;
+          mesh.parent.add(aura);
+          this.weaponAuraMeshes.push(aura);
+        });
+      }
+      this.buildStoneboundArmorShards();
+    }
+
+    if (this.weaponAuraColor === null) return;
+    const auraColor = this.weaponAuraColor;
     const mainhand = weaponHolders.find((o) => o.userData.heldSlot === 0) ?? weaponHolders[0];
     if (!mainhand) return;
     mainhand.traverse((o) => {
@@ -1500,10 +2541,8 @@ export class CharacterVisual {
         tipGeometry ?? mesh.geometry,
         new THREE.MeshBasicMaterial({
           // Additive translucent clone of the weapon mesh in the spec-authored
-          // soak color (sanguine_aura keeps its established bright blood red;
-          // the shaman imbues author their own warm/icy hues). Brightness
-          // class is fixed here - only the hue is data. Tip scope rides a
-          // vertex-alpha ramp baked into the cloned geometry.
+          // soak color. Brightness class is fixed here; only the hue is data.
+          // Tip scope rides a vertex-alpha ramp baked into the cloned geometry.
           color: auraColor,
           transparent: true,
           opacity: 0.42,
@@ -1524,6 +2563,33 @@ export class CharacterVisual {
     });
   }
 
+  private buildStoneboundArmorShards(): void {
+    const placements = [
+      { x: -0.42, y: this.height * 0.7, z: 0, sx: 0.2, sy: 0.13, rz: -0.35 },
+      { x: 0.42, y: this.height * 0.7, z: 0, sx: 0.2, sy: 0.13, rz: 0.35 },
+      { x: 0, y: this.height * 0.53, z: 0.2, sx: 0.24, sy: 0.18, rz: 0 },
+    ];
+    for (const placement of placements) {
+      const shard = new THREE.Mesh(
+        STONEBOUND_SHARD_GEOMETRY,
+        new THREE.MeshBasicMaterial({
+          color: 0x777065,
+          transparent: true,
+          opacity: 0.82,
+          wireframe: true,
+          depthWrite: false,
+        }),
+      );
+      shard.position.set(placement.x, placement.y, placement.z);
+      shard.rotation.z = placement.rz;
+      shard.scale.set(placement.sx, placement.sy, 0.11);
+      shard.renderOrder = 3;
+      shard.userData.weaponVfxMesh = true;
+      this.poseWrap.add(shard);
+      this.weaponAuraMeshes.push(shard);
+    }
+  }
+
   private disposeWeaponAura(): void {
     for (const mesh of this.weaponAuraMeshes) {
       mesh.removeFromParent();
@@ -1540,16 +2606,46 @@ export class CharacterVisual {
     return skin ? (WEAPON_VFX[skin.model] ?? null) : null;
   }
 
+  /**
+   * Whether a point-light budget owns this rig's weapon-skin light.
+   *
+   * TRUE only in the world, where the renderer reconciles the light into its
+   * fixed budget: born visible there, it would be counted for the frames before
+   * the first budget pass, and that changed numPointLights relinks every
+   * material drawn in them. `createCharacterVisual` sets it.
+   *
+   * FALSE for a rig built directly (the armoury preview, the character screen).
+   * Those own their renderer and scene and have NO budget, so nothing would ever
+   * turn the light back on: the skin's cast glow is the product on a cosmetics
+   * surface, and it must light immediately.
+   *
+   * A FIELD rather than a constructor argument, so it must be set before the
+   * rig attaches a weapon. That holds today because `buildWeaponVfx` is only
+   * reached from `finishWeaponAttach`, which runs from async model-load
+   * continuations and the runtime re-attach paths, never synchronously from the
+   * constructor. A future synchronous attach in the constructor would silently
+   * miss the flag; the ordering at the one world call site is pinned by
+   * tests/weapon_vfx_rig_build.test.ts.
+   */
+  budgetedWeaponLight = false;
+
   /** Attach the skin's rarity VFX rig to each held payload (in-hand mode: no
    *  backdrop dome, no ground pool; emissive + particles ride the weapon). */
   private buildWeaponVfx(payloads: THREE.Object3D[]): void {
     const skin = this.weaponSkinId ? WEAPON_SKINS[this.weaponSkinId] : null;
     const spec = skin ? (WEAPON_VFX[skin.model] ?? null) : null;
     if (!skin || !spec) return;
+    // The authored row is the rig's 1.0 look; the shed lever below re-derives
+    // from it, so it must be kept rather than only pushed once.
+    this.weaponVfxAuthored = weaponVfxTuningFor(skin.model, spec.tier);
+    this.weaponVfxShed = 1;
     for (const payload of payloads) {
-      const handle = createWeaponVfx(payload, spec, { grounded: false });
+      const handle = createWeaponVfx(payload, spec, {
+        grounded: false,
+        budgetedLight: this.budgetedWeaponLight,
+      });
       handle.setBackdropVisible(false);
-      handle.setTuning(weaponVfxTuningFor(skin.model, spec.tier));
+      handle.setTuning(this.weaponVfxAuthored);
       handle.setPixelScale(weaponVfxViewportHeight * this.weaponVfxSpriteScale);
       // Tag the rig's own scene nodes: applyMaterials must never tint its
       // ShaderMaterials and the shadow pass has no business with sprite shells.
@@ -1572,10 +2668,45 @@ export class CharacterVisual {
 
   /** Advance the weapon-skin VFX (shader time, pulse, flicker). Cheap no-op
    *  without an active skin; the renderer calls it once per entity per frame.
-   *  Also re-pins bow payload orientation (see reattachHeldWeapon). */
-  updateWeaponVfx(dt: number): void {
+   *  Also re-pins bow payload orientation (see reattachHeldWeapon).
+   *
+   *  `shed` is the rig-strength multiplier from `weaponVfxShedScale` (viewer
+   *  distance plus the frame-budget governor's vfx lever); 1 is the authored
+   *  look. It only ever DIMS; what removes a rig is the far-LOD swap below.
+   *
+   *  The rig's point light deliberately keeps its `visible` flag at every
+   *  scale: three counts visible point lights into every lit material's program
+   *  cache key, so clearing one mid-flight is the open-world recompile freeze.
+   *  Dimming drives its intensity down instead, which is the look without the
+   *  hazard. */
+  updateWeaponVfx(dt: number, shed = 1): void {
     this.applySkinOrientation(dt);
+    if (this.weaponVfx.length === 0) return;
+    // A rig that the far-LOD swap has taken off screen still cost a full tick
+    // of uniform writes, emissive pulse and light flicker every frame, for
+    // something no pixel can show: `setFar` hides `modelWrap`, and a held
+    // weapon (with its rig) hangs off a bone INSIDE it.
+    //
+    // Gated on the far mesh ACTUALLY standing in (farMeshShown), not on `far`
+    // alone, and that is the load-bearing half: `setFar` leaves `modelWrap`
+    // VISIBLE when there is no baked mesh, or one whose materials are still
+    // linking behind the compile gate, while `isFar` reads true either way.
+    // Skipping on `far` alone would freeze a rig that is still drawing,
+    // leaving its motes hanging in the air and its light stuck at whatever
+    // the last flicker wrote.
+    if (farMeshShown(this.far, this.farMesh !== null, this.farCompilePending)) return;
+    this.applyWeaponVfxShed(shed);
     for (const handle of this.weaponVfx) handle.update(dt);
+  }
+
+  // Write-elided: setTuning walks every part and rewrites its materials, so the
+  // quantized scale is compared first and an unchanged frame costs nothing.
+  private applyWeaponVfxShed(shed: number): void {
+    const next = Number.isFinite(shed) ? Math.min(1, Math.max(0, shed)) : 1;
+    if (next === this.weaponVfxShed) return;
+    this.weaponVfxShed = next;
+    scaleWeaponVfxTuning(this.weaponVfxAuthored, next, this.weaponVfxTuningScratch);
+    for (const handle of this.weaponVfx) handle.setTuning(this.weaponVfxTuningScratch);
   }
 
   /** Blend pinned skin payloads between the authored grip glue and their
@@ -1583,9 +2714,20 @@ export class CharacterVisual {
    *  bow-slot gun to GUN_CARRY_QUAT everywhere BUT the shot (and never while
    *  dead: a corpse's weapon just lies with the hand). Position always follows
    *  the hand. No-op without pinned payloads. */
+  /** The live one-shot's kind for the aim pin. Derived rather than stored as a
+   *  third latch, so it cannot drift out of step with currentIsOneShot. */
+  private currentOneShotKind(): OneShotKind {
+    if (!this.currentIsOneShot) return null;
+    if (this.currentOneShotIsEmote) return 'emote';
+    return this.currentOneShotIsAttack ? 'attack' : 'other';
+  }
+
   private applySkinOrientation(dt: number): void {
     if (this.orientPins.length === 0) return;
-    const shot = this.currentIsOneShot && !this.currentOneShotIsEmote;
+    // "Is this character shooting", asked properly: the attack one-shot (the
+    // release) or an active cast (the draw of a cast-time shot). A hit react is
+    // a one-shot and is NOT shooting; see rangedSkinAiming.
+    const shot = rangedSkinAiming(this.currentOneShotKind(), this.castingAbility);
     const step = dt / BOW_PIN_BLEND_S;
     this.root.getWorldQuaternion(BOW_Q_ROOT);
     for (const entry of this.orientPins) {
@@ -1628,19 +2770,35 @@ export class CharacterVisual {
     disposeOwnedWeaponSkinMaterials(this.model, this.originalMaterials, [
       this.ghostMaterials,
       this.soulRendMaterials,
+      this.shadowformMaterials,
+      this.moonkinMaterials,
+      this.runeTintMaterials,
       this.auraGlowMaterials,
     ]);
   }
 
   private disposeEffectMaterials(): void {
+    // The scratch set wears clones this sweep is about to dispose, so they are
+    // dropped WITHOUT being recorded as linked (a disposed program is not one).
+    this.dropPendingEffectSwap(false);
     const materials = new Set<THREE.Material>([
       ...this.ghostMaterials.values(),
       ...this.soulRendMaterials.values(),
+      ...this.shadowformMaterials.values(),
+      ...this.moonkinMaterials.values(),
+      ...this.ferocityMaterials.flatMap((cache) => [...cache.values()]),
+      ...this.ascensionMaterials.values(),
+      ...this.runeTintMaterials.values(),
       ...this.auraGlowMaterials.values(),
     ]);
     for (const material of materials) material.dispose();
     this.ghostMaterials.clear();
     this.soulRendMaterials.clear();
+    this.shadowformMaterials.clear();
+    this.moonkinMaterials.clear();
+    for (const cache of this.ferocityMaterials) cache.clear();
+    this.ascensionMaterials.clear();
+    this.runeTintMaterials.clear();
     this.auraGlowMaterials.clear();
   }
 
@@ -1706,6 +2864,13 @@ export class CharacterVisual {
   /** Rebuild the shadow-caster list and original-material snapshot after the model
    *  graph changes (a weapon swap adds/removes bone-child meshes). */
   private rebuildCasters(): void {
+    // Un-apply any live effect overlay (ghost, soul rend, tints) BEFORE the
+    // snapshot: equipping a weapon while stealthed otherwise captures the
+    // ghost clone as a mesh's "original", and the character stays translucent
+    // forever after leaving stealth (owner playtest: /dev bis inside
+    // Duskveil). Restore from the pre-rebuild map first, then recapture.
+    for (const [mesh, original] of this.originalMaterials) mesh.material = original;
+    this.originalMaterials.clear();
     this.casters.length = 0;
     this.model.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -1728,24 +2893,47 @@ export class CharacterVisual {
 
   dispose(): void {
     this.disposed = true;
+    this.bastionSweepFx?.dispose();
+    this.bastionSweepFx = null;
+    this.bastionSweepAction = null;
+    this.templarsVerdictFx?.dispose();
+    this.templarsVerdictFx = null;
+    this.templarsVerdictAction = null;
     this.disposeWeaponAura();
     this.disposeWeaponVfx();
     this.disposeWeaponSkinMaterials();
     this.disposeEffectMaterials();
+    // Release the shared tinted-material leases (never disposing directly:
+    // another visual may still mount the same clones; the shared cache
+    // disposes an entry only once nothing claims it). Cleared so a double
+    // dispose cannot release another visual's claims.
+    releaseTintedMaterials(this.tintedRigClaims);
+    this.tintedRigClaims.clear();
+    releaseTintedMaterials(this.tintedFarClaims);
+    this.tintedFarClaims.clear();
+    this.dropPendingFarMaterials();
+    this.dropPendingEffectSwap(false);
     this.mixer.stopAllAction();
     this.mixer.uncacheRoot(this.model);
     this.skeletonUpdates.dispose();
     this.root.removeFromParent();
     // SkeletonUtils.clone gives each instance exclusive Skeletons whose GPU
     // bone textures the renderer allocates lazily, release them here or
-    // online interest churn strands one per despawned entity. Geometries and
-    // materials remain shared per-asset caches and are never disposed.
+    // online interest churn strands one per despawned entity. Geometries
+    // remain shared per-asset caches and are never disposed; shared tinted
+    // materials were claim-released above and dispose through the bounded
+    // cache once no visual mounts them.
     const skeletons = new Set<THREE.Skeleton>();
     this.model.traverse((o) => {
       const sm = o as THREE.SkinnedMesh;
       if (sm.isSkinnedMesh && sm.skeleton) skeletons.add(sm.skeleton);
     });
     for (const skeleton of skeletons) skeleton.dispose();
+    // Give the composed part set back. It is the one shared cache entry that IS
+    // reclaimable: keyed by the look rather than by the asset, so a populated
+    // zone mints one per distinct character and would otherwise grow for the
+    // life of the session. No-op for a fixed rig.
+    releaseModularVariant(this.model);
   }
 
   // -------------------------------------------------------------------------
@@ -1757,7 +2945,19 @@ export class CharacterVisual {
     // every player ClipMap names walkBack, but baseAction() silently falls back
     // to walk when the GLB lacks it, and the machine would then hold a state
     // nothing is playing.
-    return desiredBaseState(s, !!this.action(this.def.clips.walkBack));
+    //
+    // Wading is the same rule seen from the other side: a rig with no wade
+    // cycle (every mob and NPC) must not enter the state at all, or it would
+    // play its dry walk at the WADE clip's tempo — the fallback covers the pose
+    // but nothing covers the timing.
+    // Passed as a flag rather than a doctored copy of `s`: this runs per entity
+    // per frame, and the copy allocated a fresh object every frame for every
+    // rig with no wade clip standing in a ford.
+    return desiredBaseState(
+      s,
+      !!this.action(this.def.clips.walkBack),
+      !!this.action(this.def.clips.wade),
+    );
   }
 
   /** Refill the weight scratch from the live mixer (see `weightScan`). */
@@ -1794,25 +2994,95 @@ export class CharacterVisual {
     this.fadeTo(this.baseAction(), FADE, false);
   }
 
+  private baseTransitionFade(next: BaseState): number {
+    // A winged form without an authored Jump clip must leave its locomotion
+    // stride almost immediately. The normal crossfade preserves too much of a
+    // forward-leaning Run pose after takeoff and reads as a frozen leap.
+    return this.key === 'form_metamorph' && next === 'jump' ? 0.04 : FADE;
+  }
+
   private effectMaterial<T extends THREE.Material | THREE.Material[]>(material: T): T {
     if (Array.isArray(material)) return material.map((m) => this.effectSingleMaterial(m)) as T;
     return this.effectSingleMaterial(material) as T;
   }
 
+  // Every overlay cache below clones the rig's live material. They all go
+  // through cloneMaterialWithHooks for the reason material_clone_hooks.ts
+  // spells out: a bare clone() drops onBeforeCompile, so it renders WITHOUT
+  // the rim glow, the worn detail layer and the player's armour dye (a dyed
+  // set reverting to its base colours the moment the character ghosts, goes
+  // shadowform, or shifts to moonkin), and it links a second program on its
+  // first draw because three keys its cache on customProgramCacheKey().
   private effectSingleMaterial(material: THREE.Material): THREE.Material {
     // Death treatments (soul rend, ghost run) win over the shapeshift tints.
     if (this.soulRend) return this.soulRendMaterial(material);
     if (this.ghosted) return this.ghostMaterial(material);
-    if (this.metamorph) return this.metamorphMaterial(material);
     if (this.moonkin) return this.moonkinMaterial(material);
     if (this.shadowform) return this.shadowformMaterial(material);
+    if (this.ferocityStage > 0) return this.ferocityMaterial(material, this.ferocityStage);
+    if (this.ascended) return this.ascensionMaterial(material);
+    if (this.runeTint !== null) return this.runeTintMaterial(material, this.runeTint);
     // lowest priority: the ability VFX buff/cast body glow
     if (this.auraGlowIntensity > 0.01) return this.auraGlowMaterial(material);
     return material;
   }
 
+  private ferocityMaterial(material: THREE.Material, stage: number): THREE.Material {
+    const index = Math.min(2, Math.max(0, stage - 1));
+    const cache = this.ferocityMaterials[index];
+    const cached = cache.get(material);
+    if (cached) return cached;
+    const marked = cloneMaterialWithHooks(material);
+    const withColor = marked as THREE.Material & {
+      color?: THREE.Color;
+      emissive?: THREE.Color;
+      emissiveIntensity?: number;
+    };
+    if (withColor.color) {
+      withColor.color.lerp(FEROCITY_TINTS[index], FEROCITY_TINT_STRENGTH[index]);
+    }
+    if (withColor.emissive) {
+      withColor.emissive.setHex(FEROCITY_EMISSIVE[index]);
+      withColor.emissiveIntensity = Math.max(
+        withColor.emissiveIntensity ?? 0,
+        FEROCITY_EMISSIVE_STRENGTH[index],
+      );
+    }
+    cache.set(material, marked);
+    return marked;
+  }
+
+  private runeTintMaterial(material: THREE.Material, tint: number): THREE.Material {
+    const cached = this.runeTintMaterials.get(material);
+    if (cached && cached.userData.runeTintHex === tint) return cached;
+    // Chained to a different rune color: replace the clone and dispose the
+    // old one. Safe because every runeTintMaterial call happens inside an
+    // applyVisualMaterials sweep, and a tint change reaches here only while
+    // that sweep is rewriting every mount of the old clone (same synchronous
+    // pass, no render in between), so disposal lands exactly as the material
+    // is unmounted, and the map stays at one clone per source instead of one
+    // per (source, color) forever.
+    cached?.dispose();
+    const marked = cloneMaterialWithHooks(material);
+    marked.userData.runeTintHex = tint;
+    const withColor = marked as THREE.Material & {
+      color?: THREE.Color;
+      emissive?: THREE.Color;
+      emissiveIntensity?: number;
+    };
+    // "Very slight": lean the base color toward the rune color and add a low
+    // emissive of the same hue so the read survives bright daylight floors.
+    if (withColor.color) withColor.color.lerp(new THREE.Color(tint), 0.3);
+    if (withColor.emissive) {
+      withColor.emissive.setHex(tint);
+      withColor.emissiveIntensity = 0.18;
+    }
+    this.runeTintMaterials.set(material, marked);
+    return marked;
+  }
+
   private ghostMaterial(material: THREE.Material): THREE.Material {
-    const opacity = this.ghostStyle === 'stealth' ? STEALTH_OPACITY : GHOST_OPACITY;
+    const opacity = ghostEffectOpacity(this.ghostStyle);
     const cached = this.ghostMaterials.get(material);
     if (cached) {
       // one cache serves both flavors; rewrite the opacity on style flips
@@ -1820,14 +3090,7 @@ export class CharacterVisual {
       cached.opacity = opacity;
       return cached;
     }
-    const ghost = material.clone();
-    ghost.transparent = true;
-    ghost.opacity = opacity;
-    // depthWrite stays ON: with it off the whole rig depth-blends against
-    // itself, so back faces and far limbs shine through the chest - the x-ray
-    // the owner reported on Duskveil. Writing depth lets nearer faces occlude
-    // farther ones and the body reads as one uniformly faded silhouette.
-    ghost.depthWrite = true;
+    const ghost = createGhostEffectMaterial(material, this.ghostStyle);
     this.ghostMaterials.set(material, ghost);
     return ghost;
   }
@@ -1835,20 +3098,7 @@ export class CharacterVisual {
   private soulRendMaterial(material: THREE.Material): THREE.Material {
     const cached = this.soulRendMaterials.get(material);
     if (cached) return cached;
-    const marked = material.clone();
-    marked.transparent = true;
-    marked.opacity = SOUL_REND_OPACITY;
-    marked.depthWrite = false;
-    const withColor = marked as THREE.Material & {
-      color?: THREE.Color;
-      emissive?: THREE.Color;
-      emissiveIntensity?: number;
-    };
-    if (withColor.color) withColor.color.copy(SOUL_REND_TINT);
-    if (withColor.emissive) {
-      withColor.emissive.setHex(0x2a0000);
-      withColor.emissiveIntensity = Math.max(withColor.emissiveIntensity ?? 0, 0.35);
-    }
+    const marked = applySoulRendOverlay(material);
     this.soulRendMaterials.set(material, marked);
     return marked;
   }
@@ -1856,20 +3106,7 @@ export class CharacterVisual {
   private shadowformMaterial(material: THREE.Material): THREE.Material {
     const cached = this.shadowformMaterials.get(material);
     if (cached) return cached;
-    const marked = material.clone();
-    marked.transparent = true;
-    marked.opacity = SHADOWFORM_OPACITY;
-    marked.depthWrite = true;
-    const withColor = marked as THREE.Material & {
-      color?: THREE.Color;
-      emissive?: THREE.Color;
-      emissiveIntensity?: number;
-    };
-    if (withColor.color) withColor.color.copy(SHADOWFORM_TINT);
-    if (withColor.emissive) {
-      withColor.emissive.setHex(0x2a0a4a);
-      withColor.emissiveIntensity = Math.max(withColor.emissiveIntensity ?? 0, 0.4);
-    }
+    const marked = createShadowformEffectMaterial(material);
     this.shadowformMaterials.set(material, marked);
     return marked;
   }
@@ -1877,42 +3114,26 @@ export class CharacterVisual {
   private moonkinMaterial(material: THREE.Material): THREE.Material {
     const cached = this.moonkinMaterials.get(material);
     if (cached) return cached;
-    const marked = material.clone();
-    marked.transparent = true;
-    marked.opacity = MOONKIN_OPACITY;
-    marked.depthWrite = true;
-    const withColor = marked as THREE.Material & {
-      color?: THREE.Color;
-      emissive?: THREE.Color;
-      emissiveIntensity?: number;
-    };
-    if (withColor.color) withColor.color.copy(MOONKIN_TINT);
-    if (withColor.emissive) {
-      withColor.emissive.setHex(0x6a3fd0);
-      withColor.emissiveIntensity = Math.max(withColor.emissiveIntensity ?? 0, 0.55);
-    }
+    const marked = createMoonkinEffectMaterial(material);
     this.moonkinMaterials.set(material, marked);
     return marked;
   }
 
-  private metamorphMaterial(material: THREE.Material): THREE.Material {
-    const cached = this.metamorphMaterials.get(material);
+  private ascensionMaterial(material: THREE.Material): THREE.Material {
+    const cached = this.ascensionMaterials.get(material);
     if (cached) return cached;
-    const marked = material.clone();
+    const marked = cloneMaterialWithHooks(material);
     const withColor = marked as THREE.Material & {
       color?: THREE.Color;
       emissive?: THREE.Color;
       emissiveIntensity?: number;
     };
-    if (withColor.color) withColor.color.copy(METAMORPH_TINT);
+    if (withColor.color) withColor.color.lerp(ASCENSION_TINT, 0.38);
     if (withColor.emissive) {
-      withColor.emissive.setHex(0x7a1abf);
-      // Set, don't floor: the source materials ship emissiveIntensity 1 (with a
-      // black emissive color), so a Math.max floor keeps full-strength glow and
-      // the body renders as flat neon, drowning the fire aura and all shading.
-      withColor.emissiveIntensity = 0.35;
+      withColor.emissive.setHex(0x9d690e);
+      withColor.emissiveIntensity = 0.48;
     }
-    this.metamorphMaterials.set(material, marked);
+    this.ascensionMaterials.set(material, marked);
     return marked;
   }
 
@@ -1930,15 +3151,40 @@ export class CharacterVisual {
       case 'run':
         return this.action(c.run) ?? this.action(c.walk);
       case 'cast':
-        return this.action(c.cast) ?? this.action(c.idle);
+        // A displayed bow holds its draw here instead of the shared caster
+        // gesture; every other weapon keeps the rig's authored cast.
+        return (
+          this.action(weaponSkinCastClip(this.weaponSkinId, this.castingAbility) ?? undefined) ??
+          this.action(c.cast) ??
+          this.action(c.idle)
+        );
       case 'spin':
         return this.action(c.attack[0]) ?? this.action(c.idle);
       case 'swim':
         return this.action(c.swim) ?? this.action(c.idle);
+      case 'swimSurface':
+        // Rigs with one swim clip (creatures, and any body that never loaded
+        // the authored lane) swim it at every depth.
+        return this.action(c.swimSurface) ?? this.action(c.swim) ?? this.action(c.idle);
+      case 'swimIdle':
+        // No tread clip = keep stroking on the spot, which is what every rig
+        // did before the tread existed.
+        return (
+          this.action(c.swimIdle) ??
+          this.action(c.swimSurface) ??
+          this.action(c.swim) ??
+          this.action(c.idle)
+        );
+      case 'wade':
+        return this.action(c.wade) ?? this.action(c.walk) ?? this.action(c.idle);
       case 'sit':
         return this.action(c.sitDown) ?? this.action(c.sitIdle) ?? this.action(c.idle);
       case 'jump':
         return this.action(c.jump) ?? this.action(c.idle);
+      case 'fall':
+        // Rigs without the authored flail (mobs, creatures) hold the jump
+        // pose for the whole fall, which is what every rig did before it.
+        return this.action(c.fall) ?? this.action(c.jump) ?? this.action(c.idle);
       default:
         return this.action(c.idle);
     }
@@ -1975,11 +3221,44 @@ export class CharacterVisual {
     prev: THREE.AnimationAction | null,
     fade: number,
   ): void {
+    // A transition can interrupt a crossfade still in flight (the stow gesture
+    // racing the waterline's base-state edge is the common case: auto-sheathe
+    // fires the moment the swim latch flips). The action that was FADING IN at
+    // that moment is neither `next` nor `prev`, so the pairwise fade below
+    // never touches it — its scheduled ramp completes and a full-weight loop
+    // is left running under every later pose. That is the "swims in mid-air /
+    // glitched swimming after jumping in from a cliff" bug. Sweep every other
+    // unpaused running action out whenever a new transition starts; the climb
+    // overlay actions run PAUSED (scrubbed by phase) and are never touched.
+    //
+    // stop(), NOT fadeOut(). `fadeOut(d)` is `_scheduleFading(d, 1, 0)`, and
+    // _updateWeight MULTIPLIES the interpolant by `this.weight`, so fading out
+    // an action caught mid-fade-in at 0.05 first RESTORES it to full weight for
+    // the frame and only then decays it: the sweep would trade a stuck loop for
+    // a full-weight flash of the stale pose, with a WATER_FADE-long tail on
+    // exactly the shoreline transitions this exists to fix. setEffectiveWeight(0)
+    // is worse still, since it zeroes `this.weight` permanently and every later
+    // fadeIn multiplies by that zero. stop() deactivates and reset()s (which
+    // stopFading()s) without touching weight, and the pairwise fade below keeps
+    // the scheduled total at 1, so the rig never dips toward BIND pose.
+    for (const a of this.actions.values()) {
+      if (a === next || a === prev || a.paused || !a.isRunning()) continue;
+      a.stop();
+    }
     if (prev && prev !== next && drivesPose(readActionWeight(prev))) {
       prev.fadeOut(fade);
       next.fadeIn(fade).play();
       return;
     }
+    // A prev below the pose-drive threshold still needs its scheduled fades
+    // cancelled: it is excluded from the sweep above (as prev) and from the
+    // crossfade (below threshold), so a fade-in it was carrying would
+    // otherwise complete underneath the snap and loop at full weight.
+    // stop() for the same reason as the sweep, and doubly here: this branch
+    // exists to SNAP, and fading a near-dead prev out from weight 1 would blend
+    // it ~50/50 against the snapped `next` for the whole fade, the opposite of
+    // what the docblock above promises.
+    if (prev && prev !== next && !prev.paused && prev.isRunning()) prev.stop();
     next.setEffectiveWeight(1);
     next.play();
   }
@@ -1991,7 +3270,12 @@ export class CharacterVisual {
    *  looping `jump` unchanged. */
   private isOnce(a: THREE.AnimationAction): boolean {
     if (this.baseState === 'sit') return a === this.action(this.def.clips.sitDown);
-    if (this.baseState === 'jump' && this.def.clips.land)
+    // 'fall' counts as well as 'jump'. A rig with no authored flail resolves
+    // `fall` back to its jump clip (baseAction), so keying this on 'jump' alone
+    // meant a long fall silently LOOPED the pose a short hop clamps. The check
+    // is on the resolved ACTION, so a rig that does ship a flail is unaffected:
+    // its fall action is not the jump action, and the flail loops as intended.
+    if ((this.baseState === 'jump' || this.baseState === 'fall') && this.def.clips.land)
       return a === this.action(this.def.clips.jump);
     return false;
   }
@@ -2002,8 +3286,11 @@ export class CharacterVisual {
     repeats = 1,
     emoteId: OverheadEmoteId | null = null,
   ): void {
+    this.currentOneShotIsAttack = false;
     const a = this.action(name);
     if (!a) return;
+    if (name !== PALADIN_TEMPLARS_VERDICT_CLIP) this.stopTemplarsVerdictFx();
+    if (name !== PALADIN_BASTION_SWEEP_CLIP) this.stopBastionSweepFx();
     const prev = this.current;
     // reset (not stop) restarts the clip in place: stopping the clip that is
     // ALREADY driving the rig, then fading it back in from zero with no
@@ -2024,6 +3311,8 @@ export class CharacterVisual {
   }
 
   private onFinished(a: THREE.AnimationAction): void {
+    if (a === this.templarsVerdictAction) this.stopTemplarsVerdictFx();
+    if (a === this.bastionSweepAction) this.stopBastionSweepFx();
     if (this.deadLock) return; // death clip clamps on its last frame
     if (this.baseState === 'sit' && a === this.action(this.def.clips.sitDown)) {
       this.fadeTo(this.action(this.def.clips.sitIdle) ?? a, 0.25, false);
@@ -2057,6 +3346,8 @@ export class CharacterVisual {
   }
 
   private enterDeath(): void {
+    this.stopTemplarsVerdictFx();
+    this.stopBastionSweepFx();
     this.deadLock = true;
     this.currentIsOneShot = false;
     this.currentOneShotIsEmote = false;
@@ -2097,6 +3388,16 @@ export class CharacterVisual {
     }
     this.beginAction(death, prev, ONESHOT_FADE);
     this.current = death;
+  }
+
+  private stopTemplarsVerdictFx(): void {
+    this.templarsVerdictAction = null;
+    this.templarsVerdictFx?.update(null, 0);
+  }
+
+  private stopBastionSweepFx(): void {
+    this.bastionSweepAction = null;
+    this.bastionSweepFx?.update(null, 0);
   }
 
   private revive(): void {
@@ -2140,7 +3441,11 @@ function clipNamesOf(def: VisualDef): string[] {
     c.sitDown,
     c.sitIdle,
     c.swim,
+    c.swimSurface,
+    c.swimIdle,
+    c.wade,
     c.jump,
+    c.fall,
     c.land,
     c.walkBack,
     c.flourish,

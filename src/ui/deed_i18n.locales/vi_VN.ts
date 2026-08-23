@@ -7,6 +7,54 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  exp_dawnhold_castle: {
+    name: 'Cánh Cửa Mở Trong Vườn',
+    desc: 'Ghé thăm Lâu Đài Dawnhold và dạo quanh những sảnh vườn ngập nắng.',
+  },
+  exp_the_last_keep: {
+    name: 'Những Sảnh Đường Tĩnh Lặng',
+    desc: 'Bước qua cánh cửa Pháo Đài Cuối Cùng và dạo bước qua những sảnh đường tĩnh lặng.',
+  },
+  pvp_bg_first_capture: {
+    name: 'Cờ Trong Tay',
+    desc: 'Chiếm một lá cờ tại Cánh Đồng Trũng Gai.',
+  },
+  pvp_bg_first_win: {
+    name: 'Trũng Gai Vững Bền',
+    desc: 'Thắng một trận Cánh Đồng Trũng Gai.',
+  },
+  pvp_bg_wins_25: {
+    name: 'Người Trấn Giữ Trũng Gai',
+    desc: 'Thắng 25 trận Cánh Đồng Trũng Gai.',
+    title: 'Người Cầm Cờ',
+  },
+  pvp_bg_captures_100: {
+    name: 'Một Trăm Lá Cờ',
+    desc: 'Chiếm 100 lá cờ tại Cánh Đồng Trũng Gai trong suốt sự nghiệp của bạn.',
+  },
+  dgn_rift: {
+    name: 'Người Đi Xuyên Rạn Nứt',
+    desc: 'Dọn sạch một Rạn Nứt bằng cách đánh bại trùm của tầng đó.',
+  },
+  dgn_rift_s_rank: {
+    name: 'Quân Vương Rạn Nứt',
+    desc: 'Dọn sạch một Rạn Nứt hạng S, bậc khó nhất mà một cổng Rạn Nứt có thể sinh ra.',
+  },
+  pvp_honor_sergeant: {
+    name: 'Kẻ Phá Trận',
+    desc: 'Kiếm được 10.000 danh dự trong suốt cuộc đời nhân vật. Tiêu nó đi không bao giờ khiến bạn mất cấp bậc.',
+    title: 'Kẻ Phá Trận',
+  },
+  pvp_honor_knight_lieutenant: {
+    name: 'Kẻ Tàn Phá Chiến Trường',
+    desc: 'Kiếm được 40.000 danh dự trong suốt cuộc đời nhân vật, cả một mùa chiến tranh thực sự phía sau bạn.',
+    title: 'Kẻ Tàn Phá Chiến Trường',
+  },
+  pvp_honor_field_marshal: {
+    name: 'Vương Miện Chiến Tranh',
+    desc: 'Kiếm được 150.000 danh dự trong suốt cuộc đời nhân vật. Hiếm có trên bất kỳ vương quốc nào, và nó nên như vậy.',
+    title: 'Vương Miện Chiến Tranh',
+  },
   chr_drakemaw_broodlord: {
     name: 'Kẻ Phá Vỡ Ổ Trứng',
     desc: 'Hạ gục một Lãnh Chúa Bầy Drakemaw giữa bầy trứng của nó, vượt qua tiếng gầm, đòn chém bổ, và ngọn lửa.',
@@ -14,6 +62,54 @@ export const table: DeedLocaleTable = {
   chr_maw_matriarch: {
     name: 'Bầu Trời Lặng Yên',
     desc: 'Hạ gục Cindraleth Mẫu Chúa Hàm trong tổ miệng núi lửa của nó, phía trên Drakemaw.',
+  },
+  chr_frostveil_gatherer: {
+    name: 'Thu hoach tren ruong bac thang',
+    desc: 'Thu hoach mot mach quang, mot vung go va mot luong thao moc o Frostveil.',
+  },
+  chr_frostveil_first_cast: {
+    name: 'Lop bang dau tren ho nho',
+    desc: 'Cau mot con ca trong vung nuoc Frostveil.',
+  },
+  chr_amberfall_gatherer: {
+    name: 'Vu thu hoach Amberfall',
+    desc: 'Thu hoach mot mach quang, mot vung go va mot luong thao moc o Amberfall.',
+  },
+  chr_amberfall_first_cast: {
+    name: 'Me ca tu dam lon',
+    desc: 'Cau mot con ca trong vung nuoc Amberfall.',
+  },
+  chr_nightbloom_gatherer: {
+    name: 'Vu thu hoach mong mo',
+    desc: 'Thu hoach mot mach quang, mot vung go va mot luong thao moc o Nightbloom.',
+  },
+  chr_nightbloom_first_cast: {
+    name: 'Gon song tren gieng trang',
+    desc: 'Cau mot con ca trong vung nuoc Nightbloom.',
+  },
+  chr_wraithwood_gatherer: {
+    name: 'Thu hoach duoi tan cay',
+    desc: 'Thu hoach mot mach quang, mot vung go va mot luong thao moc o Wraithwood.',
+  },
+  chr_wraithwood_first_cast: {
+    name: 'Lan cau trong vinh guong',
+    desc: 'Cau mot con ca trong vung nuoc Wraithwood.',
+  },
+  chr_palmreach_gatherer: {
+    name: 'Thu hoach tren bai co',
+    desc: 'Thu hoach mot mach quang, mot vung go va mot luong thao moc o Palmreach.',
+  },
+  chr_palmreach_first_cast: {
+    name: 'Tha cau o dam sapphire',
+    desc: 'Cau mot con ca trong vung nuoc Palmreach.',
+  },
+  chr_evergarden_gatherer: {
+    name: 'Loc cua vuon hoa',
+    desc: 'Thu hoach mot mach quang, mot vung go va mot luong thao moc o Evergarden.',
+  },
+  chr_evergarden_first_cast: {
+    name: 'Lan cau tren ao canh hoa',
+    desc: 'Cau mot con ca trong vung nuoc Evergarden.',
   },
   pvp_card_duel_first_win: {
     name: 'Luật Của Ta',
@@ -873,5 +969,77 @@ export const table: DeedLocaleTable = {
   chr_farshore_first_cast: {
     name: 'Điều Lũ Mòng Biển Biết',
     desc: 'Câu một con cá từ vùng nước của Bờ Biển Xa Xôi.',
+  },
+  prog_engineering_rare: {
+    name: 'Cơ Khí Chính Xác',
+    desc: 'Chế tạo vật phẩm hiếm đầu tiên trong Cơ Khí.',
+  },
+  prog_alchemy_rare: {
+    name: 'Rượu Vang Quý Hiếm',
+    desc: 'Chế tạo vật phẩm hiếm đầu tiên trong Giả Kim.',
+  },
+  prog_cooking_rare: {
+    name: 'Món Ăn Đáng Nhớ',
+    desc: 'Chế tạo vật phẩm hiếm đầu tiên trong Nấu Ăn.',
+  },
+  prog_leatherworking_rare: {
+    name: 'Thuộc Da Tinh Xảo',
+    desc: 'Chế tạo vật phẩm hiếm đầu tiên trong Thuộc Da.',
+  },
+  prog_tailoring_rare: {
+    name: 'Đường Kim Bậc Thầy',
+    desc: 'Chế tạo vật phẩm hiếm đầu tiên trong May Vá.',
+  },
+  prog_weaponcrafting_rare: {
+    name: 'Tôi Luyện Đến Sáng Bóng',
+    desc: 'Chế tạo vật phẩm hiếm đầu tiên trong Rèn Vũ Khí.',
+  },
+  prog_armorcrafting_rare: {
+    name: 'Mạ Đến Hoàn Hảo',
+    desc: 'Chế tạo vật phẩm hiếm đầu tiên trong Rèn Giáp.',
+  },
+  col_reliquary_rank_2: {
+    name: 'Người Giữ Chiến Lợi',
+    desc: 'Đạt cấp Quản Thủ 2 trong Kỳ Trân Các (10 kỳ trân độc nhất đã biên mục).',
+    title: 'Người Giữ Chiến Lợi',
+  },
+  col_reliquary_rank_3: {
+    name: 'Người Biên Mục',
+    desc: 'Đạt cấp Quản Thủ 3 trong Kỳ Trân Các (25 kỳ trân độc nhất đã biên mục).',
+    title: 'Người Biên Mục',
+  },
+  col_reliquary_rank_4: {
+    name: 'Đại Quản Thủ',
+    desc: 'Đạt cấp Quản Thủ 4 trong Kỳ Trân Các (50 kỳ trân độc nhất đã biên mục).',
+    title: 'Đại Quản Thủ',
+  },
+  col_reliquary_rank_5: {
+    name: 'Chiến Lợi Vĩnh Hằng',
+    desc: 'Đạt cấp Quản Thủ 5 trong Kỳ Trân Các (100 kỳ trân độc nhất đã biên mục).',
+  },
+  col_reliquary_complete: {
+    name: 'Đại Kỳ Trân Các',
+    desc: 'Biên mục mọi kỳ trân trong Kỳ Trân Các mà một nhân vật có thể giữ. Về sau mục lục có mở rộng cũng không bao giờ lấy lại điều đó.',
+    title: 'Quản Thủ Kho Báu',
+  },
+  col_reliquary_conquerors: {
+    name: 'Kệ Kẻ Chinh Phục',
+    desc: 'Biên mục mọi kỳ trân trên kệ Kẻ Chinh Phục của Kỳ Trân Các. Về sau mục lục có mở rộng cũng không bao giờ lấy lại điều đó.',
+    title: 'Kẻ Phá Kho Báu',
+  },
+  col_reliquary_illum_nythraxis_heroic: {
+    name: 'Nythraxis Rực Sáng',
+    desc: 'Làm rực sáng trang Anh Hùng: Raid Nythraxis của Kỳ Trân Các.',
+    title: 'Ánh Sáng Nythraxis',
+  },
+  col_reliquary_illum_thunzharr: {
+    name: 'Thunzharr Rực Sáng',
+    desc: 'Làm rực sáng trang Thunzharr, Đỉnh Núi Thức Giấc của Kỳ Trân Các.',
+    title: 'Ánh Sáng Thunzharr',
+  },
+  col_reliquary_illum_gravewyrm_heroic: {
+    name: 'Thánh Đường Rực Sáng',
+    desc: 'Làm rực sáng trang Anh Hùng: Thánh Đường Mộ Long của Kỳ Trân Các.',
+    title: 'Ánh Sáng Thánh Đường',
   },
 };

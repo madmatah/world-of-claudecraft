@@ -127,6 +127,38 @@ describe('DelveBoardController', () => {
     expect(test.focusFirst).toHaveBeenCalledWith('.delve-enter-btn');
   });
 
+  it('renders distinct Delve Mark placements for balance, companion upgrade, and shop price', () => {
+    const test = makeHarness();
+    test.controller.open(7);
+
+    const imageIdentity = (selector: string) => {
+      const matches = test.panel.querySelectorAll<HTMLImageElement>(selector);
+      expect(matches, selector).toHaveLength(1);
+      const image = matches[0];
+      return {
+        className: image.className,
+        src: image.getAttribute('src'),
+        alt: image.getAttribute('alt'),
+        draggable: image.getAttribute('draggable'),
+      };
+    };
+    const delveMarkIdentity = {
+      className: 'currency-inline currency-delve_mark',
+      src: '/ui/currency/delve_mark.webp',
+      alt: '',
+      draggable: 'false',
+    };
+
+    expect(imageIdentity('.delve-board-meta > img')).toEqual(delveMarkIdentity);
+    expect(imageIdentity('[data-companion-upgrade] > img')).toEqual(delveMarkIdentity);
+    expect(test.panel.querySelector('.delve-shop-price')).toBeNull();
+
+    test.panel.querySelector<HTMLButtonElement>('[data-board-tab="shop"]')?.click();
+    expect(imageIdentity('.delve-board-meta > img')).toEqual(delveMarkIdentity);
+    expect(imageIdentity('.delve-shop-price > img')).toEqual(delveMarkIdentity);
+    expect(test.panel.querySelector('[data-companion-upgrade]')).toBeNull();
+  });
+
   it('sends the selected heroic tier through IWorld and preloads the same interior event', () => {
     const test = makeHarness();
     test.controller.open(7);
@@ -183,6 +215,28 @@ describe('DelveBoardController', () => {
     expect(confirm.cancel).toBe('Cancel');
     // Dismissing the dialog (cancel/Escape never runs onOk) sends no command.
     expect(test.delveBuyShopItem).not.toHaveBeenCalled();
+  });
+
+  it('marks the panel a labeled dialog (accessible name, #2808)', () => {
+    const test = makeHarness();
+
+    test.controller.open(7);
+
+    expect(test.panel.getAttribute('role')).toBe('dialog');
+    expect(test.panel.getAttribute('aria-modal')).toBe('false');
+    expect(test.panel.getAttribute('tabindex')).toBe('-1');
+    expect(test.panel.getAttribute('aria-label')).toBe('Delve Board');
+    expect(test.panel.hasAttribute('aria-labelledby')).toBe(false);
+  });
+
+  it('keeps the same dialog name across a tab-switch rebuild', () => {
+    const test = makeHarness();
+    test.controller.open(7);
+
+    test.panel.querySelector<HTMLButtonElement>('[data-board-tab="shop"]')?.click();
+
+    expect(test.panel.getAttribute('role')).toBe('dialog');
+    expect(test.panel.getAttribute('aria-label')).toBe('Delve Board');
   });
 
   it('closes and restores focus if the authoritative NPC disappears', () => {

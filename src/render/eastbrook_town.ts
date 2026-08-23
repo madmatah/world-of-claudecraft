@@ -33,8 +33,17 @@ import {
 } from './eastbrook_town_visibility_core';
 import { indexExactVertexTuples } from './exact_index_geometry';
 import { EMISSIVE_GLOW, GFX, surfaceMat } from './gfx';
+import { cloneMaterialWithHooks } from './material_clone_hooks';
 import { applyOccluderFade, type OccluderFadeMat, occluderFadeMat } from './occluder_fade';
 import { occluderFadeSettled, stepOccluderFade } from './occluder_fade_core';
+import type { RevealGateCore } from './reveal_gate_core';
+import {
+  newTownPiecewiseReveal,
+  orderTownRootsNearestFirst,
+  townPiecewiseRevealInto,
+  townRootVisible,
+  townStaticReveal,
+} from './town_reveal_core';
 import { modulateEmissiveByVertexColor } from './vertex_color_emissive';
 
 const ROOT_NAME = 'eastbrookTownRebuild';
@@ -42,6 +51,8 @@ const FOUNDATION_OVERLAP = 0.03;
 const FOUNDATION_COLOR = 0x46505e;
 const TOWN_CULL_RADIUS =
   EASTBROOK_LAYOUT.wall.radius + EASTBROOK_LAYOUT.wall.maximumSegmentSpan / 2;
+/** The one reveal-gate key of the town's static content. */
+const STATIC_REVEAL_KEY = 'eastbrook-town-static';
 
 const NEW_ASSET_URLS = Object.freeze([
   ...EASTBROOK_LAYOUT.buildings.map((building) => building.assetId),
@@ -132,6 +143,15 @@ export interface EastbrookTownView {
     dt: number,
     reducedMotion?: boolean,
   ): void;
+  /**
+   * First-reveal compile gating (hitch-hunt P3a): the static batches' first
+   * fog-cull reveal is held hidden until the gate warms the town key, so a
+   * cold approach never links the town's programs inside a live frame. No
+   * gate keeps the historical immediate reveal.
+   */
+  setRevealGate(gate: RevealGateCore | null): void;
+  /** The compile roots behind the town's reveal key (the static batches). */
+  staticRevealRoots(): readonly THREE.Object3D[];
 }
 
 export interface EastbrookTownDrawStats {
@@ -339,10 +359,13 @@ function townMaterial(
     // only the town's atlas-normal material ever carries this scale.
     shared.normalScale.setScalar(EASTBROOK_SURFACE_NORMAL_SCALE);
   }
-  const material = independent ? shared.clone() : shared;
+  // Hook-preserving clone: a bare clone dropped the zone-haze hook and split
+  // the program cache key, so each independent building material linked a new
+  // program at first sight (the town's share of the first-contact burst).
+  const material = independent ? cloneMaterialWithHooks(shared) : shared;
   // Conservative triplanar detail OVER the baked atlas (the baked cells are
   // stretched per-face and judged too flat alone); applied after the clone
-  // decision because Material.clone drops onBeforeCompile hooks.
+  // decision so the clone records its own detail spec.
   return emissive
     ? modulateEmissiveByVertexColor(material)
     : applyEastbrookTownSurfaceDetail(material);
@@ -877,16 +900,23 @@ function buildFromTemplates(
   };
   if (!builtInWorld) {
     group.userData.drawStats = eastbrookTownDrawStats(group);
-    return { group, update: () => undefined };
+    return {
+      group,
+      update: () => undefined,
+      setRevealGate: () => undefined,
+      staticRevealRoots: () => [],
+    };
   }
 
   const roofHideTargets: RoofHideTarget[] = [];
+  const buildingGroups: THREE.Object3D[] = [];
   for (const building of EASTBROOK_LAYOUT.buildings) {
     const template = templates.get(building.assetId);
     if (!template) throw new Error(`Eastbrook town template is missing: ${building.assetId}`);
     const built = buildBuilding(building, template, groundAt, atlas);
     group.add(built.group);
     roofHideTargets.push(built.hideTarget);
+    buildingGroups.push(built.group);
   }
   const microBuild = buildMicroBatches(templates, groundAt, atlas);
   const microBatches = microBuild.batches;
@@ -897,6 +927,33 @@ function buildFromTemplates(
   const wallBatches = buildWallBatches(wallTemplate, groundAt, atlas);
   for (const batch of wallBatches) group.add(batch);
   const staticCullTargets: THREE.Object3D[] = [...microBatches, ...wallBatches];
+  // The reveal gate compiles the buildings with the static batches: their
+  // per-building materials are not shared with any batch, so a building
+  // outside the roots linked cold on the frame its own fog cull first showed
+  // it (the Fenbridge shape, same fix).
+  const staticRevealRoots: THREE.Object3D[] = [...staticCullTargets, ...buildingGroups];
+  // Piecewise reveal anchors, in staticRevealRoots order: a batch spans the
+  // whole town so it anchors at the centre (Eastbrook sits on the world
+  // origin), a building at its own footprint. roofHideTargets is built in the
+  // buildingGroups loop, so the two stay index-aligned by construction.
+  // Only the buildings are FOOTPRINT-anchored, so only they can take the reach
+  // floor: a batch's centre anchor is an ordering hint, never an arm's-length
+  // distance (a camera at the centre would flip every batch at once).
+  const rootX: number[] = staticCullTargets.map(() => 0);
+  const rootZ: number[] = staticCullTargets.map(() => 0);
+  const rootFootprint: boolean[] = staticCullTargets.map(() => false);
+  for (const target of roofHideTargets) {
+    rootX.push(target.x);
+    rootZ.push(target.z);
+    rootFootprint.push(true);
+  }
+  const staticPiecewise = newTownPiecewiseReveal(
+    STATIC_REVEAL_KEY,
+    staticRevealRoots,
+    rootX,
+    rootZ,
+    rootFootprint,
+  );
   const roofVisibilityPlan = newEastbrookRoofVisibilityPlan();
 
   group.userData.buildingIds = EASTBROOK_LAYOUT.buildings.map((building) => building.id);
@@ -918,8 +975,29 @@ function buildFromTemplates(
   group.userData.eastbrookSurfaceAtlas = eastbrookSurfaceAtlasMetadata(group, atlas);
   group.userData.drawStats = eastbrookTownDrawStats(group);
 
+  let revealGate: RevealGateCore | null = null;
+  let staticRevealed = false;
+  // The gate asks for the roots the moment the consult fires the request, so
+  // these are the CAMERA's coordinates of that very frame: an arrival submits
+  // the buildings it landed among before the far side of the town.
+  let lastCamX = 0;
+  let lastCamZ = 0;
+  const orderedRevealRoots: THREE.Object3D[] = [];
   return {
     group,
+    setRevealGate(gate: RevealGateCore | null): void {
+      revealGate = gate;
+    },
+    staticRevealRoots(): readonly THREE.Object3D[] {
+      return orderTownRootsNearestFirst(
+        staticRevealRoots,
+        staticPiecewise.x,
+        staticPiecewise.z,
+        lastCamX,
+        lastCamZ,
+        orderedRevealRoots,
+      );
+    },
     update(
       camX: number,
       camY: number,
@@ -932,10 +1010,31 @@ function buildFromTemplates(
       reducedMotion = false,
     ): void {
       updateEastbrookCivicBeaconMotion(microBuild.civicBeaconState, reducedMotion);
-      const staticVisible = eastbrookFogVisible(camX, camZ, 0, 0, fogFar, TOWN_CULL_RADIUS);
+      lastCamX = camX;
+      lastCamZ = camZ;
+      // Eastbrook is centred on the world origin, so the camera's distance
+      // squared to the town centre is camX^2 + camZ^2.
+      const reveal = townStaticReveal(
+        eastbrookFogVisible(camX, camZ, 0, 0, fogFar, TOWN_CULL_RADIUS),
+        staticRevealed,
+        camX * camX + camZ * camZ,
+        TOWN_CULL_RADIUS,
+        revealGate,
+        STATIC_REVEAL_KEY,
+      );
+      if (reveal === 'revealed') staticRevealed = true;
+      // While the key is held, each root that has linked comes in on its own,
+      // nearest first: the whole town no longer waits for its slowest program.
+      townPiecewiseRevealInto(staticPiecewise, reveal, camX, camZ, revealGate);
       for (let index = 0; index < staticCullTargets.length; index++) {
-        staticCullTargets[index].visible = staticVisible;
+        staticCullTargets[index].visible = townRootVisible(reveal, staticPiecewise, index);
       }
+      // Buildings keep their own fog cull and roof fade, but their FIRST
+      // reveal rides the same hold as the batches: while the gate compiles
+      // the town they stay hidden until their own group has linked, and once
+      // the key is revealed the latch above never consults the gate again (a
+      // fog re-entry is a plain cull flip).
+      const buildingRootBase = staticCullTargets.length;
       for (let index = 0; index < roofHideTargets.length; index++) {
         const target = roofHideTargets[index];
         eastbrookRoofVisibilityPlanInto(
@@ -950,7 +1049,9 @@ function buildFromTemplates(
           eyeZ,
           fogFar,
         );
-        target.group.visible = roofVisibilityPlan.visible;
+        target.group.visible =
+          roofVisibilityPlan.visible &&
+          townRootVisible(reveal, staticPiecewise, buildingRootBase + index);
         if (!roofVisibilityPlan.visible) continue;
         target.hidden = roofVisibilityPlan.hidden;
         if (occluderFadeSettled(target.alpha, target.hidden)) continue;

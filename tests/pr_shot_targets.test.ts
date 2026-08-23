@@ -2,9 +2,12 @@
 // visual changes, and only the sections they touch" policy, kept pure so it needs no
 // browser. The .mjs script has no TS/browser imports at module load, so vitest can import
 // it directly.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error - plain Node ESM script, no types
 import { classifyDiff, diffChangedPaths, resolveTargets } from '../scripts/pr_shot_targets.mjs';
+import { ABILITIES } from '../src/sim/data';
 
 describe('classifyDiff', () => {
   it('treats a backend/data-only diff as non-visual (captures nothing)', () => {
@@ -19,6 +22,20 @@ describe('classifyDiff', () => {
     expect(plan.isVisual).toBe(true);
     expect(plan.specific.map((t: { key: string }) => t.key)).toContain('inventory');
     // A specific window was found, so no generic HUD fallback.
+    expect(plan.generic).toHaveLength(0);
+  });
+
+  it('maps an options_view change to the graphics dial AND interface tab targets, in order', () => {
+    // Both targets key on 'ui/options_view'; the graphics-options entry sits
+    // first in the registry so the dial card is the lead capture. An
+    // ordering or selector regression here silently drops or duplicates the
+    // options-panel evidence.
+    const plan = classifyDiff(['src/ui/options_view.ts']);
+    expect(plan.isVisual).toBe(true);
+    expect(plan.specific.map((t: { key: string }) => t.key)).toEqual([
+      'graphics-options-shadow-dial',
+      'interface-options-tabs',
+    ]);
     expect(plan.generic).toHaveLength(0);
   });
 
@@ -57,18 +74,106 @@ describe('classifyDiff', () => {
     expect(captureSource).toContain("document.body.classList.contains('game-active')");
   });
 
-  it('captures the market overview, the buy confirmation, and expanded armor filters for market window changes', () => {
+  it('captures the held CC bands for any ability-vfx subsystem change', () => {
+    const plan = classifyDiff(['src/render/ability_vfx/fx.ts']);
+    expect(plan.isVisual).toBe(true);
+    expect(plan.specific.map((t: { key: string }) => t.key)).toContain('cc-bands');
+    // Every module the bands actually ship in resolves the target, the core
+    // included (its `when` prefix must not silently cover only the directory).
+    for (const path of [
+      'src/render/ability_vfx_core.ts',
+      'src/render/ability_vfx/painter.ts',
+      'src/render/ability_vfx/sequencer.ts',
+    ]) {
+      expect(classifyDiff([path]).specific.map((t: { key: string }) => t.key)).toContain(
+        'cc-bands',
+      );
+    }
+    const target = plan.specific.find((t: { key: string }) => t.key === 'cc-bands');
+    // One variant per band type: a shot set covering only one of the three
+    // would read as complete evidence for a change that ships all three.
+    expect(target.variants).toEqual([
+      {
+        key: 'sundering-gavel-desktop',
+        charClass: 'paladin',
+        charName: 'Aurelius',
+        abilityId: 'hammer_of_justice',
+        level: 16,
+        auraKind: 'stun',
+        settleMs: 1900,
+      },
+      {
+        key: 'icebind-desktop',
+        charClass: 'mage',
+        charName: 'Frosthollow',
+        abilityId: 'frost_nova',
+        level: 5,
+        auraKind: 'root',
+        offsetAngle: 1,
+        distance: 5.5,
+        settleMs: 1900,
+      },
+      {
+        key: 'harrow-desktop',
+        charClass: 'warlock',
+        charName: 'Vexmoor',
+        abilityId: 'fear',
+        level: 14,
+        auraKind: 'incapacitate',
+        auraId: 'fear_incap',
+        pollMs: 150,
+        settleMs: 0,
+      },
+    ]);
+    // The control must come from the real action-bar click, never an injected
+    // aura, and the poll must key off the aura KIND (plus the shared fear id,
+    // since 'incapacitate' alone does not mean fear), the same read the bands
+    // themselves use.
+    const captureSource = target.capture.toString();
+    expect(captureSource).not.toMatch(/sim\.castAbility\s*\(/);
+    expect(captureSource).not.toMatch(/auras\.push/);
+    expect(captureSource).toContain('.action-btn[data-hotbar-slot="1"]');
+    expect(captureSource).toContain('button.click()');
+    expect(captureSource).toContain('a.kind === shot.auraKind');
+    expect(captureSource).toContain('a.id === shot.auraId');
+    expect(captureSource).toContain("document.body.classList.contains('game-active')");
+  });
+
+  it('stages every CC-band variant at an ability its own class really learns', () => {
+    // A variant staged on the wrong class or below the learn level fails only
+    // at capture time, minutes into a browser run, and the failure reads as a
+    // flake ("aura never applied") rather than as bad target data.
+    const target = classifyDiff(['src/render/ability_vfx/fx.ts']).specific.find(
+      (t: { key: string }) => t.key === 'cc-bands',
+    );
+    for (const variant of target.variants) {
+      const ability = ABILITIES[variant.abilityId];
+      expect(ability, `${variant.key}: unknown ability ${variant.abilityId}`).toBeDefined();
+      expect(ability.class, `${variant.key}: wrong class for ${variant.abilityId}`).toBe(
+        variant.charClass,
+      );
+      expect(variant.level, `${variant.key}: staged below the learn level`).toBeGreaterThanOrEqual(
+        ability.learnLevel,
+      );
+    }
+  });
+
+  it('captures the market overview, browse collapse, sell price ref, collect ledger, buy confirmation, and expanded armor filters for market window changes', () => {
     const plan = classifyDiff(['src/ui/market_window.ts']);
     expect(plan.isVisual).toBe(true);
     expect(plan.specific.map((t: { key: string }) => t.key)).toEqual([
       'market-window',
+      'market-collapse-toggle',
+      'market-sell-price-ref',
+      'market-collect-ledger',
       'market-buy-confirm',
       'market-armor-filters',
     ]);
-    expect(plan.specific[2].variants).toEqual([
-      { key: 'desktop' },
-      { key: 'mobile', mobile: true },
-    ]);
+    // Keyed, not indexed: this asserts the ARMOR FILTERS target's variants, and a
+    // new market target landing ahead of it must not silently move the assertion
+    // onto a different target.
+    const armor = plan.specific.find((t: { key: string }) => t.key === 'market-armor-filters');
+    expect(armor?.variants).toEqual([{ key: 'desktop' }, { key: 'mobile', mobile: true }]);
   });
 
   it('captures the buy confirmation for its own pure core too, not just the painter', () => {
@@ -95,8 +200,9 @@ describe('classifyDiff', () => {
     const plan = classifyDiff(['tests/tank_defensive_cds.test.ts']);
     expect(plan.isVisual).toBe(true);
     expect(plan.specific.map((t: { key: string }) => t.key)).toEqual(['tank-defensive-cds']);
-    // paladin-desktop, druid-desktop, paladin-mobile.
-    expect(plan.specific[0].variants).toHaveLength(3);
+    // paladin-desktop, druid-desktop, paladin-mobile, paladin-retribution-desktop:
+    // the target widened past the tank when Dawnreaver grew Debt of Light.
+    expect(plan.specific[0].variants).toHaveLength(4);
   });
 
   it('maps a zone/terrain change to the world-map target', () => {
@@ -212,6 +318,103 @@ describe('classifyDiff', () => {
         'src/ui/vale_cup_briefing.ts',
       ]).specific.find((candidate: { key: string }) => candidate.key === key);
       expect(target?.variants).toEqual([{ key: 'desktop' }, { key: 'mobile', mobile: true }]);
+    }
+  });
+
+  it('routes the shared Reliquary label module to both Reliquary targets', () => {
+    // reliquary_labels.ts resolves every relic display name AND the missing-cell
+    // source line, so it changes what BOTH captures show: the Overview recent
+    // chips and the page grid's cells, tooltips, and labels. Without it in the
+    // when lists a source-line or display-name change ships with no screenshot.
+    const plan = classifyDiff(['src/ui/reliquary_labels.ts']);
+    // The negative keeps isVisual meaningful here: every src/ui path is
+    // visual by prefix, so only the discriminating pair proves the flag.
+    expect(classifyDiff(['docs/qa-gate.md']).isVisual).toBe(false);
+    expect(plan.isVisual).toBe(true);
+    // Cross-file contract for the reliquary-page cell picker: the script
+    // selects on the data marker the painter stamps (never English aria
+    // text), so both ends must spell the same attribute or the capture
+    // silently degrades to the fallback cell. The painter side is pinned
+    // behaviorally in tests/reliquary_window_behavior.test.ts. Both reads are
+    // COMMENT-STRIPPED so prose mentioning the tokens can never satisfy them.
+    const stripSource = (src: string): string =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const script = stripSource(
+      readFileSync(join(__dirname, '../scripts/pr_shot_targets.mjs'), 'utf8'),
+    );
+    expect(script).toContain("hasAttribute('data-cell-source')");
+    const painterSrc = stripSource(
+      readFileSync(join(__dirname, '../src/ui/reliquary_window.ts'), 'utf8'),
+    );
+    // The attribute carries the number of source lines the cell RESOLVES, not
+    // a constant marker: the picker below reads it as a number to land the
+    // shot on the richest multi-source cell, so a painter that went back to
+    // "1" would leave the capture on an arbitrary one-line relic.
+    expect(painterSrc).toContain('data-cell-source="${sourceLines.length}"');
+    expect(script).toContain("Number.parseInt(node.getAttribute('data-cell-source')");
+    expect(script).toContain('if (count > bestCount)');
+    const keys = plan.specific.map((t: { key: string }) => t.key);
+    expect(keys).toContain('reliquary-window');
+    expect(keys).toContain('reliquary-page');
+    for (const key of ['reliquary-window', 'reliquary-page']) {
+      const target = plan.specific.find(
+        (candidate: { key: string; variants: { key: string; mobile?: boolean }[] }) =>
+          candidate.key === key,
+      );
+      expect(
+        target?.variants.map((v: { key: string }) => v.key),
+        key,
+      ).toEqual(['desktop', 'mobile']);
+      expect(target?.variants[1]?.mobile, key).toBe(true);
+      // The capture rule (Phase 22): every reliquary rig seeds the LOW preset
+      // before the document loads, so shots stay comparable across machines.
+      for (const variant of target?.variants ?? []) {
+        expect(String(variant.beforeLoad), `${key} ${variant.key} seeds the low preset`).toContain(
+          'graphicsPreset = 1',
+        );
+      }
+    }
+  });
+
+  it('holds the reliquary-tracker capture to the window contracts it borrows', () => {
+    // The tracker capture stages pins through the window's OWN controls, so it
+    // rests on cross-file spellings the script cannot import. Both reads are
+    // COMMENT-STRIPPED so prose mentioning the tokens can never satisfy them.
+    const stripSource = (src: string): string =>
+      src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const script = stripSource(
+      readFileSync(join(__dirname, '../scripts/pr_shot_targets.mjs'), 'utf8'),
+    );
+    const windowSrc = stripSource(
+      readFileSync(join(__dirname, '../src/ui/reliquary_window.ts'), 'utf8'),
+    );
+    // The between-variant cleanup sweeps the same storage prefix the window
+    // persists under. A prefix drift would leave a prior variant's pins in
+    // place, and the pin control is a TOGGLE, so a stale pin would be flipped
+    // OFF and the capture would corrupt silently.
+    expect(windowSrc).toContain("RELIQUARY_PIN_KEY_PREFIX = 'woc_reliquary_pins'");
+    expect(script).toContain("indexOf('woc_reliquary_pins')");
+    // The staging drives the window's markup: the pin toggle (skipped when
+    // refused in EITHER form, or pressed), and the shelf rows' data-page.
+    expect(windowSrc).toContain('data-pin="${esc(pageId)}"');
+    expect(script).toContain('[data-pin=');
+    expect(windowSrc).toContain('aria-pressed="${pinned}"');
+    expect(windowSrc).toContain('aria-disabled="true"');
+    expect(script).toContain("getAttribute('aria-disabled') === 'true'");
+    expect(script).toContain("getAttribute('aria-pressed') === 'true'");
+    expect(windowSrc).toContain('class="reliquary-page-row" data-page=');
+    expect(script).toContain('.reliquary-page-row');
+    // And the routing: both halves of the tracker pair reach the target.
+    for (const path of [
+      'src/ui/reliquary_tracker_painter.ts',
+      'src/ui/reliquary_tracker_view.ts',
+    ]) {
+      const plan = classifyDiff([path]);
+      expect(plan.isVisual, path).toBe(true);
+      expect(
+        plan.specific.map((t: { key: string }) => t.key),
+        path,
+      ).toContain('reliquary-tracker');
     }
   });
 
@@ -346,5 +549,45 @@ describe('diffChangedPaths', () => {
     for (const variant of target?.variants ?? []) {
       expect(typeof variant.beforeLoad, `${variant.key} beforeLoad`).toBe('function');
     }
+  });
+});
+
+describe('the druid auto-unshift target', () => {
+  it('fires on the sim rule and on the bar gate that has to agree with it', () => {
+    // The behavior lives in the sim and its visible consequence lives on the
+    // bar, so BOTH paths must select the target: a change to either one alone
+    // still needs the evidence.
+    for (const path of [
+      'src/sim/combat/form_auto_unshift.ts',
+      'src/ui/hud/action_bar/action_bar_view.ts',
+    ]) {
+      const plan = classifyDiff([path]);
+      expect(plan.isVisual).toBe(true);
+      expect(plan.specific.map((t: { key: string }) => t.key)).toContain('druid-auto-unshift');
+      expect(plan.generic).toHaveLength(0);
+    }
+  });
+
+  it('covers both bar-swapping and travel forms, on desktop and mobile', () => {
+    // Bruin parks the mana pool and Fleet does not, which is the split the rule
+    // turns on, so a variant list that lost either one would stop proving it.
+    const target = classifyDiff(['src/sim/combat/form_auto_unshift.ts']).specific.find(
+      (t: { key: string }) => t.key === 'druid-auto-unshift',
+    );
+    expect(target.variants.map((v: { key: string }) => v.key)).toEqual([
+      'bruin-form-desktop',
+      'fleet-form-desktop',
+      'bruin-form-mobile',
+    ]);
+    expect(target.variants.map((v: { formAbility: string }) => v.formAbility)).toEqual([
+      'bear_form',
+      'travel_form',
+      'bear_form',
+    ]);
+    expect(target.variants.filter((v: { mobile?: boolean }) => v.mobile)).toHaveLength(1);
+    // Every variant drives the real druid kit, not a stand-in class.
+    for (const v of target.variants) expect(v.charClass).toBe('druid');
+    expect(ABILITIES.healing_touch.class).toBe('druid');
+    expect(ABILITIES.healing_touch.castTime).toBeGreaterThan(1);
   });
 });

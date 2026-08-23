@@ -1,22 +1,31 @@
 import type * as http from 'node:http';
 import { verifyLoginTwoFactor } from './account';
+import { parseAdminAccountSort } from './admin_accounts_sort';
+import {
+  ACTIVITY_WINDOW_DAYS,
+  classDistribution,
+  levelDistribution,
+  registrationsByDay,
+  sessionsByDay,
+} from './admin_activity_cache';
 import {
   accountDetail,
   associationsForIp,
   characterProfessionsRow,
-  classDistribution,
   clientPerfRaw,
   clientPerfSummary,
   dailyRewardPointEvents,
-  levelDistribution,
   listAccounts,
   listCharacters,
   listModerationActions,
   listSharedIps,
   onlineHistory,
-  registrationsByDay,
-  sessionsByDay,
 } from './admin_db';
+import {
+  type AdminGeneralChatRateLimitDeps,
+  type AdminGeneralChatRateLimitService,
+  createAdminGeneralChatRateLimitService,
+} from './admin_general_chat_rate_limit';
 import type { AdminGuildBankView } from './admin_guild_bank_view';
 import {
   ADMIN_GUILD_REASON_MAX,
@@ -55,7 +64,12 @@ import {
   newToken,
   verifyPassword,
 } from './auth';
-import { getBugReportScreenshot, listBugReports } from './bug_report_db';
+import {
+  type BugReportResolution,
+  getBugReportScreenshot,
+  listBugReports,
+  resolveBugReport,
+} from './bug_report_db';
 import {
   characterProfessionsSheetFromRow,
   restoreItemBodyError,
@@ -71,6 +85,12 @@ import {
   updateFilterConfig,
   type WordTier,
 } from './chat_filter_db';
+import {
+  CHEATER_MARK_ADMIN_TARGET_CODE,
+  cheaterMarkBodySchema,
+  liftCheaterMarkBodySchema,
+  rethrowCheaterMarkRefusal,
+} from './cheater_mark_api';
 import { cleanContentModerationReason } from './content_moderation_db';
 import { currentDailyRewardDay } from './daily_rewards';
 import {
@@ -88,8 +108,11 @@ import {
 } from './db';
 import { emailSecurityIncident } from './email';
 import type { GameServer } from './game';
+import { type GeneralChatRateLimit, setGeneralChatRateLimit } from './general_chat_quota_db';
 import { ctxAccountId } from './http/context';
+import { HttpError } from './http/errors';
 import { logger } from './http/logger';
+import { withBody } from './http/middleware/body';
 import {
   ADMIN_META,
   type AdminAuthDb,
@@ -109,8 +132,8 @@ import {
   forceCharacterRename,
   ignoreReport,
   liftAccountChatMute,
+  liftAccountCheaterMark,
   moderateAccount,
-  moderationQueue,
   moderationReportsForAccount,
   muteAccountChat,
   reactivateAccountAudited,
@@ -118,10 +141,12 @@ import {
   recordProfessionsRestore,
   resetChatStrikesAudited,
   setAccountAiFlag,
+  setAccountCheaterMark,
   setAccountStreamerFlair,
   setDailyRewardsBan,
   setDailyRewardsIpBan,
 } from './moderation_db';
+import { readModerationQueue } from './moderation_queue_cache';
 import { providerUsageSnapshot } from './provider_usage';
 import { authThrottled, clearAuthFailures, rateLimited, recordAuthFailure } from './ratelimit';
 import { REALM } from './realm';
@@ -168,7 +193,6 @@ const ADMIN_LOGIN_TOO_MANY_FAILED_ATTEMPTS =
 const ADMIN_LOGIN_INVALID_TWO_FACTOR_CODE = 'invalid authentication code';
 const MAX_PAGE_LIMIT = 200;
 const DEFAULT_PAGE_LIMIT = 25;
-const ACTIVITY_WINDOW_DAYS = 30;
 const ANTIBOT_CONFIG_NOTE_MAX = 500;
 const UNSTUCK_DEFAULT_DAYS = 30;
 const UNSTUCK_DEFAULT_LIMIT = 50;
@@ -201,6 +225,51 @@ const GUILD_BANK_SAVE_FAILED = 'the change could not be saved and was rolled bac
 // there is nothing to retry).
 const GUILD_BANK_DELETING = 'that guild is being deleted, so its bank is closed';
 const GUILD_BANK_PURGE_REFUSED = 'the guild bank change was refused';
+
+const realAdminGeneralChatRateLimitDeps: AdminGeneralChatRateLimitDeps = {
+  set: setGeneralChatRateLimit,
+  isAdminAccount,
+};
+let adminGeneralChatRateLimitService: AdminGeneralChatRateLimitService =
+  createAdminGeneralChatRateLimitService(realAdminGeneralChatRateLimitDeps);
+
+/** Install the narrow General chat policy persistence seam for endpoint tests. */
+export function setAdminGeneralChatRateLimitDepsForTests(
+  deps: AdminGeneralChatRateLimitDeps,
+): void {
+  adminGeneralChatRateLimitService = createAdminGeneralChatRateLimitService(deps);
+}
+
+/** Restore the production General chat policy persistence seam after a unit test. */
+export function resetAdminGeneralChatRateLimitDepsForTests(): void {
+  adminGeneralChatRateLimitService = createAdminGeneralChatRateLimitService(
+    realAdminGeneralChatRateLimitDeps,
+  );
+}
+
+/**
+ * The one general-chat-rate-limit endpoint body, shared verbatim by the legacy
+ * handleAdminApi arm and the routes-table handler. The service validates
+ * bounds, refuses admin targets, and calls the atomic persistence seam once;
+ * that transaction owns the audit row, window reset, and NOTIFY, so no live
+ * state can apply before the durable commit. Applying synchronously afterward
+ * closes the response-to-NOTIFY window for sessions on the handling realm;
+ * LISTEN remains authoritative elsewhere.
+ */
+async function respondGeneralChatRateLimit(
+  res: http.ServerResponse,
+  input: { targetAccountId: number; adminAccountId: number; body: unknown },
+  applyLive: (accountId: number, after: GeneralChatRateLimit | null) => void,
+): Promise<void> {
+  const outcome = await adminGeneralChatRateLimitService.update({
+    accountId: input.targetAccountId,
+    adminAccountId: input.adminAccountId,
+    body: input.body,
+  });
+  if (!outcome.ok) return fail(res, outcome.status, outcome.error);
+  applyLive(input.targetAccountId, outcome.value.after);
+  return ok(res, { ok: true });
+}
 
 function guildRenameFailure(error: AdminGuildRenameError): { status: number; message: string } {
   switch (error) {
@@ -923,6 +992,21 @@ export async function handleAdminApi(
       const ignored = await ignoreReport(Number(ignoreMatch[1]), accountId, body.note);
       return ignored ? ok(res, { ok: true }) : fail(res, 404, 'open report not found');
     }
+    const bugReportResolveMatch = /^\/admin\/api\/bug-reports\/(\d+)\/(resolve|dismiss)$/.exec(
+      path,
+    );
+    if (req.method === 'POST' && bugReportResolveMatch) {
+      const body = await readBody(req);
+      const status: BugReportResolution =
+        bugReportResolveMatch[2] === 'resolve' ? 'resolved' : 'dismissed';
+      const resolved = await resolveBugReport(
+        Number(bugReportResolveMatch[1]),
+        accountId,
+        status,
+        body.note,
+      );
+      return resolved ? ok(res, { ok: true }) : fail(res, 404, 'open bug report not found');
+    }
     const forceRenameMatch = /^\/admin\/api\/moderation\/characters\/(\d+)\/force-rename$/.exec(
       path,
     );
@@ -1104,6 +1188,22 @@ export async function handleAdminApi(
       } catch (err) {
         return fail(res, 400, err instanceof Error ? err.message : 'password reset failed');
       }
+    }
+
+    const generalChatRateLimitMatch =
+      /^\/admin\/api\/accounts\/(\d+)\/general-chat-rate-limit$/.exec(path);
+    if (req.method === 'POST' && generalChatRateLimitMatch) {
+      // `await`, not a bare returned promise: a rejected setter must land in
+      // this function's own catch (the 500 'internal error' boundary).
+      return await respondGeneralChatRateLimit(
+        res,
+        {
+          targetAccountId: Number(generalChatRateLimitMatch[1]),
+          adminAccountId: accountId,
+          body: await readBody(req),
+        },
+        (id, after) => game.applyGeneralChatRateLimitLive(id, after),
+      );
     }
 
     // Account flair: the AI-operated mark and an official streamer's links. Both
@@ -1390,7 +1490,8 @@ export async function handleAdminApi(
     if (path === '/admin/api/accounts') {
       const { page, limit } = parsePageParams(url.searchParams);
       const search = (url.searchParams.get('search') ?? '').slice(0, 64);
-      return ok(res, await listAccounts(search, page, limit));
+      const { sort, dir } = parseAdminAccountSort(url.searchParams);
+      return ok(res, await listAccounts(search, page, limit, sort, dir));
     }
     if (path === '/admin/api/guilds') {
       const { page, limit } = parsePageParams(url.searchParams);
@@ -1474,7 +1575,7 @@ export async function handleAdminApi(
       });
     }
     if (path === '/admin/api/moderation/queue') {
-      return ok(res, { rows: await moderationQueue(game.liveAccountIds()) });
+      return ok(res, { rows: await readModerationQueue(game.liveAccountIds()) });
     }
     if (path === '/admin/api/moderation/history') {
       const { page, limit } = parsePageParams(url.searchParams);
@@ -1679,9 +1780,14 @@ export type AdminRuntime = Pick<
   | 'muteAccountChat'
   | 'liftChatMuteLive'
   | 'resetChatStrikesLive'
+  | 'applyGeneralChatRateLimitLive'
   // Push an operator's account-flair edit onto the account's live session, so the
   // AI mark / streamer links change without a reconnect.
   | 'applyAccountFlairLive'
+  // Push a Cheater mark change onto the account's live session. Without it a
+  // sanction applied to a logged-in player does nothing until their next login,
+  // which is the session it is most needed in.
+  | 'applyCheaterMarkLive'
   | 'reloadChatFilter'
   | 'reloadBlockedIps'
   | 'disconnectByIp'
@@ -1780,6 +1886,9 @@ function makeRealAdminDb() {
     accountDetail,
     associationsForIp,
     characterProfessionsRow,
+    // Cache-backed (the shared admin activity bundle; both dispatch arms read
+    // it): a setAdminDbForTests override still replaces these members outright,
+    // which bypasses the cache and keeps existing fakes exact.
     classDistribution,
     clientPerfRaw,
     clientPerfSummary,
@@ -1803,6 +1912,7 @@ function makeRealAdminDb() {
     sessionsByDay,
     listBugReports,
     getBugReportScreenshot,
+    resolveBugReport,
     listUnstuckReports: (options: Parameters<typeof listUnstuckReportsDb>[1]) =>
       listUnstuckReportsDb(pool, options),
     listUnstuckHotspots: (options: Parameters<typeof listUnstuckHotspotsDb>[1]) =>
@@ -1824,9 +1934,18 @@ function makeRealAdminDb() {
     ignoreReport,
     liftAccountChatMute,
     moderateAccount,
-    moderationQueue,
+    // Cache-backed (the shared moderation queue memo; both dispatch arms read
+    // it and it is bust-wired by moderation_db.ts's setOnModerationQueueChanged
+    // hook): a setAdminDbForTests override still replaces this member outright.
+    moderationQueue: readModerationQueue,
     moderationReportsForAccount,
     muteAccountChat,
+    // The Cheater mark: apply/re-length and lift early. Deliberately NO
+    // remaining-budget read here: the apply arm returns what its own transaction
+    // stored, and a second read could be overtaken by a save-path burn and push
+    // a stale budget onto the live session.
+    setAccountCheaterMark,
+    liftAccountCheaterMark,
     accountAndScopeForToken,
     accountMailTarget,
     findAccount,
@@ -1903,7 +2022,10 @@ export function resetAdminDbForTests(): void {
 // The admin-auth gate reads its two db functions (accountAndScopeForToken and
 // adminRolesForAccount) off the active bundle, so a setAdminDbForTests fake drives
 // it too. AdminDb is a superset of AdminAuthDb, so the getter is assignable.
-const requireAdmin = createRequireAdmin((): AdminAuthDb => adminDb());
+// Exported so sibling admin-surface domain modules (server/ad_spend.ts) mount
+// the SAME gate over the SAME seam, keeping the scope sweep and the
+// setAdminDbForTests injection authoritative for every admin route.
+export const requireAdmin = createRequireAdmin((): AdminAuthDb => adminDb());
 
 /**
  * The four moderation actions the enum route accepts. The central permission gate
@@ -2175,11 +2297,12 @@ async function perfTickCaptureHandler(ctx: Ctx): Promise<void> {
   ok(ctx.res, useAdminRuntime().startPerfCapture(durationMs));
 }
 
-/** GET /admin/api/accounts: paged account search (search clamped to 64 chars). */
+/** GET /admin/api/accounts: paged, sortable account search (search clamped to 64 chars). */
 async function accountsHandler(ctx: Ctx): Promise<void> {
   const { page, limit } = parsePageParams(ctx.url.searchParams);
   const search = (ctx.url.searchParams.get('search') ?? '').slice(0, 64);
-  ok(ctx.res, await adminDb().listAccounts(search, page, limit));
+  const { sort, dir } = parseAdminAccountSort(ctx.url.searchParams);
+  ok(ctx.res, await adminDb().listAccounts(search, page, limit, sort, dir));
 }
 
 /** GET /admin/api/guilds: current-realm guild search with bounded pagination. */
@@ -2515,6 +2638,89 @@ async function forceRenameHandler(ctx: Ctx): Promise<void> {
   }
 }
 
+/**
+ * Refuse a Cheater mark aimed at an operator account.
+ *
+ * Admin accounts are exempt for the same reason they are exempt from
+ * suspend/ban/chat-mute (the isAdminAccount guards above): an operator must not be
+ * able to brand another operator, deliberately or by mistyping an account id.
+ * Applied to the LIFT arm as well as the mark arm, so the pair states the same
+ * rule; the cost is that an account marked BEFORE being promoted to staff has to
+ * be demoted before its tag can be lifted through the API.
+ */
+async function refuseAdminCheaterMarkTarget(targetAccountId: number): Promise<void> {
+  if (await adminDb().isAdminAccount(targetAccountId)) {
+    throw new HttpError(400, CHEATER_MARK_ADMIN_TARGET_CODE);
+  }
+}
+
+/**
+ * POST /admin/api/moderation/accounts/:id/cheater-mark: brand an account with the
+ * Cheater tag for a budget of PLAYED seconds, and push it onto the live session.
+ *
+ * A REGISTRY-ONLY route (no legacy handleAdminApi twin), so it follows the
+ * new-endpoint recipe rather than the chat-mute arm beside it: the body is parsed
+ * by withBody and decoded through a typed schema (a shape failure is the
+ * pipeline's 422 validation.failed), and every refusal is a stable
+ * `cheater_mark.*` code through HttpError, never English prose.
+ */
+async function cheaterMarkHandler(ctx: Ctx): Promise<void> {
+  const rt = useAdminRuntime();
+  const targetAccountId = adminTargetId(ctx);
+  // Cheap-reject-first: the decode is pure CPU, the operator-target check is a
+  // db read, so a malformed request never buys a query.
+  const decoded = cheaterMarkBodySchema.decode(ctx.body ?? {});
+  if (!decoded.ok) throw decoded;
+  await refuseAdminCheaterMarkTarget(targetAccountId);
+  // No initializer on purpose: 0 is the wire form of "no mark", so a default
+  // here would mean a future non-throwing arm in the catch below silently LIFTS
+  // a live mark. rethrowCheaterMarkRefusal returns never, which is what makes
+  // the definite assignment hold.
+  let storedSeconds: number;
+  try {
+    storedSeconds = await adminDb().setAccountCheaterMark({
+      accountId: targetAccountId,
+      adminAccountId: ctxAccountId(ctx),
+      reason: decoded.value.reason,
+      seconds: decoded.value.seconds,
+    });
+  } catch (err) {
+    rethrowCheaterMarkRefusal(err);
+  }
+  // Push the budget the WRITE ITSELF returned, never the requested one (
+  // moderation_db clamps to CHEATER_MARK_MAX_SECONDS) and never a follow-up
+  // read: the unaudited save-path burn is guarded only by
+  // `cheater_mark_seconds > 0`, so it can land between the COMMIT and a second
+  // SELECT. Re-lengthening a live mark would then push the OLD remaining while
+  // the API answered ok, and the operator's correction would silently vanish.
+  rt.applyCheaterMarkLive(targetAccountId, storedSeconds);
+  ok(ctx.res, { ok: true });
+}
+
+/**
+ * POST /admin/api/moderation/accounts/:id/lift-cheater-mark: clear the tag early
+ * and push the lift onto the live session. Registry-only, same recipe as its
+ * sibling above; 0 seconds is the wire form of "no mark".
+ */
+async function liftCheaterMarkHandler(ctx: Ctx): Promise<void> {
+  const rt = useAdminRuntime();
+  const targetAccountId = adminTargetId(ctx);
+  const decoded = liftCheaterMarkBodySchema.decode(ctx.body ?? {});
+  if (!decoded.ok) throw decoded;
+  await refuseAdminCheaterMarkTarget(targetAccountId);
+  try {
+    await adminDb().liftAccountCheaterMark({
+      accountId: targetAccountId,
+      adminAccountId: ctxAccountId(ctx),
+      reason: decoded.value.reason,
+    });
+  } catch (err) {
+    rethrowCheaterMarkRefusal(err);
+  }
+  rt.applyCheaterMarkLive(targetAccountId, 0);
+  ok(ctx.res, { ok: true });
+}
+
 /** POST /admin/api/moderation/accounts/:id/lift-mute: clear a chat mute + live push. */
 async function liftMuteHandler(ctx: Ctx): Promise<void> {
   const rt = useAdminRuntime();
@@ -2766,6 +2972,25 @@ async function resetPasswordHandler(ctx: Ctx): Promise<void> {
 }
 
 /**
+ * POST /admin/api/accounts/:id/general-chat-rate-limit: set or clear the account's
+ * General-channel-only quota. Same moderation family as suspend/ban/chat-mute, so
+ * the shared service refuses admin targets (clearing stays allowed); the full
+ * endpoint body lives in respondGeneralChatRateLimit, shared with the legacy arm.
+ */
+async function generalChatRateLimitHandler(ctx: Ctx): Promise<void> {
+  const rt = useAdminRuntime();
+  return respondGeneralChatRateLimit(
+    ctx.res,
+    {
+      targetAccountId: adminTargetId(ctx),
+      adminAccountId: ctxAccountId(ctx),
+      body: await readBody(ctx.req),
+    },
+    (id, after) => rt.applyGeneralChatRateLimitLive(id, after),
+  );
+}
+
+/**
  * POST /admin/api/accounts/:id/ai: mark the account as AI-operated (or clear it).
  * Cosmetic and non-punitive: no reason is required and, unlike suspend/ban/chat-mute,
  * there is NO isAdminAccount guard (a staff account can legitimately carry flair).
@@ -2886,6 +3111,22 @@ async function unstuckReportsHandler(ctx: Ctx): Promise<void> {
 async function bugScreenshotHandler(ctx: Ctx): Promise<void> {
   ok(ctx.res, { screenshot: await adminDb().getBugReportScreenshot(adminTargetId(ctx)) });
 }
+
+/** POST /admin/api/bug-reports/:id/(resolve|dismiss): close an open bug report, audited. */
+function bugReportResolveHandler(status: BugReportResolution) {
+  return async (ctx: Ctx): Promise<void> => {
+    const body = await readBody(ctx.req);
+    const resolved = await adminDb().resolveBugReport(
+      adminTargetId(ctx),
+      ctxAccountId(ctx),
+      status,
+      body.note,
+    );
+    return resolved ? ok(ctx.res, { ok: true }) : fail(ctx.res, 404, 'open bug report not found');
+  };
+}
+const bugReportResolveHandlerResolved = bugReportResolveHandler('resolved');
+const bugReportResolveHandlerDismissed = bugReportResolveHandler('dismissed');
 
 /** GET /admin/api/characters: paged, sortable character search. */
 async function charactersHandler(ctx: Ctx): Promise<void> {
@@ -3181,6 +3422,14 @@ export const routes: RouteDef[] = [
     meta: adminTargetMeta('account'),
     handler: resetPasswordHandler,
   },
+  {
+    method: 'POST',
+    path: '/admin/api/accounts/:id/general-chat-rate-limit',
+    surface: 'admin',
+    middleware: [requireAdmin, requireAdminTarget('account')],
+    meta: adminTargetMeta('account'),
+    handler: generalChatRateLimitHandler,
+  },
 
   // Account flair: the AI-operated mark and an official streamer's platform links.
   {
@@ -3287,6 +3536,26 @@ export const routes: RouteDef[] = [
     middleware: [requireAdmin, requireAdminTarget('account')],
     meta: adminTargetMeta('account'),
     handler: chatMuteHandler,
+  },
+  // The Cheater mark pair. Registry-only (born after the migration, so no legacy
+  // ladder twin), which is why these two are the only admin routes that mount
+  // withBody: the dual-edit parity rule that keeps the migrated handlers
+  // self-reading does not describe a route with nothing to be in parity with.
+  {
+    method: 'POST',
+    path: '/admin/api/moderation/accounts/:id/cheater-mark',
+    surface: 'admin',
+    middleware: [requireAdmin, requireAdminTarget('account'), withBody()],
+    meta: adminTargetMeta('account'),
+    handler: cheaterMarkHandler,
+  },
+  {
+    method: 'POST',
+    path: '/admin/api/moderation/accounts/:id/lift-cheater-mark',
+    surface: 'admin',
+    middleware: [requireAdmin, requireAdminTarget('account'), withBody()],
+    meta: adminTargetMeta('account'),
+    handler: liftCheaterMarkHandler,
   },
   {
     method: 'POST',
@@ -3451,6 +3720,22 @@ export const routes: RouteDef[] = [
     middleware: [requireAdmin, requireAdminTarget('bugReport')],
     meta: adminTargetMeta('bugReport'),
     handler: bugScreenshotHandler,
+  },
+  {
+    method: 'POST',
+    path: '/admin/api/bug-reports/:id/resolve',
+    surface: 'admin',
+    middleware: [requireAdmin, requireAdminTarget('bugReport')],
+    meta: adminTargetMeta('bugReport'),
+    handler: bugReportResolveHandlerResolved,
+  },
+  {
+    method: 'POST',
+    path: '/admin/api/bug-reports/:id/dismiss',
+    surface: 'admin',
+    middleware: [requireAdmin, requireAdminTarget('bugReport')],
+    meta: adminTargetMeta('bugReport'),
+    handler: bugReportResolveHandlerDismissed,
   },
   {
     method: 'GET',

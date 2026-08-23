@@ -32,53 +32,92 @@ describe('shapeshift-form compile gate (#2571)', () => {
     expect(blockEnd).toBeGreaterThan(blockStart);
     const block = source.slice(blockStart, blockEnd);
 
-    for (const form of ['sheepVisual', 'bearVisual', 'catVisual', 'travelVisual']) {
-      const visualAt = block.indexOf(`v.${form} = built;`);
-      expect(visualAt, `${form} assignment`).toBeGreaterThan(-1);
-      const addAt = block.indexOf('v.group.add(built.root)', visualAt);
-      expect(addAt, `${form} group.add`).toBeGreaterThan(visualAt);
-      const pendingAt = block.indexOf('v.formCompilePending = built.root;', addAt);
-      expect(pendingAt, `${form} pending set`).toBeGreaterThan(addAt);
-      const gateAt = block.indexOf('this.gateSwapFlagOnCompile(built.root, () => {', pendingAt);
-      expect(gateAt, `${form} gate call`).toBeGreaterThan(pendingAt);
-      const settleAt = block.indexOf(
-        'v.formCompilePending = settlePendingSwap(v.formCompilePending, built.root);',
-        gateAt,
+    // Every form is built by the one shared builder, and the four that must not
+    // pop in half-linked ask it for the gate. Metamorphosis is the deliberate
+    // exception: it grows out of the body it replaces.
+    for (const [form, slot] of [
+      ['sheep', 'sheepVisual'],
+      ['bear', 'bearVisual'],
+      ['cat', 'catVisual'],
+      ['travel', 'travelVisual'],
+    ]) {
+      expect(block, `${slot} gated build`).toContain(
+        `this.buildFormVisual(e, v, 'form_${form}', '${slot}', true)`,
       );
-      expect(settleAt, `${form} settle callback`).toBeGreaterThan(gateAt);
     }
+    expect(block).toContain(
+      "this.buildFormVisual(e, v, 'form_metamorph', 'metamorphVisual', false)",
+    );
+
+    // ...and the builder still attaches, marks pending, gates, and settles, in
+    // that order, behind the gateCompile arm.
+    const builderStart = source.indexOf('  private buildFormVisual(');
+    expect(builderStart).toBeGreaterThan(-1);
+    const builder = source.slice(builderStart, source.indexOf('\n  private ', builderStart + 10));
+    const assignAt = builder.indexOf('v[slot] = built;');
+    expect(assignAt, 'slot assignment').toBeGreaterThan(-1);
+    const addAt = builder.indexOf('v.group.add(built.root)', assignAt);
+    expect(addAt, 'group.add').toBeGreaterThan(assignAt);
+    const skipAt = builder.indexOf('if (!gateCompile) return;', addAt);
+    expect(skipAt, 'ungated early return').toBeGreaterThan(addAt);
+    const pendingAt = builder.indexOf('v.formCompilePending = built.root;', skipAt);
+    expect(pendingAt, 'pending set').toBeGreaterThan(skipAt);
+    const gateAt = builder.indexOf('this.gateSwapFlagOnCompile(built.root, () => {', pendingAt);
+    expect(gateAt, 'gate call').toBeGreaterThan(pendingAt);
+    const settleAt = builder.indexOf(
+      'v.formCompilePending = settlePendingSwap(v.formCompilePending, built.root);',
+      gateAt,
+    );
+    expect(settleAt, 'settle callback').toBeGreaterThan(gateAt);
 
     // Uses the flag shape (gateSwapFlagOnCompile), not the direct-hide shape
     // (gateSwapOnCompile): the visibility lines right below recompute every tick.
-    expect(block).not.toContain('this.gateSwapOnCompile(built.root)');
+    expect(builder).not.toContain('this.gateSwapOnCompile(built.root)');
   });
 
-  it('consults the pending token, keyed per form root, in the per-frame visibility recompute', () => {
+  it('feeds the pending token to the readiness mask, so the BASE body stands in', () => {
     const source = renderer();
-    const blockStart = source.indexOf('// Gated per form root: the per-frame recompute below');
+    const blockStart = source.indexOf('// A form rig that is still linking is NOT ready');
     const blockEnd = source.indexOf('// rideable mount under the player', blockStart);
     expect(blockStart).toBeGreaterThan(-1);
     expect(blockEnd).toBeGreaterThan(blockStart);
     const block = source.slice(blockStart, blockEnd);
 
+    // The readiness mask, not the per-root setActive lines, is what the gate
+    // now feeds: a pending form is NOT ready, so resolvedCharacterForm stays
+    // 'base' and formVisibility.base keeps the body drawing.
+    expect(block).toContain('const formReadyMask = characterFormReadyMask(');
+    expect(block).toContain('v.formCompilePending,\n      );');
     expect(block).toContain(
-      'v.sheepVisual.root.visible = polyed && v.formCompilePending !== v.sheepVisual.root;',
+      'const resolvedForm = resolvedCharacterForm(requestedForm, formReadyMask);',
     );
+    expect(block).toContain('const formVisibility = characterFormVisibility(resolvedForm);');
     expect(block).toContain(
-      'v.bearVisual.root.visible = bear && v.formCompilePending !== v.bearVisual.root;',
+      'applyCharacterFormVisibility(v, formVisibility, v.visualCompilePending);',
     );
-    expect(block).toContain(
-      'v.catVisual.root.visible = cat && v.formCompilePending !== v.catVisual.root;',
-    );
-    expect(block).toContain(
-      'v.travelVisual.root.visible = travel && v.formCompilePending !== v.travelVisual.root;',
-    );
+  });
+
+  it('never darkens a rig on formCompilePending any more (that was the fairness hole)', () => {
+    const source = renderer();
+    // The old shape hid the FORM on its pending token while the resolved form
+    // had already left 'base', so both bodies were dark at once. No setActive
+    // call may read the token again; the readiness mask owns it.
+    for (const line of source.split('\n')) {
+      if (line.includes('setActive(')) {
+        expect(line, 'setActive must not read the form gate token').not.toContain(
+          'formCompilePending',
+        );
+      }
+    }
+    // ...and the base body is only ever hidden by its OWN swap gate, which has
+    // the outgoing rig standing in (updateBaseVisual).
+    expect(source).not.toContain('formVisibility.base && !v.visualCompilePending');
   });
 
   it('imports settlePendingSwap from the shared compile_gate core', () => {
     const source = renderer();
     expect(source).toContain(
-      "import { CompileGateQueue, settlePendingSwap } from './compile_gate';",
+      "import { CompileGateQueue, SerialGateLane, settlePendingSwap } from './compile_gate';",
     );
   });
 });

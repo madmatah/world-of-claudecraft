@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import { DUNGEONS } from '../sim/data';
 import { RIFT_TIER_COLORS, type RiftTier } from '../sim/types';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { GFX } from './gfx';
-import { markSharedGeometry, markSharedMaterial } from './shared_resource';
+import { markOwnedMaterial, markSharedGeometry, markSharedMaterial } from './shared_resource';
 import { applyWornStone } from './worn_stone';
 
 // GLB-backed arch body (Tripo-generated, see public/models/props), with a
@@ -211,7 +212,9 @@ function warmWildheartArch(root: THREE.Object3D): void {
     const source = child.material;
     const materials = Array.isArray(source) ? source : [source];
     child.material = materials.map((material) => {
-      const clone = material.clone() as THREE.MeshStandardMaterial;
+      // markOwnedMaterial: the clone inherits the source's shared tag via
+      // Material.copy(userData), and an unowned clone would never be freed.
+      const clone = markOwnedMaterial(material.clone() as THREE.MeshStandardMaterial);
       if (clone.color) clone.color.lerp(new THREE.Color(0xb9a66d), 0.48);
       return clone;
     });
@@ -456,7 +459,9 @@ function runeClone(height: number, lit: boolean): THREE.Group {
   const emis = new THREE.Color(lit ? 0xffc35a : 0xc27a2a);
   const intensity = lit ? 1.35 : 0.5;
   const boost = (mm: THREE.Material): THREE.Material => {
-    const c = mm.clone() as THREE.MeshStandardMaterial;
+    // Owned per-clone recolor: strip the shared tag the clone inherits from
+    // the markGltfShared original so the view's teardown actually frees it.
+    const c = markOwnedMaterial(mm.clone() as THREE.MeshStandardMaterial);
     if ('emissive' in c) {
       c.emissive = emis;
       c.emissiveIntensity = intensity;
@@ -997,7 +1002,9 @@ export function buildDoorBody(
     if (isWildheart) warmWildheartArch(inst);
     body.add(inst);
   } else {
-    const stone = isWildheart ? doorStoneMaterial().clone() : doorStoneMaterial();
+    const stone = isWildheart
+      ? markOwnedMaterial(doorStoneMaterial().clone())
+      : doorStoneMaterial();
     if (isWildheart && (stone as THREE.MeshStandardMaterial).color) {
       (stone as THREE.MeshStandardMaterial).color.setHex(0xb9a66d);
     }
@@ -1019,6 +1026,9 @@ export function buildDoorBody(
     ? wildheartDoorPortalMaterial(lowGfx)
     : doorPortalMaterial(entering, lowGfx);
   const portal = new THREE.Mesh(doorPortalGeometry(), portalMat);
+  // doors flagged staticDoor render a still membrane: the renderer's
+  // per-frame swirl spin and opacity pulse skip this mesh
+  if (dungeonId && DUNGEONS[dungeonId]?.staticDoor) portal.userData.staticDoor = true;
   portal.position.y = isWildheart && wildheartGate ? 4.4 : 2.15;
   portal.scale.set(
     isWildheart && wildheartGate ? 2.35 : 1,

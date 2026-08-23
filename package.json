@@ -1,6 +1,6 @@
 {
   "name": "world-of-claudecraft",
-  "version": "0.34.0",
+  "version": "0.39.0",
   "private": true,
   "license": "MIT",
   "author": {
@@ -16,7 +16,7 @@
     "release:prepare": "node scripts/release_version.mjs prepare",
     "version:sync": "node scripts/version_sync.mjs",
     "version": "node scripts/version_sync.mjs && git add android/app/build.gradle ios/App/App.xcodeproj/project.pbxproj",
-    "build:bundle": "npm run sitemap:build && npm run sfx:manifest && node scripts/build_media_manifest.mjs generate && vite build && node scripts/check_backdrop_survival.mjs && node scripts/build_media_manifest.mjs emit",
+    "build:bundle": "node scripts/build_bundle_pregen.mjs && vite build && node scripts/check_backdrop_survival.mjs && node scripts/build_media_manifest.mjs emit",
     "build": "npm run i18n:gen && npm run wiki:content && npm run build:bundle",
     "wiki:content": "node scripts/wiki/build_content.mjs",
     "wiki:stills": "node scripts/wiki/render_model_stills.mjs",
@@ -41,7 +41,7 @@
     "lint:fix": "biome lint --write .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
-    "ci:changed": "biome ci --changed --no-errors-on-unmatched",
+    "ci:changed": "node scripts/ci_changed.mjs",
     "check:admin": "svelte-check --tsconfig ./tsconfig.admin.json",
     "check:ts": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/buildinfo.json",
     "check:ts:bot": "tsc -p tsconfig.bot.json",
@@ -84,7 +84,7 @@
     "perf:professions": "node scripts/load_professions.mjs",
     "audit:quests": "node scripts/quest_audit_graph.mjs",
     "audit:zone1": "npm run audit:quests",
-    "db:up": "docker compose up -d postgres",
+    "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
     "db:cleanup-zone1-removed": "tsx scripts/cleanup_removed_zone1_content.ts",
     "db:migrate-old-cragmaw-pelt": "tsx scripts/migrate_old_cragmaw_pelt.ts",
@@ -124,12 +124,12 @@
     "bs58": "^6.0.0",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
-    "n8ao": "^1.10.1",
+    "n8ao": "^2.0.0",
     "obscenity": "^0.4.6",
     "pg": "^8.21.0",
-    "postprocessing": "6.36.0",
+    "postprocessing": "6.39.4",
     "prom-client": "15.1.3",
-    "three": "^0.165.0",
+    "three": "0.185.1",
     "tweetnacl": "1.0.3",
     "ws": "^8.21.0"
   },
@@ -145,14 +145,14 @@
     "@testing-library/svelte": "^5.4.2",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
-    "@types/three": "^0.165.0",
+    "@types/three": "^0.185.4",
     "@types/ws": "^8.18.1",
     "@typescript/native": "npm:typescript@^7.0.2",
     "@vitest/browser": "4.1.10",
     "@vitest/browser-playwright": "4.1.10",
     "axe-core": "4.12.1",
-    "electron": "^43.0.0",
-    "electron-builder": "^26.15.6",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.7",
     "esbuild": "^0.28.1",
     "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0",
@@ -289,12 +289,32 @@
     }
   },
   "allowScripts": {
-    "sharp@0.34.5": true,
+    "sharp@0.35.3": true,
     "ffmpeg-static@5.3.0": true,
     "ffprobe-static@3.1.0": true
   },
   "packageManager": "pnpm@10.34.5",
   "pnpm": {
+    "overrides": {
+      "axios@1": "^1.19.0",
+      "brace-expansion@1": "^1.1.18",
+      "brace-expansion@2": "^2.1.4",
+      "brace-expansion@5": "^5.0.9",
+      "fast-uri@3": "^3.1.5",
+      "js-yaml@4": "^4.3.1",
+      "nanoid@3": "^3.3.17",
+      "postcss@8": "^8.5.25",
+      "sharp@0.34": "^0.35.3",
+      "tar@7": "^7.5.22",
+      "undici@6": "^6.28.0",
+      "undici@7": "^7.29.0"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-3gc7-fjrx-p6mg",
+        "GHSA-w5hq-g745-h8pq"
+      ]
+    },
     "onlyBuiltDependencies": [
       "esbuild",
       "ffmpeg-static",
@@ -306,6 +326,9 @@
       "electron-winstaller",
       "fsevents",
       "@reown/appkit"
-    ]
+    ],
+    "patchedDependencies": {
+      "three@0.185.1": "patches/three@0.185.1.patch"
+    }
   }
 }

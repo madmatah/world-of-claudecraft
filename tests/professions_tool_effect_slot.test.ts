@@ -24,8 +24,18 @@ import {
 import { type CharacterState, type PlayerMeta, Sim } from '../src/sim/sim';
 import { hasTranslation } from '../src/ui/i18n';
 import { TOOL_EFFECT_NAME_KEYS } from '../src/ui/tool_effect_name';
+import { runRecharge } from './helpers/enchant_family_cast';
+import { EMPTY_TEST_WORLD } from './sim_shared';
 
-const makeSim = (seed = 11) => new Sim({ seed, playerClass: 'warrior', autoEquip: false });
+// This whole file never ticks the sim and never touches an entity, camp, npc,
+// or ground object: every assertion is a content-table/config lookup
+// (startingDurabilityFor, RARITY_DURABILITY_BONUS, TOOL_EFFECTS membership,
+// i18n key existence) or a deterministic value the test itself set (signer
+// names, wire-echoed ids, explicit addItem counts). The empty world drops the
+// ambient camp/npc/ground-object spawn work every one of the 55 Sim
+// constructions below used to pay for.
+const makeSim = (seed = 11) =>
+  new Sim({ seed, playerClass: 'warrior', autoEquip: false, world: EMPTY_TEST_WORLD });
 const metaOf = (sim: Sim): PlayerMeta => sim.meta(sim.playerId) as PlayerMeta;
 
 /** Self-signed charm copies for both live effects (the acquisition craft's
@@ -471,7 +481,7 @@ describe('the R48 directional provenance arm and the deny-event reasons', () => 
     sim.drainEvents();
     sim.slotToolEffect('constructor', 'gatherers_cache');
     sim.slotToolEffect('mining', 'constructor');
-    sim.rechargeToolEffect('constructor');
+    runRecharge(sim, 'constructor');
     const reasons = sim
       .drainEvents()
       .filter((e) => e.type === 'toolEffectResult')
@@ -1063,7 +1073,7 @@ describe('the deny echo clamps wire-supplied ids (the whole-branch hardening)', 
     const sim = makeSim();
     const junk = 'r'.repeat(16000);
     sim.drainEvents();
-    sim.rechargeToolEffect(junk);
+    runRecharge(sim, junk);
     expect(sim.drainEvents().find((e) => e.type === 'toolEffectResult')).toMatchObject({
       action: 'recharge',
       ok: false,
@@ -1115,14 +1125,14 @@ describe('the dead gate on both player-reachable actions (the whole-branch harde
     sim.player.dead = true;
     sim.player.hp = 0;
     sim.drainEvents();
-    sim.rechargeToolEffect('mining');
+    runRecharge(sim, 'mining');
     const err = sim.drainEvents().find((e) => e.type === 'error');
     expect(err).toMatchObject({ text: "You can't do that while dead." });
     expect(sim.countItem('arcane_dust'), 'materials untouched').toBe(10);
     expect(slot.durability, 'no refill happened').toBe(0);
     // Alive-control: the SAME sim recharges fine, so the gate is the refusal.
     sim.player.dead = false;
-    sim.rechargeToolEffect('mining');
+    runRecharge(sim, 'mining');
     expect(sim.countItem('arcane_dust')).toBeLessThan(10);
     expect(slot.durability).toBeGreaterThan(0);
   });

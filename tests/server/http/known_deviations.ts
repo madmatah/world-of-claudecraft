@@ -62,7 +62,6 @@ export const DEVIATION_ID = {
   mapsAssetsRateLimitedBodyToCode: 'maps-assets-rate-limited-body-to-code',
   mapsAssetsIdParamDecode: 'maps-assets-id-param-decode-422',
 } as const;
-export type DeviationId = (typeof DEVIATION_ID)[keyof typeof DEVIATION_ID];
 
 export interface KnownDeviation {
   // Kebab-style unique id (a value of DEVIATION_ID).
@@ -991,9 +990,6 @@ export const KNOWN_DEVIATIONS: readonly KnownDeviation[] = [
       '/internal/discord/presence',
       '/internal/discord/grant',
       '/internal/discord/member',
-      '/internal/discord/relay',
-      '/internal/discord/activity',
-      '/internal/discord/daily-rewards-winners',
       '/internal/discord/daily-rewards-winners/mark',
       '/internal/discord/members-meta',
     ],
@@ -1327,6 +1323,7 @@ export const KNOWN_DEVIATIONS: readonly KnownDeviation[] = [
       '/api/maps/:id/publish',
       '/api/maps/:id/unpublish',
       '/api/assets',
+      '/api/assets/:id',
       '/api/assets/:file',
     ],
     currentBehavior:
@@ -1335,7 +1332,9 @@ export const KNOWN_DEVIATIONS: readonly KnownDeviation[] = [
       'their fused ip+account bucket inline in server/main.ts, and the two public reads ' +
       '(GET /api/maps/public, the GET /api/assets byte read) plus the anonymous leg of ' +
       'GET /api/maps/:id check the tier-1 publicReadRateLimited bucket, each returning ' +
-      'the same snake_case prose body.',
+      'the same snake_case prose body. DELETE /api/assets/:id shares the same ' +
+      'assetUploadRateLimited fused ip+account bucket as the POST /api/assets upload, so it ' +
+      'carries the identical old-vs-new 429 body/header divergence described below.',
     intendedBehavior:
       'The v0.20.0 in-merge migration serves these routes through the new pipeline, where ' +
       'the throttle is a rateLimit(policy) middleware (MAP_MUTATION_POLICY / ' +
@@ -1345,7 +1344,8 @@ export const KNOWN_DEVIATIONS: readonly KnownDeviation[] = [
       'Retry-After, instead of the bare { error: "rate_limited" } prose. The tier-1 buckets ' +
       'are SHARED with the legacy arms (the policies wrap the same ratelimit.ts functions), ' +
       'so limits land identically; only the 429 body shape and headers differ, plus EVERY ' +
-      'policy-mounted lane (the mutations and upload included, not just the public reads) ' +
+      'policy-mounted lane (the mutations, the upload, and the DELETE /api/assets/:id ' +
+      'ASSET_UPLOAD_POLICY arm included, not just the public reads) ' +
       'gains the pg tier-2 global backstop the legacy tier-1-only checks lack. The GET ' +
       '/api/assets/:file byte read keeps the surface-default problem+json ERROR envelope ' +
       '(its success body is binary but its meta sets no envelope, the POST /api/card ' +

@@ -11,8 +11,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { audio } from '../src/game/audio';
+import { CHROME_GUARDED_PANELS } from '../src/ui/chrome_focus_wiring';
 import { deedName } from '../src/ui/deed_i18n';
 import { Hud } from '../src/ui/hud';
+import { bindChromeButtonKeyGuard } from '../src/ui/pointer_blur';
 
 // This file runs under jsdom (for the keyboard-guard behavioral test below),
 // where import.meta.url is an http URL that readFileSync rejects; resolve the
@@ -23,7 +25,10 @@ const read = (rel: string): string => readFileSync(join(__dirname, rel), 'utf8')
 // pinned below carry comments that name the very tokens the pins look for.
 // Only WHOLE-line comments: a trailing-comment or URL-bearing code line must
 // survive intact, or the pins below would stop seeing the code they guard.
-const stripLineComments = (src: string): string => src.replace(/^\s*\/\/.*$/gm, '');
+// A regex, not a lexer: assumes no `/*` inside a string or regex literal in the scanned
+// sources (true for hud.ts, pointer_blur.ts and chrome_focus_wiring.ts today).
+const stripLineComments = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 const painter = read('../src/ui/deeds_window.ts');
 const tracker = read('../src/ui/deed_tracker_painter.ts');
@@ -136,6 +141,20 @@ describe('hud wiring', () => {
     expect(hud).toContain('onWatchChanged: () => this.updateDeedTracker(),');
   });
 
+  it('feeds the worn border into both unit frames from the two different sources', () => {
+    // SELF reads the deeds facet; the TARGET reads the entity wire field. Both
+    // fills are load-bearing and neither is covered by the unit_frame suites,
+    // which drive the painter with a descriptor the call site builds here: drop
+    // either line and the picker changes nothing on screen with every test green.
+    expect(hud).toContain('playerFrame.borderSlug = deedBorderSlug(sim.activeBorder);');
+    expect(hud).toContain('targetFrame.borderSlug = deedBorderSlug(target.border ?? null);');
+    // The painter can only write the ring on a frame it was handed.
+    expect(hud).toContain("private pfPortraitWrapEl = $('#pf-portrait-wrap');");
+    expect(hud).toContain("private targetPortraitWrapEl = $('#tf-portrait-wrap');");
+    expect(hud).toContain('portraitBorder: this.pfPortraitWrapEl,');
+    expect(hud).toContain('portraitBorder: this.targetPortraitWrapEl,');
+  });
+
   it('routes Esc through the painter close (WCAG focus return)', () => {
     expect(hud).toMatch(/case 'deeds-window':[\s\S]{0,200}?this\.deedsWindow\.close\(\);/);
   });
@@ -157,19 +176,46 @@ describe('hud wiring', () => {
 
   it('keeps the retro arm silent: one summary line, no banner, no audio', () => {
     const start = hud.indexOf('private handleDeedUnlocks(');
-    const end = hud.indexOf('log(text: string', start);
+    const end = hud.indexOf('\n  log(\n', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
-    const body = hud.slice(start, end);
+    // Comment-stripped (the reliquary sibling's idiom, and this file's own
+    // level-up arm): the arm carries prose about tPlural and formatNumber right
+    // above the code, which would otherwise satisfy the pins below on its own.
+    const body = stripLineComments(hud.slice(start, end));
     // Banner and audio are gated on the PLAN's fresh-unlock fields; the retro
     // count only ever feeds the one localized summary log line.
     expect(body).toContain('if (plan.bannerId !== null)');
     expect(body).toContain('if (plan.playSound) audio.achievement();');
+    // The RAW plan.retroCount is the second argument on purpose: it is what
+    // tPlural feeds Intl.PluralRules, so pinning it stops a refactor from
+    // passing the pre-formatted string and collapsing every locale onto the
+    // .other leaf ("1 deeds recorded" again).
     expect(body).toMatch(
-      /if \(plan\.retroCount > 0\) \{\s*const retroText = t\('hudChrome\.deeds\.retroSummary'/,
+      /if \(plan\.retroCount > 0\) \{\s*const retroText = tPlural\(\s*'hudChrome\.plurals\.deedsRetroSummary',\s*plan\.retroCount,/,
     );
+    // The display override: the visible number stays locale-formatted through
+    // formatNumber even though the selection arg above is the raw count.
+    expect(body).toContain('count: formatNumber(plan.retroCount, { maximumFractionDigits: 0 })');
     expect(body.match(/showCelebrationBanner/g)?.length).toBe(1);
     expect(body.match(/audio\.achievement/g)?.length).toBe(1);
+  });
+
+  it('logs BOTH worn-cosmetic hints, each from its own plan list', () => {
+    // A title unlock has always pointed at the picker; a border unlock did not,
+    // and three of the four border deeds are earned far from the Book. Both
+    // lines are pinned here (comment-stripped, like the arm above) so neither
+    // consumer loop can be dropped while the pure plan keeps building the list.
+    const start = hud.indexOf('private handleDeedUnlocks(');
+    const end = hud.indexOf('\n  log(\n', start);
+    const body = stripLineComments(hud.slice(start, end));
+    expect(body).toMatch(
+      /for \(const id of plan\.titleHintIds\) \{\s*this\.log\(\s*t\('hudChrome\.deeds\.unlockedTitleHint', \{ title: deedTitleText\(id\) \}\),\s*'#ffd100',?\s*\);/,
+    );
+    // Named by the DEED: a border reward carries a palette slug, never text.
+    expect(body).toMatch(
+      /for \(const id of plan\.borderHintIds\) \{\s*this\.log\(\s*t\('hudChrome\.deeds\.unlockedBorderHint', \{ name: deedName\(id\) \}\),\s*'#ffd100',?\s*\);/,
+    );
   });
 
   it("the level-up arm's three banners all ride the 'levelup' class (source pin)", () => {
@@ -209,7 +255,7 @@ describe('hud wiring', () => {
     expect(start).toBeGreaterThan(-1);
     // Strip line comments first: this method's prose names the 'deed' variant,
     // so an uncommented slice would let a reworded comment satisfy the pin.
-    const body = stripLineComments(hud.slice(start, hud.indexOf('log(text: string', start)));
+    const body = stripLineComments(hud.slice(start, hud.indexOf('\n  log(\n', start)));
     // The deed variant AND the R38 'deed' banner class both ride the call
     // (the celebration wrapper's second and third arguments): the class is
     // what queues it behind a live level-up instead of replacing it, the
@@ -480,10 +526,14 @@ describe('hud wiring', () => {
     // off, so BOTH earned-moment texts route through the throttled combat
     // announcer (once for the coalesced banner line, once for retro).
     const start = hud.indexOf('private handleDeedUnlocks(');
-    const body = hud.slice(start, hud.indexOf('log(text: string', start));
+    const body = hud.slice(start, hud.indexOf('\n  log(\n', start));
     expect(body).toContain('this.combatAnnouncer.push(bannerText, performance.now());');
     expect(body).toContain('this.combatAnnouncer.push(retroText, performance.now());');
     expect(body.match(/combatAnnouncer\.push/g)?.length).toBe(2);
+    // The chat-pane delivery too, not just the announcer: deleting the log
+    // call would compile and pass everything else while the visible catch-up
+    // line vanishes (the reliquary sibling pins its log line the same way).
+    expect(body).toContain("this.log(retroText, '#ffd100');");
   });
 
   it('marks the watch toggle state and names the recent-strip jump buttons', () => {
@@ -501,8 +551,13 @@ describe('hud wiring', () => {
   it('shows the active title and earned border badges on the character sheet', () => {
     expect(hud).toContain("t('hudChrome.deeds.charTitleLabel')");
     expect(hud).toContain('data-act="open-deeds"');
-    expect(hud).toContain('class="ms-badge ms-deed-border"');
+    expect(hud).toMatch(/class="ms-badge ms-deed-border\$\{worn \? ' ms-active' : ''\}"/);
     expect(hud).toMatch(/reward\?\.kind === 'border' && sim\.deedsEarned\.has\(id\)/);
+    // The WORN badge is state, not decoration: it is picked by comparing deed
+    // ids against the facet read, and it says so in its own LABEL rather than
+    // leaning on the ms-active colour alone (WCAG 1.4.1).
+    expect(hud).toContain('const worn = id === sim.activeBorder;');
+    expect(hud).toContain("t('hudChrome.deeds.charBorderWorn', { name })");
   });
 
   it('renders the inspected player title from the entity wire field', () => {
@@ -534,6 +589,16 @@ describe('entry HTMLs', () => {
       // keyboard-reachable toggle (the quest-tracker contract).
       expect(html).toContain('<div id="deed-tracker"></div>');
       expect(html).not.toContain('id="deed-tracker" aria-hidden');
+    }
+  });
+
+  it('ids the two portrait frames the border ring paints on in BOTH game entries', () => {
+    // $('#pf-portrait-wrap') resolves null in a document that lacks the id, and
+    // the painter then skips the ring silently: an index-only edit would ship a
+    // border that never appears for online players (the /play shared-entry trap).
+    for (const html of [indexHtml, playHtml]) {
+      expect(html).toContain('class="portrait-wrap" id="pf-portrait-wrap"');
+      expect(html).toContain('class="portrait-wrap" id="tf-portrait-wrap"');
     }
   });
 
@@ -620,20 +685,21 @@ describe('touch open chain (More tray -> Hud)', () => {
 });
 
 describe('touch long-press peek', () => {
-  it('attaches the card tooltip and suppresses BOTH card actions on a peek release', () => {
+  it('attaches the card tooltip and suppresses EVERY card action on a peek release', () => {
     expect(painter).toContain(
       "this.deps.attachTooltip(card, () => this.cardTooltipHtml(card.dataset.deed ?? ''));",
     );
     // Each action arm consumes the shared guard FIRST: a peek release
-    // dismisses the tooltip and fires nothing (watch toggle and title equip).
+    // dismisses the tooltip and fires nothing (watch toggle, title equip, and
+    // border equip).
     expect(
       painter.match(
         /if \(this\.deps\.consumePeek\(\)\) \{\s*this\.deps\.hideTooltip\(\);\s*return;\s*\}/g,
       )?.length,
-    ).toBe(2);
-    // Association, not just count: the guard is the FIRST statement of the
-    // [data-watch] handler AND of the [data-title] handler specifically.
-    for (const selector of ['data-watch', 'data-title']) {
+    ).toBe(3);
+    // Association, not just count: the guard is the FIRST statement of each
+    // action handler specifically, never merely present somewhere in the file.
+    for (const selector of ['data-watch', 'data-title', 'data-border-pick']) {
       expect(painter).toMatch(
         new RegExp(
           `\\('\\[${selector}\\]'\\)\\)\\s*\\{\\s*btn\\.addEventListener\\('click', \\(\\) => \\{\\s*` +
@@ -693,6 +759,11 @@ describe('mobile layout (hud.mobile.css)', () => {
   });
 
   it('folds the tracker to a count chip on the compact tier and routes its tap to the Book', () => {
+    // The chip's own chrome (the shared compact `.dt-header` rule and its
+    // ::after hit extension, which this tracker and the Reliquary tracker
+    // share) is pinned once, in tests/reliquary_tracker_view.test.ts
+    // ('keeps the compact mobile chip a 40px tap target ...'); this test
+    // owns the fold and the routing only.
     expect(hudMobile).toMatch(
       /body\.mobile-touch\.hud-mobile-compact #deed-tracker \.dt-list \{\s*display: none;/,
     );
@@ -780,6 +851,18 @@ describe('chrome keys and CSS floors', () => {
     expect(hudCss).toMatch(
       /@media \(pointer: coarse\) \{\s*#deed-tracker \.dt-header \{\s*min-height: 40px;/,
     );
+    // On the COMPACT tier that coarse min-height is overridden by layer (the
+    // chip is a 24px visual there) and the 40px floor rides an invisible
+    // ::after hit extension instead (24 + 2x8; DESIGN.md 10.1; the inset is
+    // -9px because it is measured from the padding edge of the 1px-bordered
+    // chip). The shared chip rule is pinned in full in
+    // tests/reliquary_tracker_view.test.ts and its live reach in
+    // tests/browser/target_size.browser.test.ts; this half-pin keeps the deed
+    // tracker's own floor guarded where a deed-tracker change would look: the
+    // deed selector must be IN the extension's selector list, with the reach.
+    expect(hudMobile.replace(/\/\*[\s\S]*?\*\//g, '')).toMatch(
+      /hud-mobile-compact #deed-tracker \.dt-header::after[^{]*\{\s*content: "";\s*position: absolute;\s*inset: -9px;/,
+    );
     // The recent-strip jump buttons: the floor lives in hud.mobile.css and
     // must be UNCONDITIONAL under body.mobile-touch (a landscape tablet never
     // enters the short-phone media block).
@@ -819,33 +902,44 @@ describe('non-modal Enter/Space activation guard (WCAG 2.1.1)', () => {
     // Book button has focus: without the guard, Space jumps the character and
     // Enter opens chat instead of activating the control. Mirror the bank pin
     // (tests/bank_window.test.ts): slice the guard array so removing the entry reds.
-    const start = hud.indexOf("'#delve-board',");
-    expect(start).toBeGreaterThan(0);
-    const guardArray = hud.slice(start, hud.indexOf(']', start));
-    expect(guardArray).toContain("'#deeds-window'");
-    // The shared guard body the behavioral test below faithfully copies: it
-    // stopPropagation's Enter/Space only when a BUTTON has focus and NEVER
-    // preventDefault's (native activation survives). Scope the preventDefault
-    // absence to the guard region so an unrelated hud handler cannot mask a drift.
-    const guardRegion = hud.slice(start, hud.indexOf("$('#mm-map')", start));
-    expect(guardRegion).toContain("(e.target as HTMLElement).tagName !== 'BUTTON'");
-    expect(guardRegion).toContain('e.stopPropagation()');
-    expect(guardRegion).not.toContain('preventDefault');
+    // The root list lives in src/ui/chrome_focus_wiring.ts; hud.ts is a one-line
+    // consumer of its wiring entry point.
+    expect(CHROME_GUARDED_PANELS).toContain('#deeds-window');
+    expect(stripLineComments(hud)).toContain('wireChromeFocus($)');
+    // The shared guard body lives in src/ui/pointer_blur.ts
+    // (bindChromeButtonKeyGuard), which the behavioral test below drives
+    // directly: it stopPropagation's Enter/Space only when a BUTTON has focus
+    // and NEVER preventDefault's (native activation survives). Pin that the
+    // wiring binds it (plus the pointer-only drop) over every guarded panel and
+    // that the wiring itself stays preventDefault-free (a default-preventing
+    // handler there would kill the native activation the guard protects).
+    const wiring = stripLineComments(read('../src/ui/chrome_focus_wiring.ts'));
+    const loopStart = wiring.indexOf('for (const panelId of CHROME_GUARDED_PANELS)');
+    expect(loopStart).toBeGreaterThan(0);
+    const loop = wiring.slice(loopStart);
+    expect(loop).toContain('bindChromeButtonKeyGuard(panel)');
+    expect(loop).toContain('bindPointerBlur(panel)');
+    expect(wiring).not.toContain('preventDefault');
+    const guardSrc = stripLineComments(read('../src/ui/pointer_blur.ts'));
+    const bodyStart = guardSrc.indexOf('function bindChromeButtonKeyGuard');
+    expect(bodyStart).toBeGreaterThan(0);
+    // Bound the slice at the function's closing brace so the negative below never
+    // polices whatever follows the guard in the module.
+    const guardBody = guardSrc.slice(bodyStart, guardSrc.indexOf('\n}\n', bodyStart) + 3);
+    expect(guardBody).toContain("tagName !== 'BUTTON'");
+    expect(guardBody).toContain('ke.stopPropagation()');
+    expect(guardBody).not.toContain('preventDefault');
   });
 
   it('stops Enter/Space from the game binds on a focused Book button, preserving native activation', () => {
-    // Drives the exact hud.ts guard body over a Book button. The source pin above
-    // keeps hud.ts wiring #deeds-window into the array and keeps this copy honest;
-    // deeds_window_focus.test.ts covers that the real Book renders buttons here.
+    // Drives the REAL shared guard (the one hud.ts binds on each guarded panel
+    // root; it survives the painter's innerHTML rebuilds because it lives on
+    // the root). deeds_window_focus.test.ts covers that the real Book renders
+    // buttons here.
     document.body.innerHTML = '<div id="deeds-window"><button data-close></button></div>';
     const root = document.getElementById('deeds-window') as HTMLElement;
     const btn = root.querySelector('button') as HTMLButtonElement;
-    // The listener hud.ts installs on each guarded panel root (survives the
-    // painter's innerHTML rebuilds because it lives on the root).
-    root.addEventListener('keydown', (e) => {
-      if ((e.target as HTMLElement).tagName !== 'BUTTON') return;
-      if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') e.stopPropagation();
-    });
+    bindChromeButtonKeyGuard(root);
     const windowSpy = vi.fn();
     window.addEventListener('keydown', windowSpy);
     btn.focus();

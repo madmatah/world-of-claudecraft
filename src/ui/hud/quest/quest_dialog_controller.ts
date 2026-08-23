@@ -6,6 +6,7 @@ import { npcQuestMarkerKind, type QuestMarkerKind } from '../../../sim/quests/qu
 import { dist2d, type Entity, type ItemDef, questObjectiveRequired } from '../../../sim/types';
 import type { IWorld } from '../../../world_api';
 import { archetypeTitleText, craftNameText } from '../../char_window';
+import { currencyIconHtml, heroicMarkIconHtml } from '../../currency_art';
 import { decorativeArtImg } from '../../decorative_art';
 import { markDialogRoot } from '../../dialog_root';
 import { itemDisplayName } from '../../entity_i18n';
@@ -18,6 +19,7 @@ import { archetypeImageUrl } from '../../profession_art';
 import { buildAttunementPreview } from '../../profession_identity_view';
 import { svgIcon } from '../../ui_icons';
 import { isStationMasterNpc } from '../vendor/train_view';
+import { isWarfareVendorNpc } from '../vendor/warfare_vendor_view';
 import { gossipMenuIsEmpty } from './gossip_menu';
 import { masterCraftTarget } from './master_craft_core';
 import { PROF_INTRO_QUEST_ID, professionIntroHintVisible } from './prof_intro_hint_core';
@@ -64,6 +66,9 @@ export interface QuestDialogControllerDeps {
   // to <body> without an explicit, still-live element handed in.
   openVendor(npcId: number, opener?: HTMLElement | null): void;
   openHeroicVendor(npcId: number, opener?: HTMLElement | null): void;
+  /** The WARFARE quartermaster's sectioned honor shop. Same opener handoff as
+   *  openVendor above: the dialog is hidden before the route fires. */
+  openWarfareVendor(npcId: number, opener?: HTMLElement | null): void;
   openTrain(npcId: number): void;
   openUnbind(npcId: number): void;
   /** Open the crafting window straight to `craftId`'s tab (the station
@@ -334,7 +339,36 @@ export class QuestDialogController {
         ),
       )
       .map((progress) => progress.questId);
-    const hasVendor = npc.vendorItems.length > 0;
+    // The WARFARE quartermaster REPLACES the generic goods row with its sectioned
+    // window (gated on the NpcDef flag, never a hard-coded id).
+    //
+    // This reverses an earlier decision, deliberately (owner 2026-08-07). Both rows
+    // used to show, on the reasoning that distinct labels made them tellable apart
+    // and that suppressing the generic row cost selling and buyback at an NPC that
+    // had them. In play the two still read as the same option, because they open
+    // the SAME stock: a quartermaster's vendorItems IS the whole WARFARE catalog,
+    // so the generic grid is a flat copy of what the sectioned window lays out
+    // properly. One row, the good one.
+    //
+    // The stock itself must stay non-empty: the honor purchase path is generic
+    // over vendorItems (items.ts buyItem refuses an empty list and requires the id
+    // to be in it), and the warfareVendor flag is a WINDOW routing hint the buy
+    // path never reads. Emptying the stock to hide the row would turn the shop
+    // off. Suppressing the ROW is the only lever that does not.
+    //
+    // It is also the safer row. The ordinary vendor window renders an honor price
+    // for its rows (vendor_view.ts) and its onBuy calls sim.buyItem straight
+    // through with NO confirm, so the generic row was an unconfirmed one-click
+    // path to the same tens-of-thousands-of-honor set pieces the sectioned window
+    // puts behind a confirm dialog (Hud.requestWarfarePurchase). Dropping it
+    // closes that bypass; tests/warfare_purchase_confirm.test.ts pins both halves.
+    //
+    // Accepted cost: selling is no longer reachable at FURY or Warmarshal Draven
+    // Kole, both dedicated honor quartermasters. Nothing is stranded by it: the
+    // buyback list is per PLAYER (PlayerMeta.vendorBuyback), not per NPC, so
+    // anything sold earlier is still bought back at any other vendor in the world.
+    const hasWarfareVendor = isWarfareVendorNpc(definition);
+    const hasVendor = npc.vendorItems.length > 0 && !hasWarfareVendor;
     // Station master (Professions 2.0): the resident master of a
     // crafting station (stations content masterNpcId) offers recipe training.
     const hasTraining = isStationMasterNpc(npc.templateId, world.stationPlacements);
@@ -353,6 +387,7 @@ export class QuestDialogController {
         hasVendor,
         hasMarket,
         hasHeroicVendor,
+        hasWarfareVendor,
         hasDelveBoard,
         hasVcup: hasValeCup,
         hasCardMaster,
@@ -407,7 +442,7 @@ export class QuestDialogController {
       html += `<button type="button" class="qd-list-item" data-discuss="${esc(questId)}" aria-label="${esc(t('questUi.dialog.discussQuestAria', { name: title }))}"><span class="gold">?</span> ${esc(t('questUi.dialog.discussQuest', { name: title }))}</button>`;
     }
     if (hasVendor) {
-      html += `<button type="button" class="qd-list-item" data-vendor="1" aria-label="${esc(t('questUi.dialog.browseGoodsAria', { name: npcName }))}"><span class="quest-complete">$</span> ${esc(t('questUi.dialog.browseGoods'))}</button>`;
+      html += `<button type="button" class="qd-list-item" data-vendor="1" aria-label="${esc(t('questUi.dialog.browseGoodsAria', { name: npcName }))}">${currencyIconHtml('coin_gold')} ${esc(t('questUi.dialog.browseGoods'))}</button>`;
     }
     // Crafting shortcut: the master's Crafting option opens the crafting
     // window straight to their own craft's tab (the viewer's stronger craft
@@ -439,7 +474,12 @@ export class QuestDialogController {
       html += `<button type="button" class="qd-list-item" data-market="1" aria-label="${esc(t('questUi.dialog.worldMarketAria'))}"><span class="gold">${svgIcon('market')}</span> ${esc(t('questUi.dialog.worldMarket'))}</button>`;
     }
     if (hasHeroicVendor) {
-      html += `<button type="button" class="qd-list-item" data-heroic-shop="1" aria-label="${esc(t('questUi.dialog.browseGoodsAria', { name: npcName }))}"><span class="quest-complete">$</span> ${esc(t('questUi.dialog.browseGoods'))}</button>`;
+      html += `<button type="button" class="qd-list-item" data-heroic-shop="1" aria-label="${esc(t('questUi.dialog.browseGoodsAria', { name: npcName }))}">${heroicMarkIconHtml()} ${esc(t('questUi.dialog.browseGoods'))}</button>`;
+    }
+    if (hasWarfareVendor) {
+      // Its OWN label and accessible name: this row sits beside the generic
+      // goods row above at a flagged NPC, so it can never reuse "Browse Goods".
+      html += `<button type="button" class="qd-list-item" data-warfare-shop="1" aria-label="${esc(t('hudChrome.warfareShop.gossipOptionAria', { name: npcName }))}">${currencyIconHtml('honor')} ${esc(t('hudChrome.warfareShop.gossipOption'))}</button>`;
     }
     if (hasDelveBoard) {
       const delve = Object.values(DELVES).find((entry) => entry.boardNpcId === npc.templateId);
@@ -466,6 +506,7 @@ export class QuestDialogController {
     });
     this.bindRoute('[data-vendor]', (opener) => this.deps.openVendor(npc.id, opener));
     this.bindRoute('[data-heroic-shop]', (opener) => this.deps.openHeroicVendor(npc.id, opener));
+    this.bindRoute('[data-warfare-shop]', (opener) => this.deps.openWarfareVendor(npc.id, opener));
     this.bindRoute('[data-train]', () => this.deps.openTrain(npc.id));
     if (masterCraft !== null) {
       this.bindRoute('[data-crafting]', () => this.deps.openCrafting(masterCraft));

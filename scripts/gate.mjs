@@ -21,15 +21,13 @@
 // changed-file biome are never treated as cacheable "green forever".
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
+import { cwd } from 'node:process';
+import { runGateChild } from './lib/gate_child.mjs';
+import { acquireFullSuiteLock } from './lib/gate_lock.mjs';
 import { resolveAvailableMemoryBytes } from './lib/gate_memory.mjs';
-import { buildFullGateSteps } from './lib/gate_steps.mjs';
+import { runGatePreflights } from './lib/gate_preflight.mjs';
+import { buildFullGateSteps, FULL_SUITE_STEP_NAME } from './lib/gate_steps.mjs';
 import { computeGateWorkers, resolveGateWorkerTierCap } from './lib/gate_workers.mjs';
-import {
-  formatInstallSyncFailure,
-  parseInstallProblems,
-  shouldCheckInstallSync,
-} from './lib/npm_install_sync.mjs';
-import { FFMPEG_PATH, FFPROBE_PATH } from './sfx/ffmpeg_paths.mjs';
 
 // Halving the core count only protects a gate run from ITSELF; it does nothing when a
 // second `npm run gate` (or any other heavy vitest run) is happening in a sibling
@@ -66,53 +64,14 @@ const shell = process.platform === 'win32';
 // and other preflights that need to test their OWN failure mode in isolation
 // (tests/sfx_gate_preflight.test.ts) set it explicitly rather than relying on the
 // side effect of an empty PATH also making `npm` itself unspawnable.
-if (process.env.WOC_SKIP_DEP_SYNC !== '1') {
-  const npmLs = spawnSync('npm', ['ls', '--depth=0', '--json'], { encoding: 'utf8', shell });
-  if (shouldCheckInstallSync(npmLs)) {
-    try {
-      const installProblems = parseInstallProblems(npmLs.stdout);
-      if (installProblems.length > 0) {
-        console.error(
-          `[gate] FAIL at "dependency sync"\n${formatInstallSyncFailure(installProblems)}`,
-        );
-        process.exit(1);
-      }
-    } catch (err) {
-      // npm ran but did not produce parseable JSON: a problem with the check
-      // itself, not evidence of drift, so warn and let the gate continue rather
-      // than fail on output we cannot interpret.
-      console.error(`[gate] WARN: dependency sync check skipped: ${err.message}`);
-    }
-  }
-}
-
-// Probe the resolved binaries BY EXECUTION: the ffmpeg-static/ffprobe-static
-// packages download their binary via an allowlisted install script, so a
-// scripts-skipped install leaves a missing file behind the import, and the PATH
-// fallback may not exist either. Failing here is cheaper and clearer than
-// failing mid-suite.
-const missingAudioTools = [
-  ['ffmpeg', FFMPEG_PATH],
-  ['ffprobe', FFPROBE_PATH],
-].filter(([, toolPath]) => {
-  const probe = spawnSync(toolPath, ['-version'], { stdio: 'ignore', shell });
-  return probe.error !== undefined || probe.status !== 0;
-});
-if (missingAudioTools.length > 0) {
-  console.error(
-    `[gate] missing required SFX audio tooling: ${missingAudioTools.map(([name]) => name).join(', ')}\n` +
-      '[gate] the bundled ffmpeg-static/ffprobe-static binaries are absent or broken (a\n' +
-      '[gate] scripts-skipped install leaves them missing): reinstall with\n' +
-      '[gate] pnpm install --frozen-lockfile (ensure onlyBuiltDependencies allows\n' +
-      '[gate] ffmpeg-static/ffprobe-static), or install FFmpeg (including ffprobe) on PATH,\n' +
-      '[gate] then re-run pnpm run gate',
-  );
-  process.exit(1);
-}
+// Both preflights now live in lib/gate_preflight.mjs so gate:select shares them
+// rather than silently losing the early, clear failure they exist to produce.
+await runGatePreflights({ label: 'gate', shell });
 
 const branch =
   spawnSync('git', ['branch', '--show-current'], { encoding: 'utf8', shell }).stdout?.trim() ?? '';
 const releaseTier = branch.startsWith('release/');
+const repoRoot = cwd();
 // Base env for every step. Per-step overlays (e.g. pretest skip on vitest) merge on top.
 // The release tier is NOT applied here. It rides on the one dedicated vitest step
 // buildFullGateSteps adds for a release branch (lib/gate_steps.mjs), mirroring the
@@ -123,7 +82,7 @@ const baseEnv = { ...process.env };
 // Shared step list (Phase 2 generate-once + Phase 8 turbo cacheable pure steps).
 // The bot build rides inside buildFullGateSteps (scripts/lib/gate_steps.mjs), so
 // the packet's R7 step stays in every consumer of the shared list.
-const steps = buildFullGateSteps(workers, { releaseTier });
+const steps = buildFullGateSteps(workers, { releaseTier, repoRoot });
 
 if (releaseTier) {
   console.log(
@@ -131,10 +90,32 @@ if (releaseTier) {
   );
 }
 
+// Concurrent `npm run gate` runs are routine under this repo's own per-task-worktree
+// workflow, and each sizes its Vitest pool as if it owned the host (computeGateWorkers
+// above). Only the full-suite step is the wall-clock bottleneck (#2808), so only it is
+// serialized across processes; every other step still runs freely in parallel across
+// worktrees. GATE_NO_LOCK=1 restores today's fully concurrent behavior for a user who
+// deliberately wants two full suites running at once.
+const noLock = process.env.GATE_NO_LOCK === '1';
+if (noLock) {
+  console.log('[gate] GATE_NO_LOCK=1: full-suite lock disabled, running unserialized');
+}
+
 for (const { name, cmd, args, hint, env: envOverlay } of steps) {
   console.log(`\n[gate] ${name}: ${cmd} ${args.join(' ')}`);
   const env = envOverlay ? { ...baseEnv, ...envOverlay } : baseEnv;
-  const res = spawnSync(cmd, args, { stdio: 'inherit', env, shell });
+  const locked = name === FULL_SUITE_STEP_NAME;
+  const { release } = locked
+    ? await acquireFullSuiteLock({ optOut: noLock })
+    : { release: async () => {} };
+  let res;
+  try {
+    res = locked
+      ? await runGateChild(cmd, args, { stdio: 'inherit', env, shell })
+      : spawnSync(cmd, args, { stdio: 'inherit', env, shell });
+  } finally {
+    await release();
+  }
   if (res.status !== 0) {
     console.error(`\n[gate] FAIL at "${name}" (exit ${res.status ?? 'killed'})`);
     if (hint) console.error(`[gate] hint: ${hint}`);

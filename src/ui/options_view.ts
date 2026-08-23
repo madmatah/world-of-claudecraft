@@ -197,6 +197,25 @@ export interface OptionsEnv {
   touch: boolean;
   /** isNativeAppShell(): hides the Interface Mode picker (the shell forces touch). */
   nativeShell: boolean;
+  /** desktopGpuPrefSupported(): reveals the desktop GPU preference row. A BRIDGE
+   *  CAPABILITY, deliberately not nativeShell (which is also true in the mobile
+   *  shells, and is true for a desktop shell too old to have the preference).
+   *  Absent (the web/offline callers) means the row never renders. */
+  desktopGpuPref?: boolean;
+  /** desktopDisplayModeSupported(): the shell owns the window, so the Display
+   *  card shows a windowed/borderless picker INSTEAD of the browser Fullscreen
+   *  toggle (asking the browser for fullscreen inside an already-fullscreen
+   *  shell window makes the two fight). Also a BRIDGE CAPABILITY, not
+   *  nativeShell: a desktop shell too old to have display modes keeps the
+   *  browser toggle, which is what actually works there. Absent (the
+   *  web/offline callers) means the picker never renders. */
+  desktopDisplayMode?: boolean;
+  /** desktopDiscordPresenceSupported(): reveals the Discord Rich Presence row.
+   *  A BRIDGE CAPABILITY like the two above, deliberately not nativeShell: the
+   *  mobile shells cannot publish a presence at all, and neither can a desktop
+   *  shell installed before it shipped. Absent (the web/offline callers) means
+   *  the row never renders. */
+  desktopDiscordPresence?: boolean;
 }
 
 const slider = (
@@ -256,6 +275,14 @@ const choice = (
 
 const note = (textKey: TranslationKey): NoteControl => ({ control: 'note', textKey });
 
+// The desktop shell's window modes, in the order a player reads them: the
+// smaller window first, the default (borderless fullscreen) second, matching
+// the stored numbers 0 and 1 so the picker's order is the setting's order.
+const displayModeOptions: ChoiceOption[] = [
+  { value: 0, labelKey: 'hud.options.displayModeWindowed' },
+  { value: 1, labelKey: 'hud.options.displayModeBorderless' },
+];
+
 // The advanced-preset sub-setting ladders (round 10). Values are the
 // PERSISTED numbers gfx.ts maps to knob levels: the historical binary rows
 // stored 0 (Low) and 1 (High), so those keep their meaning and the new
@@ -267,9 +294,14 @@ const qualityLadderOptions: ChoiceOption[] = [
   { value: 1, labelKey: 'hud.options.graphicsPresetHigh' },
   { value: 2, labelKey: 'hud.options.graphicsPresetInsane' },
 ];
-// Effects & Lighting stops at High (the full high-tier post stack); the
-// ultra/insane tiers' full-res AO rides the preset, not this dial.
-const effectsLadderOptions: ChoiceOption[] = [
+// The High-capped three-step ladder, shared by the dials that stop at High.
+// Effects & Lighting: High is already the full high-tier post stack (the
+// ultra/insane tiers' full-res AO rides the preset, not this dial). Shadow
+// Quality: High is the 4096 map, and the retired Insane rung's single
+// 8192x8192 shadow target was a ~256 MB-class GPU allocation redrawn every
+// frame for marginal visible gain. Particle Effects: a three-step band clamp
+// by design (see its gfx.ts mapping).
+const highCapLadderOptions: ChoiceOption[] = [
   { value: 0, labelKey: 'hud.options.graphicsPresetLow' },
   { value: 0.5, labelKey: 'hud.options.graphicsPresetMedium' },
   { value: 1, labelKey: 'hud.options.graphicsPresetHigh' },
@@ -301,6 +333,7 @@ export type OptionsPanelId =
 
 export type OptionsMenuAction =
   | { kind: 'goto'; view: OptionsPanelId }
+  | { kind: 'wiki' }
   | { kind: 'unstuck' }
   | { kind: 'logout' }
   | { kind: 'close' };
@@ -321,6 +354,9 @@ export function buildOptionsMenu(opts: { bugReportAvailable: boolean }): Options
     { labelKey: 'hudChrome.auraOverlay.title', action: { kind: 'goto', view: 'auras' } },
     { labelKey: 'hud.options.audio', action: { kind: 'goto', view: 'audio' } },
     { labelKey: 'hudChrome.perf.title', action: { kind: 'goto', view: 'performance' } },
+    // The wiki row sits with the help-shaped entries (above Report a Bug /
+    // Unstuck); it opens the confirm-first external hop, never a sub-panel.
+    { labelKey: 'nav.wiki', action: { kind: 'wiki' } },
   ];
   if (opts.bugReportAvailable)
     entries.push({
@@ -340,11 +376,48 @@ export function buildOptionsMenu(opts: { bugReportAvailable: boolean }): Options
 // own modules.
 // ---------------------------------------------------------------------------
 
-/** Body control rows for the Graphics sub-panel, in render order. The interleaved
- *  notes (browser-effects, interface-mode) live here; the painter appends the
- *  trailing graphics/reload notes + the reload button + footer as panel chrome. */
-export function buildGraphicsControls(s: OptionsSettingsSource, env: OptionsEnv): OptionsControl[] {
-  const out: OptionsControl[] = [];
+/** One titled card of the two-column Graphics sub-panel. */
+export interface GraphicsSection {
+  titleKey: TranslationKey;
+  /** Desktop placement: column 1 (left), column 2 (right), or 'full' (a card
+   *  spanning both columns below them, its rows flowing two-up). Narrow/touch
+   *  stacks everything in section order. */
+  column: 1 | 2 | 'full';
+  controls: OptionsControl[];
+}
+
+// The two-option Off/On ladder the per-effect binaries render with.
+const offOnOptions: ChoiceOption[] = [
+  { value: 0, labelKey: 'hud.options.off' },
+  { value: 1, labelKey: 'hud.options.on' },
+];
+// Ambient Occlusion's three rungs: Off, half-resolution, full-resolution
+// (Full is how an Advanced mix reaches the ultra tiers' full-res AO).
+const ambientOcclusionOptions: ChoiceOption[] = [
+  { value: 0, labelKey: 'hud.options.off' },
+  { value: 0.5, labelKey: 'hudChrome.options.gfxHalf' },
+  { value: 1, labelKey: 'hud.options.surfaceDetailFull' },
+];
+// The two-step Low/High ladder (Character Detail's distant-rig animation
+// band, Dynamic Lights' point-light pool).
+const lowHighOptions: ChoiceOption[] = [
+  { value: 0, labelKey: 'hud.options.graphicsPresetLow' },
+  { value: 1, labelKey: 'hud.options.graphicsPresetHigh' },
+];
+
+/** The Graphics sub-panel as titled cards in a two-column form (the perf
+ *  panel's categorized layout). The per-system dials render for EVERY preset
+ *  (round 12): under a fixed preset they display that preset's seeded levels
+ *  and editing one switches the staged draft to the Advanced custom mix
+ *  (graphics_rebuild_core.stageGraphicsDraftChange, wired by the painter); the
+ *  dial ladders re-render so the preset row tracks that switch. The native
+ *  shell keeps its capped preset row only (its memory profile owns most of the
+ *  dial-mapped knobs, so the dials would be dead controls there). */
+export function buildGraphicsSections(
+  s: OptionsSettingsSource,
+  env: OptionsEnv,
+): GraphicsSection[] {
+  const quality: OptionsControl[] = [];
   const graphicsPresetOptions: ChoiceOption[] = [
     { value: 1, labelKey: 'hud.options.graphicsPresetLow' },
     { value: 2, labelKey: 'hud.options.graphicsPresetMedium' },
@@ -360,29 +433,88 @@ export function buildGraphicsControls(s: OptionsSettingsSource, env: OptionsEnv)
       { value: 5, labelKey: 'hud.options.graphicsPresetAdvanced' },
     );
   }
-  out.push(choice(s, 'graphicsPreset', 'hud.options.graphicsQuality', graphicsPresetOptions, true));
-  // Advanced preset (5) reveals the per-system level ladders (round 10:
-  // four-step quality dials replacing the historical Low/High binaries, plus
-  // the new Surface Detail dial).
-  if (Math.round(s.num('graphicsPreset')) === 5) {
-    out.push(choice(s, 'terrainDetail', 'hud.options.terrainDetail', qualityLadderOptions));
-    out.push(choice(s, 'foliageDensity', 'hud.options.foliageDensity', qualityLadderOptions));
-    out.push(choice(s, 'surfaceDetail', 'hud.options.surfaceDetail', surfaceDetailOptions));
-    out.push(choice(s, 'effectsQuality', 'hud.options.effectsQuality', effectsLadderOptions));
-    out.push(choice(s, 'shadowQuality', 'hud.options.shadowQuality', qualityLadderOptions));
-  }
-  out.push(
+  quality.push(
+    choice(s, 'graphicsPreset', 'hud.options.graphicsQuality', graphicsPresetOptions, true),
+  );
+  // The custom-switch explainer renders only under a FIXED preset: once the
+  // Advanced mix is active the dials edit in place and the note is a no-op.
+  if (!env.nativeShell && Math.round(s.num('graphicsPreset')) !== 5)
+    quality.push(note('hudChrome.options.gfxCustomNote'));
+
+  // The per-system dial cards: the world's geometry/dressing layers in one,
+  // the light-and-post passes in the other.
+  const world: OptionsControl[] = [
+    choice(s, 'terrainDetail', 'hud.options.terrainDetail', qualityLadderOptions, true),
+    choice(s, 'foliageDensity', 'hud.options.foliageDensity', qualityLadderOptions, true),
+    choice(s, 'surfaceDetail', 'hud.options.surfaceDetail', surfaceDetailOptions, true),
+    choice(s, 'viewDistance', 'hudChrome.options.gfxViewDistance', qualityLadderOptions, true),
+    choice(s, 'waterQuality', 'hudChrome.options.gfxWaterQuality', qualityLadderOptions, true),
+    choice(s, 'characterDetail', 'hudChrome.options.gfxCharacterDetail', lowHighOptions, true),
+  ];
+  const lighting: OptionsControl[] = [
+    choice(s, 'effectsQuality', 'hud.options.effectsQuality', highCapLadderOptions, true),
+    choice(s, 'shadowQuality', 'hud.options.shadowQuality', highCapLadderOptions, true),
+    choice(
+      s,
+      'ambientOcclusion',
+      'hudChrome.options.gfxAmbientOcclusion',
+      ambientOcclusionOptions,
+      true,
+    ),
+    choice(s, 'bloomQuality', 'hudChrome.options.gfxBloom', offOnOptions, true),
+    choice(s, 'antiAliasing', 'hudChrome.options.gfxAntiAliasing', offOnOptions, true),
+    choice(s, 'dynamicLights', 'hudChrome.options.gfxDynamicLights', lowHighOptions, true),
+    choice(
+      s,
+      'particleEffects',
+      'hudChrome.options.gfxParticleEffects',
+      highCapLadderOptions,
+      true,
+    ),
+    // Ambient Occlusion and Bloom ride the post chain, so Effects & Lighting on
+    // Low leaves them nothing to run on. Anti-Aliasing is the exception: the
+    // grade-only chain carries its own fused FXAA arm (gfx_aa_policy_core.ts),
+    // and this dial is the only control over it there.
+    note('hudChrome.options.gfxEffectsNote'),
+  ];
+
+  const camera: OptionsControl[] = [slider(s, 'cameraSpeed', 'hud.options.cameraSpeed')];
+  // Camera Speed only scales mouselook; touch gets a dedicated look-rate slider.
+  if (env.touch) camera.push(slider(s, 'touchLookSpeed', 'hud.options.touchLookSpeed'));
+
+  const display: OptionsControl[] = [
+    slider(s, 'renderScale', 'hud.options.renderQuality'),
+    slider(s, 'brightness', 'hud.options.brightness'),
+    slider(s, 'cameraFov', 'hud.options.fieldOfView', 'degrees', 1),
+    // One row, two meanings by host. A desktop shell that owns the window gets
+    // the mode picker (it also covers "make the window smaller", which the
+    // browser toggle cannot); every other host keeps the browser Fullscreen
+    // toggle byte for byte, so the web and mobile arms are untouched.
+    env.desktopDisplayMode
+      ? choice(s, 'displayMode', 'hud.options.displayMode', displayModeOptions)
+      : toggle(s, 'fullscreen', 'hud.options.fullscreen'),
+    toggle(s, 'weather', 'game.settings.weather'),
+    // Opt-in wake/ripple simulation on water (default off): the one water effect
+    // that runs extra GPU passes; bubbles and splashes are unaffected. It sits
+    // beside Weather in GRAPHICS rather than in Interface (Troy, 2026-08-07):
+    // it costs frames, so it belongs with the things you turn down for
+    // performance, not with the HUD comfort toggles.
+    boolToggle(s, 'waterRipples', 'hudChrome.options.waterRipples'),
+    toggle(s, 'showOverflowXp', 'game.settings.showOverflowXp'),
+  ];
+
+  const system: OptionsControl[] = [
     choice(s, 'browserEffects', 'hudChrome.options.browserEffects', [
       { value: 0, labelKey: 'hudChrome.options.browserEffectsAuto' },
       { value: 1, labelKey: 'hudChrome.options.browserEffectsFull' },
       { value: 2, labelKey: 'hudChrome.options.browserEffectsReduced' },
       { value: 3, labelKey: 'hudChrome.options.browserEffectsMinimal' },
     ]),
-  );
-  out.push(note('hudChrome.options.browserEffectsNote'));
+    note('hudChrome.options.browserEffectsNote'),
+  ];
   // Desktop vs on-screen touch controls. Hidden in the native shell (forces touch).
   if (!env.nativeShell) {
-    out.push(
+    system.push(
       choice(
         s,
         'interfaceMode',
@@ -395,29 +527,61 @@ export function buildGraphicsControls(s: OptionsSettingsSource, env: OptionsEnv)
         true,
       ),
     );
-    out.push(note('hudChrome.options.interfaceModeNote'));
+    system.push(note('hudChrome.options.interfaceModeNote'));
   }
-  out.push(slider(s, 'cameraSpeed', 'hud.options.cameraSpeed'));
-  // Camera Speed only scales mouselook; touch gets a dedicated look-rate slider.
-  if (env.touch) out.push(slider(s, 'touchLookSpeed', 'hud.options.touchLookSpeed'));
-  out.push(slider(s, 'brightness', 'hud.options.brightness'));
-  out.push(slider(s, 'cameraFov', 'hud.options.fieldOfView', 'degrees', 1));
-  out.push(slider(s, 'renderScale', 'hud.options.renderQuality'));
-  out.push(toggle(s, 'fullscreen', 'hud.options.fullscreen'));
-  out.push(toggle(s, 'showOverflowXp', 'game.settings.showOverflowXp'));
-  if (env.touch) out.push(slider(s, 'touchOpacity', 'hud.options.touchOpacity'));
-  out.push(toggle(s, 'weather', 'game.settings.weather'));
-  if (env.touch) out.push(slider(s, 'joystickScale', 'hud.options.joystickSize'));
-  if (env.touch) out.push(slider(s, 'actionButtonScale', 'hud.options.buttonSize'));
-  if (env.touch) out.push(slider(s, 'joystickDeadzone', 'hud.options.joystickDeadzone'));
-  if (env.touch) out.push(boolToggle(s, 'touchInvertLook', 'hud.options.invertLook'));
-  // Camera joystick is hidden/off by default (swipe-look is primary); left-handed
-  // layout already has a Key Bindings row (leftHandedTouch), but is surfaced here
-  // too since it is squarely a touch/graphics-panel concern for touch players.
-  if (env.touch)
-    out.push(boolToggle(s, 'mobileCameraJoystick', 'hudChrome.options.mobileCameraJoystick'));
-  if (env.touch) out.push(boolToggle(s, 'leftHandedTouch', 'hudChrome.options.mobileLeftHanded'));
-  return out;
+
+  // The two dial cards balance the columns (Quality + World left, Lighting +
+  // Camera right); the row-style cards (Display, System, Touch) span FULL
+  // width below them with their rows flowing two-up, so neither column ends
+  // in a ragged gap. The dial cards are omitted on the native shell (its
+  // memory profile owns the dial-mapped knobs, so they would be dead rows).
+  const sections: GraphicsSection[] = [
+    { titleKey: 'hudChrome.options.gfxSectionQuality', column: 1, controls: quality },
+  ];
+  if (!env.nativeShell) {
+    sections.push(
+      { titleKey: 'hudChrome.options.gfxSectionWorld', column: 1, controls: world },
+      { titleKey: 'hudChrome.options.gfxSectionLighting', column: 2, controls: lighting },
+    );
+  }
+  sections.push(
+    { titleKey: 'hudChrome.options.gfxSectionCamera', column: 2, controls: camera },
+    { titleKey: 'hudChrome.options.gfxSectionDisplay', column: 'full', controls: display },
+    { titleKey: 'hudChrome.options.gfxSectionSystem', column: 'full', controls: system },
+  );
+  if (env.touch) {
+    sections.push({
+      titleKey: 'hudChrome.options.gfxSectionTouch',
+      column: 'full',
+      controls: [
+        slider(s, 'touchOpacity', 'hud.options.touchOpacity'),
+        slider(s, 'joystickScale', 'hud.options.joystickSize'),
+        slider(s, 'actionButtonScale', 'hud.options.buttonSize'),
+        slider(s, 'joystickDeadzone', 'hud.options.joystickDeadzone'),
+        boolToggle(s, 'touchInvertLook', 'hud.options.invertLook'),
+        // Camera joystick is hidden/off by default (swipe-look is primary);
+        // left-handed layout already has a Key Bindings row (leftHandedTouch),
+        // but is surfaced here too since it is squarely a touch/graphics-panel
+        // concern for touch players.
+        boolToggle(s, 'mobileCameraJoystick', 'hudChrome.options.mobileCameraJoystick'),
+        boolToggle(s, 'leftHandedTouch', 'hudChrome.options.mobileLeftHanded'),
+      ],
+    });
+  }
+  return sections;
+}
+
+/** The one flatten both consumers share: the painter feeds the reset footer
+ *  with flattenGraphicsSections(sections) over the SAME section objects it
+ *  painted, so the card layout and the reset-key scope can never disagree. */
+export function flattenGraphicsSections(sections: GraphicsSection[]): OptionsControl[] {
+  return sections.flatMap((section) => section.controls);
+}
+
+/** The Graphics sub-panel's controls as one flat list (the card sections in
+ *  order), for the dispatch tests that pin the full set. */
+export function buildGraphicsControls(s: OptionsSettingsSource, env: OptionsEnv): OptionsControl[] {
+  return flattenGraphicsSections(buildGraphicsSections(s, env));
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +613,8 @@ export function buildAudioControls(s: OptionsSettingsSource): OptionsControl[] {
 export function buildControllerControls(s: OptionsSettingsSource): OptionsControl[] {
   return [
     boolToggle(s, 'gamepadEnabled', 'hudChrome.controller.enable'),
+    boolToggle(s, 'gamepadCrossHotbar', 'hudChrome.controller.crossHotbarEnable'),
+    boolToggle(s, 'gamepadCrossHotbarExpand', 'hudChrome.controller.crossHotbarExpand'),
     boolToggle(s, 'gamepadInvertY', 'hudChrome.controller.invertY'),
     slider(s, 'gamepadStickDeadzone', 'hudChrome.controller.deadzone'),
     slider(s, 'gamepadCameraSpeed', 'hudChrome.controller.cameraSpeed', 'oneDecimal'),
@@ -484,30 +650,56 @@ export const INTERFACE_TAB_LABEL_KEY: Record<InterfaceTab, TranslationKey> = {
 const tag = (category: InterfaceTab, controls: OptionsControl[]): OptionsControl[] =>
   controls.map((c): OptionsControl => ({ ...c, category }));
 
-export function buildInterfaceControls(s: OptionsSettingsSource): OptionsControl[] {
+export function buildInterfaceControls(
+  s: OptionsSettingsSource,
+  env?: OptionsEnv,
+): OptionsControl[] {
+  const general: OptionsControl[] = [
+    // uiScale commits on release: applying it live rescales the whole UI (the
+    // options window included), which shoves the slider under the cursor and
+    // makes the value hard to land (issue 1558).
+    { ...slider(s, 'uiScale', 'hudChrome.options.uiScale'), commitOnChange: true },
+    slider(s, 'hudOpacity', 'hud.options.hudOpacity'),
+    slider(s, 'tooltipScale', 'hud.options.tooltipScale'),
+    boolToggle(s, 'frostedPanels', 'hud.options.frostedPanels'),
+    boolToggle(s, 'highContrastText', 'hud.options.highContrastText'),
+    boolToggle(s, 'reduceMotion', 'hud.options.reduceMotion'),
+    // Camera comfort (mouse-look direction), so it sits with the comfort
+    // toggles rather than the Combat tab's attack/action-bar cluster.
+    boolToggle(s, 'invertLookY', 'hud.options.invertLookY'),
+    boolToggle(s, 'landingHighContrast', 'hudChrome.options.highContrastBackground'),
+    boolToggle(s, 'showDevBadges', 'hudChrome.options.showDevBadges'),
+    boolToggle(s, 'showWalletOnCharacterScreen', 'hudChrome.options.showWalletOnCharacterScreen'),
+    boolToggle(s, 'showWalletOnPlayerCard', 'hudChrome.options.showWalletOnPlayerCard'),
+    boolToggle(s, 'showPlaytime', 'hudChrome.options.showPlaytime'),
+    boolToggle(s, 'showDailyRewardsChest', 'hudChrome.options.showDailyRewardsChest'),
+    boolToggle(s, 'showItemLevel', 'hudChrome.options.showItemLevel'),
+    boolToggle(s, 'showReliquaryTracker', 'hudChrome.options.showReliquaryTracker'),
+    boolToggle(s, 'showOwnNameplate', 'hudChrome.options.showOwnNameplate'),
+    boolToggle(s, 'showPlayerNameplates', 'hudChrome.options.showPlayerNameplates'),
+  ];
+  // The desktop shell's GPU preference, last in the tab so the web arm's row
+  // order is untouched. Gated on the bridge CAPABILITY, so it renders only in a
+  // desktop shell that actually exposes the preference; its note carries the
+  // next-launch caveat (the shell applies the choice at startup, not live).
+  if (env?.desktopGpuPref) {
+    general.push(
+      boolToggle(s, 'forceHighPerfGpu', 'hudChrome.options.forceHighPerfGpu'),
+      note('hudChrome.options.forceHighPerfGpuNote'),
+    );
+  }
+  // Discord Rich Presence, behind its own bridge capability (an older shell has
+  // the GPU preference but not this one, so the two gates are independent). Its
+  // note carries the privacy caveat: the activity is visible to anyone who can
+  // see the player's Discord profile.
+  if (env?.desktopDiscordPresence) {
+    general.push(
+      boolToggle(s, 'discordPresence', 'hudChrome.options.discordPresence'),
+      note('hudChrome.options.discordPresenceNote'),
+    );
+  }
   return [
-    ...tag('general', [
-      // uiScale commits on release: applying it live rescales the whole UI (the
-      // options window included), which shoves the slider under the cursor and
-      // makes the value hard to land (issue 1558).
-      { ...slider(s, 'uiScale', 'hudChrome.options.uiScale'), commitOnChange: true },
-      slider(s, 'hudOpacity', 'hud.options.hudOpacity'),
-      slider(s, 'tooltipScale', 'hud.options.tooltipScale'),
-      boolToggle(s, 'frostedPanels', 'hud.options.frostedPanels'),
-      boolToggle(s, 'highContrastText', 'hud.options.highContrastText'),
-      boolToggle(s, 'reduceMotion', 'hud.options.reduceMotion'),
-      // Camera comfort (mouse-look direction), so it sits with the comfort
-      // toggles rather than the Combat tab's attack/action-bar cluster.
-      boolToggle(s, 'invertLookY', 'hud.options.invertLookY'),
-      boolToggle(s, 'landingHighContrast', 'hudChrome.options.highContrastBackground'),
-      boolToggle(s, 'showDevBadges', 'hudChrome.options.showDevBadges'),
-      boolToggle(s, 'showWalletOnCharacterScreen', 'hudChrome.options.showWalletOnCharacterScreen'),
-      boolToggle(s, 'showWalletOnPlayerCard', 'hudChrome.options.showWalletOnPlayerCard'),
-      boolToggle(s, 'showDailyRewardsChest', 'hudChrome.options.showDailyRewardsChest'),
-      boolToggle(s, 'showItemLevel', 'hudChrome.options.showItemLevel'),
-      boolToggle(s, 'showOwnNameplate', 'hudChrome.options.showOwnNameplate'),
-      boolToggle(s, 'showPlayerNameplates', 'hudChrome.options.showPlayerNameplates'),
-    ]),
+    ...tag('general', general),
     ...tag('frames', [
       slider(s, 'playerFrameScale', 'hudChrome.options.playerFrameScale'),
       slider(s, 'targetFrameScale', 'hudChrome.options.targetFrameScale'),
@@ -535,9 +727,11 @@ export function buildInterfaceControls(s: OptionsSettingsSource): OptionsControl
       boolToggle(s, 'partyFrameShowResource', 'hudChrome.partyFrames.showResource'),
       boolToggle(s, 'partyFrameShowAbsorbs', 'hudChrome.partyFrames.showAbsorbs'),
       boolToggle(s, 'partyFrameShowAuras', 'hudChrome.partyFrames.showAuras'),
+      boolToggle(s, 'partyFrameShowPets', 'hudChrome.partyFrames.showPets'),
       boolToggle(s, 'partyFrameShowSelf', 'hudChrome.partyFrames.showSelf'),
       boolToggle(s, 'aurasOnPlayerFrame', 'hudChrome.options.aurasOnPlayerFrame'),
       boolToggle(s, 'showTargetOfTarget', 'hudChrome.options.showTargetOfTarget'),
+      boolToggle(s, 'showPetFrame', 'hudChrome.options.showPetFrame'),
     ]),
     ...tag('chat', [
       slider(s, 'chatFontScale', 'hud.options.chatFontScale'),
@@ -546,6 +740,11 @@ export function buildInterfaceControls(s: OptionsSettingsSource): OptionsControl
     ]),
     ...tag('combat', [
       boolToggle(s, 'startAttackOnAbilityUse', 'hudChrome.options.startAttackOnAbility'),
+      boolToggle(
+        s,
+        'stopAutoAttackOnTargetSwitch',
+        'hudChrome.options.stopAutoAttackOnTargetSwitch',
+      ),
       boolToggle(s, 'showAttackButton', 'hudChrome.options.showAttackButton'),
       boolToggle(s, 'walkByAutoloot', 'hudChrome.options.walkByAutoloot'),
       boolToggle(s, 'groundReticle', 'hudChrome.options.groundReticle'),
@@ -558,6 +757,7 @@ export function buildInterfaceControls(s: OptionsSettingsSource): OptionsControl
       boolToggle(s, 'showThirdActionBar', 'hudChrome.options.showThirdActionBar', {
         disabled: !s.bool('showSecondaryActionBar'),
       }),
+      boolToggle(s, 'hideUnusedActionSlots', 'hudChrome.options.hideUnusedActionSlots'),
       boolToggle(s, 'lockActionBars', 'hudChrome.options.lockActionBars'),
     ]),
   ];

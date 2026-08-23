@@ -15,8 +15,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "9a7ebc25",
+      "nextId": 968,
+      "state": "f3a1d8c8",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -37,11 +37,11 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -54,7 +54,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -72,6 +72,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "talents": {
             "rows": {}
           },
@@ -90,7 +94,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
@@ -103,7 +107,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -147,9 +151,9 @@
     {
       "tick": 2,
       "time": 0.1,
-      "nextId": 948,
-      "state": "4164242a",
-      "events": "ca4dbfa8",
+      "nextId": 970,
+      "state": "909f8c3d",
+      "events": "087bbf54",
       "rng": {
         "draws": 4,
         "digest": "0d8664bb"
@@ -158,8 +162,8 @@
     {
       "tick": 4,
       "time": 0.2,
-      "nextId": 948,
-      "state": "e78025ef",
+      "nextId": 970,
+      "state": "baed8c80",
       "events": "741638a5",
       "rng": {
         "draws": 4,
@@ -169,8 +173,8 @@
     {
       "tick": 5,
       "time": 0.25,
-      "nextId": 948,
-      "state": "434e11bb",
+      "nextId": 970,
+      "state": "d8654074",
       "events": "741638a5",
       "rng": {
         "draws": 4,
@@ -191,11 +195,11 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -222,7 +226,7 @@
           ],
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -241,6 +245,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "renown": 20,
           "talents": {
             "rows": {}
@@ -260,7 +268,7 @@
               "name": "Battle Stance",
               "remaining": 3599.75,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
@@ -273,7 +281,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99.25,
           "hp": 50000,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 10,
           "lootFfaTimer": "Infinity",
@@ -317,8 +325,8 @@
     {
       "tick": 5,
       "time": 0.25,
-      "nextId": 948,
-      "state": "ebcf3700",
+      "nextId": 970,
+      "state": "e2388d8b",
       "events": "741638a5",
       "rng": {
         "draws": 4,
@@ -339,11 +347,11 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -370,7 +378,7 @@
           ],
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -389,6 +397,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "renown": 20,
           "talents": {
             "rows": {}
@@ -417,7 +429,7 @@
           "fiveSecondRule": 99.25,
           "ghost": true,
           "hp": 442,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 10,
           "lootFfaTimer": "Infinity",
@@ -461,9 +473,9 @@
     {
       "tick": 5,
       "time": 0.25,
-      "nextId": 948,
-      "state": "6a4c40c5",
-      "events": "95b3ec56",
+      "nextId": 970,
+      "state": "3b6fd9ee",
+      "events": "4173bb38",
       "rng": {
         "draws": 4,
         "digest": "0d8664bb"
@@ -483,11 +495,11 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -514,7 +526,7 @@
           ],
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -533,6 +545,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "renown": 20,
           "talents": {
             "rows": {}
@@ -552,7 +568,7 @@
               "name": "Resurrection Sickness",
               "remaining": 60,
               "school": "shadow",
-              "sourceId": 941,
+              "sourceId": 963,
               "undispellable": true,
               "value": -0.75
             }
@@ -567,7 +583,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99.25,
           "hp": 44,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 10,
           "lootFfaTimer": "Infinity",
@@ -611,9 +627,9 @@
     {
       "tick": 6,
       "time": 0.3,
-      "nextId": 948,
-      "state": "58411eac",
-      "events": "84d641f1",
+      "nextId": 970,
+      "state": "5dbfeb0b",
+      "events": "6917cc65",
       "rng": {
         "draws": 4,
         "digest": "0d8664bb"
@@ -622,8 +638,8 @@
     {
       "tick": 7,
       "time": 0.35,
-      "nextId": 948,
-      "state": "a1932d3f",
+      "nextId": 970,
+      "state": "5c394a4c",
       "events": "741638a5",
       "rng": {
         "draws": 4,
@@ -644,11 +660,11 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -675,7 +691,7 @@
           ],
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -694,6 +710,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "renown": 20,
           "talents": {
             "rows": {}
@@ -713,7 +733,7 @@
               "name": "Resurrection Sickness",
               "remaining": 59.9,
               "school": "shadow",
-              "sourceId": 941,
+              "sourceId": 963,
               "undispellable": true,
               "value": -0.75
             },
@@ -724,7 +744,7 @@
               "name": "Battle Stance",
               "remaining": 3599.9,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
@@ -737,7 +757,7 @@
           "fallStartY": 1.511848,
           "fiveSecondRule": 99.35,
           "hp": 44,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 10,
           "lootFfaTimer": "Infinity",

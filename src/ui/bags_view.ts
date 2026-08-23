@@ -114,6 +114,10 @@ export type BagTooltipHintKey =
   | 'itemUi.tooltip.clickConsume'
   | 'itemUi.tooltip.clickUseInstant'
   | 'itemUi.tooltip.clickUse'
+  // Tool-effect charms are not bag-usable: the sim refuses useItem with the
+  // "Open Professions to slot that" line, so the hover must not advertise
+  // "Click to use" for a click that only errors.
+  | 'hudChrome.professions.toolEffectTooltip.openProfessions'
   | 'hudChrome.mailbox.clickAttach'
   | 'hudChrome.mailbox.cannotMail'
   | '';
@@ -376,8 +380,24 @@ export function bagTooltipHintKey(
     return 'itemUi.tooltip.clickEquip';
   if (item.kind === 'food' || item.kind === 'drink') return 'itemUi.tooltip.clickConsume';
   if (item.kind === 'potion') return 'itemUi.tooltip.clickUseInstant';
+  // Charms (use.type 'toolEffect') slot from the Professions window, not from
+  // a bag click. Mirror the sim refusal copy so the hover never promises a
+  // use action the click cannot perform.
+  if (isToolEffectBagUse(item.use)) {
+    return 'hudChrome.professions.toolEffectTooltip.openProfessions';
+  }
   if (item.use) return 'itemUi.tooltip.clickUse';
   return '';
+}
+
+/** True when bag use payload is a tool-effect charm (ItemDef use.type). */
+function isToolEffectBagUse(use: unknown): boolean {
+  return (
+    !!use &&
+    typeof use === 'object' &&
+    Object.hasOwn(use, 'type') &&
+    (use as { type: unknown }).type === 'toolEffect'
+  );
 }
 
 /** The quality key into QUALITY_COLOR for an item ('common' when unspecified).
@@ -491,6 +511,17 @@ export function buildBagGrid(
   if (visible.length === 0)
     return { state: 'noMatch', cells: [], visible: [], emptyCells: 0, overflow };
   return { state: 'items', cells, visible, emptyCells, overflow };
+}
+
+/** Stable key over exactly what the sort command changes: each stack's id,
+ *  count (consolidation merges), and parked cell hint (the restamp), in array
+ *  order. The sort settle ripple keys on this changing rather than on the
+ *  painted grid, because the press also resets an active filter and the
+ *  derived-list-to-real-cells SHAPE switch would read as a content change on
+ *  the press's own repaint (online, that paint still shows the unsorted
+ *  mirror; the tidied inventory lands with the heavy self snapshot). */
+export function bagSortSignature(inventory: readonly InvSlot[]): string {
+  return inventory.map((s) => `${s.itemId}x${s.count}@${s.slot ?? '-'}`).join(',');
 }
 
 /** One socket of the bag bar: the equipped bag (with its slot count) or an

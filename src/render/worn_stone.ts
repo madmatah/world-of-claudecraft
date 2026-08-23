@@ -32,10 +32,12 @@
 // must stay SUBTLE: the game's look is cozy low-poly, the detail suggests
 // material, never photoreal.
 import type * as THREE from 'three';
-import { loadTexture } from './assets/loader';
+import { ktx2SiblingUrl } from './assets/ktx2_sibling';
+import { loadKtx2Texture } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { GFX, type GfxSettings, type SurfaceMatOpts, surfaceMat } from './gfx';
 import { renderLayerDisabled } from './render_dev_flags';
+import { markSharedMaterial } from './shared_resource';
 
 export type SurfaceFamily = 'stone' | 'rock' | 'wood' | 'plaster' | 'bark' | 'fabric' | 'metal';
 
@@ -387,9 +389,15 @@ function prepareFamilyTexture(
   const key = `${family}:${channel}`;
   const existing = surfaceTextureTasks.get(key);
   if (existing) return existing;
-  const task = loadTexture(`${fam.dir ?? '/textures/structures/'}${fam.prefix}_${suffix}.jpg`, {
-    repeat: true,
-  })
+  // Every family channel ships a KTX2 sibling and is requested compressed: the
+  // set is up to 5 maps per family across 7 families, and decoding each to a
+  // full 1024x1024 RGBA bitmap is what this pipeline exists to avoid. The
+  // clone below still works on a CompressedTexture (Texture.clone is
+  // constructor + copy, and copy carries source, mipmaps and format across),
+  // and it shares the source with the original exactly as the raw-image path
+  // did.
+  const url = `${fam.dir ?? '/textures/structures/'}${fam.prefix}_${suffix}.jpg`;
+  const task = loadKtx2Texture(ktx2SiblingUrl(url), { repeat: true })
     .then((tex) => {
       const clone = tex.clone();
       clone.anisotropy = 4;
@@ -668,6 +676,14 @@ export function applySurfaceDetail(
   const metalMix = (fam.metalMix ?? 0) * scalarK;
   const prev = mat.onBeforeCompile;
   const prevSrc = typeof prev === 'function' ? prev.toString() : '';
+  // Captured BEFORE the override below, like addRimGlow: called later it
+  // yields whatever key the previous layer composed (the armor dye pins a
+  // distinct key per dyed material while its wrapper SOURCE is identical),
+  // which prevSrc alone cannot see. Only an EXPLICIT previous key carries
+  // information here: for a default-keyed predecessor the bound prototype
+  // getter re-reads this.onBeforeCompile at call time, i.e. the worn wrapper
+  // itself, a constant across materials; that case is covered by prevSrc.
+  const prevProgramKey = mat.customProgramCacheKey.bind(mat);
   mat.onBeforeCompile = (shader, renderer) => {
     prev?.call(mat, shader, renderer);
     // Fail soft before the preload gate resolves: the material simply ships
@@ -937,7 +953,11 @@ export function applySurfaceDetail(
   // The default program cache key stringifies onBeforeCompile, and every worn
   // wrapper stringifies identically even when the chained PREVIOUS hook (which
   // edits different source) differs, so re-include its source text (the
-  // foliage_collapse precedent). The family's texture-ready state keys too
+  // foliage_collapse precedent) AND the previous live key: source text alone
+  // collided a dyed and an undyed rig material of the same name into one
+  // program (the rim wrapper's source is the same closure whatever it wraps;
+  // only the dye layer's own customProgramCacheKey tells them apart).
+  // The family's texture-ready state keys too
   // (before the preload resolves the hook compiles to a plain pass-through),
   // as do the projection mode and the tier's parallax tap count.
   mat.customProgramCacheKey = () => {
@@ -953,7 +973,7 @@ export function applySurfaceDetail(
     // with the effective tile scale (and the dev ?wornfade override).
     const fadeBands = scaledFadeBands(fam.parallaxDepth, tileScale);
     const fadeKey = `f${fadeBands.parStart.toFixed(1)},${fadeBands.parEnd.toFixed(1)},${fadeBands.detStart.toFixed(1)},${fadeBands.detEnd.toFixed(1)}`;
-    return `surface-detail|${family}|${ready}|${par}|${mask}|${met}|${objectSpace ? 'o' : 'w'}|${fadeKey}|${prevSrc}`;
+    return `surface-detail|${family}|${ready}|${par}|${mask}|${met}|${objectSpace ? 'o' : 'w'}|${fadeKey}|${prevSrc}|${prevProgramKey()}`;
   };
 }
 
@@ -988,7 +1008,8 @@ export function reapplySurfaceDetailToClone(clone: THREE.Material): void {
  * Every resolved family detail texture (normal/AO/rough/disp/metal clones),
  * for the renderer's boot-prewarm window. These textures are shader UNIFORMS
  * attached in onBeforeCompile, not material properties, so the scene texture
- * sweep (renderer.ts collectObjectTextures reads map/normalMap/... keys) can
+ * sweep (material_texture_slots.ts collectObjectTextures reads the named map
+ * slots) can
  * never find them: without an explicit prewarm they upload on the first live
  * draw that binds them. The Displacement fields are the heavy case: they only
  * load on the parallax tiers (ultra+), and their first-draw decode+upload was
@@ -1038,6 +1059,12 @@ export function detailedSurfaceMat(
   if (!mat) {
     mat = base.clone();
     applySurfaceDetail(mat as THREE.MeshStandardMaterial, family, detail);
+    // Shared for the same reason surfaceMat's own cache is: one instance per
+    // key, reused process-wide. three's Material.copy deep-copies userData, so
+    // the clone already inherits the base's marker; marking it explicitly keeps
+    // that from being a silent dependency on three's copy semantics across a
+    // version bump, which is the kind of thing a bump would break quietly.
+    markSharedMaterial(mat);
     detailedMats.set(key, mat);
   }
   return mat;

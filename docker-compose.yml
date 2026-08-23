@@ -11,11 +11,21 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       - eastbrook_pgdata:/var/lib/postgresql/data
+    # pg_isready is a trivial ping, so polling it often costs nothing, but a permanent
+    # 1Hz steady-state probe is unwanted overhead on the production stack this file also
+    # deploys (see DEPLOY.md). start_period + start_interval give the fast 1s cadence
+    # ONLY during a cold boot (failures inside start_period don't spend the retry
+    # budget at all), while interval/timeout/retries return to the same steady-state
+    # values used before this change, keeping the ~50s outer ceiling for a genuinely
+    # cold initdb intact. -h pins the probe to the TCP listener so it cannot read
+    # healthy off initdb's transient unix-socket-only bootstrap server.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eastbrook -d eastbrook"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U eastbrook -d eastbrook"]
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 60s
+      start_interval: 1s
 
   # The full game server (client + API + world). `docker compose up -d`
   # then open http://localhost:8787 — or put a TLS reverse proxy in front
@@ -96,11 +106,26 @@ services:
       # heartbeat log line (tickHz, per-phase p95/max) plus over-budget stutter
       # traces. Off by default so production logs stay quiet.
       PERF_TICK_LOG: ${PERF_TICK_LOG:-}
+      # Runtime: client perf beacon retention in days for the nightly sweep
+      # (server/http/config.ts, code default 14). The host .env sets a longer
+      # window (90) so device/FPS history spans release cycles; without this
+      # passthrough the container silently runs the code default and discards
+      # the longitudinal data the perf investigations rely on.
+      PERF_REPORT_RETENTION_DAYS: ${PERF_REPORT_RETENTION_DAYS:-}
+      # Runtime: the sibling retention knobs config.ts reads that were missing
+      # the same passthrough, so a host .env override silently fell back to the
+      # code defaults exactly like PERF_REPORT_RETENTION_DAYS did. Empty is
+      # safe: numberOr treats the empty string as absent.
+      CHAT_LOG_RETENTION_DAYS: ${CHAT_LOG_RETENTION_DAYS:-}
+      UNSTUCK_REPORT_RETENTION_DAYS: ${UNSTUCK_REPORT_RETENTION_DAYS:-}
+      DAILY_REWARD_EVENTS_RETENTION_DAYS: ${DAILY_REWARD_EVENTS_RETENTION_DAYS:-}
+      ONLINE_SAMPLES_RETENTION_DAYS: ${ONLINE_SAMPLES_RETENTION_DAYS:-}
       # Runtime: the published OTA bundle manifest POST /api/ota/updates reads
       # (server/ota_updates.ts). Empty (unset) keeps OTA dark: the endpoint
       # answers "no update" and the native apps keep their current bundle. Must
       # be https, and must share its origin with the bundle URLs inside it.
       OTA_MANIFEST_URL: ${OTA_MANIFEST_URL:-}
+      OTA_DELTA_DISABLED: ${OTA_DELTA_DISABLED:-}
       # Runtime: bearer token that gates GET /metrics (server/http/health.ts).
       # Empty (unset) leaves the endpoint feature-off (404); a non-empty value
       # turns it on behind Authorization: Bearer <token>. Set on the host .env by
@@ -174,12 +199,26 @@ services:
       # Studio, run its installer against the host overlay root, and this server
       # reads only the stable runtime manifest plus immutable audio blobs here.
       SFX_PACK_DIR: /app/sfx-runtime/audio/sfx
+      # Combat parse capture (server/parse/): inert unless PARSE_CAPTURE=1 and
+      # an ingest URL is set. The spool dir must live on the mounted volume
+      # below so batches survive a container restart.
+      PARSE_CAPTURE: ${PARSE_CAPTURE:-}
+      PARSE_INGEST_URL: ${PARSE_INGEST_URL:-}
+      PARSE_INGEST_TOKEN: ${PARSE_INGEST_TOKEN:-}
+      PARSE_CAPTURE_SURFACES: ${PARSE_CAPTURE_SURFACES:-}
+      PARSE_SPOOL_DIR: ${PARSE_SPOOL_DIR:-/app/parse-spool}
+      PARSE_SPOOL_MAX_MB: ${PARSE_SPOOL_MAX_MB:-}
+      PARSE_ENV_LABEL: ${PARSE_ENV_LABEL:-}
+      PARSE_CENSUS: ${PARSE_CENSUS:-}
+      PARSE_CENSUS_HOUR: ${PARSE_CENSUS_HOUR:-}
+      WOC_BUILD_VERSION: ${WOC_BUILD_VERSION:-}
     # loopback-only: the TLS reverse proxy (Caddy) is the public entrance
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
       - ${EASTBROOK_MEDIA_DIR:-./media-cache}:/app/dist/media
       - ${EASTBROOK_SFX_DIR:-./sfx-runtime}:/app/sfx-runtime:ro
+      - ${PARSE_SPOOL_HOST_DIR:-./parse-spool}:/app/parse-spool
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Exec form with a node one-liner, deliberately unlike the CMD-SHELL healthcheck

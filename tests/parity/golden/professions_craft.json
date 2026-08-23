@@ -18,8 +18,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "516985d4",
+      "nextId": 968,
+      "state": "78dd8755",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -39,11 +39,11 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -56,7 +56,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -74,6 +74,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "talents": {
             "rows": {}
           },
@@ -92,7 +96,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
@@ -105,7 +109,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -149,9 +153,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "d5e7117f",
-      "events": "95660433",
+      "nextId": 968,
+      "state": "6bf72748",
+      "events": "07ce633b",
       "rng": {
         "draws": 0,
         "digest": "811c9dc5"
@@ -170,11 +174,11 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {},
           "craftSkills": {},
-          "craftThrottle": {},
           "deedStats": {
             "counters": {},
             "dungeonClears": {},
@@ -187,7 +191,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -209,6 +213,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "talents": {
             "rows": {}
           },
@@ -227,7 +235,7 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
@@ -240,7 +248,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -284,9 +292,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "72431191",
-      "events": "71a8984f",
+      "nextId": 968,
+      "state": "1fd272d8",
+      "events": "a3a70b1c",
       "rng": {
         "draws": 1,
         "digest": "412668e3"
@@ -305,6 +313,7 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {
@@ -312,9 +321,6 @@
           },
           "craftSkills": {
             "alchemy": 1
-          },
-          "craftThrottle": {
-            "count": 1
           },
           "deedStats": {
             "counters": {
@@ -334,7 +340,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -364,6 +370,10 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {}
+          },
           "talents": {
             "rows": {}
           },
@@ -383,11 +393,12 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
+          "castTotal": 1.75,
           "combatTimer": 99,
           "comboUntil": -1,
           "critChance": 0.06,
@@ -396,7 +407,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -440,9 +451,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "65e16bf3",
-      "events": "acd9122e",
+      "nextId": 968,
+      "state": "6905eb7f",
+      "events": "b8dabfff",
       "rng": {
         "draws": 2,
         "digest": "58bf8a9e"
@@ -468,6 +479,7 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {
@@ -476,9 +488,6 @@
           "craftSkills": {
             "alchemy": 1,
             "tailoring": 200
-          },
-          "craftThrottle": {
-            "count": 2
           },
           "deedStats": {
             "counters": {
@@ -498,11 +507,15 @@
               "spider_leg",
               "spool_of_thread",
               "worn_sword"
+            ],
+            "visited": [
+              "masterwork:first",
+              "masterwork:tailoring"
             ]
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -554,7 +567,7 @@
             "selfSignedBonusApplied": true
           },
           "lastMasterwork": {
-            "crafter": 941,
+            "crafter": 963,
             "itemId": "eastbrook_ritual_vestments",
             "recipeId": "recipe_eastbrook_ritual_vestments"
           },
@@ -562,6 +575,18 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {},
+            "marks": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ],
+            "recent": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -591,11 +616,12 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
+          "castTotal": 1.75,
           "combatTimer": 99,
           "comboUntil": -1,
           "critChance": 0.06,
@@ -604,7 +630,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -648,9 +674,9 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "db035f9f",
-      "events": "71a8984f",
+      "nextId": 968,
+      "state": "457240aa",
+      "events": "a3a70b1c",
       "rng": {
         "draws": 3,
         "digest": "7e0fce15"
@@ -676,6 +702,7 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {
@@ -684,9 +711,6 @@
           "craftSkills": {
             "alchemy": 2,
             "tailoring": 200
-          },
-          "craftThrottle": {
-            "count": 3
           },
           "deedStats": {
             "counters": {
@@ -706,11 +730,15 @@
               "spider_leg",
               "spool_of_thread",
               "worn_sword"
+            ],
+            "visited": [
+              "masterwork:first",
+              "masterwork:tailoring"
             ]
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -760,7 +788,7 @@
             "recipeId": "recipe_minor_healing_potion"
           },
           "lastMasterwork": {
-            "crafter": 941,
+            "crafter": 963,
             "itemId": "eastbrook_ritual_vestments",
             "recipeId": "recipe_eastbrook_ritual_vestments"
           },
@@ -768,6 +796,18 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {},
+            "marks": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ],
+            "recent": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -797,11 +837,12 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
+          "castTotal": 1.75,
           "combatTimer": 99,
           "comboUntil": -1,
           "critChance": 0.06,
@@ -810,7 +851,7 @@
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -854,8 +895,246 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 946,
-      "state": "db035f9f",
+      "nextId": 968,
+      "state": "8f9e56fe",
+      "events": "0f312f41",
+      "rng": {
+        "draws": 3,
+        "digest": "7e0fce15"
+      },
+      "label": "craft-cast-armed",
+      "players": [
+        {
+          "activeLoadout": -1,
+          "archetype": {
+            "activeArchetype": "tailoring",
+            "attunedPairs": [
+              "leatherworking+tailoring"
+            ],
+            "hobbyCraft": "weaponcrafting",
+            "pairedMajor": "leatherworking"
+          },
+          "arena2v2Rating": 1500,
+          "arenaRating": 1500,
+          "bags": [
+            null,
+            null,
+            null,
+            null
+          ],
+          "bank": {},
+          "bgRating": 1500,
+          "cls": "warrior",
+          "companionUpgrades": {},
+          "counters": {
+            "xpGained": 48
+          },
+          "craftSkills": {
+            "alchemy": 2,
+            "tailoring": 200
+          },
+          "deedStats": {
+            "counters": {
+              "craftsPerformed": 3,
+              "masterworksCrafted": 1
+            },
+            "dungeonClears": {},
+            "itemsDiscovered": [
+              "baked_bread",
+              "eastbrook_buckler",
+              "eastbrook_ritual_vestments",
+              "homespun_cloth",
+              "linen_scrap",
+              "minor_healing_potion",
+              "recruit_tunic",
+              "silverleaf_herb",
+              "spider_leg",
+              "spool_of_thread",
+              "worn_sword"
+            ],
+            "visited": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ]
+          },
+          "delveClears": {},
+          "delveDaily": {},
+          "entityId": 963,
+          "equipment": {
+            "chest": "recruit_tunic",
+            "mainhand": "worn_sword",
+            "offhand": "eastbrook_buckler"
+          },
+          "equipmentInstance": {},
+          "gatheringProficiency": {},
+          "heroicDaily": {},
+          "inventory": [
+            {
+              "count": 5,
+              "itemId": "baked_bread"
+            },
+            {
+              "count": 2,
+              "itemId": "minor_healing_potion"
+            },
+            {
+              "count": 1,
+              "itemId": "homespun_cloth"
+            },
+            {
+              "count": 1,
+              "itemId": "spool_of_thread"
+            },
+            {
+              "count": 1,
+              "craftedRecipeId": "recipe_eastbrook_ritual_vestments",
+              "instance": {
+                "rolled": {
+                  "masterwork": true,
+                  "stats": {
+                    "int": 1,
+                    "spi": 1
+                  }
+                },
+                "signer": "Adventurer"
+              },
+              "itemId": "eastbrook_ritual_vestments"
+            },
+            {
+              "count": 2,
+              "itemId": "linen_scrap"
+            },
+            {
+              "count": 2,
+              "itemId": "spider_leg"
+            },
+            {
+              "count": 4,
+              "itemId": "silverleaf_herb"
+            }
+          ],
+          "lastCraftResult": {
+            "count": 1,
+            "itemId": "minor_healing_potion",
+            "ok": true,
+            "quality": "common",
+            "recipeId": "recipe_minor_healing_potion"
+          },
+          "lastMasterwork": {
+            "crafter": 963,
+            "itemId": "eastbrook_ritual_vestments",
+            "recipeId": "recipe_eastbrook_ritual_vestments"
+          },
+          "lifetimeXp": 48,
+          "mailWelcomed": true,
+          "nodeHarvestReadyAt": {},
+          "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {},
+            "marks": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ],
+            "recent": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ]
+          },
+          "talents": {
+            "rows": {}
+          },
+          "tierMailSent": [
+            [
+              "leatherworking",
+              0
+            ],
+            [
+              "tailoring",
+              0
+            ]
+          ],
+          "townFocus": {},
+          "xp": 48
+        }
+      ],
+      "entities": [
+        {
+          "aiState": "idle",
+          "attackPower": 46,
+          "auras": [
+            {
+              "duration": 3600,
+              "id": "battle_stance",
+              "kind": "battle_stance",
+              "name": "Battle Stance",
+              "remaining": 3600,
+              "school": "physical",
+              "sourceId": 963
+            }
+          ],
+          "blockChance": 0.05,
+          "blockValue": 6,
+          "castRemaining": 1.75,
+          "castTotal": 1.75,
+          "castingAbility": "crafting",
+          "combatTimer": 99,
+          "comboUntil": -1,
+          "craftCastBatchRemaining": 2,
+          "craftCastBatchTotal": 2,
+          "craftCastRecipeId": "recipe_minor_healing_potion",
+          "critChance": 0.06,
+          "detonateTimer": "Infinity",
+          "dodgeChance": 0.06,
+          "fallStartY": 1.5,
+          "fiveSecondRule": 99,
+          "hp": 100,
+          "id": 963,
+          "kind": "player",
+          "level": 1,
+          "lootFfaTimer": "Infinity",
+          "maxHp": 100,
+          "maxResource": 100,
+          "moveSpeed": 7,
+          "offhandItemId": "eastbrook_buckler",
+          "onGround": true,
+          "overpowerUntil": -1,
+          "petMode": "defensive",
+          "pos": {
+            "x": 2,
+            "y": 1.5,
+            "z": -2
+          },
+          "potionCooldownUntil": -1,
+          "resourceType": "rage",
+          "spawnPos": {
+            "x": 2,
+            "y": 1.5,
+            "z": -2
+          },
+          "spellPower": 5,
+          "stats": {
+            "agi": 20,
+            "armor": 144,
+            "int": 10,
+            "spi": 11,
+            "sta": 23,
+            "str": 23
+          },
+          "templateId": "warrior",
+          "weapon": {
+            "max": 5,
+            "min": 2,
+            "speed": 2
+          }
+        }
+      ]
+    },
+    {
+      "tick": 0,
+      "time": 0,
+      "nextId": 968,
+      "state": "8f9e56fe",
       "events": "741638a5",
       "rng": {
         "draws": 3,
@@ -882,6 +1161,7 @@
             null
           ],
           "bank": {},
+          "bgRating": 1500,
           "cls": "warrior",
           "companionUpgrades": {},
           "counters": {
@@ -890,9 +1170,6 @@
           "craftSkills": {
             "alchemy": 2,
             "tailoring": 200
-          },
-          "craftThrottle": {
-            "count": 3
           },
           "deedStats": {
             "counters": {
@@ -912,11 +1189,15 @@
               "spider_leg",
               "spool_of_thread",
               "worn_sword"
+            ],
+            "visited": [
+              "masterwork:first",
+              "masterwork:tailoring"
             ]
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 941,
+          "entityId": 963,
           "equipment": {
             "chest": "recruit_tunic",
             "mainhand": "worn_sword",
@@ -956,6 +1237,18 @@
                 "signer": "Adventurer"
               },
               "itemId": "eastbrook_ritual_vestments"
+            },
+            {
+              "count": 2,
+              "itemId": "linen_scrap"
+            },
+            {
+              "count": 2,
+              "itemId": "spider_leg"
+            },
+            {
+              "count": 4,
+              "itemId": "silverleaf_herb"
             }
           ],
           "lastCraftResult": {
@@ -966,7 +1259,7 @@
             "recipeId": "recipe_minor_healing_potion"
           },
           "lastMasterwork": {
-            "crafter": 941,
+            "crafter": 963,
             "itemId": "eastbrook_ritual_vestments",
             "recipeId": "recipe_eastbrook_ritual_vestments"
           },
@@ -974,6 +1267,18 @@
           "mailWelcomed": true,
           "nodeHarvestReadyAt": {},
           "recipesGrandfathered": true,
+          "reliquary": {
+            "counts": {},
+            "firstFind": {},
+            "marks": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ],
+            "recent": [
+              "masterwork:first",
+              "masterwork:tailoring"
+            ]
+          },
           "talents": {
             "rows": {}
           },
@@ -1003,20 +1308,26 @@
               "name": "Battle Stance",
               "remaining": 3600,
               "school": "physical",
-              "sourceId": 941
+              "sourceId": 963
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
+          "castRemaining": 1.75,
+          "castTotal": 1.75,
+          "castingAbility": "crafting",
           "combatTimer": 99,
           "comboUntil": -1,
+          "craftCastBatchRemaining": 2,
+          "craftCastBatchTotal": 2,
+          "craftCastRecipeId": "recipe_minor_healing_potion",
           "critChance": 0.06,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "fallStartY": 1.5,
           "fiveSecondRule": 99,
           "hp": 100,
-          "id": 941,
+          "id": 963,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",

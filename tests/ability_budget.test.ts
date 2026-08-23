@@ -89,9 +89,15 @@ describe('ability budget: the two shapes that really call it agree', () => {
       if (pool) charges[id] = { charges: pool.charges, fixed: pool.fixed };
     }
     return {
+      id: e.id,
       autoAttack: false,
       dead: e.dead,
       resource: e.resource,
+      // Mirrored off the entity like every field above, not defaulted: the whole
+      // point of this shape is that it carries what the live bar reads, and a
+      // druid running a form has its real pool parked in savedMana.
+      resourceType: e.resourceType,
+      savedMana: e.savedMana,
       cooldowns: e.cooldowns,
       gcdRemaining: 0,
       potionCdRemaining: 0,

@@ -65,7 +65,7 @@ import {
   DRAKELANDS_ROADS,
   DRAKELANDS_ZONE,
 } from './content/drakelands';
-import { DUNGEON_DEFS, DUNGEON_MOBS } from './content/dungeons';
+import { DUNGEON_DEFS, DUNGEON_KEEPSAKE_ITEMS, DUNGEON_MOBS } from './content/dungeons';
 import {
   EVERGARDEN_CAMPS,
   EVERGARDEN_ITEMS,
@@ -133,6 +133,7 @@ import {
 import { GROUND_PICKUP_LINES } from './content/ground_pickup_lines';
 import { MAGE_PET_MOBS } from './content/mage_pets';
 import { MAILBOXES } from './content/mailboxes';
+import { NECROMANCY_MOBS } from './content/necromancy';
 import {
   NIGHTBLOOM_CAMPS,
   NIGHTBLOOM_ITEMS,
@@ -162,6 +163,7 @@ import {
   PALMREACH_ROADS,
   PALMREACH_ZONE,
 } from './content/palmreach';
+import { PRACTICE_DUMMY_CAMPS, PRACTICE_DUMMY_MOBS } from './content/practice_dummies';
 import { STATIONS } from './content/professions';
 import {
   REALM_CAMPS,
@@ -348,6 +350,7 @@ export const ITEMS: Record<string, ItemDef> = mergeItems(
   GALECREST_ITEMS,
   FARSHORE_ITEMS,
   WILDHEART_ITEMS,
+  DUNGEON_KEEPSAKE_ITEMS,
 );
 
 export type { AggregatedSetEffect } from './content/item_sets';
@@ -357,8 +360,10 @@ export const MOBS: Record<string, MobTemplate> = {
   ...ZONE1_MOBS,
   ...ZONE2_MOBS,
   ...ZONE3_MOBS,
+  ...PRACTICE_DUMMY_MOBS,
   ...DUNGEON_MOBS,
   ...WARLOCK_PET_MOBS,
+  ...NECROMANCY_MOBS,
   ...MAGE_PET_MOBS,
   ...TEMPLE_MOBS,
   ...TEMPLE_DUNGEON_MOBS,
@@ -501,6 +506,12 @@ export const CAMPS: CampDef[] = [
   // The Drakelands dragonkin brood belt (v0.35 rework) arrived after the
   // knights: same append-last rule, so every camp above keeps its draws.
   ...DRAKELANDS_BROOD_CAMPS,
+  // The Highwatch practice row (content/practice_dummies.ts) is last of all,
+  // same append-last rule. These three draw no world-gen rng at all (the spawn
+  // loop's dummy branch is rng-free), so they cannot move an earlier camp even
+  // in principle; they sit here so the array's one ordering rule has no
+  // exceptions to remember.
+  ...PRACTICE_DUMMY_CAMPS,
 ];
 
 // Escort quest runs (src/sim/escort.ts): defs authored per realm, merged here
@@ -735,6 +746,14 @@ export function getContentGeneration(): number {
   return contentGeneration;
 }
 
+// Whether the active content is the built-in world. Consumers whose derived
+// state lives OUTSIDE this thread (the zone-build workers) must fall back to
+// in-thread paths for a custom world: a worker samples its own module copy of
+// the content, which is always the built-in one.
+export function isBuiltinWorldActive(): boolean {
+  return activeWorld === BUILTIN_WORLD;
+}
+
 // Swap in a custom world (editor play-test) or restore the built-in (pass nothing).
 // Affects terrain (world.ts), props (render/props.ts), and any consumer that reads
 // through getActiveWorldContent. Spawns come from SimConfig.world too (sim.ts ctor).
@@ -922,7 +941,6 @@ export function zoneWelcomeText(
 // Legacy single-zone exports (zone 1) — still referenced by tests and the
 // starter-town logic.
 export { DEEPFEN_SHALLOWS_LAKE, GRAVEYARD_POS, LAKE, TOWN_RADIUS };
-export const ZONE_NAME = ZONE1_ZONE.name;
 
 // ---------------------------------------------------------------------------
 // Dungeons — private party instances at far-off flat origins (see
@@ -1058,10 +1076,8 @@ export function migrateLegacyInstancePos(pos: { x: number; z: number }): {
   return { x: dungeon.doorPos.x, z: dungeon.doorPos.z - 4 };
 }
 
-// Legacy aliases for the Hollow Crypt (tests + scripts reference these).
+// Legacy aliases for the Hollow Crypt (tests reference these).
 export const CRYPT_DOOR_POS = DUNGEONS.hollow_crypt.doorPos;
-export const CRYPT_ENTRY = DUNGEONS.hollow_crypt.entry;
-export const CRYPT_EXIT_OFFSET = DUNGEONS.hollow_crypt.exitOffset;
 export const CRYPT_SPAWNS = DUNGEONS.hollow_crypt.spawns;
 
 // ---------------------------------------------------------------------------
@@ -1170,9 +1186,10 @@ export function isRiftPos(x: number): boolean {
   return x >= RIFT_BAND_X_MIN && x < RIFT_BAND_X_MAX;
 }
 
-// Nearest rift-floor origin to a far-off z (all floors share RIFT_X_MIN; they
-// stack along z, slot-major then floor-minor). Mirrors arenaOriginAt: the renderer
-// uses it to place the generated interior at the same origin the sim spawned it.
+// Rift-floor origin for a far-off z, slot-major then floor-minor. Mirrors
+// arenaOriginAt: the renderer uses it to place the generated interior at the
+// same origin the sim spawned it (callers always probe positions already
+// inside a floor, where the slot-major floor() derivation is exact).
 export function riftOriginAt(z: number): { x: number; z: number } {
   const off = z - RIFT_Z0;
   const slot = Math.max(
@@ -1185,6 +1202,40 @@ export function riftOriginAt(z: number): { x: number; z: number } {
     Math.min(RIFT_MAX_FLOORS - 1, Math.round(withinSlot / RIFT_FLOOR_SPACING)),
   );
   return riftInstanceOrigin(slot, floor);
+}
+
+/** The z of the NEAREST rift floor origin to z, allocation-free. Distinct
+ * from riftOriginAt ON PURPOSE: that helper's slot-major floor() derivation
+ * maps a z just SOUTH of a slot's floor 0 into the PREVIOUS slot (whose
+ * floor index then clamps to the top floor, hundreds of yards away). Fine
+ * for its renderer callers, catastrophically wrong for the collision region
+ * lookup, where it would silently drop collision on the south half of floor
+ * 0 for every slot past 0. Two candidate slots always suffice: a region
+ * spans +-RIFT_REGION_HALF_Z (160) around its origin, floors are 340 apart,
+ * and the inter-slot gap is 540, so the containing slot is
+ * floor(off / RIFT_SLOT_SPACING) or the one after; the nearest candidate
+ * wins, and when a region contains z its own origin IS the nearest (every
+ * other origin sits at least 180 away vs at most 160). No allocation: this
+ * runs once per movement resolve and once per 0.5 yd sight sample. */
+export function riftNearestFloorOriginZ(z: number): number {
+  const s0 = Math.floor((z - RIFT_Z0) / RIFT_SLOT_SPACING);
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestZ = RIFT_Z0;
+  for (let i = 0; i <= 1; i++) {
+    const slot = Math.max(0, Math.min(RIFT_LAYOUT_SLOT_COUNT - 1, s0 + i));
+    const floor0 = RIFT_Z0 + slot * RIFT_SLOT_SPACING;
+    const floor = Math.max(
+      0,
+      Math.min(RIFT_MAX_FLOORS - 1, Math.round((z - floor0) / RIFT_FLOOR_SPACING)),
+    );
+    const oz = floor0 + floor * RIFT_FLOOR_SPACING;
+    const d = Math.abs(z - oz);
+    if (d < bestDistance) {
+      bestDistance = d;
+      bestZ = oz;
+    }
+  }
+  return bestZ;
 }
 
 export function delveAt(x: number): DelveDef | null {
@@ -1239,6 +1290,61 @@ export function yumiMazeOriginAt(z: number): { x: number; z: number; slot: numbe
     }
   }
   const o = yumiMazeOrigin(best);
+  return { x: o.x, z: o.z, slot: best };
+}
+
+// ---------------------------------------------------------------------------
+// Thornhollow Fields, the 5v5 capture-the-flag battleground. Its match
+// instances sit on the far-east instance plane like every other instanced
+// region, offset from INSTANCE_X_BASE rather than from world zero: the plane
+// moved east wholesale (see migrateLegacyInstancePos), so a raw offset would
+// land these matches in the OVERWORLD. The band is placed well past the
+// overflow-dungeon growth zone (DUNGEON_OVERFLOW_X_BASE + 600 per dungeon), so
+// adding dungeons can never walk into it.
+//
+// Unlike every other far-east band, this one has REAL terrain: the Thornhollow
+// field's sculpted heightfield (sim/battleground_field.ts serves world.ground
+// Height's band arm), and its per-slot colliders are registered into the
+// open-world spatial grid rather than scanned as one instance-local set
+// (sim/colliders.ts bandSlotColliders).
+// ---------------------------------------------------------------------------
+
+// x at/after this = a Thornhollow Fields instance.
+export const BG_BAND_X_MIN = INSTANCE_X_BASE + 30_000;
+// Two-sided cap, the Yumi-band move: the band never claims everything east, so
+// a later band stays classifiable.
+export const BG_BAND_X_MAX = INSTANCE_X_BASE + 34_000;
+// Battleground instances share this x; slots stack along z.
+export const BG_X = INSTANCE_X_BASE + 30_400;
+export const BG_SLOT_COUNT = 3; // concurrent 5v5 matches the world can host
+const BG_Z0 = -1500;
+const BG_SLOT_SPACING = 920; // way past the 100x280 field, so cross-slot player
+// pairs stay over 600yd apart: beyond even the RAISED in-band interest radius,
+// which applies to SAME-slot pairs only (server/game.ts BG_MATCH_DROP_RADIUS).
+// The band has the room, and physical separation is a cheaper guarantee than
+// relying on the same-slot filter alone.
+
+export function battlegroundOrigin(slot: number): { x: number; z: number } {
+  return { x: BG_X, z: BG_Z0 + slot * BG_SLOT_SPACING };
+}
+
+export function isBgPos(x: number): boolean {
+  return x >= BG_BAND_X_MIN && x < BG_BAND_X_MAX;
+}
+
+// Nearest battleground instance origin to a far-off position, matched by
+// z-band (the x is shared across slots). Mirrors arenaOriginAt.
+export function bgOriginAt(z: number): { x: number; z: number; slot: number } {
+  let best = 0,
+    bestD = Infinity;
+  for (let i = 0; i < BG_SLOT_COUNT; i++) {
+    const d = Math.abs(z - battlegroundOrigin(i).z);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  const o = battlegroundOrigin(best);
   return { x: o.x, z: o.z, slot: best };
 }
 

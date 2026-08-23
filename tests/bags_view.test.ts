@@ -11,6 +11,7 @@ import {
   bagQualityKey,
   bagQuestSectionHeadersAllowed,
   bagShiftLinks,
+  bagSortSignature,
   bagStackIndex,
   bagsMoneyRowStale,
   bagsWindowShown,
@@ -45,6 +46,14 @@ const ITEMS: Record<string, ItemDef> = {
   questItem: { kind: 'quest', name: 'Relic', quality: 'epic' } as ItemDef,
   bound: { kind: 'armor', name: 'Bound Plate', quality: 'uncommon', noMarketList: true } as ItemDef,
   rod: { kind: 'tool', name: 'Fishing Rod', use: { type: 'fishing' } } as ItemDef,
+  // Tool-effect charm: use.type 'toolEffect' is not bag-usable; the hover must
+  // point at the Professions window rather than advertising "Click to use".
+  charm: {
+    kind: 'tool',
+    name: "Gatherer's Cache",
+    quality: 'rare',
+    use: { type: 'toolEffect', effectId: 'gatherers_cache' },
+  } as ItemDef,
   soulbound: { kind: 'quest', name: 'Soulbound Key', quality: 'epic', noDiscard: true } as ItemDef,
   starterTool: {
     kind: 'tool',
@@ -491,6 +500,11 @@ describe('bagTooltipHintKey', () => {
     expect(bagTooltipHintKey(ITEMS.bread, NO_MODE)).toBe('itemUi.tooltip.clickConsume');
     expect(bagTooltipHintKey(ITEMS.potion, NO_MODE)).toBe('itemUi.tooltip.clickUseInstant');
     expect(bagTooltipHintKey(ITEMS.rod, NO_MODE)).toBe('itemUi.tooltip.clickUse');
+    // Charms refuse bag use (sim: "Open Professions to slot that."); the hint
+    // must not advertise click-to-use for a click that only errors.
+    expect(bagTooltipHintKey(ITEMS.charm, NO_MODE)).toBe(
+      'hudChrome.professions.toolEffectTooltip.openProfessions',
+    );
     expect(bagTooltipHintKey({ kind: 'junk' }, NO_MODE)).toBe('');
   });
 
@@ -804,5 +818,35 @@ describe('noVendorSell affordances (the quest-granted starter tools)', () => {
     expect(bagItemAction(ITEMS.starterTool, { ...NO_MODE, tradeOpen: true })).toBe('trade');
     expect(bagItemAction(ITEMS.starterTool, { ...NO_MODE, bankDeposit: true })).toBe('bankDeposit');
     expect(bagItemAction(ITEMS.starterTool, NO_MODE)).toBe('use');
+  });
+});
+
+describe('bagSortSignature', () => {
+  const inv = (): InvSlot[] => [
+    { itemId: 'bread', count: 3, slot: 4 },
+    { itemId: 'sword', count: 1 },
+  ];
+
+  it('is stable for an unchanged inventory (same on both host shapes)', () => {
+    expect(bagSortSignature(inv())).toBe(bagSortSignature(inv()));
+  });
+
+  it('moves when a count changes (consolidation)', () => {
+    const changed = inv();
+    changed[0].count = 5;
+    expect(bagSortSignature(changed)).not.toBe(bagSortSignature(inv()));
+  });
+
+  it('moves when only a cell hint changes (the restamp, no merge at all)', () => {
+    const changed = inv();
+    changed[1].slot = 0;
+    expect(bagSortSignature(changed)).not.toBe(bagSortSignature(inv()));
+  });
+
+  it('distinguishes an absent hint from cell 0 and never collides on removal', () => {
+    const hinted: InvSlot[] = [{ itemId: 'bread', count: 3, slot: 0 }];
+    const unhinted: InvSlot[] = [{ itemId: 'bread', count: 3 }];
+    expect(bagSortSignature(hinted)).not.toBe(bagSortSignature(unhinted));
+    expect(bagSortSignature([])).not.toBe(bagSortSignature(unhinted));
   });
 });

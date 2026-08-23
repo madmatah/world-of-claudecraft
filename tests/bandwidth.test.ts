@@ -16,10 +16,10 @@ vi.mock('../server/db', () => ({
   grantAccountMechChroma: vi.fn(async () => ({ completedQuestIds: [], mechChromaIds: [] })),
 }));
 
+import { isUpdateDue } from '../server/entity_update_cadence';
 import { GameServer, wireEntity } from '../server/game';
 import { otherRealmRacersParticipantIds } from '../server/realm_racers_interest';
 import { appendSnapshotEntity } from '../server/snapshot_entity_stream';
-import { VALE_CUP_BALL_TEMPLATE_ID } from '../src/sim/content/vale_cup';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
 import type { Entity } from '../src/sim/types';
@@ -39,10 +39,6 @@ const INTEREST_DROP_RADIUS = 100;
 const NPC_INTEREST_RADIUS = 120;
 const NPC_DROP_RADIUS = 130;
 const INTEREST_QUERY_RADIUS = NPC_DROP_RADIUS; // widest radius any kind needs
-const FULL_RATE_RADIUS_SQ = 55 * 55;
-const HALF_RATE_RADIUS_SQ = 80 * 80;
-const HALF_RATE_DIVISOR = 2;
-const QUARTER_RATE_DIVISOR = 4;
 
 interface RefSent {
   idVer: number;
@@ -58,21 +54,6 @@ function refInterestLimitSq(e: Entity, known: boolean): number {
     return known ? NPC_DROP_RADIUS * NPC_DROP_RADIUS : NPC_INTEREST_RADIUS * NPC_INTEREST_RADIUS;
   }
   return known ? INTEREST_DROP_RADIUS * INTEREST_DROP_RADIUS : INTEREST_RADIUS * INTEREST_RADIUS;
-}
-
-// isUpdateDue re-typed verbatim from server/game.ts.
-function refIsUpdateDue(
-  tick: number,
-  e: Entity,
-  d2: number,
-  viewer: Entity,
-  sentAtTick: number,
-): boolean {
-  if (e.templateId === VALE_CUP_BALL_TEMPLATE_ID) return true;
-  if (d2 <= FULL_RATE_RADIUS_SQ) return true;
-  if (viewer.targetId === e.id || e.aggroTargetId === viewer.id) return true;
-  const divisor = d2 <= HALF_RATE_RADIUS_SQ ? HALF_RATE_DIVISOR : QUARTER_RATE_DIVISOR;
-  return tick - sentAtTick >= divisor;
 }
 
 // The OLD per-viewer interest scan, replicated inline against the live grid: gather
@@ -103,7 +84,7 @@ function referenceEntsKeep(
       e.id,
       tick,
       stableTimerWire,
-      fullRate || refIsUpdateDue(tick, e, d2, anchor, known?.sentAtTick ?? tick),
+      fullRate || isUpdateDue(tick, e, d2, anchor, known?.sentAtTick ?? tick),
       shadow,
       present,
       ents,

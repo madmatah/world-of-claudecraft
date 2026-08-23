@@ -1,6 +1,25 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const crestIconMocks = vi.hoisted(() => ({
+  cached: vi.fn<(kind: string, id: string, size: number) => string | null>(() => null),
+  procedural: vi.fn(
+    (_kind: string, id: string, size: number) => `data:image/png;base64,${id}-${size}`,
+  ),
+}));
+
+// Happy DOM reports an unrequested image as complete with zero natural width. Keep the
+// real crest hydration seam under test, but replace its canvas-backed last-resort
+// renderer with a deterministic data URL so this controller test does not need a 2D
+// canvas implementation.
+vi.mock('../src/ui/icons', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/ui/icons')>()),
+  cachedProceduralIconDataUrl: crestIconMocks.cached,
+  proceduralIconDataUrl: crestIconMocks.procedural,
+}));
+
 import { FiestaController } from '../src/ui/hud/fiesta/fiesta_controller';
 import { t } from '../src/ui/i18n';
 import type { FiestaMatchInfo, IWorld } from '../src/world_api';
@@ -88,6 +107,9 @@ function harness() {
 describe('FiestaController', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    crestIconMocks.cached.mockReset();
+    crestIconMocks.cached.mockReturnValue(null);
+    crestIconMocks.procedural.mockClear();
   });
 
   it('paints the active authoritative score without firing a synthetic score cue', () => {
@@ -97,6 +119,21 @@ describe('FiestaController', () => {
 
     expect(test.controller.isActive()).toBe(true);
     expect(test.score.innerHTML).toContain('fs-core');
+    const faces = test.score.querySelectorAll<HTMLImageElement>('.fp-face');
+    expect(faces).toHaveLength(2);
+    expect(
+      Array.from(faces, (face) => [
+        face.getAttribute('data-crest-fallback-id'),
+        face.getAttribute('data-crest-fallback-size'),
+      ]),
+    ).toEqual([
+      ['class_warrior', '96'],
+      ['class_mage', '96'],
+    ]);
+    expect(crestIconMocks.procedural.mock.calls.map((call) => call.slice(1))).toEqual([
+      ['class_warrior', 96],
+      ['class_mage', 96],
+    ]);
     expect(test.audio.scorePing).not.toHaveBeenCalled();
   });
 
@@ -170,11 +207,44 @@ describe('FiestaController', () => {
 
     const cards = test.augments.querySelectorAll<HTMLButtonElement>('.fa-card');
     expect(cards).toHaveLength(3);
+    expect(cards[0].querySelector<HTMLImageElement>('.fa-icon')?.src).toContain(
+      '/ui/fiesta/augments/aug_brutality.webp',
+    );
     cards[1].click();
     expect(test.arenaAugmentPick).toHaveBeenCalledWith('aug_toughness');
     expect(test.audio.click).toHaveBeenCalledTimes(1);
     expect(test.augments.style.display).toBe('none');
     expect(test.augments.innerHTML).toBe('');
+  });
+
+  it('keeps category art when an augment image is unknown or fails to decode', () => {
+    const test = harness();
+    test.fiesta.offer = {
+      tier: 'silver',
+      wave: 1,
+      choices: ['aug_brutality', 'future_augment', 'aug_keen_eye'],
+    };
+
+    test.controller.update();
+
+    const cards = test.augments.querySelectorAll<HTMLButtonElement>('.fa-card');
+    const primary = cards[0].querySelector<HTMLImageElement>('img.fa-icon');
+    expect(primary?.src).toContain('/ui/fiesta/augments/aug_brutality.webp');
+    primary?.dispatchEvent(new Event('error'));
+    expect(cards[0].querySelector('img.fa-icon')).toBeNull();
+    expect(cards[0].querySelector('.fa-icon svg')).not.toBeNull();
+    expect(cards[1].querySelector('img.fa-icon')).toBeNull();
+    expect(cards[1].querySelector('.fa-icon svg')).not.toBeNull();
+    expect(cards[1].querySelector('.fa-icon')?.classList.contains('cat-utility')).toBe(true);
+  });
+
+  it('keeps the touch offer inside a short zoomed landscape viewport', () => {
+    const css = readFileSync('src/styles/hud.mobile.css', 'utf8');
+    expect(css).toContain('body.mobile-touch #fiesta-augments {');
+    expect(css).toContain('top: calc(max(8px, env(safe-area-inset-top)) / var(--ui-scale, 1));');
+    expect(css).toContain('bottom: auto;');
+    expect(css).toContain('@media (max-height: 480px) and (orientation: landscape)');
+    expect(css).toContain('max-width: calc(var(--app-vw) / var(--ui-scale, 1) - 16px);');
   });
 
   it('localizes each augment card aria-label through one composed t() key', () => {

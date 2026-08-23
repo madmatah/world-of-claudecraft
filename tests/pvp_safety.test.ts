@@ -276,7 +276,7 @@ describe('PvP control abilities in active duels', () => {
     }
 
     const fear = b.auras.find((aura) => aura.id === 'fear_incap' && aura.kind === 'incapacitate');
-    expect(fear?.duration).toBe(8);
+    expect(fear?.duration).toBe(5);
 
     for (let i = 0; i < 20; i++) sim.tick();
 
@@ -284,13 +284,13 @@ describe('PvP control abilities in active duels', () => {
     expect(b.auras.some((aura) => aura.id === 'fear_incap')).toBe(true);
   });
 
-  it('diminishes repeated duel Fears to 8s, 4s, 2s, 1s and resets after 60s', () => {
+  it('diminishes repeated duel Fears from their authored duration and resets after 60s', () => {
     const { sim, aPid, b } = startDuel('warlock', 'warrior', 20);
 
     const castFear = () => {
       // A resisted Fear applies nothing and does NOT advance diminishing returns
       // (the spell-hit roll precedes the DR bookkeeping in applyAbility), so retry
-      // until it lands. This keeps the 8/4/2/1 sequence stable regardless of where
+      // until it lands. This keeps the multiplier sequence stable regardless of where
       // the shared world RNG stream happens to sit (new content shifts it).
       let dur = 0;
       for (let attempt = 0; attempt < 50 && dur === 0; attempt++) {
@@ -305,21 +305,21 @@ describe('PvP control abilities in active duels', () => {
       return dur;
     };
 
-    expect(castFear()).toBe(8);
-    expect(castFear()).toBe(4);
-    expect(castFear()).toBe(2);
-    expect(castFear()).toBe(1);
+    expect(castFear()).toBe(5);
+    expect(castFear()).toBe(2.5);
+    expect(castFear()).toBe(1.25);
+    expect(castFear()).toBe(0.625);
 
     b.auras = b.auras.filter((aura) => aura.id !== 'fear_incap');
     for (let i = 0; i < 20 * 61; i++) sim.tick();
 
-    expect(castFear()).toBe(8);
+    expect(castFear()).toBe(5);
   }, 90_000);
 
   it('duel stuns land at full duration on every repeat (stun DR exemption)', () => {
     const { sim, aPid, b } = startDuel('paladin', 'warrior', 20);
 
-    // Hammer of Justice at level 20 is rank 2: a 4s instant stun. As with Fear, a
+    // Sundering Gavel is a 3s instant stun. As with Fear, a
     // resisted stun applies nothing and does NOT advance diminishing returns, so
     // retry until it lands to keep the sequence stable against shared-RNG drift.
     const castStun = () => {
@@ -340,10 +340,10 @@ describe('PvP control abilities in active duels', () => {
     // Balance pass (maintainer): player stuns are EXEMPT from PvP diminishing
     // returns (they are short flat durations behind real cooldowns); every
     // repeat lands at full duration. Fear/polymorph/root keep their ladders.
-    expect(castStun()).toBe(4);
-    expect(castStun()).toBe(4);
-    expect(castStun()).toBe(4);
-    expect(castStun()).toBe(4);
+    expect(castStun()).toBe(3);
+    expect(castStun()).toBe(3);
+    expect(castStun()).toBe(3);
+    expect(castStun()).toBe(3);
   });
 
   it('keeps opener and controlled stuns on independent DR chains (#1004)', () => {
@@ -374,14 +374,14 @@ describe('PvP control abilities in active duels', () => {
 
     // The controlled stun is unaffected by the spent opener chain, and with
     // the stun-DR exemption every repeat stays full length.
-    expect(castStun()).toBe(4);
-    expect(castStun()).toBe(4);
-    expect(castStun()).toBe(4);
+    expect(castStun()).toBe(3);
+    expect(castStun()).toBe(3);
+    expect(castStun()).toBe(3);
   });
 
   it('does not diminish PvE stuns: a stun on a mob keeps full duration on repeat', () => {
     // DR is duel/PvP only (player source AND player target). A paladin stunning a
-    // hostile mob must always land the full 4s, no matter how many times in a row.
+    // hostile mob must always land the full 3s, no matter how many times in a row.
     const sim = new Sim({
       seed: 7,
       playerClass: 'paladin' as any,
@@ -424,9 +424,9 @@ describe('PvP control abilities in active duels', () => {
       return dur;
     };
 
-    expect(stunMob()).toBe(4);
-    expect(stunMob()).toBe(4);
-    expect(stunMob()).toBe(4);
-    expect(stunMob()).toBe(4);
+    expect(stunMob()).toBe(3);
+    expect(stunMob()).toBe(3);
+    expect(stunMob()).toBe(3);
+    expect(stunMob()).toBe(3);
   });
 });

@@ -26,7 +26,8 @@ import { renderLayerDisabled } from './render_dev_flags';
 // Actual AA graph on the pinned packages: N8AO renders into its own
 // single-sample beauty target, so MSAA cannot protect the composer tiers.
 // High, ultra, and insane use tail SMAA at a 1.75 DPR cap. Medium keeps its
-// adaptive-resolution region by omitting SMAA and the full-UV ScreenFx tail.
+// adaptive-resolution region by omitting SMAA and the full-UV ScreenFx tail,
+// and gets its edge AA from the FXAA arm fused into OutputGradePass instead.
 // Full-screen targets never inherit MSAA.
 //
 // OutputGradePass explicitly quantizes both removed RGBA16F boundaries: bloom's
@@ -146,8 +147,10 @@ export function buildComposer(
     aoFullRes: GFX.aoFullRes,
     bloom: GFX.bloom,
     smaa: GFX.smaa,
+    fxaa: GFX.fxaa,
     n8aoDisabled: renderLayerDisabled('n8ao'),
     smaaDisabled: renderLayerDisabled('smaa'),
+    fxaaDisabled: renderLayerDisabled('fxaa'),
     isWebGL2: webgl.capabilities.isWebGL2,
     msaaSamples: GFX.msaaSamples,
   });
@@ -207,9 +210,16 @@ export function buildComposer(
     bloom = new PreparedBloomPass(size.clone(), BLOOM_STRENGTH, BLOOM_RADIUS, BLOOM_THRESHOLD);
     composer.addPass(bloom);
   }
+  // Edge AA for the grade-only tiers lives INSIDE this pass. A tail pass would
+  // be full-frame and cost the chain its dynamic-resolution region (see the AA
+  // note above); the fused arm rides the grade's own uInputUvRect remap, so it
+  // adds taps and nothing else: no pass, no target, no resolve.
+  // ?fxaa=off is the dev-only perf-attribution kill switch, the grade-chain
+  // counterpart of ?smaa=off.
   const grade = new OutputGradePass(
     sharedUniforms.uTime,
     bloom instanceof PreparedBloomPass ? bloom.bloomTexture : null,
+    { fxaa: plan.gradeFxaa },
   );
   composer.addPass(grade);
 
@@ -239,7 +249,7 @@ export function buildComposer(
   // Edge AA, after the grade so it works on the display-space image (SMAA's
   // edge detector expects the gamma-encoded color OutputGradePass produces).
   // It stays the LAST pass; the screen-fx pass above feeds into it.
-  // Construction size is provisional; addPass and the setSize() member resize
+  // r185 SMAAPass constructs sizeless; addPass and the setSize() member resize
   // every pass to the live drawing-buffer extent.
   // The AA policy uses SMAA on the full composer tiers. Ultra and insane run
   // the same 1.75 cap as high: when both caps bind, 1.75 squared is 49 percent of
@@ -247,7 +257,7 @@ export function buildComposer(
   // edge pass.
   // ?smaa=off is the dev-only perf-attribution kill switch. It keeps the
   // post-AA cost attributable while comparing the revised tier policy.
-  if (plan.composerPasses.includes('smaa')) composer.addPass(new SMAAPass(size.x, size.y));
+  if (plan.composerPasses.includes('smaa')) composer.addPass(new SMAAPass());
 
   return {
     composer,

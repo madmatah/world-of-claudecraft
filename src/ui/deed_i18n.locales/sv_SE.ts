@@ -7,6 +7,54 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  exp_dawnhold_castle: {
+    name: 'En öppen dörr i trädgården',
+    desc: 'Besök Dawnholds slott och strosa genom dess solbelysta trädgårdssalar.',
+  },
+  exp_the_last_keep: {
+    name: 'De tysta salarna',
+    desc: 'Stig in genom Sista fästets dörrar och vandra genom dess tysta salar.',
+  },
+  pvp_bg_first_capture: {
+    name: 'Banér i hand',
+    desc: 'Erövra en flagga i Törnhålefälten.',
+  },
+  pvp_bg_first_win: {
+    name: 'Hålan håller',
+    desc: 'Vinn en drabbning i Törnhålefälten.',
+  },
+  pvp_bg_wins_25: {
+    name: 'Hålans väktare',
+    desc: 'Vinn 25 drabbningar i Törnhålefälten.',
+    title: 'Flaggbärare',
+  },
+  pvp_bg_captures_100: {
+    name: 'Hundra banér',
+    desc: 'Erövra 100 flaggor i Törnhålefälten under din karriär.',
+  },
+  dgn_rift: {
+    name: 'Revvandrare',
+    desc: 'Rensa en reva genom att besegra dess våningsboss.',
+  },
+  dgn_rift_s_rank: {
+    name: 'Revhärskare',
+    desc: 'Rensa en reva av grad S, den svåraste graden en revportal kan skapa.',
+  },
+  pvp_honor_sergeant: {
+    name: 'Linjebrytare',
+    desc: 'Tjäna in 10 000 heder under din livstid. Att spendera den kostar dig aldrig rangen.',
+    title: 'Linjebrytare',
+  },
+  pvp_honor_knight_lieutenant: {
+    name: 'Fälthärjare',
+    desc: 'Tjäna in 40 000 heder under din livstid, en säsong av verkligt krig bakom dig.',
+    title: 'Fälthärjare',
+  },
+  pvp_honor_field_marshal: {
+    name: 'Krigskrönt',
+    desc: 'Tjäna in 150 000 heder under din livstid. Sällsynt i alla riken, och så borde det vara.',
+    title: 'Krigskrönt',
+  },
   chr_drakemaw_broodlord: {
     name: 'Kullbrytaren',
     desc: 'Fäll en Drakgapets kullherre bland dess ägg, genom vrålet, klyvhugget och elden.',
@@ -14,6 +62,54 @@ export const table: DeedLocaleTable = {
   chr_maw_matriarch: {
     name: 'Himlen tystnar',
     desc: 'Fäll Cindraleth, Gapets matriark, i hennes kraterbo ovanför Drakgapet.',
+  },
+  chr_frostveil_gatherer: {
+    name: 'Skord pa terrasserna',
+    desc: 'Skorda en malmadra, ett tradbestand och en ortbadd i Frostveil.',
+  },
+  chr_frostveil_first_cast: {
+    name: 'Forsta isen pa tjarnen',
+    desc: 'Fanga en fisk i Frostveils vatten.',
+  },
+  chr_amberfall_gatherer: {
+    name: 'Amberfalls skord',
+    desc: 'Skorda en malmadra, ett tradbestand och en ortbadd i Amberfall.',
+  },
+  chr_amberfall_first_cast: {
+    name: 'En fangst fran stormyren',
+    desc: 'Fanga en fisk i Amberfalls vatten.',
+  },
+  chr_nightbloom_gatherer: {
+    name: 'Den drommande skorden',
+    desc: 'Skorda en malmadra, ett tradbestand och en ortbadd i Nightbloom.',
+  },
+  chr_nightbloom_first_cast: {
+    name: 'En ring pa manbrunnen',
+    desc: 'Fanga en fisk i Nightblooms vatten.',
+  },
+  chr_wraithwood_gatherer: {
+    name: 'Skord under lovtaket',
+    desc: 'Skorda en malmadra, ett tradbestand och en ortbadd i Wraithwood.',
+  },
+  chr_wraithwood_first_cast: {
+    name: 'Ett kast i spegelviken',
+    desc: 'Fanga en fisk i Wraithwoods vatten.',
+  },
+  chr_palmreach_gatherer: {
+    name: 'Skord pa palmstranden',
+    desc: 'Skorda en malmadra, ett tradbestand och en ortbadd i Palmreach.',
+  },
+  chr_palmreach_first_cast: {
+    name: 'Kast i safirlagunen',
+    desc: 'Fanga en fisk i Palmreachs vatten.',
+  },
+  chr_evergarden_gatherer: {
+    name: 'Parterrens gava',
+    desc: 'Skorda en malmadra, ett tradbestand och en ortbadd i Evergarden.',
+  },
+  chr_evergarden_first_cast: {
+    name: 'Ett kast pa kronbladsdammen',
+    desc: 'Fanga en fisk i Evergardens vatten.',
   },
   pvp_card_duel_first_win: {
     name: 'Husregler',
@@ -804,5 +900,77 @@ export const table: DeedLocaleTable = {
   chr_farshore_first_cast: {
     name: 'Det måsarna vet',
     desc: 'Fånga en fisk ur Fjärrkustens vatten.',
+  },
+  prog_engineering_rare: {
+    name: 'Precisionsingenjörskonst',
+    desc: 'Skapa ditt första sällsynta föremål i Ingenjörskonst.',
+  },
+  prog_alchemy_rare: {
+    name: 'En sällsynt årgång',
+    desc: 'Skapa ditt första sällsynta föremål i Alkemi.',
+  },
+  prog_cooking_rare: {
+    name: 'En rätt att minnas',
+    desc: 'Skapa ditt första sällsynta föremål i Matlagning.',
+  },
+  prog_leatherworking_rare: {
+    name: 'Fin garvning',
+    desc: 'Skapa ditt första sällsynta föremål i Läderhantverkeri.',
+  },
+  prog_tailoring_rare: {
+    name: 'Ett mästerligt stygn',
+    desc: 'Skapa ditt första sällsynta föremål i Skrädderi.',
+  },
+  prog_weaponcrafting_rare: {
+    name: 'Härdad till glans',
+    desc: 'Skapa ditt första sällsynta föremål i Vapensmide.',
+  },
+  prog_armorcrafting_rare: {
+    name: 'Pansrad till perfektion',
+    desc: 'Skapa ditt första sällsynta föremål i Rustningssmide.',
+  },
+  col_reliquary_rank_2: {
+    name: 'Bytesväktare',
+    desc: 'Nå intendentgrad 2 i Relikvariet (10 unika katalogiserade reliker).',
+    title: 'Bytesväktare',
+  },
+  col_reliquary_rank_3: {
+    name: 'Katalogisatorn',
+    desc: 'Nå intendentgrad 3 i Relikvariet (25 unika katalogiserade reliker).',
+    title: 'Katalogisatorn',
+  },
+  col_reliquary_rank_4: {
+    name: 'Ärkeintendent',
+    desc: 'Nå intendentgrad 4 i Relikvariet (50 unika katalogiserade reliker).',
+    title: 'Ärkeintendent',
+  },
+  col_reliquary_rank_5: {
+    name: 'Eviga byten',
+    desc: 'Nå intendentgrad 5 i Relikvariet (100 unika katalogiserade reliker).',
+  },
+  col_reliquary_complete: {
+    name: 'Det Stora Relikvariet',
+    desc: 'Katalogisera varje relik i Relikvariet som en rollperson kan behålla. Att katalogen växer senare tar det aldrig ifrån dig.',
+    title: 'Valvets intendent',
+  },
+  col_reliquary_conquerors: {
+    name: 'Erövrarnas hylla',
+    desc: 'Katalogisera varje relik på Relikvariets hylla Erövrare. Att katalogen växer senare tar det aldrig ifrån dig.',
+    title: 'Valvbrytare',
+  },
+  col_reliquary_illum_nythraxis_heroic: {
+    name: 'Nythraxis illuminerad',
+    desc: 'Illuminera sidan Heroisk: Nythraxis-raid i Relikvariet.',
+    title: 'Nythraxis ljus',
+  },
+  col_reliquary_illum_thunzharr: {
+    name: 'Thunzharr illuminerad',
+    desc: 'Illuminera sidan Thunzharr, den vaknande toppen i Relikvariet.',
+    title: 'Thunzharrs ljus',
+  },
+  col_reliquary_illum_gravewyrm_heroic: {
+    name: 'Helgedomen illuminerad',
+    desc: 'Illuminera sidan Heroisk: Gravlindormens helgedom i Relikvariet.',
+    title: 'Helgedomens ljus',
   },
 };

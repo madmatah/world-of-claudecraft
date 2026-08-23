@@ -33,14 +33,18 @@ import {
   LITANY_PUZZLE_KINDS,
   litanyHatchlingSpawnClear,
 } from '../src/sim/delves/drowned_litany_rooms';
-import { clampDelveModuleBounds, rollDelveAffixes } from '../src/sim/delves/runs';
+import {
+  clampDelveModuleBounds,
+  grantDelveRewards,
+  rollDelveAffixes,
+} from '../src/sim/delves/runs';
 import { createMob } from '../src/sim/entity';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
 import { solveLockActions } from '../src/sim/lockpick';
 import { PLAYER_BODY_RADIUS } from '../src/sim/pathfind';
 import { Rng } from '../src/sim/rng';
 import { DELVE_IMPLEMENTED_AFFIXES, Sim } from '../src/sim/sim';
-import { DT, type WorldContent } from '../src/sim/types';
+import { type DelveRun, DT, INSTANCE_EMPTY_TIMEOUT, type WorldContent } from '../src/sim/types';
 import { terrainHeight } from '../src/sim/world';
 
 const DELVE_TEST_WORLD: WorldContent = {
@@ -797,6 +801,134 @@ describe('delve interactables and affixes', () => {
     expect(run.restlessPending.length).toBe(0);
   });
 
+  it('exit portal waits for pending Restless Graves spawns instead of racing them', () => {
+    // Live wedge (prod, 2026-08-17): killing the LAST trash in a room opened the
+    // portal inside the 3s grave delay, so the risen Bonewalkers appeared behind
+    // an already-latched portal and followed the run into the next room's gate.
+    const sim = makeSim();
+    enterReliquary(sim);
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    run.affixes = ['restless_graves'];
+    run.modules = ['reliquary_bell_niche', 'reliquary_finale'];
+    run.moduleIndex = 0;
+    (sim as any).spawnDelveModule(run);
+    const killAllLiveRunMobs = () => {
+      for (const id of [...run.mobIds]) {
+        const mob = sim.entities.get(id);
+        if (mob && !mob.dead)
+          (sim as any).dealDamage(
+            sim.player,
+            mob,
+            mob.maxHp + 1,
+            false,
+            'physical',
+            null,
+            'hit',
+            true,
+          );
+      }
+    };
+    killAllLiveRunMobs();
+    sim.tick();
+    // The kills queued delayed Bonewalkers; the portal must stay sealed for the
+    // whole pending window even though no live mob exists yet.
+    expect(run.restlessPending.length).toBeGreaterThanOrEqual(1);
+    expect(run.exitPortalOpen).toBe(false);
+    for (let i = 0; i < 20 * 4; i++) sim.tick();
+    // The graves rose: still sealed, now by the live risen.
+    expect(run.restlessPending.length).toBe(0);
+    expect(
+      [...sim.entities.values()].some((e) => e.templateId === 'reliquary_bonewalker' && !e.dead),
+    ).toBe(true);
+    expect(run.exitPortalOpen).toBe(false);
+    // Killing the risen (affix-spawned, so they queue nothing) releases the gate.
+    killAllLiveRunMobs();
+    sim.tick();
+    expect(run.restlessPending.length).toBe(0);
+    expect(run.exitPortalOpen).toBe(true);
+  });
+
+  it('advancing to the next room drops pending Restless Graves spawns with the room', () => {
+    // The pending list is room state: a spawn queued in room N must never rise
+    // after the party advanced (it would land in the OLD room but join the new
+    // room's mob list, sealing that room's portal forever).
+    const sim = makeSim();
+    enterReliquary(sim);
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    run.affixes = ['restless_graves'];
+    run.modules = ['reliquary_bell_niche', 'reliquary_sunken_ossuary', 'reliquary_finale'];
+    run.moduleIndex = 0;
+    (sim as any).spawnDelveModule(run);
+    const origin = run.origin;
+    // Queue a due spawn exactly as a trash death would, then advance rooms.
+    run.restlessPending.push({
+      at: 0,
+      x: origin.x,
+      z: origin.z + 10,
+      mobId: 'reliquary_bonewalker',
+    });
+    run.moduleIndex = 1;
+    (sim as any).spawnDelveModule(run);
+    expect(run.restlessPending.length).toBe(0);
+    const mobCountAfterAdvance = run.mobIds.length;
+    for (let i = 0; i < 20 * 5; i++) sim.tick();
+    expect(
+      [...sim.entities.values()].some((e) => e.templateId === 'reliquary_bonewalker' && !e.dead),
+    ).toBe(false);
+    expect(run.mobIds.length).toBe(mobCountAfterAdvance);
+  });
+
+  it('a player south of the run origin (the neighbor slot band) does not pin the run occupied', () => {
+    // Rooms extend only NORTH of a run's origin, but the empty-run sweep used a
+    // symmetric +-radius band. With slots 620u apart and a ~528u radius, the
+    // southern half overlapped the neighbor slot's rooms, so busy neighbors
+    // pinned a wedged run claimed forever.
+    const sim = makeSim();
+    enterReliquary(sim);
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    teleport(sim, run.origin.x, run.origin.z - 400);
+    run.emptyFor = INSTANCE_EMPTY_TIMEOUT - 1;
+    for (let i = 0; i < 21; i++) sim.tick();
+    expect(run.partyKey).toBe(null);
+  });
+
+  it('a player inside the run rooms still pins it occupied', () => {
+    const sim = makeSim();
+    enterReliquary(sim);
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    teleport(sim, run.origin.x, run.origin.z + 60);
+    run.emptyFor = INSTANCE_EMPTY_TIMEOUT - 1;
+    for (let i = 0; i < 21; i++) sim.tick();
+    expect(run.partyKey).not.toBe(null);
+    expect(run.emptyFor).toBe(0);
+  });
+
+  it('a player on module 0 south lip (just south of the origin) still pins the run', () => {
+    // Module 0 starts at DELVE_MODULE_Z_START + layout.zMin (about -11), so the
+    // south margin must reach past the walkable lip. This pins the margin from
+    // the inside: shrinking -40 toward 0 frees a run under a standing player.
+    const sim = makeSim();
+    enterReliquary(sim);
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    teleport(sim, run.origin.x, run.origin.z - 10);
+    run.emptyFor = INSTANCE_EMPTY_TIMEOUT - 1;
+    for (let i = 0; i < 21; i++) sim.tick();
+    expect(run.partyKey).not.toBe(null);
+    expect(run.emptyFor).toBe(0);
+  });
+
+  it('the south margin ends just past the lip, well before the neighbor band', () => {
+    // Pins the margin from the outside: growing -40 back toward the old
+    // symmetric radius re-opens the neighbor-slot pinning bug.
+    const sim = makeSim();
+    enterReliquary(sim);
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    teleport(sim, run.origin.x, run.origin.z - 45);
+    run.emptyFor = INSTANCE_EMPTY_TIMEOUT - 1;
+    for (let i = 0; i < 21; i++) sim.tick();
+    expect(run.partyKey).toBe(null);
+  });
+
   it('bad_air affix applies a periodic Bad Air DoT to the party (PRD §6.7)', () => {
     const sim = makeSim();
     enterReliquary(sim);
@@ -881,6 +1013,17 @@ describe('delve reward chest + surface exit flow', () => {
     (sim as any).dealDamage(sim.player, boss, boss.maxHp + 1, false, 'physical', null, 'hit', true);
     const events = sim.tick();
     return { boss, events };
+  }
+
+  function spawnBossAdd(
+    sim: ReturnType<typeof makeSim>,
+    run: ReturnType<typeof enterFinale>,
+    pos: { x: number; y: number; z: number },
+  ) {
+    const add = createMob((sim as any).nextId++, MOBS.reliquary_ledger_wraith, 9, { ...pos });
+    (sim as any).addEntity(add);
+    run.mobIds.push(add.id);
+    return add;
   }
 
   // Drive the lockpicking minigame to a flawless solve. Returns the chest id.
@@ -986,6 +1129,111 @@ describe('delve reward chest + surface exit flow', () => {
     expect(run.lockpick).toBeNull();
   });
 
+  // Regression: Deacon Varric's Raise Dead can still have a bonewalker up when the
+  // boss himself dies. The chest (and the surface exit it unlocks) must wait for
+  // that add the same way the mid-run module exit waits for trash, not hand the
+  // party their reward while a fight is still live.
+  it('refuses the locked chest while a boss-summoned add is still alive', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const run = enterFinale(sim);
+    killBoss(sim, run);
+    const chestId = run.rewardChestId!;
+    const chestEnt = sim.entities.get(chestId)!;
+    sim.player.pos = { ...chestEnt.pos };
+    sim.player.prevPos = { ...chestEnt.pos };
+
+    const add = spawnBossAdd(sim, run, chestEnt.pos);
+
+    expect(sim.delveInteract(chestId)).toBe(false);
+    const events = sim.tick();
+    expect(events).toContainEqual({
+      type: 'error',
+      text: 'Clear the remaining enemies first.',
+      pid: sim.playerId,
+    });
+    expect(events.some((e) => e.type === 'lockpickOffer')).toBe(false);
+    expect(run.objectState[chestId].open).toBe(false);
+    expect(run.lockpick).toBeNull();
+
+    // Once the add is dead, the same interaction succeeds.
+    add.dead = true;
+    expect(sim.delveInteract(chestId)).toBe(true);
+    const offer = sim.tick().find((e) => e.type === 'lockpickOffer');
+    expect(offer).toBeDefined();
+  });
+
+  it('direct lockpick engage cannot bypass a live boss-summoned add', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const run = enterFinale(sim);
+    killBoss(sim, run);
+    const chestId = run.rewardChestId!;
+    const chestEnt = sim.entities.get(chestId)!;
+    sim.player.pos = { ...chestEnt.pos };
+    sim.player.prevPos = { ...chestEnt.pos };
+    spawnBossAdd(sim, run, chestEnt.pos);
+
+    sim.lockpickEngage(chestId, 1);
+    const events = sim.tick();
+
+    expect(events).toContainEqual({
+      type: 'error',
+      text: 'Clear the remaining enemies first.',
+      pid: sim.playerId,
+    });
+    expect(events.some((e) => e.type === 'lockpickSession')).toBe(false);
+    expect(run.lockpick).toBeNull();
+    expect(run.completed).toBe(false);
+    expect(run.surfaceExitId).toBeNull();
+    expect(run.objectState[chestId].looted).not.toBe(true);
+    expect(run.objectState[chestId].open).not.toBe(true);
+  });
+
+  it('direct lockpick success cannot grant or open the exit if an add becomes live mid-session', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const run = enterFinale(sim);
+    killBoss(sim, run);
+    const chestId = run.rewardChestId!;
+    const chestEnt = sim.entities.get(chestId)!;
+    sim.player.pos = { ...chestEnt.pos };
+    sim.player.prevPos = { ...chestEnt.pos };
+
+    sim.lockpickEngage(chestId, 1);
+    expect(run.lockpick?.state).toBe('IN_PROGRESS');
+    sim.drainEvents();
+    const add = spawnBossAdd(sim, run, chestEnt.pos);
+
+    let guard = 0;
+    while (run.lockpick && run.lockpick.state === 'IN_PROGRESS' && guard++ < 12) {
+      const actions = solveLockActions(run.lockpick.pages[run.lockpick.pageIndex])!;
+      for (const a of actions) sim.lockpickAction(a);
+    }
+    const events = sim.drainEvents();
+
+    expect(events).toContainEqual({
+      type: 'error',
+      text: 'Clear the remaining enemies first.',
+      pid: sim.playerId,
+    });
+    expect(
+      events.find((e) => e.type === 'lockpickEnd' && (e as any).outcome === 'abandoned'),
+    ).toBeDefined();
+    expect(events.some((e) => e.type === 'delveChestLoot')).toBe(false);
+    expect(run.lockpick).toBeNull();
+    expect(run.completed).toBe(false);
+    expect(run.surfaceExitId).toBeNull();
+    expect(run.objectState[chestId].looted).not.toBe(true);
+    expect(run.objectState[chestId].attemptAvailable).toBe(true);
+
+    add.dead = true;
+    pickLockFlawless(sim, run, 1);
+    expect(run.completed).toBe(true);
+    expect(run.surfaceExitId).not.toBeNull();
+    expect(run.objectState[chestId].looted).toBe(true);
+  });
+
   it('flawless solve grants marks (premium tier), completes the run, and spawns the surface exit', () => {
     const sim = makeSim();
     sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
@@ -1018,6 +1266,281 @@ describe('delve reward chest + surface exit flow', () => {
     const exitObj = run.objectIds.find((id) => run.objectState[id]?.kind === 'surface_exit');
     expect(exitObj).toBeDefined();
     expect(run.objectState[exitObj!].open).toBe(true);
+  });
+
+  it('the third clear of the day still carries the premium chest bonus (window boundary)', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const meta = (sim as any).players.get(sim.playerId);
+    meta.delveDaily.markClears = 2; // this clear is #3: the last one inside the window
+    const run = enterFinale(sim);
+    killBoss(sim, run);
+    const marksBefore = sim.delveMarksFor(sim.playerId);
+    pickLockFlawless(sim, run, 1);
+    const events = sim.drainEvents();
+    // base in-window Normal (+1) + premium ante bonus (+2)
+    expect(sim.delveMarksFor(sim.playerId)).toBe(marksBefore + 3);
+    const bonus = events.find((e) => e.type === 'lockpickBonus');
+    expect(bonus).toBeDefined();
+    expect((bonus as Extract<typeof bonus, { type: 'lockpickBonus' }>).marks).toBe(2);
+  });
+
+  it('a post-window clear pays no chest bonus Marks; copper bonus and loot tier survive', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const meta = (sim as any).players.get(sim.playerId);
+    meta.delveDaily.markClears = 3; // the daily window is already spent
+    const run = enterFinale(sim);
+    killBoss(sim, run);
+    const marksBefore = sim.delveMarksFor(sim.playerId);
+    const copperBefore = meta.copper;
+    const chestId = pickLockFlawless(sim, run, 1);
+    const events = sim.drainEvents();
+    // Base post-window Normal is a 50% roll (0 or 1); the +2 premium bonus must not land.
+    expect(sim.delveMarksFor(sim.playerId) - marksBefore).toBeLessThanOrEqual(1);
+    const bonus = events.find((e) => e.type === 'lockpickBonus');
+    expect(bonus).toBeDefined();
+    const b = bonus as Extract<typeof bonus, { type: 'lockpickBonus' }>;
+    expect(b.tier).toBe('premium');
+    expect(b.marks).toBe(0);
+    // The copper half of the bonus is not windowed, and stays the full premium
+    // amount: round((8 + 14) / 2) * (copperMult 2 - 1) = 11.
+    expect(b.copper).toBe(11);
+    // The WALLET too, not just the event payload: base clear copper (8..14)
+    // plus the full unwindowed 11 bonus.
+    expect(meta.copper - copperBefore).toBeGreaterThanOrEqual(8 + 11);
+    expect(meta.copper - copperBefore).toBeLessThanOrEqual(14 + 11);
+    expect(run.objectState[chestId].lootedTier).toBe('premium'); // nor is the loot tier
+  });
+
+  it('the bonus window is per member: a spent partner earns 0 while a fresh one is paid', () => {
+    const sim = makeSim();
+    const p2 = sim.addPlayer('warrior', 'Duoist');
+    sim.partyInvite(p2, sim.playerId);
+    sim.partyAccept(p2);
+    for (const pid of [sim.playerId, p2]) {
+      sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel, pid);
+    }
+    // The picker has ground out today's window; the partner is fresh.
+    (sim as any).players.get(sim.playerId).delveDaily.markClears = 3;
+    const door = DELVES.collapsed_reliquary.doorPos;
+    for (const pid of [sim.playerId, p2]) {
+      const e = sim.entities.get(pid)!;
+      e.pos.x = door.x;
+      e.pos.z = door.z;
+      e.pos.y = terrainHeight(door.x, door.z, sim.cfg.seed);
+      e.prevPos = { ...e.pos };
+      sim.enterDelve('collapsed_reliquary', 'normal', pid);
+    }
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    run.bountiful = false;
+    run.modules = ['reliquary_finale'];
+    run.moduleIndex = 0;
+    (sim as any).spawnDelveModule(run);
+    killBoss(sim, run);
+    const marksP1Before = sim.delveMarksFor(sim.playerId);
+    const marksP2Before = sim.delveMarksFor(p2);
+    pickLockFlawless(sim, run, 1);
+    const events = sim.drainEvents();
+    const bonuses = events.filter((e) => e.type === 'lockpickBonus') as Extract<
+      (typeof events)[number],
+      { type: 'lockpickBonus' }
+    >[];
+    expect(bonuses.map((b) => [b.pid, b.marks]).sort()).toEqual(
+      [
+        [sim.playerId, 0], // post-window: no bonus Marks off the same grant
+        [p2, 2], // fresh partner: full premium bonus
+      ].sort(),
+    );
+    for (const b of bonuses) expect(b.copper).toBe(11); // copper unwindowed for both
+    // The WALLETS agree with the events: the fresh partner banks base
+    // in-window (1) + bonus (2); the spent picker gains at most the
+    // post-window 50% base roll.
+    expect(sim.delveMarksFor(p2)).toBe(marksP2Before + 3);
+    expect(sim.delveMarksFor(sim.playerId) - marksP1Before).toBeLessThanOrEqual(1);
+  });
+
+  it('grantDelveRewards returns the credited members once and [] on a completed run', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const run = enterFinale(sim);
+    killBoss(sim, run);
+    const meta = (sim as any).players.get(sim.playerId);
+    const clearsBefore = meta.delveDaily.markClears;
+    // First grant: the solo picker is credited and the daily tally advances.
+    expect(grantDelveRewards((sim as any).ctx, run)).toEqual([sim.playerId]);
+    expect(meta.delveDaily.markClears).toBe(clearsBefore + 1);
+    // Second grant on the now-completed run: nobody is credited and the tally
+    // holds. This is what structurally starves the bonus granters.
+    expect(grantDelveRewards((sim as any).ctx, run)).toEqual([]);
+    expect(meta.delveDaily.markClears).toBe(clearsBefore + 1);
+  });
+
+  it('an already-completed run pays no chest bonus at all: no marks, no copper, no event', () => {
+    const sim = makeSim();
+    sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
+    const run = enterFinale(sim);
+    killBoss(sim, run);
+    const meta = (sim as any).players.get(sim.playerId);
+    run.completed = true; // a hypothetical earlier grant already consumed the clear
+    const marksBefore = sim.delveMarksFor(sim.playerId);
+    const copperBefore = meta.copper;
+    pickLockFlawless(sim, run, 1);
+    const events = sim.drainEvents();
+    // grantDelveRewards credits nobody, so the bonus granter pays nobody and
+    // stays silent; this pins that the granter follows the CREDITED list, not
+    // party membership.
+    expect(events.find((e) => e.type === 'lockpickBonus')).toBeUndefined();
+    expect(sim.delveMarksFor(sim.playerId)).toBe(marksBefore);
+    expect(meta.copper).toBe(copperBefore);
+    // The chest itself still opens and stages its loot (loot is not the bonus).
+    expect(events.find((e) => e.type === 'delveChestLoot')).toBeDefined();
+  });
+
+  function killLitanyBoss(sim: ReturnType<typeof makeSim>) {
+    const boss = [...sim.entities.values()].find(
+      (e) => e.templateId === 'sister_nhalia_drowned_canticle',
+    )!;
+    (sim as any).dealDamage(sim.player, boss, boss.maxHp + 1, false, 'physical', null, 'hit', true);
+    sim.tick();
+  }
+
+  // Walk the acting player through a flawless Hard rite via the real input path
+  // (delveRiteChoose + one delveInteract per shrine). Playback is skipped: it is
+  // presentation; the input rules are what the tests exercise.
+  function driveRiteFlawless(sim: ReturnType<typeof makeSim>, run: DelveRun) {
+    const st = run.drownedLitanyRite!;
+    const reliquary = sim.entities.get(st.reliquaryId)!;
+    sim.player.pos = { ...reliquary.pos };
+    sim.player.prevPos = { ...reliquary.pos };
+    sim.delveRiteChoose('hard'); // the premium ceiling
+    st.sequencePlaying = false;
+    for (const kind of [...st.sequence]) {
+      const shrineId = st.shrineEntityIds[kind];
+      const shrine = sim.entities.get(shrineId)!;
+      sim.player.pos = { ...shrine.pos };
+      sim.player.prevPos = { ...shrine.pos };
+      expect(sim.delveInteract(shrineId)).toBe(true);
+    }
+    return st;
+  }
+
+  // Drive a full solo Drowned Litany rite and return the spoils facts the
+  // window tests assert against.
+  function runLitanyRiteFlawless(markClearsBefore: number) {
+    const sim = makeSim();
+    const meta = (sim as any).players.get(sim.playerId);
+    enterLitany(sim);
+    meta.delveDaily.markClears = markClearsBefore;
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    run.bountiful = false;
+    run.modules = ['litany_apse'];
+    run.moduleIndex = 0;
+    (sim as any).spawnDelveModule(run);
+    killLitanyBoss(sim);
+    const marksBefore = sim.delveMarksFor(sim.playerId);
+    const copperBefore = meta.copper;
+    const st = driveRiteFlawless(sim, run);
+    const events = sim.drainEvents();
+    const bonus = events.find((e) => e.type === 'lockpickBonus');
+    expect(bonus).toBeDefined();
+    const b = bonus as Extract<typeof bonus, { type: 'lockpickBonus' }>;
+    return {
+      sim,
+      run,
+      st,
+      b,
+      delta: sim.delveMarksFor(sim.playerId) - marksBefore,
+      copperDelta: meta.copper - copperBefore,
+    };
+  }
+
+  it('the Litany rite premium bonus pays doubled Marks inside the window', () => {
+    const { b, delta } = runLitanyRiteFlawless(2);
+    expect(b.tier).toBe('premium');
+    expect(b.marks).toBe(4); // the Litany's 2x on the premium bonus
+    expect(delta).toBe(2 + 4); // base Litany Normal in-window (2) + bonus
+  });
+
+  it('a post-window Litany rite pays zero bonus Marks; its copper and tier survive', () => {
+    const { run, st, b, delta, copperDelta } = runLitanyRiteFlawless(3);
+    expect(b.tier).toBe('premium');
+    expect(b.marks).toBe(0); // the 2x rides the same window
+    // Rite bonus copper comes from the Litany's own copper band, not the
+    // chest's: round((18 + 30) / 2) * (copperMult 2 - 1) = 24, unwindowed.
+    expect(b.copper).toBe(24);
+    // The WALLET too, not just the event payload: base clear copper (18..30)
+    // plus the full unwindowed 24 bonus.
+    expect(copperDelta).toBeGreaterThanOrEqual(18 + 24);
+    expect(copperDelta).toBeLessThanOrEqual(30 + 24);
+    expect(run.objectState[st.reliquaryId].lootedTier).toBe('premium');
+    // Base post-window Litany Normal is a 50% roll of 0 or 2; no bonus on top.
+    expect(delta).toBeLessThanOrEqual(2);
+  });
+
+  it('the rite bonus window is per member: a spent partner earns 0 while a fresh one is paid', () => {
+    const sim = makeSim();
+    const p2 = sim.addPlayer('warrior', 'Duoist');
+    sim.partyInvite(p2, sim.playerId);
+    sim.partyAccept(p2);
+    for (const pid of [sim.playerId, p2]) {
+      sim.setPlayerLevel(DELVES.drowned_litany.minLevel, pid);
+    }
+    // The picker has ground out today's window; the partner is fresh.
+    (sim as any).players.get(sim.playerId).delveDaily.markClears = 3;
+    const door = DELVES.drowned_litany.doorPos;
+    for (const pid of [sim.playerId, p2]) {
+      const e = sim.entities.get(pid)!;
+      e.pos.x = door.x;
+      e.pos.z = door.z;
+      e.pos.y = terrainHeight(door.x, door.z, sim.cfg.seed);
+      e.prevPos = { ...e.pos };
+      sim.enterDelve('drowned_litany', 'normal', pid);
+    }
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    run.bountiful = false;
+    run.modules = ['litany_apse'];
+    run.moduleIndex = 0;
+    (sim as any).spawnDelveModule(run);
+    killLitanyBoss(sim);
+    const marksP2Before = sim.delveMarksFor(p2);
+    driveRiteFlawless(sim, run);
+    const events = sim.drainEvents();
+    const bonuses = events.filter((e) => e.type === 'lockpickBonus') as Extract<
+      (typeof events)[number],
+      { type: 'lockpickBonus' }
+    >[];
+    expect(bonuses.map((b) => [b.pid, b.marks]).sort()).toEqual(
+      [
+        [sim.playerId, 0], // post-window: no bonus Marks off the same grant
+        [p2, 4], // fresh partner: the Litany's doubled premium bonus
+      ].sort(),
+    );
+    for (const b of bonuses) expect(b.copper).toBe(24); // copper unwindowed for both
+    // The fresh partner's wallet banks base in-window Litany Normal (2) + bonus (4).
+    expect(sim.delveMarksFor(p2)).toBe(marksP2Before + 6);
+  });
+
+  it('an already-completed Litany run pays no rite bonus at all: no marks, no copper, no event', () => {
+    const sim = makeSim();
+    enterLitany(sim);
+    const meta = (sim as any).players.get(sim.playerId);
+    const run = sim.delveRunForPlayer(sim.playerId)!;
+    run.bountiful = false;
+    run.modules = ['litany_apse'];
+    run.moduleIndex = 0;
+    (sim as any).spawnDelveModule(run);
+    killLitanyBoss(sim);
+    run.completed = true; // a hypothetical earlier grant already consumed the clear
+    const marksBefore = sim.delveMarksFor(sim.playerId);
+    const copperBefore = meta.copper;
+    driveRiteFlawless(sim, run);
+    const events = sim.drainEvents();
+    // Same structural starvation as the chest path: no credited members means
+    // the rite granter pays nobody and stays silent.
+    expect(events.find((e) => e.type === 'lockpickBonus')).toBeUndefined();
+    expect(sim.delveMarksFor(sim.playerId)).toBe(marksBefore);
+    expect(meta.copper).toBe(copperBefore);
   });
 
   it('flawless solve stages class-tuned gear loot and collect grants it to inventory', () => {
@@ -1225,7 +1748,7 @@ describe('delve reward chest + surface exit flow', () => {
 
   it('daily reset + first-vs-repeat XP keys off the injected UTC day (deterministic)', () => {
     const sim = makeSim();
-    sim.utcDay = '2026-06-18';
+    sim.resetDay = '2026-06-18';
     sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
     const meta = (sim as any).players.get(sim.playerId);
     const rewards = DELVES.collapsed_reliquary.baseRewards;
@@ -1259,7 +1782,7 @@ describe('delve reward chest + surface exit flow', () => {
     (sim as any).freeDelveRun(run);
 
     // Day rollover: the daily window resets (firstClearXp cleared, markClears 0).
-    sim.utcDay = '2026-06-19';
+    sim.resetDay = '2026-06-19';
     run = enterFinale(sim);
     killBoss(sim, run);
     lastXp = 0;
@@ -1269,10 +1792,10 @@ describe('delve reward chest + surface exit flow', () => {
     expect(lastXp).toBe(rewards.firstClearXp); // first clear again after reset
   });
 
-  it('refreshDelveDaily never reads the wall clock (no reset when utcDay unset)', () => {
+  it('refreshDelveDaily never reads the wall clock (no reset when resetDay unset)', () => {
     const sim = makeSim();
-    // utcDay defaults to '' (deterministic / headless): the window must not roll over.
-    expect(sim.utcDay).toBe('');
+    // resetDay defaults to '' (deterministic / headless): the window must not roll over.
+    expect(sim.resetDay).toBe('');
     sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
     const meta = (sim as any).players.get(sim.playerId);
     meta.delveDaily = { date: 'pinned', firstClearXp: new Set(['x']), markClears: 2 };
@@ -1307,7 +1830,7 @@ describe('delve reward chest + surface exit flow', () => {
 
   it('unlocks one lore journal entry per clear, capped at five (PRD §6.4)', () => {
     const sim = makeSim();
-    sim.utcDay = '2026-06-18';
+    sim.resetDay = '2026-06-18';
     sim.setPlayerLevel(DELVES.collapsed_reliquary.minLevel);
     const meta = (sim as any).players.get(sim.playerId);
     const order = [
@@ -1444,6 +1967,10 @@ describe('Tessa percent-of-health heal + rank cap', () => {
     meta.delveMarks = 100;
     meta.copper = 100;
     meta.companionUpgrades = { companion_tessa: 1 };
+    // Rank-up happens at Brother Halven's board (the delve door), not from
+    // inside the run: step back to the door before spending.
+    const door = DELVES.collapsed_reliquary.doorPos;
+    teleport(sim, door.x, door.z);
     sim.companionUpgrade('companion_tessa');
     expect(meta.companionUpgrades.companion_tessa).toBe(2);
     expect(meta.delveMarks).toBe(97);
@@ -3292,6 +3819,37 @@ describe('The Drowned Litany (Phase 7 Drowned Reliquary Rite)', () => {
     expect(run.drownedLitanyRite?.awaitingChoice).toBe(true);
     expect(run.drownedLitanyRite?.sequence.length).toBe(0);
     expect(run.drownedLitanyRite?.sequencePlaying).toBe(false);
+  });
+
+  // Regression: Sister Nhalia's own summoned cantors/choir thralls can still be
+  // up when she dies. The rite (and the surface exit it eventually unlocks) must
+  // wait for them, not let the party start it while a fight is still live.
+  it('refuses the rite difficulty commit while a boss-summoned add is still alive', () => {
+    const sim = makeSim();
+    const run = enterLitanyApse(sim);
+    killNhalia(sim);
+    const reliquary = sim.entities.get(run.drownedLitanyRite!.reliquaryId)!;
+    sim.player.pos = { ...reliquary.pos };
+    sim.player.prevPos = { ...reliquary.pos };
+
+    const add = createMob((sim as any).nextId++, MOBS.drowned_cantor, 15, { ...reliquary.pos });
+    (sim as any).addEntity(add);
+    run.mobIds.push(add.id);
+
+    (sim as Sim).delveRiteChoose('hard');
+    expect(run.drownedLitanyRite?.awaitingChoice).toBe(true); // still waiting
+    expect(run.drownedLitanyRite?.sequence.length).toBe(0);
+    expect(sim.drainEvents()).toContainEqual({
+      type: 'error',
+      text: 'Clear the remaining enemies first.',
+      pid: sim.playerId,
+    });
+
+    // Once the add is dead, the same commit succeeds.
+    add.dead = true;
+    (sim as Sim).delveRiteChoose('hard');
+    expect(run.drownedLitanyRite?.awaitingChoice).toBe(false);
+    expect(run.drownedLitanyRite?.sequence.length).toBe(6);
   });
 
   it('surfaces the rite phase on delveRun for the HUD guidance', () => {

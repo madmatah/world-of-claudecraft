@@ -124,6 +124,61 @@ describe('paperdollDropAction agrees with the sim (the authority)', () => {
   }
 });
 
+describe('paperdollDropAction unique-equipped mirror', () => {
+  const LEGENDARY = ITEMS.kingsbane_last_oath;
+  const HEROIC_LEGENDARY = ITEMS.heroic_kingsbane_last_oath;
+
+  it('refuses a second worn copy of a legendary, naming the UNIQUE reason', () => {
+    expect(
+      paperdollDropAction(LEGENDARY, 'offhand', 'warrior', 20, 'fury', {
+        mainhand: 'kingsbane_last_oath',
+      }),
+    ).toBe('blockedUnique');
+  });
+
+  it('treats the heroic variant as the same family', () => {
+    expect(
+      paperdollDropAction(HEROIC_LEGENDARY, 'offhand', 'warrior', 20, 'fury', {
+        mainhand: 'kingsbane_last_oath',
+      }),
+    ).toBe('blockedUnique');
+  });
+
+  it('accepts a legendary when no copy is worn elsewhere, or onto its own slot', () => {
+    expect(paperdollDropAction(LEGENDARY, 'offhand', 'warrior', 20, 'fury', {})).toBe('equip');
+    expect(
+      paperdollDropAction(LEGENDARY, 'mainhand', 'warrior', 20, 'fury', {
+        mainhand: 'kingsbane_last_oath',
+      }),
+    ).toBe('equip');
+  });
+
+  it('keeps the non-legendary Titan Grip same-id pair green', () => {
+    expect(
+      paperdollDropAction(TWO_HAND_WEAPON, 'offhand', 'warrior', 40, 'fury', {
+        mainhand: 'eastbrook_greatsword',
+      }),
+    ).toBe('equip');
+  });
+
+  it('agrees with the sim on the refused duplicate (the authority check)', () => {
+    const sim = new Sim({ seed: 6, playerClass: 'warrior', noPlayer: true }) as Sim &
+      Record<string, any>;
+    const pid = sim.addPlayer('warrior', 'Dropper');
+    sim.setPlayerLevel(20, pid);
+    expect(sim.setSpec('fury', pid)).toBe(true);
+    sim.addItem('kingsbane_last_oath', 2, pid);
+    sim.equipItemToSlot('kingsbane_last_oath', 'mainhand', pid);
+    const equipment = equipmentOf(sim, pid);
+    expect(paperdollDropAction(LEGENDARY, 'offhand', 'warrior', 20, 'fury', equipment)).toBe(
+      'blockedUnique',
+    );
+    const offhandBefore = equipmentOf(sim, pid).offhand;
+    sim.equipItemToSlot('kingsbane_last_oath', 'offhand', pid);
+    expect(equipmentOf(sim, pid).offhand).toBe(offhandBefore);
+  });
+});
+
 describe('isPaperdollDraggable', () => {
   it('is true for gear with a slot and false for everything else', () => {
     expect(isPaperdollDraggable(HELM)).toBe(true);
@@ -211,9 +266,20 @@ describe('touch drop routing beyond the hit-test (the phase 14 QA gaps)', () => 
 
   it('the bags release routes both action arms into the HUD deps (source pin)', () => {
     const bags = stripped('../src/ui/bags_window.ts');
-    expect(bags).toContain(
-      "if (target.kind === 'equip') this.deps.dropOnEquipSlot(s.itemId, target.slot);",
+    // The equip arm now also forwards WHICH bag copy was dragged, so it is no
+    // longer a single line. Pinned as its parts rather than as one string: the
+    // routing claim (this arm reaches dropOnEquipSlot with the item and the
+    // target slot) is what this test is about, and the added third argument is
+    // the copy-addressing work, covered by tests/item_copy_addressing_guard.
+    const equipArm = bags.slice(
+      bags.indexOf("if (target.kind === 'equip')"),
+      bags.indexOf("else if (target.kind === 'bagCell')"),
     );
+    expect(equipArm, 'the equip arm must reach the HUD dep').toContain(
+      'this.deps.dropOnEquipSlot(',
+    );
+    expect(equipArm).toContain('s.itemId');
+    expect(equipArm).toContain('target.slot');
     expect(bags).toContain(
       "else if (target.kind === 'actionSlot') this.deps.dropOnActionSlot(s.itemId, target.slot);",
     );

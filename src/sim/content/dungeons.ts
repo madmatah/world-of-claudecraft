@@ -1,7 +1,24 @@
 // Dungeon content: mob templates that only spawn inside instances, spawn
 // lists, and the DungeonDef registry merged by sim/data.ts.
 
-import type { DungeonDef, DungeonSpawn, MobTemplate } from '../types';
+import type { DungeonDef, DungeonSpawn, ItemDef, MobTemplate } from '../types';
+import { HEROIC_FINALE_COPPER, NYTHRAXIS_HEROIC_COPPER } from './dungeon_difficulty';
+
+// Keepsake ground-object items owned by the walk-in castle interiors below
+// (their zone item modules are other workstreams' files), merged into ITEMS
+// by sim/data.ts. The Last Keep's signet lives in drakelands.ts; Dawnhold's
+// posy lands here beside its dungeon def.
+export const DUNGEON_KEEPSAKE_ITEMS: Record<string, ItemDef> = {
+  // Dawnhold Castle's conservatory souvenir: the interior instance's one
+  // ground object (a dungeon must place at least one encounter; the
+  // zero-combat palace places a keepsake instead of a fight).
+  dawnhold_posy: {
+    id: 'dawnhold_posy',
+    name: 'Dawnhold Garden Posy',
+    kind: 'junk',
+    sellValue: 25,
+  },
+};
 
 export const DUNGEON_MOBS: Record<string, MobTemplate> = {
   // ---- The Hollow Crypt (5-player elite instance) ----
@@ -137,7 +154,7 @@ export const DUNGEON_MOBS: Record<string, MobTemplate> = {
     aggroRadius: 16,
     aoePulse: { min: 12, max: 18, radius: 12, every: 10, name: 'Shadow Pulse' },
     loot: [
-      { copper: 2500, chance: 1 },
+      { copper: 2500, heroicCopper: HEROIC_FINALE_COPPER, chance: 1 },
       { itemId: 'cryptbone_greaves', chance: 0.34, rollGroup: 'morthen_guaranteed_uncommon' },
       { itemId: 'quilted_trousers', chance: 0.33, rollGroup: 'morthen_guaranteed_uncommon' },
       { itemId: 'oiled_boots', chance: 0.33, rollGroup: 'morthen_guaranteed_uncommon' },
@@ -294,7 +311,7 @@ export const DUNGEON_MOBS: Record<string, MobTemplate> = {
     aoePulse: { min: 16, max: 24, radius: 12, every: 10, name: 'Mist Surge' },
     summonAdds: { mobId: 'drowned_thrall', count: 2, atHpPct: [0.6, 0.3] },
     loot: [
-      { copper: 5000, chance: 1 },
+      { copper: 5000, heroicCopper: HEROIC_FINALE_COPPER, chance: 1 },
       { itemId: 'trollhide_leggings', chance: 0.34, rollGroup: 'vael_guaranteed_uncommon' },
       { itemId: 'marshstrider_boots', chance: 0.33, rollGroup: 'vael_guaranteed_uncommon' },
       { itemId: 'fenmist_robe', chance: 0.33, rollGroup: 'vael_guaranteed_uncommon' },
@@ -512,7 +529,14 @@ export const DUNGEON_MOBS: Record<string, MobTemplate> = {
     },
     enrage: { belowHpPct: 0.3, dmgMult: 1.5, hasteMult: 1.3 },
     loot: [
-      { copper: 50000, chance: 1 },
+      // 15000c base rolls to 9000c to 21000c (the 0.6x to 1.4x loot band):
+      // roughly the 1g to 2g finale payout, a 3x premium over the 5000c the
+      // other Sanctum bosses pay. The old 50000c base paid 3g to 7g per pop
+      // on a lockout-free, skip-pullable finale, the prime repeat gold-farm
+      // target (Zulgar in Wildheart took the same nerf). The daily-lockout
+      // heroic clear pays the 10g finale base instead;
+      // tests/gravewyrm_boss_gold.test.ts pins both bands.
+      { copper: 15000, heroicCopper: HEROIC_FINALE_COPPER, chance: 1 },
       { itemId: 'boneplate_vest', chance: 0.34, rollGroup: 'korzul_guaranteed_uncommon' },
       { itemId: 'revenant_silk_robe', chance: 0.33, rollGroup: 'korzul_guaranteed_uncommon' },
       { itemId: 'nightwalk_jerkin', chance: 0.33, rollGroup: 'korzul_guaranteed_uncommon' },
@@ -532,6 +556,10 @@ export const DUNGEON_MOBS: Record<string, MobTemplate> = {
       { itemId: 'wildgrowth_leggings', chance: 0.05, rollGroup: 'korzul_bonus' },
       { itemId: 'grovewardens_grips', chance: 0.05, rollGroup: 'korzul_bonus' },
       { itemId: 'verdant_walkers', chance: 0.05, rollGroup: 'korzul_bonus' },
+      // korzul_bonus deliberately sums below 1 (some kills yield no bonus
+      // piece), so the quiver takes its 0.05 from that slack at the same
+      // per-class rate as every other piece here, diluting none of them.
+      { itemId: 'gravewyrm_bone_quiver', chance: 0.05, rollGroup: 'korzul_bonus' },
     ],
     scale: 1.8,
     color: 0x3d5c45,
@@ -674,9 +702,10 @@ export const DUNGEON_MOBS: Record<string, MobTemplate> = {
     aggroRadius: 22,
     // Each nythraxis_drop_* rollGroup is exclusive (one partitioned rng draw per
     // group) and sums to exactly 1.00. The offhand/two-hander epics ride the
-    // existing four groups, one per group, with the set-piece chances rebalanced.
+    // existing four groups, with the set-piece chances rebalanced; group 3 is
+    // the offhand group and carries two (the caster orb and the hunter quiver).
     loot: [
-      { copper: 150000, chance: 1 },
+      { copper: 150000, heroicCopper: NYTHRAXIS_HEROIC_COPPER, chance: 1 },
       { itemId: 'deathless_heartwood', chance: 0.03, rollGroup: 'nythraxis_drop_1' },
       { itemId: 'bonewrought_greatsword', chance: 0.13, rollGroup: 'nythraxis_drop_1' },
       { itemId: 'crownforged_dreadhelm', chance: 0.14, rollGroup: 'nythraxis_drop_1' },
@@ -693,13 +722,19 @@ export const DUNGEON_MOBS: Record<string, MobTemplate> = {
       { itemId: 'crownforged_dreadhelm', chance: 0.14, rollGroup: 'nythraxis_drop_2' },
       { itemId: 'nighttalon_crown', chance: 0.14, rollGroup: 'nythraxis_drop_2' },
       { itemId: 'stormcallers_spaulders', chance: 0.14, rollGroup: 'nythraxis_drop_2' },
-      { itemId: 'wraithfire_orb', chance: 0.16, rollGroup: 'nythraxis_drop_3' },
-      { itemId: 'crownforged_dreadhelm', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
-      { itemId: 'nighttalon_crown', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
-      { itemId: 'soulflame_cowl', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
-      { itemId: 'stormcallers_crown', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
-      { itemId: 'nighttalon_shoulderguards', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
-      { itemId: 'soulflame_mantle', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
+      // Group 3 is the offhand group and now carries both offhand epics, the
+      // caster orb and the hunter quiver, at an equal 0.14. The group is
+      // exclusive and must sum to exactly 1, so seating an eighth entry is the
+      // one place a quiver costs existing drops: the two offhands come down from
+      // 0.16 and the six shared set pieces from 0.14 to 0.12.
+      { itemId: 'wraithfire_orb', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
+      { itemId: 'direfang_quiver', chance: 0.14, rollGroup: 'nythraxis_drop_3' },
+      { itemId: 'crownforged_dreadhelm', chance: 0.12, rollGroup: 'nythraxis_drop_3' },
+      { itemId: 'nighttalon_crown', chance: 0.12, rollGroup: 'nythraxis_drop_3' },
+      { itemId: 'soulflame_cowl', chance: 0.12, rollGroup: 'nythraxis_drop_3' },
+      { itemId: 'stormcallers_crown', chance: 0.12, rollGroup: 'nythraxis_drop_3' },
+      { itemId: 'nighttalon_shoulderguards', chance: 0.12, rollGroup: 'nythraxis_drop_3' },
+      { itemId: 'soulflame_mantle', chance: 0.12, rollGroup: 'nythraxis_drop_3' },
       { itemId: 'direfang_greatblade', chance: 0.16, rollGroup: 'nythraxis_drop_4' },
       { itemId: 'soulflame_mantle', chance: 0.14, rollGroup: 'nythraxis_drop_4' },
       { itemId: 'crownforged_warspaulders', chance: 0.14, rollGroup: 'nythraxis_drop_4' },
@@ -871,11 +906,19 @@ export const DUNGEON_DEFS: Record<string, DungeonDef> = {
     // Overflow band: indexes 0..7 are taken (temple 3, orkadia 6, wildheart 7),
     // so the keep claims 8 (instanceOrigin: DUNGEON_OVERFLOW_X_BASE + 600).
     index: 8,
-    // On the ward terrace at the keep's west front: clear of the keep's
-    // decor collider (r 8.5 at 421,2003), of both ward step tops, and of
-    // the terrace mid-walk, so neither the leave-drop (z - 4) nor casual
-    // foot traffic clips a collider or the 2yd door trigger (castle_layout)
-    doorPos: { x: 413.5, z: 2016.5 },
+    // On the keep model's door axis (the keep sits at 421,2001.5 at scale
+    // 9.5, face at z 2012.2, facing +z), standing 1.2yd PROUD of the facade
+    // as a porch rather than flush against it. Flush put the arch's stone
+    // jambs 0.3yd off the keep's collision circle, and the two slivers of
+    // floor pinched between them were narrower than a body could turn around
+    // in. The apron cannot be fenced off instead: the restore path below
+    // drops a player inside the keep's own circle, which depenetrates them
+    // south across exactly this ground. Leaving drops the player FORWARD onto
+    // the terrace (leaveOffset +z) instead of the default z - 4, which would
+    // land inside the keep's decor collider (castle_layout)
+    doorPos: { x: 421, z: 2013.4 },
+    leaveOffset: { x: 0, z: 3.5 },
+    staticDoor: true,
     // Arrival just inside the entrance hall's south end, 4yd north of the exit
     // portal so zoning in never lands inside the exit's 2yd door trigger.
     entry: { x: 0, z: -5 },
@@ -896,6 +939,40 @@ export const DUNGEON_DEFS: Record<string, DungeonDef> = {
     enterText: 'You step into the cold, silent halls of the Last Keep.',
     leaveText: 'You pull the keep door shut and step back into the Drakelands wind.',
   },
+  dawnhold_castle: {
+    id: 'dawnhold_castle',
+    name: 'Dawnhold Castle',
+    // Overflow band: the Last Keep took 8, so Dawnhold claims 9
+    // (instanceOrigin: DUNGEON_OVERFLOW_X_BASE + 1200).
+    index: 9,
+    // FLUSH against the keep model's south face on its door axis (the keep
+    // sits at 258,878 at scale 7.5, facing +z into the bailey with its hall
+    // wing): the portal arch emerges from the palace stone and reads as the
+    // castle's own door. Leaving therefore drops the player FORWARD onto the
+    // courtyard lawn (leaveOffset +z) instead of the default z - 4, which
+    // would land inside the keep's decor collider (dawnhold_layout).
+    doorPos: { x: 258, z: 886.6 },
+    leaveOffset: { x: 0, z: 3.2 },
+    staticDoor: true,
+    // Arrival just inside the entrance hall's south end, 4yd north of the
+    // exit portal so zoning in never lands inside the exit's 2yd door trigger.
+    entry: { x: 0, z: -5 },
+    exitOffset: { x: 0, z: -9 },
+    // Zero combat, zero loot by design: a warm garden palace to walk, not a
+    // fight (the Last Keep is the direct precedent). Deliberately absent from
+    // FINDER_ACTIVITIES, so the Dungeon Finder never queues a group into an
+    // empty instance.
+    spawns: [],
+    objects: [
+      // the palace's keepsake: a pressed posy from the conservatory beds,
+      // dropped on the entrance hall floor east of the door
+      { itemId: 'dawnhold_posy', name: 'Dawnhold Garden Posy', x: 4, z: -3 },
+    ],
+    interior: 'dawnhold',
+    suggestedPlayers: 1,
+    enterText: 'You step into the warm, flower-scented halls of Dawnhold Castle.',
+    leaveText: 'You slip back out onto the sunlit garden lawn.',
+  },
   nythraxis_boss_arena: {
     id: 'nythraxis_boss_arena',
     name: 'Nythraxis Raid Arena',
@@ -909,10 +986,19 @@ export const DUNGEON_DEFS: Record<string, DungeonDef> = {
       // Three soul wardstones in a wide forward triangle in front of the boss
       // (spawn 0,96), well clear of his body so all three read distinctly and
       // raiders must split to channel them. Kept within the encounter's
-      // wardstone search radius (see nythraxisWardstones in sim.ts).
-      { itemId: 'bastion_ward_stone', name: 'Left Wardstone', x: -40, z: 79 },
-      { itemId: 'bastion_ward_stone', name: 'Right Wardstone', x: 40, z: 79 },
-      { itemId: 'bastion_ward_stone', name: 'Threshold Wardstone', x: 0, z: 63 },
+      // wardstone search radius (see nythraxisWardstones in sim.ts). The item id
+      // doubles as the Sunken Bastion quest pickup, so without interactOnly the
+      // quest-collectable display gate hides them from every raider who is not on
+      // that zone 2 quest.
+      { itemId: 'bastion_ward_stone', name: 'Left Wardstone', x: -40, z: 79, interactOnly: true },
+      { itemId: 'bastion_ward_stone', name: 'Right Wardstone', x: 40, z: 79, interactOnly: true },
+      {
+        itemId: 'bastion_ward_stone',
+        name: 'Threshold Wardstone',
+        x: 0,
+        z: 63,
+        interactOnly: true,
+      },
     ],
     interior: 'nythraxis',
     tombDressing: 'coffins',

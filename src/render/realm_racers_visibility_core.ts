@@ -12,19 +12,6 @@ export function isRealmRacersCoPilot(
   return entityId !== localPlayerId && participantIds.includes(entityId);
 }
 
-/** Normal destruction range with the match-membership fairness exception applied. */
-export function isOutsideRealmRacersRetainRange(
-  participantIds: readonly number[],
-  localPlayerId: number,
-  entityId: number,
-  distanceSq: number,
-  destroyRangeSq: number,
-): boolean {
-  return (
-    !isRealmRacersCoPilot(participantIds, localPlayerId, entityId) && distanceSq > destroyRangeSq
-  );
-}
-
 /** Normal draw hysteresis with the same match-membership exception applied. */
 export function isOutsideRealmRacersDrawRange(
   participantIds: readonly number[],

@@ -12,6 +12,8 @@ import {
   strongerQuestMarker,
 } from '../sim/quests/quest_marker_kind';
 import { type Entity, GATHER_CAST_ID } from '../sim/types';
+import { cheaterTagLabel } from '../ui/cheater_tag';
+import { deedBorderSlug } from '../ui/deed_border_view';
 import { deedTitleText } from '../ui/deed_i18n';
 import { devTierBadgeDataUrl, devTierByIndex, devTierNameOutlineColor } from '../ui/dev_tier';
 import { discordRoleTagLabel } from '../ui/discord_role_tag';
@@ -19,9 +21,11 @@ import { tEntity } from '../ui/entity_i18n';
 import { holderTierBadgeDataUrl, holderTierByIndex } from '../ui/holder_tier';
 import { formatNumber, getI18nRevision, t } from '../ui/i18n';
 import { raidMarkerDataUrl } from '../ui/icons';
+import { localizeSimAuraName } from '../ui/sim_i18n';
 import { type IWorld, OVERHEAD_EMOTES } from '../world_api';
 
 import { castBarState } from './cast_bar';
+import { anyCharacterRigDrawing, entityHasNoBody } from './entity_gate_stand_in_core';
 import { mobDisplayName, npcDisplayName, objectDisplayName } from './entity_labels';
 import {
   createNameplateCanvasState,
@@ -184,6 +188,17 @@ export class NameplatePainter {
       // The canvas pass draws only what it reaches, so skipping the entity is the
       // whole hide (the removed DOM-era hideNameplate had to clear styles instead).
       if (isQuestGatedEntityHidden(entity, world.questLog)) continue;
+      // A compile gate can leave this entity with no body at all (the arrival
+      // gate hides the whole group). Its plate is then the only thing that says
+      // an enemy is there, so it is forced on over the nameplate toggles for
+      // that window: the stand-in invariant in entity_gate_stand_in_core.ts.
+      // Deliberately AFTER the quest gate above: a quest-gated clutch is meant
+      // to read as inert scenery, and a stand-in would leak it.
+      const standIn = entityHasNoBody(
+        view.compilePending,
+        !!view.visual,
+        anyCharacterRigDrawing(view),
+      );
       // the saddle lift rides the anchor so a mounted player's plate clears the head
       const plan = nameplatePlanInto(
         this.plan,
@@ -193,6 +208,7 @@ export class NameplatePainter {
         showNameplates,
         showOwnNameplate,
         showPlayerNameplates,
+        standIn,
       );
       if (plan.hidden) continue;
 
@@ -258,7 +274,10 @@ export class NameplatePainter {
     languageChanged: boolean,
   ): void {
     state.currentTarget = entity.id === player.targetId;
-    state.hostile = entity.hostile;
+    // Enemy PLAYERS too, not just mobs: a battleground/duel/arena opponent
+    // must read hostile-red, never friendly-blue (same predicate the
+    // dead-enemy arm below already trusts).
+    state.hostile = entity.hostile || (entity.kind === 'player' && this.isHostilePlayer(entity));
     state.deadEnemy =
       entity.dead && (entity.hostile || (entity.kind === 'player' && this.isHostilePlayer(entity)));
     state.myPet = entity.ownerId === player.id;
@@ -299,13 +318,16 @@ export class NameplatePainter {
     state.level = '';
     state.levelColor = '#fff';
     state.guild = '';
+    state.guildLabel = '';
     state.title = '';
+    state.border = '';
     state.marker = '';
     state.markerTone = 'none';
     state.hpVisible = false;
     state.opacity = 1;
     state.frame = '';
     state.aiLabel = '';
+    state.cheaterLabel = '';
     state.devOutline = null;
     state.raidMarkerUrl = '';
     state.emoteIconUrl = '';
@@ -349,9 +371,19 @@ export class NameplatePainter {
       state.name = entity.afk ? `<${t('hudChrome.nameplate.afkTag')}> ${baseName}` : baseName;
       state.nameColor = roleColor ?? '#7fb8ff';
       state.guild = entity.guild;
+      // Build the drawn `<guild>` wrapper here, not in the per-frame drawBase:
+      // resolveContent is guild's only writer and runs strictly less often (the
+      // init / fullPass / urgent / languageChanged gate), so the label can
+      // never diverge from the guild it wraps.
+      if (entity.guild) state.guildLabel = `<${entity.guild}>`;
       state.hpVisible = !entity.dead;
       state.title = entity.title ? deedTitleText(entity.title) : '';
+      state.border = deedBorderSlug(entity.border);
       state.aiLabel = entity.aiAccount === true ? t('hudChrome.playerMenu.aiTag') : '';
+      // The `< >` wrapper is part of the catalog VALUE, not concatenated here:
+      // a locale that brackets differently owns its own punctuation, and the
+      // per-frame draw path never allocates a wrapper (the guildLabel rule).
+      state.cheaterLabel = cheaterTagLabel(entity);
       state.devOutline = showDevBadges ? devTierNameOutlineColor(entity.devTier ?? 0) : null;
       for (const aura of entity.auras) {
         if (aura.kind === 'stealth') {
@@ -417,7 +449,10 @@ export class NameplatePainter {
     const elite = !!template?.elite;
     const boss = !!template?.boss;
     state.friendlyPet = isFriendlyPet(entity, this.world.entities, this.isHostilePlayer);
-    const mobName = entity.ownerId !== null ? entity.name : mobDisplayName(entity.templateId);
+    const mobName =
+      entity.ownerId !== null
+        ? (localizeSimAuraName(entity.name) ?? entity.name)
+        : mobDisplayName(entity.templateId);
     state.name = entity.dead ? t('worldContent.corpseName', { name: mobName }) : mobName;
     state.nameColor = '#fff';
     state.level = entity.dead
@@ -427,8 +462,8 @@ export class NameplatePainter {
         });
     state.levelColor = mobNameColor(entity.level - player.level, entity.dead, state.friendlyPet);
     state.hpVisible = !entity.dead;
-    state.marker = entity.lootable ? '$' : elite && !entity.dead ? '◆' : '';
-    state.markerTone = state.marker ? 'loot' : 'none';
+    state.marker = entity.lootable ? 'loot' : elite && !entity.dead ? '◆' : '';
+    state.markerTone = entity.lootable ? 'loot' : 'none';
     state.frame = entity.dead ? '' : boss ? 'boss' : elite ? 'elite' : '';
   }
 

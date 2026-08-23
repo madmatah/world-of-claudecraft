@@ -37,7 +37,16 @@
 // depends on either yet; they still must not be renamed apart later, and the
 // label reads against its metric, never across families.
 
-import { Counter, Gauge, type Registry } from 'prom-client';
+import { Counter, Gauge, Histogram, type Registry } from 'prom-client';
+import {
+  BG_COMPOSITIONS,
+  BG_END_CAUSES,
+  BG_SCORE_SIDES,
+  type BgCompositionLabel,
+  type BgEndCauseLabel,
+  bgScoreSides,
+  isBgEndCause,
+} from '../battleground_telemetry';
 import {
   COPPER_FLOW_SOURCES,
   type CopperFlowSource,
@@ -55,6 +64,10 @@ import {
 } from '../fishing_telemetry';
 import {
   type GameMetricsCounters,
+  GENERAL_CHAT_QUOTA_DB_OUTCOMES,
+  GENERAL_CHAT_QUOTA_OUTCOMES,
+  type GeneralChatQuotaDbOutcome,
+  type GeneralChatQuotaOutcome,
   GUILD_BANK_INCIDENTS,
   type GuildBankIncident,
   WS_DROP_CAUSES,
@@ -100,11 +113,26 @@ export const WOC_INPUT_FRAMES_MISSED_TOTAL = 'woc_input_frames_missed_total';
 /** Total player chat messages routed to other players (any channel). */
 export const WOC_CHAT_MESSAGES_TOTAL = 'woc_chat_messages_total';
 
+/** Configured General quota decisions, labeled by bounded outcome. */
+export const WOC_GENERAL_CHAT_QUOTA_TOTAL = 'woc_general_chat_quota_total';
+
+/** Current General quota database calls in flight in this realm process. */
+export const WOC_GENERAL_CHAT_QUOTA_IN_FLIGHT = 'woc_general_chat_quota_in_flight';
+export const WOC_GENERAL_CHAT_QUOTA_DB_CALLS_TOTAL = 'woc_general_chat_quota_db_calls_total';
+export const WOC_GENERAL_CHAT_QUOTA_DB_DURATION_SECONDS =
+  'woc_general_chat_quota_db_duration_seconds';
+export const WOC_GENERAL_CHAT_QUOTA_DB_POOL = 'woc_general_chat_quota_db_pool';
+export const WOC_GENERAL_CHAT_QUOTA_LISTENER = 'woc_general_chat_quota_listener';
+export const WOC_GENERAL_CHAT_QUOTA_CACHE_ACCOUNTS = 'woc_general_chat_quota_cache_accounts';
+
 /** Total characters successfully created. */
 export const WOC_CHARACTERS_CREATED_TOTAL = 'woc_characters_created_total';
 
 /** Total guild-bank incidents on the dupe-sensitive paths, by kind. */
 export const WOC_GUILD_BANK_INCIDENTS_TOTAL = 'woc_guild_bank_incidents_total';
+
+/** Rift forge wire commands refused while the gate is closed (server/rift_forge_gate.ts). */
+export const WOC_RIFT_FORGE_REFUSED_TOTAL = 'woc_rift_forge_refused_total';
 
 /** Guild bank activity log cache readout, labeled by counter name. ONE metric
  *  with a `kind` label rather than six names: the vocabulary is closed and
@@ -132,6 +160,9 @@ export const WOC_FISHING_KOI_TOTAL = 'woc_fishing_koi_total';
 /** Total fishing got-aways (missed reel, timed-out session, or no bag room), same labels. */
 export const WOC_FISHING_GOT_AWAYS_TOTAL = 'woc_fishing_got_aways_total';
 
+/** Total sessions ended by a pre-bite re-press (the anti-spam early reel), same labels. */
+export const WOC_FISHING_EARLY_REELS_TOTAL = 'woc_fishing_early_reels_total';
+
 /** Total casts whose table draw resolved the empty row (nothing biting), same labels. */
 export const WOC_FISHING_EMPTY_HOOKS_TOTAL = 'woc_fishing_empty_hooks_total';
 
@@ -147,6 +178,19 @@ export const WOC_ROD_FEE_PAYMENTS_TOTAL = 'woc_rod_fee_payments_total';
  *  the realm count, and dropping the by (recipe) grouping multiplies every
  *  training by the single HIGHEST fee (the two rod fees differ 4x). */
 export const WOC_ROD_FEE_COPPER = 'woc_rod_fee_copper';
+
+/** Resolved RATED Thornhollow Fields matches, by ending cause and composition.
+ *  The denominator for the two sums below, and on its own the cap-tuning read:
+ *  the share of matches the CLOCK ended rather than the winning capture is
+ *  `sum(rate(...{cause="timer"})) / sum(rate(...))`. */
+export const WOC_BATTLEGROUND_MATCHES_TOTAL = 'woc_battleground_matches_total';
+/** Summed ACTIVE seconds of those matches, same labels. Mean match length is
+ *  this over the count above; it is a SUM, so never graph it alone. */
+export const WOC_BATTLEGROUND_DURATION_SECONDS_TOTAL = 'woc_battleground_duration_seconds_total';
+/** Summed final scores of those matches, split into the high and low side of
+ *  each result (a draw contributes the same value to both). Mean captures per
+ *  match per side is this over the match count. */
+export const WOC_BATTLEGROUND_CAPTURES_TOTAL = 'woc_battleground_captures_total';
 
 /**
  * The FIXED set of loop phases surfaced on woc_sim_tick_phase_seconds. These are
@@ -200,6 +244,10 @@ export interface GameStateSource {
   tickPhaseMillis(): Record<string, TickPhaseMillis>;
   /** pg pool saturation snapshot (pg Pool totalCount/idleCount/waitingCount). */
   dbPool(): { total: number; idle: number; waiting: number };
+  generalChatQuotaDbPool(): { total: number; idle: number; waiting: number };
+  generalChatQuotaInFlight(): number;
+  generalChatQuotaCachedAccounts(): number;
+  generalChatQuotaListener(): { connected: number; reconnects: number; pendingRefreshes: number };
   /**
    * Wall clock (epoch millis) of the last COMPLETED tick pass, null during warmup.
    * This one is NOT a Prometheus gauge (loop rate is already covered by
@@ -354,10 +402,84 @@ export function registerGameStateMetrics(
     registers: [registry],
   });
 
+  const riftForgeRefusals = new Counter({
+    name: WOC_RIFT_FORGE_REFUSED_TOTAL,
+    help: 'Total rift forge wire commands refused while the gate is closed; the stock client sends none, so a non-zero rate means a modified client is probing.',
+    registers: [registry],
+  });
+
   const chatMessages = new Counter({
     name: WOC_CHAT_MESSAGES_TOTAL,
     help: 'Total player chat messages routed to other players (any channel).',
     registers: [registry],
+  });
+
+  const generalChatQuota = new Counter({
+    name: WOC_GENERAL_CHAT_QUOTA_TOTAL,
+    help: 'Configured General chat quota decisions by bounded outcome.',
+    labelNames: ['outcome'],
+    registers: [registry],
+  });
+  for (const outcome of GENERAL_CHAT_QUOTA_OUTCOMES) generalChatQuota.inc({ outcome }, 0);
+
+  const generalChatQuotaDbCalls = new Counter({
+    name: WOC_GENERAL_CHAT_QUOTA_DB_CALLS_TOTAL,
+    help: 'Dedicated General quota database calls by bounded outcome.',
+    labelNames: ['outcome'],
+    registers: [registry],
+  });
+  const generalChatQuotaDbDuration = new Histogram({
+    name: WOC_GENERAL_CHAT_QUOTA_DB_DURATION_SECONDS,
+    help: 'End-to-end dedicated General quota database call duration.',
+    labelNames: ['outcome'],
+    buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 1.5],
+    registers: [registry],
+  });
+  for (const outcome of GENERAL_CHAT_QUOTA_DB_OUTCOMES) {
+    generalChatQuotaDbCalls.inc({ outcome }, 0);
+    // Pre-seed the histogram series too, so the first post-boot scrape has it.
+    generalChatQuotaDbDuration.zero({ outcome });
+  }
+
+  new Gauge({
+    name: WOC_GENERAL_CHAT_QUOTA_IN_FLIGHT,
+    help: 'Current General chat quota database calls in flight in this realm process.',
+    registers: [registry],
+    collect() {
+      this.set(source.generalChatQuotaInFlight());
+    },
+  });
+  new Gauge({
+    name: WOC_GENERAL_CHAT_QUOTA_DB_POOL,
+    help: 'Dedicated General quota pool clients by fixed state.',
+    labelNames: ['state'],
+    registers: [registry],
+    collect() {
+      const state = source.generalChatQuotaDbPool();
+      this.set({ state: 'total' }, state.total);
+      this.set({ state: 'idle' }, state.idle);
+      this.set({ state: 'waiting' }, state.waiting);
+    },
+  });
+  new Gauge({
+    name: WOC_GENERAL_CHAT_QUOTA_LISTENER,
+    help: 'General quota policy listener state by fixed measure.',
+    labelNames: ['measure'],
+    registers: [registry],
+    collect() {
+      const state = source.generalChatQuotaListener();
+      this.set({ measure: 'connected' }, state.connected);
+      this.set({ measure: 'reconnects' }, state.reconnects);
+      this.set({ measure: 'pending_refreshes' }, state.pendingRefreshes);
+    },
+  });
+  new Gauge({
+    name: WOC_GENERAL_CHAT_QUOTA_CACHE_ACCOUNTS,
+    help: 'Accounts retained in the bounded local General quota refusal/notice cache.',
+    registers: [registry],
+    collect() {
+      this.set(source.generalChatQuotaCachedAccounts());
+    },
   });
 
   const charactersCreated = new Counter({
@@ -458,6 +580,10 @@ export function registerGameStateMetrics(
     WOC_FISHING_GOT_AWAYS_TOTAL,
     'Total fishing got-aways (missed reel, timed-out session, or no bag room), by zone and band.',
   );
+  const fishingEarlyReels = fishingCounter(
+    WOC_FISHING_EARLY_REELS_TOTAL,
+    'Total fishing sessions ended by a pre-bite re-press (the anti-spam early reel), by zone and band.',
+  );
   const fishingEmptyHooks = fishingCounter(
     WOC_FISHING_EMPTY_HOOKS_TOTAL,
     'Total fishing casts whose table draw resolved the empty row, by water zone and effective band.',
@@ -480,6 +606,39 @@ export function registerGameStateMetrics(
     // Static content, set once at registration: the fee is a pure tier lookup
     // over a frozen recipe record, so there is nothing to re-read at scrape.
     rodFeeCopper.set({ recipe }, rodFeeForRecipe(recipe));
+  }
+
+  const bgMatches = new Counter({
+    name: WOC_BATTLEGROUND_MATCHES_TOTAL,
+    help: 'Total resolved RATED Thornhollow Fields matches, by ending (caps, timer, forfeit) and composition (premade, pug). The ending split is the BG_CAPS_TO_WIN tuning read.',
+    labelNames: ['ending', 'composition'],
+    registers: [registry],
+  });
+  const bgDurationSeconds = new Counter({
+    name: WOC_BATTLEGROUND_DURATION_SECONDS_TOTAL,
+    help: 'Summed ACTIVE seconds of resolved rated Thornhollow Fields matches, same labels. A SUM: mean length is this divided by woc_battleground_matches_total.',
+    labelNames: ['ending', 'composition'],
+    registers: [registry],
+  });
+  const bgCaptures = new Counter({
+    name: WOC_BATTLEGROUND_CAPTURES_TOTAL,
+    help: 'Summed final scores of resolved rated Thornhollow Fields matches, by ending and by the high or low side of the result. A SUM: mean captures per side is this divided by woc_battleground_matches_total.',
+    labelNames: ['ending', 'side'],
+    registers: [registry],
+  });
+  // Same zero-backfill as the drop causes: an operator comparing the timer share
+  // against the caps share needs both series to exist from boot, not from the
+  // first match that happens to end that way.
+  // The label is named `ending`, deliberately NOT `cause`: the ws-drop family
+  // already owns a `cause` label whose vocabulary is pinned by a registry-wide
+  // label scan, and a second family sharing the name would widen that pin
+  // rather than merely sit beside it.
+  for (const ending of BG_END_CAUSES) {
+    for (const composition of BG_COMPOSITIONS) {
+      bgMatches.inc({ ending, composition }, 0);
+      bgDurationSeconds.inc({ ending, composition }, 0);
+    }
+    for (const side of BG_SCORE_SIDES) bgCaptures.inc({ ending, side }, 0);
   }
 
   return {
@@ -511,9 +670,35 @@ export function registerGameStateMetrics(
         // Drop the sample rather than propagate into the input path.
       }
     },
+    riftForgeRefused(): void {
+      try {
+        riftForgeRefusals.inc();
+      } catch {
+        // Drop the sample rather than propagate into the dispatch path.
+      }
+    },
     chatMessage(): void {
       try {
         chatMessages.inc();
+      } catch {
+        // Drop the sample rather than propagate into the chat path.
+      }
+    },
+    generalChatQuota(outcome: GeneralChatQuotaOutcome): void {
+      try {
+        if (!GENERAL_CHAT_QUOTA_OUTCOMES.includes(outcome)) return;
+        generalChatQuota.inc({ outcome });
+      } catch {
+        // Drop the sample rather than propagate into the chat path.
+      }
+    },
+    generalChatQuotaDbCall(outcome: GeneralChatQuotaDbOutcome, durationSeconds: number): void {
+      try {
+        if (!GENERAL_CHAT_QUOTA_DB_OUTCOMES.includes(outcome)) return;
+        generalChatQuotaDbCalls.inc({ outcome });
+        if (Number.isFinite(durationSeconds) && durationSeconds >= 0) {
+          generalChatQuotaDbDuration.observe({ outcome }, durationSeconds);
+        }
       } catch {
         // Drop the sample rather than propagate into the chat path.
       }
@@ -590,6 +775,14 @@ export function registerGameStateMetrics(
         // Drop the sample rather than propagate into the event-routing path.
       }
     },
+    fishingEarlyReel(zone: HarvestBand, band: FishingBandLabel): void {
+      try {
+        if (!fishingLabelsInVocabulary(zone, band)) return;
+        fishingEarlyReels.inc({ zone, band });
+      } catch {
+        // Drop the sample rather than propagate into the event-routing path.
+      }
+    },
     fishingEmptyHook(zone: HarvestBand, band: FishingBandLabel): void {
       try {
         if (!fishingLabelsInVocabulary(zone, band)) return;
@@ -607,6 +800,32 @@ export function registerGameStateMetrics(
         rodFeePayments.inc({ recipe: recipeId });
       } catch {
         // Drop the sample rather than propagate into the event-routing path.
+      }
+    },
+    battlegroundResolved(
+      cause: BgEndCauseLabel,
+      composition: BgCompositionLabel,
+      durationSec: number,
+      scoreCrimson: number,
+      scoreAzure: number,
+    ): void {
+      try {
+        // The cause crosses an untyped seam (it is a string on the drained sim
+        // record), so the membership check is this family's cardinality bound.
+        // The composition is a boolean at its source and cannot be off-vocabulary.
+        if (!isBgEndCause(cause)) return;
+        // A non-finite or negative duration would corrupt the very mean the sum
+        // exists for; drop the whole sample rather than book a partial one.
+        if (!Number.isFinite(durationSec) || durationSec < 0) return;
+        if (!Number.isFinite(scoreCrimson) || !Number.isFinite(scoreAzure)) return;
+        if (scoreCrimson < 0 || scoreAzure < 0) return;
+        const { high, low } = bgScoreSides(scoreCrimson, scoreAzure);
+        bgMatches.inc({ ending: cause, composition });
+        bgDurationSeconds.inc({ ending: cause, composition }, durationSec);
+        bgCaptures.inc({ ending: cause, side: 'high' }, high);
+        bgCaptures.inc({ ending: cause, side: 'low' }, low);
+      } catch {
+        // Drop the sample rather than propagate into the tick path.
       }
     },
   };

@@ -16,6 +16,7 @@ const settings = {
   msaaSamples: 4,
   bloom: true,
   smaa: false,
+  fxaa: true,
   dynamicShadows: true,
   terrainCastShadows: true,
   shadowMap: 4096,
@@ -48,6 +49,7 @@ describe('gfx override parsing', () => {
           'msaaSamples:0',
           'bloom:0',
           'smaa:1',
+          'fxaa:0',
           'dynamicShadows:0',
           'terrainCastShadows:0',
           'shadowMap:2048',
@@ -76,6 +78,7 @@ describe('gfx override parsing', () => {
       msaaSamples: 0,
       bloom: false,
       smaa: true,
+      fxaa: false,
       dynamicShadows: false,
       terrainCastShadows: false,
       shadowMap: 2048,
@@ -143,13 +146,38 @@ describe('gfx override application', () => {
       ]),
     );
 
+    // Regenerated for the GfxSettings.nativeIosMemoryProfile -> iosMemoryProfile rename (the
+    // field now covers every iOS WebKit host, not just the packaged native app; see gfx.ts).
+    // Only the serialized KEY NAME moves for these desktop-default cases (none of them pass an
+    // iOS platform hint, so the field's VALUE stays false throughout), but JSON.stringify bakes
+    // the key name into the byte pin same as any other field.
+    // Regenerated again for the C1 memory-ratchet fix: the desktop
+    // maxPooledCharacterVisuals arm moved from POSITIVE_INFINITY (which
+    // JSON.stringify serializes as null) to the bounded 128 (see gfx.ts and
+    // tests/character_visual_pool.test.ts), so every desktop-default profile's
+    // serialized bytes moved by exactly that one value.
+    // The low row alone was regenerated once more when the desktop-client
+    // branch merged: its phase 5 low retune (bands/caps/grassRadius 72,
+    // characters floor 0.86, pinned per-axis by
+    // tests/gfx_low_monotonicity.test.ts) stacks on top of the C1 value, so
+    // low hashes differently from the release row while the other five match
+    // it byte for byte.
+    // Regenerated across the board for the denseDressing field (the dressing
+    // compensation cohort: lowPlus plus the leanFoliage medium session; see
+    // gfx.ts and tests/gfx.test.ts). Its VALUE is false for every
+    // desktop-default case here, only the serialized key name moves the bytes.
+    // Regenerated across the board for the `fxaa` field (edge AA fused into the
+    // output grade pass; see gfx_aa_policy_core.ts). Unlike the renames above
+    // this one moves a VALUE too: medium and the Advanced grade-only mix are
+    // the profiles the new AA policy grants it to, and low/high/ultra/insane
+    // move only by the serialized key name.
     expect(hashes).toEqual({
-      low: '42ed799774110700ab92986f9c91ca11eddf4dec10f283c840c8dceaa193678f',
-      medium: 'c050b1dcd93c42a1e3bb889d09d111a01843d40f3c2e6b18246fa29fa72df5f2',
-      high: '2c9f07d64a9bc6de9bef133b0fda15b78cf5b3caea3c1b663e2581acc4cb64a7',
-      ultra: 'a4d06e8812fb3d633004e6e0b7b0476d09fcea35bf5e4867a41c298844451345',
-      insane: 'f958af0c8455eb70663b7eb7298fc20d2508d1250897aa340eb57152b142e960',
-      advanced: 'a46ab9ada9e851a87cc5c54ce48650fbce8c704368b22d87bb6f1f21c4b8467e',
+      low: '49e537a97a367badeb8f9cbeb408bbb0832e886e164349eb682a0b3a128f2dcb',
+      medium: '7f724620474ca3dc4f4ffc18653a5b07ed02de35984fb65375bbd38b7d79644e',
+      high: 'eb82ae69bed246784b6db51df29edfcb928931d8174ed633c2a3eda5706bb9d1',
+      ultra: '08c271575220f6f332b4730a04a9e77be13ee1b9624eda37056f8d2660ea6c0f',
+      insane: 'f3399ea1e9439ea52e873be3decb7dc8ccbb77f04dcb28db2da2359c885d5ca0',
+      advanced: '5674b855481ede62fb55fbe0f8074d991227487bc152f6f0e8676ff94b0947e6',
     });
   });
 

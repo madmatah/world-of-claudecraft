@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SKINS } from '../src/render/characters/manifest';
 import {
   classHasSkin,
@@ -6,27 +6,32 @@ import {
   EVENT_SKIN_TOKEN_ID,
   MECH_CHROMAS,
   mechChromaItemId,
+  mechChromaSkinIndex,
   rankAllowsSkin,
   rollSkinRank,
   SKIN_COUNTS,
   SKIN_RANK_ROLL_WEIGHTS,
   SKIN_RANKS,
 } from '../src/sim/content/skins';
-import { BUILTIN_WORLD } from '../src/sim/data';
+import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { Sim } from '../src/sim/sim';
 import type { PlayerClass, SimEvent, SkinRank, WorldContent } from '../src/sim/types';
+import { expectDefined } from './helpers/defined';
 
 type SkinEvent = Extract<SimEvent, { type: 'skinEvent' }>;
 
-// Rank rolls are inventory-only. The seed search below needs many independent
-// Sims but no ambient camps, NPCs or gathering objects, so keep terrain/content
-// tables intact while omitting constructor-only world spawns.
+// Rank rolls are inventory-only. These cases need independent Sims but no
+// ambient camps or gathering objects, so keep terrain/content
+// tables and NPCs intact while omitting unrelated constructor-only spawns.
 const SKIN_TEST_WORLD: WorldContent = {
   ...BUILTIN_WORLD,
   camps: [],
-  npcs: {},
   groundObjects: [],
+  roads: [],
 };
+
+beforeAll(() => setActiveWorldContent(SKIN_TEST_WORLD));
+afterAll(() => setActiveWorldContent(null));
 
 // Events emitted outside tick() (useItem) are returned by the next tick() drain.
 function drainSkinEvent(sim: Sim): SkinEvent | undefined {
@@ -81,9 +86,9 @@ describe('cosmetic skin-select event', () => {
     const sim = new Sim({ seed: 7, playerClass: 'mage', playerName: 'Roller' });
     sim.addItem(EVENT_SKIN_TOKEN_ID, 1);
     sim.useItem(EVENT_SKIN_TOKEN_ID);
-    const first = drainSkinEvent(sim)!.rank;
+    const first = expectDefined(drainSkinEvent(sim)).rank;
     sim.useItem(EVENT_SKIN_TOKEN_ID); // re-open
-    const second = drainSkinEvent(sim)!.rank;
+    const second = expectDefined(drainSkinEvent(sim)).rank;
     expect(second).toBe(first);
   });
 
@@ -147,27 +152,33 @@ describe('cosmetic skin-select event', () => {
     expect(sim.countItem('amber_crimson_armor_plate')).toBe(0);
   });
 
-  it('unequips a mech cosmetic account-wide and returns the specific item', () => {
+  it('unequipping a mech cosmetic keeps the account-wide unlock permanent, like a store appearance', () => {
+    // Regression: unequipping used to REVOKE accountCosmetics.mechChromaIds
+    // outright, so a chroma still showing on another character (one that was
+    // not online at the time) could never be taken off or re-applied again.
+    // The unlock must behave like a purchased Season 1 Armory weapon skin:
+    // account-wide and permanent.
     const sim = new Sim({ seed: 1, playerClass: 'shaman', playerName: 'Mechwearer' });
     sim.addItem('amber_crimson_armor_plate', 1);
     sim.useItem('amber_crimson_armor_plate');
 
-    expect((sim as any).unequipMechChroma('amber_crimson')).toBe(true);
+    expect(sim.unequipMechChroma('amber_crimson')).toBe(true);
 
-    expect(sim.accountCosmetics.mechChromaIds).toEqual([]);
-    expect(sim.player.skin).toBe(0);
-    expect(sim.player.skinCatalog).toBe('class');
-    expect(sim.countItem('amber_crimson_armor_plate')).toBe(1);
-
-    sim.useItem('amber_crimson_armor_plate');
-
+    // The unlock never expires: unequipping only changes the CURRENT display.
     expect(sim.accountCosmetics.mechChromaIds).toEqual(['amber_crimson']);
     expect(sim.player.skin).toBe(0);
-    expect(sim.player.skinCatalog).toBe('mech');
+    expect(sim.player.skinCatalog).toBe('class');
+    // Nothing is minted back: the look was never itemized to begin with, and
+    // re-equipping should never require a fresh copy of the plate.
     expect(sim.countItem('amber_crimson_armor_plate')).toBe(0);
+
+    // Re-equipping needs no item at all: the account already owns the look.
+    sim.changeSkin(0, 'mech');
+    expect(sim.player.skin).toBe(0);
+    expect(sim.player.skinCatalog).toBe('mech');
   });
 
-  it('returns a non-vendorable, non-discardable, non-marketable mech cosmetic item when unequipped', () => {
+  it('the mech cosmetic plate is non-vendorable, non-discardable, non-marketable', () => {
     const sim = new Sim({ seed: 1, playerClass: 'shaman', playerName: 'Seller' });
     const merchant = [...sim.entities.values()].find(
       (e) => e.kind === 'npc' && e.templateId === 'the_merchant',
@@ -178,8 +189,6 @@ describe('cosmetic skin-select event', () => {
     sim.player.prevPos = { ...pos };
 
     sim.addItem('amber_crimson_armor_plate', 1);
-    sim.useItem('amber_crimson_armor_plate');
-    expect((sim as any).unequipMechChroma('amber_crimson')).toBe(true);
 
     sim.sellItem('amber_crimson_armor_plate');
     sim.discardItem('amber_crimson_armor_plate');
@@ -193,10 +202,11 @@ describe('cosmetic skin-select event', () => {
     ).toBe(false);
   });
 
-  it('returns and reuses a specific item for every mech chroma', () => {
+  it('keeps every mech chroma unlocked account-wide after unequipping, freely reselectable', () => {
     for (const chroma of MECH_CHROMAS) {
       const itemId = mechChromaItemId(chroma.id);
       expect(itemId, chroma.id).toBeTruthy();
+      const skin = mechChromaSkinIndex(chroma.id);
 
       const sim = new Sim({ seed: 1, playerClass: 'shaman', playerName: `Mech-${chroma.id}` });
       sim.accountCosmetics = {
@@ -205,14 +215,19 @@ describe('cosmetic skin-select event', () => {
         weaponSkinIds: [],
         weaponSkinLoadout: {},
       };
-      expect((sim as any).unequipMechChroma(chroma.id)).toBe(true);
-      expect(sim.accountCosmetics.mechChromaIds).not.toContain(chroma.id);
-      expect(sim.countItem(itemId!)).toBe(1);
+      sim.setPlayerSkin(sim.playerId, skin, 'mech');
 
-      sim.useItem(itemId!);
-
+      expect(sim.unequipMechChroma(chroma.id)).toBe(true);
+      // The unlock survives the unequip, for every chroma in the catalog.
       expect(sim.accountCosmetics.mechChromaIds).toContain(chroma.id);
-      expect(sim.countItem(itemId!)).toBe(0);
+      expect(sim.player.skinCatalog).toBe('class');
+      // No item is minted for any chroma: the look is never itemized.
+      expect(sim.countItem(expectDefined(itemId))).toBe(0);
+
+      // Free re-equip: the unlock alone gates it, no item spent.
+      sim.changeSkin(skin, 'mech');
+      expect(sim.player.skinCatalog).toBe('mech');
+      expect(sim.player.skin).toBe(skin);
     }
   });
 
@@ -229,7 +244,7 @@ describe('cosmetic skin-select event', () => {
   it('rejects a skin above the rolled rank (server authority): no change, token kept', () => {
     // Rank RNG is pinned separately above; this case isolates claim authority.
     const sim = withPendingRank('uncommon', 'mage');
-    const epicSkin = EVENT_SKIN_TIERS.find((tier) => tier.rank === 'epic')!.skin;
+    const epicSkin = expectDefined(EVENT_SKIN_TIERS.find((tier) => tier.rank === 'epic')).skin;
     expect(rankAllowsSkin('uncommon', epicSkin)).toBe(false);
 
     sim.claimEventSkin(epicSkin);
@@ -254,19 +269,14 @@ describe('cosmetic skin-select event', () => {
 
     // End to end: an index past the class's last skin is a no-op even under an
     // active epic event (the token is kept, no skin applied).
-    let sim: Sim | null = null;
-    for (let seed = 1; seed < 500 && sim === null; seed++) {
-      const r = rollRank(seed, 'paladin');
-      if (r.rank === 'epic') sim = r.sim;
-    }
-    expect(sim).not.toBeNull();
+    const sim = withPendingRank('epic', 'paladin');
     const outOfRange = SKIN_COUNTS.paladin; // one past the last valid paladin skin
     expect(classHasSkin('paladin', outOfRange)).toBe(false);
 
-    sim!.claimEventSkin(outOfRange);
+    sim.claimEventSkin(outOfRange);
 
-    expect(sim!.player.skin).toBe(0); // not applied
-    expect(sim!.inventory.find((s) => s.itemId === EVENT_SKIN_TOKEN_ID)?.count).toBe(1); // token kept
+    expect(sim.player.skin).toBe(0); // not applied
+    expect(sim.inventory.find((s) => s.itemId === EVENT_SKIN_TOKEN_ID)?.count).toBe(1); // token kept
   });
 
   it('SKIN_COUNTS stays in lockstep with the renderer SKINS manifest', () => {
@@ -277,7 +287,7 @@ describe('cosmetic skin-select event', () => {
 
   it('persists the pending rank across serialize/deserialize', () => {
     const { sim, rank } = rollRank(4);
-    const state = sim.serializeCharacter(sim.playerId)!;
+    const state = expectDefined(sim.serializeCharacter(sim.playerId));
     expect(state.pendingSkinRank).toBe(rank);
 
     const sim2 = new Sim({ seed: 99, playerClass: 'warrior', playerName: 'Other' });

@@ -1,0 +1,462 @@
+import { describe, expect, it } from 'vitest';
+import { createPreviewOpenGate } from '../src/render/characters/preview_open_gate_core';
+import {
+  buildPostEntryPreviewPrewarmUnits,
+  PREVIEW_PREWARM_BUSY_POLL_MS,
+  PREVIEW_PREWARM_HEADROOM_POLL_CAP,
+  PREVIEW_PREWARM_UNIT_SPACING_MS,
+  type PreviewPrewarmUnit,
+  runPreviewPrewarmSchedule,
+} from '../src/ui/preview_prewarm_core';
+
+const unit = (
+  family: 'char',
+  label: string,
+  run: () => void | Promise<void> = () => {},
+): PreviewPrewarmUnit => ({ family, label, run });
+
+describe('runPreviewPrewarmSchedule', () => {
+  it('enqueues every unit in order and resolves done', async () => {
+    const ran: string[] = [];
+    const handle = runPreviewPrewarmSchedule(
+      [unit('char', 'a'), unit('char', 'b'), unit('char', 'c')],
+      {
+        enqueue: async (label, run) => {
+          ran.push(label);
+          await run();
+        },
+        isFamilyBusy: () => false,
+        delay: async () => {},
+      },
+    );
+    await handle.done;
+    expect(ran).toEqual(['a', 'b', 'c']);
+  });
+
+  it('pauses while the owning window is open and resumes after it closes', async () => {
+    const ran: string[] = [];
+    const waits: number[] = [];
+    let charBusyPolls = 0;
+    const handle = runPreviewPrewarmSchedule([unit('char', 'a'), unit('char', 'b')], {
+      enqueue: async (label) => {
+        ran.push(label);
+      },
+      // Busy for the first two polls of the char family, then free.
+      isFamilyBusy: (family) => family === 'char' && ++charBusyPolls <= 2,
+      delay: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    await handle.done;
+    expect(ran).toEqual(['a', 'b']);
+    // Two busy polls, then the fixed inter-unit spacing after each unit.
+    expect(waits).toEqual([
+      PREVIEW_PREWARM_BUSY_POLL_MS,
+      PREVIEW_PREWARM_BUSY_POLL_MS,
+      PREVIEW_PREWARM_UNIT_SPACING_MS,
+      PREVIEW_PREWARM_UNIT_SPACING_MS,
+    ]);
+  });
+
+  it('waits for frame headroom but runs anyway past the starvation cap', async () => {
+    const ran: string[] = [];
+    let headroomPolls = 0;
+    const handle = runPreviewPrewarmSchedule([unit('char', 'a')], {
+      enqueue: async (label) => {
+        ran.push(label);
+      },
+      isFamilyBusy: () => false,
+      // Never regains headroom: the cap must bound the wait.
+      hasHeadroom: () => {
+        headroomPolls++;
+        return false;
+      },
+      delay: async () => {},
+    });
+    await handle.done;
+    expect(ran).toEqual(['a']);
+    expect(headroomPolls).toBe(PREVIEW_PREWARM_HEADROOM_POLL_CAP + 1);
+  });
+
+  it('a failed unit reports and never halts the remaining schedule', async () => {
+    const ran: string[] = [];
+    const failed: string[] = [];
+    const handle = runPreviewPrewarmSchedule(
+      [unit('char', 'a'), unit('char', 'boom'), unit('char', 'c')],
+      {
+        enqueue: async (label) => {
+          if (label === 'boom') throw new Error('context lost');
+          ran.push(label);
+        },
+        isFamilyBusy: () => false,
+        delay: async () => {},
+        onUnitError: (label) => failed.push(label),
+      },
+    );
+    await handle.done;
+    expect(ran).toEqual(['a', 'c']);
+    expect(failed).toEqual(['boom']);
+  });
+
+  it('cancel stops issuing units, including out of a busy pause', async () => {
+    const ran: string[] = [];
+    let polls = 0;
+    const handle = runPreviewPrewarmSchedule([unit('char', 'a'), unit('char', 'b')], {
+      enqueue: async (label) => {
+        // Yield one microtask so the handle exists (the schedule starts
+        // synchronously at creation, before its own const is assigned).
+        await Promise.resolve();
+        ran.push(label);
+        // Cancel mid-schedule: the in-flight unit finishes, the next never runs.
+        if (label === 'a') handle.cancel();
+      },
+      isFamilyBusy: () => false,
+      delay: async () => {
+        polls++;
+      },
+    });
+    await handle.done;
+    expect(ran).toEqual(['a']);
+
+    // Cancellation while paused on a busy window also exits promptly.
+    const stuck = runPreviewPrewarmSchedule([unit('char', 'x')], {
+      enqueue: async () => {
+        throw new Error('must not run');
+      },
+      isFamilyBusy: () => true,
+      delay: async () => {
+        if (++polls > 3) stuck.cancel();
+      },
+    });
+    await stuck.done;
+    expect(polls).toBeGreaterThan(3);
+  });
+
+  it('re-checks family busy after the headroom wait and defers the unit until the window closes', async () => {
+    // The headroom pause can itself run long enough for the player to open
+    // the very window the next unit is about to warm. Drive that exact
+    // interleaving with a fake clock: no headroom for the first two polls (the
+    // window opens during the first one), headroom regained on the third
+    // check, then the schedule must recheck busy before enqueueing rather than
+    // firing at the now-open window. The window closes on the next busy poll.
+    const events: string[] = [];
+    let headroomAvailable = false;
+    let windowBusy = false;
+    let delayCount = 0;
+    const handle = runPreviewPrewarmSchedule([unit('char', 'a')], {
+      enqueue: async (label) => {
+        events.push(`enqueue:${label}`);
+      },
+      isFamilyBusy: (family) => {
+        const busy = family === 'char' && windowBusy;
+        events.push(busy ? 'busy' : 'free');
+        return busy;
+      },
+      hasHeadroom: () => {
+        events.push(headroomAvailable ? 'headroom' : 'no-headroom');
+        return headroomAvailable;
+      },
+      delay: async () => {
+        delayCount++;
+        events.push('delay');
+        if (delayCount === 1) windowBusy = true;
+        if (delayCount === 2) headroomAvailable = true;
+        if (delayCount === 3) windowBusy = false;
+      },
+    });
+    await handle.done;
+    expect(events).toEqual([
+      'free', // initial busy check: window closed, enter the headroom wait
+      'no-headroom', // headroom poll 1
+      'delay', // pause; the window opens here
+      'no-headroom', // headroom poll 2
+      'delay', // pause; headroom recovers here
+      'headroom', // headroom poll 3: regained, exit the headroom wait
+      'busy', // recheck after the headroom wait: window is open, do not enqueue
+      'busy', // back at the top: the busy wait's own check agrees
+      'delay', // busy-wait pause; the window closes here
+      'free', // busy wait exits
+      'headroom', // headroom re-checked fresh for the second pass: still fine
+      'free', // recheck after the headroom wait: window is closed
+      'enqueue:a', // only now does the unit actually run
+      'delay', // the fixed inter-unit spacing after the unit
+    ]);
+  });
+});
+
+describe('the schedule and the cold-open gate share one linked signature', () => {
+  // The per-skin units warm the SAME visual with different body textures, so
+  // only the first of them links anything: the rest would re-run a compileAsync
+  // that compiles nothing while still blocking the main thread. The open gate
+  // holds the other half of the rule (an open after these skips its warm), so
+  // the two are driven here against the real gate rather than a fake flag.
+  it('the first skin unit links, the rest still upload but skip their compile', async () => {
+    const gate = createPreviewOpenGate();
+    const sig = '["player_warrior",null,null,null,null]';
+    let compiles = 0;
+    let uploads = 0;
+    const ran: string[] = [];
+
+    const units = buildPostEntryPreviewPrewarmUnits({
+      playerClass: 'warrior',
+      allClasses: [],
+      skinCount: () => 3,
+      cardPoses: [],
+      includeCharFamily: true,
+      warmCharSkins: true,
+      // The subject is the per-skin units alone: no poses, no portraits.
+      includeCardPoses: false,
+      portraitFramings: [],
+      renderCharShell: () => {},
+      prewarmCharSkin: () => {
+        if (!gate.isLinked(sig)) {
+          compiles++;
+          gate.noteLinked(sig);
+        }
+        uploads++;
+      },
+      prewarmCardPose: () => {},
+      renderPortrait: () => {},
+    });
+
+    const handle = runPreviewPrewarmSchedule(units, {
+      enqueue: async (label, run) => {
+        ran.push(label);
+        await run();
+      },
+      isFamilyBusy: () => false,
+      delay: async () => {},
+    });
+    await handle.done;
+
+    expect(ran).toEqual([
+      'preview:char-window',
+      'preview:char-skin:0',
+      'preview:char-skin:1',
+      'preview:char-skin:2',
+    ]);
+    expect(compiles).toBe(1);
+    expect(uploads).toBe(3);
+    // ...and the open gate skips too, because it reads the same signature.
+    expect(gate.arm(sig, 0)).toBe(false);
+  });
+});
+
+describe('buildPostEntryPreviewPrewarmUnits', () => {
+  it('orders shell, own skins, card poses, then all-class portraits, and plans NO armory unit (boot: includeCharFamily true)', () => {
+    const calls: string[] = [];
+    const units = buildPostEntryPreviewPrewarmUnits<string>({
+      playerClass: 'hunter',
+      allClasses: ['hunter', 'mage'],
+      skinCount: (unitId) => (unitId === 'player_hunter' ? 2 : 1),
+      cardPoses: ['heroic'],
+      includeCharFamily: true,
+      warmCharSkins: true,
+      includeCardPoses: true,
+      portraitFramings: ['headshot', 'body'],
+      renderCharShell: () => {
+        calls.push('shell');
+      },
+      prewarmCharSkin: (skin) => {
+        calls.push(`skin:${skin}`);
+      },
+      prewarmCardPose: (pose) => {
+        calls.push(`pose:${pose}`);
+      },
+      renderPortrait: (cls, skin, framing) => {
+        calls.push(`portrait:${cls}:${skin}:${framing}`);
+      },
+    });
+    expect(units.map((entry) => entry.label)).toEqual([
+      'preview:char-window',
+      'preview:char-skin:0',
+      'preview:char-skin:1',
+      'preview:card-pose:0',
+      'preview:portrait:hunter:0:headshot',
+      'preview:portrait:hunter:0:body',
+      'preview:portrait:hunter:1:headshot',
+      'preview:portrait:hunter:1:body',
+      'preview:portrait:mage:0:headshot',
+      'preview:portrait:mage:0:body',
+    ]);
+    expect(units.every((entry) => entry.family === 'char')).toBe(true);
+    // NEGATIVE pin, and the load-bearing one. The armory catalog was about 2.1
+    // to 2.6 s of live-frame hitches that every online session paid for a window
+    // only some players open, and its cost was positional rather than per skin,
+    // so no gentler schedule was available. It is warmed NOWHERE ahead of time
+    // now: the store's card list needs none of it, and one card's preview is
+    // built on the inspect click. A store-open warm was the attempt this branch
+    // measured and deleted (it moved a cold store open 530.9 ms to 522.8 ms), so
+    // a restored loop fails here instead of silently returning.
+    expect(units.some((entry) => entry.label.startsWith('preview:armory'))).toBe(false);
+    for (const entry of units) entry.run();
+    expect(calls).toEqual([
+      'shell',
+      'skin:0',
+      'skin:1',
+      'pose:heroic',
+      'portrait:hunter:0:headshot',
+      'portrait:hunter:0:body',
+      'portrait:hunter:1:headshot',
+      'portrait:hunter:1:body',
+      'portrait:mage:0:headshot',
+      'portrait:mage:0:body',
+    ]);
+  });
+
+  it('a portrait unit returns its promise so the paced lane actually awaits it', async () => {
+    // Regression pin: renderPortrait may be async (the prewarm path), and a
+    // block-bodied run wrapper would discard the promise, un-pacing the whole
+    // portrait family (the lane would advance mid-render).
+    let resolvePortrait!: () => void;
+    const units = buildPostEntryPreviewPrewarmUnits<string>({
+      playerClass: 'hunter',
+      allClasses: ['hunter'],
+      skinCount: () => 1,
+      cardPoses: [],
+      includeCharFamily: false,
+      warmCharSkins: false,
+      includeCardPoses: false,
+      portraitFramings: ['headshot'],
+      renderCharShell: () => {},
+      prewarmCharSkin: () => {},
+      prewarmCardPose: () => {},
+      renderPortrait: () =>
+        new Promise<void>((resolve) => {
+          resolvePortrait = resolve;
+        }),
+    });
+    const portraitUnit = units.find(
+      (entry) => entry.label === 'preview:portrait:hunter:0:headshot',
+    );
+    expect(portraitUnit).toBeDefined();
+    let settled = false;
+    const running = Promise.resolve(portraitUnit?.run()).then(() => {
+      settled = true;
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    resolvePortrait();
+    await running;
+    expect(settled).toBe(true);
+  });
+
+  it('excludes the char-window shell/skin/pose units on a graphics-rebuild restart, keeping the portrait units in order (includeCharFamily false)', () => {
+    // The rebuild-restart plan (hud.ts restoreGraphicsPreviewContexts passing
+    // includeCharFamily: false) must drop exactly the shell-dependent trio:
+    // the shell itself is unbuilt there (its own cover is already down, so
+    // building it would hitch a live frame), and the per-skin/per-pose units
+    // no-op against a null this.charPreview anyway. Portrait units stay (they
+    // are canvas-2D, no dependence on the shell). There are no armory units in
+    // any plan: that catalog builds per inspected card.
+    const calls: string[] = [];
+    const units = buildPostEntryPreviewPrewarmUnits<string>({
+      playerClass: 'hunter',
+      allClasses: ['hunter', 'mage'],
+      skinCount: (unitId) => (unitId === 'player_hunter' ? 2 : 1),
+      cardPoses: ['heroic'],
+      includeCharFamily: false,
+      warmCharSkins: true,
+      includeCardPoses: true,
+      portraitFramings: ['headshot', 'body'],
+      renderCharShell: () => {
+        calls.push('shell');
+      },
+      prewarmCharSkin: (skin) => {
+        calls.push(`skin:${skin}`);
+      },
+      prewarmCardPose: (pose) => {
+        calls.push(`pose:${pose}`);
+      },
+      renderPortrait: (cls, skin, framing) => {
+        calls.push(`portrait:${cls}:${skin}:${framing}`);
+      },
+    });
+    expect(units.map((entry) => entry.label)).toEqual([
+      'preview:portrait:hunter:0:headshot',
+      'preview:portrait:hunter:0:body',
+      'preview:portrait:hunter:1:headshot',
+      'preview:portrait:hunter:1:body',
+      'preview:portrait:mage:0:headshot',
+      'preview:portrait:mage:0:body',
+    ]);
+    expect(units.every((entry) => !entry.label.startsWith('preview:char-window'))).toBe(true);
+    expect(units.every((entry) => !entry.label.startsWith('preview:char-skin'))).toBe(true);
+    expect(units.every((entry) => !entry.label.startsWith('preview:card-pose'))).toBe(true);
+    for (const entry of units) entry.run();
+    expect(calls).toEqual([
+      'portrait:hunter:0:headshot',
+      'portrait:hunter:0:body',
+      'portrait:hunter:1:headshot',
+      'portrait:hunter:1:body',
+      'portrait:mage:0:headshot',
+      'portrait:mage:0:body',
+    ]);
+    expect(calls).not.toContain('shell');
+  });
+
+  const trimDeps = (
+    over: Partial<Parameters<typeof buildPostEntryPreviewPrewarmUnits<string>>[0]>,
+  ) =>
+    buildPostEntryPreviewPrewarmUnits<string>({
+      playerClass: 'hunter',
+      allClasses: ['hunter'],
+      skinCount: () => 2,
+      cardPoses: ['heroic', 'battle'],
+      includeCharFamily: true,
+      warmCharSkins: true,
+      includeCardPoses: true,
+      portraitFramings: ['headshot', 'body'],
+      renderCharShell: () => {},
+      prewarmCharSkin: () => {},
+      prewarmCardPose: () => {},
+      renderPortrait: () => {},
+      ...over,
+    });
+
+  it('WS2: warmCharSkins false drops every char-skin unit, keeps the shell (composed look)', () => {
+    const labels = trimDeps({ warmCharSkins: false }).map((u) => u.label);
+    expect(labels).toContain('preview:char-window');
+    expect(labels.some((l) => l.startsWith('preview:char-skin'))).toBe(false);
+    // warmCharSkins true still emits them (the fixed-rig / legacy arm).
+    const warm = trimDeps({ warmCharSkins: true }).map((u) => u.label);
+    expect(warm.filter((l) => l.startsWith('preview:char-skin'))).toEqual([
+      'preview:char-skin:0',
+      'preview:char-skin:1',
+    ]);
+  });
+
+  it('WS1: includeCardPoses false drops every card-pose unit', () => {
+    const labels = trimDeps({ includeCardPoses: false }).map((u) => u.label);
+    expect(labels.some((l) => l.startsWith('preview:card-pose'))).toBe(false);
+    // true still emits one per pose.
+    const warm = trimDeps({ includeCardPoses: true }).map((u) => u.label);
+    expect(warm.filter((l) => l.startsWith('preview:card-pose'))).toEqual([
+      'preview:card-pose:0',
+      'preview:card-pose:1',
+    ]);
+  });
+
+  it('WS3: portraitFramings gates exactly which framing units are emitted', () => {
+    const headshotOnly = trimDeps({ portraitFramings: ['headshot'] }).map((u) => u.label);
+    expect(headshotOnly).toContain('preview:portrait:hunter:0:headshot');
+    expect(headshotOnly.some((l) => l.endsWith(':body'))).toBe(false);
+    const bodyOnly = trimDeps({ portraitFramings: ['body'] }).map((u) => u.label);
+    expect(bodyOnly).toContain('preview:portrait:hunter:0:body');
+    expect(bodyOnly.some((l) => l.endsWith(':headshot'))).toBe(false);
+  });
+
+  it('the login trim (composed look) warms only shell + headshots, no skins/poses/body', () => {
+    // Mirrors what hud.ts passes for a modern composed-look player at login.
+    const labels = trimDeps({
+      warmCharSkins: false,
+      includeCardPoses: false,
+      portraitFramings: ['headshot'],
+    }).map((u) => u.label);
+    expect(labels).toEqual([
+      'preview:char-window',
+      'preview:portrait:hunter:0:headshot',
+      'preview:portrait:hunter:1:headshot',
+    ]);
+  });
+});

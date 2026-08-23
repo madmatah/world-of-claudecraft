@@ -57,6 +57,12 @@ const mi = (over: Partial<MoveInput> = {}): MoveInput => ({
   strafeLeft: false,
   strafeRight: false,
   jump: false,
+  // The two swim axes, false because a seated pilot never reads them: the drive
+  // branch owns vertical motion, and the swim arms are unreachable on a
+  // circuit's flat instanced floor. Present so the fixture is a whole MoveInput
+  // rather than a partial one an override happens to complete.
+  dive: false,
+  surface: false,
   ...over,
 });
 

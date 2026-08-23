@@ -7,7 +7,7 @@
 // This only changes the NUMBERS spliced into the description placeholders ($d
 // damage, $o over-time total, $b buff value, $t duration), never adds a string,
 // so it needs no new i18n keys. It also owns the placeholder EFFECT PICKERS
-// (which effect each placeholder reads), so hud.ts and the tooltip-consistency
+// (which effect each placeholder reads), so ability_description.ts and the tooltip-consistency
 // guard test share one definition and cannot drift. Unit-tested in
 // tests/ability_damage.test.ts; hud.ts is the thin consumer.
 import type { ResolvedAbility } from '../sim/sim';
@@ -54,7 +54,7 @@ export function abilityDamageBonus(
       // channel coefficient in combat, not the single-cast one.
       return def.channel
         ? channelTickBonus(power, def)
-        : directHitBonus(power, def, res.castTime, false);
+        : directHitBonus(power, def, res.castTime, false, 1, eff.spellPowerCoeff);
     case 'aoeDamage':
     case 'aoeRoot':
     case 'chainDamage':
@@ -69,8 +69,15 @@ export function abilityDamageBonus(
       // Each ground pulse is an AoE hit: effect_dispatch snapshots
       // directHitBonus(..., aoe) into the zone's spBonus at cast time.
       return directHitBonus(power, def, res.castTime, true);
+    case 'valkyrsCalling':
+      // The delayed landing owns its authored range in the movement system.
+      return 0;
     case 'aoeHeal':
       // AoE heals take the same per-target coefficient penalty as aoeDamage.
+      return directHealBonus(scaling.spellPower, res.castTime);
+    case 'chainHeal':
+      // Combat applies the full direct-heal coefficient to the first target,
+      // then applies the authored falloff to each jump.
       return directHealBonus(scaling.spellPower, res.castTime);
     case 'consumeAura':
       if (eff.deal) return directHitBonus(power, def, res.castTime, false);
@@ -107,6 +114,14 @@ export function abilityDamageBonus(
       const ticks = eff.interval > 0 ? Math.max(1, eff.duration / eff.interval) : 1;
       return dotTickBonus(power, def, eff.duration, eff.interval) * ticks;
     }
+    case 'hunterBloodhook':
+      return Math.round(scaling.rangedPower * eff.rangedPowerCoeff * (eff.damageMult ?? 1));
+    case 'hunterStampede':
+      return Math.round(scaling.rangedPower * eff.rangedPowerCoeff);
+    case 'afflictionLitany':
+      // Litany is a flat, rank-resolved pulse. It gains Hexcraft's ability
+      // modifier during resolution but has no Spell Power coefficient.
+      return 0;
     default:
       return 0;
   }
@@ -129,15 +144,21 @@ export function abilityPrimaryEffect(res: ResolvedAbility): AbilityEffect | unde
       eff.type === 'weaponStrike' ||
       eff.type === 'aoeDamage' ||
       eff.type === 'aoeHeal' ||
+      eff.type === 'chainHeal' ||
       eff.type === 'aoeRoot' ||
+      eff.type === 'chainDamage' ||
       eff.type === 'groundAoE' ||
+      eff.type === 'valkyrsCalling' ||
       (eff.type === 'repositionToAim' && eff.landingAoe !== undefined) ||
       eff.type === 'consumeAura' ||
       eff.type === 'finisherDamage' ||
       eff.type === 'drainTick' ||
       eff.type === 'sunder' ||
       eff.type === 'faerieFire' ||
-      eff.type === 'lifeTap',
+      eff.type === 'lifeTap' ||
+      eff.type === 'hunterBloodhook' ||
+      eff.type === 'hunterStampede' ||
+      eff.type === 'afflictionLitany',
   );
 }
 
@@ -178,6 +199,19 @@ export function abilityBuffValue(res: ResolvedAbility): number | null {
     }
   }
   return null;
+}
+
+/** The `$b` value for an already-APPLIED aura, read straight off its live
+ *  (kind, value) rather than re-resolved through anyone's talents. A buff/debuff
+ *  tooltip viewed on another entity must show what that aura actually IS, not what
+ *  the viewer's own copy of the ability would grant (Pact Deepened doubling
+ *  Fiendhide's armor for its owner must still read doubled on every other
+ *  player's screen). Mirrors abilityBuffValue's one non-identity case
+ *  (form_fireball's multiplier -> whole-percent conversion) so the two functions
+ *  can never disagree on the same aura. */
+export function auraBuffDisplayValue(a: { kind: string; value: number }): number {
+  if (a.kind === 'form_fireball') return (a.value - 1) * 100;
+  return a.value;
 }
 
 /** The value `$t` displays: the first timed effect's resolved duration in seconds

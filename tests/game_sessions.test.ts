@@ -81,6 +81,17 @@ function expectJoined(result: ClientSession | { error: string }): ClientSession 
   return result;
 }
 
+// Pull the plain notice text out of every 'events' frame a fake ws received,
+// the same shape sendChatNotice emits ({ t: 'events', list: [{ type: 'error', text }] }).
+function noticeTexts(ws: ReturnType<typeof fakeWs>): string[] {
+  return (ws.send.mock.calls as unknown[][])
+    .map((call) => JSON.parse(String(call[0])) as { t?: string; list?: { text?: string }[] })
+    .filter((frame) => frame.t === 'events')
+    .flatMap((frame) => frame.list ?? [])
+    .map((event) => event.text)
+    .filter((text): text is string => typeof text === 'string');
+}
+
 // detectActivity writes into the module-global linked-member change feed, so start
 // every test from an empty queue.
 beforeEach(() => {
@@ -131,6 +142,84 @@ describe('GameServer sessions', () => {
 
       expect(server.sim.meta(session.pid)?.questsDone.has('q_wolves')).toBe(false);
       expect(server.sim.meta(session.pid)?.questLog.has('q_wolves')).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.ALLOW_DEV_COMMANDS;
+      else process.env.ALLOW_DEV_COMMANDS = previous;
+    }
+  });
+
+  it('gates the spawn dev-command family to admin accounts even with dev commands on', () => {
+    const previous = process.env.ALLOW_DEV_COMMANDS;
+    process.env.ALLOW_DEV_COMMANDS = '1';
+    try {
+      const server = new GameServer();
+      const mobCount = () =>
+        [...server.sim.entities.values()].filter((e) => e.templateId === 'forest_wolf').length;
+
+      const player = expectJoined(server.join(fakeWs(), 21, 201, 'Tester', 'warrior', null));
+      const before = mobCount();
+      server.handleMessage(
+        player,
+        JSON.stringify({ t: 'cmd', cmd: 'chat', text: '/dev spawn forest_wolf 1 5' }),
+      );
+      expect(mobCount(), 'a non-admin tester must not conjure mobs').toBe(before);
+
+      const staff = expectJoined(
+        server.join(fakeWs(), 22, 202, 'Staffer', 'warrior', null, false, { isAdmin: true }),
+      );
+      server.handleMessage(
+        staff,
+        JSON.stringify({ t: 'cmd', cmd: 'chat', text: '/dev spawn forest_wolf 1 5' }),
+      );
+      expect(mobCount(), 'an admin account keeps spawn controls').toBe(before + 1);
+
+      // The self-serve dev commands stay open to everyone on a dev realm: the
+      // gate is spawn-family only, not a blanket staff lock.
+      server.handleMessage(
+        player,
+        JSON.stringify({ t: 'cmd', cmd: 'chat', text: '/dev gold 100' }),
+      );
+      expect(server.sim.meta(player.pid)?.copper ?? 0).toBeGreaterThan(0);
+    } finally {
+      if (previous === undefined) delete process.env.ALLOW_DEV_COMMANDS;
+      else process.env.ALLOW_DEV_COMMANDS = previous;
+    }
+  });
+
+  it('keeps the spawn dev-command gate closed when a leading space hides the slash', () => {
+    const previous = process.env.ALLOW_DEV_COMMANDS;
+    process.env.ALLOW_DEV_COMMANDS = '1';
+    try {
+      const server = new GameServer();
+      const mobCount = () =>
+        [...server.sim.entities.values()].filter((e) => e.templateId === 'forest_wolf').length;
+
+      // The remembered chat channel defaults to "say" on join. A leading space
+      // (or mixed case, or the devspawn alias) must not let a spawn command
+      // slip past the staff-only gate and reach sim.chat's own trim unchecked.
+      const playerWs = fakeWs();
+      const player = expectJoined(server.join(playerWs, 23, 203, 'LeadingSpace', 'warrior', null));
+      const before = mobCount();
+      server.handleMessage(
+        player,
+        JSON.stringify({ t: 'cmd', cmd: 'chat', text: ' /dev spawn forest_wolf 1 5' }),
+      );
+      expect(mobCount(), 'a leading space must not bypass the spawn gate').toBe(before);
+      expect(noticeTexts(playerWs)).toContain(
+        '[dev] Spawn controls require an administrator account.',
+      );
+
+      const staffWs = fakeWs();
+      const staff = expectJoined(
+        server.join(staffWs, 24, 204, 'LeadingSpaceStaff', 'warrior', null, false, {
+          isAdmin: true,
+        }),
+      );
+      server.handleMessage(
+        staff,
+        JSON.stringify({ t: 'cmd', cmd: 'chat', text: ' /dev spawn forest_wolf 1 5' }),
+      );
+      expect(mobCount(), 'an admin keeps spawn controls with a leading space').toBe(before + 1);
     } finally {
       if (previous === undefined) delete process.env.ALLOW_DEV_COMMANDS;
       else process.env.ALLOW_DEV_COMMANDS = previous;
@@ -297,7 +386,13 @@ describe('GameServer sessions', () => {
     expect(server.sim.entities.get(blocked.pid)?.skinCatalog).not.toBe('mech');
   });
 
-  it('unequips a mech chroma from every live character on the account and returns its item', () => {
+  it('unequipping a mech chroma stays permanently unlocked, like a purchased Armory skin (issue: cannot unequip on another character)', () => {
+    // Regression for a report where a player unequipped the Onyx Gold mech
+    // chroma on one character (Lupercal) and it got permanently stuck showing
+    // on another (Furyogen): unequipping used to REVOKE the account-wide
+    // unlock, so any other character (online or not) could never take it off,
+    // or put it back on, again. The unlock must behave like the Season 1
+    // Armory weapon skins: account-wide, permanent, and freely reselectable.
     revokeAccountMechChroma.mockClear();
     const server = new GameServer();
     const cosmetics = {
@@ -307,15 +402,15 @@ describe('GameServer sessions', () => {
       weaponSkinLoadout: {},
     };
     const first = expectJoined(
-      server.join(fakeWs(), 11, 101, 'Mechone', 'shaman', null, false, {
+      server.join(fakeWs(), 11, 101, 'Lupercal', 'shaman', null, false, {
         accountCosmetics: cosmetics,
       }),
     );
     // The second live character rides the GM exemption: the session cap allows
-    // one non-GM character per account, and the account-wide sweep under test
+    // one non-GM character per account, and the account-wide unlock under test
     // is the same either way.
     const second = expectJoined(
-      server.join(fakeWs(), 11, 102, 'Mechtwo', 'mage', null, true, {
+      server.join(fakeWs(), 11, 102, 'Furyogen', 'mage', null, true, {
         accountCosmetics: cosmetics,
       }),
     );
@@ -333,13 +428,69 @@ describe('GameServer sessions', () => {
       JSON.stringify({ t: 'cmd', cmd: 'unequip_mech_chroma', chroma: 'amber_crimson' }),
     );
 
-    expect(revokeAccountMechChroma).toHaveBeenCalledWith(11, 'amber_crimson');
-    expect(first.accountCosmetics.mechChromaIds).not.toContain('amber_crimson');
-    expect(second.accountCosmetics.mechChromaIds).not.toContain('amber_crimson');
+    // The account never loses the unlock (never persisted as revoked either).
+    expect(revokeAccountMechChroma).not.toHaveBeenCalled();
+    expect(first.accountCosmetics.mechChromaIds).toContain('amber_crimson');
+    expect(second.accountCosmetics.mechChromaIds).toContain('amber_crimson');
+    // Only the acting character's OWN display reverts...
     expect(server.sim.entities.get(first.pid)?.skinCatalog).toBe('class');
+    // ...the other character's independent choice is left alone, and (the
+    // reported bug) is still removable, because the unlock it depends on is
+    // still there.
+    expect(server.sim.entities.get(second.pid)?.skinCatalog).toBe('mech');
+    server.handleMessage(
+      second,
+      JSON.stringify({ t: 'cmd', cmd: 'unequip_mech_chroma', chroma: 'amber_crimson' }),
+    );
     expect(server.sim.entities.get(second.pid)?.skinCatalog).toBe('class');
-    expect(server.sim.countItem('amber_crimson_armor_plate', first.pid)).toBe(1);
+
+    // Nothing is minted or duplicated: the look was never itemized.
+    expect(server.sim.countItem('amber_crimson_armor_plate', first.pid)).toBe(0);
     expect(server.sim.countItem('amber_crimson_armor_plate', second.pid)).toBe(0);
+
+    // Re-equipping needs no item at all, the same as any other owned Armory
+    // look: the account already owns it.
+    server.handleMessage(
+      first,
+      JSON.stringify({ t: 'cmd', cmd: 'change_skin', skin: 0, catalog: 'mech' }),
+    );
+    expect(server.sim.entities.get(first.pid)?.skinCatalog).toBe('mech');
+  });
+
+  it('reconciles a saved worn mech chroma when the account cosmetics row is stale', async () => {
+    grantAccountMechChroma.mockClear();
+    const seedServer = new GameServer();
+    const seedPid = seedServer.sim.addPlayer('mage', 'Stuckmech');
+    seedServer.sim.setPlayerSkin(seedPid, 0, 'mech');
+    const state = seedServer.sim.serializeCharacter(seedPid);
+    if (!state) throw new Error('missing saved state');
+
+    const server = new GameServer();
+    const session = expectJoined(
+      server.join(fakeWs(), 11, 101, 'Stuckmech', 'mage', state, false, {
+        accountCosmetics: {
+          completedQuestIds: [],
+          mechChromaIds: [],
+          weaponSkinIds: [],
+          weaponSkinLoadout: {},
+        },
+      }),
+    );
+
+    expect(session.accountCosmetics.mechChromaIds).toContain('amber_crimson');
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(grantAccountMechChroma).toHaveBeenCalledWith(11, 'amber_crimson');
+
+    server.handleMessage(
+      session,
+      JSON.stringify({ t: 'cmd', cmd: 'unequip_mech_chroma', chroma: 'amber_crimson' }),
+    );
+    expect(server.sim.entities.get(session.pid)?.skinCatalog).toBe('class');
+    server.handleMessage(
+      session,
+      JSON.stringify({ t: 'cmd', cmd: 'change_skin', skin: 0, catalog: 'mech' }),
+    );
+    expect(server.sim.entities.get(session.pid)?.skinCatalog).toBe('mech');
   });
 
   it('keeps the character-id session index coherent across join, duplicate join, leave, and rejoin', async () => {

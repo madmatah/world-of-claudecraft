@@ -3,6 +3,8 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { ABILITIES } from '../../sim/data';
 import { ABILITY_VFX_FULL_SPECS } from '../ability_vfx_full_specs';
 import { loadGltf } from '../assets/loader';
+import { noteSpiritSpawnRefused } from '../gpu_prep_events';
+import { clamp01 } from '../num_clamp';
 
 // Spirit apparitions (the gallery's spawnSpirit/updateSpirits): ghost-tinted
 // creature GLBs playing a short choreographed path, a druid's spectral bear
@@ -20,8 +22,10 @@ import { loadGltf } from '../assets/loader';
 //     silently (no late pop-in). Models are warmed per class on first
 //     sighting (painter.syncEntity), so the miss window is the first seconds
 //     of first contact.
-//   - Fresh-loaded puppets run a one-frame invisible compile pass so the
-//     ghost material's program links at warm time, never mid-combat.
+//   - Fresh-loaded puppets link their ghost material's program at warm time,
+//     never mid-combat. A host that supplies a compile gate (the renderer's
+//     live off-thread gate) gets an off-thread link on a HIDDEN root; hosts
+//     without one keep the historical one-frame compile pass.
 //   - Despawn is a dissolve-out: the shared opacity envelope ramps to zero
 //     over the last 0.35s (the gallery's noise-dissolve shader stays a
 //     gallery luxury; the opacity read is what survives the port).
@@ -171,10 +175,6 @@ interface SpiritSlot {
   prevZ: number;
 }
 
-function clamp01(v: number): number {
-  return Math.min(1, Math.max(0, v));
-}
-
 function easeInOutSine(t: number): number {
   return -(Math.cos(Math.PI * t) - 1) / 2;
 }
@@ -204,6 +204,25 @@ function spiritModelsByClass(): Map<string, string[]> {
 const scratch = new THREE.Vector3();
 const bbScratch = new THREE.Box3();
 
+/**
+ * Runs one puppet build. The host supplies a scheduler that spends a browser
+ * idle slot and the shared GPU arbiter on it; hosts without one (tests, the
+ * editor viewport) keep the historical inline build.
+ */
+export type SpiritBuildScheduler = (build: () => void) => void;
+
+/**
+ * The host's live compile gate: compile the colour + shadow programs of a
+ * HIDDEN root off-thread and resolve once they are linked. Same shape as the
+ * gate `FishView` takes and as `renderer.compileGate`.
+ *
+ * Without one the pool falls back to the one-frame compile pass, which makes
+ * the compile group VISIBLE for a frame. A visible draw IS a synchronous link:
+ * production measured the shared `+skinning -opaque` MeshBasicMaterial of a
+ * puppet linking for 268, 150, 59 and 35 ms inside the reveal frame chain.
+ */
+export type SpiritCompileGate = (root: THREE.Object3D) => Promise<unknown>;
+
 export class SpiritApparitions {
   private slots: SpiritSlot[] = [];
   private puppets = new Map<string, SpiritPuppet>();
@@ -213,7 +232,13 @@ export class SpiritApparitions {
   private compileGroup: THREE.Group;
   private compileQueue: SpiritPuppet[] = [];
   private compiling: SpiritPuppet | null = null;
+  // set from the gate's callback, consumed by the next update(): readiness
+  // never flips off a promise (see pumpGatedCompile)
+  private gateSettled: SpiritPuppet | null = null;
+  private compileGate: SpiritCompileGate | null = null;
+  private buildScheduler: SpiritBuildScheduler | null = null;
   private time = 0;
+  private disposed = false;
 
   constructor(
     private scene: THREE.Scene,
@@ -254,10 +279,33 @@ export class SpiritApparitions {
     scene.add(this.compileGroup);
   }
 
+  /**
+   * Route puppet construction (a SkeletonUtils rig clone, a material rebind
+   * traverse, and a per-vertex skinned-bounds measure) off the GLB resolve's
+   * synchronous continuation. Without this the whole build lands in whatever
+   * frame the loader happens to resolve in, which is a live combat frame:
+   * warmForClass fires on first SIGHTING of a class, so a player walking into
+   * a fight resolves several models at once.
+   */
+  setBuildScheduler(schedule: SpiritBuildScheduler | null): void {
+    this.buildScheduler = schedule;
+  }
+
+  /**
+   * Install (or clear) the host's live compile gate. With one the warm-up
+   * hands the gate a HIDDEN puppet root and the compile group is never made
+   * visible; without one the historical one-frame visible pass runs (what
+   * headless hosts, the editor viewport, and tests get).
+   */
+  setCompileGate(gate: SpiritCompileGate | null): void {
+    this.compileGate = gate;
+  }
+
   // Kick the async loads for every spirit model this class's kit authors.
   // Called on first sighting of a player of that class; misses are harmless
   // (an unwarmed model's first cast just skips its spirit).
   warmForClass(cls: string): void {
+    if (this.disposed) return;
     const models = spiritModelsByClass().get(cls);
     if (!models) return;
     for (const model of models) this.ensureLoaded(model);
@@ -270,8 +318,16 @@ export class SpiritApparitions {
     this.loading.add(model);
     loadGltf(url).then(
       (g) => {
-        this.loading.delete(model);
-        this.buildPuppet(model, g.scene, g.animations);
+        // The model stays marked loading until the build actually runs, so a
+        // deferred build cannot be queued twice by a second ensureLoaded.
+        const build = (): void => {
+          this.loading.delete(model);
+          if (this.disposed) return;
+          if (this.puppets.has(model)) return;
+          this.buildPuppet(model, g.scene, g.animations);
+        };
+        if (this.buildScheduler) this.buildScheduler(build);
+        else build();
       },
       (err: unknown) => {
         // stays in `loading` forever on failure: never retried at frame rate
@@ -287,6 +343,7 @@ export class SpiritApparitions {
     sourceScene: THREE.Object3D,
     animations: THREE.AnimationClip[],
   ): void {
+    if (this.disposed) return;
     const root = cloneSkinned(sourceScene);
     const mat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -375,12 +432,35 @@ export class SpiritApparitions {
   // silently) when the model is still loading, both slots run, or the puppet
   // is already on stage, a spirit never pops in late.
   spawn(o: SpiritSpawnOpts): boolean {
+    if (this.disposed) return false;
     const puppet = this.puppets.get(o.model);
     if (!puppet) {
       this.ensureLoaded(o.model); // warm for the next cast
       return false;
     }
     if (puppet.inUse) return false;
+    // The gate's whole contract: a puppet is SHOWN only once EVERY material it
+    // mounts has been linked off-thread. A rig's plain and instanced meshes
+    // wear the same shared ghost material as its skinned ones, and each of
+    // those mesh kinds is its own program, so drawing an ungated puppet links
+    // them inside a combat frame (production 2026-08-18: three programs, 59.5
+    // ms, the run's only live escape). The spirit is ONE optional beat of
+    // an impact sequence that runs without it (sequencer.ts keeps the impact
+    // flash, the shake, the archetype extras, the motifs and the linger
+    // whatever this answers; what goes with the spirit is its own entrance
+    // dust, ring and light pulse in fx.ts spiritAt, which play only on a
+    // successful spawn), so a refused spawn is the same silent miss a model
+    // still in flight already takes, and the puppet goes to the front of the
+    // warm-up queue so the next cast has it. Hosts without a gate keep the historical
+    // one-frame visible compile pass and spawn immediately.
+    if (this.compileGate && !puppet.compiled) {
+      this.warmNext(puppet);
+      // Counted in perfStats().gpuPrep: a refusal is a cast the player made
+      // whose spirit layer never appeared, so how often the gate fires is the
+      // measure of whether the trade stays fair.
+      noteSpiritSpawnRefused();
+      return false;
+    }
     let slot: SpiritSlot | null = null;
     for (const s of this.slots) {
       if (!s.active) {
@@ -454,18 +534,10 @@ export class SpiritApparitions {
   }
 
   update(dt: number): void {
+    if (this.disposed) return;
     this.time += dt;
-    // one-frame compile pass for freshly loaded puppets, one puppet per frame
-    if (this.compiling) this.finishCompile();
-    if (!this.compiling) {
-      const next = this.compileQueue.pop();
-      if (next && !next.compiled && !next.inUse) {
-        next.mat.opacity = 0;
-        this.compileGroup.add(next.root);
-        this.compileGroup.visible = true;
-        this.compiling = next;
-      }
-    }
+    if (this.compileGate) this.pumpGatedCompile();
+    else this.pumpVisibleCompile();
     for (const slot of this.slots) {
       if (!slot.active) continue;
       const puppet = slot.puppet;
@@ -488,10 +560,71 @@ export class SpiritApparitions {
     if (this.compileGroup.children.length === 0) this.compileGroup.visible = false;
   }
 
+  // The historical warm-up: one freshly loaded puppet rides one VISIBLE frame
+  // in the compile group per update, which links its program synchronously.
+  private pumpVisibleCompile(): void {
+    if (this.compiling) this.finishCompile();
+    const next = this.compileQueue.pop();
+    if (next && !next.compiled && !next.inUse) {
+      next.mat.opacity = 0;
+      this.compileGroup.add(next.root);
+      this.compileGroup.visible = true;
+      this.compiling = next;
+    }
+  }
+
+  // The gated warm-up: the puppet root stays HIDDEN and the gate links its
+  // programs off-thread. The root is handed over whole, so the gate walks the
+  // rig's SkinnedMeshes wearing the shared ghost material and links the
+  // `+skinning -opaque` program the first spawn actually draws with.
+  private pumpGatedCompile(): void {
+    const gate = this.compileGate;
+    if (!gate) return;
+    // Readiness flips HERE, never in the gate's callback: pulling the root out
+    // of the scene off a promise would move nodes between frames, and
+    // numPointLights is part of three's program cache key, so a hide/show off
+    // a promise can move the counted light set and link a second program.
+    if (this.gateSettled && this.gateSettled === this.compiling) this.finishCompile();
+    if (this.compiling) return;
+    const next = this.compileQueue.pop();
+    if (!next || next.compiled) return;
+    if (next.inUse) {
+      // On stage without having been gated (a gate installed mid-session, or a
+      // release that has not run yet): requeue it, never drop it. A dropped
+      // puppet leaves the queue for good and every program it mounts links on
+      // its next draw, which is exactly what the gate exists to prevent.
+      this.compileQueue.unshift(next);
+      return;
+    }
+    next.mat.opacity = 0;
+    this.compileGroup.add(next.root);
+    this.compiling = next;
+    // A rejected gate settles exactly like a resolved one: the puppet is fully
+    // usable either way, it just never got its warm-up, and re-queueing it
+    // would retry at frame rate.
+    const settle = (): void => {
+      if (this.compiling === next) this.gateSettled = next;
+    };
+    try {
+      void gate(next.root).then(settle, settle);
+    } catch {
+      settle();
+    }
+  }
+
+  /** Warm this puppet before the rest of the backlog (pop() takes the tail). */
+  private warmNext(puppet: SpiritPuppet): void {
+    const at = this.compileQueue.indexOf(puppet);
+    if (at < 0) return;
+    this.compileQueue.splice(at, 1);
+    this.compileQueue.push(puppet);
+  }
+
   private finishCompile(): void {
     const p = this.compiling;
     if (!p) return;
     this.compiling = null;
+    this.gateSettled = null;
     p.compiled = true;
     if (p.root.parent === this.compileGroup) this.compileGroup.remove(p.root);
   }
@@ -616,5 +749,30 @@ export class SpiritApparitions {
     for (const slot of this.slots) {
       if (slot.active) this.release(slot);
     }
+  }
+
+  /** Dispose only resources created by this renderer. GLB geometries are
+   * loader-cache owned and intentionally remain untouched; each puppet owns
+   * its ghost material and animation mixer, while holders are empty groups. */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.clear();
+    this.compileQueue.length = 0;
+    this.compiling = null;
+    this.gateSettled = null;
+    for (const slot of this.slots) {
+      slot.holder.removeFromParent();
+      slot.puppet = null;
+    }
+    this.compileGroup.removeFromParent();
+    for (const puppet of this.puppets.values()) {
+      puppet.mixer.stopAllAction();
+      puppet.mixer.uncacheRoot(puppet.root);
+      puppet.root.removeFromParent();
+      puppet.mat.dispose();
+    }
+    this.puppets.clear();
+    this.loading.clear();
   }
 }

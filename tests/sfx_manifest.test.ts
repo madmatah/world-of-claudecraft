@@ -3,6 +3,7 @@
 // when the manifest is regenerated. Uses real temp directories (existsSync is
 // the tested behaviour; mocking fs defeats the purpose).
 
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -163,10 +164,11 @@ describe('buildManifest', () => {
     expect(manifest).toContain('cast_lightning_bolt');
   });
 
-  it('keeps the release catalog, all 9 mount cues, and all 62 UI cues in one 248-key inventory', () => {
+  it('keeps the release catalog, all 9 mount cues, and all 63 UI cues in one 268-key inventory', () => {
     const keys = new Set(SFX.map((entry) => entry.key));
-    expect(keys.size).toBe(248);
-    expect([...keys].filter((key) => key.startsWith('ui_'))).toHaveLength(62);
+    expect(keys.size).toBe(268);
+    expect([...keys].filter((key) => key.startsWith('ui_'))).toHaveLength(63);
+    expect(keys.has('ui_craft_cast')).toBe(true);
     for (const key of [
       'cast_lightning_bolt',
       'impact_groundshaker',
@@ -190,6 +192,12 @@ describe('buildManifest', () => {
       'mount_run_drakemaw_raptor',
       'fear_shout',
       'fear',
+      'intimidating_shout',
+      'battle_shout',
+      'demoralizing_shout',
+      'emboldening_roar',
+      'defiant_bellow',
+      'rallying_cry',
       'ice_block',
       'frost_nova',
       'hammer_of_justice',
@@ -198,6 +206,7 @@ describe('buildManifest', () => {
       'cloak_of_shadows',
       'scorch',
       'pyroblast',
+      'meteor',
       'flamestrike',
       'frozen_orb',
       'glacial_spike',
@@ -215,6 +224,16 @@ describe('buildManifest', () => {
       'eviscerate',
       'stealth',
       'move_groundshaker_engine',
+      'rift_portal_spawn',
+      'rift_portal_enter',
+      'rift_portal_drone',
+      'rift_gate_grind',
+      'rift_boulder_impact',
+      'rift_boulder_roll',
+      'rift_ice_start',
+      'rift_ice_glide',
+      'rift_ice_stop',
+      'rift_lava_tick',
     ]) {
       expect(keys.has(key), key).toBe(true);
     }
@@ -227,7 +246,7 @@ describe('buildManifest', () => {
     // purely filesystem-discovered.
     const mobFamilyKeys = [...keys].filter((key) => key.startsWith('mob_'));
     expect(mobFamilyKeys).toHaveLength(65); // 13 families x 5 actions
-    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(248);
+    expect(SFX_FIXED_CATALOG_KEYS).toHaveLength(268);
   });
 
   it('lazy-loads the Realm Racers engine without changing movement defaults', () => {
@@ -428,5 +447,37 @@ describe('mob subfamily scanning', () => {
     expect(spatialForSfx('amb_campfire')).toBe(true);
     expect(spatialForSfx('amb_forge')).toBe(true);
     expect(spatialForSfx('amb_water')).toBe(false);
+  });
+});
+
+// Pins the exact asset-to-ability binding this PR restored, so a future
+// re-swap (Meteor's landing recording and Flamestrike's cast recording were
+// mixed up once already, see the fix commit's history) gets caught by CI
+// instead of shipping silently. Reads the real committed files under
+// public/audio/sfx, not the manifest, since a manifest bug could hide the
+// exact same mistake.
+describe('meteor/flamestrike asset binding', () => {
+  const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sfxDir = path.join(repoRoot, 'public/audio/sfx');
+
+  // Pinned via `sha256sum public/audio/sfx/meteor.mp3 public/audio/sfx/flamestrike.mp3`
+  // against the recordings committed by d83aab74ac (the swap fix). A byte-distinct
+  // check alone cannot catch a RE-swap: two swapped files are still byte-distinct
+  // from each other, and the original bug here was a missing meteor.mp3, not a
+  // swap. Pinning each file's own literal hash catches both a re-swap and either
+  // file silently changing out from under the binding.
+  const METEOR_SHA256 = 'd57a0627c1bfe6daacd67706c2359347af522be0c89ba13466dcb58d94b77416';
+  const FLAMESTRIKE_SHA256 = 'bd4257d3567b43f5228066cba5f1dff5c31b205c9314bfb4c7f0d6cbfebcdf15';
+
+  it('pins meteor.mp3 and flamestrike.mp3 to their exact committed recordings', () => {
+    const meteor = readFileSync(path.join(sfxDir, 'meteor.mp3'));
+    const flamestrike = readFileSync(path.join(sfxDir, 'flamestrike.mp3'));
+    expect(createHash('sha256').update(meteor).digest('hex')).toBe(METEOR_SHA256);
+    expect(createHash('sha256').update(flamestrike).digest('hex')).toBe(FLAMESTRIKE_SHA256);
+  });
+
+  it('binds the "meteor" and "flamestrike" manifest keys to the right file each', () => {
+    expect(SFX_CLIPS.meteor.url.split('?')[0]).toBe('/audio/sfx/meteor.mp3');
+    expect(SFX_CLIPS.flamestrike.url.split('?')[0]).toBe('/audio/sfx/flamestrike.mp3');
   });
 });

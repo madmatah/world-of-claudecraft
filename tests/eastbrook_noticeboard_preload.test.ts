@@ -21,6 +21,10 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 vi.mock('../src/render/assets/loader', () => ({
   loadGltf: mocks.loadGltf,
   loadTexture: mocks.loadTexture,
+  // The surface-detail families (worn_stone.ts, pulled in transitively) load
+  // their compressed siblings; share the mock so their calls land in the same
+  // stream the prefix filters below already ignore.
+  loadKtx2Texture: mocks.loadTexture,
   releaseGltf: mocks.releaseGltf,
 }));
 
@@ -153,7 +157,8 @@ describe('Eastbrook noticeboard tier-independent preload', () => {
     expect(branch).toContain('const built = buildEastbrookNoticeboard();');
     expect(branch).toContain('body = built.group;');
     expect(branch).toContain('height = built.height;');
-    expect(branch).toContain('objectMesh = body!;');
+    expect(branch).toContain('objectMesh = body;');
+    expect(branch).not.toContain('objectMesh = body!;');
     expect(branch).not.toContain('sparkleTexture');
     expect(branch).not.toContain('new THREE.Sprite');
   });

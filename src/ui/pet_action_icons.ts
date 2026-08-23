@@ -5,8 +5,9 @@
 // (rejuvenation, defensive_stance, rapid_fire, growl, prowl, drain_life) made the pet
 // buttons borrow other classes' spell art, so a hunter's "aggressive" stance rendered
 // the SAME icon as their own Rapid Fire, and "Heal Pet" showed the druid's green magic
-// heal. These ids are deliberately NOT ability ids; each has its own recipe in
-// `icons.ts` (`ABILITY_RECIPES`). Guarded by `tests/pet_action_icons.test.ts`.
+// heal. These ids are deliberately NOT ability ids; each has dedicated painted art under
+// public/ui/skills/pet plus a procedural resilience recipe in `icons.ts`
+// (`ABILITY_RECIPES`). Guarded by `tests/pet_action_icons.test.ts`.
 export const PET_ACTION_ICONS = {
   attack: 'pet_attack',
   taunt: 'pet_growl',
@@ -18,7 +19,8 @@ export const PET_ACTION_ICONS = {
   aggressive: 'pet_aggressive',
 } as const;
 
-export type PetActionIconKey = keyof typeof PET_ACTION_ICONS;
+/** Closed painted-art inventory for synthetic pet action-bar commands. */
+export const PET_ACTION_IMAGE_IDS: ReadonlySet<string> = new Set(Object.values(PET_ACTION_ICONS));
 
 // Pure decision for the hunter Feed Pet button's disabled state. Previously
 // the button always looked identically clickable, but clicking it with no
@@ -34,6 +36,52 @@ export type PetFeedDisabledReasonKey =
 export interface PetFeedButtonState {
   disabled: boolean;
   reasonKey: PetFeedDisabledReasonKey | null;
+}
+
+export interface PetSpecialButtonState {
+  iconId: string;
+  labelKey: 'hud.pet.abyssalChain' | 'hud.pet.felbolt';
+  titleKey: 'hud.pet.abyssalChainTitle' | 'hud.pet.felboltTitle';
+  descKey: 'hud.pet.abyssalChainDesc' | 'hud.pet.felboltDesc';
+  cooldown: number;
+  autocast: boolean;
+}
+
+/** Pure pet-bar projection for template-authored Warlock abilities. The HUD
+ *  receives only localization keys and display state, while combat remains in
+ *  the server-authoritative pet-skill module. */
+export function petSpecialButtonState(
+  template:
+    | {
+        petChainPull?: { ability: string };
+        petRanged?: { ability?: string; active?: { cooldown: number } };
+      }
+    | undefined,
+  timer: number | undefined,
+  autocast: boolean | undefined,
+): PetSpecialButtonState | null {
+  const cooldown = Math.ceil(Math.max(0, timer ?? 0));
+  if (template?.petChainPull) {
+    return {
+      iconId: template.petChainPull.ability,
+      labelKey: 'hud.pet.abyssalChain',
+      titleKey: 'hud.pet.abyssalChainTitle',
+      descKey: 'hud.pet.abyssalChainDesc',
+      cooldown,
+      autocast: autocast === true,
+    };
+  }
+  if (template?.petRanged?.active && template.petRanged.ability === 'emberkin_felbolt') {
+    return {
+      iconId: template.petRanged.ability,
+      labelKey: 'hud.pet.felbolt',
+      titleKey: 'hud.pet.felboltTitle',
+      descKey: 'hud.pet.felboltDesc',
+      cooldown,
+      autocast: autocast === true,
+    };
+  }
+  return null;
 }
 
 /**

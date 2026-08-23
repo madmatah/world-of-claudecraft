@@ -29,6 +29,7 @@ import type { BuildingDef } from '../sim/types';
 import { terrainHeight, WATER_LEVEL, waterLevel } from '../sim/world';
 import { loadGltf, releaseGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
+import { attachBiomeHaze } from './biome_haze_field';
 import { buildEastbrookGrandArmouryView } from './eastbrook_grand_armoury';
 import {
   isEastbrookRebuildBuilding,
@@ -43,10 +44,20 @@ import {
   isFenbridgeRebuildWell,
 } from './fenbridge_town';
 import { EMISSIVE_LIGHT, GFX, type GfxSettings, sharedUniforms, surfaceMat } from './gfx';
+import { cloneMaterialWithHooks } from './material_clone_hooks';
 import { applyOccluderFade, type OccluderFadeMat, occluderFadeMat } from './occluder_fade';
 import { occluderFadeSettled, stepOccluderFade } from './occluder_fade_core';
 import { type PropCellBounds, propCellKey, updatePropCell } from './prop_cell_core';
-import { applySurfaceDetail, reapplySurfaceDetailToClone, wornFamilyFor } from './worn_stone';
+import {
+  newPropCullPass,
+  type PropCullBounds,
+  type PropCullRevealState,
+  propCullKey,
+  propRevealRoots,
+  updatePropCullables,
+} from './prop_cull_core';
+import type { RevealGateCore } from './reveal_gate_core';
+import { applySurfaceDetail, wornFamilyFor } from './worn_stone';
 
 // Static world props: buildings, tents, campfires, mines, ruins, docks,
 // fences, graveyards — all real CC0 glTF assets (Quaternius medieval village +
@@ -86,6 +97,30 @@ export interface PropsResult {
     dt: number,
     reducedMotion?: boolean,
   ): void;
+  /**
+   * First-reveal compile gating (hitch-hunt P3a): a far cell's first drawn
+   * far swap is held in the pixel-identical near representation until the
+   * gate warms the key, and its first near flip back, once that bake was
+   * proven, holds on the bake until the `<key>:near` key warms the members'
+   * own programs (prop_cell_core). No gate keeps the immediate flip (tests,
+   * renderers without async compile; the editor viewport composes the real
+   * Renderer and is therefore gated too).
+   */
+  setRevealGate(gate: RevealGateCore | null): void;
+  /**
+   * The same gate for the merged and instanced BANDS: a band's first fog
+   * reveal on a walking approach is held hidden until the gate warms its key
+   * (prop_cull_core). Installed at the start of every scene prewarm, including
+   * graphics rebuilds. The initial-entry first-paint barrier keeps its work
+   * behind the manifest; rebuild prewarms have no barrier and preserve the
+   * historical immediate compile start. Without a gate, a band keeps the
+   * historical immediate cull and latches as revealed.
+   */
+  setBandRevealGate(gate: RevealGateCore | null): void;
+  /** The compile roots behind a gate key: a far cell's bake meshes, its
+   *  members' groups behind the cell's `:near` key, or the one band behind a
+   *  cullable key. */
+  revealRoots(key: string): readonly THREE.Object3D[];
 }
 
 const mergeBandDepth = (): number => (GFX.standardMaterials ? 180 : 90);
@@ -200,6 +235,7 @@ export const PROP_ASSET_DEFS: Record<string, PropAssetDef> = {
   hexMarket: { url: '/models/biome/hex_market.glb', kit: 'khex' },
   hexWatchtower: { url: '/models/biome/hex_watchtower.glb', kit: 'khex' },
   hexCannonTower: { url: '/models/biome/hex_tower_cannon.glb', kit: 'khex' },
+  hexTowerCatapult: { url: '/models/biome/hex_tower_catapult.glb', kit: 'khex' },
   hexBarracks: { url: '/models/biome/hex_barracks.glb', kit: 'khex' },
   hexCannonballs: { url: '/models/biome/hex_cannonballs.glb', kit: 'khex' },
   hexLumber: { url: '/models/biome/hex_lumber.glb', kit: 'khex' },
@@ -313,6 +349,10 @@ export const PROP_ASSET_DEFS: Record<string, PropAssetDef> = {
   kcasBannerRedA: { url: '/models/biome/kcas_banner_red_a.glb', kit: 'kcas' },
   kcasBannerRedShield: { url: '/models/biome/kcas_banner_red_shield.glb', kit: 'kcas' },
   kcasBannerRedTriple: { url: '/models/biome/kcas_banner_red_triple.glb', kit: 'kcas' },
+  // the green colorway for Dawnhold (already-shipped dungeon-kit exports)
+  kcasBannerGreenA: { url: '/models/dungeon/banner_green.glb', kit: 'kcas' },
+  kcasBannerGreenShield: { url: '/models/dungeon/banner_shield_green.glb', kit: 'kcas' },
+  kcasBannerGreenTriple: { url: '/models/dungeon/banner_triple_green.glb', kit: 'kcas' },
   kcasTorch: { url: '/models/biome/kcas_torch.glb', kit: 'kcas' },
   kcasTorchMounted: { url: '/models/biome/kcas_torch_mounted.glb', kit: 'kcas' },
   kcasRubbleLarge: { url: '/models/biome/kcas_rubble_large.glb', kit: 'kcas' },
@@ -338,6 +378,8 @@ export const PROP_ASSET_DEFS: Record<string, PropAssetDef> = {
   kcasBedroll: { url: '/models/dungeon/bed_floor.glb', kit: 'kcas' },
   kcasChair: { url: '/models/dungeon/chair.glb', kit: 'kcas' },
   kcasStool: { url: '/models/dungeon/stool.glb', kit: 'kcas' },
+  kcasStoolRound: { url: '/models/dungeon/stool_round.glb', kit: 'kcas' },
+  kcasChest: { url: '/models/dungeon/chest.glb', kit: 'kcas' },
   kcasTableRoundSmall: { url: '/models/dungeon/table_round_small.glb', kit: 'kcas' },
   kcasTableRoundMedium: { url: '/models/dungeon/table_round_medium.glb', kit: 'kcas' },
   // NOTE: the laid feast table (table_long_tablecloth_decorated_a) is already
@@ -442,11 +484,14 @@ const LOW_TIER_PROP_KEYS: readonly PropKey[] = [
  * the high-performance renderer then resolves medium+), a tier-SCOPED preload set
  * would omit props that buildProps then places, and propAsset() throws "prop asset
  * not preloaded", the v0.16.0 farmCrate crash on world entry (red "Could not start
- * the renderer" overlay). So every tier preloads the full PROP_ASSET_DEFS, mirroring
- * foliage.ts, which sources its one frozen MODEL_URLS list for both preload and
- * placement and is structurally immune to this class of bug. Because every placement
- * key is typed PropKey (a key of PROP_ASSET_DEFS), the full set is provably a superset
- * of anything buildProps can place, on every tier and device.
+ * the renderer" overlay). So every tier preloads the full PROP_ASSET_DEFS, matching the
+ * same tier-independent-superset invariant foliage.ts's deferred boot lane enforces
+ * (a `deferredFoliageUrlsForBoot()` gate once broke it there too and reopened this
+ * exact crash for "models/foliage/pine_2.glb" - see the P0 comment in foliage.ts).
+ * The shapes differ (this function ignores its tier argument outright; foliage.ts's
+ * loop just never filters by tier in the first place) but the invariant is identical.
+ * Because every placement key is typed PropKey (a key of PROP_ASSET_DEFS), the full
+ * set is provably a superset of anything buildProps can place, on every tier and device.
  *
  * The arg is retained to document the invariant and to let the guard test assert it at
  * the lowest (most dangerous) import tier; the result intentionally ignores it.
@@ -501,9 +546,10 @@ for (const key of ALL_PROP_KEYS) {
     // superset; live profile preparation may load only the requested target.
     if (!deferredPropKeysForBoot().has(key)) return Promise.resolve();
     return preparePropSource(key).then(() => {
-      // Preserve the packaged-iOS boot path: extract each source as it lands
-      // and release its parsed scene before the renderer build.
-      if (GFX.nativeIosMemoryProfile) propAsset(key);
+      // Preserve the iOS WebKit boot path (Safari, other iOS browsers, and the
+      // packaged app alike): extract each source as it lands and release its
+      // parsed scene before the renderer build.
+      if (GFX.iosMemoryProfile) propAsset(key);
     });
   });
 }
@@ -705,6 +751,9 @@ function convertMaterial(
       strength: worn.strength,
     });
   }
+  // Distant-zone air (biome_haze_field.ts): every converted kit material
+  // hazes with the ground under it, chained over the worn-detail hook.
+  attachBiomeHaze(mat);
   mat.name = `${kit}:${s.name}`;
   matConvCache.set(key, mat);
   return mat;
@@ -1182,10 +1231,14 @@ export function buildProps(seed: number, delveLabel?: (delveId: string) => strin
       const src = mesh.material as THREE.Material;
       let tm = matMap.get(src);
       if (!tm) {
-        const ghostSrc = src.clone();
-        // Material.clone drops onBeforeCompile: re-attach the recorded
-        // surface-detail layer so ghostable buildings keep their texture.
-        reapplySurfaceDetailToClone(ghostSrc);
+        // The hook-preserving clone: a bare clone dropped BOTH own-property
+        // hooks, so the ghost lost the zone-haze layer AND minted a new
+        // program cache key, linking a program per ghosted kit material the
+        // first time a crowd arrival whipped the camera across town (the
+        // measured first-contact burst). With the hooks carried over the
+        // ghost's OPAQUE program is the source's own; only the transparent
+        // fade variant remains a distinct (prewarmable) key.
+        const ghostSrc = cloneMaterialWithHooks(src);
         tm = occluderFadeMat(ghostSrc);
         matMap.set(src, tm);
       }
@@ -2148,7 +2201,8 @@ export function buildProps(seed: number, delveLabel?: (delveId: string) => strin
     const cv = document.createElement('canvas');
     cv.width = CW;
     cv.height = CH;
-    const ctx = cv.getContext('2d')!;
+    const ctx = cv.getContext('2d');
+    if (!ctx) throw new Error('2d canvas context unavailable');
 
     ctx.fillStyle = '#2b2722';
     ctx.fillRect(0, 0, CW, CH);
@@ -2264,8 +2318,7 @@ export function buildProps(seed: number, delveLabel?: (delveId: string) => strin
       im.computeBoundingSphere();
       im.computeBoundingBox();
       group.add(im);
-      const bounds = cullableBounds(im, im.boundingBox, im.boundingSphere);
-      if (bounds) cullables.push(bounds);
+      pushCullable(cullables, im, im.boundingBox, im.boundingSphere);
     }
   }
 
@@ -2275,24 +2328,37 @@ export function buildProps(seed: number, delveLabel?: (delveId: string) => strin
   for (const p of delvePortals) keep.add(p); // shader-driven void: keep its transparency/renderOrder
   const staticMeshes = mergeStaticMeshes(group, keep);
   for (const sm of staticMeshes) {
-    const bounds = cullableBounds(sm, sm.geometry.boundingBox, sm.geometry.boundingSphere);
-    if (bounds) cullables.push(bounds);
+    pushCullable(cullables, sm, sm.geometry.boundingBox, sm.geometry.boundingSphere);
   }
 
   // Far-cell merged bakes for the hideables (dual representation): identical
   // world-baked geometry on the SHARED pre-clone materials, one mesh per
   // (cell, material, castShadow). The per-frame swap lives in update().
-  // Constrained-memory profiles (phone WebKit, native iOS) skip the bake:
+  // Constrained-memory profiles (phone WebKit, every iOS WebKit host) skip the bake:
   // duplicating the prop geometry at world entry is exactly the allocation
   // spike the v0.27.2 memory hotfix class guards against, and the draw-call
   // win matters most on the desktop tiers.
   const farCells = GFX.constrainedMemory ? [] : buildFarPropCells(group, hideables);
+  const farCellsByKey = new Map(farCells.map((cell) => [cell.key, cell]));
+  const cullablesByKey = new Map(cullables.map((cullable) => [cullable.key, cullable]));
+  const cullPass = newPropCullPass();
+  let revealGate: RevealGateCore | null = null;
+  let bandRevealGate: RevealGateCore | null = null;
 
   return {
     group,
     flames,
     windmillFans,
     fireLights,
+    setRevealGate(gate: RevealGateCore | null): void {
+      revealGate = gate;
+    },
+    setBandRevealGate(gate: RevealGateCore | null): void {
+      bandRevealGate = gate;
+    },
+    revealRoots(key: string): readonly THREE.Object3D[] {
+      return propRevealRoots<THREE.Object3D>(farCellsByKey, cullablesByKey, key);
+    },
     update(
       camX: number,
       camY: number,
@@ -2305,17 +2371,27 @@ export function buildProps(seed: number, delveLabel?: (delveId: string) => strin
       reducedMotion = false,
     ): void {
       const fogFarSq = fogFar * fogFar;
-      for (let i = 0; i < cullables.length; i++) {
-        const c = cullables[i];
-        c.obj.visible = cullableVisible(c, camX, camZ, fogFar, fogFarSq);
-      }
+      // Band fog cull (prop_cull_core): a band's first reveal on a walking
+      // approach holds until the gate has linked its programs, and an arrival
+      // among the bands holds too, with its compiles submitted at the imminent
+      // priority and, on a frame where several bands escape at once, nearest
+      // to the camera first.
+      updatePropCullables(cullables, camX, camZ, fogFar, fogFarSq, bandRevealGate, cullPass);
       // Far-cell swap first (prop_cell_core): distant cells draw their merged
       // bake and suppress the members' individual baked meshes; near cells
       // (where the ghost fade can fire) draw the individuals while the bake
       // stays as the shadow-only caster. Pixel-identical both ways.
       for (const cell of farCells) {
-        updatePropCell(cell, camX, camZ, fogFar);
+        updatePropCell(cell, camX, camZ, fogFar, undefined, revealGate);
       }
+      // Deliberately NO first-sight reveal gate here (unlike the bands): tried
+      // and reverted. Gating each hideable's first fog reveal put 116 keys and
+      // their pieces into the reveal pipeline at once on the Eastbrook ride
+      // (all imminent), the iGPU could not settle them inside the watchdog,
+      // and the buildings stayed hidden 10 s then drew cold anyway. The
+      // unique-material case (a kit only one building carries) is covered by
+      // the far cell's near-flip hold instead (prop_cell_core `:near` key,
+      // a handful of keys with the proven bake as the stand-in).
       for (let i = 0; i < hideables.length; i++) {
         const h = hideables[i];
         const dx = camX - h.x,
@@ -2392,11 +2468,13 @@ interface Hideable {
 // and their union IS the bake, so the shadows are pixel-identical while the
 // per-structure shadow submissions collapse to one per (material, cell).
 interface FarPropCell {
+  key: string;
   bounds: PropCellBounds;
   meshes: THREE.InstancedMesh[];
   hideables: Hideable[];
   farMode: boolean;
   visible: boolean;
+  farReady: boolean;
 }
 
 type Footprint = Omit<
@@ -2423,12 +2501,13 @@ function pointInsideFootprint(h: Hideable, x: number, z: number): boolean {
   const dx = x - h.x,
     dz = z - h.z;
   if (h.r !== undefined) return dx * dx + dz * dz < h.r * h.r;
+  if (h.rot === undefined || h.hw === undefined || h.hd === undefined) return false;
   // world -> OBB local (three.js rotation.y convention), mirrors colliders.rotY
-  const c = Math.cos(h.rot!),
-    s = Math.sin(h.rot!);
+  const c = Math.cos(h.rot),
+    s = Math.sin(h.rot);
   const lx = dx * c - dz * s;
   const lz = dx * s + dz * c;
-  return Math.abs(lx) < h.hw! && Math.abs(lz) < h.hd!;
+  return Math.abs(lx) < h.hw && Math.abs(lz) < h.hd;
 }
 
 function segmentCircleEntry(
@@ -2455,8 +2534,9 @@ function segmentCircleEntry(
 }
 
 function segmentObbEntry(h: Hideable, ax: number, az: number, bx: number, bz: number): number {
-  const c = Math.cos(h.rot!),
-    s = Math.sin(h.rot!);
+  if (h.rot === undefined || h.hw === undefined || h.hd === undefined) return Infinity;
+  const c = Math.cos(h.rot),
+    s = Math.sin(h.rot);
   const adx = ax - h.x,
     adz = az - h.z;
   const bdx = bx - h.x,
@@ -2465,17 +2545,17 @@ function segmentObbEntry(h: Hideable, ax: number, az: number, bx: number, bz: nu
   const laz = adx * s + adz * c;
   const lbx = bdx * c - bdz * s;
   const lbz = bdx * s + bdz * c;
-  if (Math.abs(lax) < h.hw! && Math.abs(laz) < h.hd!) return 0;
+  if (Math.abs(lax) < h.hw && Math.abs(laz) < h.hd) return 0;
 
   const dx = lbx - lax,
     dz = lbz - laz;
   let tmin = -Infinity,
     tmax = Infinity;
   if (Math.abs(dx) < 1e-9) {
-    if (lax < -h.hw! || lax > h.hw!) return Infinity;
+    if (lax < -h.hw || lax > h.hw) return Infinity;
   } else {
-    let t1 = (-h.hw! - lax) / dx,
-      t2 = (h.hw! - lax) / dx;
+    let t1 = (-h.hw - lax) / dx,
+      t2 = (h.hw - lax) / dx;
     if (t1 > t2) {
       const tmp = t1;
       t1 = t2;
@@ -2485,10 +2565,10 @@ function segmentObbEntry(h: Hideable, ax: number, az: number, bx: number, bz: nu
     tmax = Math.min(tmax, t2);
   }
   if (Math.abs(dz) < 1e-9) {
-    if (laz < -h.hd! || laz > h.hd!) return Infinity;
+    if (laz < -h.hd || laz > h.hd) return Infinity;
   } else {
-    let t1 = (-h.hd! - laz) / dz,
-      t2 = (h.hd! - laz) / dz;
+    let t1 = (-h.hd - laz) / dz,
+      t2 = (h.hd - laz) / dz;
     if (t1 > t2) {
       const tmp = t1;
       t1 = t2;
@@ -2533,20 +2613,25 @@ function cameraSegmentHitsFootprint(
   return eyeY + (camY - eyeY) * t < h.topY;
 }
 
-interface PropCullable {
+interface PropCullable extends PropCullBounds, PropCullRevealState {
   obj: THREE.Object3D;
-  hasBox: boolean;
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-  cx: number;
-  cz: number;
-  r: number;
+}
+
+/** Mints the cullable's reveal-gate key from its slot: stable for the
+ *  view's lifetime, and never colliding with the far-cell grid keys. */
+function pushCullable(
+  cullables: PropCullable[],
+  obj: THREE.Object3D,
+  box: THREE.Box3 | null,
+  sphere: THREE.Sphere | null,
+): void {
+  const bounds = cullableBounds(obj, propCullKey(cullables.length), box, sphere);
+  if (bounds) cullables.push(bounds);
 }
 
 function cullableBounds(
   obj: THREE.Object3D,
+  key: string,
   box: THREE.Box3 | null,
   sphere: THREE.Sphere | null,
 ): PropCullable | undefined {
@@ -2554,6 +2639,9 @@ function cullableBounds(
     const fallback = sphere ?? box.getBoundingSphere(new THREE.Sphere());
     return {
       obj,
+      key,
+      revealed: false,
+      held: false,
       hasBox: true,
       minX: box.min.x,
       maxX: box.max.x,
@@ -2567,6 +2655,9 @@ function cullableBounds(
   if (!sphere) return undefined;
   return {
     obj,
+    key,
+    revealed: false,
+    held: false,
     hasBox: false,
     minX: sphere.center.x - sphere.radius,
     maxX: sphere.center.x + sphere.radius,
@@ -2576,23 +2667,6 @@ function cullableBounds(
     cz: sphere.center.z,
     r: sphere.radius,
   };
-}
-
-function cullableVisible(
-  c: PropCullable,
-  camX: number,
-  camZ: number,
-  fogFar: number,
-  fogFarSq: number,
-): boolean {
-  const dx = camX < c.minX ? c.minX - camX : camX > c.maxX ? camX - c.maxX : 0;
-  const dz = camZ < c.minZ ? c.minZ - camZ : camZ > c.maxZ ? camZ - c.maxZ : 0;
-  if (dx * dx + dz * dz < fogFarSq) return true;
-  if (c.hasBox) return false;
-  const centerDx = c.cx - camX;
-  const centerDz = c.cz - camZ;
-  const reach = fogFar + c.r;
-  return centerDx * centerDx + centerDz * centerDz < reach * reach;
 }
 
 // Far-cell merged bakes for the camera-ghost hideables (dual representation,
@@ -2659,14 +2733,16 @@ function buildFarPropCells(group: THREE.Group, hideables: Hideable[]): FarPropCe
     }
   }
   const out: FarPropCell[] = [];
-  for (const cellBuild of cells.values()) {
+  for (const [cellKey, cellBuild] of cells) {
     const meshes: THREE.InstancedMesh[] = [];
     const cell: FarPropCell = {
+      key: cellKey,
       bounds: cellBuild.bounds,
       meshes,
       hideables: cellBuild.hideables,
       farMode: false,
       visible: true,
+      farReady: false,
     };
     for (const bucket of cellBuild.buckets.values()) {
       const geo = mergeGeometries(bucket.geoms, false);
@@ -2674,9 +2750,13 @@ function buildFarPropCells(group: THREE.Group, hideables: Hideable[]): FarPropCe
       geo.computeBoundingBox();
       geo.computeBoundingSphere();
       // Single-instance so the count gate below can skip the color pass
-      // per frame without touching visibility (three's instanced draw path
-      // is a free no-op at count 0).
+      // per frame without touching visibility. Free ONLY because the repo's
+      // three patch keeps a count 0 InstancedMesh out of the render list:
+      // upstream still reached setProgram and linked the bake's colour
+      // program for zero pixels (2.3 s of cold links right after the curtain
+      // on the iGPU, bench batch 17; patches/three@0.185.1.patch).
       const mesh = new THREE.InstancedMesh(geo, bucket.material, 1);
+      mesh.name = `far-bake:${cellKey}`;
       mesh.setMatrixAt(0, new THREE.Matrix4());
       mesh.instanceMatrix.needsUpdate = true;
       // Pin the object bounds to the world-baked geometry bounds NOW: the
@@ -2707,7 +2787,7 @@ function buildFarPropCells(group: THREE.Group, hideables: Hideable[]): FarPropCe
     // shadow via the bake exactly as they did per-material before; the
     // lowProps ghost path (whole-group hide) cannot diverge because every
     // lowProps profile also disables dynamicShadows (gfx.ts:
-    // constrainedMemory is true whenever nativeIosMemoryProfile is).
+    // constrainedMemory is true whenever iosMemoryProfile is).
     for (const h of cellBuild.hideables) {
       for (const b of h.bakeMeshes) b.mesh.castShadow = false;
     }

@@ -71,6 +71,54 @@ afterEach(() => {
 });
 
 describe('pooled VFX cloud', () => {
+  it('disposes the generic cloud and drain channel pool exactly once', () => {
+    installCanvasStub();
+    const scene = new THREE.Scene();
+    const vfx = new Vfx(scene, () => new THREE.Vector3(0, 1, 0));
+    vfx.burst(new THREE.Vector3(0, 0, 0), 'fire', 4);
+    vfx.drainBeam(1, 2, 5);
+
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    scene.traverse((object) => {
+      const drawable = object as THREE.Mesh | THREE.Line | THREE.Points;
+      if (drawable.geometry) geometries.add(drawable.geometry);
+      const material = drawable.material;
+      if (material) {
+        for (const entry of Array.isArray(material) ? material : [material]) materials.add(entry);
+      }
+    });
+    const geometryDisposals = [...geometries].map((geometry) => vi.spyOn(geometry, 'dispose'));
+    const materialDisposals = [...materials].map((material) => vi.spyOn(material, 'dispose'));
+
+    vfx.dispose();
+
+    expect(scene.children).toHaveLength(0);
+    for (const dispose of geometryDisposals) expect(dispose).toHaveBeenCalledOnce();
+    for (const dispose of materialDisposals) expect(dispose).toHaveBeenCalledOnce();
+
+    vfx.dispose();
+    vfx.update(1);
+    expect(scene.children).toHaveLength(0);
+    for (const dispose of geometryDisposals) expect(dispose).toHaveBeenCalledOnce();
+    for (const dispose of materialDisposals) expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it('removes a projectile before a throwing impact callback can replay it', () => {
+    installCanvasStub();
+    const impact = vi.fn(() => {
+      throw new Error('projectile callback');
+    });
+    const vfx = new Vfx(new THREE.Scene(), () => new THREE.Vector3());
+
+    vfx.soulTravel(0, 0, 0, 7, impact);
+    expect(() => vfx.update(1)).toThrow('projectile callback');
+    expect(impact).toHaveBeenCalledOnce();
+
+    expect(() => vfx.update(0.1)).not.toThrow();
+    expect(impact).toHaveBeenCalledOnce();
+  });
+
   it('submits and uploads only the live ascending prefix with conservative culling', () => {
     installCanvasStub();
     const scene = new THREE.Scene();
@@ -309,17 +357,49 @@ describe('pooled VFX cloud', () => {
     const renderSites = [
       ...source.matchAll(/this\.vfx\.prepareDraw\(this\.camera\);\n\s*if \(this\.post\)/g),
     ];
-    expect(renderSites).toHaveLength(2);
+    expect(renderSites).toHaveLength(1);
     for (const site of renderSites) {
+      // refreshFrozenWorldMatrix is the r185 explicit-refresh spelling for the
+      // frozen camera (static_matrix.ts); a plain updateMatrixWorld() would
+      // no longer compose it.
       expect(
-        source.slice(0, site.index).trimEnd().endsWith('this.camera.updateMatrixWorld();'),
+        source.slice(0, site.index).trimEnd().endsWith('refreshFrozenWorldMatrix(this.camera);'),
       ).toBe(true);
     }
+    // The main-path draw moved into presentFrame (src/render/frame_present.ts),
+    // whose prepareDraw-then-render ORDER is behaviorally pinned in
+    // tests/frame_present.test.ts; what remains here is the camera-pose
+    // invariant at its call site: the only presentFrame call follows the
+    // camera-shake updateMatrixWorld.
+    // The call consumes its boolean return into the presented-frames counter
+    // (phase 4 QA F4), so the pattern anchors the whole consuming statement.
+    const presentSites = [
+      ...source.matchAll(
+        /\n\s*if \(presentFrame\(host, dt, present\)\) this\.presentedFrameCount\+\+;/g,
+      ),
+    ];
+    expect(presentSites).toHaveLength(1);
+    for (const site of presentSites) {
+      const before = source.slice(0, site.index).trimEnd();
+      // The camera-shake refresh spells refreshFrozenWorldMatrix since the
+      // r185 matrix gate (static_matrix.ts).
+      expect(before.includes('refreshFrozenWorldMatrix(this.camera);')).toBe(true);
+      expect(
+        before.slice(before.lastIndexOf('refreshFrozenWorldMatrix(this.camera);')),
+      ).not.toContain('this.camera.position');
+    }
     expect(source).toContain(`async captureScreenshot(maxEdge = 1280, quality = 0.7)`);
-    expect(source.match(/this\.vfx\.prepareDraw\(this\.camera\);/g)).toHaveLength(3);
+    expect(source.match(/this\.vfx\.prepareDraw\(this\.camera\);/g)).toHaveLength(2);
     expect(source).toContain(`this.vfx.update(dt);
     this.vfx.prepareDraw(this.camera);
+    this.needleOfFateVfx.update(dt, this.reducedMotion());
+    this.sentenceVfx.update(dt, this.reducedMotion());
     this.frozenOrbFx.update(dt);`);
-    expect(source).toMatch(/this\.captureGlIdentity\(\);\s+this\.vfx\?\.onContextRestored\(\);/);
+    // The restore handler re-captures identity, rebinds the draw-stats
+    // session (three replaces webgl.info on restore; see
+    // tests/draw_stats_core.test.ts), then notifies vfx, in that order.
+    expect(source).toMatch(
+      /this\.captureGlIdentity\(\);[\s\S]{0,700}?if \(this\.drawStats\) this\.drawStats = createLogicalFrameDrawStats\(this\.webgl\.info\);\s+this\.vfx\?\.onContextRestored\(\);/,
+    );
   });
 });

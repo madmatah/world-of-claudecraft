@@ -13,6 +13,7 @@ import {
   WORLD_MAX_Z,
   WORLD_MIN_Z,
 } from '../sim/data';
+import { inDawnholdBailey } from '../sim/dawnhold_layout';
 import { ROCK_SINK_UNITS, rockHeightOf } from '../sim/decoration_dims';
 import { galeDeckSurface } from '../sim/gale_harbor';
 import type { BiomeId } from '../sim/types';
@@ -27,7 +28,13 @@ import {
 } from '../sim/world';
 import { loadGltf, releaseGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
+import { attachBiomeHaze } from './biome_haze_field';
 import { applyCanopyDetail } from './canopy_detail';
+import {
+  type FoliageBucketRevealGate,
+  type FoliageBucketRevealState,
+  foliageBucketVisible,
+} from './foliage_bucket_reveal_core';
 import {
   applyInstanceCollapse,
   type CollapseRole,
@@ -43,6 +50,8 @@ import {
   insideEastbrookGrassExclusion,
   insideGrassHubExclusion,
 } from './foliage_core';
+import { survivesLeanDecimation } from './foliage_decimation_core';
+import { foliageGhostPrewarmDraws } from './foliage_ghost_prewarm';
 import {
   createImpostorSession,
   type ImpostorBucketHandle,
@@ -51,7 +60,11 @@ import {
   impostorPrewarmMeshes,
   impostorsActive,
 } from './foliage_impostor';
-import { IMPOSTOR_SWAP_FADE, spriteSwapDistance } from './foliage_impostor_core';
+import {
+  CANOPY_EMISSIVE_FLOOR,
+  IMPOSTOR_SWAP_FADE,
+  spriteSwapDistance,
+} from './foliage_impostor_core';
 import {
   type BucketWindowInput,
   bucketVisible,
@@ -62,10 +75,32 @@ import {
   treeDetailDistance,
 } from './foliage_lod';
 import {
+  type FoliageDrawPath,
+  foliageAttributeList,
+  foliagePrewarmTwins,
+  foliageProgramKey,
+} from './foliage_prewarm_twins_core';
+import {
   patchConstantUpNormalVertexShader,
   patchGrassFragmentShader,
   reuseDiffuseMapSampleForEmissive,
 } from './foliage_shader_core';
+import {
+  attachPackedShadowGate,
+  collapseProbeMoved,
+  copyCollapseProbe,
+  copyShadowVolumeBasis,
+  createCollapseProbe,
+  createShadowVolumeBasis,
+  packShadowCasters,
+  SHADOW_BOX_STRIDE,
+  SHADOW_CASTER_MARGIN,
+  type ShadowRowBounds,
+  type ShadowVolumeInput,
+  setShadowVolumeBasis,
+  shadowRowVisible,
+  shadowVolumeMoved,
+} from './foliage_shadow_core';
 import {
   gardenLushGrassAt,
   gardenMeadowTintAt,
@@ -79,11 +114,17 @@ import {
   type GfxSettings,
   sharedUniforms,
 } from './gfx';
+import { runSlicedBuild } from './grass_build_slicer_core';
 import {
   type GrassCapCollapseBand,
   grassCapCollapseBand,
   grassCapCollapseShaderPatch,
+  grassCardProgramCacheKey,
 } from './grass_cap_collapse_core';
+import {
+  buildGroundDecorPrewarmTwins,
+  registerGroundDecorPrewarmDraw,
+} from './ground_decor_prewarm';
 import { type InstancedGhostHandle, InstancedOccluderGhosts } from './instanced_occluder_ghosts';
 import { occluderFadeSettled, stepOccluderFade } from './occluder_fade_core';
 import {
@@ -93,7 +134,7 @@ import {
   reorderInstanceDataByStableRank,
 } from './perceptual_lod_core';
 import { collectBuildingImpostors } from './props';
-import { attachShadowPassOnlyGate } from './shadow_pass_gate_core';
+import { makeShadowOnlyMaterial } from './shadow_only_material';
 import { freezeStaticMatrices } from './static_matrix';
 import { groundGrassColorAt, groundLushnessAt } from './terrain_chunk_build';
 import { type FlowerKind, flowerTuftTexture, grassTuftTexture } from './textures';
@@ -134,7 +175,6 @@ import { applySurfaceDetail, foliageWornFamilyFor } from './worn_stone';
 
 const GRASS_CHUNK_SIZE = 48;
 const GRASS_CHUNK_BUILD_BUDGET_MS = 2.2;
-const GRASS_CHUNK_MAX_BUILDS_PER_FRAME = 1;
 const GRASS_DENSITY_LOW = 0.38;
 const GRASS_DENSITY_HIGH = 0.5;
 // Per-biome grass density multipliers over the base above. The Reach is bare
@@ -248,6 +288,12 @@ function prepareFoliageSource(url: string): Promise<void> {
 
 /** Prepare the foliage source set selected by an explicit target profile. */
 export function prepareFoliageProfileAssets(target: Readonly<GfxSettings>): Promise<void> {
+  // Unlike the deferred BOOT lane below (unconditional on purpose: see the P0 comment
+  // there), filtering by `target` here is safe: this only runs from a live graphics
+  // rebuild (src/render/assets/graphics_profile.ts), which the coordinator always
+  // AWAITS before activating `target` and letting placement run against it - there is
+  // no "placement outruns this guess" window the way there is at boot.
+  //
   // Existing extracted URLs belong to the active renderer. Reload their
   // released source scenes before the coordinator clears derived caches, so
   // its old-profile rollback arm can still rebuild after a target failure.
@@ -262,23 +308,51 @@ const ALL_FOLIAGE_MODEL_URLS = new Set([
   ...Object.values(FOLIAGE_MODEL_URLS_HIGH).flat(),
   ...Object.values(FOLIAGE_MODEL_URLS_LOW).flat(),
 ]);
-let deferredFoliageModelUrls: ReadonlySet<string> | null = null;
-function deferredFoliageUrlsForBoot(): ReadonlySet<string> {
-  deferredFoliageModelUrls ??= new Set(Object.values(foliageModelUrlsFor(GFX)).flat());
-  return deferredFoliageModelUrls;
-}
+// Tier-INDEPENDENT on purpose (the v0.16.0 farmCrate P0; see
+// tests/render_asset_preload.test.ts): buildTrees() resolves modelUrls against the LIVE
+// GFX inside the Renderer constructor, which runs AFTER initGfxTier() re-resolves GFX
+// from the real WebGL gpuRenderer string (module-load GFX is only a pre-WebGL best
+// guess). The deferred lane opens (main.ts calls beginDeferredPreloads()) BEFORE that
+// renderer/initGfxTier exists, so a preload filtered to the import-time tier guess (this
+// used to gate on a `deferredFoliageUrlsForBoot()` snapshot frozen at whichever
+// leanFoliage value was live when the FIRST deferred thunk ran) can disagree with the
+// tier placement resolves moments later: buildTrees then asks for a HIGH-only variant
+// (pine_2/4/5, oak_2..5, ...) a LOW-guessed boot never fetched, and the synchronous
+// resolver throws "foliage model not preloaded: models/foliage/pine_2.glb", crashing
+// world entry. Every url is unconditionally prepared instead, so the set placement can
+// ever ask for is always already resident, at every tier, regardless of which guess was
+// live when the deferred lane opened.
 for (const url of ALL_FOLIAGE_MODEL_URLS) {
-  registerDeferredPreload(() => {
-    // Read GFX when the deferred lane opens, after startup safety and device
-    // defaults have settled. Non-target recipes stay cheap no-op tasks.
-    if (!deferredFoliageUrlsForBoot().has(url)) return Promise.resolve();
-    return prepareFoliageSource(url).then(() => {
-      // Packaged iOS still extracts each source as it lands so parsed scenes
-      // do not accumulate before the renderer build.
-      if (GFX.nativeIosMemoryProfile) extractParts(url);
-    });
-  });
+  registerDeferredPreload(() =>
+    prepareFoliageSource(url).then(() => {
+      // Every iOS WebKit host (Safari, other iOS browsers, and the packaged app) still
+      // extracts each source as it lands so parsed scenes do not accumulate before the
+      // renderer build - but only for a url the CURRENT tier guess actually places.
+      // extractParts bakes to float geometry and a converted material, which can
+      // OUTWEIGH the compressed source it replaces, so eagerly extracting every
+      // HIGH-only variant on a device that guessed lean would trade the crash this
+      // preload set exists to prevent for a permanent (session-long) memory cost on
+      // exactly the devices this profile protects. A url the guess excludes stays an
+      // un-extracted, un-released parsed source: cheaper than baking it for nothing,
+      // and still safe if the guess turns out wrong, because buildTrees() calls
+      // extractParts(url) itself (idempotent, cached) the moment placement actually
+      // needs it, same as it always has for every non-iOS profile.
+      if (GFX.iosMemoryProfile && Object.values(foliageModelUrlsFor(GFX)).flat().includes(url)) {
+        extractParts(url);
+      }
+    }),
+  );
 }
+
+/** Test-only view of the preload/placement tier-independence invariant above
+ *  (tests/render_asset_preload.test.ts). */
+export const foliagePreloadInternalsForTest = {
+  allFoliageModelUrls: (): ReadonlySet<string> => ALL_FOLIAGE_MODEL_URLS,
+  lowTierFoliageModelUrls: (): ReadonlySet<string> =>
+    new Set(Object.values(FOLIAGE_MODEL_URLS_LOW).flat()),
+  highTierFoliageModelUrls: (): ReadonlySet<string> =>
+    new Set(Object.values(FOLIAGE_MODEL_URLS_HIGH).flat()),
+};
 
 // Desaturated biome tints riding instanceColor. The textured models carry
 // their own hue, so tints are lerped most of the way to white before use
@@ -490,6 +564,13 @@ export interface FoliageView {
   setGrassQuality(level: number): void;
   setModelQuality(level: number): void;
   perfStats(out?: FoliagePerfStats): FoliagePerfStats;
+  /** Arm the bucket first-reveal compile gate. Armed at WORLD ENTRY, never
+   *  under the curtain: the initial frame links what it draws anyway
+   *  (foliage_bucket_reveal_core.ts). */
+  setRevealGate(gate: FoliageBucketRevealGate | null): void;
+  /** Compile roots behind one gate key: the one representative bucket mesh
+   *  whose program every bucket on that key shares. */
+  revealRoots(key: string): readonly THREE.Object3D[];
 }
 
 export interface FoliagePerfStats {
@@ -567,6 +648,35 @@ interface BucketMesh {
   spriteCategory?: ImpostorCategory;
   draws: number;
   triangles: number;
+  /**
+   * Shadow rows only: the caster set behind this mesh. Present means the row
+   * takes the light-volume path (foliage_shadow_core.ts) instead of the camera
+   * window every other row uses.
+   */
+  shadow?: ShadowCasterRow;
+  /** First-reveal gate latches; the key is this mesh's program key. */
+  reveal: FoliageBucketRevealState;
+}
+
+/**
+ * One shadow-only clone's caster population.
+ *
+ * `source` is the authoritative instance matrix set; the mesh's own
+ * instanceMatrix is the PACKED buffer the shadow pass draws [0, drawCount) of,
+ * refilled from `source` whenever the light volume moves. `boxes` carries each
+ * caster's conservative world box (stride SHADOW_BOX_STRIDE) so the pack is a
+ * plain slab test, and `bounds` is their union for the row-level cull.
+ */
+interface ShadowCasterRow {
+  source: Float32Array;
+  boxes: Float32Array;
+  bounds: ShadowRowBounds;
+  instances: number;
+  trianglesPerInstance: number;
+  /** live instance count the shadow-pass gate submits */
+  drawCount: number;
+  /** volume generation this row's packed buffer was built for */
+  packSerial: number;
 }
 
 function drawCountFor(
@@ -597,6 +707,40 @@ function bucketMeshCost(mesh: THREE.InstancedMesh): Pick<BucketMesh, 'draws' | '
     triangles: triangleCountFor(mesh.geometry) * Math.max(0, count),
   };
 }
+
+const meshMaterial = (mesh: THREE.Mesh | THREE.InstancedMesh): THREE.Material =>
+  Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+
+/** The program-identity inputs of one live foliage draw: exactly what three
+ *  reads on top of the material (foliage_prewarm_twins_core.ts). */
+function foliageDrawPathOf(mesh: THREE.Mesh | THREE.InstancedMesh): FoliageDrawPath {
+  const instanced = (mesh as THREE.InstancedMesh).isInstancedMesh === true;
+  return {
+    materialKey: meshMaterial(mesh).uuid,
+    attributes: foliageAttributeList(mesh.geometry.attributes),
+    instanced,
+    instanceColor: instanced && (mesh as THREE.InstancedMesh).instanceColor != null,
+    castShadow: mesh.castShadow,
+    receiveShadow: mesh.receiveShadow,
+  };
+}
+
+/** Fresh gate latches for one bucket mesh. Called at registration, after the
+ *  caller has set the instance colours and the shadow flags: all three are
+ *  program-key inputs. */
+function bucketRevealState(mesh: THREE.InstancedMesh): FoliageBucketRevealState {
+  return { key: foliageProgramKey(foliageDrawPathOf(mesh)), revealed: false, held: false };
+}
+
+/** One prewarm twin's source. buildFoliage is the only place that sees the
+ *  whole world build, so it publishes the deduped set here and the prewarm
+ *  group (which the renderer builds afterwards) reads it back. */
+interface FoliagePrewarmDraw {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  path: FoliageDrawPath;
+}
+let foliagePrewarmDraws: readonly FoliagePrewarmDraw[] = [];
 
 interface TreeHidePart {
   mesh: THREE.InstancedMesh;
@@ -771,6 +915,7 @@ const materialCache = new Map<string, THREE.Material>();
 
 /** Drop profile-derived foliage parts/materials while retaining source URL recipes. */
 export function resetFoliageProfileCaches(): void {
+  foliagePrewarmDraws = [];
   extractedParts.clear();
   materialCache.clear();
   farTrunkCache.clear();
@@ -806,6 +951,11 @@ function foliageMaterial(
   mat.name = src.name;
   const upBlend = pol.leaf ? LEAF_UP_NORMAL_BLEND : 0;
   if (pol.windMul > 0 || upBlend > 0) addWind(mat, TREE_WIND_STRENGTH * pol.windMul, upBlend);
+  // Distant-zone air (biome_haze_field.ts): canopies and trunks at range must
+  // haze with the ground under them (a full-green pine over lavender-hazed
+  // downs reads as "no fog at all"). Chained over the wind hook; reads the
+  // post-wind vertex, so swaying canopies sample their true world position.
+  attachBiomeHaze(mat);
   if (pol.leaf && std.map) {
     // Texture-shaped ambient floor: a dense canopy shadow-maps itself into
     // darkness (worst on small meadow pines, which read as black clumps), and
@@ -815,7 +965,7 @@ function foliageMaterial(
     // the sky term through the up-bent leaf normals (LEAF_UP_NORMAL_BLEND),
     // which falls off with light instead of glowing on its own.
     mat.emissiveMap = std.map;
-    mat.emissive.setRGB(0.155, 0.175, 0.135);
+    mat.emissive.setRGB(...CANOPY_EMISSIVE_FLOOR);
   }
   applyInstanceCollapse(mat, role);
   // Trunks take the bark family, the shared boulder fields a stronger stone;
@@ -1000,8 +1150,12 @@ interface SpeciesSpec {
 // rock buckets in as the player moves, so a species (or its far-impostor) whose
 // buckets are not near spawn otherwise links its shader the first time you walk
 // into it: the open-world travel hitch. We instantiate one mesh per distinct
-// foliage material using the REAL extracted geometry and the same per-mesh state
-// the live buckets use, so compileAsync links the exact program by cache key.
+// PROGRAM using the REAL geometry and the same per-mesh state the live buckets
+// use, so compileAsync links the exact program by cache key. Deduping by
+// MATERIAL was the earlier bug: one material is drawn through several programs
+// (the far-trunk proxy geometry, the vertex-coloured rock colorways and their
+// merged cluster, the colour-inert shadow clones), and the uncovered ones
+// linked inside a live frame on a mid-travel zone entry.
 // Three pitfalls matter, all learned from real-GPU freeze logging:
 //   - real geometry, not a dummy plane: the program key depends on the geometry's
 //     attributes (a normal-mapped ultra material needs TANGENTS; a dummy plane has
@@ -1011,26 +1165,35 @@ interface SpeciesSpec {
 //   - castShadow: ultra renders a shadow pass, so the depth/shadow program variant
 //     must compile too.
 // Caller adds the group to the scene before the compile pass and removes it after.
-// (Grass compiles at spawn via the player-centred ring, so it is not duplicated.)
+// (Grass, flowers and the night glow caps ride the ground-decor twins below.)
 export function buildFoliageMaterialPrewarmGroup(): THREE.Group {
   const group = new THREE.Group();
   group.name = 'foliage-material-prewarm';
   group.position.set(0, -1000, 0); // off-screen; compileAsync ignores position
   const identity = new THREE.Matrix4();
   const white = new THREE.Color(1, 1, 1);
-  const seen = new Set<THREE.Material>();
-  const add = (geo: THREE.BufferGeometry, mat: THREE.Material): void => {
-    if (seen.has(mat)) return;
-    seen.add(mat);
-    const im = new THREE.InstancedMesh(geo, mat, 1);
-    im.setMatrixAt(0, identity);
-    im.setColorAt(0, white);
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
-    im.castShadow = true;
-    im.receiveShadow = true;
-    im.frustumCulled = false;
-    group.add(im);
+  const seen = new Set<string>();
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, path: FoliageDrawPath): void => {
+    const key = foliageProgramKey(path);
+    if (seen.has(key)) return;
+    seen.add(key);
+    let twin: THREE.Mesh;
+    if (path.instanced) {
+      const im = new THREE.InstancedMesh(geo, mat, 1);
+      im.setMatrixAt(0, identity);
+      im.instanceMatrix.needsUpdate = true;
+      if (path.instanceColor) {
+        im.setColorAt(0, white);
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      }
+      twin = im;
+    } else {
+      twin = new THREE.Mesh(geo, mat);
+    }
+    twin.castShadow = path.castShadow;
+    twin.receiveShadow = path.receiveShadow;
+    twin.frustumCulled = false;
+    group.add(twin);
   };
   // One mesh per material, keyed on the real per-species extracted parts so the
   // geometry attributes (uv / normal / tangent / color) match the live buckets.
@@ -1047,13 +1210,40 @@ export function buildFoliageMaterialPrewarmGroup(): THREE.Group {
     modelUrls.mushroom[0],
   ];
   for (const url of speciesUrls) {
-    for (const part of extractParts(url)) add(part.geometry, part.material);
+    for (const part of extractParts(url)) {
+      // The floor, and it goes FIRST so it wins the dedup: the instanced +
+      // tinted + casting variant every species material is drawn through, even
+      // when no world has been built yet (a graphics rebuild, the editor). The
+      // shadow arm here is what covers the merged shadow-caster rows: their
+      // colour-inert clone carries the same alphaTest / map / side, so three's
+      // shadow map picks the same depth program (shadow_only_material.ts).
+      add(part.geometry, part.material, {
+        materialKey: part.material.uuid,
+        attributes: foliageAttributeList(part.geometry.attributes),
+        instanced: true,
+        instanceColor: true,
+        castShadow: true,
+        receiveShadow: true,
+      });
+    }
   }
+  // Then every OTHER program the live build really draws, published by
+  // buildFoliage: the far-trunk proxy geometry, the vertex-coloured rock
+  // colorways and their merged cluster, the ground dressing, the shadow-only
+  // clone materials, and any variant GLB whose attribute set differs. Each
+  // twin mirrors the live mesh kind and shadow flags, so the plain-Mesh path
+  // that foliage really has (the camera-occluder ghosts, see
+  // foliage_ghost_prewarm.ts) gets a plain-Mesh twin rather than an instanced
+  // one that links a different program.
+  for (const draw of foliagePrewarmDraws) add(draw.geometry, draw.material, draw.path);
   // Far-foliage sprite impostors: one 1-instance mesh per category material,
   // attributes included, so their programs link in this pass too. Empty until
   // buildFoliage has baked the atlas (renderer builds the world before the
   // prewarm pass runs) and on the arms without sprites.
   for (const mesh of impostorPrewarmMeshes()) group.add(mesh);
+  // The lazily-built ground-decor pools (grass cards, flowers, night-accent
+  // glow caps): published at build time, linked here.
+  for (const twin of buildGroundDecorPrewarmTwins()) group.add(twin);
   return group;
 }
 
@@ -1065,7 +1255,9 @@ function farTrunkGeo(barkGeo: THREE.BufferGeometry): THREE.BufferGeometry {
   const cached = farTrunkCache.get(barkGeo);
   if (cached) return cached;
   barkGeo.computeBoundingBox();
-  const h = barkGeo.boundingBox!.max.y * 0.8;
+  const barkBox = barkGeo.boundingBox;
+  if (!barkBox) throw new Error('far trunk geometry missing bounds');
+  const h = barkBox.max.y * 0.8;
   const geo = new THREE.CylinderGeometry(0.2, 0.42, h, 5, 1, true);
   geo.translate(0, h / 2, 0);
   // the bark material has vertexColors:true (source GLBs ship COLOR_0); a
@@ -1111,16 +1303,202 @@ const v = new THREE.Vector3();
 const sv = new THREE.Vector3();
 const c = new THREE.Color();
 const zeroScale = new THREE.Vector3(0, 0, 0);
-const shadowOnlyMaterialCache = new WeakMap<THREE.Material, THREE.Material>();
 
-function makeShadowOnlyMaterial(src: THREE.Material): THREE.Material {
-  const cached = shadowOnlyMaterialCache.get(src);
+type MutableShadowVolume = {
+  -readonly [K in keyof ShadowVolumeInput]: ShadowVolumeInput[K];
+};
+
+// The live shadow volume, pushed by the renderer once per frame (the same seam
+// water's sun direction takes). Null until then, and null whenever the key
+// light casts no shadow, in which case every caster row falls back to the
+// camera-radial rule alone.
+const shadowVolume: MutableShadowVolume = {
+  dirX: 0,
+  dirY: 1,
+  dirZ: 0,
+  targetX: 0,
+  targetY: 0,
+  targetZ: 0,
+  halfExtent: 0,
+  lightDistance: 0,
+  near: 0,
+  far: 0,
+};
+let shadowVolumeLive = false;
+
+/**
+ * Publish the key light's orthographic shadow volume to the foliage caster
+ * rows. Nothing outside that box can write a shadow texel, so it, rather than
+ * distance from the camera, is what decides which tree clones the depth pass
+ * has to see. Allocation-free: the arguments are the renderer's own live
+ * objects (`lightDir`, the player's render position, `sun.shadow.camera`).
+ */
+export function setFoliageShadowVolume(
+  direction: { x: number; y: number; z: number },
+  target: { x: number; y: number; z: number },
+  ortho: { top: number; near: number; far: number },
+  lightDistance: number,
+): void {
+  shadowVolume.dirX = direction.x;
+  shadowVolume.dirY = direction.y;
+  shadowVolume.dirZ = direction.z;
+  shadowVolume.targetX = target.x;
+  shadowVolume.targetY = target.y;
+  shadowVolume.targetZ = target.z;
+  shadowVolume.halfExtent = ortho.top;
+  shadowVolume.near = ortho.near;
+  shadowVolume.far = ortho.far;
+  shadowVolume.lightDistance = lightDistance;
+  shadowVolumeLive = true;
+}
+
+/** Shadows off (or an unknown light): caster rows revert to the radial rule. */
+export function clearFoliageShadowVolume(): void {
+  shadowVolumeLive = false;
+}
+
+interface CasterLocalBounds {
+  /** horizontal radius about the model's own y axis, so yaw cannot escape it */
+  radiusXZ: number;
+  midY: number;
+  halfY: number;
+}
+
+const casterLocalBoundsCache = new WeakMap<THREE.BufferGeometry, CasterLocalBounds>();
+
+function casterLocalBounds(geo: THREE.BufferGeometry): CasterLocalBounds {
+  const cached = casterLocalBoundsCache.get(geo);
   if (cached) return cached;
-  const mat = src.clone();
-  mat.colorWrite = false;
-  mat.depthWrite = false;
-  shadowOnlyMaterialCache.set(src, mat);
-  return mat;
+  geo.computeBoundingBox();
+  const box = geo.boundingBox;
+  if (!box) throw new Error('caster geometry missing bounds');
+  const bounds: CasterLocalBounds = {
+    radiusXZ: Math.hypot(
+      Math.max(Math.abs(box.min.x), Math.abs(box.max.x)),
+      Math.max(Math.abs(box.min.z), Math.abs(box.max.z)),
+    ),
+    midY: (box.min.y + box.max.y) / 2,
+    halfY: (box.max.y - box.min.y) / 2,
+  };
+  casterLocalBoundsCache.set(geo, bounds);
+  return bounds;
+}
+
+// Scratch outputs from treeInstanceMatrix: the per-instance scale factors the
+// caller needs alongside the matrix, without allocating a result object per
+// tree (this runs for every decoration in the world at build time).
+const instanceScale = { s: 1, heightJitter: 1 };
+
+/**
+ * The one place a tree instance's transform is derived. The visual meshes and
+ * the shadow clone MUST agree exactly (a shadow that sits a hair off its tree
+ * is worse than no shadow), so both call this rather than repeating the math.
+ */
+function treeInstanceMatrix(
+  d: Decoration,
+  spec: SpeciesSpec,
+  seed: number,
+  out: THREE.Matrix4,
+): void {
+  const y = terrainHeight(d.x, d.z, seed);
+  const s = d.scale * spec.baseScale;
+  const heightJitter = 1 + (hashAt(d.x, d.z, 31) - 0.5) * 0.18;
+  q.setFromAxisAngle(up, d.variant * 2.1 + hashAt(d.x, d.z, 11) * Math.PI * 2);
+  out.compose(v.set(d.x, y - spec.sink * s, d.z), q, sv.set(s, s * heightJitter, s));
+  instanceScale.s = s;
+  instanceScale.heightJitter = heightJitter;
+}
+
+/**
+ * Build the shadow-only clone for one species part across a bucket's WHOLE
+ * population, core and near-fill together.
+ *
+ * The two LoD groups used to get a clone each, doubling the shadow row count
+ * for no gain: their caps resolve to the same number (the near-fill density
+ * cull sits beyond the tree-detail radius, and no casting part takes the early
+ * bark cull), so one merged row draws the same trees in half the draw calls.
+ *
+ * The clone carries a flat white instanceColor it never reads. three's depth
+ * shader has no colour chunk, so the attribute costs the shadow pass nothing,
+ * but `instanceColor !== null` IS part of a program's cache key, and the colour
+ * pass still binds a program for every gated clone (only the GL draw is
+ * skipped at count 0). Dropping the attribute would therefore mint a variant
+ * the material prewarm (buildFoliageMaterialPrewarmGroup, which sets a colour)
+ * does not cover, and pay for it as a compile hitch on the first shadow frame.
+ */
+function buildShadowCasters(
+  parent: THREE.Group,
+  seed: number,
+  spec: SpeciesSpec,
+  part: ModelPart,
+  items: Decoration[],
+): { mesh: THREE.InstancedMesh; row: ShadowCasterRow } | null {
+  const count = items.length;
+  if (count === 0) return null;
+  const mesh = new THREE.InstancedMesh(part.geometry, makeShadowOnlyMaterial(part.material), count);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3).fill(1), 3);
+  const source = new Float32Array(count * 16);
+  const boxes = new Float32Array(count * SHADOW_BOX_STRIDE);
+  const local = casterLocalBounds(part.geometry);
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < count; i++) {
+    const d = items[i];
+    treeInstanceMatrix(d, spec, seed, m);
+    m.toArray(source, i * 16);
+    mesh.setMatrixAt(i, m);
+    const s = instanceScale.s;
+    const hy = s * instanceScale.heightJitter;
+    const cy = m.elements[13] + hy * local.midY;
+    const halfY = hy * local.halfY + SHADOW_CASTER_MARGIN;
+    const halfXZ = s * local.radiusXZ + SHADOW_CASTER_MARGIN;
+    const b = i * SHADOW_BOX_STRIDE;
+    boxes[b] = d.x;
+    boxes[b + 1] = cy;
+    boxes[b + 2] = d.z;
+    boxes[b + 3] = halfXZ;
+    boxes[b + 4] = halfY;
+    boxes[b + 5] = halfXZ;
+    minX = Math.min(minX, d.x - halfXZ);
+    maxX = Math.max(maxX, d.x + halfXZ);
+    minY = Math.min(minY, cy - halfY);
+    maxY = Math.max(maxY, cy + halfY);
+    minZ = Math.min(minZ, d.z - halfXZ);
+    maxZ = Math.max(maxZ, d.z + halfXZ);
+  }
+  mesh.castShadow = true;
+  mesh.receiveShadow = false;
+  // The packed buffer is rewritten whenever the light volume moves.
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  // ORDER MATTERS: compute the instance-aware bounds while the count is still
+  // full. The gate below zeroes it, and a lazily computed sphere at count 0
+  // would cache empty and cull the clone's shadow forever. Packing never
+  // widens the set, so the full-count sphere stays the conservative bound.
+  mesh.computeBoundingSphere();
+  mesh.computeBoundingBox();
+  const row: ShadowCasterRow = {
+    source,
+    boxes,
+    bounds: {
+      centerX: (minX + maxX) / 2,
+      centerY: (minY + maxY) / 2,
+      centerZ: (minZ + maxZ) / 2,
+      halfX: (maxX - minX) / 2,
+      halfY: (maxY - minY) / 2,
+      halfZ: (maxZ - minZ) / 2,
+    },
+    instances: count,
+    trianglesPerInstance: triangleCountFor(part.geometry),
+    drawCount: count,
+    packSerial: -1,
+  };
+  attachPackedShadowGate(mesh, row);
+  parent.add(mesh);
+  return { mesh, row };
 }
 
 function placeSpecies(
@@ -1135,6 +1513,8 @@ function placeSpecies(
     minDist?: number,
     maxDist?: number,
     atDetail?: { min?: boolean; max?: boolean },
+    spriteCategory?: ImpostorCategory,
+    shadow?: ShadowCasterRow,
   ) => void,
   hideRegistry: TreeHideable[],
   impostorBucket: ImpostorBucketHandle | null,
@@ -1225,11 +1605,7 @@ function placeSpecies(
       for (const group of handlesByLod) {
         const im = new THREE.InstancedMesh(part.geometry, part.material, group.items.length);
         group.items.forEach((d, i) => {
-          const y = terrainHeight(d.x, d.z, seed);
-          const s = d.scale * spec.baseScale;
-          const heightJitter = 1 + (hashAt(d.x, d.z, 31) - 0.5) * 0.18;
-          q.setFromAxisAngle(up, d.variant * 2.1 + hashAt(d.x, d.z, 11) * Math.PI * 2);
-          m.compose(v.set(d.x, y - spec.sink * s, d.z), q, sv.set(s, s * heightJitter, s));
+          treeInstanceMatrix(d, spec, seed, m);
           im.setMatrixAt(i, m);
           const visibleMatrix = new THREE.Matrix4().copy(m);
           const hiddenMatrix = new THREE.Matrix4().copy(m).scale(zeroScale);
@@ -1241,8 +1617,6 @@ function placeSpecies(
             im.setColorAt(i, softTint(d.x, d.z, TRUNK_TINT[d.biome], c, BARK_TINT_SOFTEN, 0.5));
           }
         });
-        // canopy owns the tree shadow; bark casts only when there is no canopy
-        const castsShadow = part.isLeaf || spec.castBarkShadow;
         im.castShadow = false;
         im.receiveShadow = true;
         parent.add(im);
@@ -1260,31 +1634,6 @@ function placeSpecies(
         if (cullBark) numericCaps.push(barkFar);
         const maxDist = numericCaps.length > 0 ? Math.min(...numericCaps) : undefined;
         register(im, group.lod, undefined, maxDist, { max: true });
-        if (GFX.standardMaterials && !GFX.leanFoliage && castsShadow) {
-          const shadow = cloneInstancedTo(im, part.geometry, makeShadowOnlyMaterial(part.material));
-          shadow.castShadow = true;
-          shadow.receiveShadow = false;
-          // ORDER MATTERS: compute the instance-aware bounds while the count
-          // is still full; the gate below zeroes the count, and a lazily
-          // computed sphere at count 0 would cache empty and cull the
-          // clone's shadow forever.
-          shadow.computeBoundingSphere();
-          shadow.computeBoundingBox();
-          // Shadow-pass only: without the gate every clone also costs a
-          // colorWrite-off draw in the color pass (one per casting bucket).
-          attachShadowPassOnlyGate(shadow);
-          parent.add(shadow);
-          // The shadow pass does NOT follow the fog-EXTENDED detail distance: a
-          // tree's shadow past the old radius contributes nothing the eye can
-          // resolve, and re-drawing that geometry for the depth pass is what the
-          // extension would cost most. Keep it on the build-time radius, but DO
-          // follow a fog-SHORTENED swap (maxAtDetail): the instance collapse
-          // cannot reach three's shadow depth material, so past-the-swap slabs
-          // must drop here or invisible trees keep casting.
-          const shadowMax =
-            maxDist === undefined ? treeDetailFar : Math.min(maxDist, treeDetailFar);
-          register(shadow, 'shadow', undefined, shadowMax, { max: true });
-        }
         if (GFX.standardMaterials && !impostorsActive() && !part.isLeaf && spec.farTrunkProxy) {
           const proxy = cloneInstancedTo(im, farTrunkGeo(part.geometry), part.material);
           proxy.receiveShadow = true;
@@ -1299,6 +1648,25 @@ function placeSpecies(
           }
           parent.add(proxy);
           register(proxy, 'proxy', barkFar, group.maxDist, { max: true });
+        }
+      }
+      // Canopy owns the tree shadow; bark casts only when there is no canopy.
+      // ONE clone per part covers both LoD groups: see buildShadowCasters.
+      if (GFX.standardMaterials && !GFX.leanFoliage && (part.isLeaf || spec.castBarkShadow)) {
+        const built = buildShadowCasters(parent, seed, spec, part, list);
+        if (built) {
+          // The shadow pass does NOT follow the fog-EXTENDED detail distance: a
+          // tree's shadow past the old radius contributes nothing the eye can
+          // resolve, and re-drawing that geometry for the depth pass is what the
+          // extension would cost most. Keep it on the build-time radius, but DO
+          // follow a fog-SHORTENED swap (maxAtDetail): the instance collapse
+          // cannot reach three's shadow depth material, so past-the-swap slabs
+          // must drop here or invisible trees keep casting. treeFillFar is the
+          // near-fill half's own cull; it sits beyond treeDetailFar today, so
+          // merging the two halves loses nothing, and taking the min keeps that
+          // true if the tables are ever retuned the other way.
+          const shadowMax = Math.min(treeDetailFar, treeFillFar);
+          register(built.mesh, 'shadow', undefined, shadowMax, { max: true }, undefined, built.row);
         }
       }
     }
@@ -1322,16 +1690,7 @@ function buildTrees(
   );
   const sourceDecos = !GFX.leanFoliage
     ? decos
-    : decos.filter((d) => {
-        const keep = GFX.standardMaterials
-          ? d.kind === 'rock'
-            ? 0.74
-            : 0.68
-          : d.kind === 'rock'
-            ? 0.55
-            : 0.46;
-        return hashAt(d.x, d.z, 83) < keep;
-      });
+    : decos.filter((d) => survivesLeanDecimation(d, hashAt(d.x, d.z, 83), GFX.standardMaterials));
   const buckets = new Map<string, Bucket>();
   for (const d of sourceDecos) {
     const col = d.x < 0 ? 0 : 1;
@@ -1503,6 +1862,7 @@ function buildTrees(
       maxDist?: number,
       atDetail?: { min?: boolean; max?: boolean },
       spriteCategory?: ImpostorCategory,
+      shadow?: ShadowCasterRow,
     ): void => {
       registry.push({
         mesh,
@@ -1515,6 +1875,8 @@ function buildTrees(
         maxAtDetail: atDetail?.max,
         lod,
         spriteCategory,
+        shadow,
+        reveal: bucketRevealState(mesh),
         ...bucketMeshCost(mesh),
       });
     };
@@ -1732,8 +2094,15 @@ const DRESS_DENSITY: Record<BiomeId, number> = {
 const DRESS_DENSITY_LOW_SCALE = 1.24;
 const DRESS_LOW_SCALE_BOOST = 1.08;
 
+// The denser step, the 1.24 density scale and the 1.08 spot boost are the same
+// compensation art direction as the fatter lowPlus grass cards (a fuller ground
+// read for weak fragment-bound GPUs), so they ride GFX.denseDressing: lowPlus
+// plus the leanFoliage MEDIUM session (weak integrated GPU), whose lean model
+// set earns the same compensation. A plain low session takes medium-parity
+// dressing density; leanFoliage alone keeps only the LIGHTER lean knobs
+// (model set, variants, deco filter, tint softening).
 function dressStep(): number {
-  return GFX.leanFoliage ? DRESS_STEP_LOW : DRESS_STEP_HIGH;
+  return GFX.denseDressing ? DRESS_STEP_LOW : DRESS_STEP_HIGH;
 }
 
 function dressKindFor(biome: BiomeId, r: number): DressKind {
@@ -1857,7 +2226,7 @@ function generateDressing(seed: number): DressingSpot[] {
   const activeContent = getActiveWorldContent();
   const xHalf = WORLD_MAX_X - 16;
   const step = dressStep();
-  const scaleBoost = GFX.leanFoliage ? DRESS_LOW_SCALE_BOOST : 1;
+  const scaleBoost = GFX.denseDressing ? DRESS_LOW_SCALE_BOOST : 1;
   for (let gx = -xHalf; gx < xHalf; gx += step) {
     for (let gz = WORLD_MIN_Z + 16; gz < WORLD_MAX_Z - 16; gz += step) {
       const r = hashAt(gx, gz, 41);
@@ -1865,7 +2234,7 @@ function generateDressing(seed: number): DressingSpot[] {
       // the Evergarden takes NO random dressing: every bush there belongs to
       // an authored parterre arrangement (appended after this scatter loop)
       if (biome === 'garden') continue;
-      const density = DRESS_DENSITY[biome] * (GFX.leanFoliage ? DRESS_DENSITY_LOW_SCALE : 1);
+      const density = DRESS_DENSITY[biome] * (GFX.denseDressing ? DRESS_DENSITY_LOW_SCALE : 1);
       if (r > density) continue;
       const x = gx + (hashAt(gx, gz, 42) - 0.5) * step;
       const z = gz + (hashAt(gx, gz, 43) - 0.5) * step;
@@ -2026,6 +2395,7 @@ function buildDressing(
           maxAtDetail: spriteBacked ? true : undefined,
           spriteCategory: spriteBacked ? 'dress' : undefined,
           lod: 'dressing',
+          reveal: bucketRevealState(im),
           ...bucketMeshCost(im),
         });
       }
@@ -2060,6 +2430,8 @@ interface GrassChunk {
   centerZ: number;
   ready: boolean;
   queued: boolean;
+  /** True while a sliced build for this chunk is in flight across frames. */
+  building: boolean;
   lastSeen: number;
   lastUsed: number;
   prioritySq: number;
@@ -2069,6 +2441,14 @@ interface GrassChunk {
   flowerMesh?: THREE.InstancedMesh;
   flowerFullCount?: number;
   flowerTransitionCarry: number;
+}
+
+// The under-construction meshes of a sliced chunk build. They are parented
+// only in the finalize step, so a paused build never renders half-built; an
+// abandoned build releases them through this handle.
+interface GrassChunkPartialMeshes {
+  im: THREE.InstancedMesh | null;
+  fm: THREE.InstancedMesh | null;
 }
 
 // Tags every vertex of a tuft/flower card part with the aCap attribute the
@@ -2158,8 +2538,8 @@ function applyGrassShader(
     sh.vertexShader = patchConstantUpNormalVertexShader(sh.vertexShader);
     sh.fragmentShader = patchGrassFragmentShader(sh.fragmentShader);
   };
-  const capProgramKey = capBand ? `${capBand.start.toFixed(3)}-${capBand.end.toFixed(3)}` : 'none';
-  mat.customProgramCacheKey = () => `grass-card|cap:${capProgramKey}|${baseProgramKey}`;
+  const cacheKey = grassCardProgramCacheKey(capBand, baseProgramKey);
+  mat.customProgramCacheKey = () => cacheKey;
 }
 
 /** The overworld jungle grass tint (GRASS_TINT.jungle), for interiors that
@@ -2303,7 +2683,13 @@ function emptyGrassStats(
   return stats;
 }
 
-function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
+function buildGrassRing(
+  parent: THREE.Group,
+  seed: number,
+  // Injected so tests can drive the build budget with a fake clock; production
+  // always uses the real frame clock via the default.
+  now: () => number = () => performance.now(),
+): GrassRing {
   const baseRadius = GFX.grassRadius;
   const step = GFX.grassStep;
   const chunkCells = Math.ceil(GRASS_CHUNK_SIZE / step) + 3;
@@ -2380,6 +2766,9 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
         }),
   );
   applyGrassShader(mat, uniforms, capCollapseBand);
+  // Chunk meshes are built per frame as you walk, so no boot compile root ever
+  // sees this material (ground_decor_prewarm.ts).
+  registerGroundDecorPrewarmDraw({ geometry: geo, material: mat, instanceColor: true });
 
   // ground-cover flowers: a sparse companion set in the same chunks, sharing
   // the sway/fade shader so they move and thin exactly like the grass.
@@ -2471,6 +2860,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
           : new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.35 }),
       );
       applyGrassShader(fmMat, uniforms, null);
+      registerGroundDecorPrewarmDraw({ geometry: flowerGeo, material: fmMat, instanceColor: true });
       flowerMatCache.set(key, fmMat);
     }
     return fmMat;
@@ -2513,6 +2903,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
       centerZ: chunkCenter(cz),
       ready: false,
       queued: false,
+      building: false,
       lastSeen: -1,
       lastUsed: -1,
       prioritySq: Infinity,
@@ -2524,13 +2915,24 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
   };
 
   const queueChunk = (chunk: GrassChunk): void => {
-    if (chunk.ready || chunk.queued) return;
+    if (chunk.ready || chunk.queued || chunk.building) return;
     chunk.queued = true;
     buildQueue.push(chunk);
   };
 
-  const buildChunk = (chunk: GrassChunk): void => {
-    const started = performance.now();
+  // A chunk build is a resumable generator: each yield marks a sub-unit
+  // boundary (setup, then one grid row per sub-unit, then finalize), and
+  // buildQueuedChunks below checks the frame budget BEFORE resuming each
+  // sub-unit. The rows a chunk produces depend only on chunk coordinates,
+  // seed, and the static tables (no clock reads between yields), so the
+  // finished geometry is byte-identical however the frames divide the work;
+  // only WHEN the rows run moves. `partial` exposes the under-construction
+  // meshes so an abandoned build can release them (they are parented only in
+  // the finalize step, so a paused chunk never renders half-built).
+  const buildChunk = function* (
+    chunk: GrassChunk,
+    partial: GrassChunkPartialMeshes,
+  ): Generator<undefined, void, undefined> {
     let n = 0;
     const chunkBiome = zoneBiomeAt(chunk.centerX, chunk.centerZ);
     // dense-grass biomes get a matching buffer so the extra tufts are never
@@ -2543,6 +2945,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
     im.frustumCulled = true;
     im.receiveShadow = true; // tufts must darken inside canopy shade, not glow through it
     im.count = 0;
+    partial.im = im;
     const fieldChunk = FIELD_BIOMES.has(chunkBiome);
     // a gale chunk that reaches the stable paddock's bloom band needs a
     // field-sized buffer, or the band's drifts hit the cap and vanish
@@ -2575,6 +2978,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
     fm.frustumCulled = true;
     fm.receiveShadow = true;
     fm.count = 0;
+    partial.fm = fm;
     let fn = 0;
 
     const minX = chunk.cx * GRASS_CHUNK_SIZE;
@@ -2602,6 +3006,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
             mw.x + mw.r > minX && mw.x - mw.r < maxX && mw.z + mw.r > minZ && mw.z - mw.r < maxZ,
         )
       : [];
+    yield; // setup (buffer allocation + chunk classification) is one sub-unit
 
     for (let i = i0; i <= i1 && n < chunkCap; i++) {
       for (let j = j0; j <= j1 && n < chunkCap; j++) {
@@ -2641,6 +3046,9 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
         if (isInSowfieldShell(x, z)) continue; // the Sowfield is a mown pitch, not meadow
         // the stable yard is worked dirt; deck planks grow nothing through
         if (tuftBiome === 'gale' && (inStableYard(x, z) || onHarborDeck(x, z, seed))) continue;
+        // Dawnhold's bailey is paved wall to wall: no tuft, and so no flower
+        // anchor either (the anchors above are what bloom the garden pass)
+        if (tuftBiome === 'garden' && inDawnholdBailey(x, z, 0.5)) continue;
         // the Willowfen grows no grass blades: each would-be tuft stays an
         // unseen flower anchor (the bloom pass below), so the fen floor
         // reads as open flower fields instead (density 0 would kill the
@@ -2716,6 +3124,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
             }
             // a band-edge bloom must not stray into the worked yard
             if (tuftBiome === 'gale' && inStableYard(fx, fz)) continue;
+            if (tuftBiome === 'garden' && inDawnholdBailey(fx, fz, 0.5)) continue;
             const fs = 0.55 + hashAt(i + rep, j + rep, 9) * 0.5;
             q.setFromAxisAngle(up, hashAt(i, j, 10 + rep) * 12.4);
             m.compose(v.set(fx, fh, fz), q, sv.set(fs, fs, fs));
@@ -2728,6 +3137,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
           }
         }
       }
+      yield; // one grid row per sub-unit: the budget gates between rows
     }
 
     // Authored meadows also bloom independent of grass anchors: the scrubby
@@ -2761,6 +3171,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
             fn++;
           }
         }
+        yield; // one meadow grid row per sub-unit
       }
     }
     // The Evergarden: no grass anchors exist (mown lawn), so the parterre
@@ -2774,6 +3185,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
             const fx = i * step + (hashAt(i + rep * 37, j, 15) - 0.5) * step * 1.5;
             const fz = j * step + (hashAt(i, j + rep * 37, 16) - 0.5) * step * 1.5;
             if (fx < minX || fx >= maxX || fz < minZ || fz >= maxZ) continue;
+            if (inDawnholdBailey(fx, fz, 0.5)) continue; // the paved parade ground
             // beds and walk ribbons first, then the open-lawn meadow drifts
             let tint = parterreFlowerTintAt(fx, fz);
             if (tint < 0 && rep < 2) tint = gardenMeadowTintAt(fx, fz);
@@ -2791,6 +3203,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
             fn++;
           }
         }
+        yield; // one parterre grid row per sub-unit
       }
     }
     if (n > 0) {
@@ -2833,8 +3246,10 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
     }
     chunk.ready = true;
     builtChunks++;
-    lastBuildMs = Math.round((performance.now() - started) * 100) / 100;
-    buildMs = Math.round((buildMs + lastBuildMs) * 100) / 100;
+    // Ownership handed to the chunk (or dropped when a mesh stayed empty,
+    // exactly as before); the abandon path no longer needs to release them.
+    partial.im = null;
+    partial.fm = null;
   };
 
   const disposeChunk = (chunk: GrassChunk): void => {
@@ -2861,18 +3276,96 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
     }
   };
 
+  // The one in-flight sliced build. runSlicedBuild checks the budget BEFORE
+  // resuming each sub-unit, so a frame never pays more than the budget plus
+  // the one sub-unit that crossed the deadline, where the old
+  // check-after-build paid a whole chunk (18.6ms observed against the 2.2ms
+  // budget). Stated honestly, that bound is the budget plus FINALIZE: the
+  // grid-row sub-units are small, but the finalize sub-unit (stable-rank
+  // reorder over every instance, trim, bounding spheres, parenting, freeze)
+  // runs unsliced, so it is the largest single step a frame can absorb.
+  // Slicing finalize further is a possible follow-up; any new yield must
+  // land BEFORE the parenting writes, or abandonActiveBuild below would
+  // strand a parented partial mesh. An oversized chunk simply spans more
+  // frames; its pop-in when ready is the same pop-in the queue already
+  // implied, just a few frames later.
+  let activeBuild: {
+    chunk: GrassChunk;
+    job: { step(): boolean };
+    partial: GrassChunkPartialMeshes;
+    activeMs: number;
+  } | null = null;
+
+  const startChunkBuild = (chunk: GrassChunk): void => {
+    const partial: GrassChunkPartialMeshes = { im: null, fm: null };
+    const gen = buildChunk(chunk, partial);
+    chunk.building = true;
+    activeBuild = { chunk, job: { step: () => !gen.next().done }, partial, activeMs: 0 };
+  };
+
+  const abandonActiveBuild = (): void => {
+    if (!activeBuild) return;
+    // Partial meshes were never parented, so they never rendered: disposing
+    // releases their instance buffers without touching the shared geometry
+    // or material. The chunk rebuilds from scratch if it comes back into
+    // range, producing the same geometry (the build is a pure function of
+    // chunk coordinates and seed).
+    activeBuild.partial.im?.dispose();
+    activeBuild.partial.fm?.dispose();
+    activeBuild.chunk.building = false;
+    activeBuild = null;
+  };
+
+  // Builds run until the frame budget is spent, however many chunks that
+  // completes: the pre-sub-unit deadline check inside runSlicedBuild is the
+  // worst-frame bound, so a cheap chunk finishing early hands its remaining
+  // budget to the next queued chunk instead of discarding it. (An older
+  // one-completion-per-frame cap predated slicing, when the deadline was only
+  // consulted AFTER a whole chunk built; kept after slicing it capped
+  // COMPLETIONS, starving ring fill while a many-frame chunk was in flight
+  // and dropping unspent budget after each finish. Per-frame parenting cost
+  // needs no cap of its own: finalize, the step that parents, is one
+  // sub-unit, so the budget already meters it.)
   const buildQueuedChunks = (): void => {
-    if (buildQueue.length === 0) return;
-    buildQueue.sort((a, b) => a.prioritySq - b.prioritySq || a.key.localeCompare(b.key));
-    const deadline = performance.now() + buildBudgetMs;
-    let built = 0;
-    while (buildQueue.length > 0 && built < GRASS_CHUNK_MAX_BUILDS_PER_FRAME) {
-      const chunk = buildQueue.shift()!;
-      chunk.queued = false;
-      if (chunks.get(chunk.key) !== chunk || chunk.ready || chunk.lastSeen !== generation) continue;
-      buildChunk(chunk);
-      built++;
-      if (performance.now() >= deadline) break;
+    if (!activeBuild && buildQueue.length === 0) return;
+    const deadline = now() + buildBudgetMs;
+    let sorted = false;
+    for (;;) {
+      if (activeBuild) {
+        const { chunk } = activeBuild;
+        // A mid-build chunk that left the streamed window (or was retired)
+        // is abandoned rather than finished into a hidden mesh.
+        if (chunks.get(chunk.key) !== chunk || chunk.lastSeen !== generation) {
+          abandonActiveBuild();
+          continue;
+        }
+      } else {
+        if (buildQueue.length === 0) return;
+        if (!sorted) {
+          buildQueue.sort((a, b) => a.prioritySq - b.prioritySq || a.key.localeCompare(b.key));
+          sorted = true;
+        }
+        const chunk = buildQueue.shift();
+        if (!chunk) return;
+        chunk.queued = false;
+        if (chunks.get(chunk.key) !== chunk || chunk.ready || chunk.building) continue;
+        if (chunk.lastSeen !== generation) continue;
+        // Starting a build costs nothing yet: the generator body only runs
+        // once runSlicedBuild passes its first pre-step budget check.
+        startChunkBuild(chunk);
+      }
+      const active = activeBuild;
+      if (!active) continue;
+      const sliceStart = now();
+      const outcome = runSlicedBuild(active.job, deadline, now);
+      active.activeMs += now() - sliceStart;
+      if (outcome === 'paused') return;
+      active.chunk.building = false;
+      activeBuild = null;
+      // grassLastBuildMs is the chunk's total active build time summed over
+      // its slices (inter-frame waiting excluded), same meaning as before.
+      lastBuildMs = Math.round(active.activeMs * 100) / 100;
+      buildMs = Math.round((buildMs + lastBuildMs) * 100) / 100;
     }
   };
 
@@ -2998,7 +3491,13 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
       uniforms.uPlayerPos.value.set(px, pz);
       uniforms.uFadeFar.value = activeRadius();
       if (px > DUNGEON_X_THRESHOLD) {
-        // dungeon instances live far outside the strip — no meadow indoors
+        // dungeon instances live far outside the strip: no meadow indoors.
+        // This branch returns before buildQueuedChunks, so a build paused
+        // mid-chunk would otherwise hold its two chunkCap instance buffers
+        // for the whole dungeon run; abandon it instead (the chunk rebuilds
+        // byte-identically on return, exactly like leaving the streamed
+        // window).
+        abandonActiveBuild();
         if (parent.visible) {
           parent.visible = false;
           for (const chunk of chunks.values()) {
@@ -3052,7 +3551,8 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
       stats.grassQuality = Math.round(quality * 100) / 100;
       stats.grassActiveRadius = activeRadius();
       stats.grassChunks = chunks.size;
-      stats.grassQueuedChunks = buildQueue.length;
+      // The in-flight sliced build still counts as queued work until ready.
+      stats.grassQueuedChunks = buildQueue.length + (activeBuild ? 1 : 0);
       stats.grassBuiltChunks = builtChunks;
       stats.grassDisposedChunks = disposedChunks;
       stats.grassLastBuildMs = lastBuildMs;
@@ -3072,6 +3572,7 @@ function buildGrassRing(parent: THREE.Group, seed: number): GrassRing {
 }
 
 export const foliageGrassInternalsForTest = { buildGrassRing };
+export const foliageDressingInternalsForTest = { generateDressing, dressStep };
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -3124,6 +3625,12 @@ function cameraSegmentHitsTree(
   const hitT = segmentCircleEntry(eyeX, eyeZ, camX, camZ, t.x, t.z, t.r);
   if (hitT < 0 || hitT > 1) return false;
   return eyeY + (camY - eyeY) * hitT < t.topY;
+}
+
+/** Every InstancedMesh a hideable tree can ghost, repeats included: the ghost
+ *  pool clones per SOURCE mesh, so this is the set its programs come from. */
+function* hideableGhostSources(trees: readonly TreeHideable[]): Generator<THREE.InstancedMesh> {
+  for (const t of trees) for (const part of t.parts) yield part.mesh;
 }
 
 function updateTreeHides(
@@ -3181,6 +3688,10 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
   const group = new THREE.Group();
   group.name = 'foliage';
   const bucketMeshes: BucketMesh[] = [];
+  // One compile root per distinct bucket program: every bucket sharing a key
+  // draws the same program, so linking the representative warms them all.
+  const revealRootByKey = new Map<string, THREE.Object3D>();
+  let revealGate: FoliageBucketRevealGate | null = null;
   const treeHideables: TreeHideable[] = [];
   const treeGhosts = new InstancedOccluderGhosts();
   let modelQuality = GFX.bucketBaselines.foliage;
@@ -3210,6 +3721,15 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
     revealScale: 1,
     fogLimit: 0,
   };
+  // Light-space form of the renderer's shadow volume, and the camera-relative
+  // collapse window, rebuilt each frame, plus the copies the last repack was
+  // keyed on. `shadowPackSerial` advances only when one of them really moves,
+  // so a stationary player and camera repack nothing.
+  const shadowBasis = createShadowVolumeBasis();
+  const packedBasis = createShadowVolumeBasis();
+  const collapseProbe = createCollapseProbe();
+  const packedProbe = createCollapseProbe();
+  let shadowPackSerial = 0;
   // Reused per frame for the same reason as bucketWindow above.
   const collapseWindows: CollapseWindowValues = {
     treeMax: 0,
@@ -3283,6 +3803,7 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
           minAtDetail: true,
           lod: 'impostor',
           spriteCategory: reg.category,
+          reveal: bucketRevealState(reg.mesh),
           ...bucketMeshCost(reg.mesh),
         });
       }
@@ -3291,13 +3812,36 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
       console.error('foliage: impostor bake failed, far field keeps the lean law', err);
     }
   }
+  const drawPaths: FoliageDrawPath[] = [];
+  const drawSources = new Map<string, Omit<FoliagePrewarmDraw, 'path'>>();
   for (const b of bucketMeshes) {
     modelBucketsByLod[b.lod] = (modelBucketsByLod[b.lod] ?? 0) + 1;
     modelDraws += b.draws;
     modelTriangles += b.triangles;
     modelDrawsByLod[b.lod] = (modelDrawsByLod[b.lod] ?? 0) + b.draws;
     modelTrianglesByLod[b.lod] = (modelTrianglesByLod[b.lod] ?? 0) + b.triangles;
+    drawPaths.push(foliageDrawPathOf(b.mesh));
+    if (revealRootByKey.has(b.reveal.key)) continue;
+    revealRootByKey.set(b.reveal.key, b.mesh);
+    drawSources.set(b.reveal.key, { geometry: b.mesh.geometry, material: meshMaterial(b.mesh) });
   }
+  // The camera-occluder ghosts (instanced_occluder_ghosts.ts): plain-Mesh
+  // stand-ins minted on the first frame a trunk blocks the camera, so no boot
+  // sweep and no reveal gate can ever see them. They are not bucket meshes, so
+  // they get no reveal-gate key: the twin below is their only cover.
+  for (const draw of foliageGhostPrewarmDraws(hideableGhostSources(treeHideables))) {
+    drawPaths.push(draw.path);
+    drawSources.set(foliageProgramKey(draw.path), {
+      geometry: draw.geometry,
+      material: draw.material,
+    });
+  }
+  // Every program this world really draws, deduped with its shadow arms
+  // unioned, for the material prewarm group the renderer builds next.
+  foliagePrewarmDraws = foliagePrewarmTwins(drawPaths).flatMap((path) => {
+    const source = drawSources.get(foliageProgramKey(path));
+    return source ? [{ ...source, path }] : [];
+  });
   const grass = localGrassDisabled()
     ? {
         update(): void {},
@@ -3310,6 +3854,13 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
   freezeStaticMatrices(group);
   return {
     group,
+    setRevealGate(gate: FoliageBucketRevealGate | null): void {
+      revealGate = gate;
+    },
+    revealRoots(key: string): readonly THREE.Object3D[] {
+      const root = revealRootByKey.get(key);
+      return root ? [root] : [];
+    },
     setGrassQuality(level: number): void {
       grass.setQuality(level);
     },
@@ -3325,7 +3876,7 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
       eyeX: number,
       eyeY: number,
       eyeZ: number,
-      fogNear: number,
+      _fogNear: number,
       fogFar: number,
       atmosFogNear: number,
       atmosFogFar: number,
@@ -3395,6 +3946,30 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
       // interior, the lean arm) the wall still bounds them.
       collapseWindows.spriteFar = Math.max(fogFar, atmosFogFar);
       updateCollapseUniforms(collapseWindows);
+      // The shadow rows key on the light, not the camera (foliage_shadow_core).
+      setShadowVolumeBasis(shadowBasis, shadowVolumeLive ? shadowVolume : null);
+      // Every shadow row shares one cap: the build-time radius trimmed by the
+      // budget, then by whichever of the runtime tree-detail swap and the fog
+      // cull bites first (past either, the tree itself is gone or a sprite, and
+      // a sprite casts nothing: foliage_impostor.ts leaves castShadow false).
+      const shadowFar = Math.min(detailFar, fogLimit);
+      // The same line, per INSTANCE. It is collapseWindows.treeMax / fogCull,
+      // which foliage_collapse.ts measures from the camera, so the probe does
+      // too; the margin absorbs the repack threshold and a frame of lag. Where
+      // this earns its keep is a low sun: the shadow volume then tilts flat and
+      // runs to its far plane, well past a swap that sits at ~234 yards, so
+      // without it a billboard tree would submit a full-geometry caster.
+      collapseProbe.camX = camX;
+      collapseProbe.camZ = camZ;
+      collapseProbe.collapseFar = shadowFar + SHADOW_CASTER_MARGIN;
+      if (
+        shadowVolumeMoved(shadowBasis, packedBasis) ||
+        collapseProbeMoved(collapseProbe, packedProbe)
+      ) {
+        shadowPackSerial++;
+        copyShadowVolumeBasis(packedBasis, shadowBasis);
+        copyCollapseProbe(packedProbe, collapseProbe);
+      }
       modelVisibleBuckets = 0;
       modelVisibleDraws = 0;
       modelVisibleTriangles = 0;
@@ -3406,6 +3981,58 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
       // cull input itself became reusable.
       for (let i = 0; i < bucketMeshes.length; i++) {
         const b = bucketMeshes[i];
+        const shadowRow = b.shadow;
+        if (shadowRow !== undefined) {
+          const cap = Math.min((b.maxDist ?? Number.POSITIVE_INFINITY) * distanceScale, shadowFar);
+          let visible = shadowRowVisible(shadowRow.bounds, camX, camZ, cap, shadowBasis);
+          if (visible) {
+            if (shadowRow.packSerial !== shadowPackSerial) {
+              shadowRow.drawCount = packShadowCasters(
+                shadowBasis,
+                shadowRow.boxes,
+                shadowRow.instances,
+                shadowRow.source,
+                b.mesh.instanceMatrix.array as Float32Array,
+                collapseProbe,
+              );
+              shadowRow.packSerial = shadowPackSerial;
+              if (shadowRow.drawCount > 0) {
+                // One range REPLACES any pending one: the prefix we are about
+                // to upload is exactly what the next draw reads, and a row that
+                // three frustum-culls before uploading would otherwise queue a
+                // range per frame forever (three only clears them on upload).
+                const attr = b.mesh.instanceMatrix;
+                attr.clearUpdateRanges();
+                attr.addUpdateRange(0, shadowRow.drawCount * 16);
+                attr.needsUpdate = true;
+              }
+            }
+            visible = shadowRow.drawCount > 0;
+          }
+          if (!b.reveal.revealed) {
+            const sdx = b.x - camX;
+            const sdz = b.z - camZ;
+            visible = foliageBucketVisible(
+              visible,
+              Math.max(0, Math.sqrt(sdx * sdx + sdz * sdz) - b.radius),
+              fogFar,
+              b.reveal,
+              revealGate,
+            );
+          }
+          b.mesh.visible = visible;
+          if (visible) {
+            modelVisibleBuckets++;
+            modelVisibleDraws += b.draws;
+            const triangles = shadowRow.trianglesPerInstance * shadowRow.drawCount;
+            modelVisibleTriangles += triangles;
+            modelVisibleByLod[b.lod] = (modelVisibleByLod[b.lod] ?? 0) + 1;
+            modelVisibleDrawsByLod[b.lod] = (modelVisibleDrawsByLod[b.lod] ?? 0) + b.draws;
+            modelVisibleTrianglesByLod[b.lod] =
+              (modelVisibleTrianglesByLod[b.lod] ?? 0) + triangles;
+          }
+          continue;
+        }
         const revealScale =
           GFX.leanFoliage && (b.lod === 'core' || b.lod === 'near-fill')
             ? 0.94 + hashAt(b.x, b.z, 109) * 0.06
@@ -3432,7 +4059,18 @@ export function buildFoliage(seed: number, webgl?: THREE.WebGLRenderer): Foliage
         bucketWindow.spriteRow = b.lod === 'impostor';
         bucketWindow.swapFade = collapseWindows.fade;
         bucketWindow.spriteFar = collapseWindows.spriteFar;
-        b.mesh.visible = bucketVisible(bucketWindow);
+        // The gate drops out of the hot path the frame a bucket first draws:
+        // past that its programs are linked and a fog re-entry is a plain cull
+        // flip, so the gate can never hide what it has already shown.
+        b.mesh.visible = b.reveal.revealed
+          ? bucketVisible(bucketWindow)
+          : foliageBucketVisible(
+              bucketVisible(bucketWindow),
+              Math.max(0, bucketWindow.centerDist - b.radius),
+              fogFar,
+              b.reveal,
+              revealGate,
+            );
         // "Visible" counts SUBMITTED instances: shader-collapsed ones still
         // count here (the collapse saves raster work, not submission).
         if (b.mesh.visible) {

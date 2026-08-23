@@ -7,6 +7,54 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  exp_dawnhold_castle: {
+    name: 'Una Porta Aperta nel Giardino',
+    desc: 'Fai visita al Castello Dawnhold e passeggia per le sue sale soleggiate del giardino.',
+  },
+  exp_the_last_keep: {
+    name: 'Le Sale Silenziose',
+    desc: "Varca le porte dell'Ultima Rocca e percorri le sue sale silenziose.",
+  },
+  pvp_bg_first_capture: {
+    name: 'Vessillo in Mano',
+    desc: 'Cattura una bandiera ai Campi di Thornhollow.',
+  },
+  pvp_bg_first_win: {
+    name: 'La Valletta Resiste',
+    desc: 'Vinci una battaglia ai Campi di Thornhollow.',
+  },
+  pvp_bg_wins_25: {
+    name: 'Guardiano della Valletta',
+    desc: 'Vinci 25 battaglie ai Campi di Thornhollow.',
+    title: 'Portabandiera',
+  },
+  pvp_bg_captures_100: {
+    name: 'Cento Vessilli',
+    desc: 'Cattura 100 bandiere ai Campi di Thornhollow nel corso della tua carriera.',
+  },
+  dgn_rift: {
+    name: 'Camminasquarci',
+    desc: 'Completa uno Squarcio sconfiggendo il suo boss di piano.',
+  },
+  dgn_rift_s_rank: {
+    name: 'Sovrano degli Squarci',
+    desc: 'Completa uno Squarcio di rango S, il livello più difficile che un portale di Squarcio può generare.',
+  },
+  pvp_honor_sergeant: {
+    name: 'Spezzalinee',
+    desc: 'Guadagna 10.000 Onore nel corso della tua vita. Spenderlo non ti farà mai perdere il grado.',
+    title: 'Spezzalinee',
+  },
+  pvp_honor_knight_lieutenant: {
+    name: 'Devastacampi',
+    desc: 'Guadagna 40.000 Onore nel corso della tua vita, una stagione di guerra vera alle spalle.',
+    title: 'Devastacampi',
+  },
+  pvp_honor_field_marshal: {
+    name: 'Coronato dalla guerra',
+    desc: 'Guadagna 150.000 Onore nel corso della tua vita. Raro in qualsiasi reame, ed è giusto che sia così.',
+    title: 'Coronato dalla guerra',
+  },
   chr_drakemaw_broodlord: {
     name: 'Spezzacovata',
     desc: 'Uccidi un Signore della covata di Drakemaw tra le sue uova, superando il grido, il fendente e il fuoco.',
@@ -14,6 +62,54 @@ export const table: DeedLocaleTable = {
   chr_maw_matriarch: {
     name: 'Il Cielo Tace',
     desc: 'Uccidi Cindraleth, la Matriarca delle Fauci, nel suo nido nel cratere sopra il Drakemaw.',
+  },
+  chr_frostveil_gatherer: {
+    name: 'Raccolto sui terrazzamenti',
+    desc: 'Raccogli una vena di minerale, un gruppo di legna e un appezzamento d erbe nel Frostveil.',
+  },
+  chr_frostveil_first_cast: {
+    name: 'Primo ghiaccio sul lago',
+    desc: 'Pesca un pesce nelle acque del Frostveil.',
+  },
+  chr_amberfall_gatherer: {
+    name: 'Il raccolto di Amberfall',
+    desc: 'Raccogli una vena di minerale, un gruppo di legna e un appezzamento d erbe ad Amberfall.',
+  },
+  chr_amberfall_first_cast: {
+    name: 'Una preda dalla grande palude',
+    desc: 'Pesca un pesce nelle acque di Amberfall.',
+  },
+  chr_nightbloom_gatherer: {
+    name: 'Il raccolto sognante',
+    desc: 'Raccogli una vena di minerale, un gruppo di legna e un appezzamento d erbe a Nightbloom.',
+  },
+  chr_nightbloom_first_cast: {
+    name: 'Un increspatura sul pozzo lunare',
+    desc: 'Pesca un pesce nelle acque di Nightbloom.',
+  },
+  chr_wraithwood_gatherer: {
+    name: 'Raccolto sotto la volta',
+    desc: 'Raccogli una vena di minerale, un gruppo di legna e un appezzamento d erbe nel Wraithwood.',
+  },
+  chr_wraithwood_first_cast: {
+    name: 'Un lancio nella baia dello specchio',
+    desc: 'Pesca un pesce nelle acque del Wraithwood.',
+  },
+  chr_palmreach_gatherer: {
+    name: 'Raccolto sulla spiaggia di palme',
+    desc: 'Raccogli una vena di minerale, un gruppo di legna e un appezzamento d erbe a Palmreach.',
+  },
+  chr_palmreach_first_cast: {
+    name: 'Lancio nella laguna di zaffiro',
+    desc: 'Pesca un pesce nelle acque di Palmreach.',
+  },
+  chr_evergarden_gatherer: {
+    name: 'Il dono del parterre',
+    desc: 'Raccogli una vena di minerale, un gruppo di legna e un appezzamento d erbe a Evergarden.',
+  },
+  chr_evergarden_first_cast: {
+    name: 'Un lancio sullo stagno dei petali',
+    desc: 'Pesca un pesce nelle acque di Evergarden.',
   },
   pvp_card_duel_first_win: {
     name: 'Regole di Casa',
@@ -903,5 +999,77 @@ export const table: DeedLocaleTable = {
   chr_farshore_first_cast: {
     name: 'Ciò che Sanno i Gabbiani',
     desc: 'Pesca un pesce nelle acque del Farshore.',
+  },
+  prog_engineering_rare: {
+    name: 'Ingegneria di precisione',
+    desc: 'Forgia il tuo primo oggetto di qualità rara in Ingegneria.',
+  },
+  prog_alchemy_rare: {
+    name: "Un'annata rara",
+    desc: 'Forgia il tuo primo oggetto di qualità rara in Alchimia.',
+  },
+  prog_cooking_rare: {
+    name: 'Un piatto da ricordare',
+    desc: 'Forgia il tuo primo oggetto di qualità rara in Cucina.',
+  },
+  prog_leatherworking_rare: {
+    name: 'Concia raffinata',
+    desc: 'Forgia il tuo primo oggetto di qualità rara in Lavorazione del Cuoio.',
+  },
+  prog_tailoring_rare: {
+    name: 'Un punto da maestro',
+    desc: 'Forgia il tuo primo oggetto di qualità rara in Sartoria.',
+  },
+  prog_weaponcrafting_rare: {
+    name: 'Temprato fino a brillare',
+    desc: 'Forgia il tuo primo oggetto di qualità rara in Forgiatura di Armi.',
+  },
+  prog_armorcrafting_rare: {
+    name: 'Placcato alla perfezione',
+    desc: 'Forgia il tuo primo oggetto di qualità rara in Forgiatura di Armature.',
+  },
+  col_reliquary_rank_2: {
+    name: 'Custode dei bottini',
+    desc: 'Raggiungi il grado di Curatore 2 nel Reliquiario (10 reliquie uniche catalogate).',
+    title: 'Custode dei bottini',
+  },
+  col_reliquary_rank_3: {
+    name: 'Il Catalogatore',
+    desc: 'Raggiungi il grado di Curatore 3 nel Reliquiario (25 reliquie uniche catalogate).',
+    title: 'il Catalogatore',
+  },
+  col_reliquary_rank_4: {
+    name: 'Arcicuratore',
+    desc: 'Raggiungi il grado di Curatore 4 nel Reliquiario (50 reliquie uniche catalogate).',
+    title: 'Arcicuratore',
+  },
+  col_reliquary_rank_5: {
+    name: 'Bottini Eterni',
+    desc: 'Raggiungi il grado di Curatore 5 nel Reliquiario (100 reliquie uniche catalogate).',
+  },
+  col_reliquary_complete: {
+    name: 'Il Grande Reliquiario',
+    desc: 'Cataloga ogni reliquia del Reliquiario che un personaggio possa conservare. Se il catalogo cresce in seguito, non te lo toglie mai.',
+    title: 'Curatore della Camera del Tesoro',
+  },
+  col_reliquary_conquerors: {
+    name: 'Scaffale dei Conquistatori',
+    desc: 'Cataloga ogni reliquia dello scaffale Conquistatori del Reliquiario. Se il catalogo cresce in seguito, non te lo toglie mai.',
+    title: 'Sfondacamere',
+  },
+  col_reliquary_illum_nythraxis_heroic: {
+    name: 'Nythraxis miniata',
+    desc: 'Minia la pagina Eroico: Raid di Nythraxis del Reliquiario.',
+    title: 'Luce di Nythraxis',
+  },
+  col_reliquary_illum_thunzharr: {
+    name: 'Thunzharr miniata',
+    desc: 'Minia la pagina Thunzharr, il Picco Risvegliato del Reliquiario.',
+    title: 'Luce di Thunzharr',
+  },
+  col_reliquary_illum_gravewyrm_heroic: {
+    name: 'Santuario miniato',
+    desc: 'Minia la pagina Eroico: Santuario del Gravewyrm del Reliquiario.',
+    title: 'Luce del Santuario',
   },
 };

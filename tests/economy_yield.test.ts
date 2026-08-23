@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { HARVEST_COMPONENT_ITEMS } from '../src/sim/content/professions';
 import { CAMPS, MOBS, zoneContaining } from '../src/sim/data';
+import { isSelfScheduled } from '../src/sim/respawn_policy';
 import type { MobTemplate } from '../src/sim/types';
 import { mobXpValue } from '../src/sim/types';
 import { coinEvPerKill, itemEvPerKill, worldFarmClusters, xpPerKill } from './helpers/farm_yield';
@@ -44,29 +45,37 @@ const COIN_FAMILIES = new Set([
   'elemental',
   'burrower',
 ]);
-/** Families that pay in harvestable components rather than coin. */
+/**
+ * Families whose trash is held to the harvest rule below (usable components)
+ * instead of the coin curve. Most of them still carry a small flavor purse
+ * (24 of the 25 tagged templates today, e.g. snowdrift_wolf at 80c beside its
+ * hide/fang/meat); that coin is simply not curve-governed, components are the
+ * payment the rule enforces.
+ */
 const HARVEST_FAMILIES = new Set(['beast', 'spider', 'reptile']);
 /**
  * Evergarden and Galecrest topiary are garden CONSTRUCTS typed as beasts: they
  * are clipped hedge, so they carry coin (the gardeners' lost pay) and have no
- * hide or meat to take. The only sanctioned exception to the harvest rule.
+ * hide or meat to take. The only sanctioned exception to the components
+ * requirement, which is why governed() below excludes them.
  */
 const HEDGE_CONSTRUCTS = new Set(['topiary_stag', 'topiary_wolf', 'the_topiary_bull']);
 
 /** The population the zone respawn tiers govern (see tests/camp_density.test.ts). */
 function isTrash(template: MobTemplate): boolean {
   return (
-    !template.rare &&
     !template.boss &&
     !template.dummy &&
     !template.ambient &&
+    // Not self-scheduled (rare, or an authored respawnMult/respawnWindow): the
+    // sim's own classification, imported so the two definitions cannot drift.
+    !isSelfScheduled(template) &&
     // A puzzle-object mob (xpMult 0: the 1 HP dragonkin egg, the spider egg-sac
     // pattern) is not trash to be farmed and pays neither XP nor coin BY
     // DESIGN: the fight it hatches is the reward, and a lootable shell would
     // sparkle every corpse in a clutch. Same principled gate
     // tests/progression.test.ts uses for its unconditional-loot rule.
     template.xpMult !== 0 &&
-    template.respawnMult === undefined &&
     // A quest-gated destructible (requiresQuestId, the Broodmother eggs) is a
     // puzzle object only questers can even damage, not farm population: it
     // carries neither coin nor harvest components by design. Kept alongside the
@@ -188,7 +197,7 @@ describe('coin-family trash sits on the coin curve', () => {
   });
 });
 
-describe('harvest-family trash carries usable components instead of coin', () => {
+describe('harvest-family trash carries usable components', () => {
   const governed = () =>
     campTemplates().filter(
       ({ template }) =>
@@ -212,8 +221,9 @@ describe('harvest-family trash carries usable components instead of coin', () =>
   });
 
   it('gives every beast, spider and reptile at least one HARVESTABLE tag', () => {
-    // Mapped in HARVEST_COMPONENT_ITEMS specifically: unmapped tags like claw and
-    // tusk are dead weight the corpse-harvest command cannot turn into an item.
+    // Mapped in HARVEST_COMPONENT_ITEMS specifically: unmapped tags like gills
+    // and horn are dead weight the corpse-harvest command cannot turn into an
+    // item.
     const bare = governed()
       .filter(
         ({ template }) =>
@@ -231,9 +241,9 @@ describe('harvest-family trash carries usable components instead of coin', () =>
       [{ componentTags: tags }].filter(
         (t) => !(t.componentTags ?? []).some((tag) => tag in HARVEST_COMPONENT_ITEMS),
       ).length;
-    expect(bareOf(['claw', 'tusk'])).toBe(1);
+    expect(bareOf(['gills', 'horn'])).toBe(1);
     expect(bareOf(['hide'])).toBe(0);
-    expect(bareOf(['claw', 'hide'])).toBe(0);
+    expect(bareOf(['gills', 'hide'])).toBe(0);
     expect(bareOf([])).toBe(1);
   });
 

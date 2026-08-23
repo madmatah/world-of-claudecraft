@@ -79,6 +79,11 @@ const itemStringsEn = {
       useFood: 'Use: Restores {amount} health over {seconds} sec. Must remain seated while eating.',
       useDrink:
         'Use: Restores {amount} mana over {seconds} sec. Must remain seated while drinking.',
+      // Battle elixirs (elixir_tooltip_view.ts): the stat line for a mapped
+      // buff kind, and the aura-name fallback so an unmapped kind still says
+      // what quaffing grants instead of saying nothing.
+      useElixir: 'Use: Increases your {stat} by {value} for {minutes} min. Usable in combat.',
+      useElixirAura: 'Use: Grants {aura} for {minutes} min. Usable in combat.',
       questItem: 'Quest Item',
       // Story tooltip lines (quest_item_tooltip_view.ts): related quest title,
       // keep-rules footer, and orphaned copy when the item is no longer needed
@@ -88,6 +93,9 @@ const itemStringsEn = {
       questRules: 'Cannot be sold, banked, or traded.',
       questOrphaned: 'Not needed for any active quest.',
       classes: 'Classes: {classes}',
+      // Stackable per-slot cap (stack_size_tooltip_view.ts); unstackable
+      // kinds render no line at all rather than "Max stack: 1".
+      maxStack: 'Max stack: {count}',
       sellPrice: 'Sell price: {money}',
       clickBuy: 'Click to buy',
       clickSell: 'Click to sell',
@@ -215,6 +223,13 @@ const itemStringsEn = {
       filterPrimaryStatAll: 'Any primary stat',
       filterRarity: 'Rarity',
       filterRarityAll: 'All rarities',
+      filterSort: 'Sort',
+      sortName: 'Name (A-Z)',
+      sortPriceAsc: 'Price: Low to High',
+      // Browse toggle (issue #3103): collapses other sellers' listings to the cheapest
+      // per distinct item, so scanning for a deal does not mean paging through every
+      // near-duplicate stack.
+      collapseLowest: 'Lowest price only',
       weaponSword: 'Swords',
       weaponDagger: 'Daggers',
       weaponStaff: 'Staves',
@@ -251,11 +266,22 @@ const itemStringsEn = {
       quantity: 'Quantity',
       quantityOf: 'of {count}',
       priceEach: 'Price each',
+      // The Sell tab's current-lowest-listing-price reference (issue #3043): a
+      // same-page market check so the player never has to leave the sell path
+      // to browse first. lowestPriceNone covers the item having no active
+      // listings; while the server's echo has not caught up to the staged item
+      // yet, the painter shows neither line rather than a stale/wrong price.
+      lowestPriceLabel: 'Current lowest listed price',
+      lowestPriceNone: 'No active listings for this item yet.',
       listButton: 'List on the World Market',
       minPriceError: 'Name a price of at least 1 copper.',
       collectEmpty: 'Nothing waiting. Sale proceeds and expired listings collect here.',
       collectNote: 'Earnings and returned goods the Merchant is holding for you.',
       saleProceeds: 'Sale proceeds',
+      // The itemized ledger under the proceeds line. saleOlder covers the rows the
+      // ledger cap dropped, whose gold IS still in the total above.
+      saleBuyer: 'Sold to {buyer}',
+      saleOlder: 'Plus {count} earlier sales, included in the total.',
       collectAll: 'Collect All',
     },
     logs: {
@@ -2150,6 +2176,13 @@ const ITEM_ENTITY_IDS = [
   'cinderweave_legwraps',
   'cinderweave_handwraps',
   'cinderweave_slippers',
+  'thornhide_headdress',
+  'thornhide_mantle',
+  'thornhide_vestment',
+  'thornhide_cinch',
+  'thornhide_leggings',
+  'thornhide_gloves',
+  'thornhide_boots',
   'final_oath_medallion',
   'razorwind_torque',
   'cinder_sigil_pendant',
@@ -2401,6 +2434,18 @@ const ITEM_ENTITY_IDS = [
   'artisans_eye',
   'reins_terrorspark_groundshaker',
   'reins_drakemaw_raptor',
+  'rimefang',
+  'marrowpoint',
+  'duskwhisper',
+  'boneglass_shiv',
+  'moggers_hide_quiver',
+  'cragmaw_huntquiver',
+  'gravewyrm_bone_quiver',
+  'direfang_quiver',
+  'sharp_claw',
+  'curved_tusk',
+  'pristine_claw',
+  'dawnhold_posy',
 ] as const;
 
 type ItemEntityId = (typeof ITEM_ENTITY_IDS)[number];
@@ -2410,6 +2455,10 @@ type ItemEntityTranslation = { name: string };
 type ItemEntityTranslations = Record<ItemEntityId, ItemEntityTranslation>;
 
 const APPENDED_ITEM_NAMES: Partial<Record<ItemEntityId, string>> = {
+  rimefang: 'Rimefang',
+  marrowpoint: 'Marrowpoint',
+  duskwhisper: 'Duskwhisper',
+  boneglass_shiv: 'Boneglass Shiv',
   rift_essence: 'Rift Essence',
   rift_gem_crimson: 'Crimson Rift Gem',
   rift_gem_azure: 'Azure Rift Gem',
@@ -2507,6 +2556,25 @@ const APPENDED_ITEM_NAMES: Partial<Record<ItemEntityId, string>> = {
   reins_drakemaw_raptor: 'Reins of the Drakemaw Raptor',
   restless_skull: 'Restless Skull',
   vanguard_bone: 'Vanguard Bone',
+  // Hunter quivers, the class's first held-offhand ladder; same English-appended
+  // treatment until the release fill folds them into the per-locale arrays.
+  moggers_hide_quiver: "Mogger's Hide Quiver",
+  cragmaw_huntquiver: 'Cragmaw Huntquiver',
+  gravewyrm_bone_quiver: 'Gravewyrm Bone Quiver',
+  direfang_quiver: 'Direfang Quiver',
+  sharp_claw: 'Sharp Claw',
+  curved_tusk: 'Curved Tusk',
+  pristine_claw: 'Pristine Claw',
+  // Thornhide Garb, the leather caster WARFARE family. English-appended like the
+  // quivers above until the release fill folds them into the per-locale arrays.
+  thornhide_headdress: 'Thornhide Headdress',
+  thornhide_mantle: 'Thornhide Mantle',
+  thornhide_vestment: 'Thornhide Vestment',
+  thornhide_cinch: 'Thornhide Cinch',
+  thornhide_leggings: 'Thornhide Leggings',
+  thornhide_gloves: 'Thornhide Gloves',
+  thornhide_boots: 'Thornhide Boots',
+  dawnhold_posy: 'Dawnhold Garden Posy',
 };
 
 function itemTranslations(names: readonly string[]): ItemEntityTranslations {
@@ -2534,6 +2602,7 @@ function itemTranslationsEn(names: readonly string[]) {
     ...itemTranslations(names),
     conjured_water4: { name: 'Conjured Springwater' },
     conjured_bread4: { name: 'Conjured Feastloaf' },
+    soul_stone: { name: 'Soul Stone' },
   };
 }
 

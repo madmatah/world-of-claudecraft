@@ -7,6 +7,54 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  exp_dawnhold_castle: {
+    name: 'Una puerta abierta en el jardín',
+    desc: 'Visita el Castillo Dawnhold y pasea por sus soleados salones del jardín.',
+  },
+  exp_the_last_keep: {
+    name: 'Los salones silenciosos',
+    desc: 'Cruza las puertas de La Última Fortaleza y recorre sus salones silenciosos.',
+  },
+  pvp_bg_first_capture: {
+    name: 'Bandera en Mano',
+    desc: 'Captura una bandera en Campos Espinosos.',
+  },
+  pvp_bg_first_win: {
+    name: 'La Hondonada Resiste',
+    desc: 'Gana una batalla en Campos Espinosos.',
+  },
+  pvp_bg_wins_25: {
+    name: 'Guardián de la Hondonada',
+    desc: 'Gana 25 batallas en Campos Espinosos.',
+    title: 'Abanderado',
+  },
+  pvp_bg_captures_100: {
+    name: 'Cien Banderas',
+    desc: 'Captura 100 banderas en Campos Espinosos a lo largo de tu carrera.',
+  },
+  dgn_rift: {
+    name: 'Caminante de la Brecha',
+    desc: 'Supera una Brecha derrotando a su jefe de piso.',
+  },
+  dgn_rift_s_rank: {
+    name: 'Soberano de la Brecha',
+    desc: 'Supera una Brecha de rango S, el nivel más difícil que puede abrir un portal de Brecha.',
+  },
+  pvp_honor_sergeant: {
+    name: 'Rompefilas',
+    desc: 'Gana 10.000 de honor a lo largo de tu vida. Gastarlo nunca te cuesta el rango.',
+    title: 'Rompefilas',
+  },
+  pvp_honor_knight_lieutenant: {
+    name: 'Asolacampos',
+    desc: 'Gana 40.000 de honor a lo largo de tu vida, toda una temporada de guerra real a tus espaldas.',
+    title: 'Asolacampos',
+  },
+  pvp_honor_field_marshal: {
+    name: 'Coronado por la guerra',
+    desc: 'Gana 150.000 de honor a lo largo de tu vida. Poco común en cualquier reino, y así debe ser.',
+    title: 'Coronado por la guerra',
+  },
   chr_drakemaw_broodlord: {
     name: 'Rompenidos',
     desc: 'Abate a un Señor de la Nidada de Drakemaw entre sus huevos, sorteando el grito, el tajo y el fuego.',
@@ -14,6 +62,54 @@ export const table: DeedLocaleTable = {
   chr_maw_matriarch: {
     name: 'El Cielo Enmudece',
     desc: 'Abate a Cindraleth, la Matriarca de las Fauces, en su nido de cráter sobre el Drakemaw.',
+  },
+  chr_frostveil_gatherer: {
+    name: 'Cosecha en terrazas',
+    desc: 'Recolecta una veta de mineral, un rodal de madera y un bancal de hierbas en Frostveil.',
+  },
+  chr_frostveil_first_cast: {
+    name: 'Primer hielo en el tarn',
+    desc: 'Pesca un pez en las aguas de Frostveil.',
+  },
+  chr_amberfall_gatherer: {
+    name: 'La cosecha de Amberfall',
+    desc: 'Recolecta una veta de mineral, un rodal de madera y un bancal de hierbas en Amberfall.',
+  },
+  chr_amberfall_first_cast: {
+    name: 'Una captura del gran cenagal',
+    desc: 'Pesca un pez en las aguas de Amberfall.',
+  },
+  chr_nightbloom_gatherer: {
+    name: 'La cosecha sonadora',
+    desc: 'Recolecta una veta de mineral, un rodal de madera y un bancal de hierbas en Nightbloom.',
+  },
+  chr_nightbloom_first_cast: {
+    name: 'Una onda en el pozo lunar',
+    desc: 'Pesca un pez en las aguas de Nightbloom.',
+  },
+  chr_wraithwood_gatherer: {
+    name: 'Cosecha bajo el dosel',
+    desc: 'Recolecta una veta de mineral, un rodal de madera y un bancal de hierbas en Wraithwood.',
+  },
+  chr_wraithwood_first_cast: {
+    name: 'Un lance en la bahia del espejo',
+    desc: 'Pesca un pez en las aguas de Wraithwood.',
+  },
+  chr_palmreach_gatherer: {
+    name: 'Cosecha en la playa de palmas',
+    desc: 'Recolecta una veta de mineral, un rodal de madera y un bancal de hierbas en Palmreach.',
+  },
+  chr_palmreach_first_cast: {
+    name: 'Lance en la laguna zafiro',
+    desc: 'Pesca un pez en las aguas de Palmreach.',
+  },
+  chr_evergarden_gatherer: {
+    name: 'La abundancia del parterre',
+    desc: 'Recolecta una veta de mineral, un rodal de madera y un bancal de hierbas en Evergarden.',
+  },
+  chr_evergarden_first_cast: {
+    name: 'Un lance en el estanque de petalos',
+    desc: 'Pesca un pez en las aguas de Evergarden.',
   },
   pvp_card_duel_first_win: {
     name: 'La baza es mía',
@@ -876,6 +972,78 @@ export const table: DeedLocaleTable = {
   chr_farshore_first_cast: {
     name: 'Lo que saben las gaviotas',
     desc: 'Pesca un pez en las aguas de la Costa Lejana.',
+  },
+  prog_engineering_rare: {
+    name: 'Ingeniería de precisión',
+    desc: 'Fabrica tu primer objeto de calidad rara en Ingeniería.',
+  },
+  prog_alchemy_rare: {
+    name: 'Una cosecha excepcional',
+    desc: 'Fabrica tu primer objeto de calidad rara en Alquimia.',
+  },
+  prog_cooking_rare: {
+    name: 'Un plato para el recuerdo',
+    desc: 'Fabrica tu primer objeto de calidad rara en Cocina.',
+  },
+  prog_leatherworking_rare: {
+    name: 'Curtido fino',
+    desc: 'Fabrica tu primer objeto de calidad rara en Peletería.',
+  },
+  prog_tailoring_rare: {
+    name: 'Una puntada magistral',
+    desc: 'Fabrica tu primer objeto de calidad rara en Sastrería.',
+  },
+  prog_weaponcrafting_rare: {
+    name: 'Templado hasta brillar',
+    desc: 'Fabrica tu primer objeto de calidad rara en Fabricación de armas.',
+  },
+  prog_armorcrafting_rare: {
+    name: 'Blindado a la perfección',
+    desc: 'Fabrica tu primer objeto de calidad rara en Fabricación de armaduras.',
+  },
+  col_reliquary_rank_2: {
+    name: 'Guardabotines',
+    desc: 'Alcanza el rango de Curador 2 en El Relicario (10 reliquias únicas catalogadas).',
+    title: 'Guardabotines',
+  },
+  col_reliquary_rank_3: {
+    name: 'El Catalogador',
+    desc: 'Alcanza el rango de Curador 3 en El Relicario (25 reliquias únicas catalogadas).',
+    title: 'el Catalogador',
+  },
+  col_reliquary_rank_4: {
+    name: 'Archicurador',
+    desc: 'Alcanza el rango de Curador 4 en El Relicario (50 reliquias únicas catalogadas).',
+    title: 'Archicurador',
+  },
+  col_reliquary_rank_5: {
+    name: 'Botines Eternos',
+    desc: 'Alcanza el rango de Curador 5 en El Relicario (100 reliquias únicas catalogadas).',
+  },
+  col_reliquary_complete: {
+    name: 'El Gran Relicario',
+    desc: 'Cataloga todas las reliquias de El Relicario que un personaje pueda conservar. Que el catálogo crezca después nunca te lo quita.',
+    title: 'Curador de la Cámara',
+  },
+  col_reliquary_conquerors: {
+    name: 'Estante de Conquistadores',
+    desc: 'Cataloga todas las reliquias del estante Conquistadores de El Relicario. Que el catálogo crezca después nunca te lo quita.',
+    title: 'Rompecámaras',
+  },
+  col_reliquary_illum_nythraxis_heroic: {
+    name: 'Nythraxis iluminada',
+    desc: 'Ilumina la página Heroico: Incursión de Nythraxis de El Relicario.',
+    title: 'Luz de Nythraxis',
+  },
+  col_reliquary_illum_thunzharr: {
+    name: 'Thunzharr iluminada',
+    desc: 'Ilumina la página Thunzharr, el Pico Despierto de El Relicario.',
+    title: 'Luz de Thunzharr',
+  },
+  col_reliquary_illum_gravewyrm_heroic: {
+    name: 'Santuario iluminado',
+    desc: 'Ilumina la página Heroico: Santuario del Gravewyrm de El Relicario.',
+    title: 'Luz del Santuario',
   },
 };
 

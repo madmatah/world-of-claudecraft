@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { VfxAnchorResolver } from '../vfx_anchor';
 
 // Translucent buff/barrier shells (the gallery's receiver shell): a soft
 // additive sphere with a fresnel-style rim (rim term in the shader) wrapped
@@ -6,6 +7,13 @@ import * as THREE from 'three';
 // a buff lands. Fixed slot pool; materials cloned once at construction.
 
 const SHELL_SLOTS = 8;
+
+// Per-frame anchor scratch (see ../vfx_anchor.ts): update() resolves one anchor
+// per live shell and consumes it before the next resolve into it. That
+// consume-before-reuse is what makes a module-level scratch safe to share,
+// even when a second engine is alive (the editor viewport composes its own
+// Renderer): every reading is spent inside one synchronous update pass.
+const anchorScratch = new THREE.Vector3();
 
 interface ShellSlot {
   mesh: THREE.Mesh;
@@ -20,9 +28,11 @@ interface ShellSlot {
 
 export class BuffShells {
   private slots: ShellSlot[] = [];
+  private readonly geometry: THREE.SphereGeometry;
+  private disposed = false;
 
   constructor(scene: THREE.Scene) {
-    const geo = new THREE.SphereGeometry(1, 24, 16);
+    this.geometry = new THREE.SphereGeometry(1, 24, 16);
     const proto = new THREE.ShaderMaterial({
       uniforms: {
         uColor: { value: new THREE.Color() },
@@ -61,7 +71,7 @@ export class BuffShells {
     });
     for (let i = 0; i < SHELL_SLOTS; i++) {
       const mat = proto.clone();
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(this.geometry, mat);
       mesh.visible = false;
       mesh.renderOrder = 6;
       mesh.userData.renderCategory = 'vfx';
@@ -73,6 +83,7 @@ export class BuffShells {
 
   // Timed shell (buff shellDur): plays once and fades out on its own.
   flash(entityId: number, colorHex: number, dur: number): void {
+    if (this.disposed) return;
     const slot =
       this.slots.find((s) => s.active && s.entityId === entityId) ??
       this.slots.find((s) => !s.active) ??
@@ -88,6 +99,7 @@ export class BuffShells {
   // Held shell (barrier auras): refreshed every frame while the aura lives;
   // hold() marks it seen, endFrame() releases the ones that stopped arriving.
   hold(entityId: number, colorHex: number, frame: number): void {
+    if (this.disposed) return;
     let slot = this.slots.find((s) => s.active && s.entityId === entityId);
     if (!slot) {
       slot = this.slots.find((s) => !s.active);
@@ -102,12 +114,8 @@ export class BuffShells {
     slot.mesh.visible = true;
   }
 
-  update(
-    dt: number,
-    time: number,
-    frame: number,
-    anchor: (id: number, frac: number) => { x: number; y: number; z: number } | null,
-  ): void {
+  update(dt: number, time: number, frame: number, anchor: VfxAnchorResolver): void {
+    if (this.disposed) return;
     for (const slot of this.slots) {
       if (!slot.active) continue;
       slot.age += dt;
@@ -121,7 +129,7 @@ export class BuffShells {
         slot.mesh.visible = false;
         continue;
       }
-      const at = anchor(slot.entityId, 0.5);
+      const at = anchor(slot.entityId, 0.5, anchorScratch);
       if (!at) {
         slot.active = false;
         slot.mesh.visible = false;
@@ -149,5 +157,16 @@ export class BuffShells {
       slot.active = false;
       slot.mesh.visible = false;
     }
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.clear();
+    for (const slot of this.slots) {
+      slot.mesh.removeFromParent();
+      slot.mat.dispose();
+    }
+    this.geometry.dispose();
   }
 }

@@ -522,6 +522,13 @@ describe('The Realm Racers lifecycle', () => {
     const bEntity = entity(sim, b);
     aEntity.facing = 1.25;
     bEntity.facing = -0.5;
+    // The REINS, not just the ride. Setting `mountKey` alone gives a mount the
+    // player does not own, and an unowned mount is stripped by the ownership
+    // re-validation on its own id-staggered tick (`e.id % 4`), whose exemption
+    // covers a pilot still SEATED and not one being handed their old ride back.
+    // The fixture passed on the ids it happened to draw; the release merge moved
+    // them, and the sweep landed on the tick that snapshots the return state.
+    sim.addItem('reins_valorsteed', 1, a);
     aEntity.mountKey = 'valorsteed';
     aEntity.hp = 31;
     aEntity.resource = 7;

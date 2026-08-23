@@ -11,6 +11,7 @@
 // ORDER: beginDeferredPreloads() must run before the assetsReady() that gates the
 // Renderer, or placement could outrun a load and re-open the v0.16.0 farmCrate P0.
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   assetsReady,
@@ -19,6 +20,7 @@ import {
   registerDeferredPreload,
   registerPreload,
 } from '../src/render/assets/preload';
+import { stripComments } from './helpers/strip_comments';
 import { tsFilesUnder } from './helpers/ts_files_under';
 
 const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
@@ -26,7 +28,6 @@ const mainSource = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf
 beforeEach(() => {
   preloadInternalsForTest.reset();
 });
-
 describe('deferred preload lane', () => {
   it('does not start a deferred fetch until the lane opens', () => {
     let started = 0;
@@ -118,6 +119,46 @@ describe('startGame wiring', () => {
     expect(awaitAt).toBeGreaterThan(beginAt);
     expect(rendererAt).toBeGreaterThan(awaitAt);
   });
+
+  // The locale/deed chunk fetch and the deferred world-asset preloads are
+  // independent boot-time network/decode phases (one remote, one bundled
+  // local). Opening the deferred lane before awaiting the locale fetch lets
+  // both run concurrently instead of paying their durations back to back;
+  // opening it after would silently reintroduce the serialization.
+  it('opens the deferred preload lane BEFORE awaiting the locale fetch', () => {
+    const beginAt = mainSource.indexOf('beginDeferredPreloads()');
+    // Reflow-proof: the locale await is the multi-line CONTENT_LOCALE_CHANNEL_ENSURERS
+    // block (three loaders), so match on structure, not a pasted one-line literal
+    // (same rule as the sibling pin in tests/ios_entry_memory.test.ts).
+    const localeAwaitAt = mainSource.search(/await Promise\.all\(\[\s*ensureLocaleLoaded\(/);
+    expect(beginAt).toBeGreaterThan(-1);
+    expect(localeAwaitAt).toBeGreaterThan(beginAt);
+  });
+});
+
+describe('Thornhollow intent-driven preload', () => {
+  it('keeps Thornhollow art on its dedicated intent-driven prewarm', () => {
+    const src = readFileSync(new URL('../src/render/battleground.ts', import.meta.url), 'utf8');
+    expect(src).toContain('createBattlegroundAssetPrewarm(');
+  });
+
+  it('starts from the resolved Thornhollow tab and commits before sending queue join', () => {
+    const arena = readFileSync(new URL('../src/ui/arena_window.ts', import.meta.url), 'utf8');
+    const thornhollowArm = arena.slice(
+      arena.indexOf("if (this.tab === 'ravenrift')"),
+      arena.indexOf('this.renderArena(', arena.indexOf("if (this.tab === 'ravenrift')")),
+    );
+    expect(thornhollowArm).toContain('thornhollowPrewarm?.startPreview();');
+
+    const queueHandler = arena.slice(
+      arena.indexOf('el.querySelector(\'[data-act="queue"]\')'),
+      arena.indexOf('el.querySelector(\'[data-act="leave"]\')'),
+    );
+    expect(queueHandler.indexOf('thornhollowPrewarm?.commit();')).toBeLessThan(
+      queueHandler.indexOf('this.deps.world().bgQueueJoin();'),
+    );
+    expect(mainSource).toContain('setThornhollowPrewarmHooks({');
+  });
 });
 
 describe('editor viewport wiring', () => {
@@ -151,7 +192,7 @@ describe('no world module fetches at import', () => {
   ]);
 
   it('leaves only the sanctioned eager registrants', () => {
-    const files = tsFilesUnder(new URL('../src/render', import.meta.url).pathname);
+    const files = tsFilesUnder(fileURLToPath(new URL('../src/render', import.meta.url)));
     // Vacuity floor: an empty or misrooted walk must not pass as "no offenders".
     expect(files.length).toBeGreaterThan(100);
     const offenders: string[] = [];
@@ -160,9 +201,7 @@ describe('no world module fetches at import', () => {
       if (repoRel.endsWith('assets/preload.ts') || EAGER_ALLOWED.has(repoRel)) continue;
       // Strip comments first: this guard polices CODE, not prose that happens to
       // name the eager function while explaining the lanes.
-      const code = readFileSync(full, 'utf8')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/^[ \t]*\/\/.*$/gm, '');
+      const code = stripComments(readFileSync(full, 'utf8'));
       // Match the call, not the identifier inside registerDeferredPreload.
       if (/(?<!Deferred)\bregisterPreload\s*\(/.test(code)) offenders.push(repoRel);
     }
@@ -178,7 +217,7 @@ describe('every assetsReady host opens the lane', () => {
   // this when the lane landed; the gate stayed green because nothing swept the
   // call sites).
   it('finds no Renderer host awaiting assetsReady without beginDeferredPreloads', () => {
-    const files = tsFilesUnder(new URL('../src', import.meta.url).pathname);
+    const files = tsFilesUnder(fileURLToPath(new URL('../src', import.meta.url)));
     expect(files.length).toBeGreaterThan(400);
     const offenders: string[] = [];
     let hosts = 0;

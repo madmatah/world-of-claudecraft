@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SimEvent, VehicleDrive } from '../src/sim/types';
 
 const audioSpies = vi.hoisted(() => ({ realmRacersResult: vi.fn() }));
@@ -63,6 +63,7 @@ interface RendererHarness {
     realmRacersEvent: ReturnType<typeof vi.fn>;
     vehicle: ReturnType<typeof vi.fn>;
     stopVehicle: ReturnType<typeof vi.fn>;
+    mountEngineReset: ReturnType<typeof vi.fn>;
   };
   spawnAoeRing: ReturnType<typeof vi.fn>;
   sim: { playerId: number };
@@ -89,6 +90,7 @@ function rendererHarness(): RendererHarness {
     realmRacersEvent: vi.fn(),
     vehicle: vi.fn(),
     stopVehicle: vi.fn(),
+    mountEngineReset: vi.fn(),
   };
   renderer.spawnAoeRing = vi.fn();
   renderer.sim = { playerId: 1 };
@@ -130,6 +132,9 @@ function expectVehicleCall(spy: ReturnType<typeof vi.fn>, expected: (number | bo
 }
 
 beforeEach(() => vi.clearAllMocks());
+// One case freezes `performance.now()`; restore it so a frozen clock cannot
+// leak into a sibling that reads the real one.
+afterEach(() => vi.restoreAllMocks());
 
 describe('Realm Racers coordinator audio wiring', () => {
   it('executes the real HUD result branch with the viewer pid and leaves draws/others silent', () => {
@@ -191,8 +196,16 @@ describe('Realm Racers coordinator audio wiring', () => {
     // two rivals is never suppressed whatever the latch holds.
     const renderer = rendererHarness();
     const state = createOwnBumpFeedback();
-    markLocalBump(state, 2, performance.now());
-    markLocalBump(state, 3, performance.now());
+    // The clock is FROZEN for this case rather than read live. The suppression
+    // window is 1200 ms and the consume side reads `performance.now()` itself,
+    // so a live stamp made the verdict depend on how long the machine took
+    // between these lines: generous, but a real-time dependency in a test that
+    // is not about time at all. Pinned at a fixed instant, the window is a
+    // property of the core instead of a property of the run.
+    const nowMs = 10_000;
+    vi.spyOn(performance, 'now').mockReturnValue(nowMs);
+    markLocalBump(state, 2, nowMs);
+    markLocalBump(state, 3, nowMs);
     (renderer as unknown as { ownBumpFeedbackState: unknown }).ownBumpFeedbackState = state;
     const bump = (aId: number, bId: number) => {
       renderer.handleEvent({ type: 'realmRacersBump', aId, bId, x: 6, z: 7, impact: 12 });
@@ -254,6 +267,8 @@ describe('Realm Racers coordinator audio wiring', () => {
       views: Map<number, unknown>;
       scene: { remove: ReturnType<typeof vi.fn> };
       lightOwnerGroups: { delete: ReturnType<typeof vi.fn> };
+      healGlowAt: Map<number, number>;
+      weaponSkinApplies: { cancel: ReturnType<typeof vi.fn> };
       viewLights: unknown[];
       clickTargets: unknown[];
       audioSink: { stopVehicle: ReturnType<typeof vi.fn> };
@@ -262,6 +277,10 @@ describe('Realm Racers coordinator audio wiring', () => {
     };
     renderer.scene = { remove: vi.fn() };
     renderer.lightOwnerGroups = { delete: vi.fn() };
+    // Dropping a view also clears the per-entity heal-glow throttle and cancels
+    // any pending weapon-skin application aimed at it.
+    renderer.healGlowAt = new Map();
+    renderer.weaponSkinApplies = { cancel: vi.fn() };
     // Overhead text is one batched canvas surface now, keyed by entity id, so
     // dropping a view unregisters it there rather than detaching a DOM plate.
     renderer.nameplatePainter = { remove: vi.fn() };

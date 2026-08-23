@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEVICE_MEMORY_GB_KEY, ENTRY_TIGHT_MODE_KEY } from '../src/device_memory_hint';
@@ -19,8 +20,10 @@ import {
   isWeakIntegratedGpu,
   resolveDefaultGraphicsPreset,
   shouldUseAutoGovernor,
+  surfaceMat,
   tierFromHints,
 } from '../src/render/gfx';
+import { tsFilesUnder } from './helpers/ts_files_under';
 
 const desktop: GfxRuntimeHints = {
   search: '',
@@ -30,6 +33,45 @@ const desktop: GfxRuntimeHints = {
 };
 
 describe('graphics tier resolution', () => {
+  it('never renders shadows on a direct (no composer, no gradePass) profile', () => {
+    // r185 moved info.reset() ahead of the shadow pass, so a DIRECT profile's
+    // live info.render reads would include shadow draws in the governor and
+    // opaque-sort signals. That shift is empty today because every shipped
+    // direct profile also disables dynamic shadows; this pin makes that
+    // invariant explicit so a new tier below medium or a gradePass re-gating
+    // cannot silently move the low-end draw-pressure signal.
+    // Every settingsFor tier ('advanced' is not one: it resolves through the
+    // override path over a base tier's bands, so it cannot mint a direct
+    // profile of its own).
+    const tiers = ['low', 'medium', 'high', 'ultra', 'insane'] as const;
+    // The full hint grid the resolver differentiates on: every platform value
+    // plus the ios tightMemory arm (QA hardening: the original two-hint sample
+    // could not red on an android- or tightMemory-only rewiring).
+    const hintGrid = [
+      undefined,
+      { platform: 'android' as const },
+      { platform: 'other' as const },
+      { platform: 'ios' as const },
+      { platform: 'ios' as const, tightMemory: true },
+    ];
+    let directProfilesSeen = 0;
+    for (const tier of tiers) {
+      for (const hints of hintGrid) {
+        const settings = gfxInternalsForTest.settingsFor(tier, hints);
+        if (!settings.composer && !settings.gradePass) {
+          directProfilesSeen++;
+          expect(settings.dynamicShadows, `${tier} hints:${JSON.stringify(hints ?? null)}`).toBe(
+            false,
+          );
+        }
+      }
+    }
+    // Vacuity floor: plain low is direct on every one of the five hint arms,
+    // and the iOS arms add direct profiles on the higher tiers; the widened
+    // grid sees 13 today and must never quietly drop below that.
+    expect(directProfilesSeen).toBeGreaterThanOrEqual(13);
+  });
+
   it('resolves an unset preset device-aware, matching the medium data-fx-level fallback', () => {
     // The 3D tier (tierFromHints) and the HUD data-fx-level (graphicsPresetLabel(settings def))
     // must agree on the unset/first-run default so they never diverge. An unrecognized device
@@ -79,9 +121,10 @@ describe('graphics tier resolution', () => {
     expect(tierFromHints(desktop, false)).toBe('medium'); // unknown device -> medium fallback
     expect(tierFromHints({ ...desktop, graphicsPreset: 0 }, false)).toBe('low'); // legacy explicit 0
     expect(tierFromHints(desktop, true)).toBe('low'); // software GL with no preset -> low floor
-    // unset + unknown mobile -> medium (not the old unset -> ultra default)
+    // unset + any touch device -> low (the mobile entry-memory floor; never the old unset ->
+    // ultra default, and no longer the medium an unknown phone used to land on)
     expect(tierFromHints({ ...desktop, maxTouchPoints: 1, coarsePointer: true }, false)).toBe(
-      'medium',
+      'low',
     );
     // a URL-forced tier always wins, even on a touch device or software GL
     expect(
@@ -187,6 +230,14 @@ describe('graphics tier resolution', () => {
 
   it('keeps medium as a middle tier while high and ultra retain the premium pipeline', () => {
     const low = gfxInternalsForTest.settingsFor('low');
+    // A session that reports hints but whose adapter string is masked or unavailable.
+    const lowNoAdapter = gfxInternalsForTest.settingsFor('low', { search: '?gfx=low' });
+    const lowWeakIntel = gfxInternalsForTest.settingsFor('low', {
+      gpuRenderer: 'ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0)',
+    });
+    const lowSoftware = gfxInternalsForTest.settingsFor('low', {
+      gpuRenderer: 'Google SwiftShader',
+    });
     const medium = gfxInternalsForTest.settingsFor('medium');
     const mediumIris = gfxInternalsForTest.settingsFor('medium', {
       search: '?gfx=medium',
@@ -198,7 +249,13 @@ describe('graphics tier resolution', () => {
     expect(low.standardMaterials).toBe(false);
     expect(low.dynamicShadows).toBe(false);
     expect(low.leanFoliage).toBe(true);
-    expect(low.lowPlus).toBe(true);
+    // lowPlus is the weak-GPU art treatment, not a property of the low tier: a plain
+    // low session (no adapter string, so classifyGpuRenderer is 'unknown') must not
+    // take it, or low draws richer grass cards than medium.
+    expect(low.lowPlus).toBe(false);
+    expect(lowNoAdapter.lowPlus).toBe(false);
+    expect(lowWeakIntel.lowPlus).toBe(true);
+    expect(lowSoftware.lowPlus).toBe(true);
     expect(low.composer).toBe(false);
     expect(low.ao).toBe(false);
 
@@ -209,6 +266,16 @@ describe('graphics tier resolution', () => {
     expect(mediumIris.standardMaterials).toBe(true);
     expect(mediumIris.leanFoliage).toBe(true);
     expect(mediumIris.lowPlus).toBe(false);
+    // denseDressing is lowPlus plus the leanFoliage MEDIUM session: the
+    // dressing compensation follows the lean model set (foliage.ts), so the
+    // medium weak-iGPU cohort keeps it while plain low and plain medium take
+    // medium-parity dressing (the low-monotonicity rationale above).
+    expect(low.denseDressing).toBe(false);
+    expect(lowNoAdapter.denseDressing).toBe(false);
+    expect(lowWeakIntel.denseDressing).toBe(true);
+    expect(lowSoftware.denseDressing).toBe(true);
+    expect(medium.denseDressing).toBe(false);
+    expect(mediumIris.denseDressing).toBe(true);
     expect(medium.terrainSplat).toBe(true);
     expect(medium.composer).toBe(false);
     expect(medium.ao).toBe(false);
@@ -363,6 +430,11 @@ describe('graphics tier resolution', () => {
     expect(effectsLow.ao).toBe(false);
     expect(effectsLow.msaaSamples).toBe(0);
     expect(effectsLow.smaa).toBe(false);
+    // Losing the composer loses the SMAA tail, so the grade-fused arm is what
+    // keeps this mix anti-aliased, and the AA dial still turns it off.
+    expect(effectsLow.fxaa).toBe(true);
+    expect(adv({ effectsQuality: 0, antiAliasing: 0 }).fxaa).toBe(false);
+    expect(adv({ effectsQuality: 1 }).fxaa).toBe(false);
     const effectsMedium = adv({ effectsQuality: 0.5 });
     expect(effectsMedium.ao).toBe(true);
     expect(effectsMedium.bloom).toBe(false);
@@ -371,13 +443,28 @@ describe('graphics tier resolution', () => {
     expect(effectsHigh.ao).toBe(true);
     expect(effectsHigh.bloom).toBe(true);
     expect(effectsHigh.smaa).toBe(true);
-    // Shadows: pure map-size steps; terrain-cast joins at High.
+    // Shadows: pure map-size steps; terrain-cast joins at High. The ladder
+    // caps at High's 4096: a historical stored Insane (2) falls through to
+    // the High base instead of the retired ~256 MB-class 8192 map.
     expect(adv({ shadowQuality: 0 }).shadowMap).toBe(1024);
     expect(adv({ shadowQuality: 0 }).terrainCastShadows).toBe(false);
     expect(adv({ shadowQuality: 0.5 }).shadowMap).toBe(2560);
     expect(adv({ shadowQuality: 1 }).shadowMap).toBe(4096);
     expect(adv({ shadowQuality: 1 }).terrainCastShadows).toBe(true);
-    expect(adv({ shadowQuality: 2 }).shadowMap).toBe(8192);
+    expect(adv({ shadowQuality: 2 }).shadowMap).toBe(4096);
+    expect(adv({ shadowQuality: 2 }).terrainCastShadows).toBe(true);
+    // The load-bearing constrained arm: the retired explicit 8192 write used
+    // to OVERRIDE the phone-class 2048 cap; falling through to the base
+    // restores it (dynamicShadows stays off there regardless, so this pins
+    // the allocation, not a visible shadow).
+    const constrainedInsane = gfxInternalsForTest.settingsFor('high', {
+      graphicsPreset: 5,
+      shadowQuality: 2,
+      maxTouchPoints: 5,
+      coarsePointer: true,
+      narrowViewport: true,
+    });
+    expect(constrainedInsane.shadowMap).toBe(2048);
   });
 
   it('sheds the memory-spike knobs on constrained (phone-class) browsers, cosmetics only', () => {
@@ -439,7 +526,7 @@ describe('graphics tier resolution', () => {
     expect(lowMem.maxPointLights).toBe(3);
   });
 
-  it('uses the bounded-residency renderer profile for the packaged native iOS app', () => {
+  it('uses the bounded-residency renderer profile on EVERY iOS WebKit host, not just the packaged native app', () => {
     const nativeIos = {
       maxTouchPoints: 5,
       coarsePointer: true,
@@ -449,6 +536,15 @@ describe('graphics tier resolution', () => {
     };
     const medium = gfxInternalsForTest.settingsFor('medium', nativeIos);
     const high = gfxInternalsForTest.settingsFor('high', nativeIos);
+    // iOS Safari (or any other iOS browser): platform 'ios', but NOT the packaged
+    // native shell. Regression coverage for the bug this file used to pin as correct:
+    // Mobile Safari and the native WKWebView shell run the same WebKit engine under
+    // the same per-process WebContent memory ceiling (see safeStartupGraphicsPreset's
+    // isIosWebkit and the sibling tightMemoryProfile rung below, both of which already
+    // treated Safari and native identically), so gating this profile on `nativeApp`
+    // left every plain-browser iOS session - i.e. most iOS players - eagerly loading
+    // full-residency assets under the exact same ceiling the native app was bounded
+    // against, and crashing under ordinary play.
     const mobileWeb = gfxInternalsForTest.settingsFor('medium', {
       ...nativeIos,
       nativeApp: false,
@@ -459,9 +555,10 @@ describe('graphics tier resolution', () => {
     });
 
     expect(medium.tier).toBe('medium');
-    expect(medium.nativeIosMemoryProfile).toBe(true);
+    expect(medium.iosMemoryProfile).toBe(true);
     expect(medium.standardMaterials).toBe(false);
     expect(medium.lowPlus).toBe(true);
+    expect(medium.denseDressing).toBe(true); // rides the lowPlus art cohort
     // Collision-bearing tree/rock placement stays identical to other Medium clients.
     expect(medium.leanFoliage).toBe(false);
     expect(medium.terrainSplat).toBe(false);
@@ -479,17 +576,64 @@ describe('graphics tier resolution', () => {
 
     // Higher labels can retain their density/bucket progression, but they must not
     // re-enable WKWebView's unbounded GPU-residency features.
-    expect(high.nativeIosMemoryProfile).toBe(true);
+    expect(high.iosMemoryProfile).toBe(true);
     expect(high.standardMaterials).toBe(false);
     expect(high.terrainSplat).toBe(false);
     expect(high.composer).toBe(false);
     expect(high.dynamicShadows).toBe(false);
 
-    expect(mobileWeb.nativeIosMemoryProfile).toBe(false);
-    expect(mobileWeb.standardMaterials).toBe(true);
-    expect(nativeAndroid.nativeIosMemoryProfile).toBe(false);
+    // iOS Safari now gets EXACTLY the native app's bounded-residency profile: same flag,
+    // same knobs, byte for byte. Only the platform check (`platform === 'ios'`) decides
+    // this, never `nativeApp`.
+    expect(mobileWeb.iosMemoryProfile).toBe(true);
+    expect(mobileWeb).toEqual(medium);
+    // Android stays on the generic cross-platform constrainedMemory tier: this profile
+    // (and its extra streamed-asset/quality knobs) is iOS WebKit specific.
+    expect(nativeAndroid.iosMemoryProfile).toBe(false);
     expect(nativeAndroid.standardMaterials).toBe(true);
-    expect(nativeAndroid.maxPooledCharacterVisuals).toBe(Number.POSITIVE_INFINITY);
+    // A touch/coarse-pointer device is `constrainedMemory` regardless of platform (see
+    // isConstrainedBrowser), so Android still falls onto the SAME bounded reuse-pool tier
+    // every other mobile budget in this function already uses (maxPointLights above), not
+    // the desktop-only POSITIVE_INFINITY.
+    expect(nativeAndroid.maxPooledCharacterVisuals).toBe(24);
+    expect(nativeAndroid.maxPooledObjects).toBe(24);
+    // mobileWeb gets the TIGHTER iosMemoryProfile pool cap (6), not the generic
+    // constrainedMemory cap (24) Android and pre-fix Safari used to share.
+    expect(mobileWeb.maxPooledCharacterVisuals).toBe(6);
+    expect(mobileWeb.maxPooledObjects).toBe(6);
+  });
+
+  it('bounds the pooled-visual and pooled-object reuse caps on every constrained-memory device, never just the two narrow iOS profiles', () => {
+    const desktop = gfxInternalsForTest.settingsFor('high');
+    const androidBrowser = gfxInternalsForTest.settingsFor('high', {
+      maxTouchPoints: 5,
+      coarsePointer: true,
+      narrowViewport: true,
+      nativeApp: false,
+      platform: 'android' as const,
+    });
+    const androidNative = gfxInternalsForTest.settingsFor('high', {
+      maxTouchPoints: 5,
+      coarsePointer: true,
+      narrowViewport: true,
+      nativeApp: true,
+      platform: 'android' as const,
+    });
+
+    expect(desktop.constrainedMemory).toBe(false);
+    // The character pool is bounded on EVERY profile since the C1 memory-ratchet
+    // fix (128 on desktop, LRU-evicted; see tests/character_visual_pool.test.ts);
+    // only the ground-object pool keeps the historical desktop Infinity.
+    expect(desktop.maxPooledCharacterVisuals).toBe(128);
+    expect(desktop.maxPooledObjects).toBe(Number.POSITIVE_INFINITY);
+
+    for (const constrained of [androidBrowser, androidNative]) {
+      expect(constrained.constrainedMemory).toBe(true);
+      expect(constrained.maxPooledCharacterVisuals).toBe(24);
+      expect(Number.isFinite(constrained.maxPooledCharacterVisuals)).toBe(true);
+      expect(constrained.maxPooledObjects).toBe(24);
+      expect(Number.isFinite(constrained.maxPooledObjects)).toBe(true);
+    }
   });
 
   it('applies the 4 GB-class tight-memory rung to native iOS and recovered iOS web', () => {
@@ -522,7 +666,7 @@ describe('graphics tier resolution', () => {
     expect(tight.maxPooledCharacterVisuals).toBe(4);
     // Collision-bearing tree/rock placement fairness holds on the tight rung too.
     expect(tight.leanFoliage).toBe(false);
-    expect(tight.nativeIosMemoryProfile).toBe(true);
+    expect(tight.iosMemoryProfile).toBe(true);
 
     // Without the hint the standard native profile is exactly what it was: a
     // device the shell cannot measure keeps today's behaviour, byte for byte.
@@ -572,6 +716,31 @@ describe('graphics tier resolution', () => {
       effectsQuality: 0,
     });
     expect(advanced.maxPointLights).toBe(2);
+  });
+
+  it('gives the grade-only tier its fused edge AA and nothing else a second AA arm', () => {
+    // Medium is the tier the fused arm exists for: it keeps the region-safe
+    // grade-only chain, which a full-frame SMAA tail cannot ride.
+    expect(gfxInternalsForTest.settingsFor('medium').fxaa).toBe(true);
+    expect(gfxInternalsForTest.settingsFor('medium').smaa).toBe(false);
+    // Low has no grade pass to fuse into, and the composer tiers already have
+    // SMAA. Never both arms on one profile.
+    expect(gfxInternalsForTest.settingsFor('low').fxaa).toBe(false);
+    for (const tier of ['high', 'ultra', 'insane'] as const) {
+      const settings = gfxInternalsForTest.settingsFor(tier);
+      expect(settings.smaa, tier).toBe(true);
+      expect(settings.fxaa, tier).toBe(false);
+    }
+    // The iOS WebKit profile drops the grade pass with the composer, so it
+    // stays on no post AA at all rather than gaining an arm with no host.
+    const webkit = gfxInternalsForTest.settingsFor('medium', {
+      maxTouchPoints: 5,
+      coarsePointer: true,
+      narrowViewport: true,
+      platform: 'ios',
+    });
+    expect(webkit.gradePass).toBe(false);
+    expect(webkit.fxaa).toBe(false);
   });
 
   it('routes Advanced low effects through the low static effects tier', () => {
@@ -798,24 +967,127 @@ describe('graphics tier resolution', () => {
       ).toBe(2);
     });
 
-    it('caps mobile at HIGH: flagship / strong-on-touch -> HIGH, weak phone -> LOW, else MEDIUM', () => {
+    it('floors EVERY touch device at LOW, whatever its GPU class reports', () => {
+      // The world-entry scene build's peak memory footprint, not the frame rate, is what the
+      // mobile default protects: phone-class WebKit kills the WebContent process when the tab
+      // crosses its per-process ceiling, and the tier the build runs at is what decides that
+      // footprint. So detection may never hand a touch device anything above the floor.
       expect(
         resolveDefaultGraphicsPreset({
           ...phone,
           gpuRenderer: 'Adreno (TM) 740',
           deviceMemory: 8,
         }),
-      ).toBe(3); // flagship phone
-      // an M-series iPad (Apple Silicon on a touch device) is capped at HIGH (ultra is desktop-only);
-      // the touch cap is unchanged by the MacBook thermal default (issue 1676).
-      expect(resolveDefaultGraphicsPreset({ ...phone, gpuRenderer: 'Apple M2' })).toBe(3);
+      ).toBe(1); // flagship phone, previously HIGH
+      // an M-series iPad (Apple Silicon on a touch device), previously HIGH
+      expect(resolveDefaultGraphicsPreset({ ...phone, gpuRenderer: 'Apple M2' })).toBe(1);
+      // a desktop-class discrete GPU string on a touch device, previously HIGH
+      expect(
+        resolveDefaultGraphicsPreset({
+          ...phone,
+          gpuRenderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4080)',
+          deviceMemory: 8,
+          hardwareConcurrency: 16,
+        }),
+      ).toBe(1);
       expect(
         resolveDefaultGraphicsPreset({
           ...phone,
           gpuRenderer: 'Adreno (TM) 330',
         }),
       ).toBe(1); // old phone
-      expect(resolveDefaultGraphicsPreset(phone)).toBe(2); // typical/unknown phone -> medium
+      expect(resolveDefaultGraphicsPreset(phone)).toBe(1); // typical/masked phone, previously MEDIUM
+      // narrowViewport is the other half of the touch check: a coarse-pointer-less touch device
+      // on a narrow viewport is still mobile, so it floors too.
+      expect(
+        resolveDefaultGraphicsPreset({
+          ...desktop,
+          maxTouchPoints: 5,
+          narrowViewport: true,
+          gpuRenderer: 'Apple M2',
+        }),
+      ).toBe(1);
+    });
+
+    it('leaves the DESKTOP ladder untouched: no-touch devices keep their historical tiers', () => {
+      // The mobile floor keys off the touch check ALONE, so a device reporting no touch points
+      // must be unaffected, including a mobile-flagship GPU string (Android TV box, emulation).
+      expect(resolveDefaultGraphicsPreset({ ...desktop, gpuRenderer: 'Adreno (TM) 740' })).toBe(3);
+      expect(resolveDefaultGraphicsPreset({ ...desktop, gpuRenderer: 'Apple M2' })).toBe(2);
+      expect(resolveDefaultGraphicsPreset(desktop)).toBe(2);
+      // a touchscreen laptop (touch points, but a fine pointer on a wide viewport) is NOT mobile
+      expect(
+        resolveDefaultGraphicsPreset({
+          ...desktop,
+          maxTouchPoints: 10,
+          gpuRenderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4080)',
+          deviceMemory: 8,
+          hardwareConcurrency: 16,
+        }),
+      ).toBe(4);
+    });
+
+    it('makes every mobile result CONCLUSIVE, so first run persists it instead of re-detecting', () => {
+      // firstRunGraphicsPreset persists what resolveDefaultGraphicsPreset returns unless it is
+      // MEDIUM, the inconclusive fallback it deliberately leaves unpinned to re-detect on later
+      // boots. The mobile floor must therefore never resolve to MEDIUM, or a phone would be
+      // re-detected every boot and never carry a persisted preset at all.
+      for (const gpuRenderer of [undefined, 'Apple M2', 'Adreno (TM) 740', 'Mali-G52']) {
+        expect(resolveDefaultGraphicsPreset({ ...phone, gpuRenderer })).not.toBe(2);
+      }
+      // and the marker still short-circuits ahead of any detection, so a later explicit player
+      // choice is never re-detected over.
+      expect(firstRunGraphicsPreset(true)).toBeNull();
+    });
+
+    it('lands the unset-preset mobile RENDER tier on low too, matching the persisted preset', () => {
+      // tierFromHints shares resolveDefaultGraphicsPreset, so the 3D tier and the data-fx-level
+      // stamp agree on a first boot before main.ts has persisted anything.
+      expect(tierFromHints({ ...phone, gpuRenderer: 'Apple M2' }, false)).toBe('low');
+      expect(tierFromHints(phone, false)).toBe('low');
+      // an EXPLICIT stored preset still wins on mobile: the floor is a default, not a cap.
+      expect(tierFromHints({ ...phone, gpuRenderer: 'Apple M2', graphicsPreset: 3 }, false)).toBe(
+        'high',
+      );
+    });
+
+    it('floors a REPORTED tight-memory mobile device at LOW, and every other phone with it', () => {
+      // #2955 added this as a memory-gated floor: a flagship-class mobile GPU paired with a
+      // genuine 3-4 GB total RAM budget is a common real Android configuration, and the world's
+      // baseline texture/geometry residency alone on HIGH is large enough to cross the OS's
+      // per-tab memory ceiling during ordinary play, reported upstream as "randomly disconnects
+      // no matter the network." Those cases still floor; the blanket mobile floor now subsumes
+      // them, which is why the cases that used to sit just OUTSIDE the memory gate floor too.
+      expect(
+        resolveDefaultGraphicsPreset({
+          ...phone,
+          gpuRenderer: 'Adreno (TM) 740', // flagship: HIGH before either floor
+          deviceMemory: 3,
+        }),
+      ).toBe(1);
+      expect(
+        resolveDefaultGraphicsPreset({
+          ...phone,
+          gpuRenderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4080)', // strongDesktop-on-touch
+          deviceMemory: 4,
+        }),
+      ).toBe(1);
+      // At the old TIGHT_MEMORY_MAX_GB threshold and one above it: both floor now. The threshold
+      // is no longer load-bearing for the preset, since ample RAM does not buy a phone a tier.
+      expect(
+        resolveDefaultGraphicsPreset({ ...phone, gpuRenderer: 'Adreno (TM) 740', deviceMemory: 4 }),
+      ).toBe(1);
+      // One above the tight-memory threshold is still LOW because the mobile
+      // first-run floor is broader than the RAM-only emergency cap.
+      expect(
+        resolveDefaultGraphicsPreset({ ...phone, gpuRenderer: 'Adreno (TM) 740', deviceMemory: 5 }),
+      ).toBe(1);
+      // Never fires on desktop (not mobile) even at the same low deviceMemory: PITFALL 1's
+      // "thin RAM never pulls a tier down" rule still holds for the GPU-capability ladder.
+      expect(resolveDefaultGraphicsPreset({ ...desktop, deviceMemory: 3 })).toBe(2);
+      // Unreported memory (Safari/Firefox) must not fabricate a tight-memory reason, but the
+      // broader mobile first-run floor still covers iOS/WebKit, whose process kill is most brutal.
+      expect(resolveDefaultGraphicsPreset({ ...phone, gpuRenderer: 'Apple A17 Pro GPU' })).toBe(1);
     });
 
     it('defaults Apple Silicon Macs to MEDIUM, not ultra (thermally constrained laptops, issue 1676)', () => {
@@ -1018,6 +1290,56 @@ describe('animated far character band: per-tier ceiling', () => {
     for (const tier of ['medium', 'high', 'ultra'] as const) {
       expect(gfxInternalsForTest.settingsFor(tier, nativeIos).farCharacterAnimScale).toBe(1);
       expect(gfxInternalsForTest.settingsFor(tier, constrained).farCharacterAnimScale).toBe(1);
+    }
+  });
+});
+
+describe('surfaceMat dedupe key', () => {
+  it('splits two option sets that differ only in metalnessMap', () => {
+    // The key folded map / normalMap / roughnessMap / aoMap but not
+    // metalnessMap, so a caller that wanted the metallic arm got the SAME
+    // cached material as one that did not, and wrote the slot on afterwards.
+    // Slot presence is a program-cache-key input, so that write relinked every
+    // material already drawing with the shared entry, live.
+    const response = new THREE.Texture();
+    const base = { color: 0x808080, roughnessMap: response };
+    const plain = surfaceMat(base);
+    expect(surfaceMat({ ...base })).toBe(plain);
+
+    const metallic = surfaceMat({ ...base, metalnessMap: response });
+
+    expect(metallic).not.toBe(plain);
+    if (metallic instanceof THREE.MeshStandardMaterial) {
+      expect(metallic.metalnessMap).toBe(response);
+      expect((plain as THREE.MeshStandardMaterial).metalnessMap).toBeNull();
+    }
+  });
+
+  it('splits two option sets whose metalnessMap is a DIFFERENT texture', () => {
+    const base = { color: 0x707070, roughnessMap: new THREE.Texture() };
+    const first = surfaceMat({ ...base, metalnessMap: new THREE.Texture() });
+    const second = surfaceMat({ ...base, metalnessMap: new THREE.Texture() });
+
+    // The uuid is what the key folds, so two metallic callers with their own
+    // texture must not share the entry either.
+    expect(second).not.toBe(first);
+    if (first instanceof THREE.MeshStandardMaterial && second instanceof THREE.MeshStandardMaterial)
+      expect(second.metalnessMap).not.toBe(first.metalnessMap);
+  });
+
+  it('leaves no surfaceMat consumer writing the slot onto a shared material', () => {
+    // Every caller in the tree, not the two that once did it: the write is
+    // legal on a material a caller owns and a live relink on a shared one, and
+    // nothing tells the two apart at the call site.
+    const callers = tsFilesUnder(fileURLToPath(new URL('../src/render/', import.meta.url)))
+      .map(({ file, full }) => ({ file, source: readFileSync(full, 'utf8') }))
+      .filter(({ source }) => source.includes('surfaceMat('));
+
+    expect(callers.length).toBeGreaterThanOrEqual(24);
+    for (const { file, source } of callers) {
+      expect(source, `${file} writes metalnessMap after surfaceMat`).not.toMatch(
+        /\.metalnessMap = /,
+      );
     }
   });
 });

@@ -21,10 +21,14 @@
 import type { PartyMemberAura } from '../world_api';
 import { AurasPainter, type AurasPainterDeps } from './auras_painter';
 import { type AuraInput, type AurasDeps, createAurasView } from './auras_view';
+import { setCrestImageWithFallback } from './crest_image_fallback';
 import { t } from './i18n';
-import { iconDataUrl } from './icons';
 import type { PainterHostWriters } from './painter_host';
-import { type PartyFrameMember, partyFrameAuraIsRelevant } from './party_frames';
+import {
+  type PartyFrameMember,
+  partyFrameAuraIsRelevant,
+  prioritizePartyFrameAuras,
+} from './party_frames';
 import { svgIcon } from './ui_icons';
 import { UnitFramePainter } from './unit_frame_painter';
 
@@ -37,13 +41,6 @@ const CREST_ICON_SIZE = 20;
 // The portrait-gate key prefix: the crest repaints only when the member's class
 // changes (a row recycled to a same-class member keeps its crest).
 export const PARTY_CREST_KEY_PREFIX = 'crest:';
-// The out-of-range badge glyph (a resize arrow), kept as a named constant rather than
-// a bare literal. The dead / combat badges are the svgIcon skull / arena icons.
-const OUT_OF_RANGE_GLYPH = '⤢';
-// The leader marker glyph prefixed to the level chip, byte-faithful to the inline
-// `info.leader === m.pid ? '★' : ''`.
-export const PARTY_LEADER_GLYPH = '★';
-
 /** A pooled row's live, mutable member record. The painter overwrites `member` in
  *  place every rebuild; the row's listeners and the crest gate read it live, so a row
  *  recycled to a different pid acts on the current member, not a captured one. */
@@ -55,6 +52,8 @@ export interface PartyRowSlot {
  *  context menu on right-click or the Menu key, and the hover tracking behind
  *  Clique-style mouseover casts: pid on enter, null on leave). */
 export interface PartyRowDeps {
+  /** Select the member's PET by its entity id (the pet sliver's click / Enter). */
+  onTargetPet(entityId: number): void;
   onTarget: (pid: number) => void;
   onContextMenu: (pid: number, name: string, x: number, y: number) => void;
   onHover: (pid: number | null) => void;
@@ -75,6 +74,10 @@ export interface PartyRow {
   group: HTMLElement;
   rewind: HTMLElement;
   incoming: HTMLElement;
+  /** The pet health sliver and its parts; the painter drives all three. */
+  petBar: HTMLElement;
+  petFill: HTMLElement;
+  petLabel: HTMLElement;
   relocalize: () => void;
   /** Repaint the member's mini aura strip (its own keyed AurasPainter pool per row).
    *  Called by the pool on each signature-gated sync, never per frame. */
@@ -123,6 +126,29 @@ export function partyRowHandlers(slot: PartyRowSlot, deps: PartyRowDeps) {
     mouseenter: (): void => deps.onHover(slot.member.pid),
     mouseleave: (): void => deps.onHover(null),
   };
+}
+
+/**
+ * The PET sliver's click handler, split from the row's own so the two selections cannot
+ * be confused: clicking the sliver selects the member's PET, clicking anywhere else on
+ * the row selects the MEMBER. It stops propagation, or the click would bubble to the
+ * row handler and immediately re-select the member over the pet.
+ *
+ * Mouse only, by design. The sliver carries no role/tabindex (see createPartyRow), so
+ * there is no keyboard arm here to go with a focus it can never receive.
+ *
+ * Reads the LIVE slot for the same reason the row handlers do: rows are pooled and
+ * recycled to a different member, so a captured pet id would go stale. A no-op when
+ * the current member has no visible pet.
+ */
+export function petRowHandlers(slot: PartyRowSlot, deps: PartyRowDeps) {
+  const select = (ev: Event): void => {
+    ev.stopPropagation();
+    const pet = slot.member.pet;
+    if (!pet) return;
+    deps.onTargetPet(pet.id);
+  };
+  return { click: select };
 }
 
 // A persistent, hidden-by-default state badge (skull / arena icon) the pool shows via
@@ -181,8 +207,7 @@ export function createPartyRow(
   meta.className = 'pfm-meta';
   const deadBadge = buildBadge(doc, 'dead', svgIcon('skull'));
   const combatBadge = buildBadge(doc, 'combat', svgIcon('arena'));
-  const oorBadge = buildBadge(doc, 'oor', '');
-  oorBadge.textContent = OUT_OF_RANGE_GLYPH;
+  const oorBadge = buildBadge(doc, 'oor', svgIcon('out-of-range'));
   const offlineBadge = buildBadge(doc, 'offline', '');
   offlineBadge.textContent = '!';
   // Re-localize the three badge tooltips (called once now, and again by the pool on a
@@ -205,6 +230,7 @@ export function createPartyRow(
   const leadStar = doc.createElement('span');
   leadStar.className = 'lead-star';
   leadStar.setAttribute('aria-hidden', 'true');
+  leadStar.innerHTML = svgIcon('crown');
   const leadNum = doc.createElement('span');
   leadNum.className = 'lead-num';
   lead.append(leadStar, leadNum);
@@ -240,6 +266,28 @@ export function createPartyRow(
   resFill.className = 'bar-fill';
   resBar.append(resFill);
 
+  // The member's PET health sliver. Deliberately NOT class `bar`: two shipped rules
+  // select every non-hp `.bar` child of a row (the Show Resource toggle hides them,
+  // and raid style absolutely positions them into one 3px strip), so a `.bar` here
+  // would vanish with the resource bar and overlap it in raid style. It is its own
+  // clickable control: clicking the sliver selects the PET, while a click anywhere
+  // else on the row still selects the member, so the handler stops propagation.
+  const petBar = doc.createElement('div');
+  petBar.className = 'pfm-pet';
+  const petFill = doc.createElement('div');
+  petFill.className = 'pfm-pet-fill';
+  const petLabel = doc.createElement('span');
+  petLabel.className = 'pfm-pet-label visually-hidden';
+  petBar.append(petFill, petLabel);
+  // Deliberately NOT role=button / tabindex: the row itself is a button, and ARIA
+  // treats a button's children as presentational, so a nested control's semantics
+  // are unreliable in assistive tech anyway (it is also the axe nested-interactive
+  // violation). The visually-hidden label still reaches AT, as part of the row's
+  // name-from-content, which is where the pet information belongs. The click below
+  // is a MOUSE affordance only, and only where the sliver is big enough to hit:
+  // the mobile and raid variants set pointer-events: none.
+  petBar.addEventListener('click', petRowHandlers(slot, deps).click);
+
   // The member's mini aura strip (their buffs/debuffs), a per-row instance of the
   // keyed aura pool under the bars. paintAuras converts the compact wire summaries
   // into the aura core's input shape (no countdown: remaining rides as Infinity, so
@@ -252,7 +300,7 @@ export function createPartyRow(
   const aurasEntity = { auras: auraInputs };
   const paintAuras = (auras: readonly PartyMemberAura[]): void => {
     auraInputs.length = 0;
-    for (const a of auras) {
+    for (const a of prioritizePartyFrameAuras(auras)) {
       if (!partyFrameAuraIsRelevant(a)) continue;
       auraInputs.push({
         id: a.id,
@@ -260,12 +308,13 @@ export function createPartyRow(
         kind: a.kind,
         remaining: a.remaining ?? Number.POSITIVE_INFINITY,
         value: a.neg ? -1 : 1,
+        poolPct: a.poolPct,
       });
     }
     aurasPainter.paint(aurasView.tick(aurasEntity));
   };
 
-  row.append(nameRow, hpBar, resBar, aurasEl);
+  row.append(nameRow, hpBar, resBar, petBar, aurasEl);
 
   const handlers = partyRowHandlers(slot, deps);
   row.addEventListener('click', handlers.click);
@@ -294,7 +343,7 @@ export function createPartyRow(
       // The crest is the party "portrait": repainted only when the class key changes,
       // reading the LIVE slot so a recycled row gets the new member's crest.
       repaintPortrait: () => {
-        crest.src = iconDataUrl('crest', `class_${slot.member.cls}`, CREST_ICON_SIZE);
+        setCrestImageWithFallback(crest, `class_${slot.member.cls}`, CREST_ICON_SIZE);
       },
     },
   );
@@ -309,6 +358,9 @@ export function createPartyRow(
     group,
     rewind,
     incoming,
+    petBar,
+    petFill,
+    petLabel,
     paintAuras,
   };
 }

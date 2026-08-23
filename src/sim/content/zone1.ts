@@ -114,8 +114,8 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
     loot: [
       { copper: 8, chance: 1 },
       { itemId: 'wolf_fang', chance: 0.45 },
-      { itemId: 'milepost_boots', chance: 0.1 },
-      { itemId: 'wolfhide_satchel', chance: 0.02 },
+      { itemId: 'milepost_boots', chance: 0.017 },
+      { itemId: 'wolfhide_satchel', chance: 0.003 },
     ],
     scale: 0.9,
     color: 0x7f8c8d,
@@ -171,7 +171,7 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
       { copper: 12, chance: 1 },
       { itemId: 'boar_hide', chance: 0.6, questId: 'q_boars' },
       { itemId: 'tough_jerky', chance: 0.3 },
-      { itemId: 'trail_leggings', chance: 0.1 },
+      { itemId: 'trail_leggings', chance: 0.02 },
     ],
     scale: 0.85,
     color: 0x935116,
@@ -204,7 +204,7 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
       { copper: 14, chance: 1 },
       { itemId: 'webwood_silk', chance: 0.55, questId: 'q_spiders' },
       { itemId: 'spider_leg', chance: 0.4 },
-      { itemId: 'mosshide_vest', chance: 0.12 },
+      { itemId: 'mosshide_vest', chance: 0.02 },
     ],
     scale: 0.9,
     color: 0x4a235a,
@@ -247,6 +247,9 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
       { itemId: 'moggers_shiv', chance: 0.25, rollGroup: 'mogger_chase' },
       { itemId: 'cryptstalker_jerkin', chance: 0.25, rollGroup: 'mogger_chase' },
       { itemId: 'valefire_lantern', chance: 0.2 },
+      // The hunter offhand rides its own independent roll beside the caster
+      // lantern, so neither class's odds depend on the other's.
+      { itemId: 'moggers_hide_quiver', chance: 0.2 },
     ],
     scale: 1.28,
     color: 0x8e5b33,
@@ -317,8 +320,8 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
       { itemId: 'tallow_candle', chance: 0.6 },
       { itemId: 'blessed_wax', chance: 0.45, questId: 'q_rite' },
       { itemId: 'linen_scrap', chance: 0.25 },
-      { itemId: 'mossy_handwraps', chance: 0.15 },
-      { itemId: 'thornling_grips', chance: 0.15 },
+      { itemId: 'mossy_handwraps', chance: 0.01 },
+      { itemId: 'thornling_grips', chance: 0.01 },
     ],
     scale: 0.85,
     color: 0x9c640c,
@@ -333,7 +336,20 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
     elite: true,
     canSwim: true,
     ccImmune: true,
-    respawnMult: 432,
+    // Random respawn window, drawn fresh per death: 36 to 72 times the 25s base
+    // is 15 to 30 minutes (was a fixed 432, three hours).
+    //
+    // WHY THE CADENCE MOVED. A level 7 named miniboss is content for players
+    // passing through Zone 1, and an experienced player solos an account to cap
+    // in about four hours, so a three-hour timer meant most of his audience
+    // never saw him at all. WHY THIS WINDOW. Zone 1's rare ladder runs from
+    // Mogger and Old Greyjaw at 4x (100s) up to Wraithbinder Maldrec at 432x
+    // (three hours); the geometric midpoint of that span is about 42x, and this
+    // window brackets it. Grix stays strictly rarer than the plain rares and far
+    // rarer than trash, while a Zone 1 visit now contains two to four of his
+    // spawns instead of a fraction of one. The randomness is separate and is
+    // what stops the camp being clock-farmed.
+    respawnWindow: { minMult: 36, maxMult: 72 },
     hpBase: 280,
     hpPerLevel: 52,
     dmgBase: 11,
@@ -359,7 +375,13 @@ export const ZONE1_MOBS: Record<string, MobTemplate> = {
       { itemId: 'hollowbone_hauberk', chance: 0.25, rollGroup: 'grix_tunnelking_chase' },
       { itemId: 'briarroot_staff', chance: 0.3 },
     ],
-    scale: 1.15,
+    // Half again the Deeprock Diggers he summons (tunnel_rat scale 0.85 x 1.5),
+    // up from 1.15. Not purely cosmetic: mob_combat's scaledDefaultMobMeleeRange
+    // adds 3 yd of reach per unit of scale ABOVE 1, so this widens his melee
+    // reach by 0.375 yd (and desiredRange, which is 0.8x of it) as well as his
+    // silhouette. That is the intended read for a rare elite standing in a pack
+    // of its own adds; it is also why this is a parity-affecting change.
+    scale: 1.275,
     color: 0xb9770e,
   },
   vale_bandit: {
@@ -610,6 +632,7 @@ export const ZONE1_NPCS: Record<string, NpcDef> = {
       'q_sexton',
       'q_hollow',
       'q_gravecallers_trail',
+      'q_divine_tome',
       'q_fenbridge_muster',
     ],
     greeting: 'The Light keep you. Even the dead find no rest here of late.',
@@ -1094,6 +1117,33 @@ export const ZONE1_QUESTS: Record<string, QuestDef> = {
     itemRewards: {},
     requiresQuest: 'q_hollow',
   },
+  // --- Paladin-only Dawnbound Tome chain (learn Recall the Fallen). Step 1 with Brother
+  // Aldric in the Vale opens the rite and sends you after him; the rite itself is
+  // completed with Aldric in Mirefen Marsh (q_rite_of_redemption, zone2), which
+  // grants the resurrection on turn-in. ---
+  q_divine_tome: {
+    id: 'q_divine_tome',
+    name: 'The Dawnbound Tome',
+    giverNpcId: 'brother_aldric',
+    turnInNpcId: 'brother_aldric',
+    text: 'The Light does not rest in you quietly, $N. I have watched you lay the dead to peace, and I believe you are ready for what few paladins are ever taught: the Rite of Recall, by which a fallen soul is called back to the living. Its words are kept in the Dawnbound Tome, here in my keeping, but a book is no blessing while the restless dead still walk this ground. Return 6 more Restless Bones to the earth, and I will begin to teach you.',
+    completionText:
+      'The chapel yard grows quiet. You are ready for the words, $N, but the Rite of Recall cannot be spoken in a warm chapel. It must be sung where the veil between life and death wears thin. I mean to carry the Tome north into the Mirefen Marsh. Follow me there, and we will finish this.',
+    objectives: [
+      {
+        type: 'kill',
+        targetMobId: 'restless_bones',
+        count: 6,
+        label: 'Restless Bones laid to rest',
+      },
+    ],
+    xpReward: 650,
+    copperReward: 200,
+    itemRewards: {},
+    requiredClass: ['paladin'],
+    requiresQuest: 'q_bones',
+    minLevel: 6,
+  },
   q_bandits: {
     id: 'q_bandits',
     name: 'Bandits of the Vale',
@@ -1172,16 +1222,25 @@ export const ZONE1_QUESTS: Record<string, QuestDef> = {
     requiredItems: ['copper_mining_pick'],
     completionEffect: { type: 'attunePair', mode: 'new', pairId: 'weaponcrafting+armorcrafting' },
   },
+  // STALE-OVERLAY NOTE (docs/i18n-scaling/translation-workflow.md, "Rewording an
+  // existing English value"): the giver text and objectives.0.label for this key
+  // were reworded (mob display names webwood spider -> Sableweb Lurker) without a
+  // matching overlay re-fill. The status registry has no staleness detection yet
+  // (srcHash/enHash comparison is dormant), so translated locales keep rendering
+  // the OLD mob name and the release-tier pending gate will NOT catch it. Flagging
+  // here for the next maintainer i18n-locale-fill pass to re-do
+  // entities.quests.q_prof_attune_outfitter.{text,objectives.0.label} in every
+  // locale overlay.
   q_prof_attune_outfitter: {
     id: 'q_prof_attune_outfitter',
     name: "The Outfitter's Measure",
     giverNpcId: 'weaver_ottilie',
     turnInNpcId: 'weaver_ottilie',
-    text: 'Measure the cost before you cut, that is the first rule at my loom. Choose me and Leatherworking and Tailoring become your two majors, the pair you may carry beyond rare work; the craft opposite them settles in as your hobby, taken to rare and left there. The trades you set aside are not unravelled, $N, only folded away, dormant until you take them up again. Be certain, though: should you leave this pair and later want it back, the way home is paid in labor that lengthens each time, five culled at first, then eight, then eleven, always a little more. If your mind is made, cull four webwood spiders and bring their silk to the loom, for good thread starts every good garment.',
+    text: 'Measure the cost before you cut, that is the first rule at my loom. Choose me and Leatherworking and Tailoring become your two majors, the pair you may carry beyond rare work; the craft opposite them settles in as your hobby, taken to rare and left there. The trades you set aside are not unravelled, $N, only folded away, dormant until you take them up again. Be certain, though: should you leave this pair and later want it back, the way home is paid in labor that lengthens each time, five culled at first, then eight, then eleven, always a little more. If your mind is made, cull four Sableweb Lurkers and bring their silk to the loom, for good thread starts every good garment.',
     completionText:
       'Even thread, even hand. Leatherworking and Tailoring are yours to carry as far as your skill will reach. Measure twice, and they will not fail you.',
     objectives: [
-      { type: 'kill', targetMobId: 'webwood_spider', count: 4, label: 'Webwood Spider culled' },
+      { type: 'kill', targetMobId: 'webwood_spider', count: 4, label: 'Sableweb Lurker culled' },
     ],
     xpReward: 150,
     copperReward: 0,
@@ -1251,16 +1310,19 @@ export const ZONE1_QUESTS: Record<string, QuestDef> = {
       pairId: 'weaponcrafting+armorcrafting',
     },
   },
+  // STALE-OVERLAY NOTE: same reword-without-refill gap as q_prof_attune_outfitter
+  // above (webwood spider -> Sableweb Lurker), needs an i18n-locale-fill pass for
+  // entities.quests.q_prof_amends_outfitter.{text,objectives.0.label}.
   q_prof_amends_outfitter: {
     id: 'q_prof_amends_outfitter',
     name: 'Threads Rejoined',
     giverNpcId: 'weaver_ottilie',
     turnInNpcId: 'weaver_ottilie',
-    text: 'Back at my loom after all. I hold no grudge, $N, but the thread remembers a hand that let it go, and the cost of taking it up again is measured out longer each time. Cull the webwood spiders crowding the eastern woods, and the labor will settle your hands before they touch good silk again.',
+    text: 'Back at my loom after all. I hold no grudge, $N, but the thread remembers a hand that let it go, and the cost of taking it up again is measured out longer each time. Cull the Sableweb Lurkers crowding the eastern woods, and the labor will settle your hands before they touch good silk again.',
     completionText:
       'Steady again. Leatherworking and Tailoring return to your hands as majors. Measure twice this time before you wander.',
     objectives: [
-      { type: 'kill', targetMobId: 'webwood_spider', count: 5, label: 'Webwood Spider culled' },
+      { type: 'kill', targetMobId: 'webwood_spider', count: 5, label: 'Sableweb Lurker culled' },
     ],
     xpReward: 100,
     copperReward: 0,
@@ -1287,16 +1349,19 @@ export const ZONE1_QUESTS: Record<string, QuestDef> = {
     resolvedObjectiveCounts: 'archetypeAmends',
     completionEffect: { type: 'attunePair', mode: 'return', pairId: 'alchemy+cooking' },
   },
+  // STALE-OVERLAY NOTE: same reword-without-refill gap as q_prof_attune_outfitter
+  // above (tunnel rat -> Deeprock Digger), needs an i18n-locale-fill pass for
+  // entities.quests.q_prof_amends_bombardier.{text,objectives.0.label}.
   q_prof_amends_bombardier: {
     id: 'q_prof_amends_bombardier',
     name: 'The Ledger Grows',
     giverNpcId: 'tinker_gizzel',
     turnInNpcId: 'tinker_gizzel',
-    text: 'You came BACK, ha, they always come back, the loud stuff has a pull, yes? No sulking from me, $N, but the ledger, oh the ledger, it grows every time you skip out, more each return, that is only fair. Go clear the tunnel rats out of the dig for me, sweat first, sparks later, that is the rule I just made up.',
+    text: 'You came BACK, ha, they always come back, the loud stuff has a pull, yes? No sulking from me, $N, but the ledger, oh the ledger, it grows every time you skip out, more each return, that is only fair. Go clear the Deeprock Diggers out of the dig for me, sweat first, sparks later, that is the rule I just made up.',
     completionText:
       'THERE it is, the itch is back in your hands. Engineering and Alchemy, majors again, go on, go make a bang. Try to stay put this time, eh?',
     objectives: [
-      { type: 'kill', targetMobId: 'tunnel_rat', count: 5, label: 'Tunnel Rat exterminated' },
+      { type: 'kill', targetMobId: 'tunnel_rat', count: 5, label: 'Deeprock Digger exterminated' },
     ],
     xpReward: 100,
     copperReward: 0,
@@ -1442,6 +1507,7 @@ export const ZONE1_QUEST_ORDER = [
   'q_sexton',
   'q_hollow',
   'q_gravecallers_trail',
+  'q_divine_tome',
   'q_mogger',
   'q_prof_attune_smith',
   'q_prof_attune_outfitter',

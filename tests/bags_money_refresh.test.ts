@@ -5,8 +5,10 @@
 // The defect is a missing convergence edge, not a missing button handler:
 //  - the sim's proceeds arm moves ONLY meta.copper (src/sim/market.ts), so the
 //    player's inventory is byte-identical;
-//  - `copper` rides every self-frame in the server's UNCONDITIONAL base object
-//    while `inv` is serialize-diffed, so a money-only frame carries no `inv`;
+//  - `copper` is a `maybe(...)` delta key like `inv` (both rode the server's
+//    UNCONDITIONAL base object at the time #2373 was filed; copper later joined
+//    the delta-guarded cohort alongside the rest of the static combat-rating/
+//    progression scalars), so a money-only frame carries `copper` but no `inv`;
 //  - ClientWorld therefore mirrored the new copper while raising NO
 //    inventory-changed flag, and Hud.onInventoryChanged() (the one authoritative
 //    online path to renderBags) never ran.
@@ -17,9 +19,9 @@
 // This file owns the WIRE half, driven through a REAL GameServer and a real
 // ClientWorld: a proceeds-only collect must raise the flag from the copper delta
 // alone (red before the fix), an unchanged purse must not raise it (which is what
-// forces a diff rather than an `s.copper !== undefined` presence test, and with it a
-// 20 Hz repaint), the pre-existing inventory arm must still flag, and the spectate
-// anchor ruling is pinned so it cannot drift silently.
+// forces a diff against the prior mirror rather than an `s.copper !== undefined`
+// presence test, and with it a 20 Hz repaint), the pre-existing inventory arm must
+// still flag, and the spectate anchor ruling is pinned so it cannot drift silently.
 //
 // The other two halves live where they can be EXECUTED rather than pattern-matched:
 // the pure staleness decision is a truth table on bagsMoneyRowStale in
@@ -54,9 +56,11 @@ vi.mock('../server/db', () => ({
 }));
 
 import { type ClientSession, GameServer } from '../server/game';
+import { emptySaleLog } from '../src/sim/market_sale_log';
 import type { Entity } from '../src/sim/types';
 import { groundHeight } from '../src/sim/world';
 import { bareClient } from './helpers/bare_client';
+import { methodBody } from './helpers/method_body';
 
 const PROCEEDS = 54321;
 
@@ -124,6 +128,7 @@ function setup() {
   sim.market.marketCollections.set(String(meta.characterId ?? meta.entityId), {
     copper: PROCEEDS,
     items: [],
+    sales: emptySaleLog(),
   });
 
   const client = bareClient(session.pid);
@@ -179,16 +184,19 @@ describe('bag money-row freshness on a money-only delta (#2373)', () => {
     (client as any).applySnapshot(snap);
     expect(client.consumeInventoryChanged()).toBe(true);
 
-    // A second broadcast with no further money movement. A fix written as
-    // `if (s.copper !== undefined) this.invChanged = true` would pass the test
-    // above and fire here on EVERY snapshot, tearing down the bags, the vendor,
-    // the char sheet and the crafting probe twice a tick under the player's
-    // cursor. Diffing against the prior mirror is what keeps this false.
+    // A second broadcast with no further money movement. copper is itself a
+    // `maybe(...)` delta key (server/game.ts), so an unchanged purse omits it
+    // outright; the decoder's `s.copper ?? this.copper` fallback (diffed against
+    // the prior mirror, never a bare `s.copper !== undefined` presence test)
+    // keeps the flag down regardless of whether the key rides or elides, so this
+    // stays green even if a future change stops eliding it.
+    const copperBefore = client.copper;
     fc.sent.length = 0;
     (server as any).broadcastSnapshots();
     const quiet = lastSnap(fc.sent);
-    expect(quiet.self.copper).toBe(client.copper); // copper still rides the frame
+    expect('copper' in quiet.self).toBe(false); // copper delta-elides, unchanged
     (client as any).applySnapshot(quiet);
+    expect(client.copper).toBe(copperBefore); // prior mirror preserved, not wiped
     expect(client.consumeInventoryChanged()).toBe(false);
   });
 
@@ -199,6 +207,7 @@ describe('bag money-row freshness on a money-only delta (#2373)', () => {
     sim.market.marketCollections.set(String(meta.characterId ?? meta.entityId), {
       copper: 0,
       items: [{ itemId: 'worn_sword', count: 1 }],
+      sales: emptySaleLog(),
     });
 
     const snap = collect(server, fc, session);
@@ -294,8 +303,11 @@ describe('bag purse-freshness wiring (source pins)', () => {
     // the cold-load-safe form too (issue #1538): every money-only credit now routes
     // through here, so the raw `!== 'none'` compare would rebuild a window the
     // player has never opened on each one.
-    expect(hud).toMatch(
-      /onInventoryChanged\(\): void \{[^}]*if \(bagsWindowShown\(\$\('#bags'\)\.style\.display\)\) this\.renderBags\(\);/,
+    // Sliced to the method body (the shared two-space-close bound) rather
+    // than a flat [^}]* reach from the opener: brace-bearing sibling arms
+    // inside onInventoryChanged broke that shape once (#2931).
+    expect(methodBody(hud, 'onInventoryChanged(): void {')).toContain(
+      "if (bagsWindowShown($('#bags').style.display)) this.renderBags();",
     );
   });
 

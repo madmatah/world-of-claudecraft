@@ -1,5 +1,5 @@
 import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
-import { delveAt, dungeonAt, isDelvePos, type ZoneDef } from '../sim/data';
+import { delveAt, dungeonAt, isBgPos, isDelvePos, type ZoneDef } from '../sim/data';
 import { realmRacersLaneAt } from '../sim/realm_racers_layout';
 import { isAtSowfield } from '../sim/vale_cup_layout';
 import {
@@ -111,6 +111,9 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
 
   const dungeon = dungeonAt(input.playerPos.x);
   const inRaidArena = dungeon?.id === RAID_ARENA_ID;
+  // Thornhollow Fields battleground: the whole match rides the existing battle track
+  // (the raid-arena musicCombat treatment; no dedicated audio asset).
+  const inBattleground = isBgPos(input.playerPos.x);
   const inCombat = aggroed || input.now - input.lastCombatEventAt < RECENT_COMBAT_MS;
   bossEngaged =
     bossEngaged || inRaidArena || input.now - input.lastBossCombatEventAt < RECENT_BOSS_COMBAT_MS;
@@ -159,7 +162,7 @@ export function instanceMusicDecision(input: InstanceMusicInput): InstanceMusicD
   return {
     zone,
     inCombat,
-    musicCombat: inCombat || inRaidArena,
+    musicCombat: inCombat || inRaidArena || inBattleground,
     bossEngaged,
     instanceId: musicInstanceId,
     atSowfield,

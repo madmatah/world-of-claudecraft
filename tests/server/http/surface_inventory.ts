@@ -1151,6 +1151,34 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
     limiter: null,
     requireOwnedExpected: null,
   },
+  // Reliquary (server/reliquary.ts): the population-rarity aggregate, a
+  // registry-only RouteDef born after the migration like the deeds family, and
+  // the deeds-rarity row shape exactly (anonymous public JSON read, budgeted
+  // in-handler with publicReadRateLimited).
+  {
+    dispatcher: DISPATCH.mainApi,
+    method: 'GET',
+    path: '/api/reliquary/rarity',
+    handler: 'server/reliquary.ts rarityHandler (registry-only RouteDef)',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.public,
+    limiter: 'publicReadRateLimited',
+    requireOwnedExpected: null,
+  },
+  // Thornhollow Fields (server/battleground.ts): a registry-only RouteDef born after
+  // the migration, per the same new-route rule as the deeds family. Public
+  // anonymous ladder read, rate-limited in-handler with publicReadRateLimited
+  // (the deeds-rarity row shape).
+  {
+    dispatcher: DISPATCH.mainApi,
+    method: 'GET',
+    path: '/api/battleground/leaderboard',
+    handler: 'server/battleground.ts bgLeaderboardHandler (registry-only RouteDef)',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.public,
+    limiter: 'publicReadRateLimited',
+    requireOwnedExpected: null,
+  },
   // OTA update check (server/ota_updates.ts): registry-only RouteDef, same
   // new-route rule as the deeds trio. The Capgo capacitor-updater plugin in
   // the native mobile shells POSTs its device/version check-in here; the
@@ -1397,7 +1425,7 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
     handler: 'assetIdMatch',
     contentType: PROBLEM_JSON,
     authScope: AUTH_SCOPE.full,
-    limiter: null,
+    limiter: 'assetUploadRateLimited',
     requireOwnedExpected: REQUIRE_OWNED.bola404,
     match: /^\/api\/assets\/(\d+)$/,
   },
@@ -1461,6 +1489,34 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
     limiter: null,
     requireOwnedExpected: REQUIRE_OWNED.operator404,
     match: /^\/admin\/api\/moderation\/accounts\/(\d+)\/chat-mute$/,
+  },
+  // The Cheater mark pair (src/sim/moderation/): registry-only RouteDefs born
+  // AFTER the migration (the new-route rule, server/http/CLAUDE.md), so neither
+  // has a legacy handleAdminApi arm and neither carries a `match` regex; there is
+  // no dispatcher regex literal for the freshness gate to compare one against,
+  // and the legacy rollback answers 404 for both by design. Their RouteDef path
+  // template is their one dispatch source, so surface_inventory.test.ts lists
+  // both in REGISTRY_ONLY_PARAM_PATHS. The operator gate pair and the envelope
+  // are the chat-mute row's exactly.
+  {
+    dispatcher: DISPATCH.admin,
+    method: 'POST',
+    path: '/admin/api/moderation/accounts/:id/cheater-mark',
+    handler: 'server/admin.ts cheaterMarkHandler (registry-only RouteDef)',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: REQUIRE_OWNED.operator404,
+  },
+  {
+    dispatcher: DISPATCH.admin,
+    method: 'POST',
+    path: '/admin/api/moderation/accounts/:id/lift-cheater-mark',
+    handler: 'server/admin.ts liftCheaterMarkHandler (registry-only RouteDef)',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: REQUIRE_OWNED.operator404,
   },
   {
     dispatcher: DISPATCH.admin,
@@ -1594,6 +1650,17 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
     requireOwnedExpected: REQUIRE_OWNED.operator404,
     match: /^\/admin\/api\/accounts\/(\d+)\/reset-password$/,
   },
+  {
+    dispatcher: DISPATCH.admin,
+    method: 'POST',
+    path: '/admin/api/accounts/:id/general-chat-rate-limit',
+    handler: 'generalChatRateLimitMatch',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: REQUIRE_OWNED.operator404,
+    match: /^\/admin\/api\/accounts\/(\d+)\/general-chat-rate-limit$/,
+  },
   // Account flair: the operator-set AI mark and an official streamer's links.
   {
     dispatcher: DISPATCH.admin,
@@ -1715,6 +1782,39 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
     method: 'GET',
     path: '/admin/api/overview',
     handler: 'handleAdminApi arm: /admin/api/overview',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: null,
+  },
+  // Ad-spend ledger: registry-only RouteDefs born AFTER the migration (the
+  // new-route rule, server/http/CLAUDE.md): no legacy ladder arm, so the
+  // legacy rollback answers 404 for them by design.
+  {
+    dispatcher: DISPATCH.admin,
+    method: 'GET',
+    path: '/admin/api/ad-spend',
+    handler: 'server/ad_spend.ts listHandler (registry-only RouteDef)',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: null,
+  },
+  {
+    dispatcher: DISPATCH.admin,
+    method: 'POST',
+    path: '/admin/api/ad-spend',
+    handler: 'server/ad_spend.ts upsertHandler (registry-only RouteDef)',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: null,
+  },
+  {
+    dispatcher: DISPATCH.admin,
+    method: 'POST',
+    path: '/admin/api/ad-spend/delete',
+    handler: 'server/ad_spend.ts deleteHandler (registry-only RouteDef)',
     contentType: PROBLEM_JSON,
     authScope: AUTH_SCOPE.admin,
     limiter: null,
@@ -2047,6 +2147,28 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
   },
   {
     dispatcher: DISPATCH.admin,
+    method: 'POST',
+    path: '/admin/api/bug-reports/:id/resolve',
+    handler: 'bugReportResolveMatch',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: REQUIRE_OWNED.operator404,
+    match: /^\/admin\/api\/bug-reports\/(\d+)\/(resolve|dismiss)$/,
+  },
+  {
+    dispatcher: DISPATCH.admin,
+    method: 'POST',
+    path: '/admin/api/bug-reports/:id/dismiss',
+    handler: 'bugReportResolveMatch',
+    contentType: PROBLEM_JSON,
+    authScope: AUTH_SCOPE.admin,
+    limiter: null,
+    requireOwnedExpected: REQUIRE_OWNED.operator404,
+    match: /^\/admin\/api\/bug-reports\/(\d+)\/(resolve|dismiss)$/,
+  },
+  {
+    dispatcher: DISPATCH.admin,
     method: 'GET',
     path: '/admin/api/moderation/accounts/:id',
     handler: 'moderationAccountMatch',
@@ -2272,41 +2394,15 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
     limiter: null,
     requireOwnedExpected: null,
   },
-  {
-    dispatcher: DISPATCH.internal,
-    method: 'GET',
-    path: '/internal/discord/relay',
-    handler: 'handleDiscordInternal arm: /internal/discord/relay',
-    contentType: PROBLEM_JSON,
-    authScope: AUTH_SCOPE.secretDiscord,
-    limiter: null,
-    requireOwnedExpected: null,
-  },
-  {
-    dispatcher: DISPATCH.internal,
-    method: 'GET',
-    path: '/internal/discord/activity',
-    handler: 'handleDiscordInternal arm: /internal/discord/activity',
-    contentType: PROBLEM_JSON,
-    authScope: AUTH_SCOPE.secretDiscord,
-    limiter: null,
-    requireOwnedExpected: null,
-  },
+  // The retired per-endpoint GET pickups (relay, activity, and the standalone
+  // daily-rewards-winners read) have NO rows here: the bot's consolidated
+  // outbox poll replaced them and both their arms were removed together
+  // (#2791), so a request to those paths answers the ladder's terminal 404.
   {
     dispatcher: DISPATCH.internal,
     method: 'POST',
     path: '/internal/discord/members-meta',
     handler: 'handleDiscordInternal arm: /internal/discord/members-meta',
-    contentType: PROBLEM_JSON,
-    authScope: AUTH_SCOPE.secretDiscord,
-    limiter: null,
-    requireOwnedExpected: null,
-  },
-  {
-    dispatcher: DISPATCH.internal,
-    method: 'GET',
-    path: '/internal/discord/daily-rewards-winners',
-    handler: 'handleDiscordInternal arm: /internal/discord/daily-rewards-winners',
     contentType: PROBLEM_JSON,
     authScope: AUTH_SCOPE.secretDiscord,
     limiter: null,
@@ -2350,10 +2446,12 @@ export const SURFACE_INVENTORY: readonly SurfaceRoute[] = [
   },
   // The consolidated bot poll: the relay, activity and linked-member change
   // feeds drained together with the winner-day announcements, so the bot makes
-  // one request per interval instead of three plus a full member sweep. The
-  // second REGISTRY-ONLY internal route, same reason as flex-batch above (born
-  // after the migration, no handleDiscordInternal arm, so the handler anchors on
-  // the exported RouteDef symbol).
+  // one request per interval instead of three plus a full member sweep. Since
+  // #2791 this is the ONLY pickup surface: the per-endpoint GETs it replaced
+  // are retired from both arms. The second REGISTRY-ONLY internal route, same
+  // reason as flex-batch above (born after the migration, no
+  // handleDiscordInternal arm, so the handler anchors on the exported RouteDef
+  // symbol).
   {
     dispatcher: DISPATCH.internal,
     method: 'GET',

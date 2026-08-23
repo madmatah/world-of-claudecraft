@@ -1,3 +1,15 @@
+// The authoritative self-position discontinuity, and the ONE mechanism that
+// decides it.
+//
+// The v0.40.0 release merge arrived carrying a second one:
+// `hasAuthoritativeSelfPositionDiscontinuity(events, playerId)` in
+// `src/render/self_motion.ts`, which `main.ts` called on the event batch. It is
+// gone, and this file is why it could go rather than being kept beside this one.
+// The mirror's flag answers strictly more: the same completed `unstuck`, PLUS
+// `realmRacersReset`, and it defers the answer until the snapshot that follows
+// the events has actually landed on the mirror. That deferral is the part a
+// batch-reading predicate cannot have, because the two arrive as separate
+// ordered frames and a render frame can fall between them.
 import { describe, expect, it } from 'vitest';
 import { ClientWorld } from '../src/net/online';
 

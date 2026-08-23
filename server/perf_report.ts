@@ -257,6 +257,180 @@ function sanitizeBrowserSummary(value: unknown): Record<string, unknown> | undef
   };
 }
 
+// rendererGpuQueue (issue #3167): the background GPU queue drains one unit at
+// a time (plus a small released-tail overlap), so the running unit, the
+// released tails, and the stalls they record are the only evidence a
+// never-settling unit leaves. Same JSONB-not-DDL treatment as the longtask
+// block above, with the same kind of numeric bound. A completed unit's slice
+// is a single piece of GPU work; an active unit's age is time SINCE it started
+// and can span whole reporting intervals, hence the two different ceilings.
+const GPU_QUEUE_RAW_MS_MAX = 60_000;
+const GPU_QUEUE_RAW_AGE_MS_MAX = 30 * 60_000;
+const GPU_QUEUE_RAW_STALLS_MAX = 8;
+const GPU_QUEUE_RAW_SLOWEST_MAX = 8;
+// Released compile-gate tails settling beside the active unit. The client caps
+// them at the queue's own tail limit; this bound only defends the ingest.
+const GPU_QUEUE_RAW_TAILS_MAX = 4;
+// One row per priority lane in the recent-interval block. GPU_WORK_PRIORITY has
+// six named lanes; the slack absorbs a caller passing its own number without
+// letting a hostile payload turn a fixed-size block into a list.
+const GPU_QUEUE_RAW_LANES_MAX = 8;
+// Grant-wait examples. The client caps at 5; this only defends the ingest.
+const GPU_QUEUE_RAW_WAITS_MAX = 8;
+// The recent window is an INTERVAL readout, so its span is bounded by what a
+// client could plausibly aggregate over rather than by a unit age.
+const GPU_QUEUE_RAW_WINDOW_MS_MAX = 10 * 60_000;
+
+function gpuQueueUnitLabel(value: unknown): string {
+  return textIn(value, 80, 'unlabeled');
+}
+
+function gpuQueuePriority(value: unknown): number {
+  return intIn(value, -1000, 1000, 0);
+}
+
+function sanitizeGpuQueueSummary(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) return undefined;
+  const active = isRecord(value.active)
+    ? {
+        label: gpuQueueUnitLabel(value.active.label),
+        priority: gpuQueuePriority(value.active.priority),
+        ageMs: numberIn(value.active.ageMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+      }
+    : null;
+  const stalls = Array.isArray(value.stalls) ? value.stalls : [];
+  const slowest = Array.isArray(value.slowest) ? value.slowest : [];
+  const blockiest = Array.isArray(value.blockiest) ? value.blockiest : [];
+  const waitingTails = Array.isArray(value.waitingTails) ? value.waitingTails : [];
+  return {
+    units: intIn(value.units, 0, 10_000_000, 0),
+    totalSyncMs: numberIn(value.totalSyncMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    worstSyncMs: numberIn(value.worstSyncMs, 0, GPU_QUEUE_RAW_MS_MAX, 0),
+    // The frame-cost half of the client's queue readout. This sanitizer
+    // REBUILDS the block from a fixed key set rather than merging, so a field
+    // the client adds and this list omits is dropped silently: adding one here
+    // is part of adding it there.
+    totalFrameGapMs: numberIn(value.totalFrameGapMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    worstFrameGapMs: numberIn(value.worstFrameGapMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    worstUnsharedFrameGapMs: numberIn(
+      value.worstUnsharedFrameGapMs,
+      0,
+      GPU_QUEUE_RAW_AGE_MS_MAX,
+      0,
+    ),
+    pending: intIn(value.pending, 0, 1_000_000, 0),
+    stallCount: intIn(value.stallCount, 0, 1_000_000, 0),
+    active,
+    waitingTails: waitingTails
+      .slice(0, GPU_QUEUE_RAW_TAILS_MAX)
+      .filter(isRecord)
+      .map((tail) => ({
+        label: gpuQueueUnitLabel(tail.label),
+        priority: gpuQueuePriority(tail.priority),
+        ageMs: numberIn(tail.ageMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+      })),
+    stalls: stalls
+      .slice(0, GPU_QUEUE_RAW_STALLS_MAX)
+      .filter(isRecord)
+      .map((stall) => ({
+        label: gpuQueueUnitLabel(stall.label),
+        priority: gpuQueuePriority(stall.priority),
+        ageMs: numberIn(stall.ageMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+        settled: Boolean(stall.settled),
+      })),
+    slowest: slowest.slice(0, GPU_QUEUE_RAW_SLOWEST_MAX).filter(isRecord).map(sanitizeGpuQueueUnit),
+    // Ranked by frame cost rather than sync slice: the units this metric exists
+    // to surface report single-digit syncMs, so a sync-ordered list alone can
+    // never carry them to the fleet.
+    blockiest: blockiest
+      .slice(0, GPU_QUEUE_RAW_SLOWEST_MAX)
+      .filter(isRecord)
+      .map(sanitizeGpuQueueUnit),
+    worstWaitMs: numberIn(value.worstWaitMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    longestWaits: (Array.isArray(value.longestWaits) ? value.longestWaits : [])
+      .slice(0, GPU_QUEUE_RAW_WAITS_MAX)
+      .filter(isRecord)
+      .map((wait) => ({
+        label: gpuQueueUnitLabel(wait.label),
+        priority: gpuQueuePriority(wait.priority),
+        waitMs: numberIn(wait.waitMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+        // Nullable by design: a wait with nothing running points at the tail cap
+        // rather than at a holder, and flattening that to a string would invent
+        // a culprit.
+        blockedBy: typeof wait.blockedBy === 'string' ? gpuQueueUnitLabel(wait.blockedBy) : null,
+        blockedByPriority:
+          wait.blockedByPriority === null || wait.blockedByPriority === undefined
+            ? null
+            : gpuQueuePriority(wait.blockedByPriority),
+        waitedOnTailCap: Boolean(wait.waitedOnTailCap),
+        tails: (Array.isArray(wait.tails) ? wait.tails : [])
+          .slice(0, GPU_QUEUE_RAW_TAILS_MAX)
+          .filter((tail): tail is string => typeof tail === 'string')
+          .map((tail) => gpuQueueUnitLabel(tail)),
+      })),
+    recent: sanitizeGpuQueueRecent(value.recent),
+  };
+}
+
+// The one INTERVAL-scoped block in the queue readout: everything beside it is
+// cumulative or a lifetime maximum, so this is what a pacing A/B is read from.
+// Rebuilt from a fixed key set like its parent, lanes included.
+function sanitizeGpuQueueRecent(value: unknown): Record<string, unknown> {
+  const record = isRecord(value) ? value : {};
+  const lanes = Array.isArray(record.lanes) ? record.lanes : [];
+  return {
+    windowMs: numberIn(record.windowMs, 0, GPU_QUEUE_RAW_WINDOW_MS_MAX, 0),
+    units: intIn(record.units, 0, 10_000_000, 0),
+    totalSyncMs: numberIn(record.totalSyncMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    totalFrameGapMs: numberIn(record.totalFrameGapMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    worstSyncMs: numberIn(record.worstSyncMs, 0, GPU_QUEUE_RAW_MS_MAX, 0),
+    worstFrameGapMs: numberIn(record.worstFrameGapMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    worstWaitMs: numberIn(record.worstWaitMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    lanes: lanes
+      .slice(0, GPU_QUEUE_RAW_LANES_MAX)
+      .filter(isRecord)
+      .map((lane) => ({
+        priority: gpuQueuePriority(lane.priority),
+        units: intIn(lane.units, 0, 10_000_000, 0),
+        worstWaitMs: numberIn(lane.worstWaitMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+        totalWaitMs: numberIn(lane.totalWaitMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+        worstSyncMs: numberIn(lane.worstSyncMs, 0, GPU_QUEUE_RAW_MS_MAX, 0),
+        worstFrameGapMs: numberIn(lane.worstFrameGapMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+      })),
+  };
+}
+
+function sanitizeGpuQueueUnit(unit: Record<string, unknown>): Record<string, unknown> {
+  return {
+    label: gpuQueueUnitLabel(unit.label),
+    priority: gpuQueuePriority(unit.priority),
+    syncMs: numberIn(unit.syncMs, 0, GPU_QUEUE_RAW_MS_MAX, 0),
+    wallMs: numberIn(unit.wallMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    // Enqueue to start. A cosmetic lane delaying an actionable one shows up
+    // here first, so it survives ingest beside the cost fields.
+    waitMs: numberIn(unit.waitMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    frameGapMs: numberIn(unit.frameGapMs, 0, GPU_QUEUE_RAW_AGE_MS_MAX, 0),
+    sharedFrameGap: intIn(unit.sharedFrameGap, 0, 1_000_000, 0),
+  };
+}
+
+/** The per-level budget-variant costs, rebuilt field by field, or nothing when
+ *  the entry carries none (every entry but programs.budget-variants). */
+function compactBudgetVariants(value: unknown): Record<string, unknown> {
+  if (!Array.isArray(value)) return {};
+  const variants = value
+    .slice(0, PREWARM_COMPACT_BUDGET_VARIANTS_MAX)
+    .filter(isRecord)
+    .map((variant) => ({
+      index: nullableNumberIn(variant.index, 0, 1000),
+      elapsedMs: nullableNumberIn(variant.elapsedMs, 0, 600_000),
+      syncMs: nullableNumberIn(variant.syncMs, 0, 600_000),
+      programDelta: nullableNumberIn(variant.programDelta, -10_000, 10_000),
+      passes: nullableNumberIn(variant.passes, 0, 100_000),
+    }));
+  return variants.length > 0 ? { budgetVariants: variants } : {};
+}
+
 function compactPrewarmSummary(value: unknown): Record<string, unknown> | null {
   if (!isRecord(value)) return null;
   const out: Record<string, unknown> = {};
@@ -276,13 +450,29 @@ function compactPrewarmSummary(value: unknown): Record<string, unknown> | null {
     'compileTimedOut',
     'manifestPlanned',
     'manifestCompleted',
+    'manifestPartial',
+    'manifestSkipped',
     'manifestTimedOut',
     'manifestFailed',
-    'timedOutEntryIds',
-    'failedEntryIds',
   ];
   for (const key of scalarKeys) {
     if (value[key] !== undefined) out[key] = value[key];
+  }
+  // The three entry-id lists are client-supplied arrays and must never be
+  // copied verbatim like the scalars above (bounded only by the body cap):
+  // same bounds as the entries block below, non-arrays dropped outright.
+  // Deliberate asymmetry with the scalar copy: the manifestPartial /
+  // manifestTimedOut / manifestFailed COUNTS stay authoritative and uncapped
+  // (clamping one would misreport the true count), while these id lists are
+  // bounded SAMPLES. A stored count larger than its list length is therefore
+  // the documented shape of this signal, not self-contradiction.
+  for (const key of ['partialEntryIds', 'timedOutEntryIds', 'failedEntryIds']) {
+    const ids = value[key];
+    if (!Array.isArray(ids)) continue;
+    out[key] = ids
+      .slice(0, 24)
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => textIn(id, 80));
   }
   const entries = Array.isArray(value.entries)
     ? value.entries
@@ -301,9 +491,201 @@ function compactPrewarmSummary(value: unknown): Record<string, unknown> | null {
       remainingMsAfter: nullableNumberIn(entry.remainingMsAfter, 0, 60_000),
       programDelta: nullableNumberIn(entry.programDelta, -10_000, 10_000),
       textureDelta: nullableNumberIn(entry.textureDelta, -10_000, 10_000),
+      workDone: nullableNumberIn(entry.workDone, 0, 100_000),
+      workPlanned: nullableNumberIn(entry.workPlanned, 0, 100_000),
       detail: textIn(entry.detail, 160),
+      // Carried across truncation for the same reason compileUnits and the
+      // pacing transitions are: the per-level costs are the whole point of the
+      // budget-variants entry, and dropping them here loses them on exactly the
+      // overflowing reports they explain. Only one entry ever carries them, so
+      // the cost is one small list, and every field is rebuilt not copied.
+      ...compactBudgetVariants(entry.budgetVariants),
     }));
+  const resume = sanitizePrewarmResume(value.resume);
+  if (resume) out.resume = resume;
+  // The streamed-prewarm diagnostic, carried across truncation on a TIGHTER
+  // sample than the verbatim path. A report that overflows the byte cap is a
+  // report from a heavy session, which is exactly when "which unit stalled"
+  // and "did the pacer back off" are worth having: dropping these here would
+  // lose the signal precisely where it matters. Same shape as the verbatim
+  // path so a reader needs one parser, just fewer members.
+  const compileUnits = Array.isArray(value.compileUnits) ? value.compileUnits : null;
+  if (compileUnits) {
+    out.compileUnits = rankedCompileUnits(compileUnits, PREWARM_COMPACT_COMPILE_UNITS_MAX).map(
+      (unit) => ({
+        id: textIn(unit.id, 80),
+        lane: textIn(unit.lane, 40),
+        // The field the ranking above SELECTS on: without it a reader sees
+        // units chosen by the failure rule with no way to tell which failed.
+        failedAtMs: nullableNumberIn(unit.failedAtMs, 0, 600_000),
+        syncMs: nullableNumberIn(unit.syncMs, 0, 600_000),
+        settledDurationMs: nullableNumberIn(unit.settledDurationMs, 0, 600_000),
+        programDelta: nullableNumberIn(unit.programDelta, -10_000, 10_000),
+        statusAtReveal: textIn(unit.statusAtReveal, 16),
+      }),
+    );
+  }
+  const pacing = value.prewarmPacing;
+  if (isRecord(pacing)) {
+    const adaptive = isRecord(pacing.adaptive) ? pacing.adaptive : null;
+    const transitions = adaptive && Array.isArray(adaptive.transitions) ? adaptive.transitions : [];
+    out.prewarmPacing = {
+      mode: textIn(pacing.mode, 24),
+      source: textIn(pacing.source, 24),
+      adaptive: adaptive
+        ? {
+            state: textIn(adaptive.state, 24),
+            backoffCount: nullableNumberIn(adaptive.backoffCount, 0, 100_000),
+            noProgressCount: nullableNumberIn(adaptive.noProgressCount, 0, 100_000),
+            transitions: transitions
+              .slice(-PREWARM_COMPACT_TRANSITIONS_MAX)
+              .filter(isRecord)
+              .map((transition) => ({
+                atMs: nullableNumberIn(transition.atMs, 0, 600_000),
+                from: textIn(transition.from, 24),
+                to: textIn(transition.to, 24),
+                reason: textIn(transition.reason, 40),
+              })),
+          }
+        : null,
+    };
+  }
   return out;
+}
+
+// The resume lane's outcome: whether the entries the deadline dropped ever ran.
+// Rebuilt from a fixed key set, and only when the client sent one, so an older
+// client's report is stored without a hollow block that a reader would have to
+// tell apart from a lane that genuinely did nothing.
+const PREWARM_RESUME_ENTRIES_MAX = 24;
+// Mirrors PrewarmResumeStatus / PrewarmResumeEntryOutcome['lane'] in
+// src/render/prewarm_resume_ledger_core.ts. server/ cannot import src/render,
+// so this is a deliberate copy, the same pattern as CROWD_BUCKET_LABELS above.
+const PREWARM_RESUME_STATUSES = ['none', 'scheduled', 'done', 'failed'] as const;
+const PREWARM_RESUME_LANES = ['debt', 'cosmetic'] as const;
+
+// The streamed-prewarm diagnostic lists, bounded on the SAME rule as the
+// resume block above and for the same reason: they ride the verbatim raw path,
+// the client caps are advisory (any token holder can post a hand-rolled
+// report), and an unbounded list reaches storage on every report that fits
+// under the body cap. Mirrors PREWARM_REPORT_COMPILE_UNITS /
+// PREWARM_REPORT_BUDGET_VARIANTS / PREWARM_REPORT_TRANSITIONS in
+// src/game/perf_reporter.ts; server/ cannot import src/game, so this is a
+// deliberate copy, the same pattern as PREWARM_RESUME_STATUSES above.
+// A length clamp, not a field rebuild: the shapes are read as opaque
+// diagnostics, and it is their UNBOUNDED length that is the defect. Individual
+// member fields stay unshaped here on purpose, so a retained member can still
+// carry a long string or a nested object; what bounds THAT is the 16 KB
+// RAW_SUMMARY_MAX_BYTES check below, which runs after these clamps and routes
+// anything over it into compactPrewarmSummary, where every field IS rebuilt
+// through textIn / nullableNumberIn. Storage is therefore bounded in bytes on
+// both paths, and in shape on the compact one.
+// The compact path's own, tighter sample: it exists to fit a report that
+// already overflowed, so it carries fewer members and fewer fields per member.
+const PREWARM_COMPACT_COMPILE_UNITS_MAX = 6;
+const PREWARM_COMPACT_TRANSITIONS_MAX = 6;
+const PREWARM_COMPACT_BUDGET_VARIANTS_MAX = 6;
+// Scanned before ranking; far above any legitimate report (the client cap is 12).
+const PREWARM_COMPILE_UNITS_SCAN_MAX = 256;
+
+/**
+ * The most diagnostic `limit` compile units, in their original order.
+ *
+ * Taking the FIRST few would keep the earliest units, which on a boot are the
+ * cheap ones, and this block exists to answer "which unit stalled" on exactly
+ * the heavy reports that overflow into the compact path. Failures rank above
+ * everything, then synchronous time. Mirrors sampleCompileUnits in
+ * src/game/perf_prewarm_lists_core.ts; server/ cannot import src/game, so this
+ * is a deliberate copy, the same pattern as PREWARM_RESUME_STATUSES above.
+ */
+function rankedCompileUnits(units: unknown[], limit: number): Record<string, unknown>[] {
+  // Bounded BEFORE the sort, the same shape as PERF_SUGGESTION_IDS_SCAN_MAX
+  // above: a legitimate payload is at most the client cap, and an unauthenticated
+  // ingest should not sort an attacker-sized array even once. The scan bound sits
+  // far above any real report, so ranking is unaffected in practice.
+  const records = units.slice(0, PREWARM_COMPILE_UNITS_SCAN_MAX).filter(isRecord);
+  if (records.length <= limit) return records;
+  return records
+    .map((unit, index) => ({ unit, index }))
+    .sort((a, b) => {
+      const failed =
+        Number(a.unit.failedAtMs === null || a.unit.failedAtMs === undefined) -
+        Number(b.unit.failedAtMs === null || b.unit.failedAtMs === undefined);
+      if (failed !== 0) return failed;
+      const sync = numberIn(b.unit.syncMs, 0, 600_000, 0) - numberIn(a.unit.syncMs, 0, 600_000, 0);
+      if (sync !== 0) return sync;
+      // The client's own tie-break, so the two copies really do rank alike.
+      const settled =
+        numberIn(b.unit.settledDurationMs, 0, 600_000, 0) -
+        numberIn(a.unit.settledDurationMs, 0, 600_000, 0);
+      if (settled !== 0) return settled;
+      return a.index - b.index;
+    })
+    .slice(0, limit)
+    .sort((a, b) => a.index - b.index)
+    .map((entry) => entry.unit);
+}
+const PREWARM_COMPILE_UNITS_MAX = 12;
+const PREWARM_BUDGET_VARIANTS_MAX = 8;
+const PREWARM_PACING_TRANSITIONS_MAX = 12;
+
+/** Bound the client-supplied prewarm diagnostic lists in place. */
+function boundPrewarmDiagnosticLists(prewarm: Record<string, unknown>): void {
+  if (Array.isArray(prewarm.compileUnits)) {
+    // Ranked, not sliced: taking the first N here would throw away the slow and
+    // failed units before the compact path (or a reader) ever sees them, which
+    // is the opposite of what this list is for. A well-behaved client already
+    // sampled the same way; a hand-rolled report has not.
+    prewarm.compileUnits = rankedCompileUnits(prewarm.compileUnits, PREWARM_COMPILE_UNITS_MAX);
+  }
+  for (const key of ['manifestEntries', 'entries']) {
+    const entries = prewarm[key];
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) {
+      if (!isRecord(entry) || !Array.isArray(entry.budgetVariants)) continue;
+      entry.budgetVariants = entry.budgetVariants
+        .slice(0, PREWARM_BUDGET_VARIANTS_MAX)
+        .filter(isRecord);
+    }
+  }
+  const pacing = prewarm.prewarmPacing;
+  if (!isRecord(pacing)) return;
+  const adaptive = pacing.adaptive;
+  if (!isRecord(adaptive) || !Array.isArray(adaptive.transitions)) return;
+  // The MOST RECENT, matching sampleTransitions on the client: a pacer's end
+  // state is what a report is read for, and keeping the front would drop it.
+  adaptive.transitions = adaptive.transitions
+    .slice(-PREWARM_PACING_TRANSITIONS_MAX)
+    .filter(isRecord);
+}
+
+function sanitizePrewarmResume(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  const entries = Array.isArray(value.entries) ? value.entries : [];
+  const failedUnitIds = Array.isArray(value.failedUnitIds) ? value.failedUnitIds : [];
+  return {
+    // Enums, so an allowlist rather than 16 free characters: a client cannot
+    // store a status a reader would then have to guess the meaning of.
+    status: choiceIn(value.status, PREWARM_RESUME_STATUSES, 'none'),
+    plannedEntries: intIn(value.plannedEntries, 0, 1000, 0),
+    plannedUnits: intIn(value.plannedUnits, 0, 100_000, 0),
+    startedUnits: intIn(value.startedUnits, 0, 100_000, 0),
+    failedUnits: intIn(value.failedUnits, 0, 100_000, 0),
+    failedUnitIds: failedUnitIds
+      .slice(0, PREWARM_RESUME_ENTRIES_MAX)
+      .filter((id): id is string => typeof id === 'string')
+      .map((id) => textIn(id, 160)),
+    entries: entries
+      .slice(0, PREWARM_RESUME_ENTRIES_MAX)
+      .filter(isRecord)
+      .map((entry) => ({
+        id: textIn(entry.id, 80),
+        lane: choiceIn(entry.lane, PREWARM_RESUME_LANES, 'cosmetic'),
+        planned: intIn(entry.planned, 0, 100_000, 0),
+        started: intIn(entry.started, 0, 100_000, 0),
+        failed: intIn(entry.failed, 0, 100_000, 0),
+      })),
+  };
 }
 
 function compactRawSummary(value: Record<string, unknown>): Record<string, unknown> {
@@ -323,6 +705,9 @@ function compactRawSummary(value: Record<string, unknown>): Record<string, unkno
     'netPipeline',
     'heapSawtooth',
     'browser',
+    // A wedged GPU queue is exactly what a truncated report must still carry:
+    // the block is small and bounded, and it is the whole signal.
+    'rendererGpuQueue',
   ]) {
     if (value[key] !== undefined) out[key] = value[key];
   }
@@ -340,6 +725,27 @@ function rawSummary(value: unknown, devTraceAllowed = false): Record<string, unk
     const browser = sanitizeBrowserSummary(parsed.browser);
     if (browser) parsed.browser = browser;
     else delete parsed.browser;
+    const gpuQueue = sanitizeGpuQueueSummary(parsed.rendererGpuQueue);
+    if (gpuQueue) parsed.rendererGpuQueue = gpuQueue;
+    else delete parsed.rendererGpuQueue;
+    // The prewarm summary rides through verbatim on this path, bounded only by
+    // the body cap, so its client-supplied LISTS are bounded here explicitly.
+    // Without this the resume block's entries and failed-unit ids reach storage
+    // unclamped on every report under the size limit, and the compact path's
+    // sanitizer only ever sees the oversized minority.
+    // BOTH prewarm keys, never only the summary: the current client stopped
+    // sending the full `rendererPrewarm` twin, but a client older than that
+    // change still does (its resume block rides a getter on the live stats
+    // object), the compact path still accepts the key as its fallback, and any
+    // token holder can post one whatever their client does.
+    for (const key of ['rendererPrewarmSummary', 'rendererPrewarm']) {
+      const prewarm = parsed[key];
+      if (!isRecord(prewarm)) continue;
+      const resume = sanitizePrewarmResume(prewarm.resume);
+      if (resume) prewarm.resume = resume;
+      else delete prewarm.resume;
+      boundPrewarmDiagnosticLists(prewarm);
+    }
     const boundedText = JSON.stringify(parsed);
     const maxBytes = devTraceAllowed ? RAW_SUMMARY_DEV_TRACE_MAX_BYTES : RAW_SUMMARY_MAX_BYTES;
     if (Buffer.byteLength(boundedText) > maxBytes) {
@@ -478,4 +884,18 @@ export const perfReportInternalsForTest = {
   PERF_REPORT_SCHEMA_VERSION,
   LONG_TASK_RAW_MS_MAX,
   LONG_TASK_RAW_AGE_MS_MAX,
+  GPU_QUEUE_RAW_MS_MAX,
+  GPU_QUEUE_RAW_AGE_MS_MAX,
+  GPU_QUEUE_RAW_STALLS_MAX,
+  GPU_QUEUE_RAW_SLOWEST_MAX,
+  GPU_QUEUE_RAW_TAILS_MAX,
+  GPU_QUEUE_RAW_LANES_MAX,
+  GPU_QUEUE_RAW_WAITS_MAX,
+  GPU_QUEUE_RAW_WINDOW_MS_MAX,
+  PREWARM_RESUME_ENTRIES_MAX,
+  PREWARM_RESUME_STATUSES,
+  PREWARM_RESUME_LANES,
+  PREWARM_COMPILE_UNITS_MAX,
+  PREWARM_BUDGET_VARIANTS_MAX,
+  PREWARM_PACING_TRANSITIONS_MAX,
 };

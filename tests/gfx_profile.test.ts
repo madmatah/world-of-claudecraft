@@ -33,6 +33,14 @@ const mediumPreferences: GraphicsSettingsSnapshot = {
   surfaceDetail: 1,
   effectsQuality: 1,
   shadowQuality: 1,
+  antiAliasing: 1,
+  bloomQuality: 1,
+  ambientOcclusion: 1,
+  viewDistance: 1,
+  waterQuality: 1,
+  characterDetail: 1,
+  dynamicLights: 1,
+  particleEffects: 1,
 };
 
 describe('GfxProfile resolution and activation', () => {
@@ -97,7 +105,7 @@ describe('GfxProfile resolution and activation', () => {
     const safe = resolveGfxProfile(nativeIos, advanced, '');
     expect(safe.settings.tier).toBe('high');
     expect(safe.settings.bladeCarpetRadius).toBe(0);
-    expect(safe.settings.nativeIosMemoryProfile).toBe(true);
+    expect(safe.settings.iosMemoryProfile).toBe(true);
 
     const forced = resolveGfxProfile(nativeIos, advanced, '?gfx=ultra&gfxo=bladeCarpetRadius:7');
     expect(forced.settings.tier).toBe('ultra');

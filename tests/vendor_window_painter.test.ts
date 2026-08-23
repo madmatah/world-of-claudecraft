@@ -9,7 +9,7 @@
 // has no rows.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { ItemDef } from '../src/sim/types';
 import type { VendorBuyOptions } from '../src/sim/vendor_buy_stack';
 import { dismissBuyQuantityPrompts } from '../src/ui/hud/vendor/buy_quantity_prompt_window';
@@ -76,6 +76,110 @@ function heroicDeps(overrides: Partial<Parameters<typeof renderHeroicVendorWindo
     ...overrides,
   };
 }
+
+describe('renderVendorWindow / renderHeroicVendorWindow: dialog root (accessible name, #2808)', () => {
+  it('renderVendorWindow marks #vendor-window as a labeled dialog', () => {
+    const view: VendorView = {
+      goods: [],
+      buyback: [],
+      honorBalance: 0,
+      hasHonorGoods: false,
+      multiple: 1,
+    };
+    const el = document.createElement('div');
+    renderVendorWindow(el, 'Darva', view, deps());
+
+    expect(el.getAttribute('role')).toBe('dialog');
+    expect(el.getAttribute('aria-modal')).toBe('false');
+    expect(el.getAttribute('tabindex')).toBe('-1');
+    expect(el.getAttribute('aria-label')).toBe('Darva: Goods');
+    expect(el.hasAttribute('aria-labelledby')).toBe(false);
+  });
+
+  it('renderHeroicVendorWindow marks #vendor-window as a labeled dialog', () => {
+    const view: HeroicShopView = { rows: [], balance: 0 };
+    const el = document.createElement('div');
+    renderHeroicVendorWindow(el, 'Quartermaster', view, heroicDeps());
+
+    expect(el.getAttribute('role')).toBe('dialog');
+    expect(el.getAttribute('aria-modal')).toBe('false');
+    expect(el.getAttribute('tabindex')).toBe('-1');
+    expect(el.getAttribute('aria-label')).toBe('Quartermaster: Goods');
+    expect(el.hasAttribute('aria-labelledby')).toBe(false);
+  });
+});
+
+describe('vendor painters: painted currency identities', () => {
+  function imageIdentity(image: HTMLImageElement | null) {
+    expect(image).not.toBeNull();
+    return {
+      className: image?.className,
+      src: image?.getAttribute('src'),
+      alt: image?.getAttribute('alt'),
+      draggable: image?.getAttribute('draggable'),
+    };
+  }
+
+  it('renders Honor art independently in the generic vendor balance and item price', () => {
+    const view: VendorView = {
+      goods: [
+        {
+          itemId: 'honor_blade',
+          item: item('honor_blade'),
+          price: { copper: 0, honor: 9 },
+          quantity: 1,
+          affordable: true,
+          requirementUnmet: false,
+        },
+      ],
+      buyback: [],
+      honorBalance: 73,
+      hasHonorGoods: true,
+      multiple: 1,
+    };
+    const el = document.createElement('div');
+
+    renderVendorWindow(el, 'Honor Vendor', view, deps());
+
+    const honorIdentity = {
+      className: 'currency-inline currency-honor',
+      src: '/ui/currency/honor.webp',
+      alt: '',
+      draggable: 'false',
+    };
+    expect(imageIdentity(el.querySelector<HTMLImageElement>('.warfare-balance > img'))).toEqual(
+      honorIdentity,
+    );
+    expect(
+      imageIdentity(el.querySelector<HTMLImageElement>('.vendor-item .warfare-price > img')),
+    ).toEqual(honorIdentity);
+    expect(el.querySelectorAll('img.currency-honor')).toHaveLength(2);
+  });
+
+  it('renders Heroic Mark art independently in the quartermaster balance and item price', () => {
+    const view: HeroicShopView = {
+      rows: [{ itemId: 'heroic_blade', item: item('heroic_blade'), marks: 11, affordable: true }],
+      balance: 29,
+    };
+    const el = document.createElement('div');
+
+    renderHeroicVendorWindow(el, 'Heroic Quartermaster', view, heroicDeps());
+
+    const heroicMarkIdentity = {
+      className: 'currency-inline currency-heroic-mark',
+      src: '/ui/items/heroic_mark.webp',
+      alt: '',
+      draggable: 'false',
+    };
+    expect(
+      imageIdentity(el.querySelector<HTMLImageElement>('.vendor-section-title > img')),
+    ).toEqual(heroicMarkIdentity);
+    expect(
+      imageIdentity(el.querySelector<HTMLImageElement>('.vendor-item .vi-price > img')),
+    ).toEqual(heroicMarkIdentity);
+    expect(el.querySelectorAll('img.currency-heroic-mark')).toHaveLength(2);
+  });
+});
 
 describe('renderVendorWindow: goods/buyback grid wrapping', () => {
   it('appends goods rows as children of .vendor-goods-grid', () => {
@@ -577,6 +681,47 @@ describe('renderHeroicVendorWindow: goods grid wrapping', () => {
     renderHeroicVendorWindow(el, 'Quartermaster', view, heroicDeps());
 
     expect(el.querySelectorAll('.vendor-goods-grid').length).toBe(0);
+  });
+
+  it('carries keyboard focus across a repaint (uninitiated rebuilds, #2931)', () => {
+    // Marks are a bag count, so ANY inventory delta repaints this window
+    // uninitiated through Hud.repaintOpenServiceWindows; the
+    // focus-across-a-REBUILD contract applies (the train/unbind idiom).
+    // Attached to document.body: focus() is inert on a detached tree.
+    const rows: HeroicShopRow[] = [
+      { itemId: 'trinket', item: item('trinket'), marks: 10, affordable: true },
+      { itemId: 'charm', item: item('charm'), marks: 10, affordable: true },
+    ];
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    renderHeroicVendorWindow(el, 'Quartermaster', { rows, balance: 20 }, heroicDeps());
+    el.querySelector<HTMLButtonElement>('[data-focus-key="buy:trinket"]')?.focus();
+    renderHeroicVendorWindow(el, 'Quartermaster', { rows, balance: 20 }, heroicDeps());
+    expect((document.activeElement as HTMLElement).dataset.focusKey).toBe('buy:trinket');
+    // The focused tile going disabled falls to the grid neighbor, never to
+    // <body>: the rung an uninitiated marks repaint actually exercises.
+    renderHeroicVendorWindow(
+      el,
+      'Quartermaster',
+      { rows: [{ ...rows[0], affordable: false }, rows[1]], balance: 5 },
+      heroicDeps(),
+    );
+    expect((document.activeElement as HTMLElement).dataset.focusKey).toBe('buy:charm');
+    // Every tile disabled falls to the close button.
+    renderHeroicVendorWindow(
+      el,
+      'Quartermaster',
+      { rows: rows.map((r) => ({ ...r, affordable: false })), balance: 0 },
+      heroicDeps(),
+    );
+    expect((document.activeElement as HTMLElement).dataset.focusKey).toBe('close');
+    el.remove();
+  });
+
+  // The focus test attaches to document.body; a mid-test failure must not
+  // leak a focused node into the shared document for later tests.
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 });
 

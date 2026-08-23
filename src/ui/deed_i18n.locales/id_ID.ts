@@ -7,6 +7,54 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  exp_dawnhold_castle: {
+    name: 'Pintu Terbuka di Taman',
+    desc: 'Kunjungi Kastil Dawnhold dan jelajahi aula tamannya yang bermandikan cahaya.',
+  },
+  exp_the_last_keep: {
+    name: 'Aula yang Sunyi',
+    desc: 'Masuklah melalui pintu Benteng Terakhir dan susuri aula-aulanya yang sunyi.',
+  },
+  pvp_bg_first_capture: {
+    name: 'Bendera di Tangan',
+    desc: 'Rebut bendera di Medan Thornhollow.',
+  },
+  pvp_bg_first_win: {
+    name: 'Thornhollow Bertahan',
+    desc: 'Menangkan pertempuran di Medan Thornhollow.',
+  },
+  pvp_bg_wins_25: {
+    name: 'Penjaga Thornhollow',
+    desc: 'Menangkan 25 pertempuran di Medan Thornhollow.',
+    title: 'Pembawa Panji',
+  },
+  pvp_bg_captures_100: {
+    name: 'Seratus Bendera',
+    desc: 'Rebut 100 bendera di Medan Thornhollow sepanjang kariermu.',
+  },
+  dgn_rift: {
+    name: 'Penjelajah Rift',
+    desc: 'Bersihkan Rift dengan mengalahkan bos lantainya.',
+  },
+  dgn_rift_s_rank: {
+    name: 'Penguasa Rift',
+    desc: 'Bersihkan Rift peringkat S, tingkat tersulit yang bisa dimunculkan portal Rift.',
+  },
+  pvp_honor_sergeant: {
+    name: 'Pemecah Barisan',
+    desc: 'Raih 10.000 kehormatan seumur hidupmu. Membelanjakannya tidak akan pernah menghilangkan pangkat ini.',
+    title: 'Pemecah Barisan',
+  },
+  pvp_honor_knight_lieutenant: {
+    name: 'Perusak Medan',
+    desc: 'Raih 40.000 kehormatan seumur hidupmu, satu musim perang sungguhan di belakangmu.',
+    title: 'Perusak Medan',
+  },
+  pvp_honor_field_marshal: {
+    name: 'Bermahkota Perang',
+    desc: 'Raih 150.000 kehormatan seumur hidupmu. Langka di realm mana pun, dan memang seharusnya begitu.',
+    title: 'Bermahkota Perang',
+  },
   chr_drakemaw_broodlord: {
     name: 'Pemusnah Tetasan',
     desc: 'Tumpaskan seekor Penguasa Sarang Drakemaw di tengah telur-telurnya, menembus raungan, tebasan, dan apinya.',
@@ -14,6 +62,54 @@ export const table: DeedLocaleTable = {
   chr_maw_matriarch: {
     name: 'Langit Membisu',
     desc: 'Tumpaskan Cindraleth Sang Matriark Rahang di sarang kawahnya di atas Drakemaw.',
+  },
+  chr_frostveil_gatherer: {
+    name: 'Panen Teras',
+    desc: 'Panen urat bijih, tegakan kayu, dan petak herba di Frostveil.',
+  },
+  chr_frostveil_first_cast: {
+    name: 'Es Pertama di Tarn',
+    desc: 'Tangkap ikan dari perairan Frostveil.',
+  },
+  chr_amberfall_gatherer: {
+    name: 'Panen Amberfall',
+    desc: 'Panen urat bijih, tegakan kayu, dan petak herba di Amberfall.',
+  },
+  chr_amberfall_first_cast: {
+    name: 'Tangkapan dari Rawa Besar',
+    desc: 'Tangkap ikan dari perairan Amberfall.',
+  },
+  chr_nightbloom_gatherer: {
+    name: 'Panen Bermimpi',
+    desc: 'Panen urat bijih, tegakan kayu, dan petak herba di Nightbloom.',
+  },
+  chr_nightbloom_first_cast: {
+    name: 'Riak di Sumur Bulan',
+    desc: 'Tangkap ikan dari perairan Nightbloom.',
+  },
+  chr_wraithwood_gatherer: {
+    name: 'Panen di Bawah Kanopi',
+    desc: 'Panen urat bijih, tegakan kayu, dan petak herba di Wraithwood.',
+  },
+  chr_wraithwood_first_cast: {
+    name: 'Lemparan di Teluk Cermin',
+    desc: 'Tangkap ikan dari perairan Wraithwood.',
+  },
+  chr_palmreach_gatherer: {
+    name: 'Panen di Pantai Palem',
+    desc: 'Panen urat bijih, tegakan kayu, dan petak herba di Palmreach.',
+  },
+  chr_palmreach_first_cast: {
+    name: 'Melempar di Laguna Safir',
+    desc: 'Tangkap ikan dari perairan Palmreach.',
+  },
+  chr_evergarden_gatherer: {
+    name: 'Karunia Parterre',
+    desc: 'Panen urat bijih, tegakan kayu, dan petak herba di Evergarden.',
+  },
+  chr_evergarden_first_cast: {
+    name: 'Lemparan di Kolam Kelopak',
+    desc: 'Tangkap ikan dari perairan Evergarden.',
   },
   pvp_card_duel_first_win: {
     name: 'Aturan Sendiri',
@@ -870,5 +966,77 @@ export const table: DeedLocaleTable = {
   chr_farshore_first_cast: {
     name: 'Yang Diketahui Para Camar',
     desc: 'Pancing seekor ikan dari perairan Pesisir Jauh.',
+  },
+  prog_engineering_rare: {
+    name: 'Rekayasa Presisi',
+    desc: 'Buat barang bertingkat langka pertamamu dalam Rekayasa.',
+  },
+  prog_alchemy_rare: {
+    name: 'Vintage Langka',
+    desc: 'Buat barang bertingkat langka pertamamu dalam Alkimia.',
+  },
+  prog_cooking_rare: {
+    name: 'Hidangan yang Tak Terlupakan',
+    desc: 'Buat barang bertingkat langka pertamamu dalam Memasak.',
+  },
+  prog_leatherworking_rare: {
+    name: 'Penyamakan Halus',
+    desc: 'Buat barang bertingkat langka pertamamu dalam Pengolahan Kulit.',
+  },
+  prog_tailoring_rare: {
+    name: 'Jahitan Sang Maestro',
+    desc: 'Buat barang bertingkat langka pertamamu dalam Menjahit.',
+  },
+  prog_weaponcrafting_rare: {
+    name: 'Ditempa hingga Berkilau',
+    desc: 'Buat barang bertingkat langka pertamamu dalam Penempaan Senjata.',
+  },
+  prog_armorcrafting_rare: {
+    name: 'Dilapisi hingga Sempurna',
+    desc: 'Buat barang bertingkat langka pertamamu dalam Penempaan Zirah.',
+  },
+  col_reliquary_rank_2: {
+    name: 'Penjaga Rampasan',
+    desc: 'Capai peringkat Kurator 2 di Relikuari (10 relik unik terkatalog).',
+    title: 'Penjaga Rampasan',
+  },
+  col_reliquary_rank_3: {
+    name: 'Sang Pembuat Katalog',
+    desc: 'Capai peringkat Kurator 3 di Relikuari (25 relik unik terkatalog).',
+    title: 'sang Pembuat Katalog',
+  },
+  col_reliquary_rank_4: {
+    name: 'Kurator Utama',
+    desc: 'Capai peringkat Kurator 4 di Relikuari (50 relik unik terkatalog).',
+    title: 'Kurator Utama',
+  },
+  col_reliquary_rank_5: {
+    name: 'Rampasan Abadi',
+    desc: 'Capai peringkat Kurator 5 di Relikuari (100 relik unik terkatalog).',
+  },
+  col_reliquary_complete: {
+    name: 'Relikuari Agung',
+    desc: 'Katalogkan setiap relik di Relikuari yang bisa disimpan sebuah karakter. Pertumbuhan katalog di kemudian hari tidak pernah menariknya kembali.',
+    title: 'Kurator Ruang Simpan',
+  },
+  col_reliquary_conquerors: {
+    name: 'Rak Penakluk',
+    desc: 'Katalogkan setiap relik di rak Penakluk pada Relikuari. Pertumbuhan katalog di kemudian hari tidak pernah menariknya kembali.',
+    title: 'Pembobol Ruang Simpan',
+  },
+  col_reliquary_illum_nythraxis_heroic: {
+    name: 'Nythraxis Diterangi',
+    desc: 'Terangi halaman Heroik: Raid Nythraxis pada Relikuari.',
+    title: 'Cahaya Nythraxis',
+  },
+  col_reliquary_illum_thunzharr: {
+    name: 'Thunzharr Diterangi',
+    desc: 'Terangi halaman Thunzharr, Puncak yang Terjaga pada Relikuari.',
+    title: 'Cahaya Thunzharr',
+  },
+  col_reliquary_illum_gravewyrm_heroic: {
+    name: 'Sanktum Diterangi',
+    desc: 'Terangi halaman Heroik: Sanktum Gravewyrm pada Relikuari.',
+    title: 'Cahaya Sanktum',
   },
 };

@@ -109,10 +109,13 @@ const EXCLUDED_PATHS = new Set<string>(ORPHAN_DEVIATION?.routes ?? []);
 // router-owned-only shape instead (the same assertion pair as the orphan).
 const REGISTRY_ONLY_PATHS = new Set<string>([
   '/api/deeds/rarity',
+  '/api/reliquary/rarity',
   '/api/deeds/broadcasts',
   '/api/characters/:id/deeds-recent',
+  '/api/characters/:id/appearance-reroll',
   '/api/steam/link',
   '/api/steam/status',
+  '/api/battleground/leaderboard',
   '/api/epic/link',
   '/api/epic/status',
   '/api/ota/updates',
@@ -235,6 +238,7 @@ describe('registry completeness: migrated baseline (public reads + auth + charac
     // Registry-only (born after the migration, the new-route rule): the
     // owner's newest-first deed unlock ids for the Book's recent strip.
     { method: 'GET', path: '/api/characters/:id/deeds-recent' },
+    { method: 'POST', path: '/api/characters/:id/appearance-reroll' },
     { method: 'POST', path: '/api/characters/:id/rename' },
     { method: 'POST', path: '/api/characters/:id/takeover' },
     { method: 'DELETE', path: '/api/characters/:id' },
@@ -316,6 +320,12 @@ describe('registry completeness: migrated baseline (public reads + auth + charac
     { method: 'GET', path: '/api/deeds/rarity' },
     { method: 'GET', path: '/api/deeds/broadcasts' },
     { method: 'POST', path: '/api/deeds/broadcasts' },
+    // The reliquary rarity read (server/reliquary.ts): registry-only on the
+    // same terms as the deeds family, and it shares their cache and flight.
+    { method: 'GET', path: '/api/reliquary/rarity' },
+    // The Thornhollow Fields ladder (server/battleground.ts): registry-only like the
+    // deeds family, per the same new-route rule.
+    { method: 'GET', path: '/api/battleground/leaderboard' },
     // The Steam link trio (server/steam/routes.ts): registry-only like the
     // deeds pair, env-gated dark until STEAM_ENABLED=1.
     { method: 'POST', path: '/api/steam/link' },
@@ -560,7 +570,9 @@ describe('registry completeness: oauth + internal surfaces (server/oauth.ts, ser
   // parallel list. The oauth surface migrates ONLY its POST JSON rows: the two GET
   // consent/device HTML pages stay on the top-level ladder, off the route table,
   // served through the dispatcher's delegate. The internal migration moved EVERY
-  // handleInternalApi row (11: restart-countdown + the 10 Discord-bot routes) and
+  // handleInternalApi row (then 11: restart-countdown + the 10 Discord-bot
+  // routes; the three per-endpoint GET pickups the outbox replaced have since
+  // been RETIRED from both arms, #2791) and
   // at first left the separate /internal/daily-rewards/* ops family delegate-only;
   // the late-arrival pass put that family on the table too (behind the fail-closed
   // requireInternalSecretFailClosed gate), so the internal derivation now spans
@@ -580,12 +592,13 @@ describe('registry completeness: oauth + internal surfaces (server/oauth.ts, ser
   it('derives the expected non-empty ladders', () => {
     expect(oauthPostLadder.length).toBe(5);
     expect(oauthGetLadder.length).toBe(2);
-    // 21 = the handleInternalApi twelve (restart-countdown + the 11 Discord-bot
-    // routes, flaired-ids included) plus the seven-route payout and moderation ops
+    // 18 = the handleInternalApi nine (restart-countdown + the 8 Discord-bot
+    // routes, flaired-ids included; the retired relay/activity/winners GETs
+    // have no rows since #2791) plus the seven-route payout and moderation ops
     // family below, plus the two registry-only rows (POST
     // /internal/discord/flex-batch and GET /internal/discord/outbox), which have
     // no legacy ladder arm by design and so are the internal rows with no twin.
-    expect(internalLadder.length).toBe(21);
+    expect(internalLadder.length).toBe(18);
     expect(opsFamilyRows.length).toBe(7);
   });
 
@@ -626,6 +639,20 @@ describe('registry completeness: oauth + internal surfaces (server/oauth.ts, ser
       .filter((r) => apiRegistry.resolve(r.method, r.path).kind !== 'matched')
       .map((r) => `${r.method} ${r.path}`);
     expect(dropped).toEqual([]);
+  });
+
+  it('the retired per-endpoint Discord GET pickups resolve OFF the table (#2791)', () => {
+    // notFound, not methodNotAllowed: no sibling method survives on these
+    // paths and no dynamic pattern may shadow them, so the dispatcher
+    // delegates each to the legacy ladder's terminal 404 (the ladder-arm half
+    // is pinned in tests/server/internal.test.ts with a valid secret).
+    for (const path of [
+      '/internal/discord/relay',
+      '/internal/discord/activity',
+      '/internal/discord/daily-rewards-winners',
+    ]) {
+      expect(apiRegistry.resolve('GET', path).kind, path).toBe('notFound');
+    }
   });
 
   it('every oauth RouteDef selects the RFC 6749 envelope', () => {

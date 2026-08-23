@@ -23,6 +23,17 @@
     --color-deed-banner-text: #ffe27a;
     --color-deed-banner-border: #b8902a;
     --color-deed-banner-bg: rgb(26 21 12 / 92%);
+    /* Gathering skill milestone plate (#banner.banner-skill). Warm copper
+       craft language, framed so a Mining 50 plate can never read as a
+       character level-up (the bare --gold celebration). Distinct from the
+       parchment deed plate so both earned moments keep their own identity.
+       The gradient token drops the --color- prefix (the --panel-bg
+       precedent: --color-* names hold plain colors). */
+    --color-skill-banner-text: #f0d078;
+    --color-skill-banner-border: #c49a3c;
+    --skill-banner-bg: linear-gradient(165deg, rgb(42 32 14 / 94%) 0%, rgb(18 14 8 / 96%) 100%);
+    --color-skill-banner-subtext: #e8d8a8;
+    --color-skill-banner-inset: rgb(255 209 0 / 14%);
     --border: #6f5a2a;
     /* --panel-base is the single themeable frame colour; --panel-bg derives the
        shipped gradient from it (overwritten wholesale by the theme system). */
@@ -33,6 +44,14 @@
        the #0070dd anchor). The theme system re-emits this per preset via
        ensureReadable, so the light Parchment panel darkens it to AA. */
     --color-quest-tag-text: #3d9bff;
+    /* Profession-affinity tooltip line ("Used by Leatherworking, ...", the
+       tt-material-use class): the craft-teal wash over the accent, at the
+       classic-preset value. The theme system re-emits this per preset via
+       ensureReadable (src/ui/theme.ts) so the light Parchment panel darkens
+       it until it clears the contrast floor. Named for the tooltip surface,
+       NOT --color-craft-*: that family below is the crafting-difficulty ramp
+       and this token is unrelated to it. */
+    --color-material-use: #d6ce3b;
     /* Quest moments (DESIGN.md section 4.3 / principle 4): tracked titles,
        bag-grid quest purpose marks, map quest markers. Bright saturated
        yellow reserved for quest, never chrome. Distinct from --gold / --color-accent
@@ -61,10 +80,19 @@
     --color-mana: #2b7bd4;
     --color-rage: #c0392b;
     --color-energy: #e4c531;
+    --color-focus: #d79a2b;
+    --color-devotion: #e7b943;
+    --color-ascension: #fff1a3;
     --color-hostile: #ff6b5e;
     --color-friendly: #9fdc7f;
     --color-buff: #3a6ea8;
     --color-debuff: #c0392b;
+    /* The operator-applied Cheater tag on a name line. Its own token, not
+       --color-hostile: hostility is a reaction the same frame already spends
+       that red on, and a sanction is not a reaction. Kept in lockstep with
+       CHEATER_STYLE in src/render/nameplate_canvas.ts so the overhead plate and
+       the target frame brand a player the same colour. */
+    --color-cheater-tag: #ff6b6b;
     /* Protect Yumi team identity (blue team A / red team B), driven by the
        yumi match HUD + arena window; never hardcoded in painter TS. */
     --color-team-blue: #2f6fe0;
@@ -72,6 +100,20 @@
     /* Per-school debuff border tints (WoW-style poison/magic/curse reads); physical
        keeps the base --color-debuff red. Driven by the aura node's data-school. */
     --color-debuff-fire: #e8722a;
+    --color-ruin-empty-border: #6b2b12;
+    --color-ruin-empty-start: #27100b;
+    --color-ruin-empty-end: #120706;
+    --color-ruin-lit-border: #ffd073;
+    --color-ruin-lit-core: #fff0a0;
+    --color-ruin-lit-mid: #ff6a1f;
+    --color-ruin-lit-edge: #8d1d08;
+    --color-ruin-glow: #ff5a1fcc;
+    --color-ruin-inner-shine: #fff4;
+    --color-ruin-ritual-shadow: #080201e8;
+    --color-ruin-ritual-aura: #ff4c213d;
+    --color-ruin-ring-highlight: #e982365c;
+    --color-ruin-rune-dim: #8d3b1f99;
+    --color-ruin-full-flare: #ffcf737a;
     --color-debuff-frost: #4aa3df;
     --color-debuff-arcane: #3f8cff;
     --color-debuff-shadow: #9b59d0;
@@ -113,6 +155,21 @@
        raw hex). Exact pre-existing value. */
     --color-quality-default: #fff;
 
+    /* World Market item-NAME colors (consumer: market_name_color.ts via the
+       Browse-row name). Poor/common/uncommon/legendary alias the shipped
+       QUALITY_COLOR values verbatim; rare and epic are LIFTED because the
+       shipped hues fail WCAG AA on the market panel ground (rare #0070dd reads
+       3.87:1, epic #a335ee reads 3.82:1, both under the 4.5:1 text floor). The
+       lifted values keep the same hue but clear AA (rare #5aa9f0 -> 7.42:1,
+       epic #c88ef5 -> 7.67:1). Scoped to the market name on purpose: the icon
+       border and every other surface stay on the shared palette (icons.ts). */
+    --mkt-name-poor: #b8b8b8;
+    --mkt-name-common: #f2efe6;
+    --mkt-name-uncommon: #7fc98f;
+    --mkt-name-rare: #5aa9f0;
+    --mkt-name-epic: #c88ef5;
+    --mkt-name-legendary: #ffab5e;
+
     /* Crafting skill-gain difficulty tints (consumer: components.css
        .crafting-difficulty[data-difficulty], painted by crafting_window.ts as
        a data attribute, never an inline color). The classic four-color recipe
@@ -150,6 +207,29 @@
     --color-bag-quest-seal: var(--color-quest);
     --color-bag-quest-seal-ready: color-mix(in srgb, var(--color-quest) 55%, #fff);
     --color-quest-tracker-bag-hover: var(--color-quest);
+    /* Fine-grade material treatment for every owned-stack grid (components.css
+       .bag-item.bag-fine / .bank-item.bag-fine / .bi-fine-seal, painted by
+       bags_window.ts, bank_window.ts, and guild_bank_window.ts as a class,
+       never an inline color). Grade class, not a rarity tier and not quest
+       purpose: cool refined teal-silver rim + soft wash + crafting seal so
+       fine ores/logs/herbs never read as plain white reagents. Distinct from
+       --color-quest gold and from green/blue/purple quality borders. Shape is
+       primary, tint is redundant (fairness). Always-on, no --fx-* gate. */
+    --color-bag-fine: #6ec8d4;
+    --color-bag-fine-rim: var(--color-bag-fine);
+    --color-bag-fine-wash: color-mix(in srgb, var(--color-bag-fine) 18%, transparent);
+    --color-bag-fine-seal: var(--color-bag-fine);
+
+    /* Player item lock (issue 3042, components.css .bi-lock-seal, painted by
+       bags_window.ts / bank_window.ts / guild_bank_window.ts as a class, never
+       an inline color). A player-toggled safety mark, orthogonal to the
+       per-copy glyphs above (a locked copy can also be masterwork/enchanted/
+       signed/bound), so it paints in its OWN bottom-left corner rather than
+       competing for the top-left glyph slot. Warm amber, distinct from every
+       other bag-grid tint (enchanted green, signed/quest gold, bound steel-
+       blue, fine teal). Shape (padlock) is primary, tint is redundant
+       (fairness). */
+    --color-bag-lock-seal: #e0a24a;
 
     /* Empty paperdoll slot greys (char_window.ts uses these so the painter carries
        no raw hex): the muted "Empty" label and the dimmed placeholder-icon border.
@@ -203,6 +283,9 @@
     --color-map-building-chapel: #9b9080;
     --color-map-building-inn: #8a6233;
     --color-map-building-house: #7a5630;
+    --color-map-castle-wall: #9b9080;
+    --color-map-castle-tower: #b3a894;
+    --color-map-castle-court: rgba(120, 150, 96, 0.35);
     --color-map-well: #5a7fa8;
     --color-map-stall: #b07a3a;
     --color-map-tent: #9a8a5a;
@@ -210,6 +293,40 @@
     --color-map-graveyard: #8a929c;
     --color-map-mudhut: #7a6a4a;
     --color-map-campfire: #ff9a3c;
+    /* Zone-map ready nodes follow the painted resources themselves: ore copper,
+       wood amber, herb leaf-green. Every cooldown fallback shares the same
+       neutral gray as the minimap; the cached paintings receive the matching
+       grayscale treatment before paint. Locked references the minimap rust
+       token so both surfaces agree structurally (retune one, both follow).
+       Glow is a soft ready halo (rgba) under the icon. */
+    --color-map-gather-ore-ready: #e8a44a;
+    --color-map-gather-ore-cooldown: #90989a;
+    --color-map-gather-ore-glow: rgba(232, 164, 74, 0.32);
+    --color-map-gather-wood-ready: #e0a142;
+    --color-map-gather-wood-cooldown: #90989a;
+    --color-map-gather-wood-glow: rgba(224, 161, 66, 0.32);
+    --color-map-gather-herb-ready: #69cf72;
+    --color-map-gather-herb-cooldown: #90989a;
+    --color-map-gather-herb-glow: rgba(105, 207, 114, 0.32);
+    --color-map-gather-locked: var(--color-minimap-node-locked);
+    /* Cached map-marker raster treatments. The shared Hud cache resolves these
+       at construction, re-samples them on theme and forced-colors signals, and
+       rebuilds only when a value changed. Keylines, cooldown rings, locks,
+       ranks, and reward-state badges stay outside every painter redraw. */
+    --color-map-marker-keyline: #f5dfad;
+    --color-map-marker-cooldown-arc-dark: #24292a;
+    --color-map-marker-cooldown-arc-light: #c8cdcc;
+    --color-map-marker-lock-dark: #24170f;
+    --color-map-marker-lock-bronze: #d39a45;
+    --color-map-marker-lock-highlight: #f2c46d;
+    --color-map-marker-semantic-dark: #171a1d;
+    --color-map-marker-semantic-bronze: #c28a42;
+    --color-map-marker-semantic-silver: #d7dce1;
+    --color-map-marker-semantic-gold: #f2c357;
+    --color-map-marker-semantic-cyan: #70d8ff;
+    --color-map-marker-semantic-jammed: #e56d45;
+    --color-map-marker-semantic-opened: #d8dddc;
+    --color-map-marker-neutral-fallback: #9ba1a2;
     /* continent overview: the open water the world_overview plate is letterboxed
        into (resolved by continent_map_painter.ts). Its own token rather than
        --color-map-ocean above, because the plate is a tall portrait crop of the
@@ -256,12 +373,21 @@
     --color-minimap-player: #fff;
     --color-minimap-outline: #000;
     --color-minimap-gather-ready: #3ef07a;
-    --color-minimap-gather-cooldown: #5a5f57;
+    --color-minimap-gather-cooldown: #90989a;
     --color-minimap-station: #d98e4a;
     /* Tool-tier locked gather node (Professions 2.0): a dark rust
-       clearly apart from the ready green, the cooldown olive-gray, and the
+       clearly apart from the ready green, neutral cooldown gray, and the
        bright mob red, so the lock reads at minimap marker size. */
     --color-minimap-node-locked: #8a4a3a;
+
+    /* Thornhollow Fields M-map chrome (resolved by battleground_map_painter.ts via
+       getComputedStyle, same one-pass resolve as the minimap tokens above). The
+       carry ring shares its orange with the scoreboard's .bg-fstate.carried so the
+       two surfaces can never disagree about the carried-flag color. */
+    --color-bg-carry-ring: #ffb03c;
+    --color-bg-field-edge: #262c38;
+    --color-bg-mid-line: #00000026;
+    --color-bg-map-ink: #00000090;
 
     /* Talents window: tree arrows + tooltip accents (talents_window.ts references
        these via var() so the painter carries no raw hex). Exact pre-existing values. */
@@ -382,10 +508,26 @@
      dropping the blur leaves a clean opaque panel). It is !important so it crosses
      cascade layers and wins over the opt-in frosted panels; a low-tier player then
      computes backdrop-filter:none, so the per-pixel composite over the WebGL canvas
-     never runs. Ultra/high/medium are untouched (data-fx-level only matches "low"). */
+     never runs. Ultra/high/medium are untouched (data-fx-level only matches "low").
+     The SAME removal also fires whenever the touch interface is up (body.mobile-touch),
+     independent of data-fx-level: unlike the decorative --fx-shadow glows, backdrop-filter
+     is a compositor cost, not a 3D-throughput one, so it is not something a device's chosen
+     3D quality tier predicts. The mobile-touch chrome (the always-visible button ring,
+     action ring and extra-controls modal) sits directly over the live-updating WebGL canvas,
+     so blurring it every frame is disproportionately expensive on phone-class compositors at
+     ANY graphics preset. A touch player's 3D preset only auto-floors to low on their FIRST
+     boot (src/render/gfx.ts resolveDefaultGraphicsPreset) and is never re-detected once an
+     explicit choice is recorded, so a returning player, or one who raised their preset before
+     ever seeing this glass chrome, would otherwise keep paying this cost indefinitely. This
+     touches only the glass BLUR (the chrome keeps its translucent background/border look);
+     it never lowers the 3D preset itself, so terrain/shadow/character quality stays exactly
+     what the player chose. */
   :root[data-fx-level="low"] *,
   :root[data-fx-level="low"] *::before,
-  :root[data-fx-level="low"] *::after {
+  :root[data-fx-level="low"] *::after,
+  body.mobile-touch *,
+  body.mobile-touch *::before,
+  body.mobile-touch *::after {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
   }

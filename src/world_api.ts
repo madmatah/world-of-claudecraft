@@ -17,7 +17,7 @@
 //   entity_roster.ts    IWorldEntityRoster   cfg/entities/player/moveInput/realm reads
 //   combat.ts           IWorldCombat         ability casts, auto-attack, spirit release
 //   targeting.ts        IWorldTargeting      target selection + tab cycling
-//   interaction.ts      IWorldInteraction    interact / lootCorpse / pickUpObject
+//   interaction.ts      IWorldInteraction    civic-service readout + interact / loot / pickup
 //   loot.ts             IWorldLoot           need/greed loot rolls
 //   inventory.ts        IWorldInventory      bags, equipment, vendor, copper
 //   cosmetics.ts        IWorldCosmetics      account skins + mech chroma
@@ -29,6 +29,7 @@
 //   trade.ts            IWorldTrade          peer-to-peer trade window
 //   chat.ts             IWorldChat           chat router + emotes
 //   duel_arena.ts       IWorldDuelArena      duels + ranked arena + 2v2 fiesta
+//   battleground.ts     IWorldBattleground   Thornhollow Fields 5v5 capture-the-flag queue + match view
 //   social_graph.ts     IWorldSocialGraph    friends/blocks/guild (online-only frames)
 //   market.ts           IWorldMarket         World Market browse/list/buy
 //   mail.ts             IWorldMail           Ravenpost mail send/take + unread badge
@@ -41,7 +42,8 @@
 //                                            content + basic crafting action landed in #1127)
 //   bank.ts             IWorldBank           per-character deposit box (proximity-gated info +
 //                                            deposit/withdraw/buy-slots)
-//   guild_bank.ts       IWorldGuildBank      shared guild treasury + item store (officer-plus,
+//   guild_bank.ts       IWorldGuildBank      shared guild treasury + item store (guild-wide view
+//                                            with canEdit marking officer-plus EDITS,
 //                                            proximity-gated info + gold/item/buy-slots commands)
 //   vale_cup.ts         IWorldValeCup        Vale Cup boarball queue/roles/betting/practice
 //   realm_racers.ts     IWorldRealmRacers    Realm Racers queue, practice, race, Ground Blast
@@ -49,6 +51,7 @@
 //   dungeon_finder.ts   IWorldDungeonFinder  Dungeon Finder queue/proposals/premade board
 //   deeds.ts            IWorldDeeds          earned deeds, lifetime stats, renown, active title,
 //                                            rarity + the account-Renown leaderboard reads
+//   reliquary.ts        IWorldReliquary      sparse firstFind / marks / recent + pure completion
 //
 // THREE GATES pin this seam (run before any facet edit; the literal counts are
 // pinned THERE and re-stale here, so this prose stays count-free):
@@ -63,6 +66,7 @@
 
 import type { IWorldActionBar } from './world_api/action_bar';
 import type { IWorldBank } from './world_api/bank';
+import type { IWorldBattleground } from './world_api/battleground';
 import type { IWorldCardMinigame } from './world_api/card_minigame';
 import type { IWorldChat } from './world_api/chat';
 import type { IWorldCombat } from './world_api/combat';
@@ -87,6 +91,7 @@ import type { IWorldProfessions } from './world_api/professions';
 import type { IWorldProgressionXp } from './world_api/progression_xp';
 import type { IWorldQuests } from './world_api/quests';
 import type { IWorldRealmRacers } from './world_api/realm_racers';
+import type { IWorldReliquary } from './world_api/reliquary';
 import type { IWorldSocialGraph } from './world_api/social_graph';
 import type { IWorldTalents } from './world_api/talents';
 import type { IWorldTargeting } from './world_api/targeting';
@@ -117,7 +122,13 @@ export type {
 // discriminator. Changing the authoritative town layout requires a new epoch:
 // the strict discriminator makes both rolling-deploy directions fail closed
 // before either binary loads a character into a differently shaped world.
-export const ONLINE_WORLD_LAYOUT_VERSION = 4 as const;
+// 7 = Fate Threads moved from the marked target to the Warlock. Mixed binaries
+// disagree about the authoritative resource carrier, so they must fail closed.
+// 8 = the Realm Racers instance band. It is a NEW epoch rather than either side
+// of the merge: this branch grew its own layout from epoch 3 while the release
+// grew three of its own, so a binary at 7 and a binary at this one disagree
+// about the town and must fail closed exactly as any other pair would.
+export const ONLINE_WORLD_LAYOUT_VERSION = 8 as const;
 export const ONLINE_WORLD_AUTH_TYPE = `auth-world-${ONLINE_WORLD_LAYOUT_VERSION}` as const;
 // The one wire literal both sides emit for a layout-epoch mismatch. The server
 // rejects with it, the client synthesizes it for pre-epoch servers, and the UI
@@ -127,8 +138,14 @@ export const ONLINE_WORLD_INCOMPATIBLE_MESSAGE =
 
 // Snapshot timer wire capability shared by the browser mirror and authoritative
 // server. Keep the version exact so rolling deploys can negotiate fail-closed.
-export const STABLE_TIMER_WIRE_VERSION = 2 as const;
+export const STABLE_TIMER_WIRE_VERSION = 3 as const;
 export type StableTimerWireVersion = typeof STABLE_TIMER_WIRE_VERSION;
+
+// Warlock pet-bar signature command capability. It is negotiated independently
+// from the world-layout epoch so rolling deploys fail closed for this optional
+// behavior without disconnecting otherwise compatible clients.
+export const PET_SPECIAL_WIRE_VERSION = 1 as const;
+export type PetSpecialWireVersion = typeof PET_SPECIAL_WIRE_VERSION;
 
 // Absolute cooldown schedule in server simulation seconds. A number is the
 // expiry for 1x recovery. The tuple adds a temporary recovery-rate segment;
@@ -146,9 +163,21 @@ export type {
   ActionBarSlotAction,
 } from './world_api/action_bar';
 export type { BankBonusSource, BankInfo } from './world_api/bank';
+export type {
+  BgFlagInfo,
+  BgInfo,
+  BgLadderEntry,
+  BgMatchInfo,
+  BgPlayerInfo,
+  BgProposalInfo,
+} from './world_api/battleground';
 export type { CardMinigameInfo } from './world_api/card_minigame';
 export { isOverheadEmoteId, OVERHEAD_EMOTES } from './world_api/chat';
-export type { ActiveFrostRing, ActiveTemporalHourglass } from './world_api/combat';
+export type {
+  ActiveConsecration,
+  ActiveFrostRing,
+  ActiveTemporalHourglass,
+} from './world_api/combat';
 export type { AccountCosmetics } from './world_api/cosmetics';
 export type {
   DailyRewardEligibilityView,
@@ -199,7 +228,11 @@ export {
   type GuildBankLogOp,
   type GuildBankLogView,
 } from './world_api/guild_bank';
-export type { WorldInteractionOutcome } from './world_api/interaction';
+export type {
+  CivicServiceKind,
+  CivicServicePlacement,
+  WorldInteractionOutcome,
+} from './world_api/interaction';
 export type { MailInfo, MailKindView, MailMessageView } from './world_api/mail';
 export type { MarketInfo, MarketListingView } from './world_api/market';
 export { queryDiffersFromEcho, searchDiffersFromEcho } from './world_api/market';
@@ -226,6 +259,12 @@ export type {
   RealmRacersRacerInfo,
   RealmRacersResult,
 } from './world_api/realm_racers';
+export type {
+  ReliquaryCatalogCompletion,
+  ReliquaryFirstFindView,
+  ReliquaryPageCompletion,
+  ReliquaryRarity,
+} from './world_api/reliquary';
 export type {
   CharacterProfile,
   CharacterSearchResult,
@@ -271,6 +310,7 @@ export interface IWorld
     IWorldTrade,
     IWorldChat,
     IWorldDuelArena,
+    IWorldBattleground,
     IWorldCardMinigame,
     IWorldSocialGraph,
     IWorldMarket,
@@ -286,6 +326,7 @@ export interface IWorld
     IWorldDungeonFinder,
     IWorldActionBar,
     IWorldDeeds,
+    IWorldReliquary,
     IWorldMounts,
     IWorldRealmRacers {}
 
@@ -333,6 +374,7 @@ export const COMMAND_NAMES = [
   'unequip_item',
   'use',
   'discard',
+  'lock_item',
   'buy',
   'sell',
   'buyback',
@@ -411,6 +453,7 @@ export const COMMAND_NAMES = [
   'switchLoadout',
   'deleteLoadout',
   'market_search',
+  'market_sell_price_check',
   'market_list',
   'market_list_instance',
   'market_buy',
@@ -521,29 +564,75 @@ export const COMMAND_NAMES = [
   // Guild billboard: set (or clear, with '') the officer-editable message
   // pinned atop the social window's Guild tab (SocialService.guildSetMotd).
   'guild_set_motd',
+  // Template-authored active on a controlled pet (Abyssal Chain, Felbolt)
+  // plus its pet-bar autocast toggle.
+  'pet_special',
+  'pet_auto_special',
+  // Commission order board (Professions 2.0, issue #1298): open/cancel a
+  // commission request, or accept/deliver one as a crafter (Sim.
+  // openCommissionOrder/cancelCommissionOrder/acceptCommissionOrder/
+  // deliverCommissionOrder via src/sim/professions/commission_order.ts).
+  'open_commission_order',
+  'cancel_commission_order',
+  'accept_commission_order',
+  'deliver_commission_order',
+  // "Stop Auto-Attack on Target Switch" QoL preference (issue #1358): mirrors
+  // the client setting onto the authoritative Targeting slice so every
+  // target-switch selector can gate on it (Sim.setStopAutoAttackOnTargetSwitch
+  // via src/sim/targeting.ts).
+  'stopAutoAttackOnTargetSwitch',
+  // Thornhollow Fields 5v5 capture-the-flag: queue join/leave and the deliberate
+  // battleground action press (flag pickup; Sim.bgQueueJoin/bgQueueLeave/
+  // bgFlagAction via src/sim/social/battleground.ts). dev_bg_start is the
+  // env-gated force-start (dispatch-only, below).
+  'bg_queue',
+  'bg_leave',
+  'bg_respond',
+  'bg_flag',
+  'dev_bg_start',
   // Profiler-only server authority: idempotently prevents incoming damage while
   // preserving normal outgoing damage and incoming hit presentation.
   'dev_profiler_invulnerable',
-  // The Guild Bank cluster (officer-plus shared treasury + item store,
-  // src/sim/guild_bank.ts). Its own guild_bank_* tokens forever, NEVER a reuse
+  // The Guild Bank cluster (shared treasury + item store, viewable guild-wide,
+  // EDITABLE officer-plus only: every token below is a mutating op the sim
+  // refuses for a plain member, src/sim/guild_bank.ts). Its own guild_bank_*
+  // tokens forever, NEVER a reuse
   // of the personal bank_* strings (state.md decision; pinned by
   // tests/command_facets.test.ts). `slot` is a container index and `count`
   // optional (the bank_* wire idiom); `amount` is copper. The Sim owns every
-  // gameplay rule (banker proximity, officer-plus rank, quest-bind, caps,
-  // table price); the server validates shape only.
+  // gameplay rule (banker proximity, officer-plus rank on edits, quest-bind,
+  // caps, table price); the server validates shape only.
   'guild_bank_deposit_gold',
   'guild_bank_withdraw_gold',
   'guild_bank_deposit',
   'guild_bank_withdraw',
   'guild_bank_buy_slots',
-  // The guild bank ACTIVITY LOG request (the officer-visible history of the
-  // append-only bank_ledger rows). A pure READ token: it mutates nothing, and
+  // The guild bank ACTIVITY LOG request (the guild-visible history of the
+  // append-only bank_ledger rows; readable by every member since the v0.35
+  // member read-only view). A pure READ token: it mutates nothing, and
   // its answer comes back on its own one-shot 'gbanklog' frame rather than the
-  // 20 Hz snapshot, because the payload is cold, identical for every officer of
+  // 20 Hz snapshot, because the payload is cold, identical for every member of
   // the guild, and 50 rows wide. Sent only while the log view is open.
   'guild_bank_log',
+  // Paperdoll eye toggle: helmet-visibility preference on the composed body.
+  // Appended because wire tokens are never reordered.
+  'set_helm',
+  // One-shot bag clean-up (IWorldInventory.sortInventory): no payload, the
+  // sim consolidates and restamps cell hints deterministically. Appended
+  // because wire tokens are never reordered.
+  'inv_sort',
+  // Book of Deeds nameplate border selection, the sibling of 'deed_set_title'.
+  // Appended rather than filed beside its twin because wire tokens are never
+  // reordered.
+  'deed_set_border',
+  // The backward half of the Tab cycle (IWorldTargeting.tabTargetPrev): no
+  // payload, the sim resolves the previous enemy in the same ordered list Tab
+  // walks forward. Appended because wire tokens are never reordered.
+  'tabPrev',
   // The Realm Racers queue and active-race forfeit, plus the Practice start
   // that seats a house pilot against you immediately (no queue, no wait).
+  // Appended AFTER the release's own tokens for the same reason they were
+  // appended: a released index never moves, and these five have not shipped.
   'realm_racers_join',
   'realm_racers_leave',
   'realm_racers_forfeit',
@@ -571,6 +660,7 @@ export const DISPATCH_ONLY_COMMANDS = [
   'leave_crypt',
   'social_refresh',
   'targetNearest',
+  'dev_bg_start',
   // Riding-lesson leftovers: 'mount_train_answer' (the removed lean-cue arm) and
   // 'mount_train_abort' (the removed course minigame's cancel) no longer have a
   // ClientWorld sender, but the wire strings ARE the protocol (append-only), so
@@ -614,6 +704,7 @@ export type WorldFacet =
   | 'IWorldTrade'
   | 'IWorldChat'
   | 'IWorldDuelArena'
+  | 'IWorldBattleground'
   | 'IWorldCardMinigame'
   | 'IWorldSocialGraph'
   | 'IWorldMarket'
@@ -628,6 +719,7 @@ export type WorldFacet =
   | 'IWorldDungeonFinder'
   | 'IWorldActionBar'
   | 'IWorldDeeds'
+  | 'IWorldReliquary'
   | 'IWorldMounts'
   | 'IWorldRealmRacers';
 
@@ -650,8 +742,10 @@ export const COMMAND_FACETS = {
   // IWorldTargeting: target selection + tab cycling.
   target: 'IWorldTargeting',
   tab: 'IWorldTargeting',
+  tabPrev: 'IWorldTargeting',
   targetNearestFriendly: 'IWorldTargeting',
   tabFriendly: 'IWorldTargeting',
+  stopAutoAttackOnTargetSwitch: 'IWorldTargeting',
   // IWorldLoot: need-greed roll submit.
   lootRoll: 'IWorldLoot',
   // IWorldInventory: non-fungible Rift gear progression. These mutate the
@@ -662,6 +756,9 @@ export const COMMAND_FACETS = {
   rift_upgrade_item: 'IWorldInventory',
   rift_enchant_item: 'IWorldInventory',
   rift_socket_gem: 'IWorldInventory',
+  // IWorldInventory: the one-shot bag clean-up; the sim re-derives the whole
+  // arrangement, so there is no payload to validate.
+  inv_sort: 'IWorldInventory',
   // IWorldTelemetry: fire-and-forget metrics sink.
   telemetry: 'IWorldTelemetry',
   // IWorldProgressionXp: opt-in cosmetic prestige (leaderboard is a REST GET, no
@@ -682,6 +779,7 @@ export const COMMAND_FACETS = {
   unequip_mech_chroma: 'IWorldCosmetics',
   change_weapon_skin: 'IWorldCosmetics',
   stow_weapon: 'IWorldCosmetics',
+  set_helm: 'IWorldCosmetics',
   // IWorldPet: hunter-pet commands (snake_case wire strings, by design; pet state
   // mirrors on the owned-mob entity wire, not a self-snapshot field).
   pet_abandon: 'IWorldPet',
@@ -692,6 +790,8 @@ export const COMMAND_FACETS = {
   pet_taunt: 'IWorldPet',
   pet_auto_taunt: 'IWorldPet',
   pet_auto_water_jet: 'IWorldPet',
+  pet_special: 'IWorldPet',
+  pet_auto_special: 'IWorldPet',
   pet_feed: 'IWorldPet',
   pet_heal: 'IWorldPet',
   pet_mode: 'IWorldPet',
@@ -729,6 +829,11 @@ export const COMMAND_FACETS = {
   arena_queue: 'IWorldDuelArena',
   arena_leave: 'IWorldDuelArena',
   arena_augment: 'IWorldDuelArena',
+  // IWorldBattleground: the Thornhollow Fields queue + the deliberate flag action.
+  bg_queue: 'IWorldBattleground',
+  bg_leave: 'IWorldBattleground',
+  bg_respond: 'IWorldBattleground',
+  bg_flag: 'IWorldBattleground',
   // IWorldCardMinigame: the Card Duel minigame queue + in-match card plays.
   // cardMinigameInfo is a snapshot read (no send).
   card_queue_join: 'IWorldCardMinigame',
@@ -763,6 +868,7 @@ export const COMMAND_FACETS = {
   // IWorldMarket: World Market browse/list/buy/cancel/collect (snake_case wire
   // strings, by design). marketInfo is a snapshot read (no send, untagged).
   market_search: 'IWorldMarket',
+  market_sell_price_check: 'IWorldMarket',
   market_list: 'IWorldMarket',
   market_list_instance: 'IWorldMarket',
   market_buy: 'IWorldMarket',
@@ -850,10 +956,12 @@ export const COMMAND_FACETS = {
   df_apply: 'IWorldDungeonFinder',
   df_apply_cancel: 'IWorldDungeonFinder',
   df_app_respond: 'IWorldDungeonFinder',
-  // IWorldDeeds: the Book of Deeds title selection (snake_case wire string, by
-  // design). deedsEarned/deedStats/renown/activeTitle are snapshot reads (no
-  // send, untagged).
+  // IWorldDeeds: the Book of Deeds cosmetic selections, title and nameplate
+  // border (snake_case wire strings, by design).
+  // deedsEarned/deedStats/renown/activeTitle/activeBorder are snapshot reads
+  // (no send, untagged).
   deed_set_title: 'IWorldDeeds',
+  deed_set_border: 'IWorldDeeds',
   // IWorldActionBar: the debounced action-bar layout upload. takeActionBarLayoutRestore
   // is a login-time read (no send, untagged).
   save_hotbar_layout: 'IWorldActionBar',

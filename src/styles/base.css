@@ -6,6 +6,12 @@
    rides the inline var(--range-fill, 0%) fallback, set per element by the HUD; it
    stays here and is never promoted to a :root token. */
 @layer base {
+  img.crest-image-fallback {
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: cover;
+  }
+
   * {
     box-sizing: border-box;
     margin: 0;
@@ -54,24 +60,6 @@
   }
   ::-webkit-scrollbar-corner {
     background: transparent;
-  }
-
-  /* Software pointer driven by the gamepad's stick while a HUD window is open
-     (gamepad.ts). Hidden until cursor mode activates; sits above the HUD. */
-  .gamepad-cursor {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: 22px;
-    height: 22px;
-    margin: -11px 0 0 -11px;
-    border: 2px solid #d4af37;
-    border-radius: 50%;
-    background: rgba(212, 175, 55, 0.25);
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
-    pointer-events: none;
-    z-index: 100000;
-    display: none;
   }
 
   /* ---------- MMO-themed native form controls ----------
@@ -549,7 +537,8 @@
   .mkt-tab:focus-visible,
   .mkt-btn:focus-visible,
   .mkt-list-btn:focus-visible,
-  .profession-skill-list:focus-visible {
+  .profession-skill-list:focus-visible,
+  .prof-effect:focus-visible {
     outline: 2px solid var(--color-border-focus);
     outline-offset: 2px;
   }

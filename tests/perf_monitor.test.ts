@@ -61,6 +61,130 @@ function netPipelineFixture(): NetPipelineSummary {
 beforeEach(() => installBrowserGlobals());
 afterEach(() => removeBrowserGlobals());
 
+describe('hidden present skips', () => {
+  it('counts a skipped frame without sampling it, and carries it in the snapshot', () => {
+    const perf = new PerfMonitor(null);
+    expect(perf.snapshot(1000).hiddenPresentSkips).toBe(0);
+
+    perf.frame(0.016, 100);
+    perf.noteHiddenPresentSkip();
+    perf.noteHiddenPresentSkip();
+
+    const snap = perf.snapshot(2000);
+    expect(snap.hiddenPresentSkips).toBe(2);
+    // Counted, never sampled: a renderless frame folded into `frames` would
+    // inflate fps and bury a real hitch in the frame-time percentiles.
+    expect(snap.frames).toBe(1);
+  });
+
+  it('clears the counter alongside the other counters on reset', () => {
+    const perf = new PerfMonitor(null);
+    perf.noteHiddenPresentSkip();
+    expect(perf.snapshot(1000).hiddenPresentSkips).toBe(1);
+    perf.reset();
+    expect(perf.snapshot(2000).hiddenPresentSkips).toBe(0);
+  });
+
+  it('surfaces the counter in the overlay once skips exist, and stays quiet at zero', () => {
+    // The counter's ONE live sink (phase 4 QA F11): without this line the
+    // field is written, snapshotted, and read by nothing but the E2E probe.
+    const created: Array<{ textContent?: string }> = [];
+    installBrowserGlobals('?perf');
+    (globalThis as any).document.createElement = () => {
+      const el = {
+        style: {},
+        textContent: '',
+        addEventListener: () => {},
+        appendChild: () => {},
+      };
+      created.push(el);
+      return el;
+    };
+    const perf = new PerfMonitor(null);
+    expect(perf.enabled).toBe(true);
+    perf.frame(0.016, 100);
+    perf.tick(2000);
+    const overlayText = () =>
+      created.map((el) => el.textContent ?? '').find((text) => text.includes('fps ')) ?? '';
+    expect(overlayText()).not.toContain('hidden skips');
+    perf.noteHiddenPresentSkip();
+    perf.noteHiddenPresentSkip();
+    perf.tick(4000);
+    expect(overlayText()).toContain('hidden skips 2');
+  });
+
+  it('discounts a closed hidden span from the cumulative fps denominator', () => {
+    // The after-restore dilution (frames stop while hidden, wall seconds keep
+    // counting): 100 frames over ~10 visible seconds must read ~10 fps, not
+    // the ~0.9 that 110 wall seconds would produce.
+    const perf = new PerfMonitor(null);
+    const t0 = performance.now();
+    for (let i = 0; i < 100; i++) perf.frame(0.016, t0 + i * 16);
+    perf.setFrameSampling(false, t0 + 10_000);
+    perf.setFrameSampling(true, t0 + 110_000);
+    const snap = perf.snapshot(t0 + 110_000);
+    expect(snap.frames).toBe(100);
+    expect(snap.fps).toBeGreaterThan(8);
+    expect(snap.fps).toBeLessThan(12);
+  });
+
+  it('discounts a hidden span still open at snapshot time', () => {
+    const perf = new PerfMonitor(null);
+    const t0 = performance.now();
+    for (let i = 0; i < 100; i++) perf.frame(0.016, t0 + i * 16);
+    perf.setFrameSampling(false, t0 + 10_000);
+    const snap = perf.snapshot(t0 + 110_000);
+    expect(snap.fps).toBeGreaterThan(8);
+    expect(snap.fps).toBeLessThan(12);
+  });
+
+  it('treats repeated same-value sampling writes as no-ops (main.ts sets it every frame)', () => {
+    const perf = new PerfMonitor(null);
+    const t0 = performance.now();
+    for (let i = 0; i < 100; i++) perf.frame(0.016, t0 + i * 16);
+    perf.setFrameSampling(true, t0 + 5_000); // already on: must not move the ledger
+    perf.setFrameSampling(false, t0 + 10_000);
+    perf.setFrameSampling(false, t0 + 60_000); // still off: the span keeps its start
+    perf.setFrameSampling(true, t0 + 110_000);
+    const snap = perf.snapshot(t0 + 110_000);
+    expect(snap.fps).toBeGreaterThan(8);
+    expect(snap.fps).toBeLessThan(12);
+  });
+
+  it('clears the hidden-time ledger on reset', () => {
+    const perf = new PerfMonitor(null);
+    perf.setFrameSampling(false, 1_000);
+    perf.setFrameSampling(true, 61_000);
+    perf.reset();
+    const t0 = performance.now();
+    for (let i = 0; i < 50; i++) perf.frame(0.016, t0 + i * 16);
+    const snap = perf.snapshot(t0 + 10_000);
+    // Only wall time since the reset counts: a stale 60 s ledger would push
+    // the denominator to its floor and fake a huge fps here.
+    expect(snap.fps).toBeGreaterThan(4);
+    expect(snap.fps).toBeLessThan(6);
+  });
+
+  it('records no bucket sample while frame sampling is off, and resumes when it returns', () => {
+    // Phase 4 QA F10: a hidden desktop frame must reproduce the web
+    // hidden-tab shape, where NO per-frame sample records (rAF pauses there),
+    // or the sim/events rings would grow a hidden-only population and the
+    // first post-refocus report window would carry it. main.ts flips this
+    // switch from the presentation gate every frame.
+    const perf = new PerfMonitor(null);
+    const start = perf.startTime();
+    perf.setFrameSampling(false);
+    perf.finishTime('sim', start);
+    perf.finishTime('events', start);
+    expect(perf.snapshot(1000).mainMs.sim.count).toBe(0);
+    expect(perf.snapshot(1000).mainMs.events.count).toBe(0);
+
+    perf.setFrameSampling(true);
+    perf.finishTime('sim', perf.startTime());
+    expect(perf.snapshot(2000).mainMs.sim.count).toBe(1);
+  });
+});
+
 describe('perf monitor ungated net pipeline', () => {
   it('keeps netPipeline in the snapshot while the gated network block stays null when disabled', () => {
     const perf = new PerfMonitor(null);
@@ -126,6 +250,35 @@ describe('perf monitor heap sawtooth sampling', () => {
     perf.tick(2000);
     perf.tick(3000);
     expect(perf.snapshot(3000).heapSawtooth).toBeNull();
+  });
+
+  it('exposes the heap floor trend only through the enabled dev hitch report', () => {
+    (performance as any).memory = {
+      usedJSHeapSize: 100 * MB,
+      totalJSHeapSize: 200 * MB,
+      jsHeapSizeLimit: 4096 * MB,
+    };
+    const disabled = new PerfMonitor(null);
+    expect(disabled.hitchReport()).toBeNull();
+
+    location.search = '?perf';
+    const enabled = new PerfMonitor(null);
+    enabled.tick(1000);
+    (performance as any).memory.usedJSHeapSize = 130 * MB;
+    enabled.tick(2000);
+    (performance as any).memory.usedJSHeapSize = 105 * MB;
+    enabled.tick(3000);
+    expect(enabled.hitchReport()).toEqual({
+      heapSawtooth: expect.objectContaining({
+        gcDropCount: 1,
+        allocRateMbPerSec: 15,
+      }),
+      heapFloor: { startMb: 100, endMb: 105, growthMb: 5, floorSamples: 2 },
+      heapFloorSeries: [
+        { atMs: 1000, floorMb: 100 },
+        { atMs: 3000, floorMb: 105 },
+      ],
+    });
   });
 });
 
@@ -209,7 +362,15 @@ describe('perf monitor scene census wiring', () => {
       hitchStats: () => ({
         frames: 100,
         hitches: 2,
-        byCause: { 'shader-compile': 1, 'texture-upload': 0, 'view-create': 0, other: 1 },
+        byCause: {
+          'shader-compile': 1,
+          'texture-upload': 0,
+          'zone-build': 0,
+          'view-create': 0,
+          gc: 0,
+          'off-frame': 0,
+          other: 1,
+        },
         programGrowthFrames: 1,
         programsAdded: 3,
         recent: [],
@@ -246,6 +407,49 @@ describe('perf monitor scene census wiring', () => {
     expect(snap.census?.rows[0]?.category).toBe('props');
     expect(snap.hitches?.hitches).toBe(2);
     expect(snap.hitches?.byCause['shader-compile']).toBe(1);
+  });
+
+  it('renders every hitch cause counter on the overlay hitch line', () => {
+    // The zone-build, gc and off-frame causes are the ones the build ledger,
+    // the heap sample and the frame-gap attribution added: a hitch filed
+    // under them must be readable on the overlay, not only in the JSON report.
+    const created: Array<{ textContent?: string }> = [];
+    installBrowserGlobals('?perf');
+    (globalThis as any).document.createElement = () => {
+      const el = {
+        style: {},
+        textContent: '',
+        addEventListener: () => {},
+        appendChild: () => {},
+      };
+      created.push(el);
+      return el;
+    };
+    const renderer = fakeRenderer();
+    renderer.hitchStats = () => ({
+      frames: 100,
+      hitches: 21,
+      byCause: {
+        'shader-compile': 1,
+        'texture-upload': 2,
+        'zone-build': 3,
+        'view-create': 4,
+        gc: 5,
+        'off-frame': 6,
+        other: 7,
+      },
+      programGrowthFrames: 1,
+      programsAdded: 8,
+      recent: [],
+    });
+    const perf = new PerfMonitor(renderer as unknown as Renderer);
+    perf.frame(0.016, 100);
+    perf.tick(2000);
+    const overlayText =
+      created.map((el) => el.textContent ?? '').find((text) => text.includes('fps ')) ?? '';
+    expect(overlayText).toContain(
+      'hitch 21 (compile 1 tex 2 zone 3 view 4 gc 5 off 6 other 7)  prog +8',
+    );
   });
 
   it('drops the one self-inflicted frame sample after a census run', () => {

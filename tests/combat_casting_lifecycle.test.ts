@@ -14,10 +14,12 @@ import {
   updateCasting,
 } from '../src/sim/combat/casting_lifecycle';
 import { handleDeath } from '../src/sim/combat/damage';
+import { ABILITIES } from '../src/sim/content/classes';
 import { GATHER_NODES } from '../src/sim/content/gather_nodes';
 import { BUILTIN_WORLD, LAKE, MOBS } from '../src/sim/data';
 import { clearNythraxisWardChannelCast } from '../src/sim/encounters/nythraxis';
 import { createMob } from '../src/sim/entity';
+import { ACTIONS, applyAction } from '../src/sim/obs';
 import { startFishing } from '../src/sim/professions/fishing';
 import { advancePendingProjectiles } from '../src/sim/projectile_travel';
 import { Sim } from '../src/sim/sim';
@@ -86,6 +88,24 @@ function drainCast(sim: AnySim, p: AnyEntity, meta: any): number {
   let n = 0;
   while (p.castingAbility && n++ < 1000) updateCasting(sim.ctx, p, meta);
   return n;
+}
+
+// A hostile mob that is currently ATTACKING the player (Entity.aggroTargetId),
+// but never selected as the player's target: the fixture auto-acquire-on-cast
+// (issue #2787) is meant to find. Never calls sim.targetEntity.
+function spawnAttacker(sim: AnySim, p: AnyEntity, dz: number, level = 1): AnyEntity {
+  const mob = createMob(sim.nextId++, MOBS.forest_wolf, level, {
+    x: p.pos.x,
+    y: p.pos.y,
+    z: p.pos.z + dz,
+  }) as AnyEntity;
+  mob.maxHp = 5000;
+  mob.hp = 5000;
+  mob.hostile = true;
+  mob.aiState = 'chase';
+  mob.aggroTargetId = p.id;
+  sim.addEntity(mob);
+  return mob;
 }
 
 describe('casting_lifecycle: timed cast start -> progress -> finish', () => {
@@ -206,7 +226,136 @@ describe('casting_lifecycle: Vanish escape stealth blocks a hostile cast (issue 
   });
 });
 
+describe('casting_lifecycle: auto-acquire on cast with no target (issue #2787)', () => {
+  it('acquires the nearest ATTACKING mob over a closer idle one', () => {
+    const { sim, p } = makeSim('mage', 12);
+    const idleNear = spawnTarget(sim, p, 1, 4); // idle, closer, never attacking
+    idleNear.aiState = 'idle';
+    const attackerFar = spawnAttacker(sim, p, 12); // farther, but actually attacking
+    sim.targetEntity(null, p.id); // spawnTarget above selected idleNear; clear it
+    expect(p.targetId).toBeNull();
+
+    castAbility(sim.ctx, 'fireball', p.id);
+    expect(p.targetId).toBe(attackerFar.id);
+    expect(p.castingAbility).toBe('fireball'); // the cast actually started
+    expect(p.castTargetId).toBe(attackerFar.id);
+  });
+
+  it('among several attackers, picks the nearest one', () => {
+    const { sim, p } = makeSim('mage', 12);
+    const near = spawnAttacker(sim, p, 6);
+    const mid = spawnAttacker(sim, p, 14);
+    const far = spawnAttacker(sim, p, 22);
+    expect(p.targetId).toBeNull();
+
+    castAbility(sim.ctx, 'fireball', p.id);
+    expect(p.targetId).toBe(near.id);
+    void mid;
+    void far;
+  });
+
+  it('never overrides an existing target, even one nearer than the attacker', () => {
+    const { sim, p } = makeSim('mage', 12);
+    const selected = spawnTarget(sim, p, 1, 15); // explicitly targeted, farther away
+    const attacker = spawnAttacker(sim, p, 6); // closer, actively attacking, but not selected
+    expect(p.targetId).toBe(selected.id);
+
+    castAbility(sim.ctx, 'fireball', p.id);
+    expect(p.targetId).toBe(selected.id); // unchanged
+    expect(p.castTargetId).toBe(selected.id);
+    void attacker;
+  });
+
+  it('still errors "You have no target." when no mob is attacking the player', () => {
+    const { sim, p } = makeSim('mage', 12);
+    spawnTarget(sim, p); // an idle mob exists, but is never targeted here
+    sim.targetEntity(null, p.id);
+    const errors: Array<Record<string, any>> = [];
+    const orig = (sim as any).emit.bind(sim);
+    (sim as any).emit = (e: Record<string, any>) => {
+      errors.push(e);
+      orig(e);
+    };
+
+    castAbility(sim.ctx, 'fireball', p.id);
+    expect(p.targetId).toBeNull();
+    expect(p.castingAbility).toBeNull();
+    expect(errors.some((e) => e.type === 'error' && e.text === 'You have no target.')).toBe(true);
+  });
+
+  it('also auto-acquires for a dual-purpose (targetType "any") ability', () => {
+    // The generic 'any' acquire arm has no LIVE consumer on this line: the
+    // paladin overhaul retired holy_shock to legacy-hidden, and Unleash
+    // Weapon resolves its own target before this arm runs. Unhide the legacy
+    // exemplar for the pin (restored below) so the arm stays guarded for the
+    // next dual-purpose ability that ships.
+    const { sim, p } = makeSim('paladin', 12);
+    ABILITIES.holy_shock.hiddenFromPlayer = false;
+    try {
+      sim.setSpec('holy');
+      const attacker = spawnAttacker(sim, p, 8);
+      expect(p.targetId).toBeNull();
+
+      castAbility(sim.ctx, 'holy_shock', p.id);
+      expect(p.targetId).toBe(attacker.id);
+    } finally {
+      ABILITIES.holy_shock.hiddenFromPlayer = true;
+    }
+    expect(p.castingAbility).toBeNull(); // holy_shock is instant (castTime 0)
+  });
+
+  it('flows the auto-acquired target through a TIMED cast to completion (applyAbility)', () => {
+    const { sim, p, meta } = makeSim('mage', 12);
+    const attacker = spawnAttacker(sim, p, 10);
+    const hp0 = attacker.hp;
+    sim.rng.chance = () => true; // guarantee the hit lands
+
+    castAbility(sim.ctx, 'fireball', p.id);
+    expect(p.castTargetId).toBe(attacker.id);
+    drainCast(sim, p, meta);
+    expect(p.castingAbility).toBeNull();
+    for (let i = 0; i < 200 && sim.ctx.pendingProjectiles.length > 0; i++)
+      advancePendingProjectiles(sim.ctx);
+    expect(attacker.hp).toBeLessThan(hp0); // resolved against the auto-acquired mob
+  });
+
+  it('behaves identically through the headless RL action path (applyAction/ability_N)', () => {
+    // Offline/server path: a direct castAbility call.
+    const direct = makeSim('mage', 12);
+    const directAttacker = spawnAttacker(direct.sim, direct.p, 10);
+    castAbility(direct.sim.ctx, 'fireball', direct.p.id);
+
+    // Headless RL path: the exact same castAbilityBySlot call the RL env's
+    // applyAction dispatches for an 'ability_N' action (src/sim/obs.ts).
+    const headless = makeSim('mage', 12);
+    const headlessAttacker = spawnAttacker(headless.sim, headless.p, 10);
+    const slot = headless.meta.known.findIndex((k: any) => k.def.id === 'fireball');
+    expect(slot).toBeGreaterThanOrEqual(0);
+    applyAction(headless.sim, ACTIONS.indexOf(`ability_${slot + 1}` as (typeof ACTIONS)[number]));
+
+    expect(headless.p.targetId).toBe(headlessAttacker.id);
+    expect(headless.p.castingAbility).toBe(direct.p.castingAbility);
+    expect(direct.p.targetId).toBe(directAttacker.id);
+  });
+});
+
 describe('casting_lifecycle: channel start -> tick -> finish', () => {
+  it('starts Consume damage on the first channel update instead of waiting one second', () => {
+    const { sim, p, meta } = makeSim('warlock', 12);
+    const mob = spawnTarget(sim, p);
+    const mobHp0 = mob.hp;
+
+    castAbility(sim.ctx, 'drain_life', p.id);
+    updateCasting(sim.ctx, p, meta);
+
+    expect(p.channelTicksLeft).toBe(2);
+    expect(sim.ctx.pendingProjectiles).toHaveLength(1);
+    for (let tick = 0; tick < 20 && mob.hp === mobHp0; tick++) {
+      advancePendingProjectiles(sim.ctx);
+    }
+    expect(mob.hp).toBeLessThan(mobHp0);
+  });
+
   it('starts a channel (channeling, resource spent at START), ticks drain, then finishes', () => {
     const { sim, p, meta } = makeSim('warlock', 12);
     const mob = spawnTarget(sim, p);
@@ -299,6 +448,26 @@ describe('casting_lifecycle: channel start -> tick -> finish', () => {
       .drainEvents()
       .filter((e: any) => e.type === 'castStop' && e.entityId === p.id);
     expect(stops.some((e: any) => e.success === false)).toBe(true);
+  });
+
+  it('keeps Litany of Woe on the existing projectile channel path', () => {
+    const { sim, p } = makeSim('priest', 20);
+    const mob = spawnTarget(sim, p, 20, 6);
+    sim.drainEvents();
+    castAbility(sim.ctx, 'mind_flay', p.id);
+
+    const events: any[] = [];
+    for (let tick = 0; tick < 25; tick++) events.push(...sim.tick());
+
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'spellfx' &&
+          event.fx === 'projectile' &&
+          event.sourceId === p.id &&
+          event.targetId === mob.id,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -676,6 +845,7 @@ describe('casting_lifecycle: determinism', () => {
 describe('casting_lifecycle: physical ranged shots resolve on projectile impact (Long Draw)', () => {
   it('deals no damage at cast completion; damage lands when the arrow arrives', () => {
     const { sim, p, meta } = makeSim('hunter', 20);
+    expect(sim.setSpec('marksmanship')).toBe(true);
     p.resource = p.maxResource = 500;
     const mob = spawnTarget(sim, p, 20, 20); // 20yd: within 35yd range, beyond the 8yd deadzone
     const events: Array<Record<string, any>> = [];

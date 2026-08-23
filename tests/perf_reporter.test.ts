@@ -102,7 +102,7 @@ function qualityBuckets(): NonNullable<PerfSnapshot['renderer']>['qualityBuckets
       maxPointLights: 6,
       activePointLights: 6,
       shadowMap: 4096,
-      nativeIosMemoryProfile: false,
+      iosMemoryProfile: false,
     },
   };
 }
@@ -150,7 +150,7 @@ function prewarmStats(): NonNullable<NonNullable<PerfSnapshot['renderer']>['prew
         category: 'world',
         priority: 50,
         required: true,
-        status: 'completed',
+        status: 'partial',
         elapsedMs: 120,
         remainingMsAfter: 4200,
         passes: 0,
@@ -160,16 +160,130 @@ function prewarmStats(): NonNullable<NonNullable<PerfSnapshot['renderer']>['prew
         texturesBefore: 40,
         texturesAfter: 52,
         textureDelta: 12,
+        workDone: 12,
+        workPlanned: 20,
         detail: 'uploaded=12',
+        budgetVariants: [
+          {
+            index: 0,
+            levels: { grass: 1, foliage: 0.86, vfx: 0.92, lighting: 0.9, resolution: 0.9 },
+            elapsedMs: 24,
+            syncMs: 18,
+            programsBefore: 10,
+            programsAfter: 14,
+            programDelta: 4,
+            passes: 1,
+          },
+          {
+            index: 1,
+            levels: { grass: 0.86, foliage: 0.72, vfx: 0.84, lighting: 0.78, resolution: 0.9 },
+            elapsedMs: 20,
+            syncMs: 15,
+            programsBefore: 14,
+            programsAfter: 16,
+            programDelta: 2,
+            passes: 1,
+          },
+        ],
       },
     ],
     manifestCompleted: 12,
+    manifestPartial: 1,
     manifestSkipped: 0,
-    manifestTimedOut: 0,
+    manifestTimedOut: 1,
     manifestFailed: 0,
-    timedOutEntryIds: [],
+    partialEntryIds: ['textures.scene'],
+    timedOutEntryIds: ['vfx.weapon-skins'],
     failedEntryIds: [],
+    // The dropped entry's second half. Without this, a report showing
+    // vfx.weapon-skins as timed-out cannot say whether the world-side weapon
+    // protection exists a minute into play or not at all.
+    resume: {
+      status: 'done' as const,
+      plannedEntries: 1,
+      plannedUnits: 3,
+      startedUnits: 3,
+      failedUnits: 1,
+      failedUnitIds: ['vfx.weapon-skins:weapon-skins:compile'],
+      entries: [
+        {
+          id: 'vfx.weapon-skins',
+          lane: 'cosmetic' as const,
+          planned: 3,
+          started: 3,
+          failed: 1,
+        },
+      ],
+    },
     diagnosticsBaseline: null,
+    compileUnits: [
+      {
+        id: 'programs.compile:0',
+        lane: 'programs.compile',
+        submittedAtMs: 100,
+        syncEndAtMs: 112,
+        settledAtMs: 140,
+        failedAtMs: null,
+        programsBefore: 10,
+        programsAfter: 14,
+        programDelta: 4,
+        chargedLinks: 4,
+        syncMs: 12,
+        settledDurationMs: 28,
+        statusAtReveal: 'settled' as const,
+        roots: Array.from({ length: 32 }, (_, index) => `root-${index}`),
+      },
+    ],
+    prewarmPacing: {
+      available: true,
+      source: 'default' as const,
+      mode: 'adaptive' as const,
+      linksPerSecond: null,
+      burst: 8,
+      compileBatchRoots: 32,
+      hardMaxMs: 5000,
+      chargedLinks: 4,
+      scope: 'compile-unit-sync-prologue' as const,
+      submitStop: {
+        submissions: 1,
+        usefulSettles: 1,
+        zeroDeltaSettles: 0,
+        zeroDeltaStreak: 0,
+        syncEnds: 1,
+        zeroDeltaSyncEnds: 0,
+        elapsedMs: 42,
+        sinceUsefulMs: 0,
+        stopped: false,
+        reason: null,
+      },
+      adaptive: {
+        state: 'ramp' as const,
+        windowLinks: 16,
+        minWindowLinks: 8,
+        maxWindowLinks: 32,
+        maxWindowObserved: 16,
+        estimatedLinksPerUnit: 4,
+        inFlightLinks: 4,
+        inFlightUnits: 1,
+        peakInFlightLinks: 24,
+        submittedUnits: 2,
+        settledUnits: 1,
+        failedUnits: 0,
+        backoffCount: 0,
+        noProgressCount: 0,
+        lastSettlementMs: 120,
+        transitions: [
+          {
+            atMs: 120,
+            from: 'ramp' as const,
+            to: 'steady' as const,
+            reason: 'mid-settlement' as const,
+            windowLinks: 16,
+            inFlightLinks: 4,
+          },
+        ],
+      },
+    },
   };
 }
 
@@ -201,6 +315,8 @@ function snapshot(): PerfSnapshot {
     seconds: 80,
     frames: 4800,
     fps: 60,
+    hiddenPresentSkips: 0,
+    hitchForensics: [],
     frameMs: { avg: 16.6, p50: 16, p95: 19, p99: 28, max: 52, long50: 1 },
     windows: {
       last10s: {
@@ -221,7 +337,170 @@ function snapshot(): PerfSnapshot {
     renderer: {
       graphicsConfigVersion: 16,
       tier: 'high',
+      currentZoneId: 'eastbrook_vale',
       qualityBuckets: qualityBuckets(),
+      gpuQueue: {
+        units: 2,
+        totalSyncMs: 18.4,
+        worstSyncMs: 12.1,
+        // The texture unit is the cheap-looking one that actually cost the
+        // frame: 6.3 ms of sync, 310 ms of lost frame. That inversion is why
+        // the beacon carries both rankings.
+        totalFrameGapMs: 329.2,
+        worstFrameGapMs: 310.5,
+        worstUnsharedFrameGapMs: 18.7,
+        slowest: [
+          {
+            label: 'live-view-compile',
+            priority: 30,
+            syncMs: 12.1,
+            wallMs: 40.2,
+            atMs: 5000,
+            waitMs: 2.4,
+            frameGapMs: 18.7,
+            sharedFrameGap: 1,
+            deferredFrames: 0,
+          },
+          {
+            label: 'texture-chunk',
+            priority: 10,
+            syncMs: 6.3,
+            wallMs: 6.3,
+            atMs: 5200,
+            waitMs: 940.5,
+            frameGapMs: 310.5,
+            sharedFrameGap: 2,
+            deferredFrames: 0,
+          },
+        ],
+        blockiest: [
+          {
+            label: 'texture-chunk',
+            priority: 10,
+            syncMs: 6.3,
+            wallMs: 6.3,
+            atMs: 5200,
+            waitMs: 940.5,
+            frameGapMs: 310.5,
+            sharedFrameGap: 2,
+            deferredFrames: 0,
+          },
+          {
+            label: 'live-view-compile',
+            priority: 30,
+            syncMs: 12.1,
+            wallMs: 40.2,
+            atMs: 5000,
+            waitMs: 2.4,
+            frameGapMs: 18.7,
+            sharedFrameGap: 1,
+            deferredFrames: 0,
+          },
+        ],
+        pending: 0,
+        active: null,
+        waitingTails: [],
+        stallCount: 0,
+        stalls: [],
+        worstWaitMs: 940.5,
+        longestWaits: [
+          {
+            label: 'texture-chunk',
+            priority: 10,
+            waitMs: 940.5,
+            blockedBy: 'preview:armory:skin',
+            blockedByPriority: 10,
+            waitedOnTailCap: true,
+            tails: ['preview:armory:skin'],
+          },
+        ],
+        admission: { enabled: false, deferred: 0, parks: 0 },
+        recent: {
+          windowMs: 30000,
+          units: 2,
+          totalSyncMs: 18.4,
+          totalFrameGapMs: 329.2,
+          worstSyncMs: 12.1,
+          worstFrameGapMs: 310.5,
+          worstWaitMs: 940.5,
+          lanes: [
+            {
+              priority: 30,
+              units: 1,
+              worstWaitMs: 2.4,
+              totalWaitMs: 2.4,
+              worstSyncMs: 12.1,
+              worstFrameGapMs: 18.7,
+            },
+            {
+              priority: 10,
+              units: 1,
+              worstWaitMs: 940.5,
+              totalWaitMs: 940.5,
+              worstSyncMs: 6.3,
+              worstFrameGapMs: 310.5,
+            },
+          ],
+        },
+      },
+      nightAmount: 0,
+      gpuPrep: {
+        budget: {
+          frameEmaMs: 16.7,
+          headroomMs: 1.5,
+          spentThisFrameMs: 0,
+          legacy: false,
+          degrading: false,
+          kinds: [{ kind: 'touch', emaMs: 0.4, samples: 12 }],
+          decisions: {
+            'actionable-floor': 0,
+            fits: 12,
+            progress: 0,
+            starvation: 0,
+            legacy: 0,
+            'first-sample': 1,
+            cover: 0,
+            'no-headroom': 3,
+            'unknown-cap': 0,
+            pressure: 0,
+            'cover-not-arrival': 0,
+          },
+        },
+        events: {
+          total: 0,
+          dropped: 0,
+          counts: {
+            'reveal-watchdog': 0,
+            'reveal-soft-deadline': 0,
+            'attach-watchdog': 0,
+            'gate-timeout': 0,
+            'submit-stop': 0,
+            'live-program': 0,
+            arrival: 0,
+            'touch-unproven': 0,
+          },
+          events: [],
+          reveal: {
+            keysHeld: 0,
+            rootsHeld: 0,
+            rootsPiecewise: 0,
+            rootsReach: 0,
+            rootsAtWatchdog: 0,
+            imminentHolds: 0,
+          },
+          gates: { spiritSpawnsRefused: 0 },
+          portraits: {
+            transferCaptures: 0,
+            readbackCaptures: 0,
+            canvasCaptures: 0,
+            transferLatches: 0,
+            readbackLatches: 0,
+          },
+        },
+      },
+      buildLedger: { kinds: {}, worstFrame: { ms: 0, count: 0, atMs: 0 }, slowest: [] },
+      lookPieces: { pending: 0, completedPieces: 0, bandsRun: 0, deferred: 0, attached: 0 },
+      zoneStreaming: { prepared: 1, pending: 0, last: null },
       autoGovernor: true,
       budget: {
         targetFps: 60,
@@ -239,6 +518,7 @@ function snapshot(): PerfSnapshot {
       },
       renderScale: 1,
       effectiveRenderScale: 0.9,
+      shadowCadenceHalfRate: false,
       renderBudget: {
         enabled: true,
         mode: 'stable',
@@ -313,6 +593,16 @@ function snapshot(): PerfSnapshot {
       },
       renderDiagnostics: renderDiagnostics(),
       prewarm: prewarmStats(),
+      entryDetailHorizon: {
+        active: false,
+        cap: 700,
+        targetFar: 700,
+        nextCap: null,
+        stableFrames: 0,
+        armedAtMs: null,
+        holdReason: 'inactive',
+        transitions: [],
+      },
     },
     hud: null,
     assets: { preload: { tasks: 0, waitMs: 0, complete: true }, byType: {}, files: [] },
@@ -352,7 +642,14 @@ function snapshot(): PerfSnapshot {
   };
 }
 
-beforeEach(() => installBrowserGlobals());
+beforeEach(() => {
+  installBrowserGlobals();
+  // The heavy streamed-prewarm lists ride an emit-ON-CHANGE gate whose state is
+  // module-level (one per page, like the reporter itself). Reset it per case or
+  // an earlier test's identical fixture silently gates the lists off in a later
+  // one, and every length assertion below becomes order-dependent.
+  perfReporterInternalsForTest.prewarmHeavyListGate.reset();
+});
 
 describe('perf reporter payload', () => {
   it('summarizes renderer performance without copying the full user agent', () => {
@@ -380,6 +677,12 @@ describe('perf reporter payload', () => {
     expect(body.source).toBe('benchmark');
     expect(body.zoneOrScenario).toBe('bench_dense_foliage');
     expect(JSON.stringify(body.rawSummary)).not.toContain('Safari/605');
+    // hiddenPresentSkips ships in rawSummary (review reversal of the phase 4
+    // decision): sends are skipped while hidden, but an after-restore session
+    // still beacons cumulative numbers whose spans included minimized time,
+    // and the counter is the only fleet-visible evidence of that residue. It
+    // rides in rawSummary (the no-DDL home), never as a top-level column.
+    expect((body.rawSummary as { hiddenPresentSkips?: number }).hiddenPresentSkips).toBe(0);
     expect((body.rawSummary as { graphicsConfigVersion?: number }).graphicsConfigVersion).toBe(16);
     expect(
       (body.rawSummary as { rendererQualityBuckets?: { levels?: { foliage?: number } } })
@@ -393,18 +696,186 @@ describe('perf reporter payload', () => {
       (body.rawSummary as { rendererPrewarmSummary?: { manifestPlanned?: number } })
         .rendererPrewarmSummary?.manifestPlanned,
     ).toBe(14);
+    // The honest partial signal must survive into the report: a deadline or
+    // prefetch-trimmed entry is 'partial' with its counts, never 'completed'.
     expect(
-      (body.rawSummary as { rendererPrewarmSummary?: { entries?: unknown[] } })
-        .rendererPrewarmSummary?.entries,
-    ).toHaveLength(2);
+      (body.rawSummary as { rendererPrewarmSummary?: { manifestPartial?: number } })
+        .rendererPrewarmSummary?.manifestPartial,
+    ).toBe(1);
     expect(
-      (body.rawSummary as { rendererPrewarm?: { manifestEntries?: unknown[] } }).rendererPrewarm
-        ?.manifestEntries,
-    ).toHaveLength(2);
+      (body.rawSummary as { rendererPrewarmSummary?: { partialEntryIds?: string[] } })
+        .rendererPrewarmSummary?.partialEntryIds,
+    ).toEqual(['textures.scene']);
+    const summaryEntries = (
+      body.rawSummary as {
+        rendererPrewarmSummary?: {
+          entries?: {
+            id?: string;
+            status?: string;
+            workDone?: number;
+            workPlanned?: number;
+            budgetVariants?: Record<string, unknown>[];
+          }[];
+        };
+      }
+    ).rendererPrewarmSummary?.entries;
+    expect(summaryEntries).toHaveLength(2);
+    expect(summaryEntries?.[1]).toMatchObject({
+      id: 'textures.scene',
+      status: 'partial',
+      workDone: 12,
+      workPlanned: 20,
+    });
+    expect(summaryEntries?.[1]?.budgetVariants).toEqual([
+      {
+        index: 0,
+        levels: { grass: 1, foliage: 0.86, vfx: 0.92, lighting: 0.9, resolution: 0.9 },
+        elapsedMs: 24,
+        syncMs: 18,
+        programsBefore: 10,
+        programsAfter: 14,
+        programDelta: 4,
+        passes: 1,
+      },
+      {
+        index: 1,
+        levels: { grass: 0.86, foliage: 0.72, vfx: 0.84, lighting: 0.78, resolution: 0.9 },
+        elapsedMs: 20,
+        syncMs: 15,
+        programsBefore: 14,
+        programsAfter: 16,
+        programDelta: 2,
+        passes: 1,
+      },
+    ]);
+    // The live stats object is NOT sent beside the summary. It was a second
+    // copy of the same block under the ingest's 16 KB cap, and once its resume
+    // getter started serializing, the copy the server rebuilds from a fixed key
+    // set was no longer the only one carrying resume. Nothing reads the twin
+    // back out of storage, so the summary is the whole payload: a new field
+    // belongs in `rendererPrewarmSummary`, never in a restored twin.
+    expect(body.rawSummary as Record<string, unknown>).not.toHaveProperty('rendererPrewarm');
+    // The resume lane's outcome, which is the other half of "did this entry
+    // run". `vfx.weapon-skins` reads timed-out above; only this block says its
+    // units were handed to the lane, and that one of them failed, so the
+    // world-side weapon protection is incomplete rather than merely late.
+    const prewarmSummary = (body.rawSummary as { rendererPrewarmSummary?: Record<string, unknown> })
+      .rendererPrewarmSummary;
+    expect(prewarmSummary?.manifestSkipped).toBe(0);
+    expect(prewarmSummary?.resume).toEqual({
+      status: 'done',
+      plannedEntries: 1,
+      plannedUnits: 3,
+      startedUnits: 3,
+      failedUnits: 1,
+      failedUnitIds: ['vfx.weapon-skins:weapon-skins:compile'],
+      entries: [{ id: 'vfx.weapon-skins', lane: 'cosmetic', planned: 3, started: 3, failed: 1 }],
+    });
+    expect(prewarmSummary?.compileUnits).toEqual([
+      {
+        id: 'programs.compile:0',
+        lane: 'programs.compile',
+        submittedAtMs: 100,
+        syncEndAtMs: 112,
+        settledAtMs: 140,
+        failedAtMs: null,
+        programsBefore: 10,
+        programsAfter: 14,
+        programDelta: 4,
+        chargedLinks: 4,
+        syncMs: 12,
+        settledDurationMs: 28,
+        statusAtReveal: 'settled',
+      },
+    ]);
+    expect(prewarmSummary?.prewarmPacing).toMatchObject({
+      adaptive: {
+        peakInFlightLinks: 24,
+        transitions: [
+          {
+            atMs: 120,
+            from: 'ramp',
+            to: 'steady',
+            reason: 'mid-settlement',
+            windowLinks: 16,
+            inFlightLinks: 4,
+          },
+        ],
+      },
+    });
     expect(
       (body.rawSummary as { rendererFoliage?: { modelVisibleTrianglesByLod?: { core?: number } } })
         .rendererFoliage?.modelVisibleTrianglesByLod?.core,
     ).toBe(420_000);
+  });
+
+  it('carries a nonzero hiddenPresentSkips into raw summary (the after-restore evidence)', () => {
+    // A session minimized for a while and then restored: the skip counter is
+    // what disambiguates its diluted-looking spans from a genuinely slow
+    // machine, since no beacon goes out DURING the hidden span itself.
+    const settings = new Settings();
+    const snap = snapshot();
+    snap.hiddenPresentSkips = 4321;
+    const body = perfReporterInternalsForTest.payloadFromSnapshot(snap, settings, 'sess1', 42)!;
+    expect((body.rawSummary as { hiddenPresentSkips?: number }).hiddenPresentSkips).toBe(4321);
+  });
+
+  it('bounds prewarm unit and variant telemetry without copying root labels', () => {
+    const settings = new Settings();
+    const snap = snapshot();
+    const prewarm = snap.renderer?.prewarm;
+    if (!prewarm || !prewarm.compileUnits?.[0]) throw new Error('fixture prewarm is incomplete');
+    const baseUnit = prewarm.compileUnits[0];
+    prewarm.compileUnits = Array.from({ length: 40 }, (_, index) => ({
+      ...baseUnit,
+      id: `programs.compile:${index}`,
+      roots: Array.from({ length: 32 }, (_, rootIndex) => `root-${rootIndex}`),
+    }));
+    const variants = prewarm.manifestEntries[1]?.budgetVariants?.[0];
+    if (!variants) throw new Error('fixture variants are incomplete');
+    prewarm.manifestEntries[1].budgetVariants = Array.from({ length: 20 }, (_, index) => ({
+      ...variants,
+      index,
+    }));
+
+    const body = perfReporterInternalsForTest.payloadFromSnapshot(snap, settings, 'sess1', 42)!;
+    const summary = (
+      body.rawSummary as {
+        rendererPrewarmSummary?: {
+          compileUnits?: Record<string, unknown>[];
+          entries?: { budgetVariants?: Record<string, unknown>[] }[];
+        };
+      }
+    ).rendererPrewarmSummary;
+    expect(summary?.compileUnits).toHaveLength(12);
+    expect(summary?.compileUnits?.[0]).not.toHaveProperty('roots');
+    expect(summary?.entries?.[1]?.budgetVariants).toHaveLength(8);
+  });
+
+  it('bounds adaptive transition telemetry at the literal 12-entry cap', () => {
+    const settings = new Settings();
+    const snap = snapshot();
+    const adaptive = snap.renderer?.prewarm?.prewarmPacing?.adaptive;
+    if (!adaptive || !adaptive.transitions[0])
+      throw new Error('fixture adaptive pacing is incomplete');
+    adaptive.transitions = Array.from({ length: 40 }, (_, index) => ({
+      ...adaptive.transitions[0],
+      atMs: index,
+    }));
+
+    const body = perfReporterInternalsForTest.payloadFromSnapshot(snap, settings, 'sess1', 42)!;
+    const summary = (
+      body.rawSummary as {
+        rendererPrewarmSummary?: {
+          prewarmPacing?: { adaptive?: { transitions?: Record<string, unknown>[] } };
+        };
+      }
+    ).rendererPrewarmSummary;
+    expect(summary?.prewarmPacing?.adaptive?.transitions).toHaveLength(12);
+    // The MOST RECENT ones: a pacer's end state is what a report is read for,
+    // and the fixture numbers each transition by index so this is decisive.
+    expect(summary?.prewarmPacing?.adaptive?.transitions?.[0]?.atMs).toBe(28);
+    expect(summary?.prewarmPacing?.adaptive?.transitions?.at(-1)?.atMs).toBe(39);
   });
 
   it('carries the four dropped browser longtask fields into raw summary (#2479)', () => {
@@ -425,6 +896,168 @@ describe('perf reporter payload', () => {
     expect(
       (body.rawSummary as { browser?: { longTasks?: Record<string, number> } }).browser?.longTasks,
     ).toEqual({ totalMs: 120, avg: 60, max: 80, lastAge: 1000 });
+  });
+
+  it('carries the GPU queue block, active unit included, into raw summary (#3167)', () => {
+    // A settled queue: only completed units, no running one. This is the arm
+    // that used to be the ONLY arm, since a never-settling unit records nothing.
+    const settings = new Settings();
+    const settled = perfReporterInternalsForTest.payloadFromSnapshot(
+      snapshot(),
+      settings,
+      'sess1',
+      42,
+    )!;
+    const settledQueue = (settled.rawSummary as { rendererGpuQueue?: Record<string, unknown> })
+      .rendererGpuQueue;
+    expect(settledQueue).toMatchObject({
+      units: 2,
+      totalSyncMs: 18.4,
+      worstSyncMs: 12.1,
+      totalFrameGapMs: 329.2,
+      worstFrameGapMs: 310.5,
+      worstUnsharedFrameGapMs: 18.7,
+      pending: 0,
+      stallCount: 0,
+      active: null,
+      stalls: [],
+    });
+    expect(settledQueue?.slowest).toEqual([
+      {
+        label: 'live-view-compile',
+        priority: 30,
+        syncMs: 12.1,
+        wallMs: 40.2,
+        waitMs: 2.4,
+        frameGapMs: 18.7,
+        sharedFrameGap: 1,
+      },
+      {
+        label: 'texture-chunk',
+        priority: 10,
+        syncMs: 6.3,
+        wallMs: 6.3,
+        waitMs: 940.5,
+        frameGapMs: 310.5,
+        sharedFrameGap: 2,
+      },
+    ]);
+    // The interval arm, which is the only one two reports can be differenced
+    // on: everything above it is cumulative or a lifetime maximum. The lane
+    // rows are what say a cosmetic unit made a live-view one wait.
+    expect(settledQueue?.recent).toEqual({
+      windowMs: 30_000,
+      units: 2,
+      totalSyncMs: 18.4,
+      totalFrameGapMs: 329.2,
+      worstSyncMs: 12.1,
+      worstFrameGapMs: 310.5,
+      worstWaitMs: 940.5,
+      lanes: [
+        {
+          priority: 30,
+          units: 1,
+          worstWaitMs: 2.4,
+          totalWaitMs: 2.4,
+          worstSyncMs: 12.1,
+          worstFrameGapMs: 18.7,
+        },
+        {
+          priority: 10,
+          units: 1,
+          worstWaitMs: 940.5,
+          totalWaitMs: 940.5,
+          worstSyncMs: 6.3,
+          worstFrameGapMs: 310.5,
+        },
+      ],
+    });
+    expect(settledQueue?.worstWaitMs).toBe(940.5);
+    // Attribution rides with the wait: the cost lists cannot carry it, because a
+    // unit can wait a long time while costing nothing itself.
+    expect(settledQueue?.longestWaits).toEqual([
+      {
+        label: 'texture-chunk',
+        priority: 10,
+        waitMs: 940.5,
+        blockedBy: 'preview:armory:skin',
+        blockedByPriority: 10,
+        waitedOnTailCap: true,
+        tails: ['preview:armory:skin'],
+      },
+    ]);
+    // The frame-cost ranking inverts the sync ranking, which is the whole point
+    // of shipping both: a sync-ordered beacon would bury the unit that hurt.
+    expect(settledQueue?.blockiest).toEqual([
+      {
+        label: 'texture-chunk',
+        priority: 10,
+        syncMs: 6.3,
+        wallMs: 6.3,
+        waitMs: 940.5,
+        frameGapMs: 310.5,
+        sharedFrameGap: 2,
+      },
+      {
+        label: 'live-view-compile',
+        priority: 30,
+        syncMs: 12.1,
+        wallMs: 40.2,
+        waitMs: 2.4,
+        frameGapMs: 18.7,
+        sharedFrameGap: 1,
+      },
+    ]);
+
+    const snap = snapshot();
+    snap.renderer!.gpuQueue = {
+      units: 2,
+      totalSyncMs: 18.4,
+      worstSyncMs: 12.1,
+      totalFrameGapMs: 0,
+      worstFrameGapMs: 0,
+      worstUnsharedFrameGapMs: 0,
+      slowest: [],
+      blockiest: [],
+      pending: 7,
+      active: { label: 'wedged-compile', priority: 40, ageMs: 91_000, atMs: 12_000 },
+      waitingTails: [{ label: 'released-gate', priority: 30, ageMs: 5000, atMs: 11_000 }],
+      stallCount: 1,
+      stalls: [
+        { label: 'wedged-compile', priority: 40, ageMs: 91_000, atMs: 12_000, settled: false },
+      ],
+      worstWaitMs: 0,
+      longestWaits: [],
+      admission: { enabled: false, deferred: 0, parks: 0 },
+      recent: {
+        windowMs: 30000,
+        units: 0,
+        totalSyncMs: 0,
+        totalFrameGapMs: 0,
+        worstSyncMs: 0,
+        worstFrameGapMs: 0,
+        worstWaitMs: 0,
+        lanes: [],
+      },
+    };
+    const wedged = perfReporterInternalsForTest.payloadFromSnapshot(snap, settings, 'sess1', 42)!;
+    const wedgedQueue = (wedged.rawSummary as { rendererGpuQueue?: Record<string, unknown> })
+      .rendererGpuQueue;
+    // The wedge is the whole point: units stayed at 2, so only the active unit
+    // and the stall say the queue has been blocked for a minute and a half.
+    expect(wedgedQueue).toMatchObject({
+      units: 2,
+      pending: 7,
+      stallCount: 1,
+      active: { label: 'wedged-compile', priority: 40, ageMs: 91_000 },
+      stalls: [{ label: 'wedged-compile', priority: 40, ageMs: 91_000, settled: false }],
+    });
+    // A released tail rides beside the active unit. Exact equality on purpose:
+    // toMatchObject's subset semantics would pass even if atMs leaked through,
+    // and dropping atMs (page-relative, fleet-meaningless) is the claim.
+    expect((wedgedQueue as { waitingTails?: unknown[] }).waitingTails).toEqual([
+      { label: 'released-gate', priority: 30, ageMs: 5000 },
+    ]);
   });
 
   it('carries the always-on net pipeline and heap sawtooth blocks into raw summary', () => {
@@ -888,6 +1521,66 @@ describe('perf reporter worst-window drain', () => {
     }
   });
 
+  it('skips the send while the desktop shell is hidden, even though the page reads visible', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 204, text: async () => '' }));
+    installReporterFlowGlobals(fetchImpl);
+    // The shell disables background throttling, so a minimized window still
+    // reports 'visible' here: without the shell's own signal this session would
+    // keep beaconing reports for frames it never drew.
+    (globalThis as any).document.visibilityState = 'visible';
+    let shellHidden = true;
+    const { perf } = fakePerf();
+    const stop = startPerfReporter({
+      perf,
+      settings: new Settings(),
+      tokenProvider: () => null,
+      characterIdProvider: () => null,
+      shellHidden: () => shellHidden,
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(
+        jitteredPerfReportDelay(75_000, 'reporter-test-session', 0),
+      );
+      expect(fetchImpl).not.toHaveBeenCalled();
+      // Same retry cadence as the page-hidden skip: it IS the 'hidden' skip.
+      const hiddenRetry = jitteredPerfReportDelay(300_000, 'reporter-test-session', 1);
+      expect(lastScheduledDelay()).toBe(hiddenRetry);
+
+      // Negative arm: nothing about the page changed, only the shell verdict,
+      // and the report goes out.
+      shellHidden = false;
+      await vi.advanceTimersByTimeAsync(hiddenRetry);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(lastScheduledDelay()).toBe(
+        jitteredPerfReportDelay(300_000, 'reporter-test-session', 2),
+      );
+    } finally {
+      stop();
+    }
+  });
+
+  it('sends normally when the shell hook is present and reports shown', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 204, text: async () => '' }));
+    installReporterFlowGlobals(fetchImpl);
+    (globalThis as any).document.visibilityState = 'visible';
+    const { perf } = fakePerf();
+    const stop = startPerfReporter({
+      perf,
+      settings: new Settings(),
+      tokenProvider: () => null,
+      characterIdProvider: () => null,
+      shellHidden: () => false,
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(
+        jitteredPerfReportDelay(75_000, 'reporter-test-session', 0),
+      );
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      stop();
+    }
+  });
+
   it('advances the jitter sequence when renderer evidence is not ready', async () => {
     const fetchImpl = vi.fn(async () => ({ ok: true, status: 204, text: async () => '' }));
     installReporterFlowGlobals(fetchImpl);
@@ -947,6 +1640,55 @@ describe('perf reporter worst-window drain', () => {
       stop();
     }
   });
+
+  // The heavy prewarm lists follow the same delivery rule as the worst window
+  // above: consulted when the payload is built, committed only when the POST
+  // lands. These arms drive the real send path rather than the payload builder,
+  // because the split only matters across a failed request.
+  async function postedPrewarmLists(fetchImpl: ReturnType<typeof vi.fn>): Promise<boolean[]> {
+    installReporterFlowGlobals(fetchImpl);
+    const { perf } = fakePerf();
+    const stop = startPerfReporter({
+      perf,
+      settings: new Settings(),
+      tokenProvider: () => null,
+      characterIdProvider: () => null,
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(900_000);
+    } finally {
+      stop();
+    }
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(1);
+    return fetchImpl.mock.calls.map((call) => {
+      const body = JSON.parse((call[1] as { body: string }).body) as {
+        rawSummary: { rendererPrewarmSummary?: { compileUnits?: unknown[] } };
+      };
+      return (body.rawSummary.rendererPrewarmSummary?.compileUnits?.length ?? 0) > 0;
+    });
+  }
+
+  it('stops re-sending the prewarm lists once a report carrying them lands', async () => {
+    const carried = await postedPrewarmLists(
+      vi.fn(async () => ({ ok: true, status: 204, text: async () => '' })),
+    );
+    expect(carried[0]).toBe(true);
+    expect(carried.slice(1).some(Boolean)).toBe(false);
+  });
+
+  it('re-sends the prewarm lists after the server rejects the report', async () => {
+    const carried = await postedPrewarmLists(
+      vi.fn(async () => ({ ok: false, status: 500, text: async () => 'nope' })),
+    );
+    expect(carried.every(Boolean)).toBe(true);
+  });
+
+  it('re-sends the prewarm lists after the send fails at the network layer', async () => {
+    const carried = await postedPrewarmLists(
+      vi.fn(async () => Promise.reject(new Error('offline'))),
+    );
+    expect(carried.every(Boolean)).toBe(true);
+  });
 });
 
 describe('gpuBucket software classification', () => {
@@ -972,5 +1714,100 @@ describe('gpuBucket software classification', () => {
         'ANGLE (Intel, Intel(R) UHD Graphics 620 (0x00003EA0) Direct3D11 vs_5_0 ps_5_0, D3D11)',
       ),
     ).toBe('intel-uhd');
+  });
+});
+
+describe('perf reporter streamed-prewarm emit-on-change gate', () => {
+  // The renderer RETAINS its boot prewarm snapshot, so without this gate every
+  // 5-minute beacon re-sends the same few KB describing the same one-time work.
+  // Measured, that repetition was most of the headroom under the server's 16 KB
+  // raw-summary cap.
+  // `delivered` stands in for the POST succeeding, which is what commits the
+  // gate. Building a payload records nothing on its own (ruling R5's rule), so
+  // an undelivered build below deliberately leaves the block still owed.
+  function summaryOf(snap: ReturnType<typeof snapshot>, delivered = true) {
+    const body = perfReporterInternalsForTest.payloadFromSnapshot(
+      snap,
+      new Settings(),
+      'sess-gate',
+      42,
+    )!;
+    if (delivered) {
+      const fingerprint = perfReporterInternalsForTest.pendingPrewarmListFingerprint();
+      if (fingerprint !== null)
+        perfReporterInternalsForTest.prewarmHeavyListGate.commit(fingerprint);
+    }
+    return (
+      body.rawSummary as {
+        rendererPrewarmSummary?: {
+          compileUnits?: unknown[];
+          prewarmListsUnchanged?: boolean;
+          prewarmPacing?: { adaptive?: { transitions?: unknown[] } };
+          entries?: { budgetVariants?: unknown[] }[];
+        };
+      }
+    ).rendererPrewarmSummary;
+  }
+
+  it('sends the lists on the first report and omits them while unchanged', () => {
+    const first = summaryOf(snapshot());
+    expect(first?.compileUnits?.length).toBeGreaterThan(0);
+    expect(first?.prewarmPacing?.adaptive?.transitions?.length).toBeGreaterThan(0);
+    expect(first?.prewarmListsUnchanged).toBeUndefined();
+
+    const second = summaryOf(snapshot());
+    expect(second?.compileUnits).toBeUndefined();
+    expect(second?.prewarmPacing?.adaptive?.transitions).toBeUndefined();
+    expect(second?.entries?.some((entry) => entry.budgetVariants !== undefined)).toBe(false);
+    // Absent BECAUSE unchanged, said explicitly: a reader must not conclude the
+    // lane did no work.
+    expect(second?.prewarmListsUnchanged).toBe(true);
+  });
+
+  it('keeps the lists owed when the report carrying them is never delivered', () => {
+    // The gate is committed by a successful POST, not by building the payload.
+    // Without that split, a first beacon that failed would suppress the block
+    // for the rest of the session and stamp `prewarmListsUnchanged` pointing a
+    // reader at a row that never landed.
+    const undelivered = summaryOf(snapshot(), false);
+    expect(undelivered?.compileUnits?.length).toBeGreaterThan(0);
+
+    const retry = summaryOf(snapshot(), false);
+    expect(retry?.compileUnits?.length).toBeGreaterThan(0);
+    expect(retry?.prewarmListsUnchanged).toBeUndefined();
+
+    const delivered = summaryOf(snapshot());
+    expect(delivered?.compileUnits?.length).toBeGreaterThan(0);
+    const afterDelivery = summaryOf(snapshot(), false);
+    expect(afterDelivery?.compileUnits).toBeUndefined();
+    expect(afterDelivery?.prewarmListsUnchanged).toBe(true);
+  });
+
+  it('sends them again when the resume lane changes the block after boot', () => {
+    // Not "first report only": the background resume lane can still finish
+    // units after the first beacon, and that genuinely changes the diagnostic.
+    summaryOf(snapshot());
+    const changed = snapshot();
+    const prewarm = changed.renderer?.prewarm;
+    if (!prewarm?.compileUnits?.[0]) throw new Error('fixture prewarm is incomplete');
+    prewarm.compileUnits = [
+      { ...prewarm.compileUnits[0], id: 'weapon-skins:compile:resumed-later' },
+      ...prewarm.compileUnits.slice(1),
+    ];
+
+    const after = summaryOf(changed);
+    expect(after?.compileUnits?.length).toBeGreaterThan(0);
+    expect(after?.prewarmListsUnchanged).toBeUndefined();
+  });
+
+  it('keeps the cheap scalar counters on every report', () => {
+    // The gate is about the LISTS. Everything a fleet query aggregates on must
+    // still ride each beacon, or the gate would be a telemetry regression.
+    summaryOf(snapshot());
+    const second = summaryOf(snapshot()) as Record<string, unknown>;
+    expect(second.manifestPlanned).toBeDefined();
+    expect(second.compileMs).toBeDefined();
+    expect(second.resume).toBeDefined();
+    expect((second.entries as unknown[]).length).toBeGreaterThan(0);
   });
 });

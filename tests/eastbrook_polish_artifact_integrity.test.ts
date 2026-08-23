@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 const captureContract =
   // @ts-expect-error The executable capture contract intentionally ships as plain Node ESM.
   await import('../scripts/assets/eastbrook_grand_armoury/capture_contract.mjs');
+const { POLISH_SEAL_PATH, REMINT_COMMAND } = await import(
+  '../scripts/assets/eastbrook_grand_armoury/provenance_diagnostics.mjs'
+);
 const {
   assertTownArmouryIdentity,
   assertTownAttributionTargetState,
@@ -608,12 +611,18 @@ function readJsonFile<T>(filePath: string): T {
   return JSON.parse(readFileSync(filePath, 'utf8')) as T;
 }
 
+// FROZEN, and no longer equal to the live town fingerprint: this is the identity of
+// the tree the v2 polish captures were taken against, not a mirror of the current
+// one. It first diverged when a lockfile-only dependency bump re-minted the town
+// fingerprint to aa0df220..., which moved the live value without retaking a single
+// screenshot. Do NOT sweep this to the live value along with the neighbouring
+// literals; it only moves if the captures themselves are retaken.
 const ACCEPTED_POLISH_V2_TOWN_SOURCE_FINGERPRINT =
   'e15d65fda69efd04395e93dd28af8a56f2fb9bc1ff1125e3b605b07720891367';
-const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(
-  POLISH_ROOT,
-  'metadata/after-desktop-ultra.json',
-);
+// Derived from the diagnostics module's one seal-path constant, so this
+// pin, the failure diagnostics, and the remint tool's printed metadata
+// authority sha can never silently point at three different files.
+const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(REPO_ROOT, POLISH_SEAL_PATH);
 // Re-pinned for the merge of release/v0.34.0 into this branch. Every
 // rendererIntegration move on both sides now stacks on src/render/renderer.ts:
 // from the release, PR #2720's Eastbrook fence-removal layout evidence, the live
@@ -628,15 +637,243 @@ const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(
 // at the same captured view, and only its swept provenance bytes follow the
 // merged rendererIntegration and layout inputs.
 // Re-minted with scripts/assets/eastbrook_grand_armoury/remint_polish_provenance.mjs.
-// Re-minted once more for the rally engine-audio fix: the spatial-audio listener
-// anchor in src/render/renderer.ts moves to the avatar, which moves the
-// rendererIntegration leaf, the composite riding on it, and the swept provenance
-// bytes inside this accepted metadata file. Eastbrook itself is untouched: no
-// pipeline input or geometry value changed and no capture was retaken.
+// Re-pinned for the integrated v0.35 renderer on AAA-enhancements. The accepted
+// captures are unchanged; only the rendererIntegration leaf, composite, and the
+// metadata file's second-order digest are re-minted on this branch.
+// Re-pinned again for the merge of release/v0.35.0 into AAA-enhancements: both
+// sides moved the rendererIntegration leaf (this branch's integrated v0.35
+// renderer; the release's bounded ground-object reuse pool), so the merged tree
+// mints literals matching neither parent. Captures adopted verbatim from the
+// release tip; swept by remint_polish_provenance.mjs on the merged tree.
+// Re-pinned for the PR #2982 merge: the release-side weapon-skin apply queue
+// and the PR-side ability VFX warm-up both move runtimeRender provenance leaves
+// (src/render/renderer.ts and src/render/prewarm_policy.ts), so the composite
+// and metadata seal both re-mint on the merged tree. No capture was retaken.
+// Re-pinned for the PR #2983 revert: the rendererIntegration leaf moved back
+// while PR #2982's prewarm policy remains in the release. No capture was retaken.
+// Re-pinned for the PR #2983 re-land: the rendererIntegration leaf moves
+// forward again (apply queue + vfx.weapon-skins prewarm entry) over the
+// bow-aim renderer edit the release landed after the revert. No capture was
+// retaken.
+// Re-minted again for the second release/v0.35.0 merge: the release-side
+// swimming strokes PR and pr-batch move the renderer leaf again. Captures
+// still adopted verbatim; neither parent retook one.
+// Re-minted for the merge of release/v0.35.0 into this branch: both sides moved
+// the rendererIntegration leaf, so all three literals mint to values matching
+// neither parent. No capture was retaken on either side (the two parents'
+// evidence differs only in its provenance bytes).
+// Re-minted for the VFX per-frame cost work: the rendererIntegration leaf
+// follows the anchor seam, the weapon-skin fade and the census tag. No capture
+// was retaken; every measured value is adopted verbatim.
+// Re-minted for the iOS WebKit memory-profile fix (renderer.ts's
+// nativeIosMemoryProfile -> iosMemoryProfile rename) landing on top of the VFX
+// per-frame cost work already on this release branch. No capture was retaken.
+// Re-minted for the merge of release/v0.36.0 (PR 3161) into the three
+// compileAsync patch branch: the release side moved the rendererIntegration
+// and townRuntime leaves while this branch's lockfile patch moved the GLB and
+// source-fingerprint leaves, so all three literals mint to values matching
+// neither parent. No capture was retaken.
+// Re-minted on PR 3150's v0.36.0 base merge, where the branch's renderer.ts
+// prewarm changes converged with the 3165 reseal. No capture was retaken.
+// Re-minted for the merge of release/v0.36.0 into the render caches branch:
+// both sides moved the rendererIntegration leaf (the release's prewarm compile
+// and point-light reseals; this branch's bounded character-visual pool wiring),
+// so all three literals mint to values matching neither parent. No capture was
+// retaken.
+// Re-minted for the merge of release/v0.36.0 (post PR 3220/3221) into the KTX2
+// mip-release branch: both parents move renderer.ts, so all three literals mint
+// to values matching neither parent. No capture was retaken.
+// Re-minted for the merge of release/v0.36.0 (post PR 3222) into the prewarm
+// sky-unstarve branch: both parents move renderer.ts (this branch also moves
+// prewarm_policy.ts; sky.ts moved too but is not a provenance input), so all
+// three literals mint to values matching neither parent. No capture was
+// retaken.
+// Re-minted for the review fixes on the prewarm sky-unstarve PR (deadlineExempt
+// sky entry, unified view-cap trim rule, deferred-lane gate and priority
+// threading; renderer.ts edits only). No capture was retaken.
+// Re-minted for review round 2 on the prewarm sky-unstarve PR (honest
+// archetype and scene-texture counts; renderer.ts edits only). No capture
+// was retaken.
+// Re-minted for the shadow-batch PR (shadow-camera texel snapping and the
+// budget-governed shadow cadence; renderer.ts edits only). No capture was
+// retaken.
+// Re-minted for the merge of the shadow-batch PR with the iOS constrained-
+// memory zone-eviction fix: both parents move renderer.ts, so the
+// rendererIntegration leaf mints a value matching neither parent. No capture
+// was retaken.
+// Re-minted for the merge of PR #3314's rift windup telegraph school tint
+// (issue #2917) with the release branch's renderer changes. Both parents move
+// renderer.ts, so the rendererIntegration leaf mints a value matching neither
+// parent. No capture was retaken.
+// Re-minted for the Three.js audit batch (light budget seam, blob shadows, sky
+// residency lane, splat colour pack-source fix): renderer.ts edits only. No
+// capture was retaken.
+// Re-minted for the base sync of the Three.js audit batch with the release
+// branch renderer changes. Both parents move renderer.ts, so the
+// rendererIntegration leaf mints a value matching neither parent. No capture
+// was retaken.
+// Re-minted for the release base-health repair after renderer.ts changed. No
+// capture was retaken.
+// Re-minted for the v0.37.0 base sync with the login-storm base commit. The
+// merged renderer/prewarm/source bytes mint a value matching neither parent.
+// No capture was retaken.
+// Re-minted after organizing renderer imports changed the provenance inputs.
+// No capture was retaken.
+// Re-minted for the merge of the iOS constrained-memory zone-eviction fix
+// (evictFarZoneIfConstrained's rationale moved into zone_eviction_core.ts)
+// with the release branch's organized renderer imports. Both parents move
+// renderer.ts, so the rendererIntegration leaf mints a value matching neither
+// parent. No capture was retaken.
+// Re-minted after the point-light adoption seam moved the fire-light budget
+// pass out of renderer.ts into fire_light_registry.ts. renderer.ts is a
+// provenance input, so the composite moves and the swept evidence bytes follow.
+// No capture was retaken.
+// Re-minted again for the review fixes on the same PR (stranded-light reparent
+// extracted, pooled budget-pass descriptor): renderer.ts bytes only, so the
+// composite follows it and the swept evidence bytes follow the composite. No
+// capture was retaken.
+// Re-minted for the merge of release/v0.38.0 into the night-lighting branch:
+// both parents move renderer.ts, so the composite mints a value matching neither
+// parent and this metadata authority sha follows the swept bytes. No capture was
+// retaken.
+// Re-minted for PR #3339's healGlowAt view-eviction fix on the newer release
+// renderer. The rendererIntegration leaf and swept evidence bytes move; no
+// capture was retaken.
+// Re-minted for PR #3344 after removing the unused Eastbrook civic-beacon
+// preload test hook. The civicShader leaf and swept evidence bytes move; no
+// capture was retaken.
+// Re-minted after applying the PR #3339 review repair atop PR #3344. The
+// rendererIntegration and civicShader leaves both survive, and the swept
+// evidence follows the combined inputs. No capture was retaken.
+// Re-minted for final PR #3345 integration. The reviewed offscreen-heal
+// renderer bytes remain while the Three.js patch, lockfile, and accepted GLBs
+// join the provenance inputs. No capture was retaken.
+// Re-minted after extracting entity-view policy from renderer.ts to satisfy
+// the release monolith ratchet. Behavior is unchanged; no capture was retaken.
+// Re-minted again after registering the extracted policy as its own provenance
+// leaf. The captures remain unchanged and were not retaken.
+// Re-minted for the quest-collectable spawn gate: this branch's renderer.ts
+// edits (the view gate call sites and the ground-object pool key move) shift
+// the runtimeRender.renderer leaf, the only leaf that moved. No Eastbrook
+// input, geometry value, or capture moved.
+// Re-minted for the merge of PR #3359's quest-collectable spawn gate with the
+// release branch's extracted entity-view policy. Both renderer.ts and the
+// entityViewPolicy leaf are provenance inputs; no capture was retaken.
+// Re-minted for the review fixes on this branch (Soul Rend warms every rig a
+// live body can take, plus the lazy form-visual fold): the first-order
+// composite follows renderer.ts, then this seal follows the swept evidence
+// bytes. No capture was retaken.
+// Re-minted for the r185 frozen-camera aim fix: the first-order composite
+// follows renderer.ts, then this seal follows the swept evidence bytes. No
+// capture was retaken.
+// Re-minted again after extracting the delve interior build-cache scheduling
+// into src/render/delve_interior_tracker.ts (renderer.ts moved, no capture retaken).
+// Re-minted again for the login preview/self-spirit prewarm merge with the
+// delve interior tracker extraction. Renderer/prewarm bytes moved; captures
+// were adopted verbatim.
+// Re-minted for the sky KTX2 UASTC HDR conversion: the first-order composite
+// follows renderer.ts, then this seal follows the swept evidence bytes. No
+// capture was retaken.
+// Re-minted for the corrected PR #3446 merge: the v0.39 wrapper renderer and
+// prewarm repairs combine with the sky KTX2 renderer bytes, then this seal
+// follows the swept evidence bytes. No capture was retaken.
+// Re-minted for the vfx.mount-programs prewarm entry (#2571): the first-order
+// composite follows renderer.ts and prewarm_policy.ts, then this seal follows
+// the swept evidence bytes. No capture was retaken.
+// Re-minted for the vfx.mount-programs review fixes (scene-reparent bug,
+// honest desktop-path progress, depth compile, timeout-bounded fetch,
+// constrained-device removal): the first-order composite follows renderer.ts
+// and prewarm_policy.ts, then this seal follows the swept evidence bytes. No
+// capture was retaken.
+// Re-minted for the PR #3447 merge: the first-order composite follows the
+// combined v0.39 wrapper, corrected PR #3446 sky KTX2 renderer bytes, and
+// mount-program prewarm bytes, then this seal follows the swept evidence bytes.
+// No capture was retaken.
+// Re-minted for the moved-base v0.39 wrapper refresh: the first-order
+// composite follows the combined castle renderer bytes and v0.39 wrapper
+// bytes, then this seal follows the swept evidence bytes. No capture was
+// retaken.
+// Re-minted for the approved PR #3425 merge into the v0.39 wrapper: the
+// first-order composite follows the resolved renderer bytes, then this seal
+// follows the swept evidence bytes. No capture was retaken.
+// Re-minted after syncing current release/v0.39.0 into the v0.39 wrapper: the
+// first-order composite follows the retained self-spirit prewarm and delve
+// rebuild renderer bytes, then this seal follows the swept evidence bytes. No
+// capture was retaken.
+// Re-minted for the GPU-preparation scheduler batch and its second and third
+// passes: renderer.ts and prewarm_policy.ts moved again, the seals follow the
+// swept evidence bytes. No capture was retaken.
+// Re-minted for the touch tail's readiness fix (the walk no longer asks the
+// driver): renderer.ts moved, the seals follow the swept evidence bytes. No
+// capture was retaken.
+// Re-minted for the build-ledger instrumentation (timed view and zone
+// builds, the arrival mark): renderer.ts and entity_view_policy_core.ts
+// moved, the seals follow the swept evidence bytes. No capture was retaken.
+// Re-minted for the build-span sink wiring (view-part sub-spans): renderer.ts
+// moved, the seals follow the swept evidence bytes. No capture was retaken.
+// Re-minted for the composed-look pieces hold (live candidate path wiring):
+// renderer.ts moved, the seals follow the swept evidence bytes. No capture was
+// retaken.
+// Re-minted for the gc hitch cause (the heap read on the hitch sample):
+// renderer.ts moved, the seals follow the swept evidence bytes. No capture was
+// retaken.
+// Re-minted for the deferred-decal stand-in (the live candidate path builds
+// the body without its face decals): renderer.ts moved, the seals follow the
+// swept evidence bytes. No capture was retaken.
+// Re-minted for the compile gate's piece cut (one queue unit per material
+// group of the target): renderer.ts moved, the seals follow the swept evidence
+// bytes. No capture was retaken.
+// Re-minted for the hitch sample alignment (the top-of-sync reading and the
+// aligned end-of-sync sample): renderer.ts moved, the seals follow the swept
+// evidence bytes. No capture was retaken.
+// Re-minted for the compile gate's variant settle (the third piece arm) and
+// the shadow arm's every-mesh depth twin: renderer.ts moved, the seals follow
+// the swept evidence bytes. No capture was retaken.
+// Re-minted for the resume lane ordering (program debt before upload debt):
+// prewarm_policy.ts moved, the seals follow the swept evidence bytes. No
+// capture was retaken.
+// Re-minted for the three patch-hash bump in pnpm-lock.yaml: the lockfile is a
+// hashed leaf of the town fingerprint, so the seals follow the swept evidence
+// bytes. No capture was retaken.
+// Re-minted for the merge of upstream/main into the GPU-preparation
+// scheduler branch: both parents' renderer and prewarm bytes combine in one
+// tree, so the seals follow the swept evidence bytes. No capture was retaken.
+// Re-minted for the second three patch-hash bump in pnpm-lock.yaml (the count 0
+// instanced-mesh render-list skip): the lockfile is a hashed leaf of the town
+// fingerprint, so the seals follow the swept evidence bytes. No capture was
+// retaken.
+// Re-minted for shader-memory-probes renderer instrumentation and VFX teardown
+// extraction. The renderer leaf moved; no capture was retaken because both
+// changes are behavior-neutral for the accepted visual evidence.
+// Re-minted for the fast-loading-screen-variety merge with release/v0.40.0:
+// the renderer runtime leaf moved on both sides of the merge (this branch's
+// character asset-ready wiring, the release's shader-memory probes). No
+// capture was retaken.
+// Re-minted for the review-fix round (the nearby-view floor in
+// prewarm_policy.ts, the weapon-skin early-out wiring in renderer.ts):
+// both runtime leaves moved. No capture was retaken.
+// Re-minted after merging release/v0.40.0 into the loading-hitch branch:
+// renderer.ts combines mandatory entry admission with the release's rift
+// long-session resource lifecycle changes. No capture was retaken.
+// Re-minted for the loading review fixes (rebuild reveal gates, inactive
+// horizon fast path, display-pacing admission, and restored rationale): the
+// renderer integration leaf moved. No capture was retaken.
+// PENDING at the release/v0.40.0 merge into the Realm Racers branch: the branch
+// edits src/render/renderer.ts on top of the release (rally display projection,
+// local bump and oil cues, trackside spectators, the avatar audio anchor), so
+// the rendererIntegration leaf, the composite riding on it, and this file's
+// second-order seals all move once more. Eastbrook itself is untouched: no
+// pipeline input or geometry value changed and no capture was retaken. Re-mint
+// by MEASUREMENT once the merge is fully resolved, never by copying a literal
+// across from another pin or a parent tip.
+// Re-minted for the merge of upstream/release/v0.40.0 into feature/realm-racers:
+// the composite follows renderer.ts, which now carries both parents' work (the
+// release's six releases of render evolution plus this branch's Realm Racers
+// draw path). It was the ONE input that moved; no capture was retaken.
 const ACCEPTED_POLISH_V2_METADATA_SHA256 =
-  'cc1758ff84857f202b242a3c2ce1a4cc31f48794a2d354781da59ac6718aaaf3';
+  'd72d10cdc5241782a8e42c10fd51235b0a6101d0f81472767684948885d30d88';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
-  'b9740c09dabbf4717960d17453630e3f2437f7426ad09b9f461ffdeb3852cfe0';
+  'c51cb7897258e3ef8367d0d9c7d6ff6214c65a0bdf47fe97309eaa4d14c0d895';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -927,8 +1164,16 @@ describe('Eastbrook polish committed capture artifacts', () => {
   });
 
   it('pins the historical metadata authority independently', () => {
-    expect(sha256File(ACCEPTED_POLISH_V2_METADATA_PATH)).toBe(ACCEPTED_POLISH_V2_METADATA_SHA256);
-    expect(ACCEPTED_POLISH_V2_PROVENANCE.fingerprint).toBe(ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE);
+    // On a legitimate re-mint both literals move together with the capture
+    // contract's composite pin; the remint tool prints all three.
+    expect(
+      sha256File(ACCEPTED_POLISH_V2_METADATA_PATH),
+      `the accepted metadata authority moved; if every input moved legitimately, re-mint with: ${REMINT_COMMAND}`,
+    ).toBe(ACCEPTED_POLISH_V2_METADATA_SHA256);
+    expect(
+      ACCEPTED_POLISH_V2_PROVENANCE.fingerprint,
+      `the sealed composite fingerprint moved; if every input moved legitimately, re-mint with: ${REMINT_COMMAND}`,
+    ).toBe(ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE);
   });
 
   // The frozen polish-v2 evidence intentionally predates the bank rebuild: it
@@ -1491,18 +1736,228 @@ describe('Eastbrook polish performance and contact evidence', () => {
       fingerprint.update('\0');
     }
     expect(acceptedFiles).toHaveLength(4);
-    // Second-order seal, recomputed LAST in the re-mint recipe
-    // (remint_polish_provenance.mjs): it hashes the performance evidence files,
-    // which carry the composite polish provenance. This literal and the
-    // capture-set pin above were both re-pinned BY MEASUREMENT over unchanged
-    // evidence bytes in 0d3fe7534d, not inherited from any parent tip: the
-    // capture-set pin had been carrying THIS seal's performance digest in its
-    // slot (a transposition), which kept the suite red from c1b689d2e3 until
-    // that re-pin. Re-minting either value means re-measuring the tree, never
-    // copying a literal across from the other pin or from a base branch.
-    expect(fingerprint.digest('hex')).toBe(
-      '43a78665edbf782f9ce7aa69cfd08090bcf85ae80182d2bb8d45d6895a80bb63',
-    );
+    // Second-order seal, recomputed LAST in the re-mint recipe: it hashes the
+    // performance evidence files, which carry the composite polish provenance.
+    // It therefore follows the first-order composite, so this merge moves it for
+    // the same reason: every rendererIntegration move on both sides stacks in
+    // that composite (from the release, PR #2720's fence-removal layout
+    // evidence, the live graphics rebuild #2799, the Bear Form rig swap #2842,
+    // the far-field impostors, fog-free vista and horizon pass #2793, the
+    // Blizzard timed ground loop #2861, and the brood shout/flourish wiring;
+    // from this branch, the worldObjectBurning fire-burst cue), recomputed last
+    // by remint_polish_provenance.mjs. The release retook the polish captures, so
+    // every measured value (frame timings, draw stats, triangle and scenario
+    // numbers) is adopted verbatim from the base tip; no parent's literal
+    // matched the merged tree, and no capture was retaken here.
+    // Re-pinned for the integrated v0.35 renderer on AAA-enhancements and
+    // recomputed by remint_polish_provenance.mjs.
+    // Re-pinned for the PR #2982 merge: the first-order composite follows the
+    // release-side weapon-skin renderer changes and the PR-side ability VFX
+    // warm-up changes, then this second-order performance seal follows the
+    // swept evidence bytes. No capture was retaken.
+    // Re-pinned for the PR #2983 revert: the swept evidence follows the
+    // reverted renderer while preserving PR #2982's prewarm-policy leaf.
+    // Re-pinned for the PR #2983 re-land: the swept evidence follows the
+    // re-landed renderer, itself on top of the release's bow-aim edit.
+    // Re-pinned for the VFX per-frame cost work: the first-order composite
+    // follows the renderer's anchor seam, weapon-skin fade and census tag,
+    // then this second-order seal follows the swept evidence bytes. No capture
+    // was retaken.
+    // Re-pinned for the iOS WebKit memory-profile fix: the first-order composite
+    // follows renderer.ts's nativeIosMemoryProfile -> iosMemoryProfile rename,
+    // landing on top of the VFX per-frame cost work already on this release
+    // branch, then this second-order performance seal follows the swept
+    // evidence bytes. No capture was retaken.
+    // Re-pinned for the merge of release/v0.36.0 (PR 3161) into the three
+    // compileAsync patch branch: the first-order composite follows both
+    // parents' inputs, then this second-order performance seal follows the
+    // swept evidence bytes. No capture was retaken.
+    // Re-minted after pinning the three specifier exact (PR 3165 review): only
+    // the pnpm-lock.yaml specifier row moved. No capture was retaken.
+    // Re-minted for the merge of release/v0.36.0 into the render caches branch:
+    // the first-order composite follows both parents' renderer.ts and
+    // prewarm_policy.ts inputs, then this second-order performance seal follows
+    // the swept evidence bytes. No capture was retaken.
+    // Re-minted after the point-light adoption seam moved the fire-light budget
+    // pass out of renderer.ts: the first-order composite follows renderer.ts,
+    // then this second-order seal follows the swept evidence bytes. No capture
+    // was retaken.
+    // Re-pinned for the merge of release/v0.36.0 (post PR 3220/3221) into the
+    // KTX2 mip-release branch: the first-order composite follows both parents'
+    // renderer.ts inputs, then this second-order performance seal follows the
+    // swept evidence bytes. No capture was retaken.
+    // Re-pinned for the merge of release/v0.36.0 (post PR 3222) into the
+    // prewarm sky-unstarve branch: the first-order composite follows both
+    // parents' renderer.ts inputs plus this branch's prewarm_policy.ts
+    // (sky.ts moved too but is not a provenance input), then this
+    // second-order performance seal follows the swept evidence bytes. No
+    // capture was retaken.
+    // Re-pinned for the review fixes on the prewarm sky-unstarve PR: the
+    // first-order composite follows the renderer.ts edits (deadlineExempt sky
+    // entry, unified view-cap trim rule, deferred-lane gate and priority
+    // threading), then this second-order performance seal follows the swept
+    // evidence bytes. No capture was retaken.
+    // Re-minted for review round 2 on the prewarm sky-unstarve PR (honest
+    // archetype and scene-texture counts; renderer.ts edits only). No capture
+    // was retaken.
+    // Re-minted for the merge of release/v0.36.0 (post the renderer refactor,
+    // PR 3204) into the creator-appearance branch: both parents move the
+    // rendererIntegration leaf, so the merged tree mints a value matching
+    // neither parent. No capture was retaken.
+    // Re-minted for the shadow-batch PR (shadow-camera texel snapping and the
+    // budget-governed shadow cadence; renderer.ts edits only). No capture was
+    // retaken.
+    // Re-pinned for the merge of the shadow-batch PR with the iOS constrained-
+    // memory zone-eviction fix: the first-order composite follows both
+    // parents' renderer.ts edits, then this second-order performance seal
+    // follows the swept evidence bytes. No capture was retaken.
+    // Re-pinned for the merge of PR #3314's rift windup telegraph school tint
+    // (issue #2917) with the release branch's renderer changes. The
+    // first-order composite follows the merged renderer.ts bytes, then this
+    // second-order performance seal follows the swept evidence bytes. No
+    // capture was retaken.
+    // Re-minted for the Three.js audit batch (light budget seam, blob
+    // shadows, sky residency lane, splat colour pack-source fix): the
+    // first-order composite follows renderer.ts, then this second-order
+    // performance seal follows the swept evidence bytes. No capture was
+    // retaken.
+    // Re-pinned for the base sync of the Three.js audit batch with the release
+    // branch renderer changes. The first-order composite follows the merged
+    // renderer.ts bytes, then this second-order performance seal follows the
+    // swept evidence bytes. No capture was retaken.
+    // Re-pinned for the release base-health repair after renderer.ts changed.
+    // No capture was retaken.
+    // Re-pinned for the v0.37.0 base sync with the login-storm base commit.
+    // The first-order composite follows the merged input bytes, then this
+    // second-order performance seal follows the swept evidence bytes. No
+    // capture was retaken.
+    // Re-pinned after organizing renderer imports changed the provenance
+    // inputs. No capture was retaken.
+    // Re-pinned for the merge of the iOS constrained-memory zone-eviction fix
+    // with the release branch's organized renderer imports. The first-order
+    // composite follows the merged renderer.ts bytes, then this second-order
+    // performance seal follows the swept evidence bytes. No capture was
+    // retaken.
+    // Re-minted for the merge of release/v0.38.0 into the night-lighting branch:
+    // both parents move renderer.ts, so the first-order composite mints anew and
+    // this second-order seal follows the swept evidence bytes. No capture was
+    // retaken.
+    // Re-pinned for PR #3339's healGlowAt view-eviction fix on the newer release
+    // renderer. The first-order composite follows renderer.ts, then this
+    // second-order seal follows the swept evidence bytes. No capture was retaken.
+    // Re-pinned for PR #3344 after removing the unused Eastbrook civic-beacon
+    // preload test hook. The first-order composite follows the civicShader leaf,
+    // then this second-order seal follows the swept bytes. No capture was retaken.
+    // Re-pinned after applying the PR #3339 review repair atop PR #3344. The
+    // first-order composite follows both retained leaves, then this second-order
+    // seal follows the swept evidence bytes. No capture was retaken.
+    // Re-pinned for final PR #3345 integration. The first-order composite follows
+    // the combined renderer, lockfile, and GLBs, then this seal follows the swept
+    // evidence bytes. No capture was retaken.
+    // Re-pinned after extracting entity-view policy from renderer.ts for the
+    // monolith ratchet. The seal follows the swept bytes; no capture was retaken.
+    // Re-pinned again after the policy became an explicit provenance leaf. The
+    // performance records changed only in their swept provenance blocks.
+    // Re-minted for the merge of release/v0.38.0 into the Armory warming
+    // branch: the first-order composite follows the merged renderer.ts bytes,
+    // then this second-order performance seal follows the swept evidence
+    // bytes. No capture was retaken.
+    // Re-pinned for the quest-collectable spawn gate. The first-order
+    // composite follows renderer.ts, then this second-order seal follows the
+    // swept evidence bytes. No capture was retaken.
+    // Re-pinned for the merge of PR #3359's quest-collectable spawn gate with
+    // the release branch's extracted entity-view policy. The first-order
+    // composite follows renderer.ts and entityViewPolicy, then this seal
+    // follows the swept bytes. No capture was retaken.
+    // Re-minted for the review fixes on this branch (Soul Rend warms every rig
+    // a live body can take, plus the lazy form-visual fold): the first-order
+    // composite follows renderer.ts, then this seal follows the swept evidence
+    // bytes. No capture was retaken.
+    // Re-minted for the r185 frozen-camera aim fix. The first-order composite
+    // follows renderer.ts, then this second-order performance seal follows the
+    // swept evidence bytes. No capture was retaken.
+    // Re-minted again after extracting the delve interior build-cache
+    // scheduling into src/render/delve_interior_tracker.ts. No capture retaken.
+    // Re-minted again for the merged prewarm and delve-tracker runtime inputs.
+    // No capture retaken.
+    // Re-minted for the vfx.mount-programs prewarm entry (#2571). The
+    // first-order composite follows renderer.ts and prewarm_policy.ts, then
+    // this second-order performance seal follows the swept evidence bytes. No
+    // capture was retaken.
+    // Re-minted for the vfx.mount-programs review fixes (scene-reparent bug,
+    // honest desktop-path progress, depth compile, timeout-bounded fetch,
+    // constrained-device removal). The first-order composite follows
+    // renderer.ts and prewarm_policy.ts, then this second-order performance
+    // seal follows the swept evidence bytes. No capture was retaken.
+    // Re-minted for the PR #3447 merge. The first-order composite follows the
+    // combined v0.39 wrapper, corrected PR #3446 sky KTX2 renderer bytes, and
+    // mount-program prewarm bytes, then this second-order performance seal
+    // follows the swept evidence bytes. No capture was retaken.
+    // Re-minted for the moved-base v0.39 wrapper refresh. The first-order
+    // composite follows the combined castle renderer bytes and v0.39 wrapper
+    // bytes, then this second-order performance seal follows the swept
+    // evidence bytes. No capture was retaken.
+    // Re-minted for the approved PR #3425 merge into the v0.39 wrapper. The
+    // first-order composite follows the resolved renderer bytes, then this
+    // second-order performance seal follows the swept evidence bytes. No
+    // capture was retaken.
+    // Re-minted after syncing current release/v0.39.0 into the v0.39 wrapper.
+    // The first-order composite follows the retained self-spirit prewarm and
+    // delve rebuild renderer bytes, then this second-order performance seal
+    // follows the swept evidence bytes. No capture was retaken.
+    // Re-minted for the r185 frozen-camera aim fix, then for the far-bake
+    // compile gate (renderer.ts wiring). The first-order composite follows
+    // renderer.ts, then this second-order performance seal follows the swept
+    // evidence bytes. No capture was retaken.
+    // Re-minted for the touch tail's readiness fix (renderer.ts wiring): the
+    // first-order composite follows renderer.ts, then this second-order
+    // performance seal follows the swept evidence bytes. No capture was
+    // retaken.
+    // Re-minted for the build-ledger instrumentation (renderer.ts and
+    // entity_view_policy_core.ts wiring): same order, the composite first,
+    // then this seal over the swept evidence bytes. No capture was retaken.
+    // Re-minted for the build-span sink wiring (renderer.ts): same order, the
+    // composite first, then this seal. No capture was retaken.
+    // Re-minted for the composed-look pieces hold (renderer.ts): same order,
+    // the composite first, then this seal. No capture was retaken.
+    // Re-minted for the gc hitch cause (renderer.ts): same order, the
+    // composite first, then this seal. No capture was retaken.
+    // Re-minted for the deferred-decal stand-in (renderer.ts): same order, the
+    // composite first, then this seal. No capture was retaken.
+    // Re-minted for the compile gate's piece cut (renderer.ts): same order, the
+    // composite first, then this seal. No capture was retaken.
+    // Re-minted for the hitch sample alignment (renderer.ts): same order, the
+    // composite first, then this seal. No capture was retaken.
+    // Re-minted for the compile gate's variant settle and the every-mesh depth
+    // twin (renderer.ts): same order, the composite first, then this seal. No
+    // capture was retaken.
+    // Re-minted for the resume lane ordering (prewarm_policy.ts): same order,
+    // the composite first, then this seal. No capture was retaken.
+    // Re-minted for the three patch-hash bump (pnpm-lock.yaml): same order, the
+    // composite first, then this seal. No capture was retaken.
+    // Re-minted for the merge of upstream/main into the GPU-preparation
+    // scheduler branch: both parents' renderer and prewarm bytes combine in one
+    // tree, so the seals follow the swept evidence bytes. No capture was retaken.
+    // Re-minted for the second three patch-hash bump (pnpm-lock.yaml, the count
+    // 0 instanced-mesh render-list skip): same order, the composite first, then
+    // this seal. No capture was retaken.
+    // Re-minted for the fast-loading-screen-variety merge with release/v0.40.0
+    // (renderer.ts moved on both sides): same order, the composite first, then
+    // this seal. No capture was retaken.
+    // Re-minted for the review-fix round (prewarm_policy.ts and renderer.ts
+    // moved): same order, the composite first, then this seal. No capture
+    // was retaken.
+    // Re-minted after merging release/v0.40.0 into the loading-hitch branch
+    // (renderer.ts moved on both sides): same order, the composite first,
+    // then this seal. No capture was retaken.
+    // Re-minted for the loading review fixes (renderer.ts): same order, the
+    // composite first, then this seal. No capture was retaken.
+    expect(
+      fingerprint.digest('hex'),
+      `the second-order performance digest moved; if every input moved legitimately, re-mint with: ${REMINT_COMMAND} (it recomputes this literal LAST, from the swept files)`,
+      // Re-minted for the release/v0.40.0 merge: this second-order performance
+      // seal follows the swept evidence bytes above. No capture was retaken.
+    ).toBe('7e27e7c53bf5071e00712606ce687e9ee9959f83f7b2a570ca2a930eed50e5a1');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

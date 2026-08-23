@@ -25,6 +25,7 @@ import {
   getLanguage,
   hasTranslation,
   type InterpolationValues,
+  isPendingTranslation,
   type SupportedLanguage,
   supportedLanguages,
   t,
@@ -47,9 +48,31 @@ export type EntityTranslationKind =
   | 'delve'
   | 'itemSet'
   | 'letter';
+/** An item set's per-tier bonus field, keyed by the tier's PIECE COUNT rather
+ *  than a fixed 2/3/4 triple. Every shipped set used 2, 3 and 4 pieces, and that
+ *  assumption was hard coded here, in the i18n catalog builder, and in the
+ *  tooltip's field selection, so a set authored with any other breakpoint (the
+ *  WARFARE families' 2/4/7) rendered the WRONG tier's text instead of failing.
+ *  Generalizing keeps every existing entities.itemSets.*.bonus2/bonus3/bonus4
+ *  key byte-stable in the locale overlays and mints only the new counts. */
+export type ItemSetBonusField = `bonus${number}`;
+
+/** The piece count a bonus field names, or null when the field is not a bonus
+ *  field at all. The ONE place the field-to-count mapping lives. */
+export function itemSetBonusPieces(field: string): number | null {
+  const matched = /^bonus([1-9][0-9]*)$/.exec(field);
+  return matched ? Number(matched[1]) : null;
+}
+
+/** The bonus field naming a tier of `pieces` pieces. */
+export function itemSetBonusField(pieces: number): ItemSetBonusField {
+  return `bonus${pieces}`;
+}
+
 export type EntityTranslationField =
   | 'name'
   | 'description'
+  | 'descriptionNoStealth'
   | 'title'
   | 'text'
   | 'completion'
@@ -58,21 +81,36 @@ export type EntityTranslationField =
   | 'welcome'
   | 'enterText'
   | 'leaveText'
-  | 'bonus2'
-  | 'bonus3'
-  | 'bonus4'
+  | ItemSetBonusField
   | 'sender'
   | 'subject'
-  | 'body';
+  | 'body'
+  | AbilitySpecNoteField;
+
+/** Per-spec tooltip note fields (spec-aware ability tooltips): rendered only
+ *  for the player's current specialization. One literal per spec that carries
+ *  notes today, so a typo'd spec id fails the type check. */
+export type AbilitySpecNoteField =
+  | 'specNote_assassination'
+  | 'specNote_combat'
+  | 'specNote_subtlety'
+  | 'specNote_balance'
+  | 'specNote_feral'
+  | 'specNote_restoration';
 
 export type EntityTranslationRequest =
   | { kind: 'class'; id: PlayerClass; field: 'name' | 'description'; values?: InterpolationValues }
-  | { kind: 'ability'; id: string; field: 'name' | 'description'; values?: InterpolationValues }
+  | {
+      kind: 'ability';
+      id: string;
+      field: 'name' | 'description' | 'descriptionNoStealth' | AbilitySpecNoteField;
+      values?: InterpolationValues;
+    }
   | { kind: 'item'; id: string; field: 'name'; values?: InterpolationValues }
   | {
       kind: 'itemSet';
       id: string;
-      field: 'name' | 'bonus2' | 'bonus3' | 'bonus4';
+      field: 'name' | ItemSetBonusField;
       values?: InterpolationValues;
     }
   | { kind: 'mob'; id: string; field: 'name'; values?: InterpolationValues }
@@ -254,7 +292,11 @@ function canonicalEntityText(request: EntityTranslationRequest): string {
       const set = ownEntry(ITEM_SETS, request.id);
       if (!set) return request.id;
       if (request.field === 'name') return set.name;
-      const pieces = request.field === 'bonus2' ? 2 : request.field === 'bonus3' ? 3 : 4;
+      // Piece-count agnostic (see ItemSetBonusField): the field NAMES its tier,
+      // so a 7-piece breakpoint resolves without a fifth ternary arm, and an
+      // unknown field falls back to the raw id like every other R34 miss.
+      const pieces = itemSetBonusPieces(request.field);
+      if (pieces === null) return request.id;
       return set.bonuses.find((b) => b.pieces === pieces)?.text ?? request.id;
     }
     case 'mob':
@@ -344,6 +386,42 @@ export function entityTranslationKey(request: EntityTranslationRequest): string 
   }
 }
 
+// tEntity sits on per-frame paths (nameplates, aura names, HUD frames), and
+// entityTranslationKey allocates a template literal plus runs the
+// entityPathSegment regex on EVERY call for ids that never change
+// (hitch-elimination B3). The nested memo serves a stable (kind, id, field)
+// triple with three Map reads and zero allocation. Keys derive only from
+// static content ids, never from the locale, so the memo never invalidates
+// (the localized TEXT memo lives in i18n.ts behind the resolution revision).
+// The compound kinds (questObjective, zonePoi) carry an index and stay on the
+// direct builder: their surfaces (quest log, map POIs) are cold.
+// No eviction on purpose: the ids that arrive at runtime (loot and mail entity
+// ids, wire snapshots) all name entities shipped in src/sim/content, so the
+// memo stays bounded by the static content catalog.
+const entityKeyMemo = new Map<EntityTranslationKind, Map<string, Map<string, string>>>();
+
+function cachedEntityTranslationKey(request: EntityTranslationRequest): string {
+  if (request.kind === 'questObjective' || request.kind === 'zonePoi') {
+    return entityTranslationKey(request);
+  }
+  let byId = entityKeyMemo.get(request.kind);
+  if (!byId) {
+    byId = new Map();
+    entityKeyMemo.set(request.kind, byId);
+  }
+  let byField = byId.get(request.id);
+  if (!byField) {
+    byField = new Map();
+    byId.set(request.id, byField);
+  }
+  let key = byField.get(request.field);
+  if (key === undefined) {
+    key = entityTranslationKey(request);
+    byField.set(request.field, key);
+  }
+  return key;
+}
+
 function requestManifestEntry(request: EntityTranslationRequest): EntityTranslationManifestEntry {
   const id =
     request.kind === 'questObjective'
@@ -376,12 +454,31 @@ function recordFallback(request: EntityTranslationRequest, value: string): void 
 }
 
 export function tEntity(request: EntityTranslationRequest): string {
-  const key = entityTranslationKey(request);
+  const key = cachedEntityTranslationKey(request);
   const translated = tOptional(key, request.values);
   if (translated !== null) return translated;
   const fallback = interpolateSource(canonicalEntityText(request), request.values);
   recordFallback(request, fallback);
   return fallback;
+}
+
+/** Bundle-only entity resolution for an OPTIONAL variant field: the ACTIVE
+ *  locale's own translation, or null when it does not have one, WITHOUT falling
+ *  back to English. Null on both misses that matter: the key is absent from the
+ *  bundle, or the locale has not translated it yet (a `pending` row, which the
+ *  dense table English-FILLS - tOptional alone would hand that fill straight
+ *  back).
+ *
+ *  The caller resolves a different base field on null (a talent-conditional
+ *  ability description falling back to the plain description), so an untranslated
+ *  locale reads its own prose rather than one English sentence spliced into an
+ *  otherwise localized string. This is also why declining the fill is safe here
+ *  and not in t(): an optional variant always has a translated base field to fall
+ *  back to. */
+export function tEntityOptional(request: EntityTranslationRequest): string | null {
+  const key = cachedEntityTranslationKey(request);
+  if (isPendingTranslation(key)) return null;
+  return tOptional(key, request.values);
 }
 
 export function itemDisplayName(item: ItemDef): string {
@@ -414,6 +511,17 @@ export function zonePoiLabel(zoneId: string, poiIndex: number): string {
 
 export function dungeonDisplayName(dungeonId: string): string {
   return tEntity({ kind: 'dungeon', id: dungeonId, field: 'name' });
+}
+
+/** The label a live rift floor (IWorld.riftFloor) shows wherever a surface needs
+ *  display text for it: the generated floor name, plus its C/B/A/S rank in
+ *  parens (omitted for a dev-portal run, whose tier is null). Not a tEntity
+ *  wrapper (the name/rank come from the generated RiftFloorView, not a content
+ *  id lookup); the single shared home so the minimap, the world map, and the
+ *  map-window summary format it identically instead of each re-declaring the
+ *  same rank ? label ternary. */
+export function riftFloorLabel(name: string, rank: string | null): string {
+  return rank ? t('hud.core.riftLabelRanked', { name, rank }) : t('hud.core.riftLabel', { name });
 }
 
 export function resetEntityTranslationFallbackLog(): void {
@@ -461,6 +569,21 @@ export function entityTranslationManifest(): EntityTranslationManifestEntry[] {
         entityTranslationKey({ kind: 'ability', id: ability.id, field: 'description' }),
       ),
     );
+    for (const [spec, note] of Object.entries(ability.specNotes ?? {}).sort(([a], [b]) =>
+      a.localeCompare(b),
+    )) {
+      const field = `specNote_${spec}` as AbilitySpecNoteField;
+      entries.push(
+        entry(
+          'ability',
+          ability.id,
+          field,
+          note,
+          'classAbility',
+          entityTranslationKey({ kind: 'ability', id: ability.id, field }),
+        ),
+      );
+    }
   }
   for (const item of Object.values(ITEMS).sort(compareById)) {
     // Heroic upgraded variants carry no name key: they share the base item's name
@@ -478,12 +601,14 @@ export function entityTranslationManifest(): EntityTranslationManifestEntry[] {
     );
   }
   for (const set of Object.values(ITEM_SETS).sort(compareById)) {
-    // Only tiers the set actually has: the leveling haste kits carry a single
-    // 3-piece tier, so registering a bonus2 row would emit an id-fallback string.
-    const fields: ('name' | 'bonus2' | 'bonus3' | 'bonus4')[] = ['name'];
-    if (set.bonuses.some((b) => b.pieces === 2)) fields.push('bonus2');
-    if (set.bonuses.some((b) => b.pieces === 3)) fields.push('bonus3');
-    if (set.bonuses.some((b) => b.pieces === 4)) fields.push('bonus4');
+    // Only tiers the set actually has, at WHATEVER piece counts it authored:
+    // the leveling haste kits carry a single 3-piece tier (so registering a
+    // bonus2 row would emit an id-fallback string) and the WARFARE families
+    // carry 2/4/7. Ascending and de-duplicated so the manifest order is stable.
+    const fields: ('name' | ItemSetBonusField)[] = ['name'];
+    for (const pieces of [...new Set(set.bonuses.map((b) => b.pieces))].sort((a, b) => a - b)) {
+      fields.push(itemSetBonusField(pieces));
+    }
     for (const field of fields) {
       entries.push(
         entry(

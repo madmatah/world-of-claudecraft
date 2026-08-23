@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { buildFullGateSteps, I18N_ARTIFACTS } from '../scripts/lib/gate_steps.mjs';
+import {
+  buildFullGateSteps,
+  I18N_ARTIFACTS,
+  MANIFEST_ARTIFACTS,
+} from '../scripts/lib/gate_steps.mjs';
 import {
   GATE_CACHE_TASK_INVENTORY,
   GATE_CACHEABLE_TASKS,
@@ -10,6 +14,7 @@ import {
 } from '../scripts/lib/gate_task_cache.mjs';
 
 const turboJson = JSON.parse(readFileSync(new URL('../turbo.json', import.meta.url), 'utf8')) as {
+  cacheDir?: string;
   tasks: Record<
     string,
     { cache?: boolean; inputs?: string[]; outputs?: string[]; dependsOn?: string[] }
@@ -22,10 +27,9 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 };
 
 describe('turboRunArgs', () => {
-  it('builds npx-ready turbo run argv with stream UI', () => {
-    expect(turboRunArgs(['i18n:gen'])).toEqual(['turbo', 'run', 'i18n:gen', '--ui=stream']);
+  it('builds turbo run argv with stream UI', () => {
+    expect(turboRunArgs(['i18n:gen'])).toEqual(['run', 'i18n:gen', '--ui=stream']);
     expect(turboRunArgs(['check:types', 'build:env', 'build:server'])).toEqual([
-      'turbo',
       'run',
       'check:types',
       'build:env',
@@ -74,6 +78,47 @@ describe('gate cache inventory vs turbo.json', () => {
     expect(inputs.some((p) => p.includes('i18n.catalog'))).toBe(true);
     expect(inputs.some((p) => p.includes('i18n.locales'))).toBe(true);
   });
+
+  it('invalidates the server bundle when either Rift rollback migration source changes', () => {
+    expect(turboJson.tasks['build:server'].inputs).toEqual(
+      expect.arrayContaining([
+        'scripts/migrate_rift_forge_rollback.ts',
+        'scripts/rift_forge_rollback_migration.ts',
+      ]),
+    );
+  });
+});
+
+describe('git worktree cache sharing (Turborepo >= 2.8)', () => {
+  it('stays on a turbo version that auto-shares the local cache across linked worktrees', () => {
+    // Since Turborepo 2.8, a run inside a `git worktree add` checkout auto-detects
+    // the linkage and redirects local-cache reads/writes to the MAIN checkout's
+    // .turbo/cache, no config needed (https://turborepo.dev/blog/2-8). This repo's
+    // own default task workflow mandates a fresh worktree per task, so this is what
+    // makes the very first gate run in a brand-new worktree warm-cache for every
+    // pure artifact step (i18n:gen, wiki:content, sfx:check, check:types, the env/
+    // server/bot/client builds) whenever the inputs are unchanged from what the main
+    // checkout already built, instead of paying the cold-cache cost every time.
+    // Verified empirically (docs/local-gate-perf/experiment-log.md): running the
+    // gate's turbo steps from a linked worktree wrote new cache entries into the
+    // MAIN repo root's .turbo/cache, not the worktree's own .turbo/. Pin the
+    // MINOR floor (not just "^2.") so a downgrade under 2.8 fails loudly instead
+    // of silently losing this for every new worktree.
+    const version = pkg.devDependencies?.turbo ?? '';
+    const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+    expect(match, `unparsable turbo version ${version}`).toBeTruthy();
+    const [, major, minor] = match as RegExpMatchArray;
+    const atLeast28 = Number(major) > 2 || (Number(major) === 2 && Number(minor) >= 8);
+    expect(atLeast28, `turbo ${version} predates 2.8's worktree cache sharing`).toBe(true);
+  });
+
+  it('never pins an explicit cacheDir, which disables the auto-worktree-sharing default', () => {
+    // Turborepo's auto-detection only applies when no cacheDir override is set; an
+    // explicit (even relative) cacheDir pins every worktree to its OWN path and
+    // silently reintroduces a cold cache in every fresh worktree this repo's
+    // workflow creates.
+    expect(turboJson.cacheDir).toBeUndefined();
+  });
 });
 
 describe('buildFullGateSteps orchestration', () => {
@@ -81,49 +126,81 @@ describe('buildFullGateSteps orchestration', () => {
     const steps = buildFullGateSteps(8);
     const byName = Object.fromEntries(steps.map((s) => [s.name, s]));
 
-    expect(isTurboGateStep(byName['i18n artifacts'].cmd, byName['i18n artifacts'].args)).toBe(true);
-    expect(byName['i18n artifacts'].args).toContain('i18n:gen');
+    const artifacts = byName['i18n + wiki + sfx artifacts'];
+    expect(isTurboGateStep(artifacts.cmd, artifacts.args)).toBe(true);
+    expect(artifacts.cmd).toMatch(/(?:^|[\\/])turbo(?:\.cmd)?$/);
+    expect(artifacts.args).toEqual(
+      expect.arrayContaining(['run', 'i18n:gen', 'wiki:content', 'sfx:check']),
+    );
     expect(byName['i18n freshness'].cmd).toBe('git');
     expect(byName['i18n freshness'].args).toEqual(
       expect.arrayContaining(['diff', '--exit-code', ...I18N_ARTIFACTS]),
     );
-    expect(isTurboGateStep(byName['wiki content'].cmd, byName['wiki content'].args)).toBe(true);
+    // The manifest arm mirrors the i18n one, pinned to the SAME constant the
+    // three-way weld checks (tests/ci_workflow.test.ts): trackedness closes
+    // the deleted-then-regenerated untracked-file escape, while a diff argv
+    // that drifts from MANIFEST_ARTIFACTS would prove fewer files than the
+    // classifier declassifies.
+    expect(byName['sfx manifest regen'].cmd).toBe('node');
+    expect(byName['sfx manifest regen'].args).toEqual(['scripts/build_sfx_manifest.mjs']);
+    expect(byName['media manifest regen'].cmd).toBe('node');
+    expect(byName['media manifest regen'].args).toEqual([
+      'scripts/build_media_manifest.mjs',
+      'generate',
+    ]);
+    expect(byName['manifest trackedness'].cmd).toBe('git');
+    expect(byName['manifest trackedness'].args).toEqual([
+      'ls-files',
+      '--error-unmatch',
+      '--',
+      ...MANIFEST_ARTIFACTS,
+    ]);
+    expect(byName['manifest freshness'].cmd).toBe('git');
+    expect(byName['manifest freshness'].args).toEqual([
+      'diff',
+      '--exit-code',
+      '--',
+      ...MANIFEST_ARTIFACTS,
+    ]);
     expect(byName['malware scan'].cmd).toBe('npm');
     expect(byName['malware scan'].args).toEqual(['run', 'security:gate']);
     expect(byName['biome (changed files)'].cmd).toBe('npm');
-    expect(byName['sfx check'].cmd).toBe('npx');
+    expect(byName['biome (changed files)'].args).toEqual(['run', 'ci:changed']);
     expect(byName['vitest (full suite)'].cmd).toBe('npm');
     expect(byName['vitest (full suite)'].args).toEqual(['test', '--', '--maxWorkers=8']);
     expect(byName['vitest (full suite)'].env).toEqual({ WOC_SKIP_PRETEST: '1' });
     expect(byName['browser regressions'].cmd).toBe('npm');
 
     const typesBuilds = byName['typecheck + env/server/bot builds'];
-    expect(typesBuilds.cmd).toBe('npx');
+    expect(typesBuilds.cmd).toMatch(/(?:^|[\\/])turbo(?:\.cmd)?$/);
     expect(typesBuilds.args).toEqual(
-      expect.arrayContaining([
-        'turbo',
-        'run',
-        'check:types',
-        'build:env',
-        'build:server',
-        'build:bot',
-      ]),
+      expect.arrayContaining(['run', 'check:types', 'build:env', 'build:server', 'build:bot']),
     );
     expect(isTurboGateStep(byName['client build'].cmd, byName['client build'].args)).toBe(true);
     expect(byName['client build'].args).toContain('build:bundle');
   });
 
-  it('preserves generate-once ordering: i18n before freshness before wiki before vitest', () => {
+  it('preserves generate-once ordering: artifacts before freshness before biome before vitest', () => {
     const names = buildFullGateSteps(4).map((s) => s.name);
-    const i18n = names.indexOf('i18n artifacts');
+    const artifacts = names.indexOf('i18n + wiki + sfx artifacts');
     const freshness = names.indexOf('i18n freshness');
-    const wiki = names.indexOf('wiki content');
+    const sfxRegen = names.indexOf('sfx manifest regen');
+    const mediaRegen = names.indexOf('media manifest regen');
+    const manifestTrackedness = names.indexOf('manifest trackedness');
+    const manifestFreshness = names.indexOf('manifest freshness');
+    const biome = names.indexOf('biome (changed files)');
     const vitest = names.indexOf('vitest (full suite)');
     const client = names.indexOf('client build');
-    expect(i18n).toBeGreaterThan(-1);
-    expect(freshness).toBeGreaterThan(i18n);
-    expect(wiki).toBeGreaterThan(freshness);
-    expect(vitest).toBeGreaterThan(wiki);
+    expect(artifacts).toBeGreaterThan(-1);
+    expect(freshness).toBeGreaterThan(artifacts);
+    // Both regens (and the turbo wiki:content in the artifacts step) must
+    // precede the manifest diff, or it proves nothing about this tree.
+    expect(sfxRegen).toBeGreaterThan(freshness);
+    expect(mediaRegen).toBeGreaterThan(sfxRegen);
+    expect(manifestTrackedness).toBeGreaterThan(mediaRegen);
+    expect(manifestFreshness).toBeGreaterThan(manifestTrackedness);
+    expect(biome).toBeGreaterThan(manifestFreshness);
+    expect(vitest).toBeGreaterThan(biome);
     expect(client).toBeGreaterThan(vitest);
   });
 
@@ -134,12 +211,14 @@ describe('buildFullGateSteps orchestration', () => {
       skipVitest: true,
     });
     expect(typesOnly.map((s) => s.name)).toEqual([
-      'i18n artifacts',
+      'i18n + wiki + sfx artifacts',
       'i18n freshness',
-      'wiki content',
+      'sfx manifest regen',
+      'media manifest regen',
+      'manifest trackedness',
+      'manifest freshness',
       'malware scan',
       'biome (changed files)',
-      'sfx check',
       'typecheck',
     ]);
 
@@ -149,12 +228,14 @@ describe('buildFullGateSteps orchestration', () => {
       skipVitest: true,
     });
     expect(buildsOnly.map((s) => s.name)).toEqual([
-      'i18n artifacts',
+      'i18n + wiki + sfx artifacts',
       'i18n freshness',
-      'wiki content',
+      'sfx manifest regen',
+      'media manifest regen',
+      'manifest trackedness',
+      'manifest freshness',
       'malware scan',
       'biome (changed files)',
-      'sfx check',
       'env build',
       'server build',
       'bot build',

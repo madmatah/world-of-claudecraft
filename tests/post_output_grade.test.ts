@@ -8,7 +8,7 @@ describe('fused output and grade shader', () => {
     const diffuseSampleAt = shader.indexOf('vec4 outputColor = texture(tDiffuse, inputUv);');
     const bloomSampleAt = shader.indexOf('vec4 bloom = texture(tBloom, inputUv);');
     const bloomBlendAt = shader.indexOf(
-      'outputColor.rgb = quantizeHalf(outputColor.rgb + bloom.rgb * bloom.a);',
+      'outputColor.rgb = quantizeHalf(outputColor.rgb + sanitizeFinite(bloom.rgb * bloom.a));',
     );
     const toneMapAt = shader.indexOf('outputColor.rgb = ACESFilmicToneMapping(outputColor.rgb);');
     const srgbAt = shader.indexOf('outputColor = sRGBTransferOETF(outputColor);');
@@ -39,6 +39,95 @@ describe('fused output and grade shader', () => {
     expect(shader).toContain('unpackHalf2x16(packHalf2x16(vec2(value.b, 0.0))).x');
     expect(shader).toContain('pc_fragColor = vec4(c, 1.0);');
     expect(shader).toContain('vec2 inputUv = min(vUv * uInputUvRect.xy, uInputUvRect.zw);');
+  });
+
+  it('runs the FXAA arm on the display-referred image, between the transfer and the grade', () => {
+    const shader = OUTPUT_GRADE_FRAGMENT_SHADER;
+    // The whole reason the FXAA arm is a define on THIS pass: it reuses the
+    // display-referred sample the grade already builds, so its edge detection
+    // sees the tone-mapped, transfer-encoded image a player looks at rather
+    // than the linear HDR buffer, where a bright sky swamps darker contours.
+    const displayFnAt = shader.indexOf('vec4 displayColor(vec2 inputUv) {');
+    const toneMapAt = shader.indexOf('outputColor.rgb = ACESFilmicToneMapping(outputColor.rgb);');
+    const srgbAt = shader.indexOf('outputColor = sRGBTransferOETF(outputColor);');
+    const displayReturnAt = shader.indexOf('return outputColor;');
+    const fxaaGuardAt = shader.indexOf('#ifdef FXAA_GRADE');
+    const fxaaTapAt = shader.indexOf('vec3 fxaaTap(vec2 inputUv, vec2 texelOffset) {');
+    const fxaaCallAt = shader.indexOf('outputColor.rgb = fxaaFilter(inputUv, outputColor.rgb);');
+    const gradeAt = shader.indexOf('vec3 c = quantizeHalf(outputColor.rgb);');
+
+    expect(displayFnAt).toBeGreaterThan(-1);
+    expect(toneMapAt).toBeGreaterThan(displayFnAt);
+    expect(srgbAt).toBeGreaterThan(toneMapAt);
+    expect(displayReturnAt).toBeGreaterThan(srgbAt);
+    expect(fxaaGuardAt).toBeGreaterThan(displayReturnAt);
+    expect(fxaaTapAt).toBeGreaterThan(fxaaGuardAt);
+    // Taps go through displayColor, so there is no second, raw sampler read.
+    expect(shader.match(/texture\(tDiffuse,/g)).toHaveLength(1);
+    // FXAA resolves before the grade tail, never after: the lift/vignette/grain
+    // are display-space cosmetics that must apply to the resolved pixel.
+    expect(fxaaCallAt).toBeGreaterThan(fxaaTapAt);
+    expect(gradeAt).toBeGreaterThan(fxaaCallAt);
+  });
+
+  it('clamps every FXAA tap into the rendered sub-rect so the region cannot bleed', () => {
+    const shader = OUTPUT_GRADE_FRAGMENT_SHADER;
+    // uInputUvRect.zw is the centre of the last RENDERED texel, so clamping to
+    // it stops a bilinear tap reaching the stale pixels a reduced region leaves
+    // in the rest of the target. Every tap goes through this one helper.
+    expect(shader).toContain(
+      'vec2 uv = clamp(inputUv + texelOffset * uInputTexelSize, vec2(0.0), uInputUvRect.zw);',
+    );
+    const tapBody = shader.slice(
+      shader.indexOf('vec3 fxaaTap(vec2 inputUv, vec2 texelOffset) {'),
+      shader.indexOf('vec3 fxaaFilter(vec2 inputUv, vec3 displayM) {'),
+    );
+    expect(tapBody).toContain('displayColor(uv)');
+    const fxaaBody = shader.slice(
+      shader.indexOf('vec3 fxaaFilter(vec2 inputUv, vec3 displayM) {'),
+      shader.indexOf('void main() {'),
+    );
+    expect(fxaaBody).not.toContain('displayColor(');
+    expect(fxaaBody.match(/fxaaTap\(inputUv,/g)).toHaveLength(8);
+  });
+
+  it('rewrites NaN to zero on both composer-target reads before the tonemap', () => {
+    // A single NaN fragment in the HalfFloat beauty target is smeared frame-wide
+    // by the bloom blur and tonemaps to black on the composer tiers, while the
+    // UNSIGNED_BYTE direct-to-canvas tiers clamp it away. Some drivers (ANGLE's
+    // OpenGL backend with NVIDIA on Linux) emit those NaNs from the IBL/PBR path,
+    // so OutputGradePass must scrub NaN out of BOTH the beauty read and the
+    // (already blur-spread) bloom read. Losing either scrub brings the black back.
+    const shader = OUTPUT_GRADE_FRAGMENT_SHADER;
+    expect(shader).toContain('(v.x < 0.0 || v.x >= 0.0) ? v.x : 0.0');
+    const helperAt = shader.indexOf('vec3 sanitizeFinite(vec3 v) {');
+    const beautyScrubAt = shader.indexOf('outputColor.rgb = sanitizeFinite(outputColor.rgb);');
+    const diffuseSampleAt = shader.indexOf('vec4 outputColor = texture(tDiffuse, inputUv);');
+    const bloomScrubAt = shader.indexOf('sanitizeFinite(bloom.rgb * bloom.a)');
+    const toneMapAt = shader.indexOf('outputColor.rgb = ACESFilmicToneMapping(outputColor.rgb);');
+    expect(helperAt).toBeGreaterThan(-1);
+    expect(beautyScrubAt).toBeGreaterThan(diffuseSampleAt);
+    expect(bloomScrubAt).toBeGreaterThan(-1);
+    expect(toneMapAt).toBeGreaterThan(beautyScrubAt);
+    expect(toneMapAt).toBeGreaterThan(bloomScrubAt);
+  });
+
+  it('only calls tonemapping functions the installed three chunk defines', () => {
+    // The shader includes <tonemapping_pars_fragment> and picks one arm by
+    // define; a dormant arm naming a function three renamed (r185 dropped
+    // OptimizedCineonToneMapping for CineonToneMapping) only explodes when
+    // that arm's define is set at runtime, so pin every referenced name
+    // against the installed chunk source here instead.
+    const chunk = THREE.ShaderChunk.tonemapping_pars_fragment;
+    const called = new Set(
+      [...OUTPUT_GRADE_FRAGMENT_SHADER.matchAll(/(\w+ToneMapping)\(/g)].map((m) => m[1]),
+    );
+    expect(called.size).toBeGreaterThanOrEqual(6);
+    for (const name of called) {
+      expect(chunk, `${name} missing from three's tonemapping chunk`).toContain(
+        `vec3 ${name}( vec3 color )`,
+      );
+    }
   });
 
   it('propagates exposure and selects the same ACES and sRGB defines as OutputPass', () => {
@@ -88,5 +177,47 @@ describe('fused output and grade shader', () => {
 
     pass.setInputUvRect(0.75, 0.8, 0.7, 0.74);
     expect(pass.uniforms.uInputUvRect.value.toArray()).toEqual([0.75, 0.8, 0.7, 0.74]);
+  });
+
+  it('compiles the FXAA arm only where it is asked for and leaves the SMAA tiers alone', () => {
+    const renderer = {
+      autoClear: true,
+      outputColorSpace: THREE.SRGBColorSpace,
+      toneMapping: THREE.ACESFilmicToneMapping,
+      toneMappingExposure: 1,
+      autoClearColor: true,
+      autoClearDepth: true,
+      autoClearStencil: false,
+      setRenderTarget: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as THREE.WebGLRenderer;
+    const write = new THREE.WebGLRenderTarget(16, 8);
+    const read = new THREE.WebGLRenderTarget(64, 32);
+
+    const graded = new OutputGradePass({ value: 0 }, new THREE.Texture());
+    vi.spyOn(graded.fsQuad, 'render').mockImplementation(() => {});
+    graded.render(renderer, write, read);
+    expect(graded.fxaa).toBe(false);
+    expect(graded.material.defines).toEqual({
+      BLOOM_PREPARED: '',
+      SRGB_TRANSFER: '',
+      ACES_FILMIC_TONE_MAPPING: '',
+    });
+    // Nothing to drive, so the tiers that keep tail SMAA never pay the uniform
+    // write either.
+    expect(graded.uniforms.uInputTexelSize.value.toArray()).toEqual([0, 0]);
+
+    const antialiased = new OutputGradePass({ value: 0 }, null, { fxaa: true });
+    vi.spyOn(antialiased.fsQuad, 'render').mockImplementation(() => {});
+    antialiased.render(renderer, write, read);
+    expect(antialiased.fxaa).toBe(true);
+    expect(antialiased.material.defines).toEqual({
+      FXAA_GRADE: '',
+      SRGB_TRANSFER: '',
+      ACES_FILMIC_TONE_MAPPING: '',
+    });
+    // One texel of the READ target, which is what the rendered sub-rect is made
+    // of, so the taps stay a texel apart at every region scale.
+    expect(antialiased.uniforms.uInputTexelSize.value.toArray()).toEqual([1 / 64, 1 / 32]);
   });
 });

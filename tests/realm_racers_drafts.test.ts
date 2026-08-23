@@ -7,6 +7,7 @@
 // The second is that a broken drawing is refused BY NAME rather than seated and
 // discovered at speed, which is the failure the metrics core exists to prevent.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
@@ -295,12 +296,25 @@ describe('refusing a drawing the game cannot drive', () => {
         { x: -4800, z: 4800 },
       ],
     });
-    const started = Date.now();
     const registration = realmRacersRegisterDraftCircuit(devCtx(), absurd);
     expect(registration.lane).toBe(-1);
+    // Refused without measuring anything, proved by ORDER rather than by a
+    // stopwatch. The single code is the first half: the metrics core would have
+    // plenty to say about a 9600 yard box, so one code means it never ran. The
+    // source pin below is the second half, and it is what a clock could not
+    // give: a wall-time budget passes on a fast machine even when the cheap
+    // guard has drifted BELOW the expensive call, and reds on a loaded one when
+    // nothing is wrong. See the no-machine-calibrated-timers rule.
     expect(codesOf(registration)).toEqual(['control_points_out_of_bounds']);
-    // Refused without measuring anything: the guard is a bounding box walk.
-    expect(Date.now() - started).toBeLessThan(500);
+    const source = readFileSync(
+      new URL('../src/sim/realm_racers_drafts.ts', import.meta.url),
+      'utf8',
+    );
+    expect(source.indexOf('withinDraftableBounds(circuit)')).toBeGreaterThan(-1);
+    expect(source.indexOf('realmRacersCircuitMetrics(circuit)')).toBeGreaterThan(-1);
+    expect(source.indexOf('withinDraftableBounds(circuit)')).toBeLessThan(
+      source.indexOf('realmRacersCircuitMetrics(circuit)'),
+    );
   });
 
   it('lets a merely oversized drawing through to the REAL check, which names it', () => {

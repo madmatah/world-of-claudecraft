@@ -10,15 +10,30 @@ const moveInput = (forward: boolean): MoveInput => ({
   strafeLeft: false,
   strafeRight: false,
   jump: false,
+  dive: false,
+  surface: false,
 });
 
 describe('self motion frame buffer', () => {
   it('updates one stable frame object in place', () => {
     const buffer = new SelfMotionFrameBuffer();
     const firstMove = moveInput(true);
-    const first = buffer.write(true, firstMove, 1, 80, 4, 1_000, 0.5, 1 / 60, true, 9);
+    const first = buffer.write(true, firstMove, 1, 80, 4, 1_000, 0.5, 1 / 60, true, 9, 12, 50);
     const secondMove = moveInput(false);
-    const second = buffer.write(false, secondMove, 2, 120, 8, 1_050, 0.75, 1 / 30, false, 0);
+    const second = buffer.write(
+      false,
+      secondMove,
+      2,
+      120,
+      8,
+      1_050,
+      0.75,
+      1 / 30,
+      false,
+      0,
+      31,
+      52,
+    );
 
     expect(second).toBe(first);
     expect(second).toEqual({
@@ -32,6 +47,8 @@ describe('self motion frame buffer', () => {
       frameDt: 1 / 30,
       driveImpulse: false,
       popVelocity: 0,
+      snapAgeMs: 31,
+      snapIntervalMs: 52,
     });
     // The impulse flag and the pop are per-frame state, not latches: a frame
     // that does not carry a shove must clear the one that did, or the

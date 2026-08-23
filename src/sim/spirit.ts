@@ -15,6 +15,12 @@
 //      in place, at the cost of Resurrection Sickness (RES_SICKNESS_*). For corpses
 //      that are unreachable.
 //
+// Every one of those ways back to life runs through the shared reviveAt below, so
+// that is also where the owner's PET is handed back: the death dragged it down
+// with them (the handleDeath owner arm), and the resurrection undoes both. The
+// rules live in pet/pet_owner_revive.ts; releasing the spirit is not a
+// resurrection, so a released ghost's pet stays down until they actually stand up.
+//
 // Sitting beside that loop but NOT part of it: the two /unstuck outcomes
 // (moveToGraveyardForUnstuck / reviveAtGraveyardForUnstuck). Unstuck never kills and never
 // leaves a corpse; it moves the player to the nearest graveyard, raises them if they were
@@ -22,7 +28,9 @@
 //
 // `src/sim`-pure: no DOM/Three/render/ui/game/net imports, no Math.random/Date.now.
 
+import { BG_GRAVEYARDS } from './battleground_layout';
 import {
+  battlegroundOrigin,
   DELVES,
   dungeonAt,
   isDelvePos,
@@ -37,6 +45,7 @@ import {
 } from './data';
 import { createNpc, recalcPlayerStats } from './entity';
 import { releaseSpiritInDelve } from './entity_roster';
+import { restorePetOnOwnerRevive } from './pet/pet_owner_revive';
 import { cancelProfessionSessionOnDisplacement } from './professions/session_teardown';
 import {
   aurasSurvivingDeath,
@@ -50,6 +59,7 @@ import {
 } from './resurrection';
 import type { PlayerMeta } from './sim';
 import type { SimContext } from './sim_context';
+import type { BgMatch } from './social/battleground';
 import { dist2d, type Entity, emptyMoveInput, type Vec3 } from './types';
 
 // --- tuning -----------------------------------------------------------------
@@ -108,6 +118,12 @@ function ghostGraveyard(
   graveyards: readonly { x: number; z: number }[] = OVERWORLD_GRAVEYARDS,
   fallback: { x: number; z: number } = PLAYER_START,
 ): { x: number; z: number } {
+  // Thornhollow Fields keeps the classic release: the spirit rises in its own
+  // team's keep graveyard plot and waits there for the wave, never walking out
+  // to an overworld yard. Checked FIRST, so a live match outranks every band
+  // rule below it.
+  const bgMatch = ctx.bgMatches.get(p.id) ?? null;
+  if (bgMatch) return bgGraveyardSpot(bgMatch, p.id);
   const dungeon = dungeonAt(p.pos.x);
   if (dungeon) {
     return nearestOverworldGraveyard(dungeon.doorPos.x, dungeon.doorPos.z, graveyards, fallback);
@@ -150,7 +166,10 @@ export function releasePlayerSpirit(
   if (!r) return;
   const { meta, e: p } = r;
   if (!p.dead || p.ghost) return; // not dead, or already a spirit
-  if (ctx.arenaMatches.has(p.id)) return; // arena/fiesta run their own respawn
+  // Arena/fiesta run their own respawn, BUT a live Thornhollow Fields membership wins:
+  // a stale arenaMatches entry (jail/cross-queue leaks) once held this gate
+  // shut for a whole bg match, so the guard must never outrank the bg arm.
+  if (ctx.arenaMatches.has(p.id) && !ctx.bgMatches.has(p.id)) return;
   if (isDelvePos(p.pos.x)) {
     // Delves keep their own bounded respawn rules (see entity_roster), no ghost run.
     releaseSpiritInDelve(ctx, meta.entityId);
@@ -262,7 +281,12 @@ function releaseAtNearestGraveyard(
   // A ghost shows a full (greyed) bar even though it is still `dead`. recalc forces
   // hp to 0 while dead, so set the display pools afterward.
   p.hp = p.maxHp;
-  p.resource = p.resourceType === 'mana' ? p.maxResource : p.resourceType === 'energy' ? 100 : 0;
+  p.resource =
+    p.resourceType === 'mana'
+      ? p.maxResource
+      : p.resourceType === 'energy' || p.resourceType === 'focus'
+        ? 100
+        : 0;
   p.targetId = null;
   p.autoAttack = false;
   p.queuedOnSwing = null;
@@ -275,12 +299,26 @@ function releaseAtNearestGraveyard(
   // No event: the client transitions to the ghost UI from the snapshot's ghost flag.
 }
 
+// The waiting spot inside the team's graveyard plot: a small deterministic
+// grid keyed by roster index, mirrored between teams like the plot itself.
+export function bgGraveyardSpot(match: BgMatch, pid: number): { x: number; z: number } {
+  const team = match.teams[1].includes(pid) ? 1 : 0;
+  const origin = battlegroundOrigin(match.slot);
+  const plot = BG_GRAVEYARDS[team];
+  const idx = Math.max(0, match.teams[team].indexOf(pid));
+  const m = team === 0 ? 1 : -1;
+  const dx = ((idx % 2) * 6 - 3) * m;
+  const dz = (Math.floor(idx / 2) - 1) * 3 * m;
+  return { x: origin.x + plot.x + dx, z: origin.z + plot.z + dz };
+}
+
 // Resurrect at the corpse (no penalty) once the ghost is within range of its body.
 export function resurrectAtCorpse(ctx: SimContext, pid?: number): void {
   const r = ctx.resolve(pid);
   if (!r) return;
   const { meta, e: p } = r;
   if (!p.dead || !p.ghost || !p.corpsePos) return;
+  if (ctx.bgMatches.has(p.id)) return; // Thornhollow Fields revives on the wave only
   // Server-authoritative range gate; the client only offers the button in range.
   if (dist2d(p.pos, p.corpsePos) > CORPSE_REZ_RANGE) return;
   // Revive where the ghost is standing (it ran back to within range of the body), not
@@ -295,6 +333,7 @@ export function resurrectAtSpiritHealer(ctx: SimContext, pid?: number): boolean 
   if (!r) return false;
   const { meta, e: p } = r;
   if (!p.dead || !p.ghost) return false;
+  if (ctx.bgMatches.has(p.id)) return false; // Thornhollow Fields revives on the wave only
   if (!spiritHealerInRange(ctx, p)) return false;
   // The Spirit Healer always inflicts Resurrection Sickness and returns you at only
   // RES_HEALER_HP_FRACTION of your pools (the corpse run is the penalty-free choice).
@@ -385,6 +424,12 @@ function reviveAt(
   // fractions just set, so hp settles at RES_HP_FRACTION of the reduced max.
   if (sickness === 'resurrection') applyResurrectionSickness(ctx, p);
   else if (sickness === 'unstuck') applyUnstuckSickness(ctx, p);
+  // Last of all, and here rather than in each caller, because EVERY way back to
+  // life funnels through this one body: the pet the player's death took comes back
+  // with them. Placed after the body has been moved and its pools rebuilt, so the
+  // pet is put down beside where its owner actually stands and reads a finished
+  // owner. No-ops when the death took no pet.
+  restorePetOnOwnerRevive(ctx, p);
 }
 
 // Apply one of the two sicknesses, dropping the other first. Both are `buff_allstats_pct`

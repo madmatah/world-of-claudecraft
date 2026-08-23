@@ -280,8 +280,17 @@ export function rollLoot(
       continue;
     }
     if (!ctx.rng.chance(entry.chance)) continue;
-    if (entry.copper)
-      copper += ctx.rng.int(Math.ceil(entry.copper * 0.6), Math.ceil(entry.copper * 1.4));
+    if (entry.copper) {
+      // A heroic claim substitutes the raised finale money base (see
+      // LootEntry.heroicCopper): a VALUE swap on the same single int draw at
+      // THIS site, never an extra draw here. (Downstream, the fair-split
+      // remainder loop draws per leftover coin, so a different rolled total
+      // still changes ITS draw count; that was already true of any money
+      // value change.)
+      const moneyBase =
+        heroicClaim && entry.heroicCopper !== undefined ? entry.heroicCopper : entry.copper;
+      copper += ctx.rng.int(Math.ceil(moneyBase * 0.6), Math.ceil(moneyBase * 1.4));
+    }
     if (entry.itemId) items.push({ itemId: heroicItem(entry.itemId), count: 1 });
   }
   // Heroic-only drops: when the mob's claimed instance is heroic and it has a
@@ -410,7 +419,7 @@ function startNeedGreedRoll(ctx: SimContext, itemId: string, mob: Entity): boole
 // apply: disabled, below threshold, a solo looter, or no resolvable looter.
 function startMasterLootRoll(ctx: SimContext, itemId: string, mob: Entity): boolean {
   const strategies = partyLootStrategiesForMob(ctx, mob);
-  if (!strategies || !strategies.master.enabled) return false;
+  if (!strategies?.master.enabled) return false;
   const def = ITEMS[itemId];
   if (!meetsMasterThreshold(def?.quality, strategies.master.threshold)) return false;
   const candidates = partyLootCandidatesForMob(ctx, mob);
@@ -925,8 +934,9 @@ export function pruneCorpseLoot(ctx: SimContext, mob: Entity): void {
     // the fast arm.
     //
     // "A harvest half" is isHarvestableCorpse, not a tag COUNT (#2513): a corpse
-    // whose every family is unmapped (fen_troll: claw, tusk) owes nobody a
-    // harvest, because the command boundary now refuses one. Counting its tags
+    // whose every family is unmapped (none shipped since #2905 mapped claw and
+    // tusk; the fixtures retag one) owes nobody a harvest, because the command
+    // boundary now refuses one. Counting its tags
     // here would hold the grace window open for 30 seconds waiting on a claim
     // that can never be spent, which is strictly worse than the pre-#2513
     // world, where a player could at least burn the claim and collapse it.

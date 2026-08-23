@@ -10,9 +10,14 @@ import * as THREE from 'three';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { delveInteractableVisible } from './delve_interactable_visibility_core';
-import { STONE_DETAIL_NORMAL_SCALE, stoneDetailNormal } from './detail_normals';
+import {
+  prepareStoneDetailProfileAssets,
+  STONE_DETAIL_NORMAL_SCALE,
+  stoneDetailNormal,
+} from './detail_normals';
 import { buildDungeonPropMesh } from './dungeon';
 import { GFX, surfaceMat } from './gfx';
+import { markSharedGeometry, markSharedMaterial } from './shared_resource';
 
 // Small standalone GLB props (not part of the shared dungeon-kit pack): load
 // once, clone per placement, and normalize to a target height like the reward
@@ -33,9 +38,26 @@ type StandalonePropKey = keyof typeof STANDALONE_PROP_URL;
 const loadedStandaloneProp = new Map<StandalonePropKey, THREE.Group>();
 
 if (typeof window !== 'undefined') {
+  // stoneMat below keys its material on the shared stone detail normal, and a
+  // texture SLOT is a program-cache-key input: a mass built while it is still
+  // null carries normalMap absent and links a second variant nothing warmed.
+  // The prepare memoizes, so registering it in THIS module's preload costs one
+  // resolved promise and makes the dependency explicit where the key is formed.
+  registerDeferredPreload(() => prepareStoneDetailProfileAssets(GFX));
   for (const [key, url] of Object.entries(STANDALONE_PROP_URL) as [StandalonePropKey, string][]) {
     registerDeferredPreload(() =>
       loadGltf(url).then((gltf) => {
+        // Per-view clones share this cached original's geometry and materials
+        // by reference; tag both shared so the renderer's per-view disposal
+        // never frees them (untagged, the first delve prop leaving interest
+        // disposed the template's geometry out from under every later clone).
+        gltf.scene.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          markSharedGeometry(mesh.geometry);
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const m of mats) markSharedMaterial(m);
+        });
         loadedStandaloneProp.set(key, gltf.scene);
       }),
     );

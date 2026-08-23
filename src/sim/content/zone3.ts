@@ -14,8 +14,9 @@ import type {
   ZoneDef,
   ZonePropsDef,
 } from '../types';
-import { FERAL } from './items';
+import { FERAL, HUNTER_ONLY } from './items';
 import { MOUNT_RACE_COURSE, STABLE_HORSE_TEMPLATE_ID, STABLE_PADDOCK } from './mounts';
+import { FURY_STOCK } from './pvp_honor';
 
 export const ZONE3_ZONE: ZoneDef = {
   id: 'thornpeak_heights',
@@ -130,7 +131,7 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
       { copper: 60, chance: 1 },
       { itemId: 'ridge_stalker_pelt', chance: 0.6, questId: 'q_stalker_pelts' },
       { itemId: 'ridge_stalker_pelt', chance: 0.6, questId: 'q_stalker_cloaks' },
-      { itemId: 'wildgrove_cinch', chance: 0.1 },
+      { itemId: 'wildgrove_cinch', chance: 0.02 },
     ],
     scale: 0.95,
     color: 0x8c8270,
@@ -168,6 +169,10 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
       { itemId: 'cragmaw_prowlboots', chance: 0.3 },
       { itemId: 'cragward_pauldrons', chance: 0.25 },
       { itemId: 'cragthorn_greatstaff', chance: 0.2 },
+      { itemId: 'boneglass_shiv', chance: 0.2 },
+      // Independent roll like every other piece on this table, so the quiver
+      // costs the existing drops nothing.
+      { itemId: 'cragmaw_huntquiver', chance: 0.25 },
     ],
     scale: 1.3,
     color: 0x6e6453,
@@ -199,8 +204,8 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
       // Rare caster pieces at a grindable long-shot chance, the same pattern
       // as the sabatons above: mail for the shaman/paladin line, leather for
       // the druid line.
-      { itemId: 'peaksong_helm', chance: 0.04 },
-      { itemId: 'moonbark_vestments', chance: 0.04 },
+      { itemId: 'peaksong_helm', chance: 0.002 },
+      { itemId: 'moonbark_vestments', chance: 0.002 },
     ],
     scale: 0.85,
     color: 0x9c7a3c,
@@ -291,7 +296,7 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
     loot: [
       { copper: 75, chance: 1 },
       { itemId: 'ogre_toe_ring', chance: 0.35 },
-      { itemId: 'cragprowl_belt', chance: 0.1 },
+      { itemId: 'cragprowl_belt', chance: 0.02 },
     ],
     scale: 1.3,
     color: 0x9e7b53,
@@ -530,7 +535,7 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
       { copper: 90, chance: 1 },
       { itemId: 'wyrmcult_orders', chance: 0.1, questId: 'q_cult_orders' },
       { itemId: 'frayed_prayer_beads', chance: 0.35 },
-      { itemId: 'shardsong_mantle', chance: 0.04 },
+      { itemId: 'shardsong_mantle', chance: 0.002 },
     ],
     // The zealot's fevered chanting claws at a caster's mind, draining Intellect
     // and shrinking their mana pool for a while.
@@ -561,7 +566,7 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
       { copper: 100, chance: 1 },
       { itemId: 'ritual_phylactery', chance: 0.55, questId: 'q_necromancers' },
       { itemId: 'linen_scrap', chance: 0.3 },
-      { itemId: 'wyrmcult_spellgrips', chance: 0.04 },
+      { itemId: 'wyrmcult_spellgrips', chance: 0.002 },
     ],
     manaBurn: { chance: 0.3, amount: 80, name: 'Mana Sear', school: 'shadow' },
     // Spectral Ward: a shroud of dark wards that lashes back at any caster whose
@@ -627,7 +632,7 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
       // Marrowlord Varkas: a rare per-kill chance so the bonefields are a
       // farmable path to the legwraps, not just the once-per-respawn rare.
       { itemId: 'necromancers_legwraps', chance: 0.001 },
-      { itemId: 'thornpeak_wildwraps', chance: 0.04 },
+      { itemId: 'thornpeak_wildwraps', chance: 0.002 },
     ],
     scale: 1.05,
     color: 0xcacfd2,
@@ -1059,11 +1064,13 @@ export const ZONE3_MOBS: Record<string, MobTemplate> = {
     },
     enrage: { belowHpPct: 0.2, dmgMult: 1.5, hasteMult: 1.25 },
     // Personal loot table: rolled INDEPENDENTLY for every contributor (see
-    // rollWorldBossLoot). A guaranteed storm trophy, plus AT MOST ONE epic Tier-2 set
-    // piece. The glove group rolls first at ~32%; the belt group also rolls at ~32% but
-    // the one-gear cap keeps it only when the glove roll missed, so its EFFECTIVE drop
-    // rate is ~22% (0.68 x 0.32) and a single kill never hands out both a glove and a belt.
-    // Keep the glove entries first if this ordering skew is ever retuned.
+    // rollWorldBossLoot). A guaranteed storm trophy, plus AT MOST ONE epic Tier-2
+    // piece per contributor. The gear group (four gloves + the vestments chest)
+    // rolls first at 40% (5 x 0.08); the belt group also rolls at 32% (4 x 0.08)
+    // but the one-gear cap keeps it only when the first roll missed, so its
+    // EFFECTIVE drop rate is ~19% (0.60 x 0.32) and one contributor never
+    // receives two pieces from one kill. Keep the gear-group entries first if
+    // this ordering skew is ever retuned.
     loot: [
       { itemId: 'inert_storm_shard', chance: 1 },
       { itemId: 'crownforged_gauntlets', chance: 0.08, rollGroup: 'thunzharr_t2' },
@@ -1286,6 +1293,50 @@ export const ZONE3_NPCS: Record<string, NpcDef> = {
     heroicVendor: true,
     greeting:
       'Proof of the heroic depths buys the finest rings and pendants in Highwatch. Show me your marks.',
+  },
+  // The WARFARE quartermaster, standing in the Highwatch quartermaster row a few
+  // paces west of Quartermaster Vex. Every WARFARE piece requires level 20 and
+  // Highwatch is the level-18-to-20 hub, so the stock finally sits where its
+  // buyers are; FURY keeps the identical list in Eastbrook Vale as a mirror
+  // (ONE canonical stock, two placements, never a duplicated item table).
+  //
+  // `dynamic: true` plus the reserved entity id in src/sim/pvp/
+  // warfare_quartermaster.ts are BOTH required: the generic world-init loop
+  // allocates ids by iterating the merged NPC table in insertion order, and
+  // zone 3 NPCs are spread early, so a plain insertion would shift the id of
+  // every NPC, camp mob and object created after it and red every parity
+  // golden. The loop skips a dynamic def, and the Sim ctor spawns him
+  // explicitly through the rng-free findSafePos path instead.
+  //
+  // Being an honor vendor is emergent from the stock carrying priceHonor: the
+  // buy path, range gate, balance debit and gossip row are all generic over any
+  // non-empty vendorItems, so the PURCHASE path needs no flag and no new
+  // plumbing. The sectioned WARFARE shop WINDOW is the one thing that does: it
+  // gates on the NpcDef `warfareVendor` flag (isWarfareVendorNpc in
+  // src/ui/hud/vendor/warfare_vendor_view.ts), deliberately a flag rather than
+  // the hard-coded id the Heroic Quartermaster uses, so a third placement costs
+  // one line rather than a widened constant. FURY carries the same flag: the two
+  // sell the identical stock and must present identically.
+  warmarshal_draven_kole: {
+    id: 'warmarshal_draven_kole',
+    name: 'Warmarshal Draven Kole',
+    title: 'Master of the Warfare Stores',
+    // Inside the hub radius (Highwatch is centred on 0,660 with radius 20), five
+    // yards west-north-west of Vex and six from both Bree and the bursar, which
+    // is the four-to-six yard spacing the rest of the row already runs at. The
+    // authored point is clear of every solid collider (the physics sweep checks
+    // the AUTHORED point, not the safe-position-nudged one) and far enough from
+    // the apothecary station and the Thornpeak Cairns that no station prop or
+    // headstone is vetoed out of existence by his NPC spot.
+    pos: { x: -11, z: 669 },
+    facing: 2.26, // atan2(dx, dz) toward the square at (0, 660)
+    color: 0x7d2f3f, // deep war-crimson steel, off every tint the visual manifest reserves
+    questIds: [],
+    vendorItems: [...FURY_STOCK],
+    dynamic: true,
+    warfareVendor: true,
+    greeting:
+      'Honor is the only coin I take, and the Warfare stores are mine to guard. Earn your rank on the field and I will armor you for the next one.',
   },
   loremaster_caddis: {
     id: 'loremaster_caddis',
@@ -2268,6 +2319,37 @@ export const ZONE3_OBJECTS: GroundObjectDef[] = [
 // ---------------------------------------------------------------------------
 
 export const ZONE3_ITEMS: Record<string, ItemDef> = {
+  // Rogue dagger (Basin rare): fills the Lv17-19 pre-cap gap. A minor bleed
+  // proc so a leveling rogue gets a taste of an interesting dagger before cap.
+  boneglass_shiv: {
+    id: 'boneglass_shiv',
+    name: 'Boneglass Shiv',
+    kind: 'weapon',
+    slot: 'mainhand',
+    quality: 'rare',
+    weapon: { min: 17, max: 27, speed: 1.7, dagger: true },
+    stats: { agi: 7, sta: 3 },
+    sellValue: 3000,
+    requiredClass: ['rogue', 'hunter'],
+    weaponProcs: [
+      {
+        id: 'boneglass_cut',
+        name: 'Boneglass Cut',
+        trigger: 'weaponHit',
+        chance: 0.06,
+        effects: [
+          {
+            kind: 'dot',
+            name: 'Boneglass Cut',
+            school: 'physical',
+            perTick: 4,
+            interval: 2,
+            duration: 6,
+          },
+        ],
+      },
+    ],
+  },
   // --- quest items ---
   highwatch_summons: {
     id: 'highwatch_summons',
@@ -2477,6 +2559,21 @@ export const ZONE3_ITEMS: Record<string, ItemDef> = {
     quality: 'rare',
     stats: { armor: 44, agi: 5, sta: 3 },
     sellValue: 340,
+  },
+  cragmaw_huntquiver: {
+    id: 'cragmaw_huntquiver',
+    name: 'Cragmaw Huntquiver',
+    kind: 'held_offhand',
+    slot: 'offhand',
+    quality: 'rare',
+    // The quiver ladder's early-Thornpeak rung, off the same beast that already
+    // anchors the zone's agi-leather line (Huntcord above, Prowlboots): Old
+    // Cragmaw (level 14) -> item level 17, worn-offhand budget 4. Fills the long
+    // stretch between Mogger's uncommon (item level 7) and Korzul's rare (23).
+    occupiesHand: false,
+    stats: { agi: 3, sta: 1 },
+    sellValue: 240,
+    requiredClass: HUNTER_ONLY,
   },
   // --- Level-20 endgame loot: Korzul (5-player Gravewyrm Sanctum) and Nythraxis
   // (10-player raid). Every piece below is NORMALIZED to the stat budget its item
@@ -3409,6 +3506,42 @@ export const ZONE3_ITEMS: Record<string, ItemDef> = {
     // The caster weapon-proficiency group list (CASTER_WEAPON_CLASSES); kind
     // held_offhand equips by the literal requiredClass.
     requiredClass: ['mage', 'priest', 'warlock', 'shaman', 'paladin', 'druid'],
+  },
+  gravewyrm_bone_quiver: {
+    id: 'gravewyrm_bone_quiver',
+    name: 'Gravewyrm Bone Quiver',
+    kind: 'held_offhand',
+    slot: 'offhand',
+    quality: 'rare',
+    // Korzul the Gravewyrm (level 20) -> item level 23, stats on the exact worn
+    // budget, primaryStatBudget(23, rare, offhand, WORN_OFFHAND_STAT_MULT) = 6.
+    // The mid rung of the quiver ladder, between Mogger's uncommon and the raid
+    // epic; agi/sta is the hunter identity the nighttalon leather set carries.
+    occupiesHand: false,
+    stats: { agi: 4, sta: 2 },
+    sellValue: 360,
+    requiredClass: HUNTER_ONLY,
+  },
+  direfang_quiver: {
+    id: 'direfang_quiver',
+    name: 'Direfang Quiver',
+    kind: 'held_offhand',
+    slot: 'offhand',
+    quality: 'epic',
+    // The hunter counterpart to wraithfire_orb, off the same raid boss, but on
+    // the WORN line rather than the orb's held one: the orb costs you the
+    // two-hander and this does not, so it prices at
+    // primaryStatBudget(29, epic, offhand, WORN_OFFHAND_STAT_MULT) = 9 against
+    // the orb's 15. Setless, despite sharing the Direfang display name with the
+    // nighttalon set pieces, so it cannot shift that set's bonus thresholds.
+    occupiesHand: false,
+    stats: { agi: 5, sta: 4 },
+    // Physical ranged DPS identity: Hit, matching the nighttalon leather set
+    // (attacks miss, so Hit is the throughput rating); never crit-first like the
+    // caster orb, whose heals are not resisted.
+    hitRating: 20,
+    sellValue: 12000,
+    requiredClass: HUNTER_ONLY,
   },
   // --- vendor food & drink (Quartermaster Bree) ---
   trail_hardtack: {

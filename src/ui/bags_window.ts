@@ -21,8 +21,10 @@ import { audio } from '../game/audio';
 import { BACKPACK_SLOTS, bagSlotsOf } from '../sim/bags';
 import { ITEMS, QUESTS } from '../sim/data';
 import { FIREBOTTLE_COOLDOWN_SECS, FIREBOTTLE_ITEM_ID } from '../sim/interactions/firebottle_hut';
+import { isItemLocked } from '../sim/item_lock';
 import type { EquipSlot, InvSlot, ItemDef, ItemInstancePayload } from '../sim/types';
 import type { IWorld } from '../world_api';
+import { bagCornerMark, bagRimClasses } from './bag_corner_mark_view';
 import {
   BAG_CATEGORIES,
   BAG_SORTS,
@@ -35,7 +37,8 @@ import {
   parseBagFilter,
   serializeBagFilter,
 } from './bag_filter';
-import { type BagInstanceGlyphKind, bagInstanceGlyphKind } from './bag_instance_glyph_view';
+import { bagFineMark } from './bag_fine_mark_view';
+import { bagInstanceGlyphKind } from './bag_instance_glyph_view';
 import { bagItemHasContextActions } from './bag_item_context_menu';
 import { bagQuestMarkKind, bagQuestMarkProgressFromLog } from './bag_quest_mark_view';
 import { BagQuestTrackerHighlight } from './bag_quest_tracker_highlight';
@@ -48,6 +51,7 @@ import {
   bagNoMatchKind,
   bagQualityKey,
   bagShiftLinks,
+  bagSortSignature,
   bagStackIndex,
   bagsMoneyRowStale,
   bagTooltipHintKey,
@@ -59,6 +63,7 @@ import {
   resolveDepositSubmit,
 } from './bags_view';
 import { showQuantityPrompt } from './bank_quantity_prompt';
+import { markDialogRoot } from './dialog_root';
 import { itemDisplayName } from './entity_i18n';
 import { isPaperdollDraggable } from './equip_drop_core';
 import { esc } from './esc';
@@ -68,21 +73,34 @@ import { formatNumber, type TranslationKey, t } from './i18n';
 import { iconDataUrl, QUALITY_COLOR } from './icons';
 import type { BagItemDrag, ItemDragState } from './item_drag_state';
 import { resolveDropTargetAt } from './item_drop_hit_test';
+import {
+  cornerMarkHtml,
+  INSTANCE_GLYPH_ARIA_KEYS,
+  instanceGlyphMarkHtml,
+  lockMarkHtml,
+  UNKNOWN_INSTANCE_GLYPH_ARIA_KEYS,
+} from './item_instance_glyph_mark';
 import { knownItemDef } from './known_item';
 import type { PainterHostPresentation } from './painter_host';
-import { MASTERWORK_SEAL_IMAGE_URL } from './profession_art';
 import {
   installPromptDialog as installModalPromptDialog,
   type PromptDialogHandle,
 } from './prompt_dialog';
 import { tSim } from './sim_i18n';
 import { bindTouchItemDrag } from './touch_item_drag';
-import { svgIcon, type UiIconName } from './ui_icons';
+import { svgIcon } from './ui_icons';
 import { unknownItemIconHtml } from './unknown_item_icon';
 import { totalHeldCount } from './vendor_sell_quantity';
 import { dropOnWorld } from './world_drop_target';
 
 const BAG_FILTER_KEY = 'woc_bag_filter';
+
+// Sort settle ripple: how long an armed settle waits for the tidied grid to
+// arrive before giving up (the bank deposit status timeout-backstop pattern:
+// a no-op sort on an already-tidy bag must not stay armed forever), and the
+// per-cell stagger cap that keeps a full 72-cell bag inside half a second.
+const SORT_SETTLE_MS = 3000;
+const SORT_SETTLE_STAGGER_CAP = 20;
 
 // The ad-hoc discard / sell / bank-deposit quantity prompts mount into #prompt-stack
 // (outside #bags). A window-level close() removes any that are open so it never leaves
@@ -101,43 +119,15 @@ export function dismissBagPrompts(): void {
 // item with no quality field, so no raw hex lives in the painter.
 const QUALITY_DEFAULT_COLOR = 'var(--color-quality-default)';
 
-// The procedural chrome glyph each per-copy corner kind paints
-// (bag_instance_glyph_view.ts decides WHICH kind; this maps it to art). The
-// masterwork kind is absent on purpose: it keeps its authored seal IMAGE, and
-// the generic kind keeps the pre-existing CSS wedge. No binary asset is added.
-const BAG_GLYPH_ICONS: Readonly<Record<'enchanted' | 'signed' | 'bound', UiIconName>> = {
-  enchanted: 'enchant-rune',
-  signed: 'makers-mark',
-  bound: 'bond-link',
-};
-
-// The accessible name each corner kind gives its CELL. The glyph is aria-hidden,
-// so this is the ONLY channel carrying the per-copy fact to assistive tech: the
-// three visual kinds must not collapse back into one label. 'signed' and the
-// unclassified 'generic' both keep the pre-existing maker-marked wording, which
-// is accurate for a signer payload and is the status quo for the rest.
-// Quest stacks use itemAriaQuest instead (purpose class outranks copy flags for
+// Per-copy aria keys and corner-mark HTML live in item_instance_glyph_mark.ts
+// so bags, bank, and guild bank paint the same masterwork seal / glyphs. Quest
+// stacks still use itemAriaQuest here (purpose class outranks copy flags for
 // the spoken name; the rim/wash always marks them as quest for sighted players).
-const BAG_GLYPH_ARIA_KEYS: Readonly<Record<NonNullable<BagInstanceGlyphKind>, TranslationKey>> = {
-  masterwork: 'hudChrome.bags.itemAriaMasterwork',
-  enchanted: 'hudChrome.bags.itemAriaEnchanted',
-  signed: 'hudChrome.bags.itemAriaInstanced',
-  bound: 'hudChrome.bags.itemAriaBound',
-  generic: 'hudChrome.bags.itemAriaInstanced',
-};
-
-// The unknown-cell siblings (stale-client guard): the SAME kind map, but
-// every sentence keeps the UNKNOWN signal beside the per-copy flag, because
-// for an unknown stack the tooltip is the only other channel and it is
-// mouse-only. One key per kind, whole sentences, never composed at runtime.
-const UNKNOWN_GLYPH_ARIA_KEYS: Readonly<Record<NonNullable<BagInstanceGlyphKind>, TranslationKey>> =
-  {
-    masterwork: 'itemUi.bags.unknownItemAriaMasterwork',
-    enchanted: 'itemUi.bags.unknownItemAriaEnchanted',
-    signed: 'itemUi.bags.unknownItemAriaInstanced',
-    bound: 'itemUi.bags.unknownItemAriaBound',
-    generic: 'itemUi.bags.unknownItemAriaInstanced',
-  };
+// Fine-grade stacks deliberately have NO dedicated aria key: every fine id's
+// item NAME already carries the grade word in every locale (Fine Copper Ore),
+// so a grade arm would announce it twice while costing an instanced fine copy
+// its per-copy flag (bound is the flag a player checks before trading). The
+// rim/wash/seal are salience for sighted scanning, not new information.
 
 const BAG_CATEGORY_LABEL_KEYS: Record<BagCategory, TranslationKey> = {
   all: 'hudChrome.bags.filterAll',
@@ -251,7 +241,7 @@ export interface BagsWindowDeps extends PainterHostPresentation {
   /** Equip a touch-dragged stack into the socket it was released on. The character
    *  window owns the paperdoll drop (and its refusals); this is the touch arm's way
    *  in, since a finger release has no drop event to land on that window. */
-  dropOnEquipSlot(itemId: string, slot: EquipSlot): void;
+  dropOnEquipSlot(itemId: string, slot: EquipSlot, target?: { slotIndex: number }): void;
   /** Place a touch-dragged stack on a hotbar seat (the desktop drop's item
    *  branch, reached by finger): `slot` is the 1-based bar slot a desktop
    *  row button stamps. The HUD owns eligibility (isHotbarItemId) and the
@@ -272,6 +262,7 @@ export interface BagsWindowDeps extends PainterHostPresentation {
     x: number,
     y: number,
     runDefault: () => void,
+    instance?: ItemInstancePayload,
   ): void;
 }
 
@@ -306,7 +297,28 @@ export class BagsWindow {
   // a stale class never sticks after the cell is torn down.
   private readonly trackerHighlight = new BagQuestTrackerHighlight(document);
 
+  // One-shot sort settle animation. Armed by the sort button; the NEXT grid
+  // paint whose INVENTORY signature (bagSortSignature: id, count, cell hint)
+  // differs from the PRESS-TIME baseline plays the CSS settle ripple and
+  // disarms. Keyed on the inventory rather than the painted grid because the
+  // press both resets an active filter (a shape switch that is not a sort
+  // effect) and, online, repaints the still-unsorted mirror first: the tidied
+  // inventory only lands with the heavy self snapshot. Comparing against the
+  // baseline (not the previous paint) keeps intermediate paints, or a close
+  // and reopen inside the window, from shifting what "changed" means. A
+  // timestamp backstop (SORT_SETTLE_MS) keeps a no-op sort (already tidy)
+  // from arming forever.
+  private sortSettleArmedAt = 0;
+  private lastSortBaseline = '';
+
   constructor(private readonly deps: BagsWindowDeps) {}
+
+  private armSortSettle(): void {
+    this.sortSettleArmedAt = performance.now();
+    // Captured BEFORE the sort command runs (offline the sim mutates
+    // synchronously on the same call stack as the click handler).
+    this.lastSortBaseline = bagSortSignature(this.deps.world().inventory);
+  }
 
   /**
    * Repaint the money row when the purse moved, the staleness contract this window
@@ -412,6 +424,12 @@ export class BagsWindow {
     // rebuild, so capture its scroll offset and reapply it to the fresh grid:
     // otherwise using an item (e.g. a potion) snaps the list back to the top.
     const prevScrollTop = el.querySelector('.bag-grid')?.scrollTop ?? 0;
+    // Bags is a non-modal companion window (vendor / trade / market can be open
+    // alongside it), so it gets the accessible name and role=dialog like every
+    // other window in the family, but NO focus trap: markDialogRoot never installs
+    // one on its own (that is a separate opt-in, see prompt_dialog.ts for the modal
+    // recipe this window's own prompts use).
+    markDialogRoot(el, { label: t('itemUi.bags.title') });
     el.innerHTML = `<div class="panel-title"><span>${esc(t('itemUi.bags.title'))}</span><button type="button" class="x-btn" data-close data-focus-key="close" aria-label="${esc(t('itemUi.bags.close'))}">${svgIcon('close')}</button></div>`;
     el.appendChild(this.buildBagBar());
     // Skip the chip/search row entirely when the bag is empty: a full filter bar
@@ -659,8 +677,65 @@ export class BagsWindow {
     });
     tools.appendChild(sort);
 
+    // The one-shot clean-up button (world.sortInventory): unlike the view-only
+    // dropdown beside it, this rearranges the REAL cells (server-side online,
+    // so both hosts land the identical grid). Pressing it also resets any
+    // active filter/search/view back to the pristine cells: the whole point of
+    // the press is seeing the tidied bag, and a derived list would hide it.
+    const sortBtn = document.createElement('button');
+    sortBtn.type = 'button';
+    sortBtn.className = 'bag-sort-btn';
+    sortBtn.dataset.focusKey = 'bag-sort-btn';
+    sortBtn.innerHTML = `${svgIcon('sort')}<span>${esc(t('hudChrome.bags.sortButton'))}</span>`;
+    sortBtn.setAttribute('aria-label', t('hudChrome.bags.sortButtonAria'));
+    this.deps.attachTooltip(
+      sortBtn,
+      () => `<div class="tt-sub">${esc(t('hudChrome.bags.sortButtonHint'))}</div>`,
+    );
+    sortBtn.addEventListener('click', () => {
+      audio.cardShuffle();
+      this.armSortSettle();
+      this.deps.world().sortInventory();
+      // In-memory only, deliberately NOT persisted: the press shows the
+      // tidied cells NOW, but the player's saved category/sort/search
+      // preference (woc_bag_filter) survives into the next session.
+      this.filter = { ...DEFAULT_BAG_FILTER };
+      this.render();
+    });
+    tools.appendChild(sortBtn);
+
     bar.appendChild(tools);
     return bar;
+  }
+
+  // Whether an armed sort settle should play on THIS paint: only while the
+  // arming is fresh (the backstop clears a no-op sort) and only once the
+  // inventory actually differs from its press-time state (online, the tidied
+  // inventory arrives with the heavy self snapshot, not the press's own
+  // repaint; the press's filter reset alone must never fire it).
+  private consumeSortSettle(signature: string): boolean {
+    if (this.sortSettleArmedAt === 0) return false;
+    if (performance.now() - this.sortSettleArmedAt >= SORT_SETTLE_MS) {
+      this.sortSettleArmedAt = 0;
+      return false;
+    }
+    if (signature === this.lastSortBaseline) return false;
+    this.sortSettleArmedAt = 0;
+    return true;
+  }
+
+  // The CSS-only settle ripple: a class on the grid plus a per-cell stagger
+  // index. No JS driver and no layout read (the cold-window contract); the
+  // stagger caps so a full 72-cell bag still settles inside half a second,
+  // and reduced-motion turns the whole thing off in the stylesheet.
+  private applySortSettle(grid: HTMLElement): void {
+    grid.classList.add('bag-grid-settle');
+    for (let i = 0; i < grid.children.length; i++) {
+      (grid.children[i] as HTMLElement).style.setProperty(
+        '--settle-i',
+        String(Math.min(i, SORT_SETTLE_STAGGER_CAP)),
+      );
+    }
   }
 
   // Populate (or repopulate) the .bag-grid scroll container from the current filter
@@ -674,6 +749,10 @@ export class BagsWindow {
       this.filter,
       world.bagCapacity,
     );
+    // Settle bookkeeping rides every paint: the class never persists across a
+    // repaint (each replay would re-run the animation on the fresh nodes).
+    grid.classList.remove('bag-grid-settle');
+    const settle = this.consumeSortSettle(bagSortSignature(world.inventory));
     if (model.state === 'empty') {
       grid.innerHTML = `<div class="bag-empty">${esc(t('itemUi.bags.empty'))}</div>`;
       return;
@@ -711,6 +790,7 @@ export class BagsWindow {
               : this.buildEmptyCell(cell),
         );
       }
+      if (settle) this.applySortSettle(grid);
       return;
     }
     // Derived list: soft Quest section headers only when buildBagListRows allows
@@ -734,6 +814,7 @@ export class BagsWindow {
       }
     }
     for (let i = 0; i < model.emptyCells; i++) grid.appendChild(this.buildEmptyCell(null));
+    if (settle) this.applySortSettle(grid);
   }
 
   // Soft parchment section caption for a derived bag list (Quest grouping). Not a
@@ -761,9 +842,14 @@ export class BagsWindow {
       // Quest-purpose mark (bag_quest_mark_view.ts): kind===quest gets the
       // .bag-quest rim/wash class; questReady adds .bag-quest-ready for the
       // brighter seal. Purpose class, not a quality tier.
+      // Fine-grade mark (bag_fine_mark_view.ts): fine_* materials get .bag-fine
+      // rim/wash + seal so they never read as plain white reagents. Grade class,
+      // not a quality tier; distinct lineage from quest gold. Purpose outranks
+      // grade: bagRimClasses never emits both rim classes at once.
       const questMark = bagQuestMarkKind(item, this.questMarkProgress(item));
       const questReady = questMark === 'questReady';
-      row.className = `bag-item q-${bagQualityKey(item)}${questMark ? ' bag-quest' : ''}${questReady ? ' bag-quest-ready' : ''}`;
+      const fineMark = bagFineMark(item.id);
+      row.className = `bag-item q-${bagQualityKey(item)}${bagRimClasses(questMark, fineMark)}`;
       // The stack's live inventory INDEX, resolved by REFERENCE (duplicate stacks and
       // instanced copies share an itemId): that is what the move command sends as `from`.
       const index = bagStackIndex(world.inventory, s);
@@ -781,21 +867,29 @@ export class BagsWindow {
       this.bindBagCellDrop(row, cell);
       const qColor = QUALITY_COLOR[bagQualityKey(item)] ?? QUALITY_DEFAULT_COLOR;
       const itemName = itemDisplayName(item);
-      // Corner-glyph priority (composed from bag_instance_glyph_view +
-      // bag_quest_mark_view): masterwork > quest seal > enchanted / signed /
-      // bound > generic wedge. Rim/wash for quest is independent of the seal.
+      // Corner-glyph priority (bag_corner_mark_view.ts, composed from
+      // bag_instance_glyph_view + bag_quest_mark_view + bag_fine_mark_view):
+      // masterwork > quest seal > fine seal > enchanted / signed / bound >
+      // generic wedge. The fine rim/wash is independent of which seal wins the
+      // corner (a masterwork fine stack keeps its rim).
       const glyphKind = bagInstanceGlyphKind(s.instance);
-      const isMasterwork = glyphKind === 'masterwork';
-      const showQuestSeal = questMark !== null && !isMasterwork;
+      const cornerMark = bagCornerMark(glyphKind, questMark, fineMark);
+      const locked = isItemLocked(s.instance);
       row.style.setProperty('--bag-slot-quality', qColor);
-      // Accessible name: quest stacks always announce quest item (the seal is
-      // aria-hidden). Non-quest instanced stacks keep their per-copy flag.
-      // Plain stacks keep the plain label.
-      const itemAriaKey = questMark
-        ? 'hudChrome.bags.itemAriaQuest'
-        : glyphKind
-          ? BAG_GLYPH_ARIA_KEYS[glyphKind]
-          : 'itemUi.bags.itemAria';
+      // Accessible name: the player item lock (issue 3042) outranks every
+      // other announcement, since "this copy is protected" is the single most
+      // actionable fact about a locked slot. Otherwise quest stacks always
+      // announce quest item (the seal is aria-hidden); instanced stacks keep
+      // their per-copy flag; plain stacks, fine included, keep the plain
+      // label (a fine id's NAME already carries the grade word, see the
+      // fine-grade aria note above the category map).
+      const itemAriaKey = locked
+        ? 'hudChrome.bags.itemAriaLocked'
+        : questMark
+          ? 'hudChrome.bags.itemAriaQuest'
+          : glyphKind
+            ? INSTANCE_GLYPH_ARIA_KEYS[glyphKind]
+            : 'itemUi.bags.itemAria';
       row.setAttribute(
         'aria-label',
         t(itemAriaKey, {
@@ -803,26 +897,18 @@ export class BagsWindow {
           count: formatNumber(s.count, { maximumFractionDigits: 0 }),
         }),
       );
-      // Exactly one corner treatment ever renders: masterwork seal, quest seal,
-      // or an instance glyph/tab. Composes with the bottom-right count badge,
-      // always visible without hover on desktop and touch, identical on every
-      // graphics preset (no --fx gate). Ready seals share the seal markup and
-      // brighten via .bi-quest-seal-ready (static; optional pulse is CSS-only).
-      const masterworkSeal = isMasterwork
-        ? `<img class="bi-masterwork-seal" src="${MASTERWORK_SEAL_IMAGE_URL}" alt="" aria-hidden="true" draggable="false">`
-        : '';
-      const questSeal = showQuestSeal
-        ? `<span class="bi-quest-seal${questReady ? ' bi-quest-seal-ready' : ''}" aria-hidden="true">${svgIcon('questlog')}</span>`
-        : '';
-      const instanceMark =
-        !isMasterwork && !showQuestSeal
-          ? glyphKind === 'generic'
-            ? '<span class="bi-instance" aria-hidden="true"></span>'
-            : glyphKind === 'enchanted' || glyphKind === 'signed' || glyphKind === 'bound'
-              ? `<span class="bi-glyph bi-glyph-${glyphKind}" aria-hidden="true">${svgIcon(BAG_GLYPH_ICONS[glyphKind])}</span>`
-              : ''
-          : '';
-      row.innerHTML = `${this.deps.itemIcon(item)}${instanceMark}${masterworkSeal}${questSeal}<span class="bi-count">${s.count > 1 ? esc(t('itemUi.bags.stackCount', { count: formatNumber(s.count, { maximumFractionDigits: 0 }) })) : ''}</span>`;
+      // Exactly one corner treatment ever renders (cornerMark is a single
+      // discriminant): masterwork seal, quest seal, fine seal, or an instance
+      // glyph/tab, all minted through the shared cornerMarkHtml dispatch
+      // (item_instance_glyph_mark.ts) so bank/guild-bank cells paint the same
+      // art and no painter re-derives the corner from the raw glyph kind.
+      // Composes with the bottom-right count badge, always visible without
+      // hover on desktop and touch, identical on every graphics preset (no
+      // --fx gate). Ready seals share the seal markup and brighten via
+      // .bi-quest-seal-ready (static; optional pulse is CSS-only).
+      const cornerSeal = cornerMarkHtml(cornerMark, { questReady });
+      const lockSeal = lockMarkHtml(locked);
+      row.innerHTML = `${this.deps.itemIcon(item)}${cornerSeal}${lockSeal}<span class="bi-count">${s.count > 1 ? esc(t('itemUi.bags.stackCount', { count: formatNumber(s.count, { maximumFractionDigits: 0 }) })) : ''}</span>`;
       // A firebottle mid-throw-cooldown paints a draining curtain on its slot so the
       // 5s throw pacing is visible in the bag. The bag is a cold window with no
       // per-frame driver, so the sweep is a self-contained CSS animation seeded from
@@ -872,12 +958,14 @@ export class BagsWindow {
           this.deps.insertItemChatLink(s.itemId);
           return;
         }
-        // Touch has no right-click, so a tap on an item with an action
-        // (Disenchant / Salvage / Apply Enchant) opens the action menu instead of
+        // Touch has no right-click, so a tap opens the action menu instead of
         // running the classic action directly; the menu's first row is that
-        // classic action, so nothing is lost. A plain item taps straight through,
-        // byte-identical to today. Long-press still peeks (handled above).
-        if (this.deps.isTouchHud() && this.itemMenuAvailable(item, s.itemId)) {
+        // classic action, so nothing is lost. Since the player item lock
+        // (issue 3042) added Lock/Unlock to every item's menu, this is now
+        // ALWAYS available (previously only for Disenchant / Salvage / Apply
+        // Enchant items; a plain item tapped straight through). Long-press
+        // still peeks (handled above).
+        if (this.deps.isTouchHud() && this.itemMenuAvailable(item, s.itemId, s.instance)) {
           this.openItemMenuFor(item, s, ev);
           return;
         }
@@ -907,12 +995,12 @@ export class BagsWindow {
           return;
         }
         ev.preventDefault();
-        // An item with an action (Disenchant / Salvage / Apply Enchant)
-        // opens the action menu, whose FIRST row is the classic left-click action
-        // so that binding survives. Every other item keeps today's behavior
-        // byte-identical: right-click runs the SAME action as left-click (use /
-        // equip), never a destroy (destroying is the drag-out-to-world gesture).
-        if (this.itemMenuAvailable(item, s.itemId)) {
+        // The action menu opens, whose FIRST row is the classic left-click
+        // action so that binding survives (right-click never destroys;
+        // destroying is the drag-out-to-world gesture). Every item now offers
+        // at least Lock/Unlock (issue 3042), so this always opens the menu;
+        // left-click is unchanged (still runs the classic action instantly).
+        if (this.itemMenuAvailable(item, s.itemId, s.instance)) {
           this.openItemMenuFor(item, s, ev);
           return;
         }
@@ -985,8 +1073,15 @@ export class BagsWindow {
           // The paperdoll drop belongs to the character window (it owns the sockets
           // and the equip refusals); the world drop belongs here, where the destroy
           // prompt lives. Releasing anywhere else is a plain cancel.
-          if (target.kind === 'equip') this.deps.dropOnEquipSlot(s.itemId, target.slot);
-          else if (target.kind === 'bagCell')
+          if (target.kind === 'equip') {
+            // `index` above is bagStackIndex over the live inventory, so it names
+            // the exact stack this drag started from.
+            this.deps.dropOnEquipSlot(
+              s.itemId,
+              target.slot,
+              index >= 0 ? { slotIndex: index } : undefined,
+            );
+          } else if (target.kind === 'bagCell')
             this.dropOnBagCell(index >= 0 ? index : null, target.index);
           else if (target.kind === 'actionSlot') this.deps.dropOnActionSlot(s.itemId, target.slot);
           else if (target.kind === 'actionRingSlot')
@@ -1081,7 +1176,7 @@ export class BagsWindow {
           // signal and the per-copy flag (bound is the one a player checks
           // before trading). The per-kind unknown keys keep the pair as one
           // localizable sentence.
-          t(UNKNOWN_GLYPH_ARIA_KEYS[glyphKind], {
+          t(UNKNOWN_INSTANCE_GLYPH_ARIA_KEYS[glyphKind], {
             id: s.itemId,
             count: formatNumber(s.count, { maximumFractionDigits: 0 }),
           })
@@ -1092,14 +1187,12 @@ export class BagsWindow {
     );
     if (cell !== null) row.dataset.bagIndex = String(cell);
     this.bindBagCellDrop(row, cell);
-    const instanceMark =
-      glyphKind === 'generic'
-        ? '<span class="bi-instance" aria-hidden="true"></span>'
-        : glyphKind === 'enchanted' || glyphKind === 'signed' || glyphKind === 'bound'
-          ? `<span class="bi-glyph bi-glyph-${glyphKind}" aria-hidden="true">${svgIcon(BAG_GLYPH_ICONS[glyphKind])}</span>`
-          : glyphKind === 'masterwork'
-            ? `<img class="bi-masterwork-seal" src="${MASTERWORK_SEAL_IMAGE_URL}" alt="" aria-hidden="true" draggable="false">`
-            : '';
+    // Deliberately no quest or fine mark here: both need the item DEF (quest
+    // kind) or a MATERIAL_GRADES row the client shipped WITH its ITEMS row, so
+    // an unknown-def stack can never honestly claim either. The per-copy
+    // marks are def-free (instance payload only) and do apply, minted through
+    // the shared item_instance_glyph_mark helper.
+    const instanceMark = instanceGlyphMarkHtml(glyphKind);
     row.innerHTML = `${unknownItemIconHtml(s.itemId)}${instanceMark}<span class="bi-count">${s.count > 1 ? esc(t('itemUi.bags.stackCount', { count: formatNumber(s.count, { maximumFractionDigits: 0 }) })) : ''}</span>`;
     if (canDeposit) {
       row.addEventListener('click', (ev) => {
@@ -1403,7 +1496,7 @@ export class BagsWindow {
         this.deps.showError(t('hud.pet.petEatsFoodOnly'));
         return;
       case 'petFeed':
-        this.deps.world().feedPet(s.itemId);
+        this.deps.world().feedPet(s.itemId, this.copyRefFor(s));
         this.deps.setPendingPetFeed(false);
         this.deps.resetPetBarSig();
         this.render();
@@ -1412,7 +1505,7 @@ export class BagsWindow {
         this.showDiscardItemPrompt(s.itemId, Math.max(1, Math.floor(s.count)));
         break;
       case 'equipBag':
-        this.deps.world().equipBag(s.itemId);
+        this.deps.world().equipBag(s.itemId, undefined, this.copyRefFor(s));
         this.deps.hideTooltip();
         this.render();
         break;
@@ -1420,7 +1513,9 @@ export class BagsWindow {
         // Gathering tools (#2343) route through the interact-style handler
         // (nearest matching node + autorun stop) when main.ts has wired it;
         // everything else, and any unwired host, keeps the plain useItem.
-        if (!item || !this.deps.useGatherTool(item)) this.deps.world().useItem(s.itemId);
+        if (!item || !this.deps.useGatherTool(item)) {
+          this.deps.world().useItem(s.itemId, this.copyRefFor(s));
+        }
         this.render();
         this.deps.renderCharIfOpen();
         break;
@@ -1542,7 +1637,11 @@ export class BagsWindow {
   // The bank arm reads bankOpen for the same reason bagDestroyAction does: a
   // bank view with no deposit target is still the bank owning the slot, and the
   // menu's rows are the very use / equip / destroy actions this surface refuses.
-  private itemMenuAvailable(item: ItemDef, itemId: string): boolean {
+  private itemMenuAvailable(
+    item: ItemDef,
+    itemId: string,
+    instance?: ItemInstancePayload,
+  ): boolean {
     const mode = this.bagMode();
     const inDefaultMode =
       !mode.tradeOpen &&
@@ -1553,7 +1652,7 @@ export class BagsWindow {
       !mode.bankDeposit &&
       !mode.guildBankDeposit &&
       !mode.petFeed;
-    return inDefaultMode && bagItemHasContextActions(item, itemId);
+    return inDefaultMode && bagItemHasContextActions(item, itemId, instance);
   }
 
   // Open the action menu at the event's viewport point (falling back to the row
@@ -1565,7 +1664,27 @@ export class BagsWindow {
     const x = ev.clientX || rect?.left || 0;
     const y = ev.clientY || rect?.top || 0;
     const index = bagStackIndex(this.deps.world().inventory, s);
-    this.deps.openItemActionMenu(item, s.itemId, index, x, y, () => this.runBagAction(item, s, ev));
+    this.deps.openItemActionMenu(
+      item,
+      s.itemId,
+      index,
+      x,
+      y,
+      () => this.runBagAction(item, s, ev),
+      s.instance,
+    );
+  }
+
+  /** The copy selection for a clicked stack, or undefined when the stack is no
+   *  longer in the live inventory.
+   *
+   *  bagStackIndex is indexOf, so a stale click yields -1. Sending -1 would be
+   *  REFUSED by the sim (the leaf rejects any out-of-range index by design), which
+   *  turns a stale click into a silent no-op. Falling back to no-selection keeps
+   *  the pre-feature behavior for exactly the case where we cannot name the copy. */
+  private copyRefFor(slot: InvSlot): { slotIndex: number } | undefined {
+    const index = bagStackIndex(this.deps.world().inventory, slot);
+    return index >= 0 ? { slotIndex: index } : undefined;
   }
 
   private sellBagItem(slot: InvSlot, ev: MouseEvent): void {
@@ -1579,7 +1698,7 @@ export class BagsWindow {
       const heldTotal = Math.max(count, totalHeldCount(this.deps.world().inventory, slot.itemId));
       this.showSellQuantityPrompt(slot.itemId, heldTotal);
     } else {
-      this.deps.world().sellItem(slot.itemId);
+      this.deps.world().sellItem(slot.itemId, undefined, this.copyRefFor(slot));
     }
   }
 

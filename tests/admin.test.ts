@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the db layers so no Postgres is needed; the router logic is under test.
 vi.mock('../server/db', () => ({
+  DATABASE_URL: 'postgres://test:test@127.0.0.1:1/test',
   pool: { query: vi.fn(async () => ({ rows: [] })) },
   findAccount: vi.fn(),
   touchLogin: vi.fn(),
@@ -101,8 +102,11 @@ import {
   configureAdminPlayersCap,
   handleAdminApi,
   parsePageParams,
+  resetAdminGeneralChatRateLimitDepsForTests,
   resetAdminPlayersCapForTests,
+  setAdminGeneralChatRateLimitDepsForTests,
 } from '../server/admin';
+import { resetAdminActivityCacheForTests } from '../server/admin_activity_cache';
 import {
   accountDetail,
   associationsForIp,
@@ -160,6 +164,7 @@ import {
   recordProfessionsRestore,
   resetChatStrikesAudited,
 } from '../server/moderation_db';
+import { resetModerationQueueCacheForTests } from '../server/moderation_queue_cache';
 import { authFailureCount, resetAuthFailures } from '../server/ratelimit';
 import {
   adminRolesForAccount,
@@ -249,6 +254,7 @@ const fakeGameState = {
   reloadChatFilter: vi.fn(async () => {}),
   liftChatMuteLive: vi.fn(),
   resetChatStrikesLive: vi.fn(),
+  applyGeneralChatRateLimitLive: vi.fn(),
   isIpBlocked: vi.fn(() => false),
   reloadBlockedIps: vi.fn(async () => {}),
   disconnectByIp: vi.fn(),
@@ -267,12 +273,19 @@ const fakeGame = fakeGameState as typeof fakeGameState & Parameters<typeof handl
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // The overview branch reads through the shared TTL memo (admin_overview_cache),
-  // whose refresh IS the mocked overviewCounts here; start every test cold so one
-  // test's cached value never leaks into the next.
+  // The overview/activity/moderation-queue branches all read through shared TTL
+  // memos whose refresh IS the mocked admin_db/moderation_db function here; start
+  // every test cold so one test's cached value never leaks into the next.
   resetOverviewCacheForTests();
+  resetAdminActivityCacheForTests();
+  resetModerationQueueCacheForTests();
   resetAdminGuildListReadsForTests();
   resetAdminPlayersCapForTests();
+  resetAdminGeneralChatRateLimitDepsForTests();
+  setAdminGeneralChatRateLimitDepsForTests({
+    set: async (input) => ({ before: null, after: input.rateLimit, changed: true }),
+    isAdminAccount: async () => false,
+  });
   // The per-account failed-login throttle (server/ratelimit.ts) is real, module-level
   // state; reset it so one test's failures never leak into the next.
   resetAuthFailures();
@@ -618,8 +631,40 @@ describe('admin api auth', () => {
       fakeGame,
     );
 
-    expect(listAccounts).toHaveBeenCalledWith('bob', 2, 50);
+    expect(listAccounts).toHaveBeenCalledWith('bob', 2, 50, 'id', 'desc');
     expect(res.statusCode).toBe(200);
+  });
+
+  it('passes an allowlisted sort/dir through to the accounts query and rejects a bogus column', async () => {
+    vi.mocked(accountAndScopeForToken).mockResolvedValue(fullToken(7));
+    vi.mocked(isAdminAccount).mockResolvedValue(true);
+    vi.mocked(listAccounts).mockResolvedValue({ rows: [], total: 0, page: 1, limit: 25 });
+
+    const sorted = fakeRes();
+    await handleAdminApi(
+      fakeReq({
+        token: VALID_TOKEN,
+        url: '/admin/api/accounts?sort=character_count&dir=asc',
+      }),
+      sorted,
+      fakeGame,
+    );
+    expect(sorted.statusCode).toBe(200);
+    expect(listAccounts).toHaveBeenCalledWith('', 1, 25, 'character_count', 'asc');
+
+    vi.mocked(listAccounts).mockClear();
+    const bogus = fakeRes();
+    await handleAdminApi(
+      fakeReq({
+        token: VALID_TOKEN,
+        url: '/admin/api/accounts?sort=id;%20DROP%20TABLE%20accounts&dir=asc',
+      }),
+      bogus,
+      fakeGame,
+    );
+    expect(bogus.statusCode).toBe(200);
+    // An unrecognized sort column falls back to the safe default, never the raw value.
+    expect(listAccounts).toHaveBeenCalledWith('', 1, 25, 'id', 'desc');
   });
 
   it('passes pagination, search, and sorting through to the characters query', async () => {
@@ -928,6 +973,11 @@ describe('admin api auth', () => {
   it('serves the moderation queue to admins with online account context', async () => {
     vi.mocked(accountAndScopeForToken).mockResolvedValue(fullToken(7));
     vi.mocked(isAdminAccount).mockResolvedValue(true);
+    // moderation_queue_cache.ts's base read is online-blind by design (see its
+    // header): the underlying moderationQueue is always called with an EMPTY
+    // set, and the live online status (fakeGameState.liveAccountIds => Set([9])
+    // below) is merged in afterward, never baked into what moderationQueue
+    // itself returns.
     vi.mocked(moderationQueue).mockResolvedValue([
       {
         accountId: 9,
@@ -939,7 +989,7 @@ describe('admin api auth', () => {
         latestReportAt: new Date().toISOString(),
         latestReason: 'spam',
         characterNames: ['Badactor'],
-        online: true,
+        online: false,
       },
     ]);
     const res = fakeRes();
@@ -951,8 +1001,11 @@ describe('admin api auth', () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(moderationQueue).toHaveBeenCalledWith(new Set([9]));
+    expect(moderationQueue).toHaveBeenCalledWith(new Set());
     expect(res.body.data.rows[0].openReports).toBe(4);
+    // fakeGameState.liveAccountIds() returns Set([9]) (below), so the cache's
+    // live merge marks account 9 online even though the base row was not.
+    expect(res.body.data.rows[0].online).toBe(true);
   });
 
   it('serves perf summaries and raw rows through existing admin auth', async () => {
@@ -1027,9 +1080,11 @@ describe('admin api auth', () => {
       chatMutedUntil: null,
       chatMuteReason: '',
       chatStrikes: 0,
+      generalChatRateLimit: null,
       isAi: false,
       isStreamer: false,
       streamerLinks: {},
+      cheaterMark: null,
       lastLoginIp: null,
       playtimeSeconds: 0,
       characters: [],
@@ -1050,7 +1105,7 @@ describe('admin api auth', () => {
     expect(res.body.data.account.online).toBe(true);
   });
 
-  it('includes the in-memory online state in account detail without another query', async () => {
+  it('includes the in-memory online state and General chat policy in account detail', async () => {
     vi.mocked(accountAndScopeForToken).mockResolvedValue(fullToken(7));
     vi.mocked(isAdminAccount).mockResolvedValue(true);
     vi.mocked(accountDetail).mockResolvedValue({
@@ -1065,9 +1120,11 @@ describe('admin api auth', () => {
       chatMutedUntil: null,
       chatMuteReason: '',
       chatStrikes: 0,
+      generalChatRateLimit: null,
       isAi: false,
       isStreamer: false,
       streamerLinks: {},
+      cheaterMark: null,
       lastLoginIp: null,
       playtimeSeconds: 0,
       characters: [],
@@ -1084,6 +1141,7 @@ describe('admin api auth', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.data.online).toBe(true);
+    expect(res.body.data.generalChatRateLimit).toBeNull();
     expect(accountDetail).toHaveBeenCalledWith(9);
   });
 
@@ -1788,9 +1846,11 @@ describe('admin api chat filter', () => {
       chatMutedUntil: null,
       chatMuteReason: '',
       chatStrikes: 0,
+      generalChatRateLimit: null,
       isAi: false,
       isStreamer: false,
       streamerLinks: {},
+      cheaterMark: null,
       lastLoginIp: null,
       playtimeSeconds: 0,
       characters: [],

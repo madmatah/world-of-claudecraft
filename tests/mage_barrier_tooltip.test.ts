@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { abilitiesKnownAt } from '../src/sim/content/classes';
 import { emptyModifiers } from '../src/sim/content/talents';
-import { abilityEffectText } from '../src/ui/hud';
+import { abilityEffectText } from '../src/ui/ability_description';
 
 describe('mage personal barrier tooltip', () => {
   it('shows the rank base and the live Spell Power contribution', () => {
@@ -26,7 +26,7 @@ describe('mage personal barrier tooltip', () => {
     if (!barrier) throw new Error('missing temporal_barrier');
 
     expect(abilityEffectText(barrier, { spellPower: 80, rangedPower: 0, attackPower: 0 })).toBe(
-      '160 (+20)',
+      '232 (+20)',
     );
   });
 });

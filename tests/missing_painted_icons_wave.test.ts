@@ -25,6 +25,10 @@ const manifestPath = path.join(
   repoRoot,
   'docs/achievements/missing-painted-icons-accepted-art.json',
 );
+const itemConsistencyManifestPath = path.join(
+  repoRoot,
+  'docs/achievements/item-art-consistency-2026-08-09/accepted-art.json',
+);
 
 interface ReferenceRecord {
   path: string;
@@ -127,6 +131,30 @@ interface AcceptedArtManifest {
   assets: RasterAsset[];
 }
 
+interface ItemConsistencyManifest {
+  assets: Array<{
+    kind: 'item';
+    id: string;
+    acceptedSha256: string;
+    acceptedBytes: number;
+    generationReport: string;
+  }>;
+  supersedes: Array<{
+    itemId: string;
+    historicalAcceptedArt?: { path: string; assetKey: string };
+    previous: {
+      shipping: { sha256: string; bytes: number };
+      owner: { batchId?: string };
+    };
+    replacement: {
+      batchId: string;
+      acceptedSha256: string;
+      acceptedBytes: number;
+      generationReport: string;
+    };
+  }>;
+}
+
 interface AbilityMappingEntry {
   abilityId: string;
   sourcePack: string;
@@ -141,6 +169,40 @@ interface AbilityMappingEntry {
 
 function manifest(): AcceptedArtManifest {
   return JSON.parse(readFileSync(manifestPath, 'utf8')) as AcceptedArtManifest;
+}
+
+function itemConsistencyManifest(): ItemConsistencyManifest {
+  return JSON.parse(readFileSync(itemConsistencyManifestPath, 'utf8')) as ItemConsistencyManifest;
+}
+
+function resolvedShippingPin(asset: RasterAsset): {
+  acceptedSha256: string;
+  acceptedBytes: number;
+} {
+  if (asset.kind !== 'item') return asset;
+  const replacementManifest = itemConsistencyManifest();
+  const supersession = replacementManifest.supersedes.find(({ itemId }) => itemId === asset.id);
+  if (!supersession) return asset;
+
+  expect(supersession.historicalAcceptedArt, `${asset.id} historical manifest link`).toEqual({
+    path: 'docs/achievements/missing-painted-icons-accepted-art.json',
+    assetKey: `item:${asset.id}`,
+  });
+  expect(supersession.previous.shipping, `${asset.id} immutable historical pin`).toMatchObject({
+    sha256: asset.acceptedSha256,
+    bytes: asset.acceptedBytes,
+  });
+  expect(asset.batch, `${asset.id} historical accepted-art batch`).toBeTruthy();
+  expect(supersession.previous.owner.batchId, `${asset.id} historical owner`).toBe(asset.batch);
+  const replacement = replacementManifest.assets.find(({ id }) => id === asset.id);
+  expect(replacement, `${asset.id} replacement asset`).toBeDefined();
+  expect(supersession.replacement, `${asset.id} current replacement pin`).toEqual({
+    batchId: 'item-art-consistency-2026-08-09',
+    acceptedSha256: replacement?.acceptedSha256,
+    acceptedBytes: replacement?.acceptedBytes,
+    generationReport: replacement?.generationReport,
+  });
+  return supersession.replacement;
 }
 
 function sorted(values: Iterable<string>): string[] {
@@ -176,6 +238,8 @@ const ALLOWED_REFERENCE_ROLES = [
   'subject reference',
 ] as const;
 
+// Choice-row talents, modifier art, retired summon paintings, and pet signature
+// actions are image ids without live ABILITIES rows by design.
 const PRESERVED_IMAGE_BACKED_MODIFIER_IDS = [
   'anger_management',
   'attack',
@@ -188,14 +252,46 @@ const PRESERVED_IMAGE_BACKED_MODIFIER_IDS = [
   'double_blink',
   'double_charge',
   'elemental_convergence',
+  'emberkin_felbolt',
+  'gloomshade_abyssal_chain',
   'lingering_dread',
   'overflowing_power',
+  'pet_aggressive',
+  'pet_attack',
+  'pet_defensive',
+  'pet_feed',
+  'pet_growl',
+  'pet_mend',
+  'pet_passive',
+  'pet_water_jet',
   'pursuit',
   'second_wind',
   'snap_polymorph',
+  'summon_doomguard',
+  'summon_felguard',
+  'summon_felhunter',
+  'summon_succubus',
   'temporal_rift',
   'twin_frost_nova',
   'warded',
+  'wlk_r11_demon_armor',
+  'wlk_r11_fel_concentration',
+  'wlk_r11_improved_life_tap',
+  'wlk_r14_amplify_curse',
+  'wlk_r14_ruin',
+  'wlk_r14_shadow_mastery',
+  'wlk_r17_death_coil',
+  'wlk_r17_demonic_resilience',
+  'wlk_r17_improved_fear',
+  'wlk_r20_chaos_bolt',
+  'wlk_r20_curse_mastery',
+  'wlk_r20_grimoire_of_haste',
+  'wlk_r5_bane',
+  'wlk_r5_improved_corruption',
+  'wlk_r5_improved_immolate',
+  'wlk_r8_curse_of_exhaustion',
+  'wlk_r8_howl_of_terror',
+  'wlk_r8_voidfeast',
 ] as const;
 
 describe('missing painted icon accepted-art manifest', () => {
@@ -205,18 +301,24 @@ describe('missing painted icon accepted-art manifest', () => {
     );
     const accepted = manifest();
     expect(accepted.schemaVersion).toBe(1);
+    // The paladin overhaul retired aura_surge/cleansing_verdict/divine_shield/
+    // holy_wrath (4 ability rows) and buildHeroicVariants added the
+    // heroic_duskwhisper resolver, so 209/194/90/15 became 206/190/86/16.
+    // The 2026-08-09 wave adds the 13 missing overhaul ability icons plus the
+    // bespoke Elemental Trance replacing its interim duplicate: 206/190/86
+    // become 220/204/100.
     expect(accepted.scope).toEqual({
-      targetRows: 209,
-      rasterPaintings: 194,
-      abilities: 90,
+      targetRows: 220,
+      rasterPaintings: 204,
+      abilities: 100,
       items: 101,
       deeds: 3,
-      heroicWeaponResolvers: 15,
+      heroicWeaponResolvers: 16,
       originalInventoryRows: 197,
       supplementalCurrentHeadRows: 12,
     });
-    expect(accepted.assets).toHaveLength(194);
-    expect(accepted.assets.filter((asset) => asset.kind === 'ability')).toHaveLength(90);
+    expect(accepted.assets).toHaveLength(204);
+    expect(accepted.assets.filter((asset) => asset.kind === 'ability')).toHaveLength(100);
     expect(accepted.assets.filter((asset) => asset.kind === 'item')).toHaveLength(101);
     expect(accepted.assets.filter((asset) => asset.kind === 'deed')).toHaveLength(3);
 
@@ -230,7 +332,7 @@ describe('missing painted icon accepted-art manifest', () => {
         accepted.assets.filter((asset) => asset.kind === kind).map((asset) => asset.id),
       ).toEqual(ids);
     }
-    expect(accepted.targetSets.heroicWeaponResolvers).toHaveLength(15);
+    expect(accepted.targetSets.heroicWeaponResolvers).toHaveLength(16);
     expect(accepted.targetSets.heroicWeaponResolvers.map(({ id }) => id)).toEqual(
       sorted(new Set(accepted.targetSets.heroicWeaponResolvers.map(({ id }) => id))),
     );
@@ -303,10 +405,11 @@ describe('missing painted icon accepted-art manifest', () => {
       const file = path.join(repoRoot, expectedLocation.shippingPath);
       expect(file).toBe(publicFile(asset.runtimeUrl));
       const bytes = readFileSync(file);
-      expect(bytes.length, `${asset.id} accepted byte pin`).toBe(asset.acceptedBytes);
+      const currentPin = resolvedShippingPin(asset);
+      expect(bytes.length, `${asset.id} accepted byte pin`).toBe(currentPin.acceptedBytes);
       expect(bytes.length, `${asset.id} weight ceiling`).toBeLessThanOrEqual(15 * 1024);
       expect(createHash('sha256').update(bytes).digest('hex'), `${asset.id} hash pin`).toBe(
-        asset.acceptedSha256,
+        currentPin.acceptedSha256,
       );
       const decoded = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
       expect(decoded.info.width, `${asset.id} width`).toBe(128);
@@ -360,19 +463,21 @@ describe('missing painted icon accepted-art manifest', () => {
         ).toBe(true);
       }
     }
-    expect(shippingHashes.size).toBe(194);
-    expect(sourceHashes.size).toBe(194);
-    expect(masterHashes.size).toBe(194);
+    expect(shippingHashes.size).toBe(204);
+    expect(sourceHashes.size).toBe(204);
+    expect(masterHashes.size).toBe(204);
     expect(sorted(referenceRoles)).toEqual([...ALLOWED_REFERENCE_ROLES]);
   });
 });
 
 describe('missing painted ability integration', () => {
-  it('makes every live ability image-backed while preserving all 19 modifier/talent ids', () => {
+  it('makes every live ability image-backed while preserving non-ABILITY image ids', () => {
     const accepted = manifest();
-    expect(accepted.targetSets.abilities).toHaveLength(90);
+    expect(accepted.targetSets.abilities).toHaveLength(100);
     // Read from ABILITY_ART_PENDING, the one enumeration of the painted-ability
-    // debt (src/ui/icons.ts), so unenumerated debt still reddens this line.
+    // debt (src/ui/icons.ts), so unenumerated debt still reddens this line. The
+    // release painted every ability that existed when the wave landed; the only
+    // artless ids are the three Realm Racers pickup abilities appended after it.
     expect(Object.keys(ABILITIES).filter((id) => !ABILITY_IMAGE_IDS.has(id))).toEqual([
       ...ABILITY_ART_PENDING,
     ]);
@@ -466,7 +571,12 @@ describe('missing painted item integration', () => {
   it('empties ITEM_ART_PENDING and serves all 101 targets as painted item art', () => {
     const accepted = manifest();
     expect(accepted.targetSets.items).toHaveLength(101);
-    expect(ITEM_ART_PENDING.size).toBe(0);
+    // This wave's own debt must be fully discharged. Scoped to the wave's target
+    // set rather than asserting the list is globally empty: a later change may
+    // legitimately enumerate NEW art debt (the hunter quivers do), and that must
+    // not read as this wave regressing. tests/item_icons.test.ts guard A3 owns
+    // the global count.
+    expect(accepted.targetSets.items.filter((id) => ITEM_ART_PENDING.has(id))).toEqual([]);
     for (const id of accepted.targetSets.items) {
       expect(ITEMS[id], `${id} must remain a live item`).toBeDefined();
       expect(ITEMS[id].kind, `${id} must not enter the weapon icon lane`).not.toBe('weapon');
@@ -496,6 +606,7 @@ describe('missing painted item integration', () => {
         commonPrompt: string;
         itemDirections?: Record<string, { generationPrompt: string }>;
         itemIds: string[];
+        provenanceRecord?: string;
       }>;
     };
     const targets = new Set(accepted.targetSets.items);
@@ -511,30 +622,42 @@ describe('missing painted item integration', () => {
       expect(owner.styleReference).toBeTruthy();
       expect(owner.commonPrompt).toBeTruthy();
       expect(owner.itemIds).toEqual(sorted(new Set(owner.itemIds)));
-      expect(owner.styleReferencesByItem?.[id]).toEqual(asset?.generation.references);
-      expect(owner.itemDirections?.[id]?.generationPrompt).toBe(asset?.generation.prompt);
+      const supersession = itemConsistencyManifest().supersedes.find(({ itemId }) => itemId === id);
+      if (supersession) {
+        expect(owner.batchId).toBe('item-art-consistency-2026-08-09');
+        expect(owner.provenanceRecord).toBe('docs/achievements/item-art-consistency-2026-08-09/');
+        expect(supersession.previous.shipping).toMatchObject({
+          sha256: asset?.acceptedSha256,
+          bytes: asset?.acceptedBytes,
+        });
+      } else {
+        expect(owner.styleReferencesByItem?.[id]).toEqual(asset?.generation.references);
+        expect(owner.itemDirections?.[id]?.generationPrompt).toBe(asset?.generation.prompt);
+      }
     }
   });
 });
 
 describe('missing painted deed and Heroic weapon integration', () => {
-  it('leaves every deed it painted art-backed and records generated crest ownership', () => {
+  it('leaves only the pinned art-pending deeds without painted art, and records generated crest ownership', () => {
     const accepted = manifest();
     expect(accepted.targetSets.deeds).toEqual([
       'dgn_wildheart_basin',
       'dgn_wildheart_basin_heroic',
       'pvp_card_duel_first_win',
     ]);
-    // The Drakelands brood merge appended two deeds after this wave and Realm Racers
-    // seven more, so the live catalog is 241 and the wave's own claim is unchanged: every
-    // deed that existed when it landed is painted. The only artless ids are those nine
-    // appended later, which ride the
-    // category-crest fallback the Icons authoring rule in docs/design/deeds.md sanctions,
+    // Later releases appended more deeds after this historical wave. The
+    // release art audit painted those additions, so the wave's own claim is
+    // unchanged: every deed that existed when it landed is painted. The only
+    // artless ids are the walk-in castle visit pair appended after the audit
+    // and the seven Realm Racers placing deeds, riding the category-crest
+    // fallback the Icons authoring rule in docs/design/deeds.md sanctions
     // until their 512px sources are commissioned (flagged in
-    // docs/achievements/icon-brief.md). Read from DEED_ART_PENDING, the one enumeration of
-    // that debt (src/ui/icons.ts), so this file cannot end up naming a different pending
-    // set than the other two art suites. Exhaustive: a third artless deed still reds here.
-    expect(DEED_ORDER).toHaveLength(241);
+    // docs/achievements/icon-brief.md). Read from DEED_ART_PENDING, the one
+    // enumeration of that debt (src/ui/icons.ts), so this file cannot end up
+    // naming a different pending set than the other two art suites.
+    // Exhaustive: one more artless deed still reds here.
+    expect(DEED_ORDER).toHaveLength(280);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     const credits = readFileSync(path.join(repoRoot, 'CREDITS.md'), 'utf8');
     const provenance = readFileSync(
@@ -548,7 +671,7 @@ describe('missing painted deed and Heroic weapon integration', () => {
     const generatedRow = creditRows.find((line) =>
       line.startsWith('| Generated Book of Deeds additions'),
     );
-    expect(commissionedRow).toContain('excluding the fourteen generated additions listed next');
+    expect(commissionedRow).toContain('excluding the project-generated additions credited below');
     expect(generatedRow).toContain('World of ClaudeCraft');
     expect(generatedRow).toContain('OpenAI built-in image generation');
     for (const id of accepted.targetSets.deeds) {
@@ -589,7 +712,7 @@ describe('missing painted deed and Heroic weapon integration', () => {
     }
   });
 
-  it('pins every live Heroic weapon to its base GLB-rendered portrait with no duplicate mapping', () => {
+  it('keeps the historical Heroic resolver record while serving its base painting today', () => {
     const accepted = manifest();
     const live = Object.values(ITEMS)
       .filter((item) => item.kind === 'weapon' && item.heroicOf)
@@ -610,8 +733,11 @@ describe('missing painted deed and Heroic weapon integration', () => {
       expect(target.heldModelPath).toBe(`public/models/weapons/${target.variant}.glb`);
       expect(existsSync(path.join(repoRoot, target.portraitPath))).toBe(true);
       expect(existsSync(path.join(repoRoot, target.heldModelPath))).toBe(true);
-      expect(weaponIconUrl(target.id)).toBe(target.bagIconUrl);
-      expect(iconDataUrl('item', target.id)).toBe(target.bagIconUrl);
+      // The accepted-art manifest is immutable historical evidence of the old JPG lane. The
+      // current runtime intentionally supersedes only its bag/portrait URL with base-id art;
+      // the held model and legacy preview remain available to rendering/tooling.
+      expect(weaponIconUrl(target.id)).toBe(`/ui/items/${target.baseId}.webp`);
+      expect(iconDataUrl('item', target.id)).toBe(`/ui/items/${target.baseId}.webp`);
       expect(itemWeaponModelUrl(target.id)).toBe(`models/weapons/${target.variant}.glb`);
       expect(iconDataUrl('item', target.id)).toBe(iconDataUrl('item', target.baseId));
     }

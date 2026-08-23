@@ -546,6 +546,29 @@ describe('Realm Racers circuit themes', () => {
           deep: DEEP_COLOR.getHex(),
         });
       });
+
+      it('anchors the rally water on the band origin, not on the world one', async () => {
+        const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
+        // The band sits around x = 113_700, where a highp float resolves about
+        // 7mm: a ripple lookup taken straight off the world position quantizes
+        // past a texel and the foam sines lose their argument. The shader
+        // subtracts this ONCE in the vertex stage, so the pool out here paints
+        // the same water an Evergarden lake does.
+        const water = buildRealmRacersTrack(GALECREST_CIRCUIT).group.children.find(
+          (child): child is THREE.Mesh =>
+            child instanceof THREE.Mesh && child.geometry.getAttribute('aShoreDepth') !== undefined,
+        );
+        if (!water) throw new Error('the build has no water');
+        const material = water.material as THREE.ShaderMaterial;
+        expect(material.uniforms.uSurfaceOrigin.value).toEqual(
+          new THREE.Vector2(REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z),
+        );
+        // The uniform is inert unless the shader actually subtracts it, and a
+        // subtraction in the FRAGMENT stage would be the same arithmetic on a
+        // value that has already lost the bits. Both halves, pinned.
+        expect(material.vertexShader).toContain('vSurf = wp.xz - uSurfaceOrigin;');
+        expect(material.fragmentShader).toContain('texture2D(uNorm1, vSurf * 0.055');
+      });
     });
   });
 });

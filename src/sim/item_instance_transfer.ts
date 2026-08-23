@@ -153,19 +153,25 @@ export function grantCopies(
   instance?: ItemInstancePayload,
   craftedRecipeId?: string,
 ): void {
+  // movement: every pipe that shares this grant hands over copies that already
+  // existed in somebody's hands (a market purchase, a cancelled or collected
+  // listing coming home, a mail attachment), so none of them is a world-sourced
+  // acquisition for the Reliquary tally. Discovery still fires as it always has.
   if (instance)
     ctx.addItemInstance(itemId, cloneItemInstancePayload(instance), pid, count, {
       craftedRecipeId,
+      movement: true,
     });
-  else ctx.addItem(itemId, count, pid, { craftedRecipeId });
+  else ctx.addItem(itemId, count, pid, { craftedRecipeId, movement: true });
 }
 
 /** Rebuild a persisted exchange-escrow slot (market collection item, mail
  *  attachment): unknown ids stay dormant recoverable data, counts clamp to
- *  what identical-payload merges could legitimately have built (the character
- *  load's instancedCountCap rule), and payloads deep-clone so a loaded book
- *  never aliases the raw save object. `cap` is instancedCountCap(def, instance)
- *  from bags.ts, passed in so this module stays free of the ITEMS table. */
+ *  what identical-payload merges or an in-place whole-stack lock could
+ *  legitimately have built (the character load's instancedCountCap rule), and
+ *  payloads deep-clone so a loaded book never aliases the raw save object.
+ *  `cap` is instancedCountCap(def, instance) from bags.ts, passed in so this
+ *  module stays free of the ITEMS table. */
 export function sanitizeEscrowSlot(raw: InvSlot, cap: number, dropped?: string[]): InvSlot {
   const count = Math.min(Math.max(1, raw.count | 0), cap);
   if (!raw.instance || typeof raw.instance !== 'object') {

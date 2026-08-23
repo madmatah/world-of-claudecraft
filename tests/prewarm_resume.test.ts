@@ -1,10 +1,26 @@
 import { readFileSync } from 'node:fs';
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { initialFrameDeferral } from '../src/render/initial_frame_core';
+import { createPrewarmCompileLifecycle } from '../src/render/prewarm_compile_lifecycle';
+import {
+  CONSTRAINED_PREWARM_KEEP,
+  CONSTRAINED_PREWARM_RESUME,
+  materialProgramSignature,
+  prewarmProgramContentKeys,
+  skyAssetInlineWaitMs,
+} from '../src/render/prewarm_policy';
 import {
   buildPrewarmCompileUnits,
+  compileRootDistanceSq,
+  orderRootsByDistanceSq,
   type PrewarmResumeEntry,
   resumeDroppedPrewarmEntries,
+  runPrewarmCompileResumeUnit,
+  runPrewarmPiecesSerially,
   settlePrewarmBeforePublish,
+  trackPrefetch,
+  waitForPrefetch,
 } from '../src/render/prewarm_resume';
 
 function entry(id: string, unitIds: readonly string[]): PrewarmResumeEntry {
@@ -15,6 +31,41 @@ function entry(id: string, unitIds: readonly string[]): PrewarmResumeEntry {
 }
 
 describe('resumeDroppedPrewarmEntries', () => {
+  it('closes a deferred compile lifecycle record when its resume unit settles', async () => {
+    let now = 10;
+    const unit = { id: 'scene:deferred', run: async () => {} };
+    const lifecycle = createPrewarmCompileLifecycle(() => now++);
+    const record = lifecycle.recordFor(unit, 'programs.compile-submit');
+    lifecycle.markReveal();
+    expect(initialFrameDeferral(lifecycle.records)).not.toBeNull();
+
+    await runPrewarmCompileResumeUnit(unit, lifecycle, 'programs.compile-resume', () => unit.run());
+
+    expect(initialFrameDeferral(lifecycle.records)).toBeNull();
+    expect(record.statusAtReveal).toBe('deferred');
+    expect(record.lane).toBe('programs.compile-resume');
+    expect(record.submittedAtMs).not.toBeNull();
+    expect(record.settledAtMs).not.toBeNull();
+    expect(record.failedAtMs).toBeNull();
+  });
+
+  it('marks a resumed compile lifecycle record failed before rethrowing', async () => {
+    let now = 20;
+    const unit = { id: 'scene:failed', run: async () => {} };
+    const lifecycle = createPrewarmCompileLifecycle(() => now++);
+    const record = lifecycle.recordFor(unit, 'programs.compile');
+
+    await expect(
+      runPrewarmCompileResumeUnit(unit, lifecycle, 'programs.compile-resume', async () => {
+        throw new Error('resume failed');
+      }),
+    ).rejects.toThrow('resume failed');
+
+    expect(record.submittedAtMs).not.toBeNull();
+    expect(record.settledAtMs).toBeNull();
+    expect(record.failedAtMs).not.toBeNull();
+  });
+
   it('resumes bounded units in manifest order with an idle slot before every unit', async () => {
     const events: string[] = [];
     const dropped: PrewarmResumeEntry[] = [
@@ -107,18 +158,31 @@ describe('resumeDroppedPrewarmEntries', () => {
     expect(idles).toBe(0);
   });
 
-  it('allows each resumed unit to enter a shared scheduler', async () => {
+  it('allows each resumed unit to enter a shared scheduler with its OWNING entry', async () => {
+    // The entry rides along so the runner can schedule by entry class (debt
+    // vs cosmetic); a runner receiving the wrong entry would reclassify
+    // every unit silently, so the pairing is asserted per unit.
     const events: string[] = [];
-    await resumeDroppedPrewarmEntries([entry('textures', ['one', 'two'])], {
-      idleSlot: async () => {
-        events.push('idle');
+    await resumeDroppedPrewarmEntries(
+      [entry('textures.scene', ['one', 'two']), entry('vfx.weapon-skins', ['three'])],
+      {
+        idleSlot: async () => {
+          events.push('idle');
+        },
+        runUnit: async (unit, owner) => {
+          events.push(`scheduled:${owner.id}:${unit.id}`);
+          await unit.run();
+        },
       },
-      runUnit: async (unit) => {
-        events.push(`scheduled:${unit.id}`);
-        await unit.run();
-      },
-    });
-    expect(events).toEqual(['idle', 'scheduled:one', 'idle', 'scheduled:two']);
+    );
+    expect(events).toEqual([
+      'idle',
+      'scheduled:textures.scene:one',
+      'idle',
+      'scheduled:textures.scene:two',
+      'idle',
+      'scheduled:vfx.weapon-skins:three',
+    ]);
   });
 
   it('materializes one executable compile unit per unique archetype root', async () => {
@@ -140,6 +204,209 @@ describe('resumeDroppedPrewarmEntries', () => {
     expect(compiled).toEqual(['player']);
     await units[1].run();
     expect(compiled).toEqual(['player', 'mob']);
+  });
+
+  it('a batch unit also offers one PIECE per root, each its own unit: the roots one at a time, every root attempted', async () => {
+    // The live resume lane's shape: `run` launches the batch together (the
+    // boot shape); the pieces run one root each through the caller's queue
+    // (runPrewarmPiecesSerially), so a root's second arm never fires as one
+    // continuation burst with its batch-mates, and the queue re-arbitrates
+    // between roots instead of holding for the whole batch's settle.
+    const roots = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    const order: string[] = [];
+    let inFlight = 0;
+    let overlap = 0;
+    const compile = async (root: { id: string }) => {
+      inFlight++;
+      overlap = Math.max(overlap, inFlight);
+      order.push(`start:${root.id}`);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      order.push(`end:${root.id}`);
+      inFlight--;
+      if (root.id === 'b') throw new Error('b failed');
+    };
+    const [unit] = buildPrewarmCompileUnits([{ id: 'scene', roots }], compile, { batchSize: 3 });
+    expect(unit.id).toBe('scene:0');
+    expect(unit.roots).toEqual(roots);
+    expect(unit.pieces?.map((piece) => piece.id)).toEqual(['scene:0:0', 'scene:0:1', 'scene:0:2']);
+
+    const submitted: string[] = [];
+    await expect(
+      runPrewarmPiecesSerially(unit.pieces ?? [], (piece) => {
+        submitted.push(piece.id);
+        return piece.run();
+      }),
+    ).rejects.toThrow('b failed');
+    expect(submitted).toEqual(['scene:0:0', 'scene:0:1', 'scene:0:2']);
+    expect(order).toEqual(['start:a', 'end:a', 'start:b', 'end:b', 'start:c', 'end:c']);
+    expect(overlap).toBe(1);
+
+    // and `run` keeps the together shape
+    order.length = 0;
+    overlap = 0;
+    await expect(unit.run()).rejects.toThrow('b failed');
+    expect(overlap).toBe(3);
+    expect(order.slice(0, 3)).toEqual(['start:a', 'start:b', 'start:c']);
+  });
+
+  it('skips a root whose every dedupe key was already covered', async () => {
+    // Hundreds of material-bearing leaves share programs (surfaceMat dedupes
+    // materials): a root contributing no unseen key links nothing new, so it
+    // must not cost a unit (each awaited compileAsync has a 10 ms poll floor).
+    const first = { id: 'a', mats: ['stone'] };
+    const duplicate = { id: 'b', mats: ['stone'] };
+    const fresh = { id: 'c', mats: ['stone', 'moss'] };
+    const compiled: string[] = [];
+    const units = buildPrewarmCompileUnits(
+      [{ id: 'scene', roots: [first, duplicate, fresh] }],
+      async (root) => {
+        compiled.push(root.id);
+      },
+      { dedupeKeys: (root) => root.mats },
+    );
+    expect(units.map((unit) => unit.id)).toEqual(['scene:0', 'scene:1']);
+    for (const unit of units) await unit.run();
+    expect(compiled).toEqual(['a', 'c']);
+  });
+
+  it('keeps distinct ShaderMaterial programs under content-key dedupe', async () => {
+    const vertex = 'void main() { gl_Position = vec4(0.0); }';
+    const fragment = 'void main() { gl_FragColor = vec4(1.0); }';
+    const shader = (
+      id: string,
+      overrides: Partial<
+        Pick<THREE.ShaderMaterial, 'vertexShader' | 'fragmentShader' | 'defines'>
+      > = {},
+    ) => ({
+      id,
+      material: new THREE.ShaderMaterial({
+        vertexShader: vertex,
+        fragmentShader: fragment,
+        defines: { MODE: 1 },
+        ...overrides,
+      }),
+    });
+    const roots = [
+      shader('base'),
+      shader('duplicate'),
+      shader('vertex', { vertexShader: `${vertex}\n// vertex variant` }),
+      shader('fragment', { fragmentShader: `${fragment}\n// fragment variant` }),
+      shader('defines', { defines: { MODE: 2 } }),
+    ];
+    expect(roots[0].material.customProgramCacheKey()).toBe(
+      roots[2].material.customProgramCacheKey(),
+    );
+
+    const compiled: string[] = [];
+    const units = buildPrewarmCompileUnits(
+      [{ id: 'weapon-vfx', roots }],
+      async (root) => {
+        compiled.push(root.id);
+      },
+      {
+        dedupeKeys: (root) =>
+          prewarmProgramContentKeys({}, [materialProgramSignature(root.material)]),
+      },
+    );
+
+    expect(units).toHaveLength(4);
+    for (const unit of units) await unit.run();
+    expect(compiled).toEqual(['base', 'vertex', 'fragment', 'defines']);
+  });
+
+  it('dedupes across calls through a caller-owned shared store', async () => {
+    // One logical compile pass split over several submissions (the early
+    // manifest entry, the compile entry's live-scene RE-collection, the
+    // resume lane) must not resubmit a root or signature an earlier call
+    // already covered; per-call stores made the re-collection pay every
+    // early root a second time.
+    const sharedDedupe = { seen: new Set<{ id: string; mats: string[] }>(), seenKeys: new Set() };
+    const early = { id: 'a', mats: ['stone'] };
+    const settleAddition = { id: 'b', mats: ['moss'] };
+    const compiled: string[] = [];
+    const compile = async (root: { id: string }): Promise<void> => {
+      compiled.push(root.id);
+    };
+    const firstCall = buildPrewarmCompileUnits([{ id: 'scene', roots: [early] }], compile, {
+      dedupeKeys: (root) => root.mats,
+      sharedDedupe,
+    });
+    const secondCall = buildPrewarmCompileUnits(
+      [{ id: 'scene', roots: [early, settleAddition] }],
+      compile,
+      { dedupeKeys: (root) => root.mats, sharedDedupe },
+    );
+    for (const unit of [...firstCall, ...secondCall]) await unit.run();
+    expect(compiled).toEqual(['a', 'b']);
+  });
+
+  it('mints ids that stay unique across calls sharing one dedupe store', async () => {
+    // The two passes of one logical compile pass ('programs.compile-submit'
+    // early, 'programs.compile' re-collecting the live scene) both mint units
+    // for the 'scene' group, and the lane's pacing accounts each unit BY ID.
+    // A per-call index restarting at 0 minted an id still IN FLIGHT from the
+    // early pass: the duplicate submission was dropped, its charge rewrote the
+    // in-flight unit's cost, and its settle was scored against the wrong unit.
+    const sharedDedupe = { seen: new Set<{ id: string }>(), seenKeys: new Set() };
+    const compile = async (): Promise<void> => {};
+    const early = buildPrewarmCompileUnits(
+      [{ id: 'scene', roots: [{ id: 'a' }, { id: 'b' }] }],
+      compile,
+      { sharedDedupe },
+    );
+    const tail = buildPrewarmCompileUnits(
+      [
+        { id: 'scene', roots: [{ id: 'c' }] },
+        { id: 'weapon-vfx', roots: [{ id: 'd' }] },
+      ],
+      compile,
+      { sharedDedupe },
+    );
+    expect(early.map((unit) => unit.id)).toEqual(['scene:0', 'scene:1']);
+    expect(tail.map((unit) => unit.id)).toEqual(['scene:2', 'weapon-vfx:0']);
+    const ids = [...early, ...tail].map((unit) => unit.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Without a shared store each call is its own id space, unchanged.
+    const standalone = buildPrewarmCompileUnits([{ id: 'scene', roots: [{ id: 'e' }] }], compile);
+    expect(standalone.map((unit) => unit.id)).toEqual(['scene:0']);
+  });
+
+  it('batches roots into one unit that awaits its compiles together', async () => {
+    // r165 compileAsync resolves after N x 10 ms of setTimeout polling: awaited
+    // one by one, the floors stack; awaited together, they overlap. The batch
+    // still resolves only when every compile settles.
+    const roots = ['a', 'b', 'c'].map((id) => ({ id }));
+    const started: string[] = [];
+    const release: Array<() => void> = [];
+    const units = buildPrewarmCompileUnits(
+      [{ id: 'scene', roots }],
+      (root) =>
+        new Promise<void>((resolve) => {
+          started.push(root.id);
+          release.push(resolve);
+        }),
+      { batchSize: 2 },
+    );
+    expect(units.map((unit) => unit.id)).toEqual(['scene:0', 'scene:1']);
+
+    let firstDone = false;
+    const firstRun = units[0].run();
+    void Promise.resolve(firstRun).then(() => {
+      firstDone = true;
+    });
+    await Promise.resolve();
+    // Both compiles of the batch started before either resolved.
+    expect(started).toEqual(['a', 'b']);
+    release.shift()?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(firstDone).toBe(false);
+    release.shift()?.();
+    await firstRun;
+    expect(firstDone).toBe(true);
+
+    await Promise.all([units[1].run(), Promise.resolve().then(() => release.shift()?.())]);
+    expect(started).toEqual(['a', 'b', 'c']);
   });
 
   it('never overlaps a compile that outlives its idle slot', async () => {
@@ -207,8 +474,39 @@ describe('resumeDroppedPrewarmEntries', () => {
     expect(publications).toBe(1);
   });
 
+  it('releases deferred compile, texture and sky work only after first paint', () => {
+    const renderer = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const resumeStart = renderer.indexOf('void settlePrewarmBeforePublish(');
+    const resumeEnd = renderer.indexOf(
+      '// Sky uploads deferred behind a slow prefetch',
+      resumeStart,
+    );
+    const skyEnd = renderer.indexOf('const elapsed = performance.now() - started;', resumeEnd);
+    const resumeBlock = renderer.slice(resumeStart, resumeEnd);
+    const skyBlock = renderer.slice(resumeEnd, skyEnd);
+    const prewarmAt = main.indexOf('const prewarm = await renderer.prewarmInitialScene({');
+    const firstPaintAt = main.indexOf("entryDiagnostics.checkpoint('first-paint');", prewarmAt);
+    const releaseAt = main.indexOf('initialPrewarmResumeStartGate.release();', firstPaintAt);
+
+    expect(main.slice(prewarmAt, firstPaintAt)).toContain(
+      'resumeAfterFirstPaint: initialPrewarmResumeStartGate.wait,',
+    );
+    expect(firstPaintAt).toBeGreaterThan(prewarmAt);
+    expect(releaseAt).toBeGreaterThan(firstPaintAt);
+    expect(resumeBlock).toContain('await options.resumeAfterFirstPaint;');
+    expect(skyBlock).toContain('await options.resumeAfterFirstPaint;');
+  });
+
   it('wires the production compile resume lane to bounded units', () => {
     const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    const compileUnitsSource = readFileSync(
+      new URL('../src/render/initial_scene_compile_units.ts', import.meta.url),
+      'utf8',
+    );
+    const unitsStart = source.indexOf('const compileEntryUnits =');
+    const unitsEnd = source.indexOf('const runEntry =', unitsStart);
+    const unitsSlice = source.slice(unitsStart, unitsEnd);
     const compileEntryStart = source.indexOf("id: 'programs.compile'");
     const compileEntryEnd = source.indexOf("id: 'sky.current-zone'", compileEntryStart);
     const compileEntry = source.slice(compileEntryStart, compileEntryEnd);
@@ -220,17 +518,82 @@ describe('resumeDroppedPrewarmEntries', () => {
     expect(compileEntryEnd).toBeGreaterThan(compileEntryStart);
     expect(resumeStart).toBeGreaterThan(-1);
     expect(runStart).toBeGreaterThan(resumeStart);
-    expect(resumeSlice.match(/buildPrewarmCompileUnits\(/g)).toHaveLength(1);
-    expect(resumeSlice).toContain('roots: group.children');
-    expect(resumeSlice).toContain('await this.compilePrewarmColorPrograms(root, false)');
-    expect(resumeSlice).toContain('await this.compileSkinnedShadowPrograms(root)');
-    expect(resumeSlice).not.toContain('compileAsync(this.scene');
+    expect(unitsSlice).toContain('buildInitialSceneCompileUnits({');
+    expect(compileUnitsSource.match(/buildPrewarmCompileUnits\(/g)).toHaveLength(1);
+    // The resume lane must exclude groups whose units were already submitted
+    // off-thread (resuming them would double-submit every unit).
+    expect(resumeSlice).toContain(
+      'compileEntryUnits((groupId) => !submittedCompileGroups.has(groupId))',
+    );
+    expect(unitsStart).toBeGreaterThan(-1);
+    expect(unitsEnd).toBeGreaterThan(unitsStart);
+    expect(compileUnitsSource).toContain('if (visibleOnly) root.traverseVisible(collect)');
+    expect(compileUnitsSource).toContain('else root.traverse(collect)');
+    expect(compileUnitsSource).toContain('roots: compileRoots(group.children, false)');
+    // The mass-submission callback compiles against the lights-only proxy
+    // scene (identical program keys, ~10-node prologue walk instead of the
+    // whole world per call; the live gates keep the live-scene default).
+    expect(unitsSlice).toContain(
+      'compileColor: (root) => this.compilePrewarmColorPrograms(root, false)',
+    );
+    expect(unitsSlice).toContain('compileShadow: (root) => this.compileShadowPrograms(root)');
+    expect(compileUnitsSource).toContain('await options.compileColor(root)');
+    expect(compileUnitsSource).toContain('await options.compileShadow(root)');
+    expect(compileEntry).not.toContain('compileAsync(this.scene');
+    // The resume lane specifically must never race a scene-wide compileAsync
+    // call away (the old bug this pin guards): resuming already-submitted
+    // units would double-submit their in-flight compileAsync, so resumeUnits
+    // stays a plain bounded-unit selection, never a race.
     expect(resumeSlice).not.toContain('Promise.race');
+    // run() DOES race now: a bounded await-all against its own reserved
+    // deadline (prewarmCompileAwaitDeadline, see prewarm_policy.test.ts), so
+    // an unbounded await can never push world.initial-frame's start past the
+    // hard deadline. It races only its own reserved cap, never the separate
+    // gpuSubmitDeadline the trailing exempt entries (programs.budget-variants
+    // etc, outside this slice) bound themselves against.
+    const runEnd = compileEntry.indexOf('progress: () =>', runStart);
+    expect(runEnd).toBeGreaterThan(runStart);
+    const runSlice = compileEntry.slice(runStart, runEnd);
+    expect(runSlice).toContain('Promise.race([');
+    expect(runSlice).not.toContain('performance.now() >= gpuSubmitDeadline');
     expect(source).toContain('void settlePrewarmBeforePublish(');
     expect(source).toContain('resumeDroppedPrewarmEntries(resume, {');
-    expect(source).toContain('this.backgroundGpuWork.run(unit.run, GPU_WORK_PRIORITY.BOOT_RESUME)');
+    // releaseTail: a resume unit's wall time is its off-thread links; without
+    // the tail release each unit occupied the whole serial queue for seconds
+    // and live compile gates could not start (the travel-hitch amplifier).
+    // Link/upload debt resumes at BOOT_DEBT (above the cosmetic BACKGROUND
+    // warmers that starved it in production) with its tail HELD so batches
+    // settle serially and the driver link queue stays shallow; everything
+    // else stays at BOOT_RESUME with the released tail
+    // (prewarmResumeIsDebt, prewarm_policy.ts). The lane runs a debt unit's
+    // PIECES one root per queue unit (PrewarmResumeUnit.pieces): the world is
+    // live here, the together arm's second-arm continuations fired as one
+    // 3 s task, and a batch-held unit starved the reveal gates behind it.
+    expect(source).toContain('const run = () => {');
+    expect(source).toContain(
+      'if (debt && unit.pieces) {\n                  return runPrewarmPiecesSerially(unit.pieces, (piece) =>\n                    this.backgroundGpuWork.run(piece.run, priority, piece.id, {\n                      releaseTail: true,\n                    }),\n                  );\n                }',
+    );
+    // A debt ROOT piece is one link: released under the tail cap, never a
+    // held queue head (batch 18). The batch fallback and the cosmetic resume
+    // keep the class-driven tail.
+    expect(source).toContain(
+      'return this.backgroundGpuWork.run(unit.run, priority, unit.id, {\n                  releaseTail: !debt,\n                });',
+    );
+    expect(source).toContain("return entry.id.startsWith('programs.compile')");
+    expect(source).toContain("'programs.compile-resume'");
+    // The old bare `releaseTail: true,` pin drifted: after the debt-class
+    // split the only remaining literal `true` belongs to the preview lane,
+    // an unrelated call site. The resume lane's contract is the class-driven
+    // flag, and the kickoff must order debt ahead of the serial lane's
+    // cosmetic entries (queue priority cannot reorder within the lane).
+    expect(source).toContain('const resume = orderPrewarmResumeEntries(droppedEntries);');
     expect(source).toContain('const units = entry.resumeUnits?.() ?? [];');
     expect(source).toContain('droppedEntries.push({ id: entry.id, units })');
+    expect(source).toContain("if (status === 'partial' || status === 'failed') {");
+    expect(source).toContain('const partialUnits = entry.resumePartialUnits?.() ?? [];');
+    expect(source).toContain(
+      'if (partialUnits.length > 0) droppedEntries.push({ id: entry.id, units: partialUnits });',
+    );
     expect(resumeSlice).toContain('deferPoolPublication =');
     expect(source).toContain(
       'cleanupPrewarmArtifacts({ clearVfx: true, publishPools: !deferPoolPublication })',
@@ -238,8 +601,52 @@ describe('resumeDroppedPrewarmEntries', () => {
     expect(source).toContain('cleanupPrewarmArtifacts({ clearVfx: false, publishPools: true })');
   });
 
+  it('publishes the retained pools even when the compile resume remainder is empty', () => {
+    // Regression for the stranded-pool review finding: the compile entry's
+    // resumeUnits callback can set deferPoolPublication while its OWN
+    // remainder is empty (the shared compile dedupe store already covered
+    // every root through the early 'programs.compile-submit' entry). Gating
+    // the settle-then-publish scheduling on droppedEntries.length alone then
+    // never runs it when nothing else was dropped either, so the withheld
+    // entity/npc pools are silently discarded and the early-submitted units
+    // are never awaited. The gate must also fire on deferPoolPublication alone.
+    const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    const finallyMarker =
+      'cleanupPrewarmArtifacts({ clearVfx: true, publishPools: !deferPoolPublication });';
+    const blockStart = source.indexOf(finallyMarker);
+    const blockEnd = source.indexOf('// Sky uploads deferred behind a slow prefetch', blockStart);
+    expect(blockStart).toBeGreaterThan(-1);
+    expect(blockEnd).toBeGreaterThan(blockStart);
+    const block = source.slice(blockStart, blockEnd);
+
+    // The settle-then-publish scheduling must run whenever EITHER a real
+    // entry was dropped OR pool publication was withheld, never
+    // droppedEntries.length alone.
+    expect(block).toContain('if (droppedEntries.length > 0 || deferPoolPublication) {');
+    // resumeDroppedPrewarmEntries stays unconditional on `resume` (it is
+    // itself a no-op over an empty array, per resumeDroppedPrewarmEntries'
+    // own 'does nothing for empty entries' contract): gating THIS call on
+    // resume.length instead of widening the outer guard would skip the
+    // Promise.allSettled await of submittedCompileUnits whenever the resume
+    // list is empty, so the in-flight early-submitted units would still
+    // never be awaited for the empty-remainder case.
+    expect(block).toContain('return resumeDroppedPrewarmEntries(resume, {');
+    expect(block).toContain(
+      'await Promise.allSettled(submittedCompileUnits.map((unit) => unit.done));',
+    );
+    // Exactly one publish call backs this whole block: no duplicate
+    // publication path was added alongside the widened guard.
+    expect(
+      block.match(/cleanupPrewarmArtifacts\(\{ clearVfx: false, publishPools: true \}\)/g),
+    ).toHaveLength(1);
+  });
+
   it('retains dropped texture uploads as one explicit idle unit per unique texture', () => {
     const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    const admission = readFileSync(
+      new URL('../src/render/initial_scene_texture_admission.ts', import.meta.url),
+      'utf8',
+    );
     const helperStart = source.indexOf('const textureResumeUnits = (');
     const helperEnd = source.indexOf('\n\n    const manifest:', helperStart);
     const helper = source.slice(helperStart, helperEnd);
@@ -250,11 +657,474 @@ describe('resumeDroppedPrewarmEntries', () => {
     const sceneEnd = source.indexOf("id: 'vfx.atlas'", sceneStart);
     const scene = source.slice(sceneStart, sceneEnd);
 
-    expect(helper).toContain('new Set(textures)');
-    expect(helper).toContain('run: () => this.prewarmTexture(texture)');
+    expect(helper).toContain('initialSceneTextureResumeUnits(idPrefix, textures');
+    expect(admission).toContain('new Set(textures)');
+    expect(admission).toContain('run: () => upload(texture)');
+    expect(admission).toContain('id: texturePieceLabel(`upload:$' + '{idPrefix}`, texture)');
     expect(surface).toContain("textureResumeUnits('surface-detail'");
-    expect(scene).toContain("textureResumeUnits('scene', this.collectInitialSceneTextures())");
+    expect(scene).toContain(
+      "resumeUnits: () => textureResumeUnits('scene', sceneTextureRemainder())",
+    );
+    expect(scene).toContain(
+      "resumePartialUnits: () => textureResumeUnits('scene', sceneTextureRemainder())",
+    );
     expect(surface).not.toContain('renderPrewarmPass');
     expect(scene).not.toContain('renderPrewarmPass');
+  });
+
+  // Weapon-skin rigs are worn by OTHER players, so nothing at boot draws one
+  // and their programs otherwise link on the first sighting, mid-gameplay.
+  it('warms the weapon-skin VFX programs as small resumable units', () => {
+    const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    const start = source.indexOf("id: 'vfx.weapon-skins'");
+    const end = source.indexOf("id: 'vfx.ability-primitives'", start);
+    const entry = source.slice(start, end);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(entry).toContain("category: 'vfx'");
+    expect(entry).toContain('required: false');
+    // One bounded build and compile unit per real catalog spec, never a
+    // whole-entry rerun that rebuilds all rigs after the loading cover drops.
+    // The PLAN now lives in weapon_vfx_prewarm.ts (its unit ids are pinned to
+    // literals in tests/weapon_vfx_rig_build.test.ts, and they double as the
+    // per-skin failure boundary), so the renderer side pins the WIRING and the
+    // module side pins the shape.
+    const prewarmModule = readFileSync(
+      new URL('../src/render/weapon_vfx_prewarm.ts', import.meta.url),
+      'utf8',
+    );
+    expect(prewarmModule).toContain(`weapon-skins:build:\${key}`);
+    expect(prewarmModule).toContain(`weapon-skins:compile:\${key}`);
+    expect(prewarmModule).toContain("id: 'weapon-skins:textures'");
+    expect(prewarmModule).toContain('stage.stage(key);');
+    expect(source).not.toContain("id: 'weapon-skins:group'");
+    // The staged seam owns per-key deduplication and partial-failure cleanup;
+    // keep the source pin on the renderer's exact factory wiring without
+    // coupling it to the helper's implementation details.
+    expect(source).toContain(
+      'const weaponVfxPrewarmSkinStage = createWeaponVfxPrewarmSkinStage(this.scene);',
+    );
+    expect(entry).toContain('weaponVfxPrewarmUnits(weaponVfxPrewarmSkinStage, {');
+    expect(entry).toContain('compile: (group) => this.compilePrewarmColorPrograms(group, false),');
+    expect(entry.match(/buildWeaponVfxPrewarmGroup\(\)/g)).toHaveLength(1); // loading-screen path only
+    expect(entry).toContain('for (const texture of weaponVfxPrewarmTextures()) ');
+    // The sky dome is not warmed: the world path builds none any more.
+    expect(entry).not.toContain('skyTex');
+
+    // The staged group is torn out of the scene by both cleanup paths and
+    // hidden between resumed entries, exactly like every other prewarm group.
+    expect(source).toContain('if (weaponVfxPrewarmGroup) this.scene.remove(weaponVfxPrewarmGroup)');
+    expect(source).toContain('weaponVfxPrewarmGroup = null;');
+    const hideStart = source.indexOf('const hidePrewarmArtifacts = ');
+    const hideEnd = source.indexOf('const cleanupPrewarmArtifacts = ', hideStart);
+    expect(source.slice(hideStart, hideEnd)).toContain('weaponVfxPrewarmGroup,');
+    // A dropped programs.compile still links it from its own bounded unit.
+    expect(source).toContain("['weapon-vfx', weaponVfxPrewarmGroup],");
+  });
+
+  it('leaves the weapon-skin warm off the constrained keep-list', () => {
+    expect(CONSTRAINED_PREWARM_KEEP).not.toContain('vfx.weapon-skins');
+  });
+
+  // Mounts had ZERO prewarm coverage before this entry (#2571): the runtime
+  // fallback (gateSwapFlagOnCompile at the mount-swap site) is a no-op
+  // without KHR_parallel_shader_compile, so the first sighting of any mount
+  // could freeze a live frame with no mitigation at all on that hardware.
+  //
+  // This source pin is paired with the behavior test below: a previous
+  // source-only version could not catch the scene reparent bug, but it still
+  // pins the merge-critical contract: loading-cover staging is resident-only
+  // while missing keys resume as bounded per-mount units that self-compile
+  // both color and shadow programs.
+  it('stages resident mounts inline and resumes missing keys one unit at a time', () => {
+    const source = readFileSync(new URL('../src/render/renderer.ts', import.meta.url), 'utf8');
+    const helperStart = source.indexOf('const mountPrewarmResumeUnits = ');
+    const helperEnd = source.indexOf('const textureResumeUnits', helperStart);
+    const start = source.indexOf("id: 'vfx.mount-programs'");
+    const end = source.indexOf("id: 'sky.nearby-biomes'", start);
+    const helperBlock = source.slice(helperStart, helperEnd);
+    const entryBlock = source.slice(start, end);
+
+    expect(helperStart).toBeGreaterThan(-1);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(entryBlock).toContain("category: 'vfx'");
+    expect(entryBlock).toContain('required: false');
+    // Derived from the real catalog, never a hand-maintained list: this is
+    // exactly the property that kept vfx.weapon-skins from drifting the way
+    // mounts did, and mount_prewarm.test.ts pins the derivation itself.
+    expect(source).toContain(
+      'const mountPrewarmPlannedKeys = mountPrewarmKeys(this.sim.ownedMounts());',
+    );
+    expect(source).toContain('const mountPrewarmPendingKeys = new Set(mountPrewarmPlannedKeys);');
+    expect(source).toContain('const mountPrewarmResumeUnits = (): PrewarmResumeUnit[] =>');
+    expect(helperBlock).toContain(`id: \`mount:\${key}\``);
+    expect(helperBlock).toContain('stageMountPrewarmVisual(this.scene, mountPrewarmGroup, key)');
+    expect(helperBlock).toContain('mountPrewarmPendingKeys.delete(key)');
+    expect(entryBlock).toContain(
+      'stageResidentMountPrewarmVisual(this.scene, mountPrewarmGroup, key)',
+    );
+    expect(entryBlock).toContain('if (performance.now() >= buildDeadline) break;');
+    expect(entryBlock).toContain('resumeUnits: mountPrewarmResumeUnits');
+    expect(entryBlock).toContain('resumePartialUnits: mountPrewarmResumeUnits');
+    // Both program halves: three's shadow depth material uses a different
+    // cache key (RGBADepthPacking) than the color pass, so linking only the
+    // color program still left the first shadow draw to link synchronously.
+    expect(helperBlock).toContain('compilePrewarmColorPrograms(staged.visual.root, false)');
+    expect(helperBlock).toContain('compileShadowPrograms(staged.visual.root)');
+    // An honest progress(): a run cut short by the deadline must report
+    // 'partial', never a false 'completed' (resolvePrewarmEntryStatus's
+    // documented failure mode).
+    expect(entryBlock).toContain('progress: () => ({');
+    expect(entryBlock).toContain('trimmed: mountPrewarmPendingKeys.size > 0');
+
+    // The staged group is torn out of the scene by both cleanup paths and
+    // hidden between resumed entries, exactly like every other prewarm group.
+    expect(source).toContain('if (mountPrewarmGroup) this.scene.remove(mountPrewarmGroup)');
+    expect(source).toContain('mountPrewarmGroup = null;');
+    const hideStart = source.indexOf('const hidePrewarmArtifacts = ');
+    const hideEnd = source.indexOf('const cleanupPrewarmArtifacts = ', hideStart);
+    expect(source.slice(hideStart, hideEnd)).toContain('mountPrewarmGroup,');
+    expect(source).toContain("['mounts', mountPrewarmGroup],");
+  });
+
+  // Real behavior, not a source match: builds two fake mount rigs, drives
+  // them through resumeDroppedPrewarmEntries exactly like the resume lane
+  // does, and asserts the group ends up in the scene with both rigs parented
+  // under it. This is the reproduction for the reparent bug (Object3D.add
+  // detaches its argument from any prior parent, so adding a rig to both the
+  // group and the scene silently emptied the group and never added it to the
+  // scene at all): a version of stageMountPrewarmVisual with that bug fails
+  // this test immediately.
+  it('stages every resumed mount rig into one group actually added to the scene', async () => {
+    const scene = new THREE.Scene();
+    const state: { group: THREE.Group | null } = { group: null };
+    const staged: THREE.Object3D[] = [];
+    const keys = ['a', 'b', 'c'];
+    const dropped: PrewarmResumeEntry[] = [
+      {
+        id: 'vfx.mount-programs',
+        units: keys.map((key) => ({
+          id: `mount:${key}`,
+          run: async () => {
+            const rig = new THREE.Group();
+            rig.name = `prewarm-mount:${key}`;
+            state.group ??= new THREE.Group();
+            if (state.group.parent !== scene) scene.add(state.group);
+            state.group.add(rig);
+            staged.push(rig);
+          },
+        })),
+      },
+    ];
+    await resumeDroppedPrewarmEntries(dropped, { idleSlot: async () => {} });
+
+    const resultGroup = state.group;
+    expect(resultGroup).not.toBeNull();
+    if (!resultGroup) throw new Error('unreachable');
+    expect(resultGroup.parent).toBe(scene);
+    expect(scene.children).toEqual([resultGroup]);
+    for (const rig of staged) expect(rig.parent).toBe(resultGroup);
+    expect(resultGroup.children).toEqual(staged);
+  });
+
+  it('leaves the mount warm off the constrained keep-list and off the constrained resume list', () => {
+    // Constrained-device eligibility requires a real measurement first
+    // (src/render/CLAUDE.md's iOS process-kill history): unlike
+    // vfx.ability-primitives (procedurally drawn canvases), this entry forces
+    // up to nine skinned GLB rigs resident, and mount assets are lazyPreload
+    // precisely so they never weigh on a constrained client's footprint.
+    expect(CONSTRAINED_PREWARM_RESUME).not.toContain('vfx.mount-programs');
+    expect(CONSTRAINED_PREWARM_KEEP).not.toContain('vfx.mount-programs');
+  });
+});
+
+describe('trackPrefetch', () => {
+  it('observes resolution synchronously after settlement', async () => {
+    let resolveTask: () => void = () => {};
+    const prefetch = trackPrefetch(
+      new Promise<void>((resolve) => {
+        resolveTask = resolve;
+      }),
+    );
+    expect(prefetch.isSettled()).toBe(false);
+    expect(prefetch.rejection()).toBeNull();
+    resolveTask();
+    await prefetch.task;
+    expect(prefetch.isSettled()).toBe(true);
+    expect(prefetch.rejection()).toBeNull();
+  });
+
+  it('records a rejection without leaking an unhandled rejection', async () => {
+    const failure = new Error('fetch failed');
+    const prefetch = trackPrefetch(Promise.reject(failure));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(prefetch.isSettled()).toBe(true);
+    expect(prefetch.rejection()).toBe(failure);
+    // The raw task still rejects for callers that await it deliberately.
+    await expect(prefetch.task).rejects.toBe(failure);
+  });
+});
+
+describe('waitForPrefetch: a stalled fetch can never starve the compute budget', () => {
+  it('returns pending after exactly the budgeted wait when the fetch stalls', async () => {
+    // Fake-clock harness: the fetch NEVER resolves (a black-holed network),
+    // the sleeper is the only thing that can end the wait, and it records the
+    // budget it was given.
+    const sleeps: number[] = [];
+    let releaseSleep: () => void = () => {};
+    const sleeper = (ms: number): Promise<void> => {
+      sleeps.push(ms);
+      return new Promise((resolve) => {
+        releaseSleep = resolve;
+      });
+    };
+    const prefetch = trackPrefetch(new Promise<void>(() => {}));
+    const wait = waitForPrefetch(prefetch, 9_000, sleeper);
+    await Promise.resolve();
+    expect(sleeps).toEqual([9_000]);
+    releaseSleep();
+    // The stalled fetch loses the race: the caller gets 'pending' and moves on
+    // to the budget-hungry stages instead of blocking on the network. This is
+    // the ordering fix: the pre-fix shape awaited the fetch unconditionally
+    // and was measured eating 11.5s of the 12s boot budget.
+    expect(await wait).toBe('pending');
+    expect(prefetch.isSettled()).toBe(false);
+  });
+
+  it('budget composition: entry start plus wait always precedes deadline minus reserve', async () => {
+    // The wait the renderer passes comes from skyAssetInlineWaitMs, so with a
+    // stalled fetch the sky entry consumes AT MOST deadline - reserve - now.
+    // Simulate the schedule with a virtual clock advanced only by sleeps.
+    let clock = 1_000; // sky entry start
+    const deadline = 13_000;
+    const reserve = 3_000;
+    const waitMs = skyAssetInlineWaitMs({
+      nowMs: clock,
+      deadlineMs: deadline,
+      reserveMs: reserve,
+      finishFullManifestBeforeReveal: false,
+    });
+    const sleeper = (ms: number): Promise<void> => {
+      clock += ms;
+      return Promise.resolve();
+    };
+    const outcome = await waitForPrefetch(
+      trackPrefetch(new Promise<void>(() => {})),
+      waitMs,
+      sleeper,
+    );
+    expect(outcome).toBe('pending');
+    // The compute/tail stages still start before the manifest deadline, with
+    // the full reserve intact.
+    expect(clock).toBeLessThanOrEqual(deadline - reserve);
+  });
+
+  it('returns ready without sleeping when the prefetch already settled', async () => {
+    const prefetch = trackPrefetch(Promise.resolve());
+    await prefetch.task;
+    let slept = false;
+    const outcome = await waitForPrefetch(prefetch, 5_000, () => {
+      slept = true;
+      return Promise.resolve();
+    });
+    expect(outcome).toBe('ready');
+    expect(slept).toBe(false);
+  });
+
+  it('returns ready when the fetch wins the race', async () => {
+    let resolveTask: () => void = () => {};
+    const prefetch = trackPrefetch(
+      new Promise<void>((resolve) => {
+        resolveTask = resolve;
+      }),
+    );
+    const wait = waitForPrefetch(prefetch, 5_000, () => new Promise<void>(() => {}));
+    resolveTask();
+    expect(await wait).toBe('ready');
+  });
+
+  it('treats a settled rejection as ready so the caller surfaces the failure itself', async () => {
+    const prefetch = trackPrefetch(Promise.reject(new Error('down')));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(await waitForPrefetch(prefetch, 5_000)).toBe('ready');
+  });
+
+  it('a zero or negative budget never waits at all', async () => {
+    let slept = false;
+    const sleeper = (): Promise<void> => {
+      slept = true;
+      return Promise.resolve();
+    };
+    const prefetch = trackPrefetch(new Promise<void>(() => {}));
+    expect(await waitForPrefetch(prefetch, 0, sleeper)).toBe('pending');
+    expect(await waitForPrefetch(prefetch, -100, sleeper)).toBe('pending');
+    expect(slept).toBe(false);
+  });
+
+  it('an Infinity budget awaits settlement outright (the finish-full-manifest arm)', async () => {
+    let resolveTask: () => void = () => {};
+    const prefetch = trackPrefetch(
+      new Promise<void>((resolve) => {
+        resolveTask = resolve;
+      }),
+    );
+    let settled = false;
+    const wait = waitForPrefetch(prefetch, Number.POSITIVE_INFINITY, () => {
+      throw new Error('the unbounded arm must not consult the sleeper');
+    }).then((outcome) => {
+      settled = true;
+      return outcome;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    resolveTask();
+    expect(await wait).toBe('ready');
+  });
+});
+
+describe('orderRootsByDistanceSq: the compile debt pays near-first (hitch-hunt P3a)', () => {
+  it('sorts ascending by distance', () => {
+    const roots = [{ d: 900 }, { d: 4 }, { d: 100 }];
+    expect(orderRootsByDistanceSq(roots, (root) => root.d)).toEqual([
+      { d: 4 },
+      { d: 100 },
+      { d: 900 },
+    ]);
+  });
+
+  it('keeps collection order for ties and puts unknown distances last', () => {
+    const a = { id: 'a', d: 25 as number | null };
+    const b = { id: 'b', d: null as number | null };
+    const c = { id: 'c', d: 25 as number | null };
+    const d = { id: 'd', d: null as number | null };
+    expect(orderRootsByDistanceSq([a, b, c, d], (root) => root.d)).toEqual([a, c, b, d]);
+  });
+
+  it('does not mutate the input array', () => {
+    const roots = [{ d: 2 }, { d: 1 }];
+    const input = [...roots];
+    orderRootsByDistanceSq(roots, (root) => root.d);
+    expect(roots).toEqual(input);
+  });
+
+  it('handles an empty collection', () => {
+    expect(orderRootsByDistanceSq([], () => null)).toEqual([]);
+  });
+
+  it('is wired to the live-scene compile collection anchored on the player', () => {
+    const compileUnitsSource = readFileSync(
+      new URL('../src/render/initial_scene_compile_units.ts', import.meta.url),
+      'utf8',
+    );
+    // The 'scene' group is the world-content collection the resume lane
+    // drains in order; the staged prewarm groups sit next to the player and
+    // gain nothing from sorting. Player-anchored on purpose: the early
+    // submit runs before the first updateCamera positions the camera.
+    const sceneAt = compileUnitsSource.indexOf("id: 'scene',");
+    const stagedAt = compileUnitsSource.indexOf('...options.stagedGroups.flatMap');
+    expect(sceneAt).toBeGreaterThan(-1);
+    expect(stagedAt).toBeGreaterThan(sceneAt);
+    const sceneCollection = compileUnitsSource.slice(sceneAt, stagedAt);
+    expect(sceneCollection).toContain('roots: orderRootsByDistanceSq(');
+    expect(sceneCollection).toContain(
+      'compileRootDistanceSq(root, options.playerX, options.playerZ)',
+    );
+  });
+});
+
+describe('compileRootDistanceSq: the honest position of a compile root', () => {
+  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+  it('uses the world-transformed bounding-sphere centre when present', () => {
+    // World-baked merged content: mesh at identity, geometry carries the
+    // placement. Translation alone would report (0, 0) for this root.
+    const root = {
+      matrixWorld: { elements: identity },
+      geometry: { boundingSphere: { center: { x: 300, y: 5, z: -40 } } },
+    };
+    expect(compileRootDistanceSq(root, 0, 0)).toBe(300 * 300 + 40 * 40);
+  });
+
+  it('applies the full matrix to the centre, not just the translation', () => {
+    const translated = [...identity];
+    translated[12] = 100;
+    translated[14] = 20;
+    const root = {
+      matrixWorld: { elements: translated },
+      geometry: { boundingSphere: { center: { x: 10, y: 0, z: 5 } } },
+    };
+    expect(compileRootDistanceSq(root, 0, 0)).toBe(110 * 110 + 25 * 25);
+  });
+
+  it('uses an InstancedMesh aggregate sphere instead of its primitive geometry sphere', () => {
+    const geometry = new THREE.BoxGeometry(2, 2, 2);
+    const root = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial(), 1);
+    root.setMatrixAt(0, new THREE.Matrix4().makeTranslation(500, 0, 0));
+    root.computeBoundingSphere();
+    root.updateMatrixWorld(true);
+
+    expect(root.geometry.boundingSphere?.center.x).toBe(0);
+    expect(root.boundingSphere?.center.x).toBe(500);
+    expect(compileRootDistanceSq(root, 0, 0)).toBe(500 * 500);
+  });
+
+  it('reads the NEAREST instance of a world-spanning InstancedMesh, never only its far centre', () => {
+    // Every cauldron of the world in one mesh: the aggregate centre sits far
+    // from the instance next to the player, and centre-only ordering put the
+    // mesh last (the station cauldron drew cold right after the curtain,
+    // bench batches 17 to 19).
+    const geometry = new THREE.BoxGeometry(2, 2, 2);
+    const root = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial(), 3);
+    root.setMatrixAt(0, new THREE.Matrix4().makeTranslation(-900, 0, 0));
+    root.setMatrixAt(1, new THREE.Matrix4().makeTranslation(12, 0, 5));
+    root.setMatrixAt(2, new THREE.Matrix4().makeTranslation(900, 0, 0));
+    root.computeBoundingSphere();
+    root.updateMatrixWorld(true);
+    // The aggregate centre sits near the origin with no instance there; the
+    // nearest instance is what counts.
+    expect(Math.abs(root.boundingSphere?.center.x ?? 999)).toBeLessThan(1);
+    expect(compileRootDistanceSq(root, 0, 0)).toBe(12 * 12 + 5 * 5);
+    expect(compileRootDistanceSq(root, 890, 0)).toBe(10 * 10);
+    // The mesh's own world matrix applies to the instances too.
+    root.position.set(100, 0, 0);
+    root.updateMatrixWorld(true);
+    expect(compileRootDistanceSq(root, 100, 0)).toBe(12 * 12 + 5 * 5);
+    // A single identity instance (a world-baked bake) keeps the sphere reading.
+    const bake = new THREE.InstancedMesh(geometry, new THREE.MeshBasicMaterial(), 1);
+    bake.setMatrixAt(0, new THREE.Matrix4());
+    bake.boundingSphere = new THREE.Sphere(new THREE.Vector3(300, 0, 40), 10);
+    bake.updateMatrixWorld(true);
+    expect(compileRootDistanceSq(bake, 0, 0)).toBe(300 * 300 + 40 * 40);
+  });
+
+  it('falls back to the matrix translation without a computed sphere', () => {
+    const translated = [...identity];
+    translated[12] = 30;
+    translated[14] = -40;
+    expect(compileRootDistanceSq({ matrixWorld: { elements: translated } }, 0, 0)).toBe(2500);
+    expect(
+      compileRootDistanceSq({ matrixWorld: { elements: translated }, geometry: null }, 0, 0),
+    ).toBe(2500);
+  });
+
+  it('orders a near world-baked bake ahead of a far positioned mesh', () => {
+    const nearBaked = {
+      matrixWorld: { elements: identity },
+      geometry: { boundingSphere: { center: { x: 10, y: 0, z: 0 } } },
+    };
+    const farPositioned = (() => {
+      const translated = [...identity];
+      translated[12] = 500;
+      return { matrixWorld: { elements: translated } };
+    })();
+    const ordered = orderRootsByDistanceSq([farPositioned, nearBaked], (root) =>
+      compileRootDistanceSq(root, 0, 0),
+    );
+    expect(ordered).toEqual([nearBaked, farPositioned]);
   });
 });
