@@ -286,7 +286,7 @@ interface AttributionTargetFixture {
 // release's six releases of render evolution plus this branch's Realm Racers
 // draw path). It was the ONE input that moved; no capture was retaken.
 const PINNED_POLISH_COMPOSITE_FINGERPRINT =
-  'c51cb7897258e3ef8367d0d9c7d6ff6214c65a0bdf47fe97309eaa4d14c0d895';
+  'b113d9d53a2ad54fc383f559865c983f55d9f076b343ba1645064e1429a9a19d';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

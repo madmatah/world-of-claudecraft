@@ -871,9 +871,9 @@ const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(REPO_ROOT, POLISH_SEAL_PATH);
 // release's six releases of render evolution plus this branch's Realm Racers
 // draw path). It was the ONE input that moved; no capture was retaken.
 const ACCEPTED_POLISH_V2_METADATA_SHA256 =
-  'd72d10cdc5241782a8e42c10fd51235b0a6101d0f81472767684948885d30d88';
+  'c73d97a338cbdf085296b67fb4262c1f6905da22dca6a49eb7e0dd4e55e87861';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
-  'c51cb7897258e3ef8367d0d9c7d6ff6214c65a0bdf47fe97309eaa4d14c0d895';
+  'b113d9d53a2ad54fc383f559865c983f55d9f076b343ba1645064e1429a9a19d';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -1957,7 +1957,7 @@ describe('Eastbrook polish performance and contact evidence', () => {
       `the second-order performance digest moved; if every input moved legitimately, re-mint with: ${REMINT_COMMAND} (it recomputes this literal LAST, from the swept files)`,
       // Re-minted for the release/v0.40.0 merge: this second-order performance
       // seal follows the swept evidence bytes above. No capture was retaken.
-    ).toBe('7e27e7c53bf5071e00712606ce687e9ee9959f83f7b2a570ca2a930eed50e5a1');
+    ).toBe('24b42d2e4270a76eec8fd9bebed9049e48824f59d2b23ea7d938e4c3ef4777ed');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {
