@@ -28,15 +28,19 @@ import {
   REALM_RACERS_PROP_URLS,
   REALM_RACERS_PROP_VISUALS,
 } from '../src/render/realm_racers_prop_visuals';
-import { REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
+import { CIRCUIT_THEMES, REALM_RACERS_THEME_ASSET_URLS } from '../src/render/realm_racers_themes';
 import { realmRacersPreloadInternalsForTest } from '../src/render/realm_racers_track';
+import { STREETLAMP_ASSET_DEFS } from '../src/render/streetlamp_assets';
 import { resolvePosition } from '../src/sim/colliders';
 import {
   REALM_RACERS_PRACTICE_CIRCUIT as GARDEN,
   REALM_RACERS_CIRCUIT_LIST,
   type RealmRacersCircuit,
 } from '../src/sim/content/realm_racers_circuits';
-import { REALM_RACERS_PROPS } from '../src/sim/content/realm_racers_props';
+import {
+  REALM_RACERS_LAMP_STYLES,
+  REALM_RACERS_PROPS,
+} from '../src/sim/content/realm_racers_props';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
 import {
   realmRacersCircuitErrors,
@@ -62,6 +66,11 @@ import {
   SCATTER_SURFACE_CLEARANCE,
 } from '../src/sim/realm_racers_props_resolve';
 import { rallyGardenEdgeOffsetAt, realmRacersTrack } from '../src/sim/realm_racers_spline';
+import {
+  STREETLAMP_COLLIDER_RADIUS,
+  STREETLAMP_FIXTURE_HEIGHT,
+  STREETLAMP_STYLE_BY_ZONE,
+} from '../src/sim/streetlamp_style';
 import { glbBounds } from './helpers/glb_bounds';
 
 const SEED = 42;
@@ -159,6 +168,67 @@ describe('Realm Racers props: the catalog has two halves and they must agree', (
       const rel = url.replace(/^\//, '');
       expect(existsSync(path.join(publicDir, rel)), `${url} should exist under public/`).toBe(true);
       expect(MEDIA_ASSETS[rel], `${url} should be in the media manifest`).toBeDefined();
+    }
+  });
+
+  it('draws every LAMP out of the streetlamp registry, on disk and manifested', () => {
+    // The fourteen lamp keys are the one family that cannot come through
+    // `PROP_ASSET_DEFS`: a streetlamp fixture is not a prop, it is prepared by
+    // `streetlamp_assets.ts` with an authored light socket and authored
+    // emissive materials, which is exactly why a circuit reuses one instead of
+    // dressing with a model that only looks like a lamp.
+    const lampKeys = Object.keys(REALM_RACERS_LAMP_STYLES);
+    expect(lampKeys.length).toBe(Object.keys(STREETLAMP_ASSET_DEFS).length);
+    for (const [key, style] of Object.entries(REALM_RACERS_LAMP_STYLES)) {
+      const visual = REALM_RACERS_PROP_VISUALS[key];
+      expect(visual?.kind, key).toBe('streetlamp');
+      if (visual?.kind !== 'streetlamp') continue;
+      // Derived from the fixture registry rather than restated, which is what
+      // keeps a key from quietly wearing another zone's lamp.
+      expect(visual.style).toBe(style);
+      expect(visual.url).toBe(STREETLAMP_ASSET_DEFS[style].url);
+      const rel = visual.url.replace(/^\//, '');
+      expect(existsSync(path.join(publicDir, rel)), `${visual.url} on disk`).toBe(true);
+      expect(MEDIA_ASSETS[rel], `${visual.url} manifested`).toBeDefined();
+      // The SIZE half, derived from the same measured tables the world's own
+      // posts are collided with, so the lamp a pilot hits is the lamp they see.
+      const def = REALM_RACERS_PROPS[key];
+      expect(def?.solid, key).toBe(true);
+      expect(def?.height, key).toBe(STREETLAMP_FIXTURE_HEIGHT);
+      expect(def?.footprint).toEqual({ kind: 'circle', r: STREETLAMP_COLLIDER_RADIUS[style] });
+    }
+    // ...and they are NOT in the dressing url list, which is the set the rally
+    // fetches on its own: these ride the streetlamp module's own world-entry
+    // preload, so a circuit placing one adds no fetch to anybody's session.
+    const lampUrls = new Set(Object.values(STREETLAMP_ASSET_DEFS).map((def) => def.url));
+    expect(REALM_RACERS_PROP_URLS.filter((url) => lampUrls.has(url))).toEqual([]);
+  });
+
+  it('offers every theme its own zone lamp, leading its vocabulary', () => {
+    // Fourteen near-identical lamp tiles in one palette is a hunt; a theme
+    // naming the one that belongs in its realm is what makes them authorable.
+    //
+    // Matched through the ZONE, the way the theme ids themselves are (the zone
+    // id with its article dropped, pinned in `realm_racers_themes.test.ts`),
+    // never through the biome: the Farshore flies a place-keyed sky over the
+    // vale, and a biome lookup would light its isle with Eastbrook's civic
+    // posts instead of its own coral.
+    const themeIdForZone = (zoneId: string): string =>
+      zoneId.replace(/_(vale|marsh|heights|isle)$/, '');
+    const lampOf = (theme: (typeof CIRCUIT_THEMES)[string]): string | undefined =>
+      theme.props.find((key) => key in REALM_RACERS_LAMP_STYLES);
+    for (const [themeId, theme] of Object.entries(CIRCUIT_THEMES)) {
+      const lamps = theme.props.filter((key) => key in REALM_RACERS_LAMP_STYLES);
+      expect(lamps.length, `${themeId} offers exactly one lamp`).toBe(1);
+      expect(theme.props[0], `${themeId} leads with its lamp`).toBe(lamps[0]);
+    }
+    for (const [zoneId, style] of Object.entries(STREETLAMP_STYLE_BY_ZONE)) {
+      const theme = CIRCUIT_THEMES[themeIdForZone(zoneId)];
+      expect(theme, zoneId).toBeDefined();
+      const lamp = lampOf(theme);
+      expect(lamp, zoneId).toBeDefined();
+      // The fixture this realm's own roads are lit with, and nothing else.
+      expect(REALM_RACERS_LAMP_STYLES[lamp as string], zoneId).toBe(style);
     }
   });
 

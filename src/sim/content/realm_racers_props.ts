@@ -52,6 +52,12 @@
 //
 // Pure leaf: data only, no SimContext, no rng, no clock.
 
+import {
+  STREETLAMP_COLLIDER_RADIUS,
+  STREETLAMP_FIXTURE_HEIGHT,
+  type StreetlampStyleId,
+} from '../streetlamp_style';
+
 /** A footprint in yards, at scale 1 and in the prop's own frame. */
 export type RallyPropFootprint =
   | { kind: 'circle'; r: number }
@@ -81,6 +87,63 @@ export interface RallyPropDef {
    *  piece too low to see is a trap) and by the collider's `cameraTopY`. */
   height: number;
 }
+
+/**
+ * The world's own streetlamp fixtures, as circuit dressing: one key per style.
+ *
+ * A circuit lit after dark is lit by the same lamps its zone lights its roads
+ * with, and the reason is not thrift. Every fixture carries an AUTHORED light
+ * socket, authored emissive materials and a modelled flame
+ * (`src/render/streetlamp_assets.ts`), which is what lets a lamp on a verge
+ * light the road through the night light field rather than glow at it; a new
+ * model would have to be given all three by hand before it lit anything.
+ *
+ * They meet this table's own promise about downloads: all fourteen are
+ * registered in the deferred preload lane at world entry for every player
+ * (`streetlamp_assets.ts`), so a circuit placing one adds no fetch.
+ *
+ * One key per STYLE rather than one generic key, because the footprint below is
+ * the pinned, measured collider radius of that fixture
+ * (`STREETLAMP_COLLIDER_RADIUS`) and the styles differ by more than a factor of
+ * two. A generic key would have to carry the widest of them, which is exactly
+ * the too-generous footprint this file's header calls a bug. What keeps the
+ * editor's palette from growing fourteen tiles is the theme: each theme offers
+ * its own zone's lamp and nothing else (`realm_racers_themes.ts`).
+ */
+export const REALM_RACERS_LAMP_STYLES: Readonly<Record<string, StreetlampStyleId>> = {
+  lampEastbrookCivic: 'eastbrook_civic',
+  lampMirefenWitchflame: 'mirefen_witchflame',
+  lampThornpeakBeacon: 'thornpeak_beacon',
+  lampVeiledCrystal: 'veiled_crystal',
+  lampDrakelandsBrazier: 'drakelands_brazier',
+  lampFrostveilIcicle: 'frostveil_icicle',
+  lampAmberfallCrystal: 'amberfall_crystal',
+  lampWillowfenReed: 'willowfen_reed',
+  lampNightbloomMoonflower: 'nightbloom_moonflower',
+  lampWraithwoodGhost: 'wraithwood_ghost',
+  lampPalmreachTotem: 'palmreach_totem',
+  lampEvergardenFlower: 'evergarden_flower',
+  lampGalecrestMast: 'galecrest_mast',
+  lampFarshoreCoral: 'farshore_coral',
+};
+
+/**
+ * Their defs, DERIVED rather than re-measured: the height is the one every
+ * fixture is scaled to and the radius is the collider the world already walks
+ * into, both from `src/sim/streetlamp_style.ts` and both pinned there against
+ * the shipped GLBs. Measuring them a second time here is how the two halves of
+ * one lamp drift apart.
+ */
+const LAMP_PROP_DEFS: Record<string, RallyPropDef> = Object.fromEntries(
+  Object.entries(REALM_RACERS_LAMP_STYLES).map(([key, style]) => [
+    key,
+    {
+      footprint: { kind: 'circle', r: STREETLAMP_COLLIDER_RADIUS[style] },
+      solid: true,
+      height: STREETLAMP_FIXTURE_HEIGHT,
+    },
+  ]),
+);
 
 /**
  * The authorable set. Adding a kind means adding it HERE and in the render
@@ -334,6 +397,10 @@ export const REALM_RACERS_PROPS: Record<string, RallyPropDef> = {
   // --- planting, added to the block above: drivable by design ---
   mushroomRed: { footprint: { kind: 'circle', r: 0.08 }, solid: false, height: 0.2 },
   mushroomTan: { footprint: { kind: 'circle', r: 0.09 }, solid: false, height: 0.15 },
+
+  // --- the fourteen streetlamp fixtures, so a circuit can be LIT after dark
+  // rather than only darkened (see REALM_RACERS_LAMP_STYLES above) ---
+  ...LAMP_PROP_DEFS,
 };
 
 /** The def for a key, or undefined for a key nothing authors. */

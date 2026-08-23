@@ -35,10 +35,14 @@ export const THUMBNAIL_MIN_DISTANCE = 0.35;
  * per build, so the rig owns them. An `instanced` entry draws a geometry and a
  * material out of a SHARED cache, and a GLB clone shares its parents' buffers
  * with the loader's parsed scene: freeing either would take every authored
- * circuit's props down with the tile. Two of the three answers are "leave it
- * alone", which is exactly why it is worth stating once and pinning.
+ * circuit's props down with the tile. A `streetlamp` is photographed as its own
+ * GLB clone for the same reason and takes the same answer. Three of the four
+ * answers are "leave it alone", which is exactly why it is worth stating once
+ * and pinning.
  */
-export function thumbnailOwnsGeometry(kind: 'group' | 'instanced' | 'gltf'): boolean {
+export function thumbnailOwnsGeometry(
+  kind: 'group' | 'instanced' | 'gltf' | 'streetlamp',
+): boolean {
   return kind === 'group';
 }
 

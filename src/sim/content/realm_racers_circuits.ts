@@ -683,6 +683,39 @@ const EVERGARDEN_EXPRESS_TOUR: RealmRacersCircuit = {
     { x: -147, z: -17, rx: 13, rz: 12, wobble: 0.15, seed: 12 },
   ],
   props: [
+    // The verge lights, and they are why this circuit can be raced at sunset.
+    // Eighteen of the Evergarden's own flower lamps, one every 46 yards of the
+    // 829 yard lap, all on the same side of the road the way a lit road is
+    // lit. Each one is a REAL light: the fixture carries an authored socket and
+    // the night light field lights the track from it with true direction and
+    // falloff (`src/render/realm_racers_lamps.ts`), so the road brightens
+    // because something above it is burning.
+    //
+    // Offset 16 is the nearest whole yard that clears the racing surface all
+    // the way round (the widest road here is 10 half-width, plus the verge
+    // margin and the run-off, plus the fixture's own measured radius), which is
+    // also close enough that a lamp lights the road rather than the lawn. They
+    // stand inside the chase camera's reach and the readout says so: a warning
+    // is a sentence to the author, and a lamp post is a thin pole rather than
+    // the tree canopy that rule was written for.
+    { asset: 'lampEvergardenFlower', at: { s: 0.0, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.0556, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.1111, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.1667, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.2222, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.2778, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.3333, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.3889, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.4444, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.5, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.5556, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.6111, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.6667, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.7222, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.7778, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.8333, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.8889, offset: 16 } },
+    { asset: 'lampEvergardenFlower', at: { s: 0.9444, offset: 16 } },
     { asset: 'fountain', at: { x: 21.6, z: 45.5 } },
     {
       asset: 'leafyFoxStatue',

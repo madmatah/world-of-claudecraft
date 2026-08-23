@@ -46,7 +46,17 @@ Everything else is a sibling module in one of these families:
   a circuit's edge LOOKS like is a `fences` list on the record, resolved by
   `src/sim/realm_racers_fences.ts` and cut into modules by `rallyFencePieces`
   from the kits in `realm_racers_barrier_visuals.ts`. A theme is VISUALS ONLY,
-  never a handling or track-limits knob. There is now one record per world-map
+  never a handling or track-limits knob. A circuit also owns its HOUR: the
+  record's `timeOfDay` resolves through `realm_racers_daylight_core.ts` and the
+  whole rig (`updateAmbience`) is built from that phase instead of the world
+  clock, so a race is lit by a design rather than by when the queue popped. It
+  is graded on EVERY tier, the Lambert one included, because on a circuit the
+  darkness is something a pilot reads the road through: the tier that skips the
+  cycle would otherwise be the tier that can see. The lamps that make a dark hour
+  raceable are authored props wearing the world's own streetlamp fixtures
+  (`realm_racers_lamps.ts`), each joining the night light field from its authored
+  socket, and the field runs in the band because the band's ground IS the world's
+  splat material. There is now one record per world-map
   ZONE, which is what makes the boot lane scoped rather than complete: only the
   kits a SHIPPED circuit wears are preloaded (`REALM_RACERS_THEME_BOOT_URLS`,
   against the whole-registry `REALM_RACERS_THEME_ASSET_URLS` the manifest guard

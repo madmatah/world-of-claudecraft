@@ -38,11 +38,26 @@
 // together and the readout measures what is drawn.
 
 import type * as THREE from 'three';
+import { REALM_RACERS_LAMP_STYLES } from '../sim/content/realm_racers_props';
+import type { StreetlampStyleId } from '../sim/streetlamp_style';
 import { buildTieredFountain, gardenStatueGeo, gardenStatueMaterial } from './garden_stonework';
 import { PROP_ASSET_DEFS } from './props';
+import { STREETLAMP_ASSET_DEFS } from './streetlamp_assets';
 
 export type RallyPropVisual =
   | { kind: 'gltf'; url: string }
+  /**
+   * A streetlamp FIXTURE: the world's own lit posts, which are not props at all
+   * (`streetlamp_assets.ts` prepares them, with an authored light socket,
+   * authored emissive materials and a modelled flame) and cannot come through
+   * `gltf()`, whose whole job is to point only at `PROP_ASSET_DEFS`.
+   *
+   * It carries the url as well as the style so anything that only wants to LOOK
+   * at the model (the editor's thumbnail rig) can treat it as a plain gltf; the
+   * style is what the draw path needs, because a lamp is instanced from its
+   * prepared parts and its light is registered from its prepared socket.
+   */
+  | { kind: 'streetlamp'; style: StreetlampStyleId; url: string }
   | { kind: 'group'; build(x: number, y: number, z: number, scale: number): THREE.Group }
   | {
       kind: 'instanced';
@@ -55,7 +70,18 @@ const gltf = (key: keyof typeof PROP_ASSET_DEFS): RallyPropVisual => ({
   url: PROP_ASSET_DEFS[key].url,
 });
 
+/** Every lamp key the sim catalog authors, mirrored off the SAME table, so the
+ *  two halves cannot disagree about which fixture a key wears. */
+const LAMP_VISUALS: Record<string, RallyPropVisual> = Object.fromEntries(
+  Object.entries(REALM_RACERS_LAMP_STYLES).map(([key, style]) => [
+    key,
+    { kind: 'streetlamp', style, url: STREETLAMP_ASSET_DEFS[style].url },
+  ]),
+);
+
 export const REALM_RACERS_PROP_VISUALS: Record<string, RallyPropVisual> = {
+  ...LAMP_VISUALS,
+
   // Adapted rather than handed over directly: the stonework builder takes
   // (x, z, y), the garden's own order, and this seam takes (x, y, z) like every
   // other placement in the renderer. Two argument orders that both compile is

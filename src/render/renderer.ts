@@ -568,6 +568,7 @@ import {
 } from './realm_racers_audio';
 import { realmRacersDaylight } from './realm_racers_daylight_core';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
+import { updateRealmRacersLampGlow } from './realm_racers_lamps';
 import { REALM_RACERS_SLICK_SHEEN_COLOR } from './realm_racers_slicks_core';
 import { type RallySkyKey, rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
 import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
@@ -12730,14 +12731,23 @@ export class Renderer {
     this.streetlamps?.update(lampGlow, this.time);
     this.emberPools?.update(lampGlow, this.time);
     this.campBraziers?.update(lampGlow, this.time);
+    // A circuit's own lamps burn on the SAME amount, so the world's lamps and a
+    // track's never disagree.
+    updateRealmRacersLampGlow(lampGlow, this.time);
     // The night light field: every lamp and camp fire plus the nearby bodies
     // collected above, packed into the terrain shader's uniform slots. Indoors
     // the world clock does not govern the ground either, so the same fogState
     // gate the discs use zeroes the whole field.
+    //
+    // A CIRCUIT is the other place it must run: its ground is that same splat
+    // material and an authored dark hour has nothing else lighting it. The body
+    // discs stay outdoor-only: a pool under every rival is a cue a race does not
+    // need, and the rim lift already splits a machine from dark ground.
+    const lampsLightGround = this.fogState === 'outdoor' || this.fogState === 'rally';
     updateNightLightField(
       p.pos.x,
       p.pos.z,
-      this.fogState === 'outdoor' ? lampGlow : 0,
+      lampsLightGround ? lampGlow : 0,
       this.fogState === 'outdoor' ? mobGlowAmount(this.dnGlobalNight) : 0,
       this.time,
       this.nightBodyLights,

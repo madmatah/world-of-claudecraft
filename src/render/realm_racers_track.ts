@@ -55,6 +55,11 @@ import {
   realmRacersGrassTiles,
   realmRacersGrassTint,
 } from './realm_racers_grass_core';
+import {
+  buildRealmRacersLamps,
+  type RallyLampPlacement,
+  type RallyLampsView,
+} from './realm_racers_lamps';
 import { buildRealmRacersPickups } from './realm_racers_pickups';
 import { REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import { buildRealmRacersSlicks } from './realm_racers_slicks';
@@ -694,7 +699,14 @@ function buildFences(circuit: RealmRacersCircuit, group: THREE.Group): void {
   for (const [url, spots] of cornerSpots) instanceModel(group, url, spots);
 }
 
-function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): BreathingProp[] {
+/** What the dressing pass hands back: the pieces that breathe, and the lamps,
+ *  whose lights the view has to move onto the viewer's lane. */
+interface DressingProps {
+  breathing: BreathingProp[];
+  lamps: RallyLampsView | null;
+}
+
+function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): DressingProps {
   const byAsset = new Map<string, RallyPlacedProp[]>();
   for (const prop of realmRacersPlacedProps(circuit)) {
     const list = byAsset.get(prop.asset);
@@ -702,9 +714,30 @@ function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): Br
     else byAsset.set(prop.asset, [prop]);
   }
   const breathing: BreathingProp[] = [];
+  // Every lamp of every style goes to ONE view: it owns a single night-light
+  // owner slot for the circuit, and a slot per style would have each style's
+  // re-registration wipe the last one's.
+  const lampPlacements: RallyLampPlacement[] = [];
   for (const [asset, props] of byAsset) {
     const visual = REALM_RACERS_PROP_VISUALS[asset];
     if (!visual) continue;
+    if (visual.kind === 'streetlamp') {
+      // A fixture is authored at its own shipped height and is not a piece a
+      // record may resize: `scale` is ignored here on purpose, because the sim
+      // catalog's collider radius and the socket the light leaves from are both
+      // measured at that one size, and a scaled lamp would light from somewhere
+      // its post no longer reaches.
+      for (const prop of props) {
+        lampPlacements.push({
+          x: prop.x + REALM_RACERS_ORIGIN.x,
+          y: GRASS_Y,
+          z: prop.z + REALM_RACERS_ORIGIN.z,
+          yaw: prop.yaw,
+          style: visual.style,
+        });
+      }
+      continue;
+    }
     if (visual.kind === 'gltf') {
       instanceModel(
         group,
@@ -762,7 +795,9 @@ function buildDressingProps(circuit: RealmRacersCircuit, group: THREE.Group): Br
       if (prop.scale !== 1) breathing.push({ group: built, scale: prop.scale });
     }
   }
-  return breathing;
+  const lamps = buildRealmRacersLamps(`realmRacersLamps:${circuit.id}`, lampPlacements);
+  if (lamps) group.add(lamps.group);
+  return { breathing, lamps };
 }
 
 /**
@@ -989,7 +1024,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
 
   // --- the AUTHORED dressing: every piece a designer placed by hand, plus the
   // seeded fills, from the one resolver the collision set reads too ---
-  const breathingProps = buildDressingProps(circuit, group);
+  const { breathing: breathingProps, lamps } = buildDressingProps(circuit, group);
 
   // --- the pickup boxes, under THIS circuit's group so they inherit the lane
   // transform and the "not my lane" hide the view already resolves ---
@@ -1042,10 +1077,19 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
       const lane = realmRacersLaneAt(px, pz);
       const mine = lane?.circuit.id === circuit.id;
       group.visible = mine;
-      if (!lane || !mine) return;
+      if (!lane || !mine) {
+        // The lights are WORLD positions, so a copy that is not being drawn has
+        // to give its slots back: left registered, this circuit's lamps would go
+        // on lighting the ground of whichever lane it was last moved onto.
+        lamps?.clearLights();
+        return;
+      }
       const offset = realmRacersLaneOffset(lane.index);
       if (group.position.x !== offset.x || group.position.z !== offset.z)
         group.position.set(offset.x, 0, offset.z);
+      // ...and the lamps follow the same rigid translation, which is the one
+      // thing the field cannot infer from the scene graph.
+      lamps?.setLaneOffset(offset.x, offset.z);
       // Same gate as the boxes and the oil below: a match on another circuit is
       // another lane's, and its countdown must not run this lane's lamps.
       const laneMatch = match?.circuitId === circuit.id ? match : null;

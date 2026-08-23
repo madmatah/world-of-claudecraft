@@ -152,8 +152,12 @@ export class PropThumbnailRig {
       };
     }
     try {
+      // Both remaining kinds are a model on disk: a `streetlamp` is the world's
+      // own lit fixture rather than a prop, but a TILE only wants to look at it,
+      // so it is photographed as the GLB it is (its authored emissive is dark by
+      // day, which is how a lamp looks on a shelf anyway).
       const gltf = await loadGltf(visual.url);
-      return { object: gltf.scene.clone(true), owned: thumbnailOwnsGeometry('gltf') };
+      return { object: gltf.scene.clone(true), owned: thumbnailOwnsGeometry(visual.kind) };
     } catch {
       return null;
     }

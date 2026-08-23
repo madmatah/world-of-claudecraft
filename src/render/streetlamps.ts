@@ -53,6 +53,13 @@ import { buildDrapedGlowGeometry, type GlowPatchSite } from './ground_glow_patch
 import { hasNightLightField, registerStaticNightLights } from './night_light_field';
 import { STREETLAMP_ASSET_DEFS, streetlampAsset } from './streetlamp_assets';
 import { type StreetlampEmissiveState, updateStreetlampEmissive } from './streetlamp_emissive';
+import {
+  LAMP_POOL_OPACITY,
+  LAMP_POOL_RADIUS,
+  lampFlameBreath,
+  streetlampLightAnchor,
+  streetlampLightSite,
+} from './streetlamp_light_site';
 import { radialGlowTexture } from './textures';
 
 export interface StreetlampsView {
@@ -76,29 +83,15 @@ const GLASS_EMISSIVE = 0xffa14a;
 const FALLBACK_SOURCE_EMISSIVE = 0.8;
 /** Lambert-tier fallback only: the field needs a standard splat material to
  *  splice, so the low tier keeps the draped pool rather than an unlit road. */
-const POOL_RADIUS = 6.5;
-const POOL_OPACITY = 0.5;
-/** Night-light-field entries: the punctual cutoff and candela-style level.
- *  Calibrated to the ground, not to the units: the head hangs 4.7 yd up, so
- *  the patch straight below it gets intensity * 0.045 / pi of the albedo,
- *  and reading CLEARLY lit on dark night ground needs the level up here.
- *  Raised with the pools removed (the field now carries the road alone), and
- *  again when the palette dropped to a true ~1800K flame amber: that colour
- *  carries far less luminance per unit intensity than the pale amber before it,
- *  so the same number would have read as a dimmer road.
- *
- *  The cutoff is the REACH knob and the intensity is the BRIGHTNESS knob, and
- *  they are deliberately turned separately: with decay-2 falloff the level
- *  under the lamp is set by 1/d^2 at four yards, which the cutoff barely
- *  touches, while the cutoff window is what strangles the tail. Widening the
- *  cutoff therefore carries lamplight further down the road (halfway to the
- *  next town lamp is roughly twice as lit as it was) without touching the pool
- *  underneath, which is already where it should be. */
-const FIELD_RADIUS = 48;
-const FIELD_INTENSITY = 205;
-/** A glassed lantern wavers gently, so the authored source and ground breathe
- *  together without introducing fixture-to-fixture brightness differences. */
-const FIELD_FLICKER = 0.1;
+// The pool's size and level are shared with the circuit lamps, which need the
+// same fallback on the same tier; see `streetlamp_light_site.ts`.
+const POOL_RADIUS = LAMP_POOL_RADIUS;
+const POOL_OPACITY = LAMP_POOL_OPACITY;
+// The night-light-field numbers (reach, brightness, waver) and the anchor
+// arithmetic live in `streetlamp_light_site.ts`, with the calibration written
+// out there. They moved when a Realm Racers circuit began dressing with these
+// same fixtures: a lamp on a verge has to light the track exactly as a lamp on
+// a road lights the road, and two copies of that answer is how they stop.
 
 /**
  * Post, collar, lantern housing, and finial, merged into one instanced draw,
@@ -203,16 +196,8 @@ export function buildStreetlamps(seed = 0): StreetlampsView {
     site: PlacedStreetlamp,
     yaw: number,
     socket: readonly [number, number, number],
-  ): { x: number; y: number; z: number } => {
-    const [ox, oy, oz] = socket;
-    const c = Math.cos(yaw);
-    const s = Math.sin(yaw);
-    return {
-      x: site.x + ox * c + oz * s,
-      y: site.y + oy,
-      z: site.z - ox * s + oz * c,
-    };
-  };
+  ): { x: number; y: number; z: number } =>
+    streetlampLightAnchor(site.x, site.y, site.z, yaw, socket);
 
   interface StyledSite {
     site: PlacedStreetlamp;
@@ -239,19 +224,16 @@ export function buildStreetlamps(seed = 0): StreetlampsView {
   // what keeps a plaza of fourteen different styles reading as one warm night.
   registerStaticNightLights(
     'streetlamps',
-    styled.map(({ site, style, yaw }) => {
-      const def = STREETLAMP_ASSET_DEFS[style];
-      const anchor = lightAnchor(site, yaw, socketFor(style));
-      return {
-        ...anchor,
-        radius: FIELD_RADIUS,
-        r: def.fieldColor[0],
-        g: def.fieldColor[1],
-        b: def.fieldColor[2],
-        intensity: FIELD_INTENSITY,
-        flicker: FIELD_FLICKER,
-      };
-    }),
+    styled.map(({ site, style, yaw }) =>
+      streetlampLightSite(
+        site.x,
+        site.y,
+        site.z,
+        yaw,
+        socketFor(style),
+        STREETLAMP_ASSET_DEFS[style].fieldColor,
+      ),
+    ),
   );
   // Pools ONLY where the field cannot run. Wherever the field is spliced the
   // real light is the whole story and no sprite is built at all.
@@ -404,7 +386,7 @@ export function buildStreetlamps(seed = 0): StreetlampsView {
       darkened = false;
       // A lantern flame breathes rather than strobing: two slow out-of-phase
       // sines, the same idiom the Icemantle lanterns use.
-      const flicker = 1 + Math.sin(time * 5.7) * 0.05 + Math.sin(time * 1.9) * 0.04;
+      const flicker = lampFlameBreath(time);
       for (const [material, intensity] of emitterMaterials) {
         material.emissiveIntensity = intensity * glow * flicker;
       }

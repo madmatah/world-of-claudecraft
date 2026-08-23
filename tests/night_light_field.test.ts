@@ -178,7 +178,20 @@ describe('the consumer seams (source pins)', () => {
     const renderer = read('../src/render/renderer.ts');
     expect(renderer).toContain('ensureNightLightField();');
     expect(renderer).toContain('updateNightLightField(');
-    expect(renderer).toContain("this.fogState === 'outdoor' ? lampGlow : 0,");
+    // The lamps light the ground in the two places the world's own splat
+    // material is drawn: the open world, and a Realm Racers circuit's band (the
+    // one place a race can be authored dark enough to need them). Anywhere else
+    // the field is zeroed, which is what keeps an interior off the world clock.
+    expect(renderer).toContain(
+      "const lampsLightGround = this.fogState === 'outdoor' || this.fogState === 'rally';",
+    );
+    expect(renderer).toContain('lampsLightGround ? lampGlow : 0,');
+    // The body discs stay OUTDOOR-only: a pool of light under every rival is a
+    // cue a race does not need, and the rim lift already separates a machine
+    // from dark ground.
+    expect(renderer).toContain(
+      "this.fogState === 'outdoor' ? mobGlowAmount(this.dnGlobalNight) : 0,",
+    );
     expect(renderer).toContain('collectBodyNightLights(');
   });
 

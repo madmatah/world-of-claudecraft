@@ -126,6 +126,13 @@ export interface RallyCircuitTheme {
    * The GRASS is not here for the same reason its colour is not: how thickly a
    * realm grows wild blades is `GRASS_BIOME_DENSITY`'s answer, and the
    * Evergarden's is zero because it is mown lawn.
+   *
+   * Every theme LEADS with its own zone's streetlamp fixture, and that placement
+   * in the list is the point: the catalog carries all fourteen of them (one per
+   * style, because the collider radius of a fixture is measured per style), and
+   * without a theme naming one an author dressing a night circuit would be
+   * scrolling fourteen near-identical lamp tiles to find the one that belongs
+   * in this realm. It is still only an aid: a circuit may place any zone's lamp.
    */
   props: readonly string[];
   /**
@@ -193,6 +200,7 @@ const EVERGARDEN: RallyCircuitTheme = {
   // `greatTree` IS the Evergarden's specimen elder, the same model and the same
   // scale band `garden_features.ts` raises over the lawns.
   props: [
+    'lampEvergardenFlower',
     'oak',
     'greatTree',
     'shrub',
@@ -280,6 +288,7 @@ const GALECREST: RallyCircuitTheme = {
   // A working coast: the harbour's own furniture, the golden horse, and the
   // planting that survives salt wind.
   props: [
+    'lampGalecrestMast',
     'oak',
     'shrub',
     'goldenHorseStatue',
@@ -373,6 +382,7 @@ const NIGHTBLOOM: RallyCircuitTheme = {
   // they are what the deleted ring used to plant, and nothing else in the
   // catalog looks remotely like them.
   props: [
+    'lampNightbloomMoonflower',
     'giantMushroom',
     'glowCluster',
     'amethyst',
@@ -444,6 +454,7 @@ const VEILED_HOLLOW: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampVeiledCrystal',
     'pixieMushroomHouse',
     'crystalMoundCave',
     'starHeartCrystal',
@@ -508,6 +519,7 @@ const THORNPEAK: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampThornpeakBeacon',
     'jumpVertical',
     'jumpOxer',
     'courseArch',
@@ -569,6 +581,7 @@ const DRAKELANDS: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampDrakelandsBrazier',
     'kcasRubbleLarge',
     'kcasRubbleHalf',
     'kcasRocks',
@@ -632,6 +645,7 @@ const WRAITHWOOD: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampWraithwoodGhost',
     'graveRound',
     'graveCross',
     'graveBevel',
@@ -698,6 +712,7 @@ const EASTBROOK: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampEastbrookCivic',
     'well',
     'fence',
     'timberPillar',
@@ -763,6 +778,7 @@ const MIREFEN: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampMirefenWitchflame',
     'reeds',
     'lilyRaft',
     'hexnPalisade',
@@ -825,6 +841,7 @@ const WILLOWFEN: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampWillowfenReed',
     'lilyRaft',
     'reeds',
     'rowboat',
@@ -886,6 +903,7 @@ const PALMREACH: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampPalmreachTotem',
     'hexnPalisade',
     'timberPillar',
     'rowboat',
@@ -962,6 +980,7 @@ const FARSHORE: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampFarshoreCoral',
     'hexShipRed',
     'hexShipGreen',
     'hexBoat',
@@ -1024,6 +1043,7 @@ const AMBERFALL: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampAmberfallCrystal',
     'postLantern',
     'lanternWall',
     'bench',
@@ -1094,6 +1114,7 @@ const FROSTVEIL: RallyCircuitTheme = {
   },
   reedUrl: REEDS_URL,
   props: [
+    'lampFrostveilIcicle',
     'kkWall',
     'kkPillar',
     'kkWallCracked',
