@@ -125,13 +125,16 @@ const RIFT_AMBIENCE_GAIN = 0.4;
 // control how strongly engine effort (mostly positive acceleration, plus a
 // small cruise floor) adds body and revs. The supplied loop ships mono already
 // (no stereo fold) and loses about 7.2 dB to true-peak safety. In-game tuning
-// settled at 2.2 so the pilot's engine remains present against the race music.
-// That level survived the move to unpanned playback untouched: the tuning ran
-// with the local engine sitting on the listener, which is inside REF_DISTANCE
-// and therefore already at full source gain. At full load the engine alone
-// commands 2.11, which stays below unity after the asset's -7.2 dB true-peak ceiling
-// and the 0.85 sampled-clip master.
-const REALM_RACERS_ENGINE_GAIN = 2.2;
+// first settled at 2.2 so the pilot's engine remained present against the race
+// music, then came down to 1.7 (about -2 dB) at the seat once the circuits
+// carried their own mastered tracks: at 2.2 the engine sat on top of the music
+// rather than beside it. The level survived the move to unpanned playback
+// untouched: the tuning ran with the local engine sitting on the listener,
+// which is inside REF_DISTANCE and therefore already at full source gain. At
+// full load the engine alone commands 1.63, well below unity after the asset's
+// -7.2 dB true-peak ceiling and the 0.85 sampled-clip master, and it leaves the
+// per-vehicle budget below more room for the tyre layers than 2.2 did.
+const REALM_RACERS_ENGINE_GAIN = 1.7;
 const VEHICLE_ENGINE_IDLE = 0.26;
 const VEHICLE_ENGINE_SPEED = 0.48;
 const VEHICLE_ENGINE_LOAD = 0.22;

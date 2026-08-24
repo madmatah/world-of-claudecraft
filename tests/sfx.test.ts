@@ -505,15 +505,15 @@ describe('Realm Racers vehicle loops', () => {
     // A fresh loop opens AT its rate; every later change is a commanded ramp
     // target, which is what the formula is pinned against from here on.
     expect(engine?.src.playbackRate.value).toBeCloseTo(0.35, 6);
-    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * 0.26, 6);
+    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(1.7 * 0.26, 6);
 
     sfx.vehicle(85, false, 2, 0, 0, 1, 0, 0, false);
     expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.35 + 0.6, 6);
-    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48), 6);
+    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(1.7 * (0.26 + 0.48), 6);
 
     sfx.vehicle(85, false, 2, 0, 0, 1, 1, 0, false);
     expect(engine?.src.playbackRate.targets.at(-1)).toBeCloseTo(0.35 + 0.6 + 0.3, 6);
-    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(2.2 * (0.26 + 0.48 + 0.22), 6);
+    expect(engine?.gain.gain.targets.at(-1)).toBeCloseTo(1.7 * (0.26 + 0.48 + 0.22), 6);
   });
 
   it('glides a live loop rate instead of stepping it', () => {
@@ -592,7 +592,7 @@ describe('Realm Racers vehicle loops', () => {
     const skid = internals.loops.get('realm-racers-skid-86');
     const roll = internals.loops.get('realm-racers-roll-86');
     const targets = [engine, skid, roll].map((loop) => loop?.gain.gain.targets.at(-1) ?? 0);
-    expect(targets[0]).toBeCloseTo(2.2 * (0.26 + 0.48 + 0.22), 6);
+    expect(targets[0]).toBeCloseTo(1.7 * (0.26 + 0.48 + 0.22), 6);
     expect(targets.reduce((sum, target) => sum + target, 0)).toBeCloseTo(2.25, 6);
     expect(skid?.gain.gain.targets.at(-1)).toBeLessThan(
       0.42 * SFX_CLIPS.mount_run_stalkglider_snail.gain,
