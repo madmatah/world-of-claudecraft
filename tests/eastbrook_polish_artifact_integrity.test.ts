@@ -855,6 +855,9 @@ const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(REPO_ROOT, POLISH_SEAL_PATH);
 // Re-minted after merging release/v0.40.0 into the loading-hitch branch:
 // renderer.ts combines mandatory entry admission with the release's rift
 // long-session resource lifecycle changes. No capture was retaken.
+// Re-minted for the v0.40 batch merge-forward over the loading review fixes:
+// renderer.ts and prewarm_policy.ts now seal the combined release-batch tree.
+// No capture was retaken.
 // Re-minted for the loading review fixes (rebuild reveal gates, inactive
 // horizon fast path, display-pacing admission, and restored rationale): the
 // renderer integration leaf moved. No capture was retaken.
@@ -870,10 +873,18 @@ const ACCEPTED_POLISH_V2_METADATA_PATH = path.join(REPO_ROOT, POLISH_SEAL_PATH);
 // the composite follows renderer.ts, which now carries both parents' work (the
 // release's six releases of render evolution plus this branch's Realm Racers
 // draw path). It was the ONE input that moved; no capture was retaken.
+// Re-minted for the sliding-far-mob-freeze fix (the far-mesh swap now also
+// holds out a moving entity): the renderer integration leaf moved. No
+// capture was retaken.
+// Re-minted for the stale remote-entity holdout repair (renderer.ts): the
+// renderer integration leaf moved. No capture was retaken.
+// Re-minted for the v0.40.0 merge (release tip 9a89e3483e) into
+// feature/realm-racers: renderer.ts carries both parents' work and was the
+// ONE input that moved. No capture was retaken.
 const ACCEPTED_POLISH_V2_METADATA_SHA256 =
-  'c73d97a338cbdf085296b67fb4262c1f6905da22dca6a49eb7e0dd4e55e87861';
+  'ef6f9ff164a715ea33b26efdf4043d3086937e5d58c261a79ccaa06b2bec646b';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
-  'b113d9d53a2ad54fc383f559865c983f55d9f076b343ba1645064e1429a9a19d';
+  '69356bf87e4ed50a3a5d2ed51e6ba205732c89e4bf4b1a8fee22391eaa118162';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -1952,12 +1963,19 @@ describe('Eastbrook polish performance and contact evidence', () => {
     // then this seal. No capture was retaken.
     // Re-minted for the loading review fixes (renderer.ts): same order, the
     // composite first, then this seal. No capture was retaken.
+    // Re-minted for the sliding-far-mob-freeze fix (renderer.ts): same order,
+    // the composite first, then this seal. No capture was retaken.
+    // Re-minted for the stale remote-entity holdout repair (renderer.ts):
+    // same order, the composite first, then this seal. No capture was retaken.
     expect(
       fingerprint.digest('hex'),
       `the second-order performance digest moved; if every input moved legitimately, re-mint with: ${REMINT_COMMAND} (it recomputes this literal LAST, from the swept files)`,
       // Re-minted for the release/v0.40.0 merge: this second-order performance
       // seal follows the swept evidence bytes above. No capture was retaken.
-    ).toBe('24b42d2e4270a76eec8fd9bebed9049e48824f59d2b23ea7d938e4c3ef4777ed');
+      // Re-minted for the v0.40.0 merge (release tip 9a89e3483e): this
+      // second-order performance seal follows the swept evidence bytes above.
+      // No capture was retaken.
+    ).toBe('043542ab351f8ec28bd35f8ed865223c6a77c543244fb62624e923aef9b05322');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

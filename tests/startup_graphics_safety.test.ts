@@ -121,7 +121,9 @@ describe('constrained renderer integration', () => {
     // identical blocks, each carrying its own tier gate, which is a fix applied
     // to one code path waiting to happen; what has to hold is that the gate is
     // still there and that both paths still go through it.
-    expect(source).toContain(`    this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
+    expect(
+      source,
+    ).toContain(`    this.skyView.setCameraPos(this.camera.position.x, this.camera.position.z, dt);
     if (!this.lowGfx) {`);
     expect(source.match(/this\.pushSkyGrade\(dt\);/g)).toHaveLength(2);
   });

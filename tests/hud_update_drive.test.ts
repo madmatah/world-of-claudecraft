@@ -672,7 +672,7 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     band: 'frame',
     gate: '',
     surface: 'chrome',
-    why: 'the stance/form bar; rebuilds its buttons behind a signature latch',
+    why: 'the stance/form bar, behind the hud/stance seam: the desktop row rebuilds its buttons behind a signature latch, and the touch shape paints the ring anchor through the shared write-elision facet with the icon RESOLVE key-diffed inside the painter',
   },
   {
     call: 'this.flushPendingProcAuraNotes',
@@ -729,11 +729,11 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     why: 'the touch action ring; desktop skips the tick and the paint entirely',
   },
   {
-    call: 'this.consumableBarPainter.paint',
+    call: 'this.mobileConsumableSeat.paint',
     band: 'frame',
-    gate: 'this.isMobileLayout() && this.consumablesOpen && this.consumableBarView && this.consumableBarPainter',
+    gate: 'this.isMobileLayout()',
     surface: 'chrome',
-    why: 'the touch consumables quick bar, only while the row is expanded',
+    why: 'the touch consumables seat (the ring arc position showing the first carried consumable) plus the row it opens; desktop skips both',
   },
   {
     call: 'this.xpBarPainter.paint',
@@ -903,11 +903,15 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     why: 'the party frames (a pooled painter) AND, via paintLootSettings, the loot-settings window',
   },
   {
-    call: 'this.updateTradeWindow',
+    call: 'this.wocTrade.updateTradeWindow',
     band: 'medium',
     gate: '',
     surface: 'window',
-    guard: { kind: 'hud', proof: 'if (sig === this.lastTradeSig) return;' },
+    guard: {
+      kind: 'module',
+      module: 'hud/woc_trade/woc_trade_controller.ts',
+      proof: 'if (sig === this.lastTradeSig) return;',
+    },
     why: 'the trade window, rebuilt on a signature change; also auto-opens it on a trade start',
   },
   {
@@ -1232,6 +1236,14 @@ const HUD_UPDATE_DRIVES: readonly DriveRow[] = [
     surface: 'window',
     guard: { kind: 'module', module: 'market_window.ts', proof: SIG_RETURN },
     why: 'the market window',
+  },
+  {
+    call: 'this.wocMarketWindow.refreshIfChanged',
+    band: 'slow',
+    gate: 'this.wocMarketWindow.isOpen',
+    surface: 'window',
+    guard: { kind: 'module', module: 'woc_market_window.ts', proof: SIG_RETURN },
+    why: 'the $WOC Exchange window; its wocMarketViewSig digest folds second-resolution countdowns in, so open auctions tick on the poll without a self-armed driver. This call ALSO carries the window’s background re-ask (pollFromServer, self-throttled to its own much slower cadence by woc_market_poll_core): a rebuild alone can only repaint data already in hand, and could never show a bond the chain has since confirmed',
   },
   {
     call: 'this.mailboxWindow.refreshIfChanged',
@@ -1669,13 +1681,19 @@ describe('Hud.update() drives exactly the registered set, on the registered band
     expect(
       bySurface,
       "the surface split moved. A new call needs its surface decided; a CHANGED one means a repaint was reclassified, which is the one edit that can quietly drop a window row's invalidation guard.",
-      // Both sides of every sync move this bucket split independently, so it
-      // cannot be reconciled by arithmetic across a merge. The numbers below
-      // were counted off the merged table itself, not from either side's
-      // narrative.
-      // window 47 -> 48: the Realm Racers standings/podium window row the
-      // branch brings (realm_racers.ts, module-guarded).
-    ).toEqual({ window: 48, chrome: 84, none: 17 });
+      // Both sides of every v0.36.0 sync move this bucket split independently
+      // (the branch's woc_market window row against the release's own
+      // window/chrome churn), so it cannot be reconciled by arithmetic across
+      // a merge. The numbers below were counted from the merged table itself,
+      // not from either side's narrative. At the third v0.40.0 sync the
+      // release's tracker-stack anchor apply (seats the stack below the
+      // minimap column; tracker_stack_anchor.ts) took chrome 83 -> 84 while
+      // the branch keeps its 48th window row (woc_market); the merged table
+      // counts window 48, chrome 84, none 17.
+      // The second v0.40.0 sync then adds this branch's Realm Racers
+      // standings/podium window row (realm_racers.ts, module-guarded) on top
+      // of that, taking window 48 -> 49; counted off the merged table.
+    ).toEqual({ window: 49, chrome: 84, none: 17 });
     const windows = HUD_UPDATE_DRIVES.filter((r) => r.surface === 'window');
     expect(windows.map((r) => r.call)).toContain('this.spellbookWindow.tickOpen');
     expect(windows.map((r) => r.call)).toContain('this.refreshOpenTownFocusIfChanged');
@@ -1689,13 +1707,18 @@ describe('Hud.update() drives exactly the registered set, on the registered band
     expect(byKind, 'a guard kind changed: say why in the PR, not only in the table').toEqual({
       // Reliquary cold window (module) + craft-cast single-surface strip (hud)
       // both land on this pin; keep both counts, do not drop either side.
-      // 25 = the release's 24 plus the branch's Realm Racers window row, whose
-      // guard lives in realm_racers.ts.
-      module: 25,
-      // 7 = Phase 20's refreshCharSheetIfChanged. Its latch is a HUD field
-      // (lastCharSheetSig), like its profession sibling, because the cold
-      // char_window painter holds no signature of its own to diff.
-      hud: 7,
+      // 27 = the release's 26 (its reliquary module guard, its new
+      // module-guarded row, this branch's woc_market_window row and the trade
+      // window row whose guard moved from a hud latch to the woc_trade
+      // controller) plus this branch's Realm Racers window row, whose guard
+      // lives in realm_racers.ts.
+      module: 27,
+      // 6 = Phase 20's refreshCharSheetIfChanged and its siblings. Their
+      // latches are HUD fields (lastCharSheetSig et al) because the cold
+      // char_window painter holds no signature of its own to diff. Down one
+      // at the release's trade extraction: that row's lastTradeSig latch now
+      // lives in the woc_trade module.
+      hud: 6,
       callsite: 12,
       none: 4,
     });
@@ -1744,7 +1767,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
         'hud.ts: if (sig === this.lastCharSheetSig) return;',
         'hud.ts: if (sig === this.lastProfessionSurfaceSig) return;',
         'hud.ts: if (sig === this.lastTownFocusSig) return;',
-        'hud.ts: if (sig === this.lastTradeSig) return;',
+        'hud/woc_trade/woc_trade_controller.ts: if (sig === this.lastTradeSig) return;',
         'hud/delve/lockpick_window.ts: if (lockpickRenderSig(view) !== this.lastSig) this.renderBoard();',
         'hud/quest/quest_dialog_controller.ts: if (this.introHintVisibleFor(npc) !== this.lastIntroHintVisible || gossipRowSig(this.offerableRows(npc)) !== this.lastGossipRowSig) { this.refresh(); }',
         'mailbox_window.ts: if (sig === this.lastSig) return;',
@@ -1763,6 +1786,7 @@ describe('Hud.update() drives exactly the registered set, on the registered band
         // per-frame allocation.
         'spellbook_window.ts: if (this.knownChanged(this.deps.world().known)) {',
         'target_auras_window.ts: if (this.cleared) return;',
+        'woc_market_window.ts: if (sig === this.lastSig) return;',
         'vale_cup_betting.ts: if (view.sig !== this.lastSig) {',
         'vale_cup_briefing.ts: if (view.sig !== this.lastSig) {',
         'vale_cup_window.ts: if (view.sig === this.lastSig) return;',

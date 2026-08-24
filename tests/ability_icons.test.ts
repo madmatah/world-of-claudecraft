@@ -127,13 +127,13 @@ describe('ability icons', () => {
     expect(ids).toEqual([...new Set(ids)].sort((left, right) => left.localeCompare(right)));
     // +3 over the release: the Realm Racers pickup abilities (rally_ground_blast,
     // rally_nitro, rally_oil_slick), each an authored procedural recipe.
-    expect(ids).toHaveLength(439);
+    expect(ids).toHaveLength(441);
     for (const id of ids) expect(hasExplicitAbilityIcon(id), id).toBe(true);
 
     const identity = ids.map((id) => ({ id, recipe: abilityIconRecipe(id) }));
     const hash = createHash('sha256').update(stableSerialize(identity)).digest('hex');
     // Re-baselined on the merged tree for the three appended Realm Racers recipes;
     // no shipped recipe's payload changed on either side of the merge.
-    expect(hash).toBe('160029487a752b7ae95f5571b6cd94bf472b831cfc87fd89e950778f313f3f54');
+    expect(hash).toBe('cc503dcba6813035650d445d2cd503e160b73a784cdbabba2a63764a8f1a1032');
   });
 });
