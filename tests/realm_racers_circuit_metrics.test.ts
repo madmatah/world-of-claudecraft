@@ -60,7 +60,7 @@ const DRAFT_BASE = {
   laps: 3,
   practiceLaps: 4,
   timeLimitSeconds: 420,
-  musicTrack: 'realm_racers',
+  musicTrack: 'realm_racers_evergarden',
   theme: 'evergarden',
   roles: ['competition'],
   practiceCopies: 0,

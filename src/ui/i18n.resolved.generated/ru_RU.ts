@@ -1397,6 +1397,7 @@ export const ru_RU: EnTranslations = {
       "standingsRetired": "Сход",
       "circuitName_evergarden_practice": "Тренировочный полигон Эвергардена",
       "circuitName_evergarden_express_tour": "Экспресс-тур Эвергардена",
+      "circuitName_nightbloom_moonwell_run": "Гонка у Лунного колодца Ночецветья",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "Позиция {position}/{total}",
       "lap": "Круг {lap}/{total}",

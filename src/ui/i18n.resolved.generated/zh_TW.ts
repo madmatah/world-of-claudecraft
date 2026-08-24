@@ -1397,6 +1397,7 @@ export const zh_TW: EnTranslations = {
       "standingsRetired": "退賽",
       "circuitName_evergarden_practice": "永恆花園訓練場",
       "circuitName_evergarden_express_tour": "永恆花園特快巡迴賽",
+      "circuitName_nightbloom_moonwell_run": "夜綻花野月泉競速賽",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "名次 {position}/{total}",
       "lap": "圈數 {lap}/{total}",

@@ -11159,6 +11159,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.standingsRetired': '退赛',
   'hudChrome.rally.circuitName_evergarden_practice': '永恒花园训练场',
   'hudChrome.rally.circuitName_evergarden_express_tour': '永恒花园特快巡回赛',
+  'hudChrome.rally.circuitName_nightbloom_moonwell_run': '夜绽花野月泉竞速赛',
   'hudChrome.rally.podiumTime': '{minutes}:{seconds}.{tenths}',
   'hudChrome.rally.draw': '不分胜负。赛事裁判宣布比赛平局。',
   'hudChrome.rally.position': '排名 {position}/{total}',

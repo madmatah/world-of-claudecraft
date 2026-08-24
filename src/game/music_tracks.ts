@@ -67,12 +67,17 @@ export const ZONE_STREAM_URLS: Record<MusicZone, string | null> = {
  *  renders of a composed theme in music.ts, so they live at the top level of
  *  public/audio/ next to the boss loop rather than under music/. At most one is
  *  active at a time: their areas are mutually exclusive. */
-export type AreaTrackId = 'sowfield_waiting' | 'sowfield_match' | 'realm_racers';
+export type AreaTrackId =
+  | 'sowfield_waiting'
+  | 'sowfield_match'
+  | 'realm_racers_evergarden'
+  | 'realm_racers_nightbloom';
 
 export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
   sowfield_waiting: '/audio/sowfield-waiting.mp3',
   sowfield_match: '/audio/sowfield-match.mp3',
-  realm_racers: '/audio/realm-racers.mp3',
+  realm_racers_evergarden: '/audio/realm-racers-evergarden.mp3',
+  realm_racers_nightbloom: '/audio/realm-racers-nightbloom.mp3',
 };
 
 /** Which tracks belong to the same place. Activating one warms every track of
@@ -89,8 +94,18 @@ export const AREA_TRACK_URLS: Record<AreaTrackId, string> = {
 export const AREA_TRACK_GROUP: Record<AreaTrackId, string> = {
   sowfield_waiting: 'sowfield',
   sowfield_match: 'sowfield',
-  realm_racers: 'realm_racers',
+  realm_racers_evergarden: 'realm_racers_evergarden',
+  realm_racers_nightbloom: 'realm_racers_nightbloom',
 };
+
+/** The tracks a Realm Racers circuit may name, one per zone that has a
+ *  circuit. The music director restarts any of these from the top on every
+ *  circuit visit and every new race, which is a rule about the PLACE rather
+ *  than about one track, so it is asked here rather than by track id. */
+export const REALM_RACERS_AREA_TRACKS: ReadonlySet<AreaTrackId> = new Set<AreaTrackId>([
+  'realm_racers_evergarden',
+  'realm_racers_nightbloom',
+]);
 
 /** Whether a plain string names an area track. The Realm Racers circuit records
  *  carry their track as a string, because `src/sim/` may not import this union;

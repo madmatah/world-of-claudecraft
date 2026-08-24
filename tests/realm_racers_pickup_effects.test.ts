@@ -44,6 +44,7 @@ import {
   REALM_RACERS_WARD_AURA_SECONDS,
   realmRacersForfeit,
   realmRacersResetPosition,
+  realmRacersStartMatch,
   realmRacersToWorld,
   realmRacersWarded,
 } from '../src/sim/social/realm_racers';
@@ -76,10 +77,14 @@ function match(sim: Sim): NonNullable<Sim['realmRacers']['match']> {
 function racingGrid(): { sim: Sim; pids: number[] } {
   const sim = makeWorld();
   const pids = GRID.map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
-  for (const pid of pids) sim.realmRacersQueueJoin(pid);
+  // Seated on the NAMED circuit rather than through the queue's draw: the pool
+  // holds more than one competition circuit, and the geometry below is this
+  // one's road.
+  expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
   sim.tick();
   for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
   expect(match(sim).phase).toBe('racing');
+  expect(match(sim).circuitId).toBe(RACE_CIRCUIT.id);
   return { sim, pids };
 }
 
@@ -834,7 +839,7 @@ describe('the pickups stay deterministic', () => {
     const run = () => {
       const sim = makeWorld();
       const pids = GRID.map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
-      for (const pid of pids) sim.realmRacersQueueJoin(pid);
+      realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id);
       sim.tick();
       for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
       const drawn: string[] = [];

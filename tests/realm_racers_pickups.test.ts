@@ -38,6 +38,7 @@ import {
   REALM_RACERS_RESET_LOCK_TICKS,
   realmRacersForfeit,
   realmRacersResetPosition,
+  realmRacersStartMatch,
   realmRacersToWorld,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
@@ -70,9 +71,13 @@ function match(sim: Sim): NonNullable<Sim['realmRacers']['match']> {
 function racingGrid(): { sim: Sim; pids: number[] } {
   const sim = makeWorld();
   const pids = GRID.map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
-  for (const pid of pids) sim.realmRacersQueueJoin(pid);
+  // Seated on the NAMED circuit rather than through the queue's draw: the pool
+  // holds more than one competition circuit, and every box below is resolved
+  // off this one's road.
+  expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
   sim.tick();
   expect(sim.realmRacers.match).not.toBeNull();
+  expect(match(sim).circuitId).toBe(RACE_CIRCUIT.id);
   for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
   expect(match(sim).phase).toBe('racing');
   return { sim, pids };

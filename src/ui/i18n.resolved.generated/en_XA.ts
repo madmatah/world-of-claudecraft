@@ -1397,6 +1397,7 @@ export const en_XA: EnTranslations = {
       "standingsRetired": "[Óúţ]",
       "circuitName_evergarden_practice": "[Éʋéŕĝáŕðéñ Ɓóóţçáɱþ]",
       "circuitName_evergarden_express_tour": "[Éʋéŕĝáŕðéñ Éẋþŕéšš Ţóúŕ]",
+      "circuitName_nightbloom_moonwell_run": "[Ñíĝĥţƀļóóɱ Ɱóóñŵéļļ Ŕúñ]",
       "podiumTime": "[{minutes}:{seconds}.{tenths}]",
       "position": "[Þóšíţíóñ {position}/{total}]",
       "lap": "[Ļáþ {lap}/{total}]",

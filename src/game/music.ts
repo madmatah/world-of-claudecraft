@@ -20,6 +20,7 @@ import {
   type AreaTrackId,
   COMBAT_STREAM_URLS,
   pickCombatTrackIndex,
+  REALM_RACERS_AREA_TRACKS,
   ZONE_STREAM_URLS,
 } from './music_tracks';
 
@@ -4977,12 +4978,12 @@ export class MusicDirector {
 
   /** Drive the area music: which dedicated file track owns the mix right now
    *  ('sowfield_waiting' before a Vale Cup game, 'sowfield_match' once one has
-   *  kicked off, 'realm_racers' on the rally circuit), null when the player is
+   *  kicked off, a circuit's own track on the rally band), null when the player is
    *  in none of those places. Idempotent; the HUD calls it every frame.
    *  Crossfades between the tracks and ducks the procedural score while active. */
   setAreaTrack(track: AreaTrackId | null, restart = false): void {
     const changed = track !== this.areaTrack;
-    if (track === 'realm_racers' && (changed || restart)) {
+    if (track !== null && REALM_RACERS_AREA_TRACKS.has(track) && (changed || restart)) {
       // Keep the downloaded element cached, but start each circuit visit and
       // each new match from the top of the soundtrack.
       this.ensureAreaElements(track);

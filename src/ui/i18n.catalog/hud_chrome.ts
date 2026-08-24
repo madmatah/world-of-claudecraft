@@ -1384,6 +1384,7 @@ export const hudChromeStrings = {
     // dev command) simply goes unnamed; nothing falls back to an id.
     circuitName_evergarden_practice: 'Evergarden Bootcamp',
     circuitName_evergarden_express_tour: 'Evergarden Express Tour',
+    circuitName_nightbloom_moonwell_run: 'Nightbloom Moonwell Run',
     // The end-of-race podium: a race time on each step, to a tenth. The heading
     // above the steps is the circuit name, from the keys above.
     podiumTime: '{minutes}:{seconds}.{tenths}',

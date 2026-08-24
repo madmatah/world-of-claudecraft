@@ -435,10 +435,10 @@ describe('MusicDirector area file tracks', () => {
   it('gives the race track the mix on the circuit and ducks the procedural score', () => {
     const master = (director as unknown as { master: FakeGain }).master;
     director.update('vale', false);
-    director.setAreaTrack('realm_racers');
+    director.setAreaTrack('realm_racers_evergarden');
 
-    const race = areaEls().realm_racers;
-    expect(race?.src).toBe(AREA_TRACK_URLS.realm_racers);
+    const race = areaEls().realm_racers_evergarden;
+    expect(race?.src).toBe(AREA_TRACK_URLS.realm_racers_evergarden);
     expect(race?.loop).toBe(true);
     expect(race?.play).toHaveBeenCalled();
     expect(master.gain.value).toBe(0);
@@ -450,13 +450,13 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('downloads only the tracks of the place the player is in', () => {
-    director.setAreaTrack('realm_racers');
-    expect(Object.keys(areaEls()).sort()).toEqual(['realm_racers']);
+    director.setAreaTrack('realm_racers_evergarden');
+    expect(Object.keys(areaEls()).sort()).toEqual(['realm_racers_evergarden']);
 
     director.setAreaTrack('sowfield_waiting');
     // the Sowfield pair warms together: its kickoff crossfade is instant
     expect(Object.keys(areaEls()).sort()).toEqual([
-      'realm_racers',
+      'realm_racers_evergarden',
       'sowfield_match',
       'sowfield_waiting',
     ]);
@@ -465,7 +465,7 @@ describe('MusicDirector area file tracks', () => {
   it('hands the mix back to the zone streams when the player leaves', () => {
     const master = (director as unknown as { master: FakeGain }).master;
     director.update('vale', false);
-    director.setAreaTrack('realm_racers');
+    director.setAreaTrack('realm_racers_evergarden');
     internals(director).streamKeeper();
     internals(director).ctx.currentTime += 5;
     internals(director).streamKeeper();
@@ -475,7 +475,7 @@ describe('MusicDirector area file tracks', () => {
     expect(master.gain.value).toBe(0.5); // STREAM_LEVEL at the default volume
     // the handback revives the zone stream at once, not a keeper tick later
     expect(internals(director).zoneStreams.vale?.el?.paused).toBe(false);
-    const race = areaEls().realm_racers;
+    const race = areaEls().realm_racers_evergarden;
     expect(race?.paused).toBe(false); // still fading out, not cut mid-tail
     for (const fn of timeouts) fn();
     expect(race?.paused).toBe(true);
@@ -483,7 +483,12 @@ describe('MusicDirector area file tracks', () => {
 
   it('never fades two area tracks up at once', () => {
     const gains = (director as unknown as { areaGains: Record<string, FakeGain> }).areaGains;
-    for (const track of ['sowfield_waiting', 'sowfield_match', 'realm_racers', null] as const) {
+    for (const track of [
+      'sowfield_waiting',
+      'sowfield_match',
+      'realm_racers_evergarden',
+      null,
+    ] as const) {
       director.setAreaTrack(track);
       const up = Object.values(gains).filter((gain) => gain.gain.value > 0);
       expect(up).toHaveLength(track === null ? 0 : 1);
@@ -491,8 +496,8 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('stops decoding the race track while the mix is silenced, and resumes after', () => {
-    director.setAreaTrack('realm_racers');
-    const race = areaEls().realm_racers;
+    director.setAreaTrack('realm_racers_evergarden');
+    const race = areaEls().realm_racers_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 42;
     director.setVolume(0);
@@ -506,24 +511,24 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('keeps a re-entry within the fade window playing instead of pausing it', () => {
-    director.setAreaTrack('realm_racers');
-    const race = areaEls().realm_racers;
+    director.setAreaTrack('realm_racers_evergarden');
+    const race = areaEls().realm_racers_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 31;
     director.setAreaTrack(null);
-    director.setAreaTrack('realm_racers');
+    director.setAreaTrack('realm_racers_evergarden');
     for (const fn of timeouts) fn();
     expect(race.paused).toBe(false);
     expect(race.currentTime).toBe(0);
   });
 
   it('preserves the race soundtrack position across idempotent, menu, and enable cycles', () => {
-    director.setAreaTrack('realm_racers');
-    const race = areaEls().realm_racers;
+    director.setAreaTrack('realm_racers_evergarden');
+    const race = areaEls().realm_racers_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 53;
 
-    director.setAreaTrack('realm_racers');
+    director.setAreaTrack('realm_racers_evergarden');
     director.pauseForMenu();
     director.resumeFromMenu();
     director.setEnabled(false);
@@ -533,12 +538,12 @@ describe('MusicDirector area file tracks', () => {
   });
 
   it('restarts the race soundtrack from the beginning when a new match is requested', () => {
-    director.setAreaTrack('realm_racers');
-    const race = areaEls().realm_racers;
+    director.setAreaTrack('realm_racers_evergarden');
+    const race = areaEls().realm_racers_evergarden;
     if (!race) throw new Error('race track element missing');
     race.currentTime = 67;
 
-    director.setAreaTrack('realm_racers', true);
+    director.setAreaTrack('realm_racers_evergarden', true);
 
     expect(race.currentTime).toBe(0);
   });

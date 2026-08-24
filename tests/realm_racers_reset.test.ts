@@ -21,6 +21,7 @@ import {
   REALM_RACERS_WRONG_WAY_TICKS,
   type RealmRacersMatch,
   realmRacersMovementLocked,
+  realmRacersStartMatch,
   realmRacersToCanonical,
   realmRacersToWorld,
   updateRealmRacers,
@@ -45,9 +46,13 @@ function staged(): {
   const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
     addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40),
   );
-  for (const pid of pids) sim.realmRacersQueueJoin(pid);
+  // Seated on the NAMED circuit rather than through the queue's draw: the pool
+  // holds more than one competition circuit, and every arc below is measured
+  // on this one's road.
+  realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id);
   sim.tick();
   const match = required(sim.realmRacers.match, 'race');
+  if (match.circuitId !== RACE_CIRCUIT.id) throw new Error('race seated on another circuit');
   const racer = required(sim.entities.get(pids[0]), 'racer');
   return { sim, a: pids[0], b: pids[1], pids, match, racer };
 }

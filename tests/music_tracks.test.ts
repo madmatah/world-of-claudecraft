@@ -4,10 +4,12 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { MusicZone } from '../src/game/music';
 import {
+  AREA_TRACK_GROUP,
   AREA_TRACK_URLS,
   type AreaTrackId,
   COMBAT_STREAM_URLS,
   pickCombatTrackIndex,
+  REALM_RACERS_AREA_TRACKS,
   ZONE_STREAM_URLS,
 } from '../src/game/music_tracks';
 
@@ -48,7 +50,12 @@ describe('remastered soundtrack catalog', () => {
   });
 
   it('ships every area file track at the top level of public/audio', () => {
-    const ids: AreaTrackId[] = ['sowfield_waiting', 'sowfield_match', 'realm_racers'];
+    const ids: AreaTrackId[] = [
+      'sowfield_waiting',
+      'sowfield_match',
+      'realm_racers_evergarden',
+      'realm_racers_nightbloom',
+    ];
     expect(Object.keys(AREA_TRACK_URLS).sort()).toEqual([...ids].sort());
     for (const [id, url] of Object.entries(AREA_TRACK_URLS)) {
       expect(url, `area track '${id}'`).toMatch(/^\/audio\/[a-z0-9-]+\.mp3$/);
@@ -56,14 +63,30 @@ describe('remastered soundtrack catalog', () => {
     }
   });
 
-  it('routes the Realm Racers race track to its supplied master', () => {
-    expect(AREA_TRACK_URLS.realm_racers).toBe('/audio/realm-racers.mp3');
-    const hash = createHash('sha256')
-      .update(readFileSync(assetPath(AREA_TRACK_URLS.realm_racers)))
-      .digest('hex');
-    expect(hash, 'realm racers race track bytes').toBe(
-      '068a25617a603686c973c7c39574597924478752b5466b3105c270412a5eef07',
-    );
+  it('routes each Realm Racers circuit track to its supplied master', () => {
+    // One track per zone that has a circuit, each its own file and its own
+    // group, so activating one never downloads the other.
+    const supplied = {
+      realm_racers_evergarden: [
+        '/audio/realm-racers-evergarden.mp3',
+        '068a25617a603686c973c7c39574597924478752b5466b3105c270412a5eef07',
+      ],
+      realm_racers_nightbloom: [
+        '/audio/realm-racers-nightbloom.mp3',
+        '7b4a78114dd129db9a7744c4f897229365fbab8c49aa2f0a88867d5ee2e24423',
+      ],
+    } as const;
+    for (const [id, [url, expected]] of Object.entries(supplied)) {
+      const track = id as AreaTrackId;
+      expect(AREA_TRACK_URLS[track]).toBe(url);
+      expect(REALM_RACERS_AREA_TRACKS.has(track), `${id} is a rally track`).toBe(true);
+      expect(AREA_TRACK_GROUP[track], `${id} owns its group`).toBe(id);
+      const hash = createHash('sha256')
+        .update(readFileSync(assetPath(url)))
+        .digest('hex');
+      expect(hash, `${id} track bytes`).toBe(expected);
+    }
+    expect(REALM_RACERS_AREA_TRACKS.size).toBe(Object.keys(supplied).length);
   });
 
   it('routes each supplied new-zone remaster to its matching music cue', () => {

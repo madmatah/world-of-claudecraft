@@ -141,7 +141,7 @@ describe('instance music policy', () => {
     });
 
     const racing = instanceMusicDecision(onCircuit);
-    expect(racing.areaTrack).toBe('realm_racers');
+    expect(racing.areaTrack).toBe('realm_racers_evergarden');
     expect(racing.atSowfield).toBe(false);
 
     const port = {
@@ -151,14 +151,14 @@ describe('instance music policy', () => {
       setAreaTrack: vi.fn(),
     };
     new InstanceMusicController(port).update(onCircuit);
-    expect(port.setAreaTrack).toHaveBeenCalledWith('realm_racers');
+    expect(port.setAreaTrack).toHaveBeenCalledWith('realm_racers_evergarden');
   });
 
   it('covers the private practice copies and drops the track back in the world', () => {
     const practiceSlot = instanceMusicDecision(
       input({ playerPos: realmRacersLaneOrigin(3), inDungeon: true }),
     );
-    expect(practiceSlot.areaTrack).toBe('realm_racers');
+    expect(practiceSlot.areaTrack).toBe('realm_racers_evergarden');
 
     // default fixture position: the Eastbrook hub, nowhere near the band
     expect(instanceMusicDecision(input()).areaTrack).toBeNull();
@@ -182,9 +182,9 @@ describe('instance music policy', () => {
     controller.update(onCircuit);
     controller.update({ ...onCircuit, realmRacersMatchId: 42 });
 
-    expect(port.setAreaTrack).toHaveBeenNthCalledWith(1, 'realm_racers', true);
-    expect(port.setAreaTrack).toHaveBeenNthCalledWith(2, 'realm_racers');
-    expect(port.setAreaTrack).toHaveBeenNthCalledWith(3, 'realm_racers', true);
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(1, 'realm_racers_evergarden', true);
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(2, 'realm_racers_evergarden');
+    expect(port.setAreaTrack).toHaveBeenNthCalledWith(3, 'realm_racers_evergarden', true);
   });
 });
 

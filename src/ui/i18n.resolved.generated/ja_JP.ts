@@ -1397,6 +1397,7 @@ export const ja_JP: EnTranslations = {
       "standingsRetired": "リタイア",
       "circuitName_evergarden_practice": "エバーガーデン練習場",
       "circuitName_evergarden_express_tour": "エバーガーデン・エクスプレスツアー",
+      "circuitName_nightbloom_moonwell_run": "ナイトブルーム・ムーンウェルラン",
       "podiumTime": "{minutes}:{seconds}.{tenths}",
       "position": "順位 {position}/{total}",
       "lap": "ラップ {lap}/{total}",

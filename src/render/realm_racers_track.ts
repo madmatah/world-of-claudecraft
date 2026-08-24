@@ -1126,45 +1126,60 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
  * Built EAGERLY, all of them, which is what the single-circuit band did before
  * lanes existed. The lazy build plus LRU eviction the multi-circuit plan
  * reserved for the second circuit was MEASURED here rather than assumed, and
- * eager wins on the pool as it stands. Per circuit, three builds each, in Node
- * with the procedural textures stubbed (so the numbers are the CPU cost of
- * generating and packing geometry, not of uploading it):
+ * eager still wins on the pool as it stands. Per circuit, three builds each, in
+ * Node with the procedural textures stubbed (so the numbers are the CPU cost of
+ * generating and packing geometry, not of uploading it), re-measured when the
+ * third circuit landed (the first build of each also pays the spline memo):
  *
- *   evergarden_practice       21 to 47 ms
- *   evergarden_express_tour   75 to 76 ms
+ *   evergarden_practice        20 to 49 ms
+ *   evergarden_express_tour   163 to 179 ms
+ *   nightbloom_moonwell_run   195 to 304 ms
  *
- * So the whole pool is about 120 ms, paid once during world build, behind the
- * loading screen. Three things decided it:
+ * So the whole pool is about 400 ms, paid once during world build, behind the
+ * loading screen, for every player whether or not they ever race. Three things
+ * decided eager when the pool was two, and two of them still hold:
  *
- *  - Lazy moves the LARGER of those two onto the frame a viewer arrives at a
- *    circuit, and that frame is the countdown. A tenth of a second of hitch as
+ *  - Lazy moves the LARGEST of those onto the frame a viewer arrives at a
+ *    circuit, and that frame is the countdown. A fifth of a second of hitch as
  *    the lights come on is the one place this cost must not land.
- *  - Eviction has nothing to evict. The policy worth having is "keep at most
- *    two", and the pool IS two, so the whole mechanism would be inert code with
- *    no reachable path, which is exactly what 13a-1 declined to write blind.
- *  - A megabyte of resident attribute data is not a budget anyone is fighting
- *    over out here.
+ *  - Eviction has little to evict. The policy worth having is "keep at most
+ *    two", and a pool of three keeps one out; that mechanism is still not
+ *    worth its reachable-path count at three.
+ *  - A few megabytes of resident attribute data is not a budget anyone is
+ *    fighting over out here.
  *
  * Where the time goes, so the next circuit can be judged before it is drawn:
- * the road ribbons are cheap and the cost tracks the SCATTER, which follows the
- * area inside the perimeter rather than the lap. On the Express Tour,
- * `rallyFlowerSpots` is 72 ms for 4 984 tufts (one spline projection per
- * candidate point, which is the whole of it) and the water surfaces are 29 ms
- * for two pools; everything else together is under 4 ms.
+ * the road ribbons are cheap and the cost tracks TWO fills, both priced by the
+ * spline projection they pay per candidate point. The border flowers follow
+ * the area inside the perimeter rather than the lap: `rallyFlowerSpots` is
+ * 113 ms for 10 424 tufts on the Express Tour and 138 ms for 7 475 on the
+ * Moonwell Run. The authored SCATTERS (`RallyScatter`, resolved sim-side in
+ * `realm_racers_props_resolve.ts`) walk a grid of the perimeter box at their
+ * own spacing and project every cell, whether or not a piece lands: the
+ * Moonwell Run's six scatters are about 6 700 projections for 1 599 pieces,
+ * 86 ms, and the Evergarden circuits author none. The water surfaces are
+ * about 15 ms a pool; everything else together is under 10 ms.
  *
- * The GRASS is not in those numbers, because neither shipped circuit grows any:
- * both wear the Evergarden, which is mown lawn (`GRASS_BIOME_DENSITY.garden` is
- * 0). A circuit whose zone DOES grow blades pays about 25 ms more on a lap this
- * size, measured on a Nightbloom probe of the same two curves: 4 ms to bake the
- * mask, 11 ms to place 74 057 clusters over 96 tiles, and the rest in the
- * instancing. The mask is a grid stamped off the centerline rather than a
- * projection per candidate, which is why that half is cheap.
+ * The GRASS is in the Moonwell Run's number and not in the Evergarden's: the
+ * garden is mown lawn (`GRASS_BIOME_DENSITY.garden` is 0) while the Nightbloom
+ * grows blades. The Moonwell Run resolves about 131 000 clusters over 128
+ * tiles (`realmRacersGrassTiles`), 1.8x the 74 000 the two-circuit probe of
+ * this zone was priced at (about 25 ms then: 4 ms to bake the mask, 11 ms to
+ * place the clusters, the rest in the instancing), and at 64 bytes of instance
+ * matrix a cluster it is also the largest RESIDENT term on the circuit, about
+ * 8 MB on the tiers that draw it. The mask is a grid stamped off the
+ * centerline rather than a projection per candidate, which is why the placing
+ * half is cheap.
  *
- * The build is superlinear in circuit size (1.8x the lap, 3.6x the build), so
- * revisit this decision at roughly four more circuits of this size, where the
- * eager cost approaches half a second and lazy starts paying for itself. The
- * cheapest levers, in order: `REALM_RACERS_GRASS_YARDS_PER_CLUSTER` for a
- * grassy zone, then the flower patch pitch.
+ * The build is superlinear in circuit size, so the half-second line the
+ * two-circuit revision set for revisiting this decision is now ONE more
+ * circuit of the Moonwell Run's size away. The next circuit of that size
+ * should either bring the lazy build with it or shrink its fills. The cheapest
+ * levers, in order: the record's own scatter `spacing` (each scatter costs its
+ * grid, not its pieces; a span-limited scatter still projects the whole box,
+ * so it should be sparse), `REALM_RACERS_GRASS_YARDS_PER_CLUSTER` for a grassy
+ * zone, then the flower patch pitch. `tests/realm_racers_circuits.test.ts`
+ * pins the Moonwell Run's scatter count as a ceiling for the same reason.
  */
 export function buildRealmRacersTracks(): RealmRacersTracksView {
   const group = new THREE.Group();

@@ -21,7 +21,6 @@
 // mobSwing, spawnDelveModule), never reaching into not-yet-extracted internals
 // in a way the sim itself does not already expose.
 
-import { realmRacersCompetitionCircuits } from '../../src/sim/content/realm_racers_circuits';
 import {
   arenaOrigin,
   DELVES,
@@ -45,6 +44,7 @@ import { ARENA_MIN_LEVEL } from '../../src/sim/social/arena';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
   REALM_RACERS_RETURN_TICKS,
+  realmRacersCircuitOf,
   realmRacersToWorld,
 } from '../../src/sim/social/realm_racers';
 import { addThreat } from '../../src/sim/threat';
@@ -5594,7 +5594,11 @@ function realmRacersRace(): Scenario {
       // the referee returns it before the take can fire.
       const liveMatch = sim.realmRacers.match;
       if (!liveMatch) throw new Error('realm racers grid did not seat');
-      const circuit = realmRacersCompetitionCircuits()[0];
+      // The circuit the grid was SEATED on, not the pool's first entry: the
+      // draw above picks one of several competition circuits, and a box
+      // resolved off another circuit's road would stand the leader in the
+      // meadow of this one.
+      const circuit = realmRacersCircuitOf(liveMatch);
       const box = realmRacersPickupBoxes(circuit)[0];
       const world = realmRacersToWorld(liveMatch, box.x, box.z);
       const racer = sim.entities.get(pids[0]) as AnyEntity;

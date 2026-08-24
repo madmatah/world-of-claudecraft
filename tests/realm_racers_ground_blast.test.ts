@@ -14,7 +14,7 @@ import {
   REALM_RACERS_WEAPON_CHARGES,
   resolveRealmRacersKit,
 } from '../src/sim/content/realm_racers';
-import { REALM_RACERS_PRACTICE_CIRCUIT as GARDEN_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import { realmRacersCompetitionCircuits } from '../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { GRAVITY } from '../src/sim/player_motion';
 import {
@@ -40,6 +40,7 @@ import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_RETURN_TICKS,
   realmRacersFireGroundBlast,
+  realmRacersStartMatch,
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE, type VehicleDrive } from '../src/sim/types';
@@ -57,6 +58,9 @@ function entity(sim: Sim, pid: number): Entity {
   return required(sim.entities.get(pid), `entity ${pid}`);
 }
 
+/** The circuit every live race here is seated on. */
+const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
+
 function match(sim: Sim) {
   return required(sim.realmRacers.match, 'Realm Racers match');
 }
@@ -67,12 +71,16 @@ function racing(): { sim: Sim; a: number; b: number; pids: number[] } {
   const pids = Array.from({ length: REALM_RACERS_GRID_SIZE }, (_, i) =>
     addAt(sim, 'warrior', `Racer${i}`, -6 + i * 4, -40 - i),
   );
-  for (const pid of pids) sim.realmRacersQueueJoin(pid);
+  // Seated on the NAMED circuit rather than through the queue's draw: the pool
+  // holds more than one competition circuit, and the geometry below is this
+  // one's road.
+  realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id);
   sim.tick();
+  if (match(sim).circuitId !== RACE_CIRCUIT.id) throw new Error('race seated on another circuit');
   // The rest of the field is parked far around the lap. A blast catches EVERY
   // racer inside it, which is the point of the weapon, so a shell aimed at one
   // named rival has to be fired somewhere the others are not.
-  const track = realmRacersTrack(GARDEN_CIRCUIT);
+  const track = realmRacersTrack(RACE_CIRCUIT);
   pids.slice(2).forEach((pid, i) => {
     const away = track.pointAt(track.length * (0.4 + i * 0.2));
     teleport(sim, pid, away.x, away.z);

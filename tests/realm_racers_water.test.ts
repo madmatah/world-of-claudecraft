@@ -69,7 +69,7 @@ describe('Realm Racers water: the shore line carries none of it any more', () =>
   it('covers every shipped circuit, and every one of them places its water', () => {
     // The cardinality floor for everything below: an `it.each` over a list that
     // quietly emptied registers no cases at all.
-    expect(REALM_RACERS_CIRCUIT_LIST).toHaveLength(2);
+    expect(REALM_RACERS_CIRCUIT_LIST).toHaveLength(3);
     for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
       expect((circuit.ponds?.length ?? 0) > 0, circuit.id).toBe(true);
       // The record's own IFF: water is placed, and the bank profile exists
@@ -404,25 +404,41 @@ describe('Realm Racers water: the collision entry point contains nobody', () => 
     for (const circuit of REALM_RACERS_CIRCUIT_LIST) {
       const track = realmRacersTrack(circuit);
       const lane = realmRacersLaneOffset(realmRacersPublicLane(circuit));
-      // Both kinds as CIRCLES over their own reach, deliberately generous: this
+      // Props as CIRCLES over their own reach, deliberately generous: this
       // decides what the sweep declines to judge, so over-covering costs a probe
       // and under-covering would report an author's hedge as a containment line.
-      const authored = [
-        ...realmRacersPlacedProps(circuit)
-          .filter((prop) => prop.solid)
-          .map((prop) => ({ x: prop.x, z: prop.z, r: rallyFootprintRadius(prop.footprint) })),
-        ...realmRacersFenceRuns(circuit).map(({ run }) => ({
-          x: run.x,
-          z: run.z,
-          r: Math.hypot(run.hw, run.hd),
-        })),
-      ].map((piece) => ({
-        x: piece.x + REALM_RACERS_ORIGIN.x + lane.x,
-        z: piece.z + REALM_RACERS_ORIGIN.z + lane.z,
-        // The piece's own reach plus the mover's, since a body that OVERLAPS one
-        // is pushed exactly as one standing in its centre is.
-        r: piece.r + MOVER_RADIUS,
+      const authored = realmRacersPlacedProps(circuit)
+        .filter((prop) => prop.solid)
+        .map((prop) => ({
+          x: prop.x + REALM_RACERS_ORIGIN.x + lane.x,
+          z: prop.z + REALM_RACERS_ORIGIN.z + lane.z,
+          // The piece's own reach plus the mover's, since a body that OVERLAPS
+          // one is pushed exactly as one standing in its centre is.
+          r: rallyFootprintRadius(prop.footprint) + MOVER_RADIUS,
+        }));
+      // Fences as SEGMENTS, which is the shape their collider actually has. A
+      // circle over a run's length was generous enough for a hedge, and wrong
+      // for a paling drawn round the whole enclosure: one such run is six
+      // hundred yards long, and a circle over it swallows every probe on the
+      // circuit, leaving the case agreeing about nothing.
+      const fences = realmRacersFenceRuns(circuit).map(({ run }) => ({
+        ax: run.dax + REALM_RACERS_ORIGIN.x + lane.x,
+        az: run.daz + REALM_RACERS_ORIGIN.z + lane.z,
+        bx: run.dbx + REALM_RACERS_ORIGIN.x + lane.x,
+        bz: run.dbz + REALM_RACERS_ORIGIN.z + lane.z,
+        r: run.hd + MOVER_RADIUS,
       }));
+      const nearFence = (x: number, z: number): boolean =>
+        fences.some((fence) => {
+          const dx = fence.bx - fence.ax;
+          const dz = fence.bz - fence.az;
+          const length2 = dx * dx + dz * dz;
+          const t =
+            length2 === 0
+              ? 0
+              : Math.max(0, Math.min(1, ((x - fence.ax) * dx + (z - fence.az) * dz) / length2));
+          return Math.hypot(x - (fence.ax + dx * t), z - (fence.az + dz * t)) < fence.r;
+        });
       for (let i = 0; i < track.samples.length; i += 7) {
         const sample = track.samples[i];
         for (const offset of [
@@ -432,7 +448,10 @@ describe('Realm Racers water: the collision entry point contains nobody', () => 
         ]) {
           const x = sample.x - sample.tz * offset + lane.x;
           const z = sample.z + sample.tx * offset + lane.z;
-          if (authored.some((piece) => Math.hypot(x - piece.x, z - piece.z) < piece.r)) {
+          if (
+            authored.some((piece) => Math.hypot(x - piece.x, z - piece.z) < piece.r) ||
+            nearFence(x, z)
+          ) {
             skipped++;
             continue;
           }

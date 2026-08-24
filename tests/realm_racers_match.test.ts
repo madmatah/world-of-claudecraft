@@ -75,15 +75,18 @@ function makeGrid(): { sim: Sim; pids: number[] } {
 
 function startMatch(): { sim: Sim; pids: number[]; a: number; b: number } {
   const { sim, pids } = makeGrid();
-  for (const pid of pids) sim.realmRacersQueueJoin(pid);
+  // Seated on the NAMED circuit rather than through the queue's draw: the pool
+  // holds more than one competition circuit, and every arc below is measured
+  // on this one's road.
+  expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
   sim.tick();
-  expect(sim.realmRacers.match).not.toBeNull();
+  expect(sim.realmRacers.match?.circuitId).toBe(RACE_CIRCUIT.id);
   return { sim, pids, a: pids[0], b: pids[1] };
 }
 
 function placeAtS(sim: Sim, pid: number, s: number, lateral = 0): void {
   const liveMatch = match(sim);
-  const sample = realmRacersTrack(RACE_CIRCUIT).pointAt(s);
+  const sample = realmRacersTrack(realmRacersCircuitOf(liveMatch)).pointAt(s);
   teleport(
     sim,
     pid,
@@ -115,7 +118,7 @@ function parkOffRoad(sim: Sim, pid: number, x: number, z: number): void {
   teleport(sim, pid, x, z);
   const progress = required(liveMatch.progress.get(pid), `progress ${pid}`);
   const local = realmRacersToCanonical(liveMatch, x, z);
-  const projection = realmRacersTrack(RACE_CIRCUIT).project(local.x, local.z);
+  const projection = realmRacersTrack(realmRacersCircuitOf(liveMatch)).project(local.x, local.z);
   progress.lastS = projection.s;
   progress.trackIndex = projection.index;
 }
@@ -139,7 +142,9 @@ function crossStart(sim: Sim, pid: number): void {
 }
 
 function completeLap(sim: Sim, pid: number): void {
-  advanceArc(sim, pid, realmRacersTrack(RACE_CIRCUIT).length + 12);
+  // The SEATED circuit's lap, so a heat that came through the queue's draw
+  // wraps the line on whichever competition circuit it landed on.
+  advanceArc(sim, pid, realmRacersTrack(realmRacersCircuitOf(match(sim))).length + 12);
 }
 
 describe('The Realm Racers loaned machine', () => {

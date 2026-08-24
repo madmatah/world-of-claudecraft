@@ -21,6 +21,7 @@ import {
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { polygonContainsPoint } from '../src/sim/geometry2d';
 import {
+  REALM_RACERS_MIN_STRETCH_SEPARATION,
   realmRacersCircuitErrors,
   realmRacersCircuitMetrics,
 } from '../src/sim/realm_racers_circuit_metrics';
@@ -431,6 +432,100 @@ describe('Realm Racers circuits: the Express Tour pinch strip', () => {
     expect(fountain.asset).toBe('fountain');
     for (const pond of ponds) {
       expect(polygonContainsPoint(pond.outline, fountain.x, fountain.z)).toBe(false);
+    }
+  });
+});
+
+describe('Realm Racers circuits: the Nightbloom Moonwell Run', () => {
+  const MOONWELL = realmRacersCompetitionCircuits().find(
+    (circuit) => circuit.id === 'nightbloom_moonwell_run',
+  );
+  if (!MOONWELL) throw new Error('the Moonwell Run is the competition circuit this pins');
+  const track = realmRacersTrack(MOONWELL);
+  const metrics = realmRacersCircuitMetrics(MOONWELL);
+
+  it('is a competition circuit wearing its own zone, raced at night', () => {
+    // The whole point of the record: the first circuit outside the Evergarden,
+    // and the first to name a dark hour. Both are plain strings the render
+    // registries resolve, so a typo here would silently race the garden at the
+    // world's clock; the readout is what says the ids exist.
+    expect(MOONWELL.roles).toEqual(['competition']);
+    expect(MOONWELL.practiceCopies).toBe(0);
+    expect(MOONWELL.theme).toBe('nightbloom');
+    expect(MOONWELL.timeOfDay).toBe('night');
+    expect(realmRacersCircuitErrors(metrics)).toEqual([]);
+  });
+
+  it('carries ONE pickup row, on straight road and off the start line', () => {
+    // The design says one row, and where it stands is what makes it one a
+    // pilot can aim at: straight road, so the four boxes read as four lanes
+    // rather than a scatter across a corner. WHICH straight is the author's
+    // call at the seat and is deliberately not pinned; the readout's own
+    // row-fit rule (zero errors above) is what says the row fits its road.
+    const rows = MOONWELL.pickupRows ?? [];
+    expect(rows).toHaveLength(1);
+    const s = rows[0].s * track.length;
+    expect(Math.abs(track.pointAt(s).turnRadius)).toBeGreaterThan(200);
+    expect(rows[0].s).toBeGreaterThan(0.05);
+    expect(rows[0].s).toBeLessThan(0.95);
+  });
+
+  it('runs its barrow straight head on against the start straight, in Ground Blast reach', () => {
+    // The Express Tour's pinch in another realm: two opposed stretches close
+    // enough to shell a rival across the meadow between them, and far enough
+    // apart that the projection never confuses them.
+    expect(metrics.shootingCorridorYards).toBeGreaterThan(30);
+    expect(metrics.nearestApproach.tangentDot).toBeLessThan(-0.8);
+    expect(metrics.nearestApproach.distance).toBeGreaterThanOrEqual(
+      REALM_RACERS_MIN_STRETCH_SEPARATION,
+    );
+  });
+
+  it('is lit by the Nightbloom moonflower lamp and by nothing else', () => {
+    // A night circuit is raceable because of its lamps, and a circuit wears
+    // its zone's fixture rather than any of the other thirteen. Counted off
+    // the resolver rather than the record, so a track-space lamp that failed
+    // to resolve would count as missing here.
+    const lamps = realmRacersPlacements(MOONWELL).props.filter((prop) =>
+      prop.asset.startsWith('lamp'),
+    );
+    expect(lamps.length).toBeGreaterThanOrEqual(24);
+    for (const lamp of lamps) expect(lamp.asset).toBe('lampNightbloomMoonflower');
+  });
+
+  it('keeps its dressing inside the budget the eager build was priced at', () => {
+    // The first shipped circuit to sow scatters, and the largest lap: the
+    // build cost tracks the scatter (one spline projection per candidate
+    // cell), so the count is pinned as a ceiling rather than left to a prose
+    // budget in `src/render/realm_racers_track.ts`. Raising it is a decision
+    // to re-measure that build, not a free edit.
+    const placements = realmRacersPlacements(MOONWELL);
+    expect(placements.scattered.length).toBeGreaterThan(500);
+    expect(placements.scattered.length).toBeLessThanOrEqual(1800);
+    expect(placements.props.filter((prop) => prop.solid).length).toBeLessThanOrEqual(130);
+    // Nothing a scatter sows is ever solid, so the collider set is the
+    // hand-placed pieces alone.
+    for (const piece of placements.scattered) expect(piece.solid).toBe(false);
+  });
+
+  it('keeps the Moonwell outside the hairpin and clear of the road', () => {
+    // One tarn, placed rather than derived, wrapped by the slow corner rather
+    // than sitting in the infield: the hairpin apex (the tightest point of the
+    // lap) is the nearest road to it, and the water never touches the surface.
+    const ponds = realmRacersPlacedPonds(MOONWELL);
+    expect(ponds).toHaveLength(1);
+    const pond = ponds[0];
+    const apex = track.pointAt(metrics.minRadiusOverWidthAtS);
+    const apexLocal = { x: apex.x - REALM_RACERS_ORIGIN.x, z: apex.z - REALM_RACERS_ORIGIN.z };
+    expect(Math.hypot(apexLocal.x - pond.x, apexLocal.z - pond.z)).toBeLessThan(70);
+    for (const sample of track.samples) {
+      expect(
+        polygonContainsPoint(
+          pond.outline,
+          sample.x - REALM_RACERS_ORIGIN.x,
+          sample.z - REALM_RACERS_ORIGIN.z,
+        ),
+      ).toBe(false);
     }
   });
 });
