@@ -408,6 +408,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     posX: 0,
     climbing: false,
     riftFloor: null,
+    driveControlsLocked: false,
   };
   const heldInput = emptyMoveInput();
   let heldFacing: number | null = opts.keyTimeline ? null : startFacing;
@@ -527,6 +528,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     selfMotionGateArgs.posX = pe.pos.x;
     selfMotionGateArgs.climbing = pe.climbing;
     selfMotionGateArgs.riftFloor = client.riftFloor;
+    selfMotionGateArgs.driveControlsLocked = pe.drive?.controlsLocked === true;
     const predictionEnabled = selfMotionPredictionEnabled(selfMotionGateArgs);
     movementPrediction.prepare(client, pe, predictionEnabled);
     // The unconditional 50 ms lane runs beside this from ClientWorld's own timer.

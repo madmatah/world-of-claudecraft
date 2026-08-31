@@ -28,6 +28,7 @@ vi.mock('../src/ui/icons', () => ({
   proceduralIconDataUrl: vi.fn((kind: string, id: string) => `mock:${kind}:${id}`),
 }));
 
+import { REALM_RACERS_ABILITIES, REALM_RACERS_ABILITY_ID } from '../src/sim/content/realm_racers';
 import { ABILITIES } from '../src/sim/data';
 import type { ResolvedAbility } from '../src/sim/sim';
 import type { AbilityDef, Entity } from '../src/sim/types';
@@ -454,6 +455,61 @@ describe('Hud ground aim behavior', () => {
 
     expect(hud.sim.castAbilityAt).toHaveBeenCalledWith('flamestrike', shown?.point);
     expect(hud.isGroundAimActive()).toBe(false);
+  });
+
+  // The rally weapon's identity rides the OPTIONAL trailing ability id through
+  // the whole aim pipeline (shouldUseGroundAim and every clampAimToRange site).
+  // Dropping that argument compiles clean, so these three pin the behavior it
+  // buys: always-aim entry and the forward-cone clamp of the sim's own rules.
+  describe('rally weapon aim identity', () => {
+    const rallyDef = REALM_RACERS_ABILITIES[REALM_RACERS_ABILITY_ID];
+
+    it('enters aim for the rally weapon even with every reticle preference off', () => {
+      for (const options of [
+        { desktopPreference: false },
+        { mobileTouch: true, touchPrecise: false },
+      ]) {
+        const hud = makeHud({ abilityDef: rallyDef, ...options });
+
+        hud.castSlot(3);
+
+        expect(hud.groundAim.activeAbilityId(), JSON.stringify(options)).toBe(
+          REALM_RACERS_ABILITY_ID,
+        );
+        expect(hud.sim.castAbilityAt).not.toHaveBeenCalled();
+      }
+    });
+
+    it('leashes a pad nudge to the forward cone, not the plain range circle', () => {
+      const hud = makeHud({ abilityDef: rallyDef });
+      hud.castSlot(3);
+      hud.updateGroundAimPoint({ x: 0, z: 30 });
+
+      hud.nudgeGroundAimPoint(-100, 0);
+
+      // 45 degrees off the nose at max range (70 yd); the plain radial clamp
+      // would land at about (-67, 20) instead.
+      const raw = hud.groundAim.rawAimPoint();
+      expect(raw?.x).toBeCloseTo(-70 * Math.SQRT1_2, 3);
+      expect(raw?.z).toBeCloseTo(70 * Math.SQRT1_2, 3);
+      expect(hud.groundAimReticle()?.point).toEqual(raw);
+    });
+
+    it('shows and commits an aim behind the machine folded into the cone', () => {
+      const hud = makeHud({ abilityDef: rallyDef });
+      hud.castSlot(3);
+      hud.updateGroundAimPoint({ x: 0, z: -20 });
+
+      const shown = hud.groundAimReticle();
+      // Straight behind folds to the cone edge; the asked 20 yd survives.
+      expect(shown?.point.x).toBeCloseTo(20 * Math.SQRT1_2, 3);
+      expect(shown?.point.z).toBeCloseTo(20 * Math.SQRT1_2, 3);
+      expect(shown?.dimmed).toBe(true);
+
+      hud.commitGroundAimAt();
+
+      expect(hud.sim.castAbilityAt).toHaveBeenCalledWith(REALM_RACERS_ABILITY_ID, shown?.point);
+    });
   });
 
   describe('XHB-only aim identity', () => {

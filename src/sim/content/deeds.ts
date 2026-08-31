@@ -2939,7 +2939,8 @@ export const DEEDS: Record<string, DeedDef> = {
     reward: { kind: 'title', text: 'the Unscorched' },
   },
   // Realm Racers (docs/design/deeds.md, docs/prd/... the rally minigame):
-  // placing-based, mirroring the Vale Cup precedent (pvp_vcup_*) rather than a
+  // placing-based, on the model the retired Vale Cup set (pvp_vcup_*, records
+  // kept for their holders) rather than a
   // win/lose pair, since a four-pilot heat has a whole finishing order. Only
   // rated (queued, non-practice) heats count, and a house pilot never earns
   // one of these (see onRallyRaceEndForDeeds / onRallyLapForDeeds in

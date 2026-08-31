@@ -82,6 +82,7 @@ describe('selfMotionPredictionEnabled', () => {
       { movementFrozen: true },
       { playerImmobilized: true },
       { climbing: true },
+      { driveControlsLocked: true },
     ];
     for (const over of cases) {
       expect(selfMotionPredictionEnabled(enabledArgs(over)), JSON.stringify(over)).toBe(false);
