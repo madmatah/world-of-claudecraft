@@ -52,7 +52,7 @@ import { type SimEvent, TICK_RATE } from '../src/sim/types';
 import { advanceVehicleDrive, vehicleMaxSpeed } from '../src/sim/vehicle_motion';
 import { createAurasView, isAuraDebuff } from '../src/ui/auras_view';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
-import { addAt, makeWorld, teleport } from './vale_cup_util';
+import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 /** The circuit a QUEUED race runs on, which is what every live case here seats. */
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];

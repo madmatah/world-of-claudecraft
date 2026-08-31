@@ -13,6 +13,7 @@
 // matcher — so a new unhandled sim string cannot ship silently.
 import { ABILITIES, DELVES, ITEMS, MOBS, ZONES } from '../sim/data';
 import { DELVE_MODULE_NAMES } from '../sim/sim';
+import type { EntityKind, PlayerClass } from '../sim/types';
 import { tEntity } from './entity_i18n';
 import {
   formatNumber,
@@ -43,10 +44,49 @@ const baseEnTable = {
   // refusal toasts; log.bankSlotsPurchased is the purchase notice.
   'error.bankQuestItem': 'You cannot store quest items in the bank.',
   'error.bankFull': 'Your bank is full.',
+  // The pool-honest no_fit refusal (src/sim/bank.ts bankDeposit): a
+  // non-material deposit refused while only materials-only satchel capacity
+  // remains, so "full" would contradict the two-pool meter on screen.
+  'error.bankOnlyMaterialsSpace': 'Only materials fit in the space left in your bank.',
+  // The granularity no_fit refusal (src/sim/bank.ts, MoveResult.noFitCause
+  // 'instanced_units'): free slots exist but the indivisible payload cannot
+  // land whole, so both pool lines would lie.
+  'error.bankStackIndivisible': 'That stack cannot be split to fit the space left in your bank.',
+  // Its bags-direction twin (bankWithdraw AND guildBankWithdraw, one shared
+  // literal): free bag slots exist but the indivisible payload cannot land
+  // whole, so "Your bags are full." would lie.
+  'error.bagsStackIndivisible': 'That stack cannot be split to fit the space left in your bags.',
   'error.bankCannotAfford': 'You cannot afford that bank expansion.',
   'error.bankMaxSlots': 'Your bank cannot be expanded further.',
   'error.bankTooFar': 'You are too far from the banker.',
+  // The purchase-mutex refusal ('Your bank has a purchase in progress.') is a
+  // SERVER emit (server/bank_wire.ts) and lives in server_i18n.ts beside its
+  // origin; the client's error chain runs that matcher first.
   'log.bankSlotsPurchased': 'You purchase additional bank slots.',
+  // Bank bag sockets (src/sim/bank_sockets.ts, Bank Storage phase 06). The
+  // too-far, no-such-item, and bags-full refusals deliberately REUSE the rows
+  // above and below, same banker, same bags. The two {item} lines are matched
+  // by RULES entries; the rest register in the EXACT matcher.
+  'error.bankSocketMax': 'Your bank has no more bag sockets to unlock.',
+  'error.bankSocketCannotAfford': 'You cannot afford that bag socket.',
+  'error.bankSocketNoneOpen': 'You have no open bank bag socket.',
+  'error.bankSocketSpecialProperty':
+    'That bag cannot be socketed while it carries a special property.',
+  'log.bankSocketUnlocked': 'You unlock a bank bag socket.',
+  'log.bankBagSocketed': 'Socketed {item} into your bank.',
+  'log.bankBagUnsocketed': 'Unsocketed {item} from your bank.',
+  // Materials Vault (src/sim/materials_vault.ts): the per-material stockpile
+  // beside the bank. The error.* lines are the refusal toasts; the log.* lines
+  // are the unlock/upgrade notices. The too-far refusal and the bags-full
+  // refusal deliberately REUSE the bank/bags rows above, since the vault is
+  // gated by the same banker and fills the same bags.
+  'error.vaultOnlyMaterials': 'Only materials can be stored in the Materials Vault.',
+  'error.vaultLocked': 'You have not unlocked the Materials Vault.',
+  'error.vaultMaterialFull': 'Your vault cannot hold any more of that material.',
+  'error.vaultCannotAfford': 'You cannot afford that vault upgrade.',
+  'error.vaultMaxUpgrades': 'Your vault cannot be upgraded further.',
+  'log.vaultUnlocked': 'You unlock the Materials Vault.',
+  'log.vaultUpgraded': 'You upgrade the Materials Vault.',
   // Guild Bank (src/sim/guild_bank.ts): the officer-plus shared treasury +
   // item store. The error.* lines are the refusal toasts (too-far, quest-item,
   // and "Not enough money." reuse the existing rows above / the hud arm); the
@@ -62,6 +102,11 @@ const baseEnTable = {
   'error.guildBankNoGuild': 'You must be in a guild to use the guild bank.',
   'error.guildBankRank': 'Only guild officers may use the guild bank.',
   'error.guildBankFull': 'The guild bank is full.',
+  // The granularity no_fit refusal (guildBankDeposit, MoveResult.noFitCause
+  // 'instanced_units'): free slots exist but the indivisible payload cannot
+  // land whole, so "full" would lie.
+  'error.guildBankStackIndivisible':
+    'That stack cannot be split to fit the space left in the guild bank.',
   // The anonymous-pipe item policy refusals (guildBankPipeRefusal). DEPOSIT names
   // the dimension: quest and soulbound get their own lines; noMarketList and
   // transfer-locked copies share the generic one (the mail noMailQuestItems
@@ -78,6 +123,11 @@ const baseEnTable = {
   'error.guildBankCarryCap': 'You cannot carry that much money.',
   'error.guildBankCannotAfford': 'Your guild cannot afford that expansion.',
   'error.guildBankMaxSlots': 'The guild bank cannot be expanded further.',
+  // Paid guild creation can be bounded by the process-wide transaction gate
+  // or the founder's exact ledger reservation. The server emits this through
+  // the social error seam, so it belongs in the same exact matcher as the sim
+  // refusals even though the originating authority lives in server/game.ts.
+  'error.guildCreateBusy': 'You are busy. Try again in a moment.',
   'log.guildBankOpened': 'You open the guild bank.',
   'log.guildBankSlotsPurchased': 'You purchase additional guild bank slots.',
   'log.guildBankDepositGold': 'You deposit {money} into the guild treasury.',
@@ -143,6 +193,12 @@ const baseEnTable = {
   'error.wrongEquipSlot': 'That does not go in that slot.',
   'error.faceWater': 'You need to face fishable water.',
   'error.potionNotReady': 'That potion is not ready yet.',
+  // Tide-pool summon refusals (src/sim/interactions/crab_summon.ts
+  // REASON_MESSAGE). Placeholder-free, so they register in the EXACT matcher
+  // automatically.
+  'error.crabQuestDone': 'You have what you came for. Tidewarden Nel waits on your prize.',
+  'error.crabLureTooFar': 'Carry the lure to the tide pool west of the wreck line.',
+  'error.crabAlreadyUp': 'Mister Crabs already prowls the pool!',
   // Firebottle hut burns (src/sim/interactions/firebottle_hut.ts REASON_MESSAGE).
   'error.firebottleNeeded': 'You need a firebottle to torch that.',
   'error.firebottleNotReady': 'Your firebottle is not ready yet.',
@@ -172,6 +228,7 @@ const baseEnTable = {
   'error.alreadyInParty': 'You are already in a party.',
   'error.notPartyLeader': 'You are not the party leader.',
   'error.raidMarkersParty': 'You must be in a party to use raid markers.',
+  'error.liveRaidClaimUnsafe': 'This live raid claim cannot be replaced safely.',
   'error.nameSellQty': 'Name how many you wish to sell.',
   'error.talentsInCombat': 'You cannot change talents in combat.',
   'error.talentsArena': 'You cannot change talents during an arena match.',
@@ -247,6 +304,8 @@ const baseEnTable = {
   'groundPickup.graveSealedDeny':
     'The grave is sealed against the living until the dead call you to it.',
   'groundPickup.cryptRitualCircleDeny': 'The ritual circle lies cold and dormant.',
+  'groundPickup.castawayCrateDeny': 'Barnacles seal the crate shut.',
+  'groundPickup.ferryBellDeny': 'The ferry bell hangs silent.',
   'groundPickup.supplyCrateEnough': 'You already have enough supply crates.',
   'groundPickup.gravecallerSigilEnough': "You already carry a Gravecaller's Sigil.",
   'groundPickup.ledgerPageEnough': 'You already have enough ledger pages.',
@@ -267,6 +326,8 @@ const baseEnTable = {
   'groundPickup.graveVossEnough':
     "You have already taken what Royal Assassin Voss's grave will give.",
   'groundPickup.cryptRitualCircleEnough': 'The circle has nothing more to give you.',
+  'groundPickup.castawayCrateEnough': 'You already have enough castaway crates.',
+  'groundPickup.ferryBellEnough': 'The ferry bell has nothing to give.',
   // Murloc huts (q_deepfen_purge): the pickup deny arm is defensive (hut clicks
   // route to the firebottle handler first), but the lines exist per the
   // every-object-has-lines rule and localize like the rest.
@@ -354,10 +415,6 @@ const baseEnTable = {
   // distinct object, so this covers all of them (bells rung, lanterns relit,
   // banners planted, carts righted). Emitted from interactObjectForQuests.
   'groundPickup.objectAlreadyCredited': 'You have already done this one.',
-  'error.vcupDeserter': 'The Groundskeeper remembers. Come back later.',
-  'error.vcupPartyTooBig': 'That bracket needs a smaller party.',
-  'error.vcupNoNation': 'Pick a banner nation first.',
-  'error.vcupPracticeFull': 'The practice pitches are all in use. Try again shortly.',
   'log.talentsUpdated': 'Talents updated.',
   'log.talentsReset': 'Talents reset.',
   'log.cheatDeathSave': 'Cheat Death saves you!',
@@ -423,6 +480,7 @@ const baseEnTable = {
   'log.dungeonDifficultyIsHeroic': 'Dungeon difficulty: Heroic. Use /dungeon normal to change it.',
   'log.dungeonDifficultyIsNormal': 'Dungeon difficulty: Normal. Use /dungeon heroic to change it.',
   'error.heroicMarksNeeded': 'You need {marks} Heroic Marks to buy {name}.',
+  'error.sigilNeeded': 'You need a {sigil} to buy {name}.',
   'error.channelUsage': 'Usage: /{action} <channel>. Channels: {list}.',
   'error.generalAlwaysOn': 'The General channel is always on - just use /general.',
   'error.noSuchChannel': "There is no channel named '{name}'. Channels: {list}.",
@@ -455,6 +513,99 @@ const baseEnTable = {
   'aura.temporalExhaustion': 'Temporal Exhaustion',
   // Cauterize's 5 min lockout debuff (combat/fire_mage.ts); survives death.
   'aura.cauterizeFatigue': 'Cauterize Fatigue',
+  'aura.ignivarBrandOfThePyre': 'Brand of the Pyre',
+  'aura.ignivarMoltenArmor': 'Molten Armor',
+  'aura.ignivarLastInferno': 'Last Inferno',
+  'aura.ignivarSharedPyre': 'Shared Pyre',
+  'aura.ignivarForgeChains': 'Chains of the Forge',
+  'aura.varkhulMakersBrand': "Maker's Brand",
+  'mechanic.varkhulForgefatherSweep': "Forgefather's Sweep",
+  'mechanic.varkhulCinderOrbs': 'Cinder Orbs',
+  'aura.varkhulRedHotMetal': 'Red-hot Metal',
+  'aura.varkhulRedHotMetalBarrier': 'Red-hot Metal Barrier',
+  'mechanic.varkhulForgestorm': 'Forgestorm',
+  'mechanic.varkhulAnvilsDecree': "Anvil's Decree",
+  'mechanic.varkhulHammerfallMeteors': 'Hammerfall Meteors',
+  'mechanic.varkhulMastersAssembly': "The Master's Assembly",
+  'mechanic.varkhulRepairProtocol': 'Repair Protocol',
+  'mechanic.varkhulForgeConvergence': 'Forge Convergence',
+  'mechanic.varkhulForgeLinks': 'Forge Links',
+  'aura.varkhulSentinelsGaze': "Sentinel's Gaze",
+  'aura.varkhulMoltenCore': 'Molten Core',
+  'aura.varkhulMoltenBurden': 'Molten Burden',
+  'aura.varkhulForgeLink': 'Forge Link',
+  'aura.varkhulForgeShattered': 'Forge Shattered',
+  'mechanic.varkhulUnstableReaction': 'Unstable Reaction',
+  'mechanic.varkhulCrucibleBeam': 'Crucible Beam',
+  'mechanic.varkhulForgeMeltdown': 'Forge Meltdown',
+  'aura.varkhulCrucibleExposure': 'Crucible Exposure',
+  'mechanic.varkhulTemperingRay': 'Tempering Ray',
+  'aura.varkhulTemperedWound': 'Tempered Wound',
+  'aura.varkhulCrucibleGuard': 'Crucible Guard',
+  'aura.varkhulMasterpieceUnbound': 'Masterpiece Unbound',
+  'mechanic.varkhulLivingForge': 'Living Forge',
+  'mechanic.varkhulWorldfire': 'Worldfire',
+  'mechanic.varkhulCrucibleQuake': 'Crucible Quake',
+  'mechanic.ignivarCrucibleStomp': 'Crucible Stomp',
+  'mechanic.ignivarCruciblePerimeter': 'Crucible Perimeter',
+  'mechanic.varkhulRecalibrate': 'Recalibrate',
+  'mechanic.ignivarSearingTorrent': 'Searing Torrent',
+  'mechanic.ignivarForgeStrike': 'Forge Strike',
+  'mechanic.ignivarCleansingBacklash': 'Cleansing Backlash',
+  'mechanic.ignivarApocalypse': 'Apocalypse',
+  'mechanic.ignivarRainOfCinders': 'Rain of Cinders',
+  'mechanic.ignivarFallingCinders': 'Falling Cinders',
+  'mechanic.ignivarRevolvingInferno': 'Revolving Inferno',
+  'mechanic.ignivarForgeWave': 'Forge Wave',
+  'mechanic.ignivarJudgmentOfTheForge': 'Judgment of the Forge',
+  'dialogue.ignivarHeartAwakens': 'Ignivar Ashcaller awakens. Let the world burn!',
+  'dialogue.ignivarLastFlame': 'The last flame consumes all!',
+  'dialogue.ignivarSkyBurns': 'The sky itself will burn!',
+  'dialogue.ignivarSharePyre': 'Four must share the pyre, or all will burn!',
+  'dialogue.ignivarDeath': 'Varkhul... the seal is broken.',
+  'dialogue.ignivarFinalBrand': 'Bear the Last Flame. Let it judge you.',
+  'dialogue.ignivarConduitActivated': 'The old wells answer to my fire.',
+  'dialogue.ignivarRotatingRays': 'Turn with the flame, or be unmade.',
+  'dialogue.ignivarApocalypse': 'Varkhul forged me to endure.',
+  'dialogue.ignivarDefeatSpark': 'Another spark, extinguished.',
+  'dialogue.ignivarDefeatForge': 'The forge rejects you.',
+  'dialogue.ignivarForgeJudgment': 'I am the seal. I will not break.',
+  'dialogue.ignivarRoomEntry':
+    'The seal hears you, little embers. Step closer, and feed the Last Flame.',
+  'dialogue.varkhulAssembly': 'The spring did not die. I bound its last memory into iron.',
+  'dialogue.varkhulAddsDefeated': 'You call it a prison because your flesh fears endurance.',
+  'dialogue.varkhulEngage':
+    'I am Varkhul, Forgefather of the Last Flame. Raise your weapons, little sparks.',
+  'dialogue.varkhulMasterpiece':
+    'Every blow will feed the furnace in my chest. By ember, stone, and anvil, I will unmake you.',
+  'dialogue.varkhulDeath': 'Master... I have failed you.',
+  'lore.ignivarFirstTempering':
+    'Tempering Record I: "Water remembers shape. Fire commands it to endure."',
+  'lore.ignivarLivingMetal':
+    'Tempering Record II: "The spring rejects every shell. Begin again with a living core."',
+  'lore.ignivarHeraldKey':
+    'Tempering Record III: "Ignivar endures. The herald shall carry my seal and guard the path below."',
+  'lore.ignivarSentinelEcho':
+    'Maelin\'s projection crackles: "The first shells held the flame, but nothing lived within them."',
+  'lore.ignivarWardenEcho':
+    'Maelin\'s projection crackles: "Varkhul forced the Last Spring into the metal. The water became its blood."',
+  'lore.ignivarArtificerEcho':
+    'Maelin\'s projection crackles: "Ignivar was the first design to endure. He is not merely a herald. He is the key."',
+  'lore.ignivarCoreFracture':
+    "Ignivar's core fractures. Its plates turn toward the Inner Crucible, and the sealed gate answers.",
+  'lore.ignivarForgeSilenced':
+    'The Grand Forge gutters out. For the first time in an age, the Last Spring is silent and free.',
+  'lore.ignivarFirstTemperingRecordName': 'First Tempering Record',
+  'lore.ignivarLivingMetalRecordName': 'Living Metal Record',
+  'lore.ignivarHeraldKeyRecordName': 'Herald-Key Record',
+  'error.ignivarForgeGateSealed': 'The forge gate is sealed to you.',
+  // The forge-lift antechamber's arrival line (src/sim/ignivar_forge_lift.ts).
+  'log.ignivarLiftArrives': 'The forge-lift settles; its gate grinds open.',
+  'error.ignivarRaidInCombat':
+    'Your raid is still in combat. You may enter once the fighting stops.',
+  // The boss-fight exit seal (src/sim/instances/ignivar_exit.ts, emitted by
+  // leaveDungeon): no portal leads out of a room whose boss is engaged.
+  'error.ignivarExitSealedInCombat': 'The forge doors hold fast while the battle rages.',
   'aura.carrierFatigue': 'Carrier Fatigue',
   // The always-worn carried-flag buff; right-clicking it drops the flag on purpose.
   'aura.carriedFlag': 'Carrying the Flag',
@@ -626,6 +777,21 @@ const baseEnTable = {
   'log.veilLeave': 'The veil closes behind you, and the mountain air bites again.',
   'log.ferryEnter': 'The ferry bell rings once, and the Farshore rises out of the spray.',
   'log.ferryLeave': 'The bell answers from the vale, and the mainland takes you back.',
+  // The Proving Shore (tutorial island): the greeting's ferry ride, the two
+  // clicked ferry bells, the startTutorial gate denials
+  // (sim/tutorial/greeting.ts + interactions/ferry_bell.ts), and the
+  // quest-gated vendor row denial (items.ts vendorQuestGates).
+  'log.provingFerry': 'The ferry sets you down on the Proving Shore.',
+  'log.provingEnter': 'The ferry bell tolls, and the Proving Shore rises to meet you.',
+  'log.provingLeave': 'The crossing takes hold, and Eastbrook Vale spreads out before you.',
+  'error.tutorialFromHere': 'You cannot set sail from here.',
+  'error.tutorialOutleveled': 'The Proving Shore has nothing left to teach you.',
+  'log.passingStoneKneel': 'You close your hand on the Passing Stone, and the shore lets you go.',
+  'error.passingStoneCold': 'The stone is cold. Instructor Maren has not asked this of you.',
+  'log.longWalkCorpse': 'You are whole again, and you found your own way back.',
+  'log.longWalkHealer':
+    'The Keeper set you on your feet. Next time, walk to your body: it costs you nothing.',
+  'error.vendorQuestGated': 'That item is not for sale to you yet.',
   'aura.bladedEcho': 'Bladed Echo',
   'aura.emboldened': 'Emboldened',
   'aura.enraged': 'Enraged',
@@ -773,6 +939,17 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'log.veilLeave': 'The veil closes behind you, and the mountain air bites again.',
     'log.ferryEnter': 'The ferry bell rings once, and the Farshore rises out of the spray.',
     'log.ferryLeave': 'The bell answers from the vale, and the mainland takes you back.',
+    'log.provingFerry': 'The ferry sets you down on the Proving Shore.',
+    'log.provingEnter': 'The ferry bell tolls, and the Proving Shore rises to meet you.',
+    'log.provingLeave': 'The crossing takes hold, and Eastbrook Vale spreads out before you.',
+    'error.tutorialFromHere': 'You cannot set sail from here.',
+    'error.tutorialOutleveled': 'The Proving Shore has nothing left to teach you.',
+    'log.passingStoneKneel': 'You close your hand on the Passing Stone, and the shore lets you go.',
+    'error.passingStoneCold': 'The stone is cold. Instructor Maren has not asked this of you.',
+    'log.longWalkCorpse': 'You are whole again, and you found your own way back.',
+    'log.longWalkHealer':
+      'The Keeper set you on your feet. Next time, walk to your body: it costs you nothing.',
+    'error.vendorQuestGated': 'That item is not for sale to you yet.',
     'log.deathwardSaves': 'A deathward saves you!',
     'error.lineOfSight': 'Line of sight.',
     'error.bagsFull': 'Your bags are full.',
@@ -837,10 +1014,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'That resource node does not exist.',
     'error.gatherNodeNotRespawned': 'This resource node has not respawned for you yet.',
     'error.toolEffectSlotFromWindow': 'Open Professions to slot that.',
-    'error.vcupDeserter': 'The Groundskeeper remembers. Come back later.',
-    'error.vcupPartyTooBig': 'That bracket needs a smaller party.',
-    'error.vcupNoNation': 'Pick a banner nation first.',
-    'error.vcupPracticeFull': 'The practice pitches are all in use. Try again shortly.',
     'log.talentsUpdated': 'Talents updated.',
     'log.talentsReset': 'Talents reset.',
     'log.savedBuild': 'Saved build “{name}”.',
@@ -963,6 +1136,12 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.unstuckSickness': 'Unstuck Sickness',
   },
   es: {
+    'log.passingStoneKneel':
+      'Cierras la mano sobre la Piedra de Paso, y la orilla te deja marchar.',
+    'error.tutorialFromHere': 'No puedes zarpar desde aquí.',
+    'error.tutorialOutleveled': 'La Costa de la Prueba ya no tiene nada que enseñarte.',
+    'error.passingStoneCold': 'La piedra está fría. La Instructora Maren no te ha pedido esto.',
+    'error.vendorQuestGated': 'Ese objeto no está a la venta para ti todavía.',
     'error.arenaMinLevel': 'Debes ser nivel {level} para entrar en cola de arena.',
     'error.arenaMinLevelMember':
       '{name} debe ser al menos nivel {level} para entrar en cola de arena.',
@@ -977,6 +1156,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankRank':
       'Solo los oficiales de la hermandad pueden usar el banco de la hermandad.',
     'error.guildBankFull': 'El banco de la hermandad está lleno.',
+    'error.guildBankStackIndivisible':
+      'Ese montón no se puede dividir para caber en el espacio que queda en el banco de la hermandad.',
     'error.guildBankQuestItem': 'No puedes guardar objetos de misión en el banco de la hermandad.',
     'error.guildBankSoulbound':
       'No puedes guardar objetos ligados al alma en el banco de la hermandad.',
@@ -1073,6 +1254,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'log.deathwardSaves': '¡Una protección contra la muerte te salva!',
     'error.noDeadGroupMembers': 'No hay miembros muertos en el grupo que resucitar.',
     'error.heroicMarksNeeded': 'Necesitas {marks} Marcas Heroicas para comprar {name}.',
+    'error.sigilNeeded': 'Necesitas un {sigil} para comprar {name}.',
     'aura.fingersOfFrost': 'Dedos de Escarcha',
     'aura.brainFreeze': 'Congelación Cerebral',
     'aura.wintersChill': 'Frío Invernal',
@@ -1097,6 +1279,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'La tumba está sellada para los vivos hasta que los muertos te llamen a ella.',
     'groundPickup.cryptRitualCircleDeny': 'El círculo ritual yace frío e inerte.',
+    'groundPickup.castawayCrateDeny': 'Los percebes mantienen la caja sellada.',
+    'groundPickup.ferryBellDeny': 'La campana del ferry cuelga en silencio.',
+    'groundPickup.ferryBellEnough': 'La campana del ferry no tiene nada que dar.',
+    'groundPickup.castawayCrateEnough': 'Ya tienes suficientes cajas de náufrago.',
     'groundPickup.supplyCrateEnough': 'Ya tienes suficientes cajones de suministros.',
     'groundPickup.gravecallerSigilEnough': 'Ya llevas un Sigilo de Gravecaller.',
     'groundPickup.ledgerPageEnough': 'Ya tienes suficientes páginas del registro.',
@@ -1278,11 +1464,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'Ese nodo de recursos no existe.',
     'error.gatherNodeNotRespawned': 'Este nodo de recursos aún no ha reaparecido para ti.',
     'error.toolEffectSlotFromWindow': 'Engárzalo desde la ventana de Profesiones.',
-    'error.vcupDeserter': 'El Guardacampo lo recuerda. Vuelve más tarde.',
-    'error.vcupPartyTooBig': 'Esa categoría necesita un grupo más pequeño.',
-    'error.vcupNoNation': 'Primero elige una nación de estandarte.',
-    'error.vcupPracticeFull':
-      'Los campos de práctica están todos ocupados. Inténtalo de nuevo en un momento.',
     'log.talentsUpdated': 'Talentos actualizados.',
     'log.talentsReset': 'Talentos restablecidos.',
     'log.cheatDeathSave': '¡Burlar la muerte te salva!',
@@ -1325,6 +1506,11 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Poder de la Serpiente',
     'error.bankQuestItem': 'No puedes guardar objetos de misión en el banco.',
     'error.bankFull': 'Tu banco está lleno.',
+    'error.bankOnlyMaterialsSpace': 'En el espacio que queda en tu banco solo caben materiales.',
+    'error.bankStackIndivisible':
+      'Ese montón no se puede dividir para caber en el espacio que queda en tu banco.',
+    'error.bagsStackIndivisible':
+      'Ese montón no se puede dividir para caber en el espacio que queda en tus bolsas.',
     'error.bankCannotAfford': 'No puedes permitirte esa ampliación del banco.',
     'error.bankMaxSlots': 'Tu banco no se puede ampliar más.',
     'error.bankTooFar': 'Estás demasiado lejos del banquero.',
@@ -1415,8 +1601,30 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'Solo puedes equiparte uno de esos.',
     'error.townFocusCannotAfford': 'No puedes pagar ese reajuste de enfoque.',
     'log.townFocusRespecComplete': 'Tu reajuste de enfoque se ha completado.',
+    'error.townFocusRespecCancelled':
+      'No podías permitirte la reespecialización de enfoque pendiente, así que se canceló.',
+    'error.ignivarRaidInCombat':
+      'Tu banda sigue en combate. Podrás entrar cuando termine la lucha.',
+    'error.ignivarForgeGateSealed': 'La puerta de la forja está sellada para ti.',
+    'error.liveRaidClaimUnsafe':
+      'Esta reclamación de banda activa no se puede reemplazar de forma segura.',
+    'error.vaultOnlyMaterials': 'En la Bóveda de materiales solo se pueden almacenar materiales.',
+    'error.vaultLocked': 'No has desbloqueado la Bóveda de materiales.',
+    'error.vaultMaterialFull': 'Tu bóveda no puede almacenar más de ese material.',
+    'error.vaultMaxUpgrades': 'Tu bóveda no se puede mejorar más.',
+    'error.vaultCannotAfford': 'No puedes permitirte esa mejora de la bóveda.',
+    'log.vaultUnlocked': 'Has desbloqueado la Bóveda de materiales.',
+    'log.vaultUpgraded': 'Has mejorado la Bóveda de materiales.',
+    'error.alreadyEating': 'Ya estás comiendo.',
+    'error.alreadyDrinking': 'Ya estás bebiendo.',
   },
   es_ES: {
+    'log.passingStoneKneel':
+      'Cierras la mano sobre la Piedra de Paso, y la orilla te deja marchar.',
+    'error.tutorialFromHere': 'No puedes zarpar desde aquí.',
+    'error.tutorialOutleveled': 'La Costa de la Prueba ya no tiene nada que enseñarte.',
+    'error.passingStoneCold': 'La piedra está fría. La Instructora Maren no te ha pedido esto.',
+    'error.vendorQuestGated': 'Ese objeto no está a la venta para ti todavía.',
     'error.arenaMinLevel': 'Debes ser nivel {level} para entrar en cola de arena.',
     'error.arenaMinLevelMember':
       '{name} debe ser al menos nivel {level} para entrar en cola de arena.',
@@ -1431,6 +1639,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankRank':
       'Solo los oficiales de la hermandad pueden usar el banco de la hermandad.',
     'error.guildBankFull': 'El banco de la hermandad está lleno.',
+    'error.guildBankStackIndivisible':
+      'Ese montón no se puede dividir para caber en el espacio que queda en el banco de la hermandad.',
     'error.guildBankQuestItem': 'No puedes guardar objetos de misión en el banco de la hermandad.',
     'error.guildBankSoulbound':
       'No puedes guardar objetos ligados al alma en el banco de la hermandad.',
@@ -1527,6 +1737,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': 'Ese objeto no va en ese espacio.',
     'log.deathwardSaves': '¡Una protección contra la muerte te salva!',
     'error.heroicMarksNeeded': 'Necesitas {marks} Marcas Heroicas para comprar {name}.',
+    'error.sigilNeeded': 'Necesitas un {sigil} para comprar {name}.',
     'groundPickup.supplyCrateDeny': 'El cajón está cerrado con clavos.',
     'groundPickup.gravecallerSigilDeny': 'El sigilo repele tu contacto.',
     'groundPickup.ledgerPageDeny':
@@ -1548,6 +1759,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'La tumba está sellada a los vivos hasta que los muertos te llamen a ella.',
     'groundPickup.cryptRitualCircleDeny': 'El círculo ritual yace frío e inerte.',
+    'groundPickup.castawayCrateDeny': 'Los percebes mantienen la caja sellada.',
+    'groundPickup.ferryBellDeny': 'La campana del ferry cuelga en silencio.',
+    'groundPickup.ferryBellEnough': 'La campana del ferry no tiene nada que dar.',
+    'groundPickup.castawayCrateEnough': 'Ya tienes suficientes cajas de náufrago.',
     'groundPickup.supplyCrateEnough': 'Ya tienes suficientes cajones de suministros.',
     'groundPickup.gravecallerSigilEnough': 'Ya llevas un Sigilo de Gravecaller.',
     'groundPickup.ledgerPageEnough': 'Ya tienes suficientes páginas del libro mayor.',
@@ -1729,11 +1944,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'Ese nodo de recursos no existe.',
     'error.gatherNodeNotRespawned': 'Este nodo de recursos aún no ha reaparecido para ti.',
     'error.toolEffectSlotFromWindow': 'Engárzalo desde la ventana de Profesiones.',
-    'error.vcupDeserter': 'El Guardacampo lo recuerda. Vuelve más tarde.',
-    'error.vcupPartyTooBig': 'Esa categoría necesita un grupo más pequeño.',
-    'error.vcupNoNation': 'Primero elige una nación de estandarte.',
-    'error.vcupPracticeFull':
-      'Los campos de práctica están todos ocupados. Inténtalo de nuevo en un momento.',
     'log.talentsUpdated': 'Talentos actualizados.',
     'log.talentsReset': 'Talentos restablecidos.',
     'log.cheatDeathSave': '¡Burlar la muerte te salva!',
@@ -1776,6 +1986,11 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Poder de la Serpiente',
     'error.bankQuestItem': 'No puedes guardar objetos de misión en el banco.',
     'error.bankFull': 'Tu banco está lleno.',
+    'error.bankOnlyMaterialsSpace': 'En el espacio que queda en tu banco solo caben materiales.',
+    'error.bankStackIndivisible':
+      'Ese montón no se puede dividir para caber en el espacio que queda en tu banco.',
+    'error.bagsStackIndivisible':
+      'Ese montón no se puede dividir para caber en el espacio que queda en tus bolsas.',
     'error.bankCannotAfford': 'No puedes permitirte esa ampliación del banco.',
     'error.bankMaxSlots': 'Tu banco no se puede ampliar más.',
     'error.bankTooFar': 'Estás demasiado lejos del banquero.',
@@ -1869,8 +2084,32 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'Solo puedes llevar equipado uno de esos.',
     'error.townFocusCannotAfford': 'No puedes costear ese reajuste de enfoque.',
     'log.townFocusRespecComplete': 'Tu reajuste de enfoque ha terminado.',
+
+    'error.townFocusRespecCancelled':
+      'No podías permitirte la reespecialización de enfoque pendiente, así que se canceló.',
+    'error.ignivarRaidInCombat':
+      'Tu banda sigue en combate. Podrás entrar cuando termine la lucha.',
+    'error.ignivarForgeGateSealed': 'La puerta de la forja está sellada para ti.',
+    'error.liveRaidClaimUnsafe':
+      'Esta reclamación de banda activa no se puede reemplazar de forma segura.',
+    'error.vaultOnlyMaterials': 'En la Bóveda de materiales solo se pueden almacenar materiales.',
+    'error.vaultLocked': 'No has desbloqueado la Bóveda de materiales.',
+    'error.vaultMaterialFull': 'Tu bóveda no puede almacenar más de ese material.',
+    'error.vaultMaxUpgrades': 'Tu bóveda no se puede mejorar más.',
+    'error.vaultCannotAfford': 'No puedes permitirte esa mejora de la bóveda.',
+    'log.vaultUnlocked': 'Has desbloqueado la Bóveda de materiales.',
+    'log.vaultUpgraded': 'Has mejorado la Bóveda de materiales.',
+    'error.alreadyEating': 'Ya estás comiendo.',
+    'error.alreadyDrinking': 'Ya estás bebiendo.',
   },
   fr_FR: {
+    'log.passingStoneKneel':
+      'Vous refermez la main sur la Pierre de trépas, et le rivage vous laisse partir.',
+    'error.tutorialFromHere': 'Vous ne pouvez pas prendre le large depuis ici.',
+    'error.tutorialOutleveled': "Le Rivage de l'Épreuve n'a plus rien à vous apprendre.",
+    'error.passingStoneCold':
+      "La pierre est froide. L'Instructrice Maren ne vous a pas demandé cela.",
+    'error.vendorQuestGated': 'Cet objet ne vous est pas encore proposé à la vente.',
     'error.arenaMinLevel': "Vous devez être niveau {level} pour rejoindre la file d'arène.",
     'error.arenaMinLevelMember':
       "{name} doit être au moins niveau {level} pour rejoindre la file d'arène.",
@@ -1884,6 +2123,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': 'Vous devez être dans une guilde pour utiliser la banque de guilde.',
     'error.guildBankRank': 'Seuls les officiers de la guilde peuvent utiliser la banque de guilde.',
     'error.guildBankFull': 'La banque de guilde est pleine.',
+    'error.guildBankStackIndivisible':
+      "Cette pile ne peut pas être divisée pour tenir dans l'espace restant de la banque de guilde.",
     'error.guildBankQuestItem':
       "Vous ne pouvez pas déposer d'objets de quête dans la banque de guilde.",
     'error.guildBankSoulbound':
@@ -1988,6 +2229,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': 'Cet objet ne va pas dans cet emplacement.',
     'log.deathwardSaves': 'Une protection contre la mort vous sauve !',
     'error.heroicMarksNeeded': 'Il vous faut {marks} Marques héroïques pour acheter {name}.',
+    'error.sigilNeeded': 'Il vous faut un {sigil} pour acheter {name}.',
     'groundPickup.supplyCrateDeny': 'La caisse est solidement clouée.',
     'groundPickup.gravecallerSigilDeny': 'Le sceau repousse votre main.',
     'groundPickup.ledgerPageDeny':
@@ -2010,6 +2252,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'La tombe reste scellée aux vivants tant que les morts ne vous y appellent pas.',
     'groundPickup.cryptRitualCircleDeny': 'Le cercle rituel demeure froid et endormi.',
+    'groundPickup.castawayCrateDeny': 'Les bernacles scellent la caisse.',
+    'groundPickup.ferryBellDeny': 'La cloche du bac pend en silence.',
+    'groundPickup.ferryBellEnough': "La cloche du bac n'a rien à donner.",
+    'groundPickup.castawayCrateEnough': "Vous avez déjà assez de caisses d'épave.",
     'groundPickup.supplyCrateEnough': 'Vous avez déjà assez de caisses de fournitures.',
     'groundPickup.gravecallerSigilEnough': 'Vous portez déjà un sceau de Gravecaller.',
     'groundPickup.ledgerPageEnough': 'Vous avez déjà assez de pages de registre.',
@@ -2192,11 +2438,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': "Ce nœud de ressources n'existe pas.",
     'error.gatherNodeNotRespawned': "Ce nœud de ressources n'est pas encore réapparu pour vous.",
     'error.toolEffectSlotFromWindow': 'Sertissez-le depuis la fenêtre des Métiers.',
-    'error.vcupDeserter': "Le Gardien du terrain s'en souvient. Revenez plus tard.",
-    'error.vcupPartyTooBig': 'Cette catégorie exige un groupe plus petit.',
-    'error.vcupNoNation': "Choisissez d'abord une nation de bannière.",
-    'error.vcupPracticeFull':
-      "Tous les terrains d'entraînement sont occupés. Réessayez dans un instant.",
     'log.talentsUpdated': 'Talents mis à jour.',
     'log.talentsReset': 'Talents réinitialisés.',
     'log.cheatDeathSave': 'Trompe-la-mort vous sauve !',
@@ -2239,6 +2480,12 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Puissance du Serpent',
     'error.bankQuestItem': "Vous ne pouvez pas déposer d'objets de quête à la banque.",
     'error.bankFull': 'Votre banque est pleine.',
+    'error.bankOnlyMaterialsSpace':
+      "Seuls des matériaux tiennent dans l'espace restant de votre banque.",
+    'error.bankStackIndivisible':
+      "Cette pile ne peut pas être divisée pour tenir dans l'espace restant de votre banque.",
+    'error.bagsStackIndivisible':
+      "Cette pile ne peut pas être divisée pour tenir dans l'espace restant de vos sacs.",
     'error.bankCannotAfford': "Vous n'avez pas les moyens de payer cette extension de banque.",
     'error.bankMaxSlots': 'Votre banque ne peut plus être agrandie.',
     'error.bankTooFar': 'Vous êtes trop loin du banquier.',
@@ -2332,8 +2579,33 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'Vous ne pouvez en équiper qu’un seul de ce type.',
     'error.townFocusCannotAfford': "Vous n'avez pas les moyens de cette respécialisation de focus.",
     'log.townFocusRespecComplete': 'Votre respécialisation de focus est terminée.',
+
+    'error.townFocusRespecCancelled':
+      'Vous n’aviez pas les moyens de payer votre réattribution de spécialisation de focus en attente ; elle a donc été annulée.',
+    'error.ignivarRaidInCombat':
+      'Votre raid est toujours en combat. Vous pourrez entrer une fois le combat terminé.',
+    'error.ignivarForgeGateSealed': 'La porte de la forge vous est scellée.',
+    'error.liveRaidClaimUnsafe':
+      'Cette revendication de raid en direct ne peut pas être remplacée en toute sécurité.',
+    'error.vaultOnlyMaterials':
+      'Seuls les matériaux peuvent être stockés dans le Coffre des matériaux.',
+    'error.vaultLocked': 'Vous n’avez pas déverrouillé le Coffre des matériaux.',
+    'error.vaultMaterialFull': 'Votre coffre ne peut plus contenir de ce matériau.',
+    'error.vaultMaxUpgrades': 'Votre coffre ne peut pas être amélioré davantage.',
+    'error.vaultCannotAfford': 'Vous n’avez pas les moyens de payer cette amélioration du coffre.',
+    'log.vaultUnlocked': 'Vous déverrouillez le Coffre des matériaux.',
+    'log.vaultUpgraded': 'Vous améliorez le Coffre des matériaux.',
+    'error.alreadyEating': 'Vous êtes déjà en train de manger.',
+    'error.alreadyDrinking': 'Vous êtes déjà en train de boire.',
   },
   fr_CA: {
+    'log.passingStoneKneel':
+      'Vous refermez la main sur la Pierre de trépas, et le rivage vous laisse partir.',
+    'error.tutorialFromHere': 'Vous ne pouvez pas prendre le large depuis ici.',
+    'error.tutorialOutleveled': "Le Rivage de l'Épreuve n'a plus rien à vous apprendre.",
+    'error.passingStoneCold':
+      "La pierre est froide. L'Instructrice Maren ne vous a pas demandé cela.",
+    'error.vendorQuestGated': 'Cet objet ne vous est pas encore proposé à la vente.',
     'error.arenaMinLevel': "Vous devez être niveau {level} pour rejoindre la file d'arène.",
     'error.arenaMinLevelMember':
       "{name} doit être au moins niveau {level} pour rejoindre la file d'arène.",
@@ -2347,6 +2619,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': 'Vous devez être dans une guilde pour utiliser la banque de guilde.',
     'error.guildBankRank': 'Seuls les officiers de la guilde peuvent utiliser la banque de guilde.',
     'error.guildBankFull': 'La banque de guilde est pleine.',
+    'error.guildBankStackIndivisible':
+      "Cette pile ne peut pas être divisée pour tenir dans l'espace restant de la banque de guilde.",
     'error.guildBankQuestItem':
       "Vous ne pouvez pas déposer d'objets de quête dans la banque de guilde.",
     'error.guildBankSoulbound':
@@ -2451,6 +2725,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': 'Cet objet ne va pas dans cet emplacement.',
     'log.deathwardSaves': 'Une protection contre la mort vous sauve !',
     'error.heroicMarksNeeded': 'Il vous faut {marks} Marques héroïques pour acheter {name}.',
+    'error.sigilNeeded': 'Il vous faut un {sigil} pour acheter {name}.',
     'groundPickup.supplyCrateDeny': 'La caisse est solidement clouée.',
     'groundPickup.gravecallerSigilDeny': 'Le sceau repousse votre main.',
     'groundPickup.ledgerPageDeny':
@@ -2472,6 +2747,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'La tombe est scellée aux vivants tant que les morts ne vous y appellent pas.',
     'groundPickup.cryptRitualCircleDeny': 'Le cercle rituel demeure froid et inerte.',
+    'groundPickup.castawayCrateDeny': 'Les bernacles scellent la caisse.',
+    'groundPickup.ferryBellDeny': 'La cloche du bac pend en silence.',
+    'groundPickup.ferryBellEnough': "La cloche du bac n'a rien à donner.",
+    'groundPickup.castawayCrateEnough': "Vous avez déjà assez de caisses d'épave.",
     'groundPickup.supplyCrateEnough': 'Vous avez déjà assez de caisses de fournitures.',
     'groundPickup.gravecallerSigilEnough': 'Vous portez déjà un Sceau de Gravecaller.',
     'groundPickup.ledgerPageEnough': 'Vous avez déjà assez de pages de registre.',
@@ -2655,11 +2934,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': "Ce nœud de ressources n'existe pas.",
     'error.gatherNodeNotRespawned': "Ce nœud de ressources n'est pas encore réapparu pour vous.",
     'error.toolEffectSlotFromWindow': 'Sertissez-le depuis la fenêtre des Métiers.',
-    'error.vcupDeserter': "Le Gardien du terrain s'en souvient. Revenez plus tard.",
-    'error.vcupPartyTooBig': 'Cette catégorie exige un groupe plus petit.',
-    'error.vcupNoNation': "Choisissez d'abord une nation de bannière.",
-    'error.vcupPracticeFull':
-      "Tous les terrains d'entraînement sont occupés. Réessayez dans un instant.",
     'log.talentsUpdated': 'Talents mis à jour.',
     'log.talentsReset': 'Talents réinitialisés.',
     'log.cheatDeathSave': 'Trompe-la-mort vous sauve !',
@@ -2702,6 +2976,12 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Puissance du Serpent',
     'error.bankQuestItem': "Vous ne pouvez pas déposer d'objets de quête à la banque.",
     'error.bankFull': 'Votre banque est pleine.',
+    'error.bankOnlyMaterialsSpace':
+      "Seuls des matériaux tiennent dans l'espace restant de votre banque.",
+    'error.bankStackIndivisible':
+      "Cette pile ne peut pas être divisée pour tenir dans l'espace restant de votre banque.",
+    'error.bagsStackIndivisible':
+      "Cette pile ne peut pas être divisée pour tenir dans l'espace restant de vos sacs.",
     'error.bankCannotAfford': "Vous n'avez pas les moyens de payer cette extension de banque.",
     'error.bankMaxSlots': 'Votre banque ne peut plus être agrandie.',
     'error.bankTooFar': 'Vous êtes trop loin du banquier.',
@@ -2796,6 +3076,24 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.townFocusCannotAfford':
       'Vous n’avez pas assez de moyens pour cette respécialisation de focus.',
     'log.townFocusRespecComplete': 'Votre respécialisation de focus est complétée.',
+
+    'error.townFocusRespecCancelled':
+      'Vous n’aviez pas les moyens de payer votre réattribution de spécialisation de focus en attente ; elle a donc été annulée.',
+    'error.ignivarRaidInCombat':
+      'Votre raid est toujours en combat. Vous pourrez entrer une fois le combat terminé.',
+    'error.ignivarForgeGateSealed': 'La porte de la forge vous est scellée.',
+    'error.liveRaidClaimUnsafe':
+      'Cette revendication de raid en direct ne peut pas être remplacée en toute sécurité.',
+    'error.vaultOnlyMaterials':
+      'Seuls les matériaux peuvent être stockés dans le Coffre des matériaux.',
+    'error.vaultLocked': 'Vous n’avez pas déverrouillé le Coffre des matériaux.',
+    'error.vaultMaterialFull': 'Votre coffre ne peut plus contenir de ce matériau.',
+    'error.vaultMaxUpgrades': 'Votre coffre ne peut pas être amélioré davantage.',
+    'error.vaultCannotAfford': 'Vous n’avez pas les moyens de payer cette amélioration du coffre.',
+    'log.vaultUnlocked': 'Vous déverrouillez le Coffre des matériaux.',
+    'log.vaultUpgraded': 'Vous améliorez le Coffre des matériaux.',
+    'error.alreadyEating': 'Vous êtes déjà en train de manger.',
+    'error.alreadyDrinking': 'Vous êtes déjà en train de boire.',
   },
   en_CA: {
     'log.seaFatigue': 'The open sea saps your strength. Swim back to shore!',
@@ -2803,6 +3101,17 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'log.veilLeave': 'The veil closes behind you, and the mountain air bites again.',
     'log.ferryEnter': 'The ferry bell rings once, and the Farshore rises out of the spray.',
     'log.ferryLeave': 'The bell answers from the vale, and the mainland takes you back.',
+    'log.provingFerry': 'The ferry sets you down on the Proving Shore.',
+    'log.provingEnter': 'The ferry bell tolls, and the Proving Shore rises to meet you.',
+    'log.provingLeave': 'The crossing takes hold, and Eastbrook Vale spreads out before you.',
+    'error.tutorialFromHere': 'You cannot set sail from here.',
+    'error.tutorialOutleveled': 'The Proving Shore has nothing left to teach you.',
+    'log.passingStoneKneel': 'You close your hand on the Passing Stone, and the shore lets you go.',
+    'error.passingStoneCold': 'The stone is cold. Instructor Maren has not asked this of you.',
+    'log.longWalkCorpse': 'You are whole again, and you found your own way back.',
+    'log.longWalkHealer':
+      'The Keeper set you on your feet. Next time, walk to your body: it costs you nothing.',
+    'error.vendorQuestGated': 'That item is not for sale to you yet.',
     'log.deathwardSaves': 'A deathward saves you!',
     'log.learnedAbility': 'You have learned a new ability: {name}.',
     'log.abilityRankUp': 'Your {name} has improved to Rank {rank}.',
@@ -2946,10 +3255,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'That resource node does not exist.',
     'error.gatherNodeNotRespawned': 'This resource node has not respawned for you yet.',
     'error.toolEffectSlotFromWindow': 'Open Professions to slot that.',
-    'error.vcupDeserter': 'The Groundskeeper remembers. Come back later.',
-    'error.vcupPartyTooBig': 'That bracket needs a smaller party.',
-    'error.vcupNoNation': 'Pick a banner nation first.',
-    'error.vcupPracticeFull': 'The practice pitches are all in use. Try again shortly.',
     'log.talentsUpdated': 'Talents updated.',
     'log.talentsReset': 'Talents reset.',
     'log.savedBuild': 'Saved build “{name}”.',
@@ -2991,6 +3296,12 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Might of the Serpent',
   },
   it_IT: {
+    'log.passingStoneKneel':
+      'Chiudi la mano sulla Pietra del trapasso, e la riva ti lascia andare.',
+    'error.tutorialFromHere': 'Non puoi salpare da qui.',
+    'error.tutorialOutleveled': 'La Riva della Prova non ha più nulla da insegnarti.',
+    'error.passingStoneCold': "La pietra è fredda. L'Istruttrice Maren non te lo ha chiesto.",
+    'error.vendorQuestGated': "Quell'oggetto non è ancora in vendita per te.",
     'error.arenaMinLevel': "Devi essere di livello {level} per metterti in coda per l'arena.",
     'error.arenaMinLevelMember':
       "{name} deve essere almeno di livello {level} per mettersi in coda per l'arena.",
@@ -3004,6 +3315,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': 'Devi essere in una gilda per usare la banca della gilda.',
     'error.guildBankRank': 'Solo gli ufficiali della gilda possono usare la banca della gilda.',
     'error.guildBankFull': 'La banca della gilda è piena.',
+    'error.guildBankStackIndivisible':
+      'Quella pila non può essere divisa per entrare nello spazio rimasto nella banca della gilda.',
     'error.guildBankQuestItem': 'Non puoi depositare oggetti missione nella banca della gilda.',
     'error.guildBankSoulbound':
       "Non puoi depositare oggetti vincolati all'anima nella banca della gilda.",
@@ -3104,6 +3417,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': "Quell'oggetto non va in quello slot.",
     'log.deathwardSaves': 'Una protezione dalla morte ti salva!',
     'error.heroicMarksNeeded': 'Ti servono {marks} Marchi Eroici per comprare {name}.',
+    'error.sigilNeeded': 'Ti serve un {sigil} per comprare {name}.',
     'groundPickup.supplyCrateDeny': 'La cassa è inchiodata.',
     'groundPickup.gravecallerSigilDeny': 'Il sigillo respinge il tuo tocco.',
     'groundPickup.ledgerPageDeny':
@@ -3124,6 +3438,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'La tomba è sigillata ai vivi finché i morti non ti chiamano a sé.',
     'groundPickup.cryptRitualCircleDeny': 'Il cerchio rituale giace freddo e dormiente.',
+    'groundPickup.castawayCrateDeny': 'I cirripedi tengono sigillata la cassa.',
+    'groundPickup.ferryBellDeny': 'La campana del traghetto pende silenziosa.',
+    'groundPickup.ferryBellEnough': 'La campana del traghetto non ha nulla da dare.',
+    'groundPickup.castawayCrateEnough': 'Hai già abbastanza casse alla deriva.',
     'groundPickup.supplyCrateEnough': 'Hai già abbastanza casse di rifornimenti.',
     'groundPickup.gravecallerSigilEnough': 'Porti già con te un Sigillo di Gravecaller.',
     'groundPickup.ledgerPageEnough': 'Hai già abbastanza pagine di registro.',
@@ -3305,10 +3623,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'Quel nodo di risorse non esiste.',
     'error.gatherNodeNotRespawned': 'Questo nodo di risorse non è ancora ricomparso per te.',
     'error.toolEffectSlotFromWindow': 'Incastonalo dalla finestra Professioni.',
-    'error.vcupDeserter': 'Il Custode del campo ricorda. Torna più tardi.',
-    'error.vcupPartyTooBig': 'Quella categoria richiede un gruppo più piccolo.',
-    'error.vcupNoNation': 'Prima scegli una nazione della bandiera.',
-    'error.vcupPracticeFull': 'I campi di allenamento sono tutti occupati. Riprova tra poco.',
     'log.talentsUpdated': 'Talenti aggiornati.',
     'log.talentsReset': 'Talenti azzerati.',
     'log.cheatDeathSave': 'Ingannare la morte ti salva!',
@@ -3351,6 +3665,12 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Potenza del Serpente',
     'error.bankQuestItem': 'Non puoi depositare oggetti missione in banca.',
     'error.bankFull': 'La tua banca è piena.',
+    'error.bankOnlyMaterialsSpace':
+      "Nello spazio rimasto nella tua banca c'è posto solo per i materiali.",
+    'error.bankStackIndivisible':
+      'Quella pila non può essere divisa per entrare nello spazio rimasto nella tua banca.',
+    'error.bagsStackIndivisible':
+      'Quella pila non può essere divisa per entrare nello spazio rimasto nelle tue borse.',
     'error.bankCannotAfford': "Non puoi permetterti quell'ampliamento della banca.",
     'error.bankMaxSlots': 'La tua banca non può essere ampliata oltre.',
     'error.bankTooFar': 'Sei troppo lontano dal banchiere.',
@@ -3444,8 +3764,32 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'Puoi equipaggiarne solo uno di quel tipo.',
     'error.townFocusCannotAfford': 'Non puoi permetterti quella rispecializzazione del focus.',
     'log.townFocusRespecComplete': 'La tua rispecializzazione del focus è completata.',
+
+    'error.townFocusRespecCancelled':
+      'Non potevi permetterti la riassegnazione della specializzazione di focus in sospeso, quindi è stata annullata.',
+    'error.ignivarRaidInCombat':
+      'La tua incursione è ancora in combattimento. Potrai entrare quando lo scontro sarà terminato.',
+    'error.ignivarForgeGateSealed': 'Il cancello della forgia ti è precluso.',
+    'error.liveRaidClaimUnsafe':
+      'Questa rivendicazione dell’incursione in corso non può essere sostituita in sicurezza.',
+    'error.vaultOnlyMaterials': 'Nel Deposito dei materiali si possono conservare solo materiali.',
+    'error.vaultLocked': 'Non hai sbloccato il Deposito dei materiali.',
+    'error.vaultMaterialFull': 'Il tuo deposito non può contenere altro di quel materiale.',
+    'error.vaultMaxUpgrades': 'Il tuo deposito non può essere ulteriormente potenziato.',
+    'error.vaultCannotAfford': 'Non puoi permetterti questo potenziamento del deposito.',
+    'log.vaultUnlocked': 'Hai sbloccato il Deposito dei materiali.',
+    'log.vaultUpgraded': 'Hai potenziato il Deposito dei materiali.',
+    'error.alreadyEating': 'Stai già mangiando.',
+    'error.alreadyDrinking': 'Stai già bevendo.',
   },
   de_DE: {
+    'log.passingStoneKneel':
+      'Du schließt deine Hand um den Übergangsstein, und die Küste lässt dich ziehen.',
+    'error.tutorialFromHere': 'Von hier aus kannst du nicht in See stechen.',
+    'error.tutorialOutleveled': 'Die Bewährungsküste hat dir nichts mehr beizubringen.',
+    'error.passingStoneCold':
+      'Der Stein ist kalt. Ausbilderin Maren hat dies nicht von dir verlangt.',
+    'error.vendorQuestGated': 'Diesen Gegenstand kannst du noch nicht kaufen.',
     'error.arenaMinLevel': 'Du musst Stufe {level} sein, um dich für die Arena einzureihen.',
     'error.arenaMinLevelMember':
       '{name} muss mindestens Stufe {level} sein, um sich für die Arena einzureihen.',
@@ -3459,6 +3803,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': 'Ihr müsst in einer Gilde sein, um die Gildenbank zu benutzen.',
     'error.guildBankRank': 'Nur Gildenoffiziere dürfen die Gildenbank benutzen.',
     'error.guildBankFull': 'Die Gildenbank ist voll.',
+    'error.guildBankStackIndivisible':
+      'Dieser Stapel kann nicht geteilt werden, um in den restlichen Platz der Gildenbank zu passen.',
     'error.guildBankQuestItem': 'Ihr könnt keine Questgegenstände in der Gildenbank lagern.',
     'error.guildBankSoulbound':
       'Ihr könnt keine seelengebundenen Gegenstände in der Gildenbank lagern.',
@@ -3561,6 +3907,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': 'Das gehoert nicht in diesen Slot.',
     'log.deathwardSaves': 'Ein Todesbann rettet dich!',
     'error.heroicMarksNeeded': 'Du brauchst {marks} Heroische Marken, um {name} zu kaufen.',
+    'error.sigilNeeded': 'Du brauchst ein {sigil}, um {name} zu kaufen.',
     'groundPickup.supplyCrateDeny': 'Die Kiste ist fest vernagelt.',
     'groundPickup.gravecallerSigilDeny': 'Das Siegel weist Eure Berührung ab.',
     'groundPickup.ledgerPageDeny': 'Die Buchseiten sind zu fest gebunden, um sie mitzunehmen.',
@@ -3580,6 +3927,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'Das Grab ist vor den Lebenden versiegelt, bis die Toten Euch zu ihm rufen.',
     'groundPickup.cryptRitualCircleDeny': 'Der Ritualkreis liegt kalt und erloschen da.',
+    'groundPickup.castawayCrateDeny': 'Seepocken halten die Kiste versiegelt.',
+    'groundPickup.ferryBellDeny': 'Die Fährglocke hängt stumm.',
+    'groundPickup.ferryBellEnough': 'Die Fährglocke hat nichts zu geben.',
+    'groundPickup.castawayCrateEnough': 'Ihr habt bereits genug Treibgutkisten.',
     'groundPickup.supplyCrateEnough': 'Ihr habt bereits genug Vorratskisten.',
     'groundPickup.gravecallerSigilEnough': 'Ihr tragt bereits ein Gravecaller-Siegel.',
     'groundPickup.ledgerPageEnough': 'Ihr habt bereits genug Buchseiten.',
@@ -3763,11 +4114,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeNotRespawned':
       'Dieses Ressourcenvorkommen ist für Euch noch nicht erneut erschienen.',
     'error.toolEffectSlotFromWindow': 'Öffnet die Berufe, um das anzubringen.',
-    'error.vcupDeserter': 'Der Platzwart vergisst nicht. Kommt später wieder.',
-    'error.vcupPartyTooBig': 'Diese Klasse braucht eine kleinere Gruppe.',
-    'error.vcupNoNation': 'Wählt zuerst eine Bannernation.',
-    'error.vcupPracticeFull':
-      'Alle Trainingsplätze sind gerade belegt. Versucht es gleich noch einmal.',
     'log.talentsUpdated': 'Talente aktualisiert.',
     'log.talentsReset': 'Talente zurückgesetzt.',
     'log.cheatDeathSave': 'Tod überlisten rettet Euch!',
@@ -3810,6 +4156,11 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Macht der Schlange',
     'error.bankQuestItem': 'Ihr könnt keine Questgegenstände in der Bank lagern.',
     'error.bankFull': 'Eure Bank ist voll.',
+    'error.bankOnlyMaterialsSpace': 'In Eurer Bank ist nur noch Platz für Materialien.',
+    'error.bankStackIndivisible':
+      'Dieser Stapel kann nicht geteilt werden, um in den restlichen Platz Eurer Bank zu passen.',
+    'error.bagsStackIndivisible':
+      'Dieser Stapel kann nicht geteilt werden, um in den restlichen Platz Eurer Taschen zu passen.',
     'error.bankCannotAfford': 'Ihr könnt Euch diese Bankerweiterung nicht leisten.',
     'error.bankMaxSlots': 'Eure Bank kann nicht weiter erweitert werden.',
     'error.bankTooFar': 'Ihr seid zu weit vom Bankier entfernt.',
@@ -3903,8 +4254,30 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'Du kannst davon nur eins ausrüsten.',
     'error.townFocusCannotAfford': 'Du kannst dir diese Fokus-Neuverteilung nicht leisten.',
     'log.townFocusRespecComplete': 'Deine Fokus-Neuverteilung ist abgeschlossen.',
+
+    'error.townFocusRespecCancelled':
+      'Du konntest dir deine ausstehende Fokus-Neuspezialisierung nicht leisten, daher wurde sie abgebrochen.',
+    'error.ignivarRaidInCombat':
+      'Dein Schlachtzug befindet sich noch im Kampf. Du kannst eintreten, sobald der Kampf vorbei ist.',
+    'error.ignivarForgeGateSealed': 'Das Tor zur Schmiede ist für dich versiegelt.',
+    'error.liveRaidClaimUnsafe':
+      'Diese laufende Schlachtzugsbeanspruchung kann nicht sicher ersetzt werden.',
+    'error.vaultOnlyMaterials': 'Im Materiallager können nur Materialien gelagert werden.',
+    'error.vaultLocked': 'Du hast das Materiallager noch nicht freigeschaltet.',
+    'error.vaultMaterialFull': 'Dein Lager kann von diesem Material nichts mehr aufnehmen.',
+    'error.vaultMaxUpgrades': 'Dein Lager kann nicht weiter ausgebaut werden.',
+    'error.vaultCannotAfford': 'Du kannst dir diesen Ausbau des Lagers nicht leisten.',
+    'log.vaultUnlocked': 'Du hast das Materiallager freigeschaltet.',
+    'log.vaultUpgraded': 'Du hast das Materiallager ausgebaut.',
+    'error.alreadyEating': 'Du isst bereits.',
+    'error.alreadyDrinking': 'Du trinkst bereits.',
   },
   zh_CN: {
+    'log.passingStoneKneel': '你的手合拢在往生石上，海滨这才放你离去。',
+    'error.tutorialFromHere': '你无法从这里扬帆起航。',
+    'error.tutorialOutleveled': '试炼之滨已经没有什么能再教你的了。',
+    'error.passingStoneCold': '石头是凉的。教官玛伦并未要求你这么做。',
+    'error.vendorQuestGated': '这件物品暂时还不卖给你。',
     'error.arenaMinLevel': '你必须达到等级 {level} 才能加入竞技场队列。',
     'error.arenaMinLevelMember': '{name} 必须至少达到等级 {level} 才能加入竞技场队列。',
     'log.arenaQueueAutoLeave1v1': '你离开了灰烬斗技场队列。',
@@ -3916,6 +4289,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': '你必须加入公会才能使用公会银行。',
     'error.guildBankRank': '只有公会官员才能使用公会银行。',
     'error.guildBankFull': '公会银行已满。',
+    'error.guildBankStackIndivisible': '该物品堆无法拆分，放不进公会银行的剩余空间。',
     'error.guildBankSoulbound': '你无法将灵魂绑定的物品存入公会银行。',
     'error.guildBankNoTransfer': '该物品无法存入公会银行。',
     'error.guildBankTreasuryCap': '公会金库无法容纳这么多金钱。',
@@ -4002,6 +4376,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': '该物品不能放入此装备栏位。',
     'log.deathwardSaves': '死亡护符救了你！',
     'error.heroicMarksNeeded': '购买{name}需要{marks}个英雄徽记。',
+    'error.sigilNeeded': '购买{name}需要{sigil}。',
     'aura.clearcasting': '清晰施法',
     'aura.effigy': '巫蛊像',
     'aura.gloomtithe': '幽暗什一',
@@ -4085,6 +4460,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.moongateRubbingDeny': '在守望者开口索要之前，这道铭文还轮不到你来拓印。',
     'groundPickup.graveSealedDeny': '坟墓向生者封闭，直到死者召唤你前来。',
     'groundPickup.cryptRitualCircleDeny': '仪式法阵冰冷沉寂。',
+    'groundPickup.castawayCrateDeny': '藤壶把货箱封得严严实实。',
+    'groundPickup.ferryBellDeny': '渡船铃静静垂着。',
+    'groundPickup.ferryBellEnough': '渡船铃没有什么可给你的。',
+    'groundPickup.castawayCrateEnough': '你已经有足够的漂流货箱了。',
     'groundPickup.supplyCrateEnough': '你已经有足够的补给箱了。',
     'groundPickup.gravecallerSigilEnough': '你身上已经带着一枚唤墓者徽记了。',
     'groundPickup.ledgerPageEnough': '你已经有足够的账页了。',
@@ -4205,6 +4584,9 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankQuestItem': '你无法将任务物品存入公会银行。',
     'error.guildBankWithdrawRefused': '该物品无法从公会银行取出。',
     'error.bankFull': '你的银行已满。',
+    'error.bankOnlyMaterialsSpace': '你的银行剩余空间只能存放材料。',
+    'error.bankStackIndivisible': '该物品堆无法拆分，放不进你银行的剩余空间。',
+    'error.bagsStackIndivisible': '该物品堆无法拆分，放不进你背包的剩余空间。',
     'error.bankCannotAfford': '你无力支付该银行扩展费用。',
     'error.bankMaxSlots': '你的银行无法再扩展了。',
     'error.bankTooFar': '你距离银行家太远。',
@@ -4274,10 +4656,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': '那个资源点不存在。',
     'error.gatherNodeNotRespawned': '这个资源点尚未为你刷新。',
     'error.toolEffectSlotFromWindow': '请在专业窗口中镶嵌它。',
-    'error.vcupDeserter': '场地管理员记着呢。稍后再来吧。',
-    'error.vcupPartyTooBig': '这个赛级需要更小的队伍。',
-    'error.vcupNoNation': '请先选择一个旗帜国度。',
-    'error.vcupPracticeFull': '练习场地已全部占用。请稍后再试。',
     'log.talentsUpdated': '天赋已更新。',
     'log.talentsReset': '天赋已重置。',
     'log.cheatDeathSave': '死里逃生救了你！',
@@ -4345,8 +4723,27 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': '你只能装备一个此类物品。',
     'error.townFocusCannotAfford': '你负担不起这次专注重置。',
     'log.townFocusRespecComplete': '你的专注重置已完成。',
+
+    'error.townFocusRespecCancelled': '你无法负担待处理的专精重置费用，因此操作已取消。',
+    'error.ignivarRaidInCombat': '你的团队仍在战斗中。战斗结束后才能进入。',
+    'error.ignivarForgeGateSealed': '熔炉大门拒绝向你开放。',
+    'error.liveRaidClaimUnsafe': '无法安全替换当前的实时团队归属。',
+    'error.vaultOnlyMaterials': '材料库只能存放材料。',
+    'error.vaultLocked': '你尚未解锁材料库。',
+    'error.vaultMaterialFull': '你的材料库已无法再存放更多该材料。',
+    'error.vaultMaxUpgrades': '你的材料库已无法继续升级。',
+    'error.vaultCannotAfford': '你负担不起这次材料库升级。',
+    'log.vaultUnlocked': '你解锁了材料库。',
+    'log.vaultUpgraded': '你升级了材料库。',
+    'error.alreadyEating': '你已经在进食了。',
+    'error.alreadyDrinking': '你已经在饮水了。',
   },
   zh_TW: {
+    'log.passingStoneKneel': '你的手握住了往生石，海濱終於放你離去。',
+    'error.tutorialFromHere': '你無法從這裡揚帆出海。',
+    'error.tutorialOutleveled': '試煉之濱已經沒有什麼能再教你的了。',
+    'error.passingStoneCold': '石頭是冷的。教官瑪倫並未要求你這麼做。',
+    'error.vendorQuestGated': '這件物品目前還不能賣給你。',
     'error.arenaMinLevel': '你必須達到等級 {level} 才能加入競技場佇列。',
     'error.arenaMinLevelMember': '{name} 必須至少達到等級 {level} 才能加入競技場佇列。',
     'log.arenaQueueAutoLeave1v1': '你離開了灰燼競技場佇列。',
@@ -4358,6 +4755,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': '你必須加入公會才能使用公會銀行。',
     'error.guildBankRank': '只有公會幹部才能使用公會銀行。',
     'error.guildBankFull': '公會銀行已滿。',
+    'error.guildBankStackIndivisible': '該物品堆無法拆分，放不進公會銀行的剩餘空間。',
     'error.guildBankSoulbound': '你無法將靈魂綁定物品存入公會銀行。',
     'error.guildBankNoTransfer': '該物品無法存入公會銀行。',
     'error.guildBankTreasuryCap': '公會金庫容納不下這麼多金錢。',
@@ -4444,6 +4842,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': '此物品無法裝備於該欄位。',
     'log.deathwardSaves': '死亡護符救了你！',
     'error.heroicMarksNeeded': '購買{name}需要{marks}個英雄徽記。',
+    'error.sigilNeeded': '購買{name}需要{sigil}。',
     'aura.clearcasting': '清晰施法',
     'aura.effigy': '巫毒塑像',
     'aura.gloomtithe': '幽暗什一',
@@ -4527,6 +4926,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.moongateRubbingDeny': '在守望者開口索要之前，你無權拓印這道守護符文。',
     'groundPickup.graveSealedDeny': '在亡者召喚你之前，這座墳墓不容生者踏入。',
     'groundPickup.cryptRitualCircleDeny': '儀式法陣冰冷而沉寂。',
+    'groundPickup.castawayCrateDeny': '藤壺把貨箱封得嚴嚴實實。',
+    'groundPickup.ferryBellDeny': '渡船鈴靜靜垂著。',
+    'groundPickup.ferryBellEnough': '渡船鈴沒有什麼可給你的。',
+    'groundPickup.castawayCrateEnough': '你已經有足夠的漂流貨箱了。',
     'groundPickup.supplyCrateEnough': '你已經有足夠的補給箱了。',
     'groundPickup.gravecallerSigilEnough': '你身上已經帶著一枚喚墓者徽記了。',
     'groundPickup.ledgerPageEnough': '你已經有足夠的帳頁了。',
@@ -4647,6 +5050,9 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankQuestItem': '你無法將任務物品存入公會銀行。',
     'error.guildBankWithdrawRefused': '該物品無法從公會銀行取出。',
     'error.bankFull': '你的銀行已滿。',
+    'error.bankOnlyMaterialsSpace': '你的銀行剩餘空間只能存放材料。',
+    'error.bankStackIndivisible': '該物品堆無法拆分，放不進你銀行的剩餘空間。',
+    'error.bagsStackIndivisible': '該物品堆無法拆分，放不進你背包的剩餘空間。',
     'error.bankCannotAfford': '你無力支付該銀行擴充費用。',
     'error.bankMaxSlots': '你的銀行無法再擴充了。',
     'error.bankTooFar': '你距離銀行家太遠。',
@@ -4716,10 +5122,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': '那個資源點不存在。',
     'error.gatherNodeNotRespawned': '這個資源點尚未為你重新出現。',
     'error.toolEffectSlotFromWindow': '請在專業視窗中鑲嵌它。',
-    'error.vcupDeserter': '場地管理員記著呢。稍後再來吧。',
-    'error.vcupPartyTooBig': '這個賽級需要更小的隊伍。',
-    'error.vcupNoNation': '請先選擇一個旗幟國度。',
-    'error.vcupPracticeFull': '練習場地已全部佔用。請稍後再試。',
     'log.talentsUpdated': '天賦已更新。',
     'log.talentsReset': '天賦已重置。',
     'log.cheatDeathSave': '死裡逃生救了你！',
@@ -4787,8 +5189,27 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': '你只能裝備一個此類物品。',
     'error.townFocusCannotAfford': '你負擔不起這次專注重置。',
     'log.townFocusRespecComplete': '你的專注重置已完成。',
+
+    'error.townFocusRespecCancelled': '你無法負擔待處理的專精重置費用，因此操作已取消。',
+    'error.ignivarRaidInCombat': '你的團隊仍在戰鬥中。戰鬥結束後才能進入。',
+    'error.ignivarForgeGateSealed': '熔爐大門拒絕向你開放。',
+    'error.liveRaidClaimUnsafe': '無法安全替換目前的即時團隊歸屬。',
+    'error.vaultOnlyMaterials': '材料庫只能存放材料。',
+    'error.vaultLocked': '你尚未解鎖材料庫。',
+    'error.vaultMaterialFull': '你的材料庫已無法再存放更多該材料。',
+    'error.vaultMaxUpgrades': '你的材料庫已無法繼續升級。',
+    'error.vaultCannotAfford': '你負擔不起這次材料庫升級。',
+    'log.vaultUnlocked': '你解鎖了材料庫。',
+    'log.vaultUpgraded': '你升級了材料庫。',
+    'error.alreadyEating': '你已經在進食了。',
+    'error.alreadyDrinking': '你已經在飲水了。',
   },
   ko_KR: {
+    'log.passingStoneKneel': '안식의 돌을 손에 쥐자, 해안이 당신을 놓아줍니다.',
+    'error.tutorialFromHere': '여기서는 출항할 수 없습니다.',
+    'error.tutorialOutleveled': '수련의 해안은 더 이상 당신에게 가르칠 것이 없습니다.',
+    'error.passingStoneCold': '돌이 차갑습니다. 교관 마렌은 당신에게 이것을 요구하지 않았습니다.',
+    'error.vendorQuestGated': '그 아이템은 아직 당신에게 판매되지 않습니다.',
     'error.arenaMinLevel': '투기장 대기열에 참가하려면 레벨 {level} 이상이어야 합니다.',
     'error.arenaMinLevelMember':
       '{name}님은 투기장 대기열에 참가하려면 레벨 {level} 이상이어야 합니다.',
@@ -4801,6 +5222,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': '길드 은행을 사용하려면 길드에 소속되어 있어야 합니다.',
     'error.guildBankRank': '길드 임원만 길드 은행을 사용할 수 있습니다.',
     'error.guildBankFull': '길드 은행이 가득 찼습니다.',
+    'error.guildBankStackIndivisible':
+      '해당 묶음은 나눌 수 없어 길드 은행에 남은 공간에 넣을 수 없습니다.',
     'error.guildBankSoulbound': '귀속된 아이템은 길드 은행에 보관할 수 없습니다.',
     'error.guildBankNoTransfer': '그 아이템은 길드 은행에 보관할 수 없습니다.',
     'error.guildBankTreasuryCap': '길드 금고는 그만큼 많은 돈을 담을 수 없습니다.',
@@ -4888,6 +5311,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': '해당 슬롯에 맞지 않는 장비입니다.',
     'log.deathwardSaves': '죽음의 수호가 당신을 구했습니다!',
     'error.heroicMarksNeeded': '{name}을(를) 구매하려면 영웅의 징표 {marks}개가 필요합니다.',
+    'error.sigilNeeded': '{name}을(를) 구매하려면 {sigil}이(가) 필요합니다.',
     'aura.clearcasting': '선명한 시전',
     'aura.effigy': '제물 인형',
     'aura.gloomtithe': '암흑 십일조',
@@ -4975,6 +5399,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       '죽은 자들이 당신을 부르기 전까지 무덤은 산 자에게 봉인되어 있습니다.',
     'groundPickup.cryptRitualCircleDeny': '의식진은 차갑게 식은 채 잠들어 있습니다.',
+    'groundPickup.castawayCrateDeny': '따개비가 상자를 단단히 봉하고 있습니다.',
+    'groundPickup.ferryBellDeny': '나룻배 종이 조용히 걸려 있습니다.',
+    'groundPickup.ferryBellEnough': '나룻배 종은 줄 것이 없습니다.',
+    'groundPickup.castawayCrateEnough': '표류 상자는 이미 충분히 갖고 있습니다.',
     'groundPickup.supplyCrateEnough': '보급 상자는 이미 충분히 갖고 있습니다.',
     'groundPickup.gravecallerSigilEnough': '무덤부름 인장은 이미 지니고 있습니다.',
     'groundPickup.ledgerPageEnough': '장부 페이지는 이미 충분히 갖고 있습니다.',
@@ -5096,6 +5524,9 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankQuestItem': '퀘스트 아이템은 길드 은행에 보관할 수 없습니다.',
     'error.guildBankWithdrawRefused': '해당 아이템은 길드 은행에서 꺼낼 수 없습니다.',
     'error.bankFull': '은행이 가득 찼습니다.',
+    'error.bankOnlyMaterialsSpace': '은행에 남은 공간에는 재료만 보관할 수 있습니다.',
+    'error.bankStackIndivisible': '해당 묶음은 나눌 수 없어 은행에 남은 공간에 넣을 수 없습니다.',
+    'error.bagsStackIndivisible': '해당 묶음은 나눌 수 없어 가방에 남은 공간에 넣을 수 없습니다.',
     'error.bankCannotAfford': '그 은행 확장을 구매할 돈이 부족합니다.',
     'error.bankMaxSlots': '은행을 더 이상 확장할 수 없습니다.',
     'error.bankTooFar': '은행원과 너무 멀리 떨어져 있습니다.',
@@ -5165,10 +5596,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': '그 자원 지점은 존재하지 않습니다.',
     'error.gatherNodeNotRespawned': '이 자원 지점은 아직 당신에게 다시 생성되지 않았습니다.',
     'error.toolEffectSlotFromWindow': '전문 기술 창에서 장착하세요.',
-    'error.vcupDeserter': '경기장 관리인은 기억하고 있습니다. 나중에 다시 오세요.',
-    'error.vcupPartyTooBig': '해당 등급에는 더 작은 파티가 필요합니다.',
-    'error.vcupNoNation': '먼저 깃발 국가를 선택하세요.',
-    'error.vcupPracticeFull': '연습 경기장이 모두 사용 중입니다. 잠시 후 다시 시도하세요.',
     'log.talentsUpdated': '특성이 갱신되었습니다.',
     'log.talentsReset': '특성이 초기화되었습니다.',
     'log.cheatDeathSave': '죽음 기만이 당신을 구했습니다!',
@@ -5239,8 +5666,28 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': '그런 것은 하나만 장착할 수 있습니다.',
     'error.townFocusCannotAfford': '해당 집중 재설정 비용을 감당할 수 없습니다.',
     'log.townFocusRespecComplete': '집중 재설정이 완료되었습니다.',
+
+    'error.townFocusRespecCancelled': '대기 중인 특성 초기화 비용을 감당할 수 없어 취소되었습니다.',
+    'error.ignivarRaidInCombat':
+      '공격대가 아직 전투 중입니다. 전투가 끝난 뒤에 입장할 수 있습니다.',
+    'error.ignivarForgeGateSealed': '당신에게는 대장간 문이 봉인되어 있습니다.',
+    'error.liveRaidClaimUnsafe': '현재 진행 중인 공격대 점유를 안전하게 교체할 수 없습니다.',
+    'error.vaultOnlyMaterials': '재료 보관함에는 재료만 보관할 수 있습니다.',
+    'error.vaultLocked': '아직 재료 보관함을 잠금 해제하지 않았습니다.',
+    'error.vaultMaterialFull': '보관함에 해당 재료를 더 보관할 수 없습니다.',
+    'error.vaultMaxUpgrades': '보관함을 더 이상 업그레이드할 수 없습니다.',
+    'error.vaultCannotAfford': '보관함 업그레이드 비용을 감당할 수 없습니다.',
+    'log.vaultUnlocked': '재료 보관함을 잠금 해제했습니다.',
+    'log.vaultUpgraded': '재료 보관함을 업그레이드했습니다.',
+    'error.alreadyEating': '이미 식사 중입니다.',
+    'error.alreadyDrinking': '이미 음료를 마시는 중입니다.',
   },
   ja_JP: {
+    'log.passingStoneKneel': 'たましいの石を握りしめると、渚がその手を解き放つ。',
+    'error.tutorialFromHere': 'ここから出航することはできません。',
+    'error.tutorialOutleveled': '修練の浜には、もう教えることは何も残っていません。',
+    'error.passingStoneCold': 'その石は冷たいままです。教官マレンはまだそれを求めていません。',
+    'error.vendorQuestGated': 'そのアイテムはまだあなたには売り物ではありません。',
     'error.arenaMinLevel': 'アリーナのキューに参加するにはレベル{level}が必要です。',
     'error.arenaMinLevelMember':
       '{name}はアリーナのキューに参加するにはレベル{level}以上である必要があります。',
@@ -5253,6 +5700,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': 'ギルド銀行を利用するにはギルドに加入している必要があります。',
     'error.guildBankRank': 'ギルド銀行を利用できるのはギルド幹部のみです。',
     'error.guildBankFull': 'ギルド銀行がいっぱいです。',
+    'error.guildBankStackIndivisible':
+      'そのスタックは分割できないため、ギルド銀行の残りのスペースに収まりません。',
     'error.guildBankSoulbound': '魂縛のアイテムはギルド銀行に預けられません。',
     'error.guildBankNoTransfer': 'そのアイテムはギルド銀行に預けられません。',
     'error.guildBankTreasuryCap': 'ギルド金庫にはそれだけの額を入れられません。',
@@ -5344,6 +5793,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': 'そのアイテムはそのスロットに装備できません。',
     'log.deathwardSaves': '死の加護があなたを救った！',
     'error.heroicMarksNeeded': '{name}を購入するには英雄の証が{marks}個必要です。',
+    'error.sigilNeeded': '{name}を購入するには{sigil}が必要です。',
     'aura.clearcasting': 'クリアキャスティング',
     'aura.effigy': '呪いの人形',
     'aura.gloomtithe': '闇の献納',
@@ -5430,6 +5880,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       '死者に呼ばれるそのときまで、墓は生者を拒んで封じられています。',
     'groundPickup.cryptRitualCircleDeny': '儀式の円は冷たく、眠りについています。',
+    'groundPickup.castawayCrateDeny': 'フジツボが木箱を固く閉ざしています。',
+    'groundPickup.ferryBellDeny': '渡しの鐘は静かに掛かっています。',
+    'groundPickup.ferryBellEnough': '渡しの鐘から得られるものはありません。',
+    'groundPickup.castawayCrateEnough': '漂着した木箱はすでに十分あります。',
     'groundPickup.supplyCrateEnough': '補給箱はすでに十分あります。',
     'groundPickup.gravecallerSigilEnough': 'グレイブコーラーの印章はすでに携えています。',
     'groundPickup.ledgerPageEnough': '帳簿のページはすでに十分あります。',
@@ -5556,6 +6010,11 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankQuestItem': 'クエストアイテムはギルド銀行に預けられません。',
     'error.guildBankWithdrawRefused': 'そのアイテムはギルド銀行から引き出せません。',
     'error.bankFull': '銀行がいっぱいです。',
+    'error.bankOnlyMaterialsSpace': '銀行の残りのスペースには素材しか入りません。',
+    'error.bankStackIndivisible':
+      'そのスタックは分割できないため、銀行の残りのスペースに収まりません。',
+    'error.bagsStackIndivisible':
+      'そのスタックは分割できないため、バッグの残りのスペースに収まりません。',
     'error.bankCannotAfford': 'その銀行拡張を購入するにはお金が足りません。',
     'error.bankMaxSlots': '銀行をこれ以上拡張できません。',
     'error.bankTooFar': '銀行員から遠すぎます。',
@@ -5626,10 +6085,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'その資源ポイントは存在しません。',
     'error.gatherNodeNotRespawned': 'この資源ポイントは、あなたにはまだ再出現していません。',
     'error.toolEffectSlotFromWindow': '専門技能ウィンドウから装着してください。',
-    'error.vcupDeserter': '整備人は覚えている。また後で来なさい。',
-    'error.vcupPartyTooBig': 'その階級にはもっと小さなパーティーが必要だ。',
-    'error.vcupNoNation': 'まずは旗の国を選ぼう。',
-    'error.vcupPracticeFull': '練習ピッチはすべて使用中です。しばらくして再度お試しください。',
     'log.talentsUpdated': 'タレントを更新しました。',
     'log.talentsReset': 'タレントをリセットしました。',
     'log.cheatDeathSave': '死の欺きがあなたを救いました！',
@@ -5700,8 +6155,29 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'その種類は1つだけ装備できます。',
     'error.townFocusCannotAfford': 'そのフォーカス再設定を支払えません。',
     'log.townFocusRespecComplete': 'フォーカス再設定が完了しました。',
+
+    'error.townFocusRespecCancelled':
+      '保留中のフォーカス振り直し費用を支払えないため、キャンセルされました。',
+    'error.ignivarRaidInCombat': 'あなたのレイドはまだ戦闘中です。戦闘が終わるまで入場できません。',
+    'error.ignivarForgeGateSealed': 'あなたに対して鍛冶場の門は封印されています。',
+    'error.liveRaidClaimUnsafe': '現在進行中のレイドの権利を安全に置き換えられません。',
+    'error.vaultOnlyMaterials': '素材保管庫には素材のみ保管できます。',
+    'error.vaultLocked': '素材保管庫をまだアンロックしていません。',
+    'error.vaultMaterialFull': '保管庫にはその素材をこれ以上保管できません。',
+    'error.vaultMaxUpgrades': '保管庫はこれ以上アップグレードできません。',
+    'error.vaultCannotAfford': '保管庫のアップグレード費用が足りません。',
+    'log.vaultUnlocked': '素材保管庫をアンロックしました。',
+    'log.vaultUpgraded': '素材保管庫をアップグレードしました。',
+    'error.alreadyEating': 'すでに食事中です。',
+    'error.alreadyDrinking': 'すでに飲み物を飲んでいます。',
   },
   pt_BR: {
+    'log.passingStoneKneel':
+      'Você fecha a mão sobre a Pedra de Passagem, e a praia deixa você partir.',
+    'error.tutorialFromHere': 'Você não pode zarpar daqui.',
+    'error.tutorialOutleveled': 'A Costa da Provação não tem mais nada a te ensinar.',
+    'error.passingStoneCold': 'A pedra está fria. A Instrutora Maren não pediu isso de você.',
+    'error.vendorQuestGated': 'Esse item ainda não está à venda para você.',
     'error.arenaMinLevel': 'Você precisa ser nível {level} para entrar na fila da arena.',
     'error.arenaMinLevelMember':
       '{name} precisa ser pelo menos nível {level} para entrar na fila da arena.',
@@ -5715,6 +6191,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': 'Você precisa estar em uma guilda para usar o banco da guilda.',
     'error.guildBankRank': 'Somente oficiais da guilda podem usar o banco da guilda.',
     'error.guildBankFull': 'O banco da guilda está cheio.',
+    'error.guildBankStackIndivisible':
+      'Essa pilha não pode ser dividida para caber no espaço restante do banco da guilda.',
     'error.guildBankQuestItem': 'Você não pode guardar itens de missão no banco da guilda.',
     'error.guildBankSoulbound': 'Você não pode guardar itens vinculados à alma no banco da guilda.',
     'error.guildBankNoTransfer': 'Esse item não pode ser guardado no banco da guilda.',
@@ -5812,6 +6290,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': 'Esse item não pode ser colocado nesse espaço.',
     'log.deathwardSaves': 'Uma proteção contra a morte salva você!',
     'error.heroicMarksNeeded': 'Você precisa de {marks} Marcas Heroicas para comprar {name}.',
+    'error.sigilNeeded': 'Você precisa de um {sigil} para comprar {name}.',
     'groundPickup.supplyCrateDeny': 'O caixote está fechado com pregos.',
     'groundPickup.gravecallerSigilDeny': 'O sigilo repele seu toque.',
     'groundPickup.ledgerPageDeny':
@@ -5833,6 +6312,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'O túmulo está selado contra os vivos até que os mortos chamem você a ele.',
     'groundPickup.cryptRitualCircleDeny': 'O círculo ritual jaz frio e adormecido.',
+    'groundPickup.castawayCrateDeny': 'Cracas mantêm o caixote lacrado.',
+    'groundPickup.ferryBellDeny': 'O sino da balsa pende em silêncio.',
+    'groundPickup.ferryBellEnough': 'O sino da balsa não tem nada a dar.',
+    'groundPickup.castawayCrateEnough': 'Você já tem caixotes à deriva suficientes.',
     'groundPickup.supplyCrateEnough': 'Você já tem caixotes de suprimentos suficientes.',
     'groundPickup.gravecallerSigilEnough': 'Você já carrega um Sigilo de Gravecaller.',
     'groundPickup.ledgerPageEnough': 'Você já tem páginas de livro-caixa suficientes.',
@@ -6012,11 +6495,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'Esse ponto de recursos não existe.',
     'error.gatherNodeNotRespawned': 'Este ponto de recursos ainda não ressurgiu para você.',
     'error.toolEffectSlotFromWindow': 'Encaixe isso pela janela de Profissões.',
-    'error.vcupDeserter': 'O Zelador do campo se lembra. Volte mais tarde.',
-    'error.vcupPartyTooBig': 'Essa categoria exige um grupo menor.',
-    'error.vcupNoNation': 'Escolha primeiro uma nação de bandeira.',
-    'error.vcupPracticeFull':
-      'Os campos de treino estão todos ocupados. Tente novamente em instantes.',
     'log.talentsUpdated': 'Talentos atualizados.',
     'log.talentsReset': 'Talentos redefinidos.',
     'log.cheatDeathSave': 'Enganar a morte salva você!',
@@ -6059,6 +6537,11 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.elixirSerpent': 'Força da Serpente',
     'error.bankQuestItem': 'Você não pode guardar itens de missão no banco.',
     'error.bankFull': 'Seu banco está cheio.',
+    'error.bankOnlyMaterialsSpace': 'No espaço restante do seu banco só cabem materiais.',
+    'error.bankStackIndivisible':
+      'Essa pilha não pode ser dividida para caber no espaço restante do seu banco.',
+    'error.bagsStackIndivisible':
+      'Essa pilha não pode ser dividida para caber no espaço restante das suas bolsas.',
     'error.bankCannotAfford': 'Você não pode pagar por essa expansão do banco.',
     'error.bankMaxSlots': 'Seu banco não pode ser expandido além disso.',
     'error.bankTooFar': 'Você está longe demais do banqueiro.',
@@ -6152,8 +6635,30 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'Você só pode equipar um desses.',
     'error.townFocusCannotAfford': 'Você não pode pagar essa redefinição de foco.',
     'log.townFocusRespecComplete': 'Sua redefinição de foco foi concluída.',
+
+    'error.townFocusRespecCancelled':
+      'Você não pôde pagar pela redefinição de foco pendente, então ela foi cancelada.',
+    'error.ignivarRaidInCombat':
+      'Seu raide ainda está em combate. Você poderá entrar quando a luta terminar.',
+    'error.ignivarForgeGateSealed': 'O portão da forja está selado para você.',
+    'error.liveRaidClaimUnsafe':
+      'Esta reivindicação de raide ao vivo não pode ser substituída com segurança.',
+    'error.vaultOnlyMaterials': 'Somente materiais podem ser armazenados no Cofre de Materiais.',
+    'error.vaultLocked': 'Você ainda não desbloqueou o Cofre de Materiais.',
+    'error.vaultMaterialFull': 'Seu cofre não pode armazenar mais desse material.',
+    'error.vaultMaxUpgrades': 'Seu cofre não pode ser aprimorado mais.',
+    'error.vaultCannotAfford': 'Você não pode pagar por esse aprimoramento do cofre.',
+    'log.vaultUnlocked': 'Você desbloqueou o Cofre de Materiais.',
+    'log.vaultUpgraded': 'Você aprimorou o Cofre de Materiais.',
+    'error.alreadyEating': 'Você já está comendo.',
+    'error.alreadyDrinking': 'Você já está bebendo.',
   },
   ru_RU: {
+    'log.passingStoneKneel': 'Вы сжимаете в ладони Камень Ухода, и берег отпускает вас.',
+    'error.tutorialFromHere': 'Вы не можете отплыть отсюда.',
+    'error.tutorialOutleveled': 'Берегу Испытаний больше нечему вас научить.',
+    'error.passingStoneCold': 'Камень холоден. Наставница Марен не просила вас об этом.',
+    'error.vendorQuestGated': 'Этот предмет пока не продаётся вам.',
     'error.arenaMinLevel': 'Чтобы встать в очередь на арену, нужен {level} уровень.',
     'error.arenaMinLevelMember':
       'Для постановки {name} в очередь на арену нужен как минимум {level} уровень.',
@@ -6167,6 +6672,8 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankNoGuild': 'Чтобы пользоваться банком гильдии, нужно состоять в гильдии.',
     'error.guildBankRank': 'Пользоваться банком гильдии могут только офицеры гильдии.',
     'error.guildBankFull': 'Банк гильдии полон.',
+    'error.guildBankStackIndivisible':
+      'Эту стопку нельзя разделить, чтобы она поместилась в оставшееся место банка гильдии.',
     'error.guildBankSoulbound': 'Персональные предметы нельзя хранить в банке гильдии.',
     'error.guildBankNoTransfer': 'Этот предмет нельзя хранить в банке гильдии.',
     'error.guildBankTreasuryCap': 'Казна гильдии не может вместить такую сумму.',
@@ -6255,6 +6762,7 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.wrongEquipSlot': 'Этот предмет не подходит для данного слота.',
     'log.deathwardSaves': 'Оберег от смерти спасает вас!',
     'error.heroicMarksNeeded': 'Вам нужно {marks} Героических знаков, чтобы купить {name}.',
+    'error.sigilNeeded': 'Чтобы купить {name}, нужен предмет {sigil}.',
     'aura.clearcasting': 'Ясность',
     'aura.effigy': 'Изваяние',
     'aura.gloomtithe': 'Мрачная десятина',
@@ -6343,6 +6851,10 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'groundPickup.graveSealedDeny':
       'Могила запечатана от живых, пока мёртвые сами не призовут вас к ней.',
     'groundPickup.cryptRitualCircleDeny': 'Ритуальный круг остыл и дремлет.',
+    'groundPickup.castawayCrateDeny': 'Ракушки намертво запечатали ящик.',
+    'groundPickup.ferryBellDeny': 'Паромный колокол висит безмолвно.',
+    'groundPickup.ferryBellEnough': 'Паромному колоколу нечего вам дать.',
+    'groundPickup.castawayCrateEnough': 'У вас уже достаточно выброшенных морем ящиков.',
     'groundPickup.supplyCrateEnough': 'У вас уже достаточно ящиков с припасами.',
     'groundPickup.gravecallerSigilEnough': 'Вы уже несёте с собой Сигил Могильного Зова.',
     'groundPickup.ledgerPageEnough': 'У вас уже достаточно страниц погребальной книги.',
@@ -6469,6 +6981,11 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.guildBankQuestItem': 'Предметы заданий нельзя хранить в банке гильдии.',
     'error.guildBankWithdrawRefused': 'Этот предмет нельзя забрать из банка гильдии.',
     'error.bankFull': 'Ваш банк полон.',
+    'error.bankOnlyMaterialsSpace': 'В вашем банке осталось место только для материалов.',
+    'error.bankStackIndivisible':
+      'Эту стопку нельзя разделить, чтобы она поместилась в оставшееся место вашего банка.',
+    'error.bagsStackIndivisible':
+      'Эту стопку нельзя разделить, чтобы она поместилась в оставшееся место ваших сумок.',
     'error.bankCannotAfford': 'У вас недостаточно денег на это расширение банка.',
     'error.bankMaxSlots': 'Ваш банк больше нельзя расширить.',
     'error.bankTooFar': 'Вы слишком далеко от банкира.',
@@ -6539,10 +7056,6 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.gatherNodeMissing': 'Этого источника ресурсов не существует.',
     'error.gatherNodeNotRespawned': 'Этот источник ресурсов ещё не восстановился для вас.',
     'error.toolEffectSlotFromWindow': 'Установите его в окне профессий.',
-    'error.vcupDeserter': 'Смотритель поля помнит. Возвращайся позже.',
-    'error.vcupPartyTooBig': 'Для этой категории нужна группа поменьше.',
-    'error.vcupNoNation': 'Сначала выбери знамённую нацию.',
-    'error.vcupPracticeFull': 'Все тренировочные поля заняты. Повторите попытку позже.',
     'log.talentsUpdated': 'Таланты обновлены.',
     'log.talentsReset': 'Таланты сброшены.',
     'log.cheatDeathSave': 'Обман смерти спасает вас!',
@@ -6613,9 +7126,30 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'error.uniqueEquipped': 'Можно экипировать только один такой предмет.',
     'error.townFocusCannotAfford': 'Вам не хватает средств на эту смену фокуса.',
     'log.townFocusRespecComplete': 'Смена фокуса завершена.',
+
+    'error.townFocusRespecCancelled':
+      'Вы не смогли оплатить ожидающую смену специализации фокуса, поэтому она была отменена.',
+    'error.ignivarRaidInCombat':
+      'Ваш рейд всё ещё в бою. Вы сможете войти, когда сражение закончится.',
+    'error.ignivarForgeGateSealed': 'Вам закрыт доступ к воротам кузницы.',
+    'error.liveRaidClaimUnsafe': 'Эту активную заявку на рейд нельзя безопасно заменить.',
+    'error.vaultOnlyMaterials': 'В хранилище материалов можно хранить только материалы.',
+    'error.vaultLocked': 'Вы ещё не разблокировали хранилище материалов.',
+    'error.vaultMaterialFull': 'В вашем хранилище больше нет места для этого материала.',
+    'error.vaultMaxUpgrades': 'Ваше хранилище больше нельзя улучшить.',
+    'error.vaultCannotAfford': 'Вы не можете позволить себе это улучшение хранилища.',
+    'log.vaultUnlocked': 'Вы разблокировали хранилище материалов.',
+    'log.vaultUpgraded': 'Вы улучшили хранилище материалов.',
+    'error.alreadyEating': 'Вы уже едите.',
+    'error.alreadyDrinking': 'Вы уже пьёте.',
   },
   ...BASE_NEW,
   cs_CZ: {
+    'log.passingStoneKneel': 'Sevřeš dlaň kolem Kamene přechodu a pobřeží tě pouští.',
+    'error.tutorialFromHere': 'Odsud nemůžeš vyplout.',
+    'error.tutorialOutleveled': 'Zkušební pobřeží tě už nemá co naučit.',
+    'error.passingStoneCold': 'Kámen je studený. Instruktorka Maren tě o tohle nepožádala.',
+    'error.vendorQuestGated': 'Tento předmět ti zatím není na prodej.',
     'error.arenaMinLevel': 'Musíš být na úrovni {level}, abys se mohl(a) zařadit do fronty arény.',
     'error.arenaMinLevelMember':
       '{name} musí být alespoň na úrovni {level}, aby se mohl(a) zařadit do fronty arény.',
@@ -6764,8 +7298,34 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Chlad zimy',
     'aura.icicles': 'Rampouchy',
     'aura.perfectMoment': 'Dokonalý okamžik',
+
+    'error.townFocusRespecCancelled':
+      'Nemáš dost prostředků na čekající změnu zaměření, takže byla zrušena.',
+    'error.ignivarRaidInCombat': 'Tvůj raid je stále v boji. Vstoupit můžeš, až boj skončí.',
+    'error.ignivarForgeGateSealed': 'Brána kovárny je pro tebe zapečetěná.',
+    'error.liveRaidClaimUnsafe': 'Tento nárok na probíhající raid nelze bezpečně nahradit.',
+    'error.bankStackIndivisible':
+      'Tento stoh nelze rozdělit tak, aby se vešel do volného místa v bance.',
+    'error.bagsStackIndivisible':
+      'Tento stoh nelze rozdělit tak, aby se vešel do volného místa v brašnách.',
+    'error.vaultOnlyMaterials': 'Do Trezoru materiálů lze ukládat pouze materiály.',
+    'error.vaultLocked': 'Trezor materiálů sis ještě neodemkl.',
+    'error.vaultMaterialFull': 'Do trezoru se už žádný další materiál nevejde.',
+    'error.vaultMaxUpgrades': 'Trezor už nelze dále vylepšit.',
+    'error.vaultCannotAfford': 'Na toto vylepšení trezoru nemáš dost prostředků.',
+    'error.guildBankStackIndivisible':
+      'Tento stoh nelze rozdělit tak, aby se vešel do volného místa v cechovní bance.',
+    'log.vaultUnlocked': 'Odemkl sis Trezor materiálů.',
+    'log.vaultUpgraded': 'Vylepšil sis Trezor materiálů.',
+    'error.alreadyEating': 'Už jíš.',
+    'error.alreadyDrinking': 'Už piješ.',
   },
   nl_NL: {
+    'log.passingStoneKneel': 'Je sluit je hand om de Doorgangssteen, en het strand laat je gaan.',
+    'error.tutorialFromHere': 'Je kunt hier niet uitvaren.',
+    'error.tutorialOutleveled': 'De Beproevingskust heeft je niets meer te leren.',
+    'error.passingStoneCold': 'De steen is koud. Instructeur Maren heeft je dit niet gevraagd.',
+    'error.vendorQuestGated': 'Dat voorwerp is nog niet te koop voor jou.',
     'error.arenaMinLevel':
       'Je moet niveau {level} zijn om je aan te sluiten bij de wachtrij voor de arena.',
     'error.arenaMinLevelMember':
@@ -6916,8 +7476,35 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Winterkilte',
     'aura.icicles': 'IJspegels',
     'aura.perfectMoment': 'Volmaakt Ogenblik',
+
+    'error.townFocusRespecCancelled':
+      'Je kon de geplande focus-herverdeling niet betalen, dus deze is geannuleerd.',
+    'error.ignivarRaidInCombat':
+      'Je raid is nog in gevecht. Je kunt binnenkomen zodra het gevecht voorbij is.',
+    'error.ignivarForgeGateSealed': 'De poort van de smidse is voor jou verzegeld.',
+    'error.liveRaidClaimUnsafe': 'Deze claim voor een live raid kan niet veilig worden vervangen.',
+    'error.bankStackIndivisible':
+      'Deze stapel kan niet worden gesplitst om in de resterende ruimte van je bank te passen.',
+    'error.bagsStackIndivisible':
+      'Deze stapel kan niet worden gesplitst om in de resterende ruimte van je tassen te passen.',
+    'error.vaultOnlyMaterials': 'Alleen materialen kunnen in de Materialenkluis worden opgeslagen.',
+    'error.vaultLocked': 'Je hebt de Materialenkluis nog niet ontgrendeld.',
+    'error.vaultMaterialFull': 'Er past geen extra exemplaar van dat materiaal meer in je kluis.',
+    'error.vaultMaxUpgrades': 'Je kluis kan niet verder worden verbeterd.',
+    'error.vaultCannotAfford': 'Je kunt die kluisverbetering niet betalen.',
+    'error.guildBankStackIndivisible':
+      'Deze stapel kan niet worden gesplitst om in de resterende ruimte van de gildebank te passen.',
+    'log.vaultUnlocked': 'Je ontgrendelt de Materialenkluis.',
+    'log.vaultUpgraded': 'Je verbetert de Materialenkluis.',
+    'error.alreadyEating': 'Je bent al aan het eten.',
+    'error.alreadyDrinking': 'Je bent al aan het drinken.',
   },
   pl_PL: {
+    'log.passingStoneKneel': 'Zaciskasz dłoń na Kamieniu Przejścia, a wybrzeże pozwala ci odejść.',
+    'error.tutorialFromHere': 'Nie możesz stąd podnieść żagli.',
+    'error.tutorialOutleveled': 'Wybrzeże Prób nie ma cię już czego nauczyć.',
+    'error.passingStoneCold': 'Kamień jest zimny. Instruktorka Maren nie prosiła cię o to.',
+    'error.vendorQuestGated': 'Ten przedmiot nie jest jeszcze dla ciebie na sprzedaż.',
     'error.arenaMinLevel': 'Musisz mieć poziom {level}, aby dołączyć do kolejki na arenę.',
     'error.arenaMinLevelMember':
       '{name} musi mieć co najmniej poziom {level}, aby dołączyć do kolejki na arenę.',
@@ -7069,8 +7656,37 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Chłód zimy',
     'aura.icicles': 'Sople lodu',
     'aura.perfectMoment': 'Idealna chwila',
+
+    'error.townFocusRespecCancelled':
+      'Nie było Cię stać na oczekującą zmianę specjalizacji skupienia, więc ją anulowano.',
+    'error.ignivarRaidInCombat':
+      'Twój rajd wciąż jest w walce. Możesz wejść, gdy walka się zakończy.',
+    'error.ignivarForgeGateSealed': 'Brama kuźni jest dla Ciebie zamknięta.',
+    'error.liveRaidClaimUnsafe': 'Tego aktywnego zgłoszenia rajdu nie można bezpiecznie zastąpić.',
+    'error.bankStackIndivisible':
+      'Nie można podzielić tego stosu, aby zmieścić go w wolnym miejscu w banku.',
+    'error.bagsStackIndivisible':
+      'Nie można podzielić tego stosu, aby zmieścić go w wolnym miejscu w torbach.',
+    'error.vaultOnlyMaterials': 'W Skarbcu Materiałów można przechowywać wyłącznie materiały.',
+    'error.vaultLocked': 'Nie odblokowano jeszcze Skarbca Materiałów.',
+    'error.vaultMaterialFull': 'W Skarbcu nie ma już miejsca na ten materiał.',
+    'error.vaultMaxUpgrades': 'Skarbca nie można już bardziej ulepszyć.',
+    'error.vaultCannotAfford': 'Nie stać Cię na to ulepszenie Skarbca.',
+    'error.guildBankStackIndivisible':
+      'Nie można podzielić tego stosu, aby zmieścić go w wolnym miejscu w banku gildii.',
+    'log.vaultUnlocked': 'Odblokowujesz Skarbiec Materiałów.',
+    'log.vaultUpgraded': 'Ulepszasz Skarbiec Materiałów.',
+    'error.alreadyEating': 'Już jesz.',
+    'error.alreadyDrinking': 'Już pijesz.',
   },
   id_ID: {
+    'log.passingStoneKneel':
+      'Kamu menggenggam Batu Pelepasan itu, dan pesisir ini melepaskanmu pergi.',
+    'error.tutorialFromHere': 'Kamu tidak bisa berlayar dari sini.',
+    'error.tutorialOutleveled':
+      'Pesisir Pembuktian tidak punya apa pun lagi untuk diajarkan padamu.',
+    'error.passingStoneCold': 'Batu itu dingin. Instruktur Maren belum memintamu melakukan ini.',
+    'error.vendorQuestGated': 'Barang itu belum dijual untukmu.',
     'error.arenaMinLevel': 'Kamu harus level {level} untuk mengantre ke arena.',
     'error.arenaMinLevelMember': '{name} harus setidaknya level {level} untuk mengantre ke arena.',
     'log.arenaQueueAutoLeave1v1': 'Kamu meninggalkan antrean Koloseum Abu.',
@@ -7219,8 +7835,36 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Hawa Musim Dingin',
     'aura.icicles': 'Kerucut Es',
     'aura.perfectMoment': 'Momen Sempurna',
+
+    'error.townFocusRespecCancelled':
+      'Kamu tidak mampu membayar perubahan spesialisasi fokus yang tertunda, jadi perubahan itu dibatalkan.',
+    'error.ignivarRaidInCombat':
+      'Raid kamu masih dalam pertempuran. Kamu dapat masuk setelah pertarungan berhenti.',
+    'error.ignivarForgeGateSealed': 'Gerbang tempa itu tertutup bagimu.',
+    'error.liveRaidClaimUnsafe': 'Klaim raid aktif ini tidak dapat digantikan dengan aman.',
+    'error.bankStackIndivisible':
+      'Tumpukan itu tidak dapat dipecah agar muat di ruang yang tersisa dalam bankmu.',
+    'error.bagsStackIndivisible':
+      'Tumpukan itu tidak dapat dipecah agar muat di ruang yang tersisa dalam tasmu.',
+    'error.vaultOnlyMaterials': 'Hanya material yang dapat disimpan di Vault Material.',
+    'error.vaultLocked': 'Kamu belum membuka Vault Material.',
+    'error.vaultMaterialFull': 'Vault-mu tidak dapat menampung material itu lagi.',
+    'error.vaultMaxUpgrades': 'Vault-mu tidak dapat ditingkatkan lagi.',
+    'error.vaultCannotAfford': 'Kamu tidak mampu membayar peningkatan vault itu.',
+    'error.guildBankStackIndivisible':
+      'Tumpukan itu tidak dapat dipecah agar muat di ruang yang tersisa dalam bank guild.',
+    'log.vaultUnlocked': 'Kamu membuka Vault Material.',
+    'log.vaultUpgraded': 'Kamu meningkatkan Vault Material.',
+    'error.alreadyEating': 'Kamu sedang makan.',
+    'error.alreadyDrinking': 'Kamu sedang minum.',
   },
   tr_TR: {
+    'log.passingStoneKneel':
+      "Elini Geçiş Taşı'nın üzerine kapatırsın, ve kıyı seni serbest bırakır.",
+    'error.tutorialFromHere': 'Buradan yelken açamazsın.',
+    'error.tutorialOutleveled': "Sınav Kıyısı'nın sana öğretecek bir şeyi kalmadı.",
+    'error.passingStoneCold': 'Taş soğuk. Eğitmen Maren senden bunu istemedi.',
+    'error.vendorQuestGated': 'O eşya henüz sana satılık değil.',
     'error.arenaMinLevel': 'Arena sırasına girmek için {level}. seviyeye ulaşmalısın.',
     'error.arenaMinLevelMember':
       '{name} arena sırasına girmek için en az {level}. seviyede olmalı.',
@@ -7370,8 +8014,32 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Kış Soğuğu',
     'aura.icicles': 'Buz Sarkıtları',
     'aura.perfectMoment': 'Mükemmel An',
+
+    'error.townFocusRespecCancelled':
+      'Bekleyen odak uzmanlık değişikliğinin ücretini karşılayamadığın için iptal edildi.',
+    'error.ignivarRaidInCombat': 'Raid’in hâlâ savaşta. Savaş sona erince girebilirsin.',
+    'error.ignivarForgeGateSealed': 'Demirhane kapısı sana kapalı.',
+    'error.liveRaidClaimUnsafe': 'Bu canlı raid talebi güvenle değiştirilemez.',
+    'error.bankStackIndivisible': 'Bu yığın, bankanda kalan alana sığması için bölünemez.',
+    'error.bagsStackIndivisible': 'Bu yığın, çantalarında kalan alana sığması için bölünemez.',
+    'error.vaultOnlyMaterials': 'Malzeme Kasası’nda yalnızca malzemeler saklanabilir.',
+    'error.vaultLocked': 'Malzeme Kasası’nın kilidini henüz açmadın.',
+    'error.vaultMaterialFull': 'Kasanda bu malzemeden daha fazla yer yok.',
+    'error.vaultMaxUpgrades': 'Kasan daha fazla yükseltilemez.',
+    'error.vaultCannotAfford': 'Bu kasa yükseltmesinin ücretini karşılayamazsın.',
+    'error.guildBankStackIndivisible':
+      'Bu yığın, lonca bankasında kalan alana sığması için bölünemez.',
+    'log.vaultUnlocked': 'Malzeme Kasası’nın kilidini açtın.',
+    'log.vaultUpgraded': 'Malzeme Kasası’nı yükselttin.',
+    'error.alreadyEating': 'Zaten yemek yiyorsun.',
+    'error.alreadyDrinking': 'Zaten içiyorsun.',
   },
   sv_SE: {
+    'log.passingStoneKneel': 'Du sluter handen om Övergångsstenen, och stranden släpper dig.',
+    'error.tutorialFromHere': 'Du kan inte sätta segel härifrån.',
+    'error.tutorialOutleveled': 'Prövostranden har inget mer att lära dig.',
+    'error.passingStoneCold': 'Stenen är kall. Instruktör Maren har inte bett dig om detta.',
+    'error.vendorQuestGated': 'Det föremålet är inte till salu för dig ännu.',
     'error.arenaMinLevel': 'Du måste vara nivå {level} för att köa till arenan.',
     'error.arenaMinLevelMember': '{name} måste vara minst nivå {level} för att köa till arenan.',
     'log.arenaQueueAutoLeave1v1': 'Du lämnar kön till Askgrå kolosseum.',
@@ -7520,8 +8188,36 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Vinterns köld',
     'aura.icicles': 'Istappar',
     'aura.perfectMoment': 'Perfekt ögonblick',
+
+    'error.townFocusRespecCancelled':
+      'Du hade inte råd med den pågående ändringen av fokusinriktning, så den avbröts.',
+    'error.ignivarRaidInCombat':
+      'Ditt raid är fortfarande i strid. Du kan gå in när striden är över.',
+    'error.ignivarForgeGateSealed': 'Smidesporten är stängd för dig.',
+    'error.liveRaidClaimUnsafe':
+      'Det här aktiva raidanspråket kan inte ersättas på ett säkert sätt.',
+    'error.bankStackIndivisible':
+      'Den högen kan inte delas för att få plats i det återstående utrymmet i banken.',
+    'error.bagsStackIndivisible':
+      'Den högen kan inte delas för att få plats i det återstående utrymmet i dina väskor.',
+    'error.vaultOnlyMaterials': 'Endast material kan förvaras i materialförrådet.',
+    'error.vaultLocked': 'Du har inte låst upp materialförrådet.',
+    'error.vaultMaterialFull': 'Ditt förråd rymmer inte mer av det materialet.',
+    'error.vaultMaxUpgrades': 'Ditt förråd kan inte uppgraderas mer.',
+    'error.vaultCannotAfford': 'Du har inte råd med den uppgraderingen av förrådet.',
+    'error.guildBankStackIndivisible':
+      'Den högen kan inte delas för att få plats i det återstående utrymmet i guildbanken.',
+    'log.vaultUnlocked': 'Du låser upp materialförrådet.',
+    'log.vaultUpgraded': 'Du uppgraderar materialförrådet.',
+    'error.alreadyEating': 'Du äter redan.',
+    'error.alreadyDrinking': 'Du dricker redan.',
   },
   vi_VN: {
+    'log.passingStoneKneel': 'Bạn siết chặt tay quanh Đá Từ Trần, và bờ biển để bạn ra đi.',
+    'error.tutorialFromHere': 'Bạn không thể ra khơi từ đây.',
+    'error.tutorialOutleveled': 'Bờ Biển Thử Thách không còn gì để dạy bạn nữa.',
+    'error.passingStoneCold': 'Viên đá lạnh ngắt. Giáo Quan Maren chưa yêu cầu bạn làm điều này.',
+    'error.vendorQuestGated': 'Vật phẩm đó chưa được bán cho bạn.',
     'error.arenaMinLevel': 'Bạn phải đạt cấp {level} để xếp hàng vào đấu trường.',
     'error.arenaMinLevelMember':
       '{name} phải đạt tối thiểu cấp {level} để xếp hàng vào đấu trường.',
@@ -7669,8 +8365,36 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Giá Lạnh Mùa Đông',
     'aura.icicles': 'Nhũ Băng',
     'aura.perfectMoment': 'Khoảnh Khắc Hoàn Hảo',
+
+    'error.townFocusRespecCancelled':
+      'Bạn không đủ tiền để đặt lại chuyên môn đang chờ, nên thao tác đã bị hủy.',
+    'error.ignivarRaidInCombat':
+      'Đội raid của bạn vẫn đang giao chiến. Bạn có thể vào khi trận chiến kết thúc.',
+    'error.ignivarForgeGateSealed': 'Cổng lò rèn không mở cho bạn.',
+    'error.liveRaidClaimUnsafe':
+      'Không thể thay thế yêu cầu nhận phần thưởng raid đang diễn ra này một cách an toàn.',
+    'error.bankStackIndivisible':
+      'Không thể tách chồng vật phẩm đó để vừa với chỗ trống còn lại trong ngân hàng.',
+    'error.bagsStackIndivisible':
+      'Không thể tách chồng vật phẩm đó để vừa với chỗ trống còn lại trong túi.',
+    'error.vaultOnlyMaterials': 'Chỉ vật liệu mới có thể được cất trong Kho Vật liệu.',
+    'error.vaultLocked': 'Bạn chưa mở khóa Kho Vật liệu.',
+    'error.vaultMaterialFull': 'Kho của bạn không thể chứa thêm vật liệu đó.',
+    'error.vaultMaxUpgrades': 'Kho của bạn không thể nâng cấp thêm nữa.',
+    'error.vaultCannotAfford': 'Bạn không đủ tiền cho lần nâng cấp kho đó.',
+    'error.guildBankStackIndivisible':
+      'Không thể tách chồng vật phẩm đó để vừa với chỗ trống còn lại trong ngân hàng hội.',
+    'log.vaultUnlocked': 'Bạn đã mở khóa Kho Vật liệu.',
+    'log.vaultUpgraded': 'Bạn đã nâng cấp Kho Vật liệu.',
+    'error.alreadyEating': 'Bạn đang ăn.',
+    'error.alreadyDrinking': 'Bạn đang uống.',
   },
   da_DK: {
+    'log.passingStoneKneel': 'Du lukker hånden om Hvilestenen, og kysten lader dig gå.',
+    'error.tutorialFromHere': 'Du kan ikke sætte sejl herfra.',
+    'error.tutorialOutleveled': 'Prøvestranden har intet tilbage at lære dig.',
+    'error.passingStoneCold': 'Stenen er kold. Instruktør Maren har ikke bedt dig om dette.',
+    'error.vendorQuestGated': 'Den genstand er endnu ikke til salg for dig.',
     'error.arenaMinLevel': 'Du skal være niveau {level} for at stille dig i kø til arenaen.',
     'error.arenaMinLevelMember':
       '{name} skal være mindst niveau {level} for at stille sig i kø til arenaen.',
@@ -7820,6 +8544,28 @@ const BASE_DICT: Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, str
     'aura.wintersChill': 'Vinterens Kulde',
     'aura.icicles': 'Istapper',
     'aura.perfectMoment': 'Perfekt Øjeblik',
+
+    'error.townFocusRespecCancelled':
+      'Du havde ikke råd til at nulstille dit fokus, så det blev annulleret.',
+    'error.ignivarRaidInCombat': 'Dit raid er stadig i kamp. Du kan gå ind, når kampen er slut.',
+    'error.ignivarForgeGateSealed': 'Smedjens port er lukket for dig.',
+    'error.liveRaidClaimUnsafe':
+      'Dette krav på belønningen fra det igangværende raid kan ikke erstattes sikkert.',
+    'error.bankStackIndivisible':
+      'Stakken kan ikke opdeles, så den passer til den resterende plads i din bank.',
+    'error.bagsStackIndivisible':
+      'Stakken kan ikke opdeles, så den passer til den resterende plads i dine tasker.',
+    'error.vaultOnlyMaterials': 'Kun materialer kan opbevares i Materialelageret.',
+    'error.vaultLocked': 'Du har ikke låst Materialelageret op.',
+    'error.vaultMaterialFull': 'Dit lager kan ikke rumme mere af dette materiale.',
+    'error.vaultMaxUpgrades': 'Dit lager kan ikke opgraderes yderligere.',
+    'error.vaultCannotAfford': 'Du har ikke råd til den lageropgradering.',
+    'error.guildBankStackIndivisible':
+      'Stakken kan ikke opdeles, så den passer til den resterende plads i laugsbanken.',
+    'log.vaultUnlocked': 'Du låser Materialelageret op.',
+    'log.vaultUpgraded': 'Du opgraderer Materialelageret.',
+    'error.alreadyEating': 'Du spiser allerede.',
+    'error.alreadyDrinking': 'Du drikker allerede.',
   },
 };
 
@@ -8372,6 +9118,300 @@ const PET_DICT: Record<SupportedLanguage, Record<PetSimMessageKey, string>> = {
   ...PET_NEW,
 };
 
+const RAID_BOSS_DIALOGUE_DICT: Partial<
+  Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, string>>>
+> = {
+  zh_CN: {
+    'dialogue.ignivarFinalBrand': '承受最后之焰。让它审判你。',
+    'dialogue.ignivarConduitActivated': '古老的泉源回应我的烈焰。',
+    'dialogue.ignivarRotatingRays': '随火焰旋转，否则便化为虚无。',
+    'dialogue.ignivarApocalypse': '瓦尔库尔锻造我，使我得以不灭。',
+    'dialogue.ignivarDefeatSpark': '又一粒火星，熄灭了。',
+    'dialogue.ignivarDefeatForge': '熔炉拒绝了你。',
+    'dialogue.ignivarForgeJudgment': '我即封印。我绝不会破碎。',
+    'dialogue.ignivarRoomEntry': '封印听见了你们，小小余烬。再靠近些，成为最后之焰的燃料吧。',
+    'dialogue.varkhulAssembly': '泉源并未死去。我将它最后的记忆束缚在钢铁之中。',
+    'dialogue.varkhulAddsDefeated': '你们称它为牢笼，只因血肉惧怕永恒。',
+    'dialogue.varkhulEngage': '我乃瓦尔库尔，最后之焰的铸炉之父。举起武器吧，小小火星。',
+    'dialogue.varkhulMasterpiece':
+      '每一次打击，都将为我胸中的熔炉添火。以余烬、岩石与铁砧之名，我要将你们彻底摧毁。',
+  },
+  zh_TW: {
+    'dialogue.ignivarFinalBrand': '承受最後之焰。讓它審判你。',
+    'dialogue.ignivarConduitActivated': '古老的泉源回應我的烈焰。',
+    'dialogue.ignivarRotatingRays': '隨火焰旋轉，否則便化為虛無。',
+    'dialogue.ignivarApocalypse': '瓦爾庫爾鍛造了我，使我得以不滅。',
+    'dialogue.ignivarDefeatSpark': '又一粒火星，熄滅了。',
+    'dialogue.ignivarDefeatForge': '熔爐拒絕了你。',
+    'dialogue.ignivarForgeJudgment': '我即封印。我絕不會破碎。',
+    'dialogue.ignivarRoomEntry': '封印聽見你們了，小小餘燼。再靠近些，成為最後之焰的燃料吧。',
+    'dialogue.varkhulAssembly': '泉源並未死去。我將它最後的記憶束縛在鋼鐵之中。',
+    'dialogue.varkhulAddsDefeated': '你們稱它為牢籠，只因血肉懼怕永恆。',
+    'dialogue.varkhulEngage': '我乃瓦爾庫爾，最後之焰的鑄爐之父。舉起武器吧，小小火星。',
+    'dialogue.varkhulMasterpiece':
+      '每一次打擊，都將為我胸中的熔爐添火。以餘燼、岩石與鐵砧之名，我要將你們徹底摧毀。',
+  },
+  ja_JP: {
+    'dialogue.ignivarFinalBrand': '最後の炎を受けよ。その裁きを受けるがいい。',
+    'dialogue.ignivarConduitActivated': '古き泉が我が炎に応える。',
+    'dialogue.ignivarRotatingRays': '炎と共に回れ。さもなくば消え去れ。',
+    'dialogue.ignivarApocalypse': 'ヴァルクルは耐え抜くために我を鍛えた。',
+    'dialogue.ignivarDefeatSpark': 'また一つ、火花が消えた。',
+    'dialogue.ignivarDefeatForge': '炉はお前を拒んだ。',
+    'dialogue.ignivarForgeJudgment': '我こそ封印。我は決して砕けぬ。',
+    'dialogue.ignivarRoomEntry':
+      '封印はお前たちを聞きつけた、小さき残り火よ。近づき、最後の炎の糧となれ。',
+    'dialogue.varkhulAssembly': '泉は死ななかった。その最後の記憶を鉄に封じた。',
+    'dialogue.varkhulAddsDefeated': 'お前たちがそれを牢獄と呼ぶのは、肉が永続を恐れるからだ。',
+    'dialogue.varkhulEngage': '我はヴァルクル、最後の炎の炉父。武器を掲げよ、小さき火花ども。',
+    'dialogue.varkhulMasterpiece':
+      '一撃ごとに我が胸の炉は燃え盛る。残り火と石と金床にかけて、お前たちを無へと砕く。',
+  },
+  ko_KR: {
+    'dialogue.ignivarFinalBrand': '마지막 불꽃을 견뎌라. 그 심판을 받아라.',
+    'dialogue.ignivarConduitActivated': '오래된 샘들이 내 불꽃에 응답한다.',
+    'dialogue.ignivarRotatingRays': '불꽃과 함께 돌아라. 아니면 존재째 지워지리라.',
+    'dialogue.ignivarApocalypse': '바르쿨은 내가 끝까지 버티도록 나를 벼려냈다.',
+    'dialogue.ignivarDefeatSpark': '또 하나의 불씨가 꺼졌군.',
+    'dialogue.ignivarDefeatForge': '용광로가 너를 거부한다.',
+    'dialogue.ignivarForgeJudgment': '내가 곧 봉인이다. 나는 결코 부서지지 않는다.',
+    'dialogue.ignivarRoomEntry':
+      '봉인이 너희를 들었다, 작은 잿불들아. 더 가까이 와서 마지막 불꽃의 먹이가 되어라.',
+    'dialogue.varkhulAssembly': '샘은 죽지 않았다. 나는 그 마지막 기억을 철에 묶었다.',
+    'dialogue.varkhulAddsDefeated':
+      '너희 살점이 영속을 두려워하기에 그것을 감옥이라 부르는 것이다.',
+    'dialogue.varkhulEngage':
+      '나는 바르쿨, 마지막 불꽃의 대장간 아버지다. 무기를 들어라, 작은 불티들아.',
+    'dialogue.varkhulMasterpiece':
+      '너희의 모든 일격이 내 가슴 속 용광로를 달굴 것이다. 잿불과 돌과 모루의 이름으로 너희를 산산이 없애 주마.',
+  },
+  ru_RU: {
+    'dialogue.ignivarFinalBrand': 'Прими Последнее пламя. Пусть оно тебя рассудит.',
+    'dialogue.ignivarConduitActivated': 'Древние источники отвечают моему огню.',
+    'dialogue.ignivarRotatingRays': 'Вращайтесь вместе с пламенем, иначе будете уничтожены.',
+    'dialogue.ignivarApocalypse': 'Варкхул выковал меня, чтобы я выстоял.',
+    'dialogue.ignivarDefeatSpark': 'Ещё одна искра погасла.',
+    'dialogue.ignivarDefeatForge': 'Горнило отвергает тебя.',
+    'dialogue.ignivarForgeJudgment': 'Я и есть печать. Меня не сломить.',
+    'dialogue.ignivarRoomEntry':
+      'Печать слышит вас, жалкие угольки. Подойдите ближе и станьте топливом Последнего пламени.',
+    'dialogue.varkhulAssembly': 'Источник не умер. Я сковал его последнюю память в железе.',
+    'dialogue.varkhulAddsDefeated': 'Вы зовёте это тюрьмой, потому что плоть боится вечности.',
+    'dialogue.varkhulEngage':
+      'Я Варкхул, Отец Горнила Последнего пламени. Поднимите оружие, жалкие искры.',
+    'dialogue.varkhulMasterpiece':
+      'Каждый удар напитает горнило в моей груди. Клянусь углём, камнем и наковальней, я уничтожу вас.',
+  },
+};
+
+const IGNIVAR_DICT: Partial<Record<SupportedLanguage, Partial<Record<BaseSimMessageKey, string>>>> =
+  {
+    es: {
+      'error.ignivarExitSealedInCombat':
+        'Las puertas de la forja permanecen cerradas mientras continúa la batalla.',
+      'aura.ignivarBrandOfThePyre': 'Marca de la Pira',
+      'aura.ignivarMoltenArmor': 'Armadura Fundida',
+      'aura.ignivarLastInferno': 'Último Infierno',
+      'aura.ignivarSharedPyre': 'Pira compartida',
+      'mechanic.ignivarSearingTorrent': 'Torrente abrasador',
+      'mechanic.ignivarForgeStrike': 'Golpe de Fundición',
+      'mechanic.ignivarCleansingBacklash': 'Represalia purificadora',
+      'mechanic.ignivarApocalypse': 'Apocalipsis',
+      'mechanic.ignivarRainOfCinders': 'Lluvia de brasas',
+      'mechanic.ignivarFallingCinders': 'Caída de brasas',
+      'mechanic.ignivarRevolvingInferno': 'Infierno giratorio',
+      'mechanic.ignivarForgeWave': 'Onda de la Forja',
+      'mechanic.ignivarJudgmentOfTheForge': 'Juicio de la Forja',
+      'mechanic.varkhulForgeConvergence': 'Convergencia de la Forja',
+      'mechanic.varkhulCrucibleBeam': 'Rayo del Crisol',
+      'mechanic.varkhulForgeMeltdown': 'Colapso de la Forja',
+      'aura.varkhulCrucibleExposure': 'Exposición al Crisol',
+      'mechanic.varkhulTemperingRay': 'Rayo de temple',
+      'aura.varkhulTemperedWound': 'Herida templada',
+      'mechanic.varkhulWorldfire': 'Fuego del Mundo',
+      'mechanic.varkhulCrucibleQuake': 'Seísmo del Crisol',
+      'mechanic.ignivarCrucibleStomp': 'Pisotón del Crisol',
+      'mechanic.ignivarCruciblePerimeter': 'Perímetro del Crisol',
+      'mechanic.varkhulRecalibrate': 'Recalibrar',
+      'dialogue.ignivarHeartAwakens': 'Ignivar Ashcaller despierta. ¡Que arda el mundo!',
+      'dialogue.ignivarLastFlame': '¡La última llama lo consume todo!',
+      'dialogue.ignivarSkyBurns': '¡Hasta el propio cielo arderá!',
+      'dialogue.ignivarSharePyre': '¡Cuatro deben compartir la pira o todos arderéis!',
+      'dialogue.ignivarDeath': 'Varkhul... el sello se ha roto.',
+      'dialogue.varkhulDeath': 'Maestro... te he fallado.',
+    },
+    es_ES: {
+      'error.ignivarExitSealedInCombat':
+        'Las puertas de la forja permanecen cerradas mientras continúa la batalla.',
+      'aura.ignivarBrandOfThePyre': 'Marca de la Pira',
+      'aura.ignivarMoltenArmor': 'Armadura Fundida',
+      'aura.ignivarLastInferno': 'Último Infierno',
+      'aura.ignivarSharedPyre': 'Pira compartida',
+      'mechanic.ignivarSearingTorrent': 'Torrente abrasador',
+      'mechanic.ignivarForgeStrike': 'Golpe de Fundición',
+      'mechanic.ignivarCleansingBacklash': 'Represalia purificadora',
+      'mechanic.ignivarApocalypse': 'Apocalipsis',
+      'mechanic.ignivarRainOfCinders': 'Lluvia de brasas',
+      'mechanic.ignivarFallingCinders': 'Caída de brasas',
+      'mechanic.ignivarRevolvingInferno': 'Infierno giratorio',
+      'mechanic.ignivarForgeWave': 'Onda de la Forja',
+      'mechanic.ignivarJudgmentOfTheForge': 'Juicio de la Forja',
+      'mechanic.varkhulForgeConvergence': 'Convergencia de la Forja',
+      'mechanic.varkhulCrucibleBeam': 'Rayo del Crisol',
+      'mechanic.varkhulForgeMeltdown': 'Colapso de la Forja',
+      'aura.varkhulCrucibleExposure': 'Exposición al Crisol',
+      'mechanic.varkhulTemperingRay': 'Rayo de temple',
+      'aura.varkhulTemperedWound': 'Herida templada',
+      'mechanic.varkhulWorldfire': 'Fuego del Mundo',
+      'mechanic.varkhulCrucibleQuake': 'Seísmo del Crisol',
+      'mechanic.ignivarCrucibleStomp': 'Pisotón del Crisol',
+      'mechanic.ignivarCruciblePerimeter': 'Perímetro del Crisol',
+      'mechanic.varkhulRecalibrate': 'Recalibrar',
+      'dialogue.ignivarHeartAwakens': 'Ignivar Ashcaller despierta. ¡Que arda el mundo!',
+      'dialogue.ignivarLastFlame': '¡La última llama lo consume todo!',
+      'dialogue.ignivarSkyBurns': '¡Hasta el propio cielo arderá!',
+      'dialogue.ignivarSharePyre': '¡Cuatro deben compartir la pira o todos arderéis!',
+      'dialogue.ignivarDeath': 'Varkhul... el sello se ha roto.',
+      'dialogue.varkhulDeath': 'Maestro... te he fallado.',
+    },
+    fr_FR: {
+      'error.ignivarExitSealedInCombat':
+        'Les portes de la forge restent scellées tant que la bataille fait rage.',
+    },
+    fr_CA: {
+      'error.ignivarExitSealedInCombat':
+        'Les portes de la forge restent scellées tant que la bataille fait rage.',
+    },
+    it_IT: {
+      'error.ignivarExitSealedInCombat':
+        'Le porte della forgia restano sigillate finché infuria la battaglia.',
+    },
+    de_DE: {
+      'error.ignivarExitSealedInCombat':
+        'Die Tore der Schmiede bleiben verschlossen, solange die Schlacht tobt.',
+    },
+    ja_JP: {
+      'error.ignivarExitSealedInCombat': '戦いが続く間、鍛冶場の扉は固く閉ざされている。',
+      'lore.ignivarSentinelEcho':
+        'メイリンの残り火の投影が弾ける。「最初の殻は炎を宿したが、その中に命はなかった。」',
+      'lore.ignivarWardenEcho':
+        'メイリンの残り火の投影が弾ける。「ヴァルクルは最後の泉を金属へ押し込んだ。水はその血となった。」',
+      'lore.ignivarArtificerEcho':
+        'メイリンの残り火の投影が弾ける。「イグニヴァルは初めて耐え抜いた設計だった。彼は単なる先触れではない。鍵なのだ。」',
+      'lore.ignivarCoreFracture':
+        'イグニヴァルの核が砕ける。その板が内なるるつぼへ向き、封じられた門が応える。',
+      'lore.ignivarForgeSilenced':
+        '大炉の火が消える。久遠の時を経て、最後の泉は静まり、自由になった。',
+      'mechanic.varkhulWorldfire': '世界炎',
+      'mechanic.varkhulCrucibleQuake': '坩堝の震撃',
+      'mechanic.ignivarCrucibleStomp': '坩堝の踏みつけ',
+      'mechanic.varkhulRecalibrate': '再調整',
+      'mechanic.varkhulTemperingRay': '焼入れ光線',
+      'aura.varkhulTemperedWound': '焼入れの傷',
+    },
+    ko_KR: {
+      'error.ignivarExitSealedInCombat': '전투가 계속되는 동안 대장간 문은 굳게 닫혀 있습니다.',
+      'lore.ignivarSentinelEcho':
+        '메일린의 잔불 투영이 타닥거린다. "첫 번째 껍질들은 불꽃을 품었지만 그 안에는 생명이 없었다."',
+      'lore.ignivarWardenEcho':
+        '메일린의 잔불 투영이 타닥거린다. "바르쿨은 마지막 샘을 금속에 강제로 주입했다. 물은 그들의 피가 되었다."',
+      'lore.ignivarArtificerEcho':
+        '메일린의 잔불 투영이 타닥거린다. "이그니바르는 처음으로 견뎌 낸 설계였다. 그는 단순한 전령이 아니다. 그가 바로 열쇠다."',
+      'lore.ignivarCoreFracture':
+        '이그니바르의 핵이 산산이 갈라진다. 판들이 내부 도가니를 향하자 봉인된 문이 응답한다.',
+      'lore.ignivarForgeSilenced':
+        '대장간의 불이 꺼진다. 오랜 세월 만에 마지막 샘은 고요해지고 자유를 되찾았다.',
+      'mechanic.varkhulWorldfire': '세계불꽃',
+      'mechanic.varkhulCrucibleQuake': '도가니 진동',
+      'mechanic.ignivarCrucibleStomp': '도가니 발구르기',
+      'mechanic.varkhulRecalibrate': '재보정',
+      'mechanic.varkhulTemperingRay': '담금질 광선',
+      'aura.varkhulTemperedWound': '담금질 상처',
+    },
+    ru_RU: {
+      'error.ignivarExitSealedInCombat': 'Пока идет бой, двери кузницы остаются наглухо закрыты.',
+      'lore.ignivarSentinelEcho':
+        'Угольная проекция Мэйлин потрескивает: «Первые оболочки удерживали пламя, но жизни в них не было».',
+      'lore.ignivarWardenEcho':
+        'Угольная проекция Мэйлин потрескивает: «Варкхул заточил Последний источник в металле. Вода стала его кровью».',
+      'lore.ignivarArtificerEcho':
+        'Угольная проекция Мэйлин потрескивает: «Игнивар стал первым устойчивым творением. Он не просто вестник. Он ключ».',
+      'lore.ignivarCoreFracture':
+        'Ядро Игнивара раскалывается. Его пластины поворачиваются к Внутреннему горнилу, и запечатанные врата откликаются.',
+      'lore.ignivarForgeSilenced':
+        'Великое горнило угасает. Впервые за долгие века Последний источник затих и обрёл свободу.',
+      'mechanic.varkhulWorldfire': 'Мировое пламя',
+      'mechanic.varkhulCrucibleQuake': 'Сотрясение горнила',
+      'mechanic.ignivarCrucibleStomp': 'Топот Горнила',
+      'mechanic.varkhulRecalibrate': 'Перекалибровка',
+      'mechanic.varkhulTemperingRay': 'Закалочный луч',
+      'aura.varkhulTemperedWound': 'Закалённая рана',
+    },
+    zh_CN: {
+      'error.ignivarExitSealedInCombat': '战斗仍在进行时，锻炉大门紧闭不动。',
+      'lore.ignivarSentinelEcho': '梅琳的余烬投影噼啪作响：“最初的躯壳容得下火焰，却没有生命。”',
+      'lore.ignivarWardenEcho':
+        '梅琳的余烬投影噼啪作响：“瓦尔库尔将最后之泉强行灌入金属，泉水成了它的血液。”',
+      'lore.ignivarArtificerEcho':
+        '梅琳的余烬投影噼啪作响：“伊格尼瓦是第一个存续下来的设计。他不只是先驱，他就是钥匙。”',
+      'lore.ignivarCoreFracture': '伊格尼瓦的核心碎裂，甲片转向内层熔炉，封印的大门随之回应。',
+      'lore.ignivarForgeSilenced': '大熔炉的火焰熄灭了。历经漫长岁月，最后之泉终于重归寂静与自由。',
+      'mechanic.varkhulWorldfire': '世界之火',
+      'mechanic.varkhulCrucibleQuake': '熔炉震击',
+      'mechanic.ignivarCrucibleStomp': '熔炉践踏',
+      'mechanic.varkhulRecalibrate': '重新校准',
+      'mechanic.varkhulTemperingRay': '淬火射线',
+      'aura.varkhulTemperedWound': '淬火创伤',
+    },
+    zh_TW: {
+      'error.ignivarExitSealedInCombat': '戰鬥仍在進行時，鍛爐大門緊閉不動。',
+      'lore.ignivarSentinelEcho': '梅琳的餘燼投影劈啪作響：「最初的軀殼容得下火焰，卻沒有生命。」',
+      'lore.ignivarWardenEcho':
+        '梅琳的餘燼投影劈啪作響：「瓦爾庫爾將最後之泉強行灌入金屬，泉水成了它的血液。」',
+      'lore.ignivarArtificerEcho':
+        '梅琳的餘燼投影劈啪作響：「伊格尼瓦是第一個存續下來的設計。他不只是先驅，他就是鑰匙。」',
+      'lore.ignivarCoreFracture': '伊格尼瓦的核心碎裂，甲片轉向內層熔爐，封印的大門隨之回應。',
+      'lore.ignivarForgeSilenced': '大熔爐的火焰熄滅了。歷經漫長歲月，最後之泉終於重歸寂靜與自由。',
+      'mechanic.varkhulWorldfire': '世界之火',
+      'mechanic.varkhulCrucibleQuake': '熔爐震擊',
+      'mechanic.ignivarCrucibleStomp': '熔爐踐踏',
+      'mechanic.varkhulRecalibrate': '重新校準',
+      'mechanic.varkhulTemperingRay': '淬火射線',
+      'aura.varkhulTemperedWound': '淬火創傷',
+    },
+    pt_BR: {
+      'error.ignivarExitSealedInCombat':
+        'As portas da forja permanecem seladas enquanto a batalha continua.',
+    },
+    cs_CZ: {
+      'error.ignivarExitSealedInCombat': 'Dveře kovárny zůstávají pevně zavřené, dokud zuří bitva.',
+    },
+    nl_NL: {
+      'error.ignivarExitSealedInCombat':
+        'De deuren van de smidse blijven gesloten zolang de strijd woedt.',
+    },
+    pl_PL: {
+      'error.ignivarExitSealedInCombat': 'Drzwi kuźni pozostają zamknięte, dopóki trwa walka.',
+    },
+    id_ID: {
+      'error.ignivarExitSealedInCombat':
+        'Pintu-pintu bengkel tempa tetap tertutup rapat selama pertempuran berlangsung.',
+    },
+    tr_TR: {
+      'error.ignivarExitSealedInCombat': 'Demirhane kapıları savaş sürdükçe sıkıca kapalı kalır.',
+    },
+    sv_SE: {
+      'error.ignivarExitSealedInCombat': 'Smedjans portar förblir stängda så länge striden pågår.',
+    },
+    vi_VN: {
+      'error.ignivarExitSealedInCombat':
+        'Cửa lò rèn vẫn đóng chặt chừng nào trận chiến còn tiếp diễn.',
+    },
+    da_DK: {
+      'error.ignivarExitSealedInCombat': 'Smedjens porte forbliver lukkede, så længe slaget raser.',
+    },
+  };
+
 export const DICT: Record<SupportedLanguage, Record<SimMessageKey, string>> = Object.fromEntries(
   supportedLanguages.map((lang) => [
     lang,
@@ -8380,6 +9420,8 @@ export const DICT: Record<SupportedLanguage, Record<SimMessageKey, string>> = Ob
       ...BASE_DICT[lang],
       ...PET_DICT[lang],
       'log.arenaQueueAutoLeave1v1': ARENA_QUEUE_AUTO_LEAVE_1V1[lang],
+      ...RAID_BOSS_DIALOGUE_DICT[lang],
+      ...IGNIVAR_DICT[lang],
     },
   ]),
 ) as Record<SupportedLanguage, Record<SimMessageKey, string>>;
@@ -8494,6 +9536,53 @@ const AURA_NAME_KEY: Record<string, SimMessageKey> = {
   'Racing Ward': 'aura.rallyWard',
   'Temporal Exhaustion': 'aura.temporalExhaustion',
   'Cauterize Fatigue': 'aura.cauterizeFatigue',
+  'Brand of the Pyre': 'aura.ignivarBrandOfThePyre',
+  'Molten Armor': 'aura.ignivarMoltenArmor',
+  'Last Inferno': 'aura.ignivarLastInferno',
+  'Shared Pyre': 'aura.ignivarSharedPyre',
+  'Chains of the Forge': 'aura.ignivarForgeChains',
+  "Maker's Brand": 'aura.varkhulMakersBrand',
+  "Forgefather's Sweep": 'mechanic.varkhulForgefatherSweep',
+  'Cinder Orbs': 'mechanic.varkhulCinderOrbs',
+  'Red-hot Metal': 'aura.varkhulRedHotMetal',
+  'Red-hot Metal Barrier': 'aura.varkhulRedHotMetalBarrier',
+  Forgestorm: 'mechanic.varkhulForgestorm',
+  "Anvil's Decree": 'mechanic.varkhulAnvilsDecree',
+  'Hammerfall Meteors': 'mechanic.varkhulHammerfallMeteors',
+  "The Master's Assembly": 'mechanic.varkhulMastersAssembly',
+  'Repair Protocol': 'mechanic.varkhulRepairProtocol',
+  'Forge Convergence': 'mechanic.varkhulForgeConvergence',
+  'Forge Links': 'mechanic.varkhulForgeLinks',
+  "Sentinel's Gaze": 'aura.varkhulSentinelsGaze',
+  'Molten Core': 'aura.varkhulMoltenCore',
+  'Molten Burden': 'aura.varkhulMoltenBurden',
+  'Forge Link': 'aura.varkhulForgeLink',
+  'Forge Shattered': 'aura.varkhulForgeShattered',
+  'Unstable Reaction': 'mechanic.varkhulUnstableReaction',
+  'Crucible Beam': 'mechanic.varkhulCrucibleBeam',
+  'Forge Meltdown': 'mechanic.varkhulForgeMeltdown',
+  'Crucible Exposure': 'aura.varkhulCrucibleExposure',
+  'Tempering Ray': 'mechanic.varkhulTemperingRay',
+  'Tempered Wound': 'aura.varkhulTemperedWound',
+  'Crucible Guard': 'aura.varkhulCrucibleGuard',
+  'Masterpiece Unbound': 'aura.varkhulMasterpieceUnbound',
+  'Living Forge': 'mechanic.varkhulLivingForge',
+  Worldfire: 'mechanic.varkhulWorldfire',
+  'Crucible Quake': 'mechanic.varkhulCrucibleQuake',
+  crucible_quake: 'mechanic.varkhulCrucibleQuake',
+  'Crucible Stomp': 'mechanic.ignivarCrucibleStomp',
+  'Crucible Perimeter': 'mechanic.ignivarCruciblePerimeter',
+  Recalibrate: 'mechanic.varkhulRecalibrate',
+  cinder_recalibrate: 'mechanic.varkhulRecalibrate',
+  'Searing Torrent': 'mechanic.ignivarSearingTorrent',
+  'Forge Strike': 'mechanic.ignivarForgeStrike',
+  'Cleansing Backlash': 'mechanic.ignivarCleansingBacklash',
+  Apocalypse: 'mechanic.ignivarApocalypse',
+  'Rain of Cinders': 'mechanic.ignivarRainOfCinders',
+  'Falling Cinders': 'mechanic.ignivarFallingCinders',
+  'Revolving Inferno': 'mechanic.ignivarRevolvingInferno',
+  'Forge Wave': 'mechanic.ignivarForgeWave',
+  'Judgment of the Forge': 'mechanic.ignivarJudgmentOfTheForge',
   // Thornhollow Fields battleground auras (src/sim/social/battleground.ts): spawn
   // protection, the carrier-fatigue vulnerability, the carried-flag buff, and the
   // sprint-rune haste.
@@ -10127,7 +11216,8 @@ type QuestExtraKey =
   | 'awakens'
   | 'aldrenYell'
   | 'malricYell'
-  | 'vossYell';
+  | 'vossYell'
+  | 'crabsYell';
 
 export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string>> = {
   en: {
@@ -10148,6 +11238,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} yells, "None shall disturb the king\'s rest! For Thornpeak!"',
     malricYell: '{name} yells, "Death shall never claim my king! The ritual must endure!"',
     vossYell: '{name} yells, "You will not reach him! The king must endure!"',
+    crabsYell: '{name} yells, "MINE! The pearl is mine, and mine she stays!"',
   },
   en_CA: {
     ritualNeedsKey: 'The ritual circle is silent without the Crypt Keystone.',
@@ -10167,6 +11258,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} yells, "None shall disturb the king\'s rest! For Thornpeak!"',
     malricYell: '{name} yells, "Death shall never claim my king! The ritual must endure!"',
     vossYell: '{name} yells, "You will not reach him! The king must endure!"',
+    crabsYell: '{name} yells, "MINE! The pearl is mine, and mine she stays!"',
   },
   es: {
     ritualNeedsKey: 'El círculo ritual calla sin la Piedra clave de la cripta.',
@@ -10186,6 +11278,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} grita: "¡Nadie perturbará el descanso del rey! ¡Por Thornpeak!"',
     malricYell: '{name} grita: "¡La muerte nunca reclamará a mi rey! ¡El ritual debe perdurar!"',
     vossYell: '{name} grita: "¡No llegarás hasta él! ¡El rey debe perdurar!"',
+    crabsYell: '{name} grita: "MIA! La perla es mia, y mia se queda!"',
   },
   es_ES: {
     ritualNeedsKey: 'El círculo ritual calla sin la Piedra clave de la cripta.',
@@ -10205,6 +11298,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} grita: "¡Nadie perturbará el descanso del rey! ¡Por Thornpeak!"',
     malricYell: '{name} grita: "¡La muerte nunca reclamará a mi rey! ¡El ritual debe perdurar!"',
     vossYell: '{name} grita: "¡No llegarás hasta él! ¡El rey debe perdurar!"',
+    crabsYell: '{name} grita: "MIA! La perla es mia, y mia se queda!"',
   },
   fr_FR: {
     ritualNeedsKey: 'Le cercle rituel reste muet sans la clef de la crypte.',
@@ -10224,6 +11318,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} crie: "Nul ne troublera le repos du roi! Pour Thornpeak!"',
     malricYell: '{name} crie: "La mort ne prendra jamais mon roi! Le rituel doit durer!"',
     vossYell: '{name} crie: "Vous ne l’atteindrez pas! Le roi doit durer!"',
+    crabsYell: '{name} crie: "A MOI! La perle est a moi, et a moi elle restera!"',
   },
   fr_CA: {
     ritualNeedsKey: 'Le cercle rituel reste muet sans la clef de la crypte.',
@@ -10243,6 +11338,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} crie: "Nul ne troublera le repos du roi! Pour Thornpeak!"',
     malricYell: '{name} crie: "La mort ne prendra jamais mon roi! Le rituel doit durer!"',
     vossYell: '{name} crie: "Vous ne l’atteindrez pas! Le roi doit durer!"',
+    crabsYell: '{name} crie: "A MOI! La perle est a moi, et a moi elle restera!"',
   },
   it_IT: {
     ritualNeedsKey: 'Il cerchio rituale tace senza la Chiave di volta della cripta.',
@@ -10262,6 +11358,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} grida: "Nessuno disturberà il riposo del re! Per Thornpeak!"',
     malricYell: '{name} grida: "La morte non reclamerà mai il mio re! Il rituale deve durare!"',
     vossYell: '{name} grida: "Non lo raggiungerai! Il re deve durare!"',
+    crabsYell: '{name} grida: "MIA! La perla e mia, e mia restera!"',
   },
   de_DE: {
     ritualNeedsKey: 'Der Ritualkreis schweigt ohne den Kryptenschlüsselstein.',
@@ -10281,6 +11378,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} ruft: "Niemand stört die Ruhe des Königs! Für Thornpeak!"',
     malricYell: '{name} ruft: "Der Tod soll meinen König nie fordern! Das Ritual muss bestehen!"',
     vossYell: '{name} ruft: "Ihr werdet ihn nicht erreichen! Der König muss bestehen!"',
+    crabsYell: '{name} ruft: "MEINS! Die Perle gehoert mir, und bei mir bleibt sie!"',
   },
   zh_CN: {
     ritualNeedsKey: '没有墓穴钥石，仪式法阵一片沉寂。',
@@ -10300,6 +11398,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name}喊道：“谁也不得惊扰国王的安眠！为了 Thornpeak！”',
     malricYell: '{name}喊道：“死亡永远不能带走我的国王！仪式必须延续！”',
     vossYell: '{name}喊道：“你们到不了他身边！国王必须延续！”',
+    crabsYell: '{name}喊道：“我的！珍珠是我的，永远都是我的！”',
   },
   zh_TW: {
     ritualNeedsKey: '沒有墓穴鑰石，儀式法陣一片沉寂。',
@@ -10319,6 +11418,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name}喊道：「誰也不得驚擾國王的安眠！為了 Thornpeak！」',
     malricYell: '{name}喊道：「死亡永遠不能帶走我的國王！儀式必須延續！」',
     vossYell: '{name}喊道：「你們到不了他身邊！國王必須延續！」',
+    crabsYell: '{name}喊道：「我的！珍珠是我的，永遠都是我的！」',
   },
   ko_KR: {
     ritualNeedsKey: '무덤 열쇠돌 없이는 의식진이 침묵합니다.',
@@ -10339,6 +11439,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     malricYell:
       '{name}이(가) 외칩니다. "죽음은 결코 내 왕을 데려가지 못한다! 의식은 계속되어야 한다!"',
     vossYell: '{name}이(가) 외칩니다. "너희는 그에게 닿지 못한다! 왕은 이어져야 한다!"',
+    crabsYell: '{name}이(가) 외칩니다. "내 거다! 진주는 내 것, 영원히 내 것이다!"',
   },
   ja_JP: {
     ritualNeedsKey: '墓所の要石がなければ、儀式陣は沈黙したままです。',
@@ -10358,6 +11459,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name}が叫ぶ。「王の眠りを乱す者は許さぬ！ Thornpeakのために！」',
     malricYell: '{name}が叫ぶ。「死は我が王を奪えぬ！ 儀式は続かねばならぬ！」',
     vossYell: '{name}が叫ぶ。「お前たちは王に届かぬ！ 王は永らえねばならぬ！」',
+    crabsYell: '{name}が叫ぶ。「わしのだ！真珠はわしのもの、ずっとわしのものじゃ！」',
   },
   pt_BR: {
     ritualNeedsKey: 'O círculo ritual fica em silêncio sem a Pedra-chave da cripta.',
@@ -10377,6 +11479,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     aldrenYell: '{name} grita: "Ninguém perturbará o descanso do rei! Por Thornpeak!"',
     malricYell: '{name} grita: "A morte jamais levará meu rei! O ritual deve perdurar!"',
     vossYell: '{name} grita: "Você não chegará até ele! O rei deve perdurar!"',
+    crabsYell: '{name} grita: "MINHA! A perola e minha, e minha ela fica!"',
   },
   ru_RU: {
     ritualNeedsKey: 'Ритуальный круг молчит без ключ-камня крипты.',
@@ -10397,6 +11500,7 @@ export const QUEST_EXTRA: Record<SupportedLanguage, Record<QuestExtraKey, string
     malricYell:
       '{name} кричит: "Смерть никогда не заберет моего короля! Ритуал должен сохраниться!"',
     vossYell: '{name} кричит: "Вы не доберетесь до него! Король должен сохраниться!"',
+    crabsYell: '{name} кричит: "МОЯ! Жемчужина моя, моей и останется!"',
   },
   ...QUEST_NEW,
 };
@@ -11044,6 +12148,10 @@ const RULES: Rule[] = [
     build: () => tQuestExtra('vossYell', { name: locMob('Deathstalker Voss') }),
   },
   {
+    re: /^Mister Crabs yells, "MINE! The pearl is mine, and mine she stays!"$/,
+    build: () => tQuestExtra('crabsYell', { name: locMob('Mister Crabs') }),
+  },
+  {
     re: /^You may choose a specialization at level (\d+)\.$/,
     build: (m) => tSim('error.specLevel', { level: m[1] }),
   },
@@ -11165,6 +12273,16 @@ const RULES: Rule[] = [
   { re: /^You have already recovered this relic\.$/, build: () => tItemExtra('relicRecovered') },
   { re: /^Equipped (?!\()(.+)\.$/, build: (m) => tSim('log.equipped', { item: locItem(m[1]) }) },
   { re: /^Unequipped (.+)\.$/, build: (m) => tSim('log.unequipped', { item: locItem(m[1]) }) },
+  // Bank bag sockets (src/sim/bank_sockets.ts). Anchored on the full phrase so
+  // neither rule can swallow a future bare Socketed/Unsocketed line.
+  {
+    re: /^Socketed (.+) into your bank\.$/,
+    build: (m) => tSim('log.bankBagSocketed', { item: locItem(m[1]) }),
+  },
+  {
+    re: /^Unsocketed (.+) from your bank\.$/,
+    build: (m) => tSim('log.bankBagUnsocketed', { item: locItem(m[1]) }),
+  },
   { re: /^You quaff (.+)\.$/, build: (m) => tSim('log.quaff', { item: locItem(m[1]) }) },
   {
     re: /^(Need|Greed) Roll - (\d+) for (.+) by (.+)$/,
@@ -11838,6 +12956,12 @@ const RULES: Rule[] = [
     build: (m) => tSim('error.heroicMarksNeeded', { marks: m[1], name: locItem(m[2]) }),
   },
   {
+    // Anchored on the sigil naming vocabulary so a future unrelated
+    // "You need a X to buy Y." emit cannot be shadowed by this rule.
+    re: /^You need a (.+ Sigil of the .+) to buy (.+)\.$/,
+    build: (m) => tSim('error.sigilNeeded', { sigil: locItem(m[1]), name: locItem(m[2]) }),
+  },
+  {
     re: /^All instances have been reset\.$/,
     build: () => t('hudChrome.dungeonDifficulty.resetDone'),
   },
@@ -12077,4 +13201,27 @@ export function localizeSimText(text: string): string | null {
     if (m) return rule.build(m);
   }
   return null;
+}
+
+export function localizeAuthoredYellText(
+  text: string,
+  speakerKind?: EntityKind,
+  classId?: PlayerClass,
+): string {
+  if (speakerKind === 'player' || classId !== undefined) return text;
+  return localizeSimText(text) ?? text;
+}
+
+export function localizeAuthoredYellSpeakerName(
+  name: string,
+  speakerKind?: EntityKind,
+  templateId?: string,
+  classId?: PlayerClass,
+): string {
+  if (speakerKind === 'player' || classId !== undefined) return name;
+  if (templateId && (speakerKind === 'mob' || speakerKind === 'npc')) {
+    return tEntity({ kind: speakerKind, id: templateId, field: 'name' });
+  }
+  const mob = Object.values(MOBS).find((entry) => entry.name === name);
+  return mob ? tEntity({ kind: 'mob', id: mob.id, field: 'name' }) : name;
 }

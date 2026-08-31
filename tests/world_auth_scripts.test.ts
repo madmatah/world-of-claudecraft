@@ -127,10 +127,6 @@ const AUTHENTICATED_NODE_CLIENTS = [
     authSend: 'ws.send(JSON.stringify(worldAuthMessage(token, characterId)));',
   },
   {
-    path: 'scripts/vale_cup_online_probe.mjs',
-    authSend: 'this.ws.send(JSON.stringify(worldAuthMessage(token, characterId)))',
-  },
-  {
     path: 'scripts/woc_market_shot.mjs',
     authSend: 'ws.send(JSON.stringify(worldAuthMessage(token, characterId)));',
   },
@@ -169,11 +165,11 @@ function nodeWebSocketSources(dir = SCRIPTS_ROOT): Array<[string, string]> {
 
 describe('standalone world WebSocket auth', () => {
   it('keeps the Node discriminator fresh with the authoritative world layout epoch', () => {
-    // The release carried the epoch to 7; the Realm Racers layout change is the
-    // next one on top of it, so the merged world layout is a fresh epoch.
-    expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(8);
+    // The release carried the epoch to 25; the Realm Racers layout change is
+    // the next one on top of it, so the merged world layout is a fresh epoch.
+    expect(ONLINE_WORLD_LAYOUT_VERSION).toBe(26);
     expect(ONLINE_WORLD_AUTH_TYPE).toBe(`auth-world-${ONLINE_WORLD_LAYOUT_VERSION}`);
-    expect(SCRIPT_WORLD_AUTH_TYPE).toBe('auth-world-8');
+    expect(SCRIPT_WORLD_AUTH_TYPE).toBe('auth-world-26');
     expect(SCRIPT_WORLD_AUTH_TYPE).toBe(ONLINE_WORLD_AUTH_TYPE);
     expect(readFileSync(join(ROOT, 'scripts/lib/world_auth.d.mts'), 'utf8')).toContain(
       `export const ONLINE_WORLD_AUTH_TYPE: '${ONLINE_WORLD_AUTH_TYPE}';`,

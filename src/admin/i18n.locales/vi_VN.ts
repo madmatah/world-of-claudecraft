@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const vi_VN: Record<string, string> = {
+  'error.flagActiveExists': 'Tài khoản này đã có một đánh dấu đang mở thuộc loại đó.',
+  'wealth.largeMovementsUnavailable':
+    'Không thể tải các khoản chuyển ngân hàng lớn (việc đọc sổ cái đã hết thời gian chờ). Bảng chi tiết vàng ở trên vẫn đầy đủ.',
   'error.guildBankDeleting':
     'Bang hội này đang bị xóa, nên ngân hàng của nó đã bị đóng. Không có gì được thay đổi.',
   'error.guildBankItemRequired': 'Nhập mã vật phẩm mà bạn cho rằng ô đó đang chứa.',
@@ -354,6 +357,8 @@ export const vi_VN: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Yêu cầu thử thách ví bị giới hạn',
   'usage.metric.walletLinkRequest': 'Yêu cầu liên kết ví',
   'usage.metric.walletLinkFailure': 'Lần liên kết ví thất bại',
+  'usage.metric.walletUnlinkFailure': 'Lần gỡ liên kết ví bị từ chối',
+  'usage.metric.walletUnlinkSuccess': 'Lần gỡ liên kết ví hoàn tất',
   'usage.metric.walletLinkRateLimited': 'Yêu cầu liên kết ví bị giới hạn',
   'usage.metric.cardPublishRequest': 'Yêu cầu đăng thẻ người chơi',
   'usage.metric.cardPublishRejected': 'Lần đăng thẻ người chơi bị từ chối',
@@ -1170,4 +1175,7 @@ export const vi_VN: Record<string, string> = {
   'wealth.purse': 'Về nhân vật:',
   'wealth.total': 'Tổng cộng:',
   'wealth.updatedAt': 'đã cập nhật {when}',
+  'usage.metric.walletHandoffAuthorizationEvicted':
+    'Lần bàn giao ví từ ứng dụng máy tính bị loại bỏ',
+  'usage.metric.walletHandoffCreateRejected': 'Lần bàn giao ví từ ứng dụng máy tính bị từ chối',
 };

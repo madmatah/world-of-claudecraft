@@ -452,7 +452,7 @@ export const pt_BR: EnTranslations = {
       "remainingDaysHours": "{days} d {hours} h",
       "score": "Pontuação",
       "walletValue": "Valor da carteira (WOC)",
-      "usd": "{amount} USD",
+      "usd": "{amount}",
       "sol": "{amount} SOL",
       "unknown": "Desconhecido",
       "spinTitle": "Giro Diário",
@@ -494,85 +494,85 @@ export const pt_BR: EnTranslations = {
       }
     },
     "trade": {
-      "windowClosed": "Trade window closed.",
+      "windowClosed": "A janela de troca foi fechada.",
       "woc": {
-        "tabGold": "Gold",
+        "tabGold": "Dinheiro",
         "tabWoc": "$WOC",
-        "modesLabel": "Payment currency",
-        "tabWocHint": "Paying in $WOC is available when your side of the table is empty and no gold is offered.",
-        "priceLabel": "Price in USD",
+        "modesLabel": "Moeda de pagamento",
+        "tabWocHint": "Pagar em $WOC está disponível quando o seu lado da mesa está vazio e nenhum dinheiro é oferecido.",
+        "priceLabel": "Preço em USD",
         "pricePlaceholder": "0.00",
-        "equivalent": "About {tokens} $WOC at the current rate",
-        "variableWarning": "The $WOC amount is a preview, not a fixed price. The exact number is set by a fresh quote when you pay.",
-        "feeLine": "Exchange fee {fee}, taken out of the price.",
-        "netLine": "You receive {net}",
-        "netLineBuyer": "The seller receives {net}",
-        "sendOffer": "Offer $WOC",
-        "offerSent": "Offer sent. It expires in 10 minutes unless {name} accepts.",
-        "offerSentUntil": "Offer sent. It expires at {time} unless {name} accepts.",
-        "incomingAccept": "{name} offers {price} for your items.",
-        "notInstant": "A $WOC sale is not instant. The item moves into escrow once both sides accept, and reaches the buyer once payment is verified.",
-        "blockDisabled": "The $WOC Exchange is not available on this realm.",
-        "blockNoWallet": "Link and verify a wallet to sell items for $WOC.",
-        "blockPartnerUnknown": "Checking whether that player can accept $WOC...",
-        "blockRecipientNoWallet": "That player must connect a wallet to accept $WOC payments.",
-        "hintClearYourItems": "Remove your own items: a $WOC offer buys what they are selling.",
-        "hintAwaitTheirItems": "Waiting for them to offer something that can be sold for $WOC.",
-        "hintOneItem": "A $WOC deal covers exactly one item. Only the item being sold can be on the table.",
-        "hintEnterPrice": "Enter a price in USD.",
-        "hintAcceptNeedsItem": "Add the item you are selling before accepting.",
-        "hintAcceptLocked": "That item is locked. Unlock it in your bags, then remove it from the trade and add it again.",
-        "hintGoldOffered": "Remove your gold offer first: a trade is gold or $WOC, not both.",
-        "ineligibleReason": "Soulbound, quest, and locked items, and items outside the Exchange categories, cannot be sold for $WOC.",
-        "incomingTitle": "$WOC offer from {name}",
-        "incomingBody": "{name} offers to sell you {item} for {price}.",
+        "equivalent": "Cerca de {tokens} $WOC na cotação atual",
+        "variableWarning": "O valor em $WOC é uma prévia, não um preço fixo. O número exato é definido por uma nova cotação no momento do pagamento.",
+        "feeLine": "Taxa do Mercado $WOC de {fee}, descontada do preço.",
+        "netLine": "Você recebe {net}",
+        "netLineBuyer": "O vendedor recebe {net}",
+        "sendOffer": "Oferecer $WOC",
+        "offerSent": "Oferta enviada. Ela expira em 10 minutos, a menos que {name} aceite.",
+        "offerSentUntil": "Oferta enviada. Ela expira às {time}, a menos que {name} aceite.",
+        "incomingAccept": "{name} oferece {price} pelos seus itens.",
+        "notInstant": "Uma venda em $WOC não é instantânea. O item entra em custódia assim que os dois lados aceitam, e chega ao comprador assim que o pagamento é verificado.",
+        "blockDisabled": "O Mercado $WOC não está disponível neste mundo.",
+        "blockNoWallet": "Vincule e verifique uma carteira para vender itens por $WOC.",
+        "blockPartnerUnknown": "Verificando se esse jogador pode aceitar $WOC...",
+        "blockRecipientNoWallet": "Esse jogador precisa conectar uma carteira para aceitar pagamentos em $WOC.",
+        "hintClearYourItems": "Remova seus próprios itens: uma oferta em $WOC compra o que o outro jogador está vendendo.",
+        "hintAwaitTheirItems": "Aguardando que o outro jogador ofereça algo que possa ser vendido por $WOC.",
+        "hintOneItem": "Um negócio em $WOC cobre exatamente um item. Apenas o item que está sendo vendido pode estar na mesa.",
+        "hintEnterPrice": "Digite um preço em USD.",
+        "hintAcceptNeedsItem": "Adicione o item que está vendendo antes de aceitar.",
+        "hintAcceptLocked": "Esse item está bloqueado. Desbloqueie-o nas suas bolsas, depois remova-o da negociação e adicione-o novamente.",
+        "hintGoldOffered": "Remova sua oferta de dinheiro primeiro: uma negociação é em dinheiro ou em $WOC, nunca os dois.",
+        "ineligibleReason": "Itens vinculados à alma, de missão e bloqueados, e itens fora das categorias do Mercado $WOC, não podem ser vendidos por $WOC.",
+        "incomingTitle": "Oferta em $WOC de {name}",
+        "incomingBody": "{name} oferece vender {item} para você por {price}.",
         "moneyUsd": "{usd}",
         "moneyLine": "{usd} (~ {tokens} $WOC)",
-        "waitingOther": "Offer accepted. Waiting for the other player to accept.",
-        "payNow": "Pay {usd}",
-        "awaitingPayment": "Waiting for payment confirmation...",
-        "paying": "Confirm the payment in your wallet...",
-        "settled": "Paid. Your item is in your bags, or arrives by Ravenpost mail if they were full.",
-        "settledSeller": "Paid. The item was delivered to the buyer.",
-        "accept": "Accept offer",
-        "accepted": "Offer accepted. Your item is held until payment is verified.",
-        "decline": "Decline",
-        "withdraw": "Withdraw offer",
-        "hintInsufficientBalance": "That is more $WOC than your connected wallet holds.",
-        "statusAwaitingBuyer": "Waiting for the buyer to pay.",
-        "statusPayingBuyer": "Confirming your payment on the network...",
-        "statusPayingSeller": "The buyer's payment is confirming on the network...",
-        "statusReviewBuyer": "Your payment is under review.",
-        "statusReviewSeller": "The buyer's payment is under review.",
-        "paidSeller": "You have received a payment of {price} for your {item}.",
-        "paidBuyer": "You have sent a payment of {price} for {item}.",
-        "closedCancelled": "This sale was cancelled. The item returns to the seller by Ravenpost mail.",
-        "closedSuspended": "This sale was suspended by a Game Master. The item returns to the seller by Ravenpost mail.",
-        "closedUnpaid": "This sale ended without payment. The item returns to the seller by Ravenpost mail.",
-        "closedUnpaidBuyer": "This sale ended without your payment. The item returns to the seller by Ravenpost mail; not paying an accepted deal earns a Marketplace strike.",
-        "cancelSale": "Cancel sale",
-        "cancelPendingSeller": "Cancel requested. The sale ends on its own unless the buyer pays first.",
-        "youDeclined": "You declined the offer.",
-        "youWithdrew": "You withdrew your offer.",
-        "offerNotPending": "This offer is no longer pending.",
-        "offerDeclined": "The $WOC offer was declined.",
-        "offerWithdrawn": "The $WOC offer was withdrawn.",
-        "offerExpired": "The $WOC offer expired.",
-        "offerExpiresAt": "Offer expires at {time}.",
-        "offerStandsUntil": "Your $WOC offer still stands until {time}. Trade with the seller again to finish the deal if they accept.",
-        "dealAwaitsPayment": "Your $WOC purchase is still unpaid. Trade with the seller again to pay; the deal expires on its own if you do not, and not paying earns a Marketplace strike.",
-        "closeSellerHold": "Your item stays held for the buyer's payment. Cancel the sale from the Exchange's Activity tab if you change your mind.",
-        "closePaymentContinuesBuyer": "Your payment is still being confirmed. Delivery completes on its own.",
-        "closePaymentContinuesSeller": "The buyer's payment is still being confirmed. The sale completes on its own.",
-        "p2pBindingNote": "Once both sides accept, payment is due within {duration}, or within the shorter window that opens when you press Pay. Not paying earns a Marketplace strike.",
-        "p2pBindingNoteUntimed": "Once both sides accept, payment is due shortly after, or within the shorter window that opens when you press Pay. Not paying earns a Marketplace strike.",
-        "p2pPaymentDueAt": "Payment is due by {time}. Not paying earns a Marketplace strike.",
-        "quoteExpiredTrade": "The quote expired. Press Not now, then Pay again for a fresh one.",
-        "quoteStaged": "Payment quote ready for {usd}: {tokens} $WOC, valid until {time}.",
-        "paymentConfirmed": "Payment confirmed. Your item arrives in your bags, or by Ravenpost mail if they are full, once delivery completes.",
-        "statusConfirmedBuyer": "Payment confirmed. Delivery is completing...",
-        "statusConfirmedSeller": "Payment confirmed. The sale is completing...",
-        "hintBelowMin": "The Exchange minimum price is {usd}."
+        "waitingOther": "Oferta aceita. Aguardando o outro jogador aceitar.",
+        "payNow": "Pagar {usd}",
+        "awaitingPayment": "Aguardando confirmação do pagamento...",
+        "paying": "Confirme o pagamento na sua carteira...",
+        "settled": "Pago. Seu item está nas suas bolsas, ou chega pelo Correio dos Corvos se elas estivessem cheias.",
+        "settledSeller": "Pago. O item foi entregue ao comprador.",
+        "accept": "Aceitar oferta",
+        "accepted": "Oferta aceita. Seu item fica retido até que o pagamento seja verificado.",
+        "decline": "Recusar",
+        "withdraw": "Retirar oferta",
+        "hintInsufficientBalance": "Isso é mais $WOC do que sua carteira conectada possui.",
+        "statusAwaitingBuyer": "Aguardando o comprador pagar.",
+        "statusPayingBuyer": "Confirmando seu pagamento na rede...",
+        "statusPayingSeller": "O pagamento do comprador está sendo confirmado na rede...",
+        "statusReviewBuyer": "Seu pagamento está em análise.",
+        "statusReviewSeller": "O pagamento do comprador está em análise.",
+        "paidSeller": "Você recebeu um pagamento de {price} pelo seu {item}.",
+        "paidBuyer": "Você enviou um pagamento de {price} por {item}.",
+        "closedCancelled": "Esta venda foi cancelada. O item retorna ao vendedor pelo Correio dos Corvos.",
+        "closedSuspended": "Esta venda foi suspensa por um moderador. O item retorna ao vendedor pelo Correio dos Corvos.",
+        "closedUnpaid": "Esta venda terminou sem pagamento. O item retorna ao vendedor pelo Correio dos Corvos.",
+        "closedUnpaidBuyer": "Esta venda terminou sem o seu pagamento. O item retorna ao vendedor pelo Correio dos Corvos; não pagar um negócio aceito gera uma falta no Mercado $WOC.",
+        "cancelSale": "Cancelar venda",
+        "cancelPendingSeller": "Cancelamento solicitado. A venda termina automaticamente, a menos que o comprador pague primeiro.",
+        "youDeclined": "Você recusou a oferta.",
+        "youWithdrew": "Você retirou sua oferta.",
+        "offerNotPending": "Esta oferta não está mais pendente.",
+        "offerDeclined": "A oferta em $WOC foi recusada.",
+        "offerWithdrawn": "A oferta em $WOC foi retirada.",
+        "offerExpired": "A oferta em $WOC expirou.",
+        "offerExpiresAt": "A oferta expira às {time}.",
+        "offerStandsUntil": "Sua oferta em $WOC continua válida até {time}. Negocie novamente com o vendedor para concluir o negócio, caso ele aceite.",
+        "dealAwaitsPayment": "Sua compra em $WOC ainda não foi paga. Negocie novamente com o vendedor para pagar; o negócio expira automaticamente se você não pagar, e não pagar gera uma falta no Mercado $WOC.",
+        "closeSellerHold": "Seu item continua retido para o pagamento do comprador. Cancele a venda na aba Atividade do Mercado $WOC se mudar de ideia.",
+        "closePaymentContinuesBuyer": "Seu pagamento ainda está sendo confirmado. A entrega se completa automaticamente.",
+        "closePaymentContinuesSeller": "O pagamento do comprador ainda está sendo confirmado. A venda se completa automaticamente.",
+        "p2pBindingNote": "Assim que os dois lados aceitarem, o pagamento vence em até {duration}, ou dentro do prazo mais curto que se abre quando você pressiona Pagar. Não pagar gera uma falta no Mercado $WOC.",
+        "p2pBindingNoteUntimed": "Assim que os dois lados aceitarem, o pagamento vence logo em seguida, ou dentro do prazo mais curto que se abre quando você pressiona Pagar. Não pagar gera uma falta no Mercado $WOC.",
+        "p2pPaymentDueAt": "O pagamento vence até {time}. Não pagar gera uma falta no Mercado $WOC.",
+        "quoteExpiredTrade": "A cotação expirou. Pressione Agora não e depois Pagar novamente para obter uma nova.",
+        "quoteStaged": "Cotação de pagamento pronta para {usd}: {tokens} $WOC, válida até {time}.",
+        "paymentConfirmed": "Pagamento confirmado. Seu item chega nas suas bolsas, ou pelo Correio dos Corvos se elas estiverem cheias, assim que a entrega for concluída.",
+        "statusConfirmedBuyer": "Pagamento confirmado. A entrega está sendo concluída...",
+        "statusConfirmedSeller": "Pagamento confirmado. A venda está sendo concluída...",
+        "hintBelowMin": "O preço mínimo do Mercado $WOC é {usd}."
       }
     },
     "wocStore": {
@@ -800,7 +800,37 @@ export const pt_BR: EnTranslations = {
       "applied": "Aplicado",
       "apply": "Aplicar visual",
       "detach": "Remover visual",
-      "equipHint": "Equipe uma arma do tipo {type} para aplicar este visual."
+      "equipHint": "Equipe uma arma do tipo {type} para aplicar este visual.",
+      "charter": {
+        "eyebrow": "Arca",
+        "title": "Cartas da Arca",
+        "scope": "Uma carta expande apenas o banco deste personagem. O tesoureiro vende os mesmos espaços por moedas.",
+        "grant": "Adiciona {slots} espaços de banco",
+        "buy": "Comprar Carta",
+        "buyAria": "Comprar {item}",
+        "confirmTitle": "Confirmar Compra da Carta",
+        "confirmBody": "Comprar {item} por {cost} Claudium?",
+        "resultContext": "{item} ({sku}): {message}",
+        "granted": "A carta foi aplicada. O banco deste personagem agora é maior.",
+        "alreadyGranted": "Esta carta já está neste personagem. Você não foi cobrado novamente.",
+        "applyDeferred": "Pagamento concluído. Os espaços serão aplicados automaticamente na próxima vez que este personagem entrar no jogo.",
+        "grantUnresolved": "Pagamento concluído, mas os espaços ainda não puderam ser aplicados. A compra foi registrada e o suporte pode concluí-la para você.",
+        "inProgress": "Uma compra para este personagem ainda está sendo concluída. Tente novamente em instantes.",
+        "doesNotFit": "O banco deste personagem não comporta o total concedido por esta carta.",
+        "notPurchasable": "Esta carta não pode ser comprada no momento.",
+        "noRoom": "O banco deste personagem não tem mais espaço para uma carta.",
+        "noCharterFits": "Nenhuma carta cabe no espaço restante no banco deste personagem.",
+        "someHiddenByFit": "Cartas grandes demais para o espaço restante no banco deste personagem não são exibidas.",
+        "outage": "Não foi possível confirmar a compra. Tente novamente com este botão e você não será cobrado duas vezes. Recarregar o jogo antes disso pode fazer você perder essa proteção.",
+        "outageStale": "Volte à Loja e use novamente a mesma ação de Comprar Carta. Você não será cobrado duas vezes. Recarregar o jogo antes disso pode fazer você perder essa proteção.",
+        "failed": "Não foi possível concluir a compra.",
+        "names": {
+          "strongbox_charter_1": "Carta Menor da Arca",
+          "strongbox_charter_2": "Carta Maior da Arca",
+          "strongbox_charter_3": "Carta Grandiosa da Arca",
+          "strongbox_charter_complete": "Carta Completa da Arca"
+        }
+      }
     },
     "claudium": {
       "title": "Claudium",
@@ -856,6 +886,7 @@ export const pt_BR: EnTranslations = {
       "reset": "Redefinir",
       "presets": {
         "classic": "Ouro clássico",
+        "fancyGold": "Ouro Suntuoso (em desenvolvimento)",
         "midnight": "Meia-noite",
         "parchment": "Pergaminho",
         "highContrast": "Alto contraste"
@@ -936,7 +967,8 @@ export const pt_BR: EnTranslations = {
       "durationUnitSeconds": "s",
       "durationUnitMinutes": "m",
       "durationUnitHours": "h",
-      "durationUnitDays": "d"
+      "durationUnitDays": "d",
+      "buffOverflowLabel": "+{n}"
     },
     "character": {
       "modelPreview": "Prévia do modelo do personagem"
@@ -949,7 +981,7 @@ export const pt_BR: EnTranslations = {
       "jump": "Pular",
       "leaderboard": "Classificação",
       "dailyRewards": "Loja",
-      "wocMarket": "Exchange",
+      "wocMarket": "Bolsa",
       "deeds": "Feitos",
       "mounts": "Montarias",
       "professions": "Profissões",
@@ -963,52 +995,62 @@ export const pt_BR: EnTranslations = {
       "actionRing": "Ações de combate",
       "actionPageToggle": "Mudar página de ação",
       "actionPageIndicator": "Pág. {page}",
-      "actionRadial": "Action directions",
-      "actionRadialCancel": "Cancel action",
-      "radialCenter": "Centre",
-      "radialUp": "Up",
-      "radialRight": "Right",
-      "radialDown": "Down",
-      "radialLeft": "Left",
-      "consumableSeat": "Consumables",
+      "actionRadial": "Direções de ação",
+      "actionRadialCancel": "Cancelar ação",
+      "radialCenter": "Centro",
+      "radialUp": "Cima",
+      "radialRight": "Direita",
+      "radialDown": "Baixo",
+      "radialLeft": "Esquerda",
+      "consumableSeat": "Consumíveis",
       "menuControl": "Menus",
-      "menuControlAria": "Menus. Tap to open chat, or hold and swipe right for mounts, map, bags and more.",
-      "menuControlAriaTap": "Menus. Tap to open the menu row: mounts, map, bags and more. Tap again for chat.",
+      "menuControlAria": "Menus. Toque para abrir o chat, ou segure e deslize para a direita para montarias, mapa, bolsas e mais.",
+      "menuControlAriaTap": "Menus. Toque para abrir a fileira de menus: montarias, mapa, bolsas e mais. Toque novamente para o chat.",
       "menuLabel": "Menu",
-      "quickActions": "Quick Actions",
-      "quickActionsAria": "Quick Actions. Tap to open the row of mount, chat, map, bags and more, or hold and swipe right to pick one.",
-      "quickActionsAriaTap": "Quick Actions. Tap to open the row of mount, chat, map, bags and more, then tap an item. Tap the control again to close.",
-      "quickActionsLabel": "Actions",
-      "stanceRadial": "Stances",
-      "stanceAnchorAria": "Stance: {stance}. Tap to open the stance ring, then pick another stance.",
-      "stanceAnchorEmptyAria": "No stance. Tap to open the stance ring, then pick a stance.",
-      "questStripAria": "Tracked quest {position} of {total}: {title}. Activate for the next quest.",
-      "questStripAriaSingle": "Tracked quest: {title}",
+      "quickActions": "Ações Rápidas",
+      "quickActionsAria": "Ações Rápidas. Toque para abrir a fileira de montaria, chat, mapa, bolsas e mais, ou segure e deslize para a direita para escolher uma.",
+      "quickActionsAriaTap": "Ações Rápidas. Toque para abrir a fileira de montaria, chat, mapa, bolsas e mais, depois toque em um item. Toque no controle novamente para fechar.",
+      "quickActionsLabel": "Ações",
+      "stanceRadial": "Posturas",
+      "stanceAnchorAria": "Postura: {stance}. Toque para abrir o anel de posturas, depois escolha outra postura.",
+      "stanceAnchorEmptyAria": "Nenhuma postura. Toque para abrir o anel de posturas, depois escolha uma postura.",
+      "questStripAria": "Missão rastreada {position} de {total}: {title}. Ative para a próxima missão.",
+      "questStripAriaSingle": "Missão rastreada: {title}",
       "questStripCounter": "{position}/{total}",
-      "questStripMore": "+{count} more",
+      "questStripMore": "+{count} mais",
       "targetCycle": "Trocar alvo",
       "targetCycleShort": "Alvo",
       "spellbookPageLabel": "Página {page}",
       "hideKeyboard": "Ocultar teclado",
       "chatPlaceholder": "Diga algo...",
-      "barEditor": "Edit Bars",
-      "barEditorAria": "Edit the action bar layout"
+      "barEditor": "Editar Barras",
+      "barEditorAria": "Editar o layout da barra de ação"
     },
     "barEditor": {
-      "title": "Edit Action Bar",
-      "close": "Close bar editor",
-      "pages": "Action bar pages",
-      "pageTab": "Page {page}",
-      "buttonHeader": "Button {button}",
-      "cellAria": "Button {button}, {direction}: {action}",
-      "emptyCellAria": "Button {button}, {direction}: empty",
-      "hint": "Tap a slot, then another, to swap them.",
-      "armed": "Tap a slot to place {name}.",
-      "picked": "Tap another slot to swap with {name}.",
-      "locked": "Action bars are locked in Interface options.",
-      "clear": "Clear",
-      "clearAria": "Clear a slot",
-      "clearArmed": "Tap a slot to clear it."
+      "title": "Editar Barra de Ação",
+      "close": "Fechar o editor de barras",
+      "pages": "Páginas da barra de ação",
+      "pageTab": "Página {page}",
+      "buttonHeader": "Botão {button}",
+      "cellAria": "Botão {button}, {direction}: {action}",
+      "emptyCellAria": "Botão {button}, {direction}: vazio",
+      "hint": "Toque em um espaço e depois em outro para trocá-los.",
+      "armed": "Toque em um espaço para posicionar {name}.",
+      "picked": "Toque em outro espaço para trocar com {name}.",
+      "locked": "As barras de ação estão bloqueadas nas opções de interface.",
+      "clear": "Limpar",
+      "clearAria": "Limpar um espaço",
+      "clearArmed": "Toque em um espaço para limpá-lo."
+    },
+    "tutorialGreeting": {
+      "bodyFirst": "Nunca te vi por aqui antes, amigo. É tradição nestas terras que quem está começando sua aventura visite a Costa da Provação, uma ilha tranquila além do estreito. Lá você pode aprimorar suas habilidades e se acostumar com o mundo antes de enfrentar seus desafios. A balsa faz o trajeto nos dois sentidos, e ninguém vai pensar mal de você de qualquer jeito.",
+      "bodyRefresher": "De volta com um rosto novo, é? Então você já sabe como isso funciona. Ainda assim, se quiser relembrar antes de partir, a Costa da Provação nunca recusa um aluno de volta, e a balsa está pronta quando você estiver.",
+      "play": "Fazer o tutorial",
+      "skip": "Pular o tutorial",
+      "declineNote": "Como preferir, amigo. Se um dia mudar de ideia, o sino da balsa perto da caixa de correio do Correio dos Corvos te leva até a Costa da Provação a qualquer hora, de dia ou de noite. Ela vai continuar aqui quando os lobos não estiverem.",
+      "bellHomeNote": "De volta da costa tão cedo? Foi o sino da balsa que você tocou. O gêmeo dele está pendurado bem ali, perto da caixa de correio do Correio dos Corvos: toque-o quando quiser, e a travessia vai te levar de volta à Costa da Provação. Não há problema nenhum de qualquer jeito.",
+      "islandArrivalNote": "Bem-vindo à Costa da Provação. O Guardião Tam está esperando logo ali na praia: vá falar com ele.",
+      "noteClose": "Entendido"
     },
     "tutorial": {
       "moveBodyTouch": "Use o analógico de movimento para se mover e arraste a tela para olhar ao redor. Dê alguns passos para começar.",
@@ -1021,6 +1063,117 @@ export const pt_BR: EnTranslations = {
       "nextTipQuestLog": "Abra seu Diário de Missões ({key}) para encontrar a próxima tarefa por perto.",
       "nextTipMap": "Verifique o Mapa Mundial ({key}) para ver onde as missões estão esperando.",
       "nextTipSocial": "Abra a janela Social ({key}) para encontrar um grupo para os combates mais difíceis."
+    },
+    "bootcamp": {
+      "title": "Primeiros Passos",
+      "talkTitle": "Fale com o Guardião Tam",
+      "talkBody": "O Guardião Tam vigia o portão do Percurso logo à frente. Aproxime-se dele até o nome aparecer, então pressione {interactKey}, ou clique nele com o botão esquerdo, para falar: ele vai te dar a corrida.",
+      "talkBodyTouch": "O Guardião Tam vigia o portão do Percurso logo à frente. Aproxime-se dele até o nome aparecer, então toque nele, ou toque no botão Usar, para falar: ele vai te dar a corrida.",
+      "talkBodyPad": "O Guardião Tam vigia o portão do Percurso logo à frente. Aproxime-se dele até o nome aparecer, então pressione seu botão de interação para falar: ele vai te dar a corrida.",
+      "forwardTitle": "Percorra a primeira pista",
+      "forwardBody": "Entre na pista ao lado de Tam e segure {forwardKey} para percorrê-la rumo ao oeste até sua bandeira.",
+      "forwardBodyTouch": "Entre na pista ao lado de Tam e empurre o analógico de movimento para frente para percorrê-la rumo ao oeste até sua bandeira.",
+      "forwardBodyPad": "Entre na pista ao lado de Tam e empurre o analógico esquerdo para frente para percorrê-la rumo ao oeste até sua bandeira.",
+      "turnwalkTitle": "Vire, depois ande",
+      "turnwalkBody": "Uma bandeira conquistada. Segure {turnKey} para girar no lugar até você encarar a pista murada rumo ao sul, depois segure {forwardKey} novamente e percorra-a até a segunda bandeira.",
+      "turnwalkBodyTouch": "Uma bandeira conquistada. Arraste um dedo pelo mundo (não o analógico de movimento) para girar até você encarar a pista murada rumo ao sul, depois empurre o analógico para frente e percorra-a até a segunda bandeira.",
+      "turnwalkBodyPad": "Uma bandeira conquistada. Empurre o analógico direito para girar até você encarar a pista murada rumo ao sul, depois empurre o analógico esquerdo para frente e percorra-a até a segunda bandeira.",
+      "strafeTitle": "Vire, depois ande",
+      "strafeBody": "Falta uma curva. Segure {turnLeftKey} para girar no lugar até você encarar a última pista, depois segure {forwardKey} novamente e percorra-a até a bandeira vermelha ficar atrás de você.",
+      "strafeBodyTouch": "Falta uma curva. Arraste um dedo pelo mundo (não o analógico de movimento) para girar até você encarar a última pista, depois empurre o analógico para frente e percorra-a até a bandeira vermelha ficar atrás de você.",
+      "strafeBodyPad": "Falta uma curva. Empurre o analógico direito para girar até você encarar a última pista, depois empurre o analógico esquerdo para frente e percorra-a até a bandeira vermelha ficar atrás de você.",
+      "cameraTitle": "Gire a câmera",
+      "cameraBody": "Uma última lição antes de entregar a corrida: segure o botão direito do mouse e arraste para girar a câmera completamente ao seu redor. Saber o que está atrás de você vence lutas.",
+      "cameraBodyTouch": "Uma última lição antes de entregar a corrida: arraste um dedo pelo mundo para girar a câmera completamente ao seu redor. Saber o que está atrás de você vence lutas.",
+      "cameraBodyPad": "Uma última lição antes de entregar a corrida: empurre o analógico direito para girar a câmera completamente ao seu redor. Saber o que está atrás de você vence lutas.",
+      "courseProgress": "Bandeira {current} de {total}",
+      "doneTitle": "Corrida concluída",
+      "doneBody": "Isso é tudo que suas pernas precisam saber. O Supervisor Pell está ao lado da bandeira vermelha: pressione {interactKey} nele, ou clique nele com o botão esquerdo, para entregar sua corrida e receber sua primeira recompensa.",
+      "doneBodyTouch": "Isso é tudo que suas pernas precisam saber. O Supervisor Pell está ao lado da bandeira vermelha: toque nele para entregar sua corrida e receber sua primeira recompensa.",
+      "doneBodyPad": "Isso é tudo que suas pernas precisam saber. O Supervisor Pell está ao lado da bandeira vermelha: pressione seu botão de interação nele para entregar sua corrida e receber sua primeira recompensa.",
+      "coachNextTitle": "Próximo: {npc}",
+      "coachNextBody": "Siga a trilha dourada até {npc}. Aproxime-se até o nome aparecer, então pressione {interactKey}, ou clique nele com o botão esquerdo, para receber sua próxima tarefa.",
+      "coachNextBodyTouch": "Siga a trilha dourada até {npc}. Aproxime-se até o nome aparecer, então toque nele, ou toque no botão Usar, para receber sua próxima tarefa.",
+      "coachNextBodyPad": "Siga a trilha dourada até {npc}. Aproxime-se até o nome aparecer, então pressione seu botão de interação para receber sua próxima tarefa.",
+      "coachTaskBody": "Siga a trilha dourada até sua tarefa. O rastreador à direita mantém a contagem, e {mapKey} abre o mapa se você perder o caminho.",
+      "coachTaskBodyTouch": "Siga a trilha dourada até sua tarefa. O rastreador à direita mantém a contagem, e o botão de mapa mostra o caminho se você o perder.",
+      "coachTaskBodyPad": "Siga a trilha dourada até sua tarefa. O rastreador à direita mantém a contagem, e seu botão de mapa mostra o caminho se você o perder.",
+      "coachReadyTitle": "Tarefa concluída",
+      "coachReadyBody": "Vá até {npc} e pressione {interactKey}, ou clique nele com o botão esquerdo, para entregar e receber sua recompensa.",
+      "coachReadyBodyTouch": "Vá até {npc} e toque nele para entregar e receber sua recompensa.",
+      "coachReadyBodyPad": "Vá até {npc} e pressione seu botão de interação para entregar e receber sua recompensa.",
+      "taskStrikeTrueBody": "Aproxime-se de uma efígie de palha e clique nela com o botão esquerdo para torná-la seu alvo: o nome dela aparece no topo da sua tela. Depois pressione {attackKey} para começar a golpear. Esse primeiro botão é seu ataque comum, não uma magia. Continue golpeando até uma delas cair.",
+      "taskStrikeTrueBodyTouch": "Aproxime-se de uma efígie de palha e toque nela para torná-la seu alvo. Depois toque no primeiro botão da barra de ação para golpear. Continue golpeando até uma delas cair.",
+      "taskStrikeTrueBodyPad": "Aproxime-se de uma efígie de palha e pressione seu botão de mira para torná-la seu alvo. Depois pressione seu primeiro botão de ação para golpear. Continue golpeando até uma delas cair.",
+      "taskHoneBody": "Clique com o botão esquerdo em uma efígie para mirar nela, depois pressione {abilityKey} para usar {ability}. Essa é sua habilidade, não um golpe comum. Acerte-a três vezes.",
+      "taskHoneBodyTouch": "Toque em uma efígie para mirar nela, depois toque em {ability} na barra de ação. Essa é sua habilidade, não um golpe comum. Acerte-a três vezes.",
+      "taskHoneBodyPad": "Mire em uma efígie, depois pressione o botão de ação que contém {ability}. Essa é sua habilidade, não um golpe comum. Acerte-a três vezes.",
+      "taskLongWalkBody": "Pressione {bagsKey} para abrir suas bolsas, depois clique com o botão esquerdo na Pedra da passagem. Ela o deita onde você está. Nada aqui pode te machucar, e isso não custa nada.",
+      "taskLongWalkBodyTouch": "Abra suas bolsas e toque na Pedra da passagem. Ela o deita onde você está. Nada aqui pode te machucar, e isso não custa nada.",
+      "taskLongWalkBodyPad": "Abra suas bolsas e escolha a Pedra da passagem. Ela o deita onde você está. Nada aqui pode te machucar, e isso não custa nada.",
+      "taskLongWalkDeadBody": "Você morreu, e não perdeu nada: nenhum item, nenhuma moeda, nenhuma experiência. Passo 1 de 2: clique no botão Liberar espírito no meio da sua tela. Você surgirá como um fantasma no cemitério atrás do acampamento.",
+      "taskLongWalkDeadBodyTouch": "Você morreu, e não perdeu nada: nenhum item, nenhuma moeda, nenhuma experiência. Passo 1 de 2: toque no botão Liberar espírito no meio da sua tela. Você surgirá como um fantasma no cemitério atrás do acampamento.",
+      "taskLongWalkDeadBodyPad": "Você morreu, e não perdeu nada: nenhum item, nenhuma moeda, nenhuma experiência. Passo 1 de 2: escolha Liberar espírito no meio da sua tela. Você surgirá como um fantasma no cemitério atrás do acampamento.",
+      "taskLongWalkGhostBody": "Passo 2 de 2: você é um espírito, e nada pode te tocar. Seu corpo é o marcador no seu minimapa. Caminhe até ele. Quando você se aproximar, um botão Ressuscitar no Cadáver aparece: clique nele e você estará vivo novamente, sem nenhuma penalidade. Essa caminhada é SEMPRE gratuita, e é assim que você volta toda vez que morre.",
+      "taskLongWalkGhostBodyTouch": "Passo 2 de 2: você é um espírito, e nada pode te tocar. Seu corpo é o marcador no seu minimapa. Caminhe até ele. Quando você se aproximar, um botão Ressuscitar no Cadáver aparece: toque nele e você estará vivo novamente, sem nenhuma penalidade. Essa caminhada é SEMPRE gratuita, e é assim que você volta toda vez que morre.",
+      "taskLongWalkGhostBodyPad": "Passo 2 de 2: você é um espírito, e nada pode te tocar. Seu corpo é o marcador no seu minimapa. Caminhe até ele. Quando você se aproximar, um botão Ressuscitar no Cadáver aparece: escolha-o e você estará vivo novamente, sem nenhuma penalidade. Essa caminhada é SEMPRE gratuita, e é assim que você volta toda vez que morre.",
+      "taskShellBody": "Os corredores revidam com as pinças. Clique com o botão esquerdo em um para torná-lo seu alvo, depois pressione {abilityKey} para usar {ability}, e continue atacando. Se muitos atacarem você de uma vez, recue pelo caminho: eles desistem da perseguição rapidamente, e sua vida volta enquanto você descansa.",
+      "taskShellBodyTouch": "Os corredores revidam com as pinças. Toque em um para mirar nele, depois toque em {ability} na barra de ação. Se muitos atacarem você de uma vez, recue pelo caminho: eles desistem da perseguição rapidamente, e sua vida volta enquanto você descansa.",
+      "taskShellBodyPad": "Os corredores revidam com as pinças. Mire em um, depois pressione o botão de ação que contém {ability}. Se muitos atacarem você de uma vez, recue pelo caminho: eles desistem da perseguição rapidamente, e sua vida volta enquanto você descansa.",
+      "taskStrikeTrueBodyCaster": "Aproxime-se de uma efígie de palha e clique nela com o botão esquerdo para torná-la seu alvo: o nome dela aparece no topo da sua tela. Depois pressione {attackKey}, ou clique no segundo botão da barra de ação, para conjurar sua magia. Continue conjurando até uma delas cair.",
+      "taskStrikeTrueBodyCasterTouch": "Aproxime-se de uma efígie de palha e toque nela para torná-la seu alvo. Depois toque no segundo botão da barra de ação para conjurar sua magia. Continue conjurando até uma delas cair.",
+      "taskStrikeTrueBodyCasterPad": "Aproxime-se de uma efígie de palha e pressione seu botão de mira para torná-la seu alvo. Depois pressione seu segundo botão de ação para conjurar sua magia. Continue conjurando até uma delas cair.",
+      "taskShellBodyCaster": "Os corredores revidam com as pinças. Clique com o botão esquerdo em um para torná-lo seu alvo, depois pressione {abilityKey} para usar {ability}, e continue conjurando à distância. Se muitos atacarem você de uma vez, recue pelo caminho: eles desistem da perseguição rapidamente, e sua vida volta enquanto você descansa.",
+      "taskShellBodyCasterTouch": "Os corredores revidam com as pinças. Toque em um para mirar nele, depois toque em {ability} na barra de ação, e continue conjurando à distância. Se muitos atacarem você de uma vez, recue pelo caminho: eles desistem da perseguição rapidamente, e sua vida volta enquanto você descansa.",
+      "taskShellBodyCasterPad": "Os corredores revidam com as pinças. Mire em um, depois pressione o botão de ação que contém {ability}, e continue conjurando à distância. Se muitos atacarem você de uma vez, recue pelo caminho: eles desistem da perseguição rapidamente, e sua vida volta enquanto você descansa.",
+      "taskPearlBody": "Siga a trilha dourada até a poça de maré na ponta oeste da praia. Parado na beira da água, pressione {bagsKey} para abrir suas bolsas e clique com o botão esquerdo na Isca salobra para chamá-lo à tona. Lute com ele como lutou com os corredores, e quando ele cair, pressione {interactKey} no casco dele para reivindicar a Pérola lustrosa.",
+      "taskPearlBodyTouch": "Siga a trilha dourada até a poça de maré na ponta oeste da praia. Parado na beira da água, abra suas bolsas e toque na Isca salobra para chamá-lo à tona. Lute com ele como lutou com os corredores, e quando ele cair, toque no casco dele para reivindicar a Pérola lustrosa.",
+      "taskPearlBodyPad": "Siga a trilha dourada até a poça de maré na ponta oeste da praia. Parado na beira da água, abra suas bolsas e escolha a Isca salobra para chamá-lo à tona. Lute com ele como lutou com os corredores, e quando ele cair, pressione seu botão de interação no casco dele para reivindicar a Pérola lustrosa.",
+      "taskWreckLineBody": "As caixas naufragadas ficam ao longo do caminho até o Acampamento Dawnrest. Aproxime-se de uma até o nome aparecer, então pressione {interactKey}, ou clique na caixa com o botão esquerdo, para pegá-la. Seis completam o carregamento.",
+      "taskWreckLineBodyTouch": "As caixas naufragadas ficam ao longo do caminho até o Acampamento Dawnrest. Aproxime-se de uma até o nome aparecer, então toque na caixa, ou toque no botão Usar, para pegá-la. Seis completam o carregamento.",
+      "taskWreckLineBodyPad": "As caixas naufragadas ficam ao longo do caminho até o Acampamento Dawnrest. Aproxime-se de uma até o nome aparecer, então pressione seu botão de interação para pegá-la. Seis completam o carregamento.",
+      "taskPouchBody": "Pressione {interactKey} em {npc}, ou clique nele com o botão esquerdo, para abrir a barraca, depois clique com o botão esquerdo na Bolsa de linho para comprá-la.",
+      "taskPouchBodyTouch": "Toque em {npc} para abrir a barraca, depois toque na Bolsa de linho para comprá-la.",
+      "taskPouchBodyPad": "Pressione seu botão de interação em {npc} para abrir a barraca, depois escolha a Bolsa de linho para comprá-la.",
+      "readyPouchBody": "Bolsa comprada. Pressione {bagsKey} para abrir suas bolsas e clique com o botão esquerdo na Bolsa de linho para prendê-la em um laço de bolsa livre. Depois vá até {npc} e pressione {interactKey} para exibi-la.",
+      "readyPouchBodyTouch": "Bolsa comprada. Abra suas bolsas e toque na Bolsa de linho para prendê-la em um laço de bolsa livre. Depois vá até {npc} e toque nele para exibi-la.",
+      "readyPouchBodyPad": "Bolsa comprada. Abra suas bolsas e escolha a Bolsa de linho para prendê-la em um laço de bolsa livre. Depois vá até {npc} e pressione seu botão de interação para exibi-la.",
+      "promptTalk": "Falar",
+      "promptTurnIn": "Entregar missão",
+      "promptPickUp": "Pegar",
+      "promptLootPearl": "Saqueie a pérola",
+      "promptRead": "Ler",
+      "promptRing": "Tocar",
+      "promptHold": "Segurar",
+      "promptSelect": "Selecionar",
+      "promptAttack": "Atacar",
+      "promptUseAbility": "Usar habilidade",
+      "promptKneel": "Ajoelhar",
+      "promptOpenBags": "Abra suas bolsas",
+      "promptCharacterSheet": "Abra sua ficha de personagem",
+      "promptLookAround": "Segure o botão direito e arraste para olhar ao redor",
+      "promptJump": "Pular",
+      "promptSummon": "Invocar",
+      "ringEquipTitle": "Use seu prêmio",
+      "ringEquipBody": "Você recebeu a Madrepérola, e uma recompensa de nada serve dentro de uma bolsa. Passo 1 de 2: pressione {bagsKey} para abrir suas bolsas, depois clique com o botão esquerdo no anel para equipá-lo.",
+      "ringEquipBodyTouch": "Você recebeu a Madrepérola, e uma recompensa de nada serve dentro de uma bolsa. Passo 1 de 2: abra suas bolsas e toque no anel para equipá-lo.",
+      "ringEquipBodyPad": "Você recebeu a Madrepérola, e uma recompensa de nada serve dentro de uma bolsa. Passo 1 de 2: abra suas bolsas e escolha o anel para equipá-lo.",
+      "ringAdmireTitle": "Olhe só para você",
+      "ringAdmireBody": "Passo 2 de 2: pressione {charKey} para abrir sua ficha de personagem. Essa tela mostra tudo o que você está vestindo e os atributos que isso concede, e o anel agora está na sua mão. Confira-a sempre que pegar equipamento novo.",
+      "ringAdmireBodyTouch": "Passo 2 de 2: abra sua ficha de personagem pelo menu. Essa tela mostra tudo o que você está vestindo e os atributos que isso concede, e o anel agora está na sua mão. Confira-a sempre que pegar equipamento novo.",
+      "ringAdmireBodyPad": "Passo 2 de 2: abra sua ficha de personagem pelo menu. Essa tela mostra tudo o que você está vestindo e os atributos que isso concede, e o anel agora está na sua mão. Confira-a sempre que pegar equipamento novo.",
+      "keycapThen": "depois",
+      "voiceArrival": "Calma ao desembarcar, amigo. Vê a trilha dourada aos seus pés? Ela conhece o caminho melhor do que eu. Siga-a.",
+      "voiceFirstFlag": "Essa é uma bandeira conquistada. Continue movendo essas pernas, faltam só duas.",
+      "voiceRunDone": "Uma corrida impecável, essa. O Supervisor Pell guarda sua recompensa, vá reivindicá-la.",
+      "voiceStationDoneA": "Bom trabalho. Para a próxima, o caminho já está iluminado para você.",
+      "voiceStationDoneB": "Você está pegando o jeito disso, sem dúvida.",
+      "voiceVeerOff": "Espere aí, amigo, esse é o caminho errado. A trilha dourada está atrás de você.",
+      "voiceGraduate": "O sino já foi tocado para você. Eastbrook espera do outro lado da água, e você está pronto para ela.",
+      "bellTitle": "Toque o sino",
+      "bellBody": "Sua travessia foi conquistada. Caminhe até o sino da balsa ao lado do cais e pressione {interactKey}, ou clique nele com o botão esquerdo, para zarpar rumo a Eastbrook.",
+      "bellBodyTouch": "Sua travessia foi conquistada. Caminhe até o sino da balsa ao lado do cais e toque nele para zarpar rumo a Eastbrook.",
+      "bellBodyPad": "Sua travessia foi conquistada. Caminhe até o sino da balsa ao lado do cais e pressione seu botão de interação nele para zarpar rumo a Eastbrook."
     },
     "widgets": {
       "clockTitle": "Horário local - clique para alternar entre 12/24 horas",
@@ -1072,6 +1225,31 @@ export const pt_BR: EnTranslations = {
       "devTierCol": "Insígnia",
       "mergedPrs": "PRs integrados",
       "devEmpty": "Nenhum colaborador classificado ainda."
+    },
+    "pledge": {
+      "open": "Aceitando candidaturas",
+      "closed": "Não está aceitando candidaturas",
+      "minLevel": "Nível {level}+",
+      "action": "Candidatar-se",
+      "actionTitle": "Candidatar-se a {guild}",
+      "pledged": "Candidatura enviada",
+      "yourGuild": "Sua guilda",
+      "tab": "Candidaturas",
+      "tabWithCount": "Candidaturas ({count})",
+      "empty": "Ainda ninguém se candidatou à sua guilda.",
+      "accept": "Aceitar",
+      "acceptTitle": "Aceitar a candidatura de {name}",
+      "reject": "Recusar",
+      "rejectTitle": "Recusar a candidatura de {name}",
+      "settings": "Recrutamento",
+      "acceptingLabel": "Aceitar candidaturas",
+      "minLevelLabel": "Nível mínimo",
+      "noteLabel": "Nota do quadro",
+      "notePlaceholder": "Diga aos aspirantes o que sua guilda está procurando",
+      "save": "Salvar",
+      "yourPledge": "Sua candidatura: {guild}",
+      "since": "Candidatou-se em {date}",
+      "withdraw": "Retirar candidatura"
     },
     "raidLockout": {
       "title": "Bloqueios de raide",
@@ -1164,7 +1342,6 @@ export const pt_BR: EnTranslations = {
       "targetFriendlyNext": "Alternar alvo aliado",
       "targetPrev": "Alternar alvo para trás",
       "discord": "Discord",
-      "valecup": "Copa do Vale",
       "rally": "Realm Racers",
       "bgFlag": "Ação da Bandeira do Campo de Batalha",
       "sheathe": "Embainhar/Desembainhar Arma",
@@ -1188,6 +1365,11 @@ export const pt_BR: EnTranslations = {
       "reset": "Redefinir",
       "done": "Concluir",
       "cancel": "Cancelar",
+      "showExtraBar": "Mostrar Outra Barra de Ação",
+      "hideExtraBar": "Ocultar uma Barra de Ação",
+      "conflictTitle": "Tecla Já Atribuída",
+      "conflictBody": "A tecla {key} já está atribuída a {other}. Atribuí-la a {action} vai desatribuir {other}.",
+      "conflictAccept": "Atribuir Assim Mesmo",
       "resetConfirmTitle": "Redefinir as teclas da barra de ação?",
       "resetConfirmBody": "A primeira barra volta às teclas padrão. A segunda e a terceira ficam sem atribuição. Isso não pode ser desfeito."
     },
@@ -1217,6 +1399,7 @@ export const pt_BR: EnTranslations = {
       "name_thunderstrut_gobbler": "Pavoneia-Trovões, o Grande Peru",
       "name_terrorspark_groundshaker": "Faíscaterror, Abala-Terra",
       "name_drakemaw_raptor": "Raptor de Drakemaw",
+      "name_rickshaw_mount": "Riquixá de Ossos Vinculados",
       "desc_valorsteed": "Um corcel resistente e de passo firme que aumenta a velocidade de viagem.",
       "desc_grag_bear": "Um urso resistente e de passo firme que aumenta a velocidade de viagem.",
       "desc_stalkglider_snail": "Um caracol valente e de queima lenta que aumenta a velocidade de viagem.",
@@ -1225,7 +1408,8 @@ export const pt_BR: EnTranslations = {
       "desc_stormfeather_griffin": "Um grifo da tempestade majestoso que ronda o chão sobre garras rúnicas, asas recolhidas.",
       "desc_thunderstrut_gobbler": "Um peru colossal nascido da tempestade que desce do Pico Desperto se pavoneando, com a cauda aberta como uma frente de tempestade.",
       "desc_terrorspark_groundshaker": "Uma máquina blindada compacta com esteiras pesadas, um canhão de grande calibre e uma sela feita para pilotos destemidos.",
-      "desc_drakemaw_raptor": "Um raptor da ninhada domado na sela, vindo da Caldeira de Drakemaw, puro músculo e velocidade, ainda com um leve cheiro de cinzas."
+      "desc_drakemaw_raptor": "Um raptor da ninhada domado na sela, vindo da Caldeira de Drakemaw, puro músculo e velocidade, ainda com um leve cheiro de cinzas.",
+      "desc_rickshaw_mount": "Uma carroça de ossos rangente, com um serviçal ossudo atrelado às varas, puxando você em disparada."
     },
     "mountTraining": {
       "mountPrompt": "Pressione {key} para montar no Valorsteed de treinamento.",
@@ -1322,6 +1506,7 @@ export const pt_BR: EnTranslations = {
       "endedForfeitLog": "A partida foi abandonada.",
       "firstWinBonusLine": "Primeira vitória do dia: +{honor} de Honra",
       "firstWinBonusLog": "Primeira vitória do dia: você ganha {honor} de Honra bônus.",
+      "doubleHonorLine": "Fim de Semana de Honra em Dobro: hoje a Honra dos Campos de Thornhollow paga {mult}x, e uma derrota jogada até o fim paga como uma vitória",
       "timeWarningMinutes": "Restam {minutes} minutos",
       "timeWarningOneMinute": "Resta um minuto",
       "timeWarningMinutesLog": "Restam {minutes} minutos na batalha.",
@@ -1331,146 +1516,6 @@ export const pt_BR: EnTranslations = {
         "azureKeep": "Reduto Azul",
         "ruinCourtyard": "O Pátio das Ruínas",
         "graveyard": "Cemitério"
-      }
-    },
-    "vcup": {
-      "title": "A Copa do Vale",
-      "shootPower": "FORÇA",
-      "close": "Fechar a janela da Copa do Vale",
-      "offlineNote": "A tabela de jogos está fechada. A Copa do Vale não está disponível agora.",
-      "recordLine": "Seu histórico: {wins} vitórias, {losses} derrotas, {draws} empates.",
-      "bracketsAria": "Chave da partida",
-      "bracketLabel": "{n}x{n}",
-      "waitingCount": "{count} na espera",
-      "nationsHeading": "Nação do estandarte",
-      "nation": {
-        "vale": "Vale de Eastbrook",
-        "mirefen": "Mirefen",
-        "thornpeak": "Thornpeak",
-        "coliseum": "O Coliseu Cinzento",
-        "choir": "O Coro Pálido",
-        "ogre": "Os Clãs Ogros",
-        "moon": "A Lua Pálida",
-        "copperdig": "A Cava de Cobre"
-      },
-      "awayNote": "Se os dois lados hasteiam o mesmo estandarte, o time visitante joga com a paleta invertida.",
-      "rolesHeading": "Função esportiva",
-      "rolesSmallBracketNote": "Nas chaves 1x1 e 2x2, todo combatente joga com o kit Polivalente. Feitos que exigem a chave 3x3 ou maior não podem ser conquistados aqui.",
-      "role": {
-        "allrounder": {
-          "name": "Polivalente",
-          "desc": "Um pouco de cada coisa: chute, chutão e uma ombrada limpa."
-        },
-        "striker": {
-          "name": "Atacante",
-          "desc": "Vive do chutão longo e da finta rápida."
-        },
-        "sweeper": {
-          "name": "Líbero",
-          "desc": "Tira os corredores da bola na ombrada e afasta o perigo no bicão."
-        },
-        "keeper": {
-          "name": "Goleiro",
-          "desc": "Protege a pequena área com agarrada, mergulho e tiro de meta."
-        }
-      },
-      "queue": "Entrar na Fila",
-      "leaveQueue": "Sair da Fila",
-      "queueNote": "Entre na fila de qualquer lugar; o apito chama você ao Sowfield.",
-      "queuedStatus": "Na fila para {bracket}: posição {position} de {count}.",
-      "blockNation": "Escolha primeiro uma nação de estandarte.",
-      "blockPartySize": "Essa chave exige um grupo menor.",
-      "blockNotLeader": "Só o líder do grupo pode colocar o time na fila.",
-      "inMatchNote": "Seu time está em campo. Bola pra frente!",
-      "deserterNote": "O Zelador não esquece. Você pode entrar na fila de novo em {seconds} s.",
-      "liveHeading": "Agora no Sowfield",
-      "liveAria": "Copa do Vale: {nationA} {scoreA}, {nationB} {scoreB}",
-      "walkUp": "Vá até o Sowfield para assistir das arquibancadas.",
-      "noLive": "O campo está quieto. Nenhuma partida em andamento.",
-      "boardHeading": "Quadro de vencedores",
-      "boardEmpty": "Nenhum vencedor registrado ainda. O Balde de Cobre espera.",
-      "boardWins": "{count} vitórias",
-      "enterAsGuild": "Entrar sob o estandarte de {guild}",
-      "guildRecordLine": "Histórico da sua guilda: {wins} vitórias, {losses} derrotas.",
-      "guildBoardHeading": "Estandartes de guilda",
-      "guildBoardEmpty": "Nenhuma guilda entrou em campo ainda. Hasteie seu estandarte!",
-      "guildBoardWl": "{wins} V, {losses} D",
-      "practice": "Treino contra Bots",
-      "practiceNote": "Inicia na hora uma partida privada contra bots no seu próprio campo de treino.",
-      "practiceUnratedNote": "Partidas de treino não são ranqueadas: a classificação e o progresso no Livro dos Feitos não contam.",
-      "practicingNow": "Treinando agora ({count}):",
-      "clock": "{minutes}:{seconds}",
-      "indicatorQueued": "Fila da Copa do Vale: {bracket}, posição {position} de {count}",
-      "indicatorLive": "Copa do Vale",
-      "indicatorOpen": "Abrir a janela da Copa do Vale",
-      "phaseCountdown": "Bola rolando em {seconds}",
-      "phaseGoal": "GOL!",
-      "phaseGolden": "GOL DE OURO",
-      "phaseOver": "FIM DE JOGO",
-      "bannerFound": "A Copa do Vale convoca: {nationA} x {nationB}!",
-      "bannerCountdown": "Bola rolando em {seconds}...",
-      "bannerKickoff": "BOLA ROLANDO!",
-      "bannerGoal": "GOL! {nation} marca!",
-      "bannerSave": "{name} DEFENDE!",
-      "bannerGolden": "GOL DE OURO: o próximo gol vence!",
-      "bannerEnd": "Fim de jogo: {nationA} {scoreA}, {nationB} {scoreB}",
-      "bannerWin": "Vitória no Sowfield!",
-      "bannerDraw": "Empate no Sowfield.",
-      "bannerLoss": "Derrota no Sowfield.",
-      "logQueued": "Você entra na fila da Copa do Vale para {bracket} (posição {position}).",
-      "logUnqueued": "Você sai da fila da Copa do Vale.",
-      "logFound": "Sua partida da Copa do Vale está pronta: {nationA} x {nationB}.",
-      "logRoster": "Seu lado: {allies}. O lado deles: {enemies}.",
-      "logGoal": "{name} marca para {nation}! {nationA} {scoreA}, {nationB} {scoreB}.",
-      "logSave": "{name} faz a defesa!",
-      "logWin": "Você vence a disputa no Sowfield.",
-      "logDraw": "A disputa no Sowfield termina empatada.",
-      "logLoss": "Você perde a disputa no Sowfield.",
-      "gossipOpen": "A tabela de jogos",
-      "gossipOpenAria": "Abrir a janela da Copa do Vale",
-      "mobileLabel": "Copa",
-      "briefing": {
-        "subtitle": "Preleção pré-jogo",
-        "vs": "x",
-        "rulesHeading": "Como jogar",
-        "rule1": "Chute ou passe a bola para dentro do gol adversário para marcar.",
-        "rule2": "Vence quem fizer 5 gols primeiro, ou quem tiver mais gols quando o apito final soar.",
-        "rule3": "Partida empatada no fim do tempo vai para o gol de ouro: o próximo gol vence.",
-        "rule4": "As ombradas só derrubam você. Ninguém se machuca sob a trégua da colheita.",
-        "rule5": "Qualquer um pode chegar e torcer por você das arquibancadas.",
-        "kitHeading": "Seu kit",
-        "kitNote": "Estes movimentos substituem as habilidades da sua classe durante a partida.",
-        "unratedNote": "Há bots em campo, portanto esta partida não é ranqueada: a classificação não muda e os feitos de gols, defesas e jogos sem sofrer gols não contam.",
-        "practiceUnratedNote": "Esta é uma partida de treino, portanto não é ranqueada: a classificação não muda e o progresso no Livro dos Feitos não conta.",
-        "rosterHeading": "A escalação",
-        "you": "Você",
-        "bot": "Bot",
-        "ready": "Estou pronto",
-        "readyDone": "Pronto",
-        "readyAria": "Ficar pronto para o pontapé inicial",
-        "waiting": "Aguardando o outro lado ficar pronto...",
-        "whistle": "O apito soa em {seconds}s.",
-        "readyCount": "{ready} de {total} prontos"
-      },
-      "bet": {
-        "title": "Apostas da Partida",
-        "aria": "Apostas da partida da Copa do Vale",
-        "closesIn": "Apostas encerram em {seconds}s",
-        "closed": "Apostas encerradas",
-        "prize": "Bolão {amount}",
-        "splitAria": "Parcela do bolão de apostas em cada time",
-        "expand": "Ver apostas e apostar",
-        "collapse": "Ocultar apostas",
-        "oddsLabel": "Paga",
-        "back": "Apostar em {team}",
-        "form": "{wins}V-{losses}D",
-        "mine": "Sua aposta: {amount} em {team}",
-        "none": "Você ainda não apostou nesta partida.",
-        "record": "Histórico de apostas: {wins}V-{losses}D, {sign}{net}",
-        "wonBanner": "Sua aposta venceu!",
-        "wonLog": "Sua aposta na Copa do Vale venceu: {amount} de retorno.",
-        "lostLog": "Sua aposta na Copa do Vale perdeu: {amount}.",
-        "refundLog": "Apostas anuladas, sua entrada de {amount} foi devolvida."
       }
     },
     "rally": {
@@ -1521,6 +1566,7 @@ export const pt_BR: EnTranslations = {
       "lost": "You finish {position} of {total}. The next starting grid awaits.",
       "draw": "Dead heat. The race stewards declare a draw.",
       "standingsYou": "YOU",
+      "standingsBot": "Bot",
       "standingsFinished": "Finished",
       "standingsRetired": "Out",
       "circuitName_evergarden_practice": "Evergarden Bootcamp",
@@ -1621,6 +1667,7 @@ export const pt_BR: EnTranslations = {
       "playerFrameScale": "Escala do Quadro do Jogador",
       "targetFrameScale": "Escala do Quadro do Alvo",
       "aurasOnPlayerFrame": "Benefícios no Quadro do Jogador",
+      "alwaysShowAllBuffs": "Sempre Mostrar Todos os Bônus",
       "highContrastBackground": "Fundo de alto contraste",
       "startAttackOnAbility": "Ataque Automático ao Usar Habilidade",
       "stopAutoAttackOnTargetSwitch": "Parar Ataque Automático ao Trocar de Alvo",
@@ -1630,21 +1677,27 @@ export const pt_BR: EnTranslations = {
       "stickyTarget": "Manter alvo ao clicar no chão",
       "showItemLevel": "Mostrar nível do item",
       "showReliquaryTracker": "Mostrar rastreador de relicário",
+      "confirmVendorSell": "Confirmar Antes de Vender",
+      "confirmVendorSellNote": "Desativar isso vende itens com um único clique e sem confirmação, então um espaço de bolsa deslocado pode vender o item errado.",
       "itemLevelLine": "Nível do item {level}",
       "itemScoreLine": "Pontuação {score}",
       "showSecondaryActionBar": "Mostrar Barra de Ação Secundária",
       "showThirdActionBar": "Mostrar terceira barra de ação",
+      "combineActionBars": "Combinar Barras de Ação",
       "hideUnusedActionSlots": "Ocultar Espaços de Ação Não Utilizados",
       "lockActionBars": "Travar barras de ação",
       "showTargetOfTarget": "Mostrar Alvo do Alvo",
+      "showTargetSwingTimer": "Mostrar temporizador de ataque do alvo",
       "showPetFrame": "Mostrar seu mascote",
       "waterRipples": "Ondulações na água (esteiras)",
       "showAttackButton": "Exibir Botão de Ataque",
       "showDailyRewardsChest": "Mostrar Baú de Recompensas Diárias",
       "mobileCameraJoystick": "Joystick da câmera",
       "mobileLeftHanded": "Layout para canhotos",
-      "touchTapMenus": "Tap menus",
-      "touchTapMenusNote": "Open the action, consumable and menu controls with a tap instead of a swipe. Tap an item to use it, tap the control again for its usual action, or tap outside to close."
+      "touchPreciseAim": "Mira Precisa no Chão",
+      "touchPreciseAimNote": "Mire antes de conjurar feitiços de área no chão. Desative para conjurar instantaneamente no ponto sugerido.",
+      "touchTapMenus": "Menus por toque",
+      "touchTapMenusNote": "Abra os controles de ação, consumíveis e menu com um toque em vez de um deslize. Toque em um item para usá-lo, toque no controle novamente para sua ação usual, ou toque fora para fechar."
     },
     "talentRows": {
       "tab": "Escolhas",
@@ -1669,10 +1722,16 @@ export const pt_BR: EnTranslations = {
     },
     "controller": {
       "title": "Controle",
+      "glyphStyle": "Ícones dos Botões",
+      "glyphStyleAuto": "Auto",
+      "glyphStyleXbox": "Xbox",
+      "glyphStylePlayStation": "PlayStation",
+      "glyphStyleNintendo": "Nintendo",
       "enable": "Ativar Controle",
       "invertY": "Inverter Câmera (Y)",
       "deadzone": "Zona Morta do Analógico",
       "cameraSpeed": "Velocidade da Câmera",
+      "reticleSpeed": "Velocidade da Retícula",
       "vibration": "Vibração",
       "buttons": "Disposição dos Botões",
       "resetButtons": "Redefinir Disposição dos Botões",
@@ -2053,6 +2112,7 @@ export const pt_BR: EnTranslations = {
       "fromYour": "Do seu {value} de {stat}:",
       "names": {
         "spellPower": "Poder Mágico",
+        "healPower": "Poder de Cura",
         "critRating": "Índice de crítico",
         "hasteRating": "Índice de aceleração",
         "parry": "Aparar",
@@ -2159,16 +2219,16 @@ export const pt_BR: EnTranslations = {
         "other": "você é {rank}, {count} membros"
       },
       "wocMarketSellChoose": {
-        "one": "Choose from {count} item",
-        "few": "Choose from {count} items",
-        "many": "Choose from {count} items",
-        "other": "Choose from {count} items"
+        "one": "Escolha entre {count} item",
+        "few": "Escolha entre {count} itens",
+        "many": "Escolha entre {count} itens",
+        "other": "Escolha entre {count} itens"
       },
       "wocTradeIneligible": {
-        "one": "{count} staged item cannot be sold for $WOC.",
-        "few": "{count} staged items cannot be sold for $WOC.",
-        "many": "{count} staged items cannot be sold for $WOC.",
-        "other": "{count} staged items cannot be sold for $WOC."
+        "one": "{count} item preparado não pode ser vendido por $WOC.",
+        "few": "{count} itens preparados não podem ser vendidos por $WOC.",
+        "many": "{count} itens preparados não podem ser vendidos por $WOC.",
+        "other": "{count} itens preparados não podem ser vendidos por $WOC."
       },
       "finderPartySize": {
         "one": "{count} jogador",
@@ -2187,6 +2247,12 @@ export const pt_BR: EnTranslations = {
         "few": "{count} segundos restantes",
         "many": "{count} segundos restantes",
         "other": "{count} segundos restantes"
+      },
+      "buffsHidden": {
+        "one": "Mais {count} bônus está ativo, mas oculto nesta predefinição gráfica",
+        "few": "Mais {count} bônus estão ativos, mas ocultos nesta predefinição gráfica",
+        "many": "Mais {count} bônus estão ativos, mas ocultos nesta predefinição gráfica",
+        "other": "Mais {count} bônus estão ativos, mas ocultos nesta predefinição gráfica"
       },
       "playtimeDays": {
         "one": "{count} dia",
@@ -2521,7 +2587,10 @@ export const pt_BR: EnTranslations = {
       "backpack": "Mochila",
       "bagSocketAria": "{name}: {slots}",
       "socketEmpty": "Espaço de bolsa vazio",
-      "unequipHint": "Clique para remover esta bolsa"
+      "unequipHint": "Clique para remover esta bolsa",
+      "poolGeneral": "Geral: {used} de {total}",
+      "poolMaterials": "Materiais: {used} de {total}",
+      "capacityPoolsAria": "Espaços de bolsa usados: {used} de {total}. Itens gerais: {generalUsed} de {generalTotal}. Materiais: {materialsUsed} de {materialsTotal}."
     },
     "raidConvert": {
       "toPartyDone": "Sua raide foi convertida de volta em um grupo.",
@@ -2534,7 +2603,180 @@ export const pt_BR: EnTranslations = {
       "leather": "Couro",
       "mail": "Malha"
     },
+    "varkhulCallout": {
+      "leftPillarCharging": "O pilar esquerdo da forja está carregando. Ele vai se incendiar em 3 seg!",
+      "rightPillarCharging": "O pilar direito da forja está carregando. Ele vai se incendiar em 3 seg!",
+      "bothPillarsCharging": "Os pilares da forja estão carregando. Eles vão se incendiar em 3 seg!",
+      "artificerApproaches": "Um Artífice de Brasa está se aproximando da forja!",
+      "leftPillar": "O pilar esquerdo da forja se incendeia!",
+      "rightPillar": "O pilar direito da forja se incendeia!",
+      "bothPillars": "Os pilares da forja se incendeiam!",
+      "portalsOpening": "Os portais da forja estão se abrindo!",
+      "heat75": "A forja está a 75% de calor!",
+      "heat90": "A Fusão da Forja é iminente!",
+      "addsDefeated": "A legião da forja foi derrotada: Varkhul está exposto!",
+      "worldfireBegins": "O Fogo Mundial se incendeia na borda da sala. O cadinho será consumido em 42 seg!",
+      "worldfireClosing": "O Fogo Mundial se fecha. Movam-se em direção ao centro!",
+      "worldfireConsumed": "Todo o cadinho está queimando!"
+    },
+    "varkhulWaveStatus": "Onda {wave}/{waves} | Inimigos: {remaining}",
+    "raidBossGuide": {
+      "title": "Guia de Chefes",
+      "button": "Guia de Chefes: {boss}",
+      "subtitle": "{boss} | {difficulty}",
+      "close": "Fechar guia de chefes",
+      "bossesLabel": "Chefes da raide",
+      "difficultyLabel": "Dificuldade",
+      "normal": "Normal",
+      "heroic": "Heroico",
+      "portraitAlt": "Retrato do encontro com {boss}",
+      "overviewHeading": "Visão geral",
+      "abilitiesHeading": "Habilidades",
+      "whatToDo": "O que fazer",
+      "whatToDoResponse": "O que fazer: {response}",
+      "rolesLabel": "Responsabilidades por função",
+      "flagsLabel": "Avisos de mecânica",
+      "roleTank": "Tanque",
+      "roleHealer": "Curador",
+      "roleDamage": "Dano",
+      "roleAll": "Todas as funções",
+      "flagDeadly": "Letal",
+      "flagInterruptible": "Interruptível",
+      "flagImportant": "Importante",
+      "flagCleansable": "Dissipável",
+      "browseBoss": "Ver {boss}",
+      "chooseDifficulty": "Ver mecânicas de {difficulty}",
+      "expandAbility": "Expandir {ability}",
+      "collapseAbility": "Recolher {ability}",
+      "abilityControlLabel": "{action}. {details}",
+      "tooltipMeta": "{phase} | {difficulty}",
+      "ignivar": {
+        "overview": "Varkhul forjou Ignivar como um arauto, um selo vivo e a chave para o Cadinho Interior. O encontro testa o controle dos condutos de água, a movimentação precisa e o dano de prioridade rápido.",
+        "phaseOpeningName": "O Arauto Desperta",
+        "phaseOpeningSummary": "Controle a Marca da Pira com os condutos de água enquanto lida com o frontal repetido de Ignivar, o fogo vindo do céu, os raios giratórios e a Onda da Forja em expansão.",
+        "phaseApocalypseName": "Intermissão: Apocalipse",
+        "phaseApocalypseSummary": "Com {health} de vida, Ignivar convoca um Invocador de Cinzas que tenta encerrar o encontro.",
+        "phaseJudgmentName": "Julgamento da Forja",
+        "phaseJudgmentSummary": "Com {health} de vida, Ignivar incendeia a arena e revela um refúgio seguro entre três abrigos.",
+        "phaseJudgmentHeroicSummary": "Com {health} de vida, Ignivar incendeia a arena enquanto Marcas ativas continuam a ameaçar jogadores próximos dentro do refúgio.",
+        "phaseFinaleName": "Final: Último Inferno",
+        "phaseFinaleSummary": "Com {health} de vida, Ignivar inicia uma fase final de queima com um prazo fatal e mecânicas repetidas mais rápidas.",
+        "forgeStrikeName": "Golpe da Forja",
+        "forgeStrikeSummary": "Ignivar golpeia seu tanque atual e aplica Armadura em Fusão, aumentando o dano recebido de Ignivar.",
+        "forgeStrikeResponse": "Os tanques trocam ao atingir {stacks} cargas. Os curadores se preparam para o golpe e para os primeiros ataques corpo a corpo do novo tanque.",
+        "brandName": "Marca da Pira",
+        "brandSummary": "Ignivar marca jogadores que não são tanques com dano de fogo persistente. Jogadores marcados também queimam aliados próximos.",
+        "brandResponse": "Espalhem-se. Direcione a Torrente Abrasadora para um conduto de água pronto, depois faça cada jogador marcado atravessar sozinho a água ativada para se purificar.",
+        "brandHeroicResponse": "Espalhem-se. Abra um conduto com a Torrente Abrasadora e purifique um jogador marcado por vez. Cada purificação desencadeia o Contragolpe Purificador em toda a raide.",
+        "searingTorrentName": "Torrente Abrasadora",
+        "searingTorrentSummary": "Ignivar rastreia um jogador, depois libera uma ampla explosão frontal. Um conduto de água pronto atingido pela explosão fica ativo por um curto período.",
+        "searingTorrentHeroicSummary": "Ignivar rastreia um jogador, depois libera uma explosão frontal quase letal. Um conduto de água pronto atingido pela explosão fica ativo por um curto período.",
+        "searingTorrentResponse": "Direcione o aviso por exatamente um conduto pronto. Todos os demais devem sair do frontal antes que a conjuração termine.",
+        "rainName": "Chuva de Brasas",
+        "rainSummary": "Três setores de fogo e impactos de meteoro marcados punem os jogadores que permanecem dentro dos avisos.",
+        "rainHeroicSummary": "Três setores de fogo e impactos de meteoro marcados causam dano extremo aos jogadores que permanecem dentro dos avisos.",
+        "rainResponse": "Mova-se para uma abertura sem marcação e saia de todo círculo de meteoro antes do impacto.",
+        "raysName": "Inferno Giratório",
+        "raysSummary": "Raios de fogo giratórios varrem ao redor de Ignivar e causam dano repetido aos jogadores que os tocam.",
+        "raysHeroicSummary": "Raios de fogo giratórios varrem ao redor de Ignivar e infligem dano grave repetido ao contato.",
+        "raysResponse": "Mova-se acompanhando o espaço aberto entre os raios. Não atravesse um raio, mesmo com uma habilidade de movimento rápida.",
+        "forgeWaveName": "Onda da Forja",
+        "forgeWaveSummary": "Uma parede de fogo em expansão atravessa a arena, deixando duas aberturas opostas e arremessando para trás os jogadores atingidos.",
+        "forgeWaveHeroicSummary": "Uma parede de fogo em expansão atravessa a arena, deixando duas aberturas opostas e arremessando os jogadores atingidos muito mais longe.",
+        "forgeWaveResponse": "Encontre uma das aberturas durante a preparação, alinhe-se a ela e evite ser arremessado em direção à borda da arena.",
+        "apocalypseName": "Apocalipse",
+        "apocalypseSummary": "Ignivar invoca um Invocador de Cinzas. Se o reforço terminar o Apocalipse, a raide é derrotada imediatamente.",
+        "apocalypseResponse": "Direcione todo o dano disponível ao Ignivar Ashcaller e derrote-o antes que a conjuração termine.",
+        "judgmentName": "Julgamento da Forja",
+        "judgmentSummary": "Ignivar marca três abrigos, identifica um refúgio seguro e depois queima repetidamente o restante da arena.",
+        "judgmentHeroicSummary": "Ignivar marca um refúgio seguro enquanto a arena queima. A Marca da Pira permanece ativa e continua causando dano a aliados próximos.",
+        "judgmentResponse": "Identifique o refúgio marcado de forma única durante o aviso e agrupem-se totalmente dentro do seu limite antes que o chão se incendeie.",
+        "chainsName": "Correntes da Forja",
+        "chainsSummary": "Ignivar liga jogadores próximos em pares. Afastar-se demais ou cruzar a corrente de outra dupla causa dano letal.",
+        "chainsResponse": "Fique perto do parceiro ligado a você, movam-se juntos e impeça que qualquer outro jogador passe pela sua corrente.",
+        "lastInfernoName": "Último Inferno",
+        "lastInfernoSummary": "Ignivar enfurece e prepara uma derrota total enquanto a Chuva de Brasas, a Torrente Abrasadora e o Inferno Giratório aceleram.",
+        "lastInfernoResponse": "Use os tempos de recarga restantes de dano e cura, continue executando as mecânicas de movimento e derrote Ignivar antes que a contagem regressiva termine.",
+        "brand": "Marca da Pira: espalhem-se. Direcione a Torrente Abrasadora para um conduto de água pronto, depois atravesse a água sozinho para remover a marca.",
+        "movement": "Movimento: evite os cones da Chuva de Brasas e os meteoros, mova-se acompanhando o Inferno Giratório e use as duas aberturas da Onda da Forja.",
+        "apocalypse": "Apocalipse: mate Ignivar Ashcaller antes que sua conjuração termine.",
+        "judgment": "Julgamento da Forja: identifique o refúgio único durante o aviso, depois se agrupem dentro do seu limite marcado quando o chão se incendiar.",
+        "finale": "Último Inferno: derrote Ignivar antes da derrota total enquanto meteoros mais rápidos, frontais e o Inferno Giratório continuam.",
+        "heroic": "Heroico: jogadores emparelhados devem ficar próximos durante as Correntes da Forja, a Marca permanece ativa dentro do Julgamento, e a Onda da Forja empurra mais longe."
+      },
+      "varkhul": {
+        "overview": "Varkhul aprisionou a Última Fonte moribunda para forjar metal vivo, e então criou Ignivar para guardar esse crime. Seu encontro combina posicionamento pessoal com o controle, em toda a raide, da grande forja.",
+        "phaseOpeningName": "O Pai da Forja",
+        "phaseOpeningSummary": "Varkhul alterna entre pressão sobre o tanque, frontais amplos, projéteis em movimento, absorções em grupo, ondas de meteoro e ataques vindos da grande bigorna.",
+        "phaseAssemblyName": "Intermissão: A Montagem do Mestre",
+        "phaseAssemblySummary": "Com {health} de vida, Varkhul fica protegido enquanto sua legião da forja entra pelos portais e os raios dos pilares ameaçam causar uma Fusão da Forja.",
+        "phaseFinaleName": "Final: Obra-Prima Liberta",
+        "phaseFinaleSummary": "Com {health} de vida, Varkhul ataca mais rápido, causa mais dano e pulsa fogo por toda a raide até o prazo final.",
+        "phaseFinaleHeroicSummary": "Com {health} de vida, Varkhul abandona a maioria das mecânicas anteriores enquanto o Fogo Mundial se fecha para dentro e consome o cadinho.",
+        "makersBrandName": "Marca do Criador",
+        "makersBrandSummary": "Varkhul golpeia seu tanque atual e aplica um efeito acumulativo que aumenta todo o dano recebido dele.",
+        "makersBrandResponse": "Os tanques trocam ao atingir {stacks} cargas. Os curadores preparam o próximo tanque antes que Varkhul mude de alvo.",
+        "frontalName": "Varredura do Pai da Forja",
+        "frontalSummary": "Varkhul libera uma varredura frontal muito ampla que causa muito dano de fogo a todos à sua frente.",
+        "frontalHeroicSummary": "Varkhul libera uma varredura frontal muito ampla que causa dano de fogo quase letal a todos à sua frente.",
+        "frontalResponse": "Mantenha Varkhul de costas para o grupo e mova-se atrás dele assim que o aviso aparecer.",
+        "orbsName": "Orbes de Brasa",
+        "orbsSummary": "Jogadores marcados que não são tanques deixam poças de brasa persistentes e liberam orbes de fogo em todas as direções. O Metal Incandescente também absorve a cura recebida.",
+        "orbsHeroicSummary": "Jogadores marcados que não são tanques deixam poças de brasa persistentes e muito danosas, além de liberar orbes de fogo perigosos em todas as direções. O Metal Incandescente também absorve a cura recebida.",
+        "orbsResponse": "Levem cada marca até a borda da sala, separem as poças, depois desviem dos orbes enquanto eles atravessam a arena. Os curadores devem remover a absorção rapidamente.",
+        "pyreName": "Pira Compartilhada",
+        "pyreSummary": "Um círculo em movimento segue um jogador sem Metal Incandescente. Seu dano é dividido entre os jogadores dentro dele, e cada jogador ausente causa {missingPenalty} de dano de vida máxima a toda a raide.",
+        "pyreHeroicSummary": "Um círculo em movimento segue um jogador sem Metal Incandescente e divide um golpe maior. Cada jogador ausente também causa {missingPenalty} de dano de vida máxima a toda a raide.",
+        "pyreResponse": "Agrupem pelo menos {players} jogadores dentro do círculo e movam-se com o alvo dele até a conjuração terminar.",
+        "forgestormName": "Tempestade da Forja",
+        "forgestormSummary": "Varkhul invoca {waves} ondas consecutivas de impactos de meteoro marcados por toda a arena.",
+        "forgestormHeroicSummary": "Varkhul invoca {waves} ondas consecutivas de impactos de meteoro marcados que causam dano extremo.",
+        "forgestormResponse": "Observe cada novo conjunto de avisos no chão e saia antes que aquela onda atinja o solo. Não volte a uma posição anterior sem checar a próxima onda.",
+        "rayName": "Raio de Têmpera",
+        "raySummary": "Um raio rastreia um jogador marcado durante uma longa preparação. O primeiro outro jogador entre Varkhul e o alvo intercepta o golpe e recebe Ferida Temperada.",
+        "rayResponse": "Designe um jogador saudável, geralmente o tanque secundário, para entrar na linha. Mantenha os demais jogadores fora e revezem os interceptadores enquanto a Ferida Temperada estiver ativa.",
+        "anvilName": "Decreto da Bigorna",
+        "anvilSummary": "Varkhul caminha até a grande forja e a golpeia {strikes} vezes, causando dano crescente a toda a raide.",
+        "anvilHeroicSummary": "Varkhul golpeia a grande forja {strikes} vezes causando dano crescente à raide enquanto meteoros marcados caem sobre os jogadores.",
+        "anvilResponse": "Agrupem-se para cura em área e usem tempos de recarga defensivos no golpe final.",
+        "anvilHeroicResponse": "Espalhem os meteoros marcados para longe do grupo enquanto os curadores e os tempos de recarga defensivos cobrem todos os {strikes} golpes.",
+        "assemblyName": "A Montagem do Mestre",
+        "assemblySummary": "Varkhul fica protegido e inicia uma montagem cronometrada. A raide precisa derrotar toda onda de portais antes que a forja complete sua obra-prima.",
+        "assemblyResponse": "Divida a atenção entre o controle dos raios e os reforços prioritários. Derrotem toda a legião da forja antes que o tempo da montagem se esgote.",
+        "beamName": "Raio do Cadinho",
+        "beamSummary": "Raios de pilar ativos aquecem a forja a menos que um jogador os bloqueie. Quem bloqueia recebe dano crescente de Exposição ao Cadinho, enquanto raios bloqueados e inativos deixam o calor cair.",
+        "beamHeroicSummary": "Raios de pilar ativos aquecem a forja a menos que um jogador os bloqueie. Quem bloqueia recebe dano crescente de Exposição ao Cadinho, e o calor da forja nunca diminui.",
+        "beamResponse": "Fique entre cada pilar ativo e a forja, depois revezem quem bloqueia antes que a exposição se torne perigosa. Atingir o calor máximo causa uma Fusão da Forja letal.",
+        "legionName": "Legião da Forja",
+        "legionSummary": "Guardiões do Cadinho conjuram o Tremor do Cadinho para aumentar o calor da forja, enquanto Artífices de Brasa usam o Protocolo de Reparo para curar Varkhul.",
+        "legionResponse": "Interrompam o Tremor do Cadinho, impeçam o Protocolo de Reparo e foquem cada conjurador perigoso antes de eliminar os reforços restantes.",
+        "masterpieceName": "Obra-Prima Liberta",
+        "masterpieceSummary": "Varkhul ataca mais rápido, causa mais dano e queima repetidamente a raide até a derrota total final.",
+        "masterpieceHeroicSummary": "Varkhul ataca mais rápido e causa mais dano enquanto o Fogo Mundial substitui a maioria das mecânicas anteriores na queima final.",
+        "masterpieceResponse": "Usem os tempos de recarga ofensivos e defensivos restantes e derrotem Varkhul antes que a contagem regressiva final termine.",
+        "worldfireName": "Fogo Mundial",
+        "worldfireSummary": "No Heroico, o fogo avança da borda da arena em direção ao centro em estágios até que todo o cadinho queime.",
+        "worldfireResponse": "Movam-se para dentro à frente de cada faixa de fogo avançando, preservem o espaço seguro que encolhe e derrotem Varkhul antes que o centro se incendeie.",
+        "tanks": "Tanques: troquem ao atingir duas cargas de Marca do Criador e mantenham Varkhul ao alcance corpo a corpo.",
+        "orbs": "Orbes de Brasa: jogadores marcados se espalham até a borda da sala. Suas poças de fogo persistem e os orbes liberados atravessam a sala.",
+        "pyre": "Pira Compartilhada: apenas um jogador sem Metal Incandescente é selecionado. Agrupem quatro jogadores dentro do círculo em movimento, em qualquer dificuldade. Cada jogador ausente causa 15% da vida máxima a toda a raide.",
+        "forgestorm": "Tempestade da Forja: observe os meteoros caindo e saia de todo impacto marcado antes que cada uma das três ondas atinja o solo.",
+        "anvil": "Decreto da Bigorna: Varkhul se move até a grande forja e a golpeia três vezes causando dano à raide. No Heroico também caem meteoros marcados.",
+        "ray": "Raio de Têmpera: outro jogador, geralmente um tanque, intercepta a linha em movimento antes que a longa preparação termine. O jogador atingido recebe Ferida Temperada.",
+        "forge": "Pilares da forja: bloqueiem os raios ativos antes que alcancem a forja e revezem quem bloqueia conforme a Exposição ao Cadinho cresce. Um medidor de calor cheio causa a Fusão da Forja.",
+        "assembly": "A Montagem do Mestre: bloqueiem os dois raios da forja, eliminem toda onda de portais, interrompam o Tremor do Cadinho e impeçam os Artífices de Brasa de curar Varkhul.",
+        "worldfire": "Fogo Mundial: no Heroico, a borda em chamas se fecha em direção ao centro durante a fase final. Derrotem Varkhul antes que todo o cadinho queime.",
+        "heroic": "Heroico: o calor da forja nunca esfria, o Decreto da Bigorna adiciona meteoros, e a fase final remove a maioria das mecânicas para focar no Fogo Mundial."
+      }
+    },
     "auraEffect": {
+      "sharedPyre": "Causa {total}% da vida máxima de cada jogador, dividido pelo número de jogadores dentro do círculo ({perPlayer}% cada, com {players} jogadores).",
+      "varkhulSharedPyre": "Causa {total}% da vida máxima de cada jogador, dividido entre os jogadores dentro do círculo ({perPlayer}% cada, com {players} jogadores). Cada jogador ausente também causa {missingPenalty}% de dano de vida máxima a toda a raide, incluindo os jogadores dentro do círculo.",
+      "makersBrand": "Por {duration} seg, cada carga aumenta o dano recebido de Varkhul em {pct}%. Acumula até {max} vezes. Os tanques devem trocar ao atingir {swap} cargas.",
+      "varkhulSentinelsGaze": "A Sentinela de Brasa persegue você. Mantenha-a longe da raide até que seja destruída.",
+      "varkhulMoltenCore": "Carregue este núcleo até a forja. Fardo em Fusão causa dano crescente a cada {interval} seg, de {min}% a {max}% da vida máxima.",
+      "varkhulForgeLink": "Intercepte um raio de pilar ativo antes que ele alcance a forja. Raios abertos adicionam 6% de calor por segundo. No Normal, raios bloqueados e pilares inativos esfriam a forja; no Heroico, o calor nunca cai. Ao atingir 100%, a forja sofre uma Fusão letal.",
+      "varkhulCrucibleExposure": "Bloquear um Raio do Cadinho causa dano crescente de vida máxima a cada segundo. As cargas reiniciam 10 segundos após sair do raio no Normal e após 60 segundos no Heroico.",
       "dot": "Causa {value} de dano de {school} a cada {interval} s",
       "hot": "Restaura {value} de vida a cada {interval} s",
       "mendingCurrent": "Armazena {value} de cura, liberada com o tempo ou consumida por Remendo em Cascata",
@@ -2745,18 +2987,21 @@ export const pt_BR: EnTranslations = {
       "chestTitle": "Baú",
       "takeLootButton": "Pegar Saque",
       "takeLootTooltip": "Pega as moedas e os itens largados. Não usa a coleta.",
-      "unifiedPressHint": "A tecla de interação saqueia e coleta em um único clique, usando seu foco da cidade."
+      "unifiedPressHint": "A tecla de interação saqueia e coleta em um único clique, usando seu foco da cidade.",
+      "bindConfirmTitle": "Vincula ao pegar",
+      "bindConfirmBody": "Este saque contém um item que se vinculará a você ao ser pego. Um item vinculado só pode ser negociado com jogadores que compartilharam esse saque, e apenas por tempo limitado."
     },
     "spellbook": {
       "addToBarAria": "Adicionar {name} à barra de ação",
       "removeFromBarAria": "Remover {name} da barra de ação",
-      "assignAria": "Choose a slot for {name}"
+      "assignAria": "Escolha um espaço para {name}"
     },
     "nameplate": {
       "mobLevel": "{level}",
       "mobEliteLevel": "{level}+",
       "afkTag": "AFK",
-      "cheaterTag": "< Trapaceiro >"
+      "cheaterTag": "< Trapaceiro >",
+      "pledgeTag": "Promessa a {guild}"
     },
     "mobTooltip": {
       "levelFamily": "{family} de nível {level}",
@@ -2776,6 +3021,7 @@ export const pt_BR: EnTranslations = {
     },
     "partyFrames": {
       "section": "Quadros de grupo e raide",
+      "optionsSection": "Opções de Quadros de Grupo",
       "unlock": "Mover quadros de grupo e raide",
       "lock": "Bloquear quadros de grupo e raide",
       "style": "Estilo do quadro",
@@ -2806,13 +3052,70 @@ export const pt_BR: EnTranslations = {
     "frameReset": {
       "label": "Redefinir Posições dos Quadros"
     },
+    "interfaceUnlock": {
+      "label": "Editar Quadros",
+      "unlock": "Desbloquear interface",
+      "lock": "Bloquear interface",
+      "lockAll": "Bloquear Interface",
+      "barsNote": "Somente as barras de ação que você ativou aparecem durante a edição. Para posicionar mais barras, adicione-as primeiro com os botões de mais e menos na barra de ação principal.",
+      "frozenNote": "Durante a edição, a interface e a câmera ficam congeladas: botões e quadros são apenas imagens paradas para organizar, e os cliques não alcançam o mundo do jogo.",
+      "unlockFrame": "Desbloquear este quadro",
+      "lockFrame": "Bloquear este quadro",
+      "resizeFrame": "Redimensionar este quadro",
+      "frameNames": {
+        "actionBar1": "Barra de Ação",
+        "actionBar2": "Barra de Ação 2",
+        "actionBar3": "Barra de Ação 3",
+        "steamWishlist": "Lembrete de Lista de Desejos",
+        "menu": "Menu",
+        "minimap": "Minimapa",
+        "stanceBar": "Barra de Postura",
+        "xpBar": "Barra de XP",
+        "chat": "Chat",
+        "actionBarGroup": "Barras de Ação",
+        "playerFrame": "Jogador",
+        "targetFrame": "Alvo",
+        "partyFrames": "Grupo",
+        "swingBar": "Ataque Automático"
+      },
+      "framesMenu": "Configurações de Quadros",
+      "framesMenuTitle": "Mostre ou oculte quadros individuais. Um quadro desmarcado permanece oculto até que você o marque novamente ou redefina para o padrão.",
+      "showHideFrames": "Mostrar ou Ocultar Quadros",
+      "buffsLeftToRight": "Bônus da esquerda para a direita",
+      "debuffsLeftToRight": "Penalidades da esquerda para a direita",
+      "lockPlayerFrameToBar": "Fixar Quadro do Jogador na Barra de Ação",
+      "actionBarsVertical": "Barras de Ação Verticais",
+      "actionBar1Vertical": "Barra de Ação Vertical",
+      "actionBar2Vertical": "Barra de Ação Vertical 2",
+      "actionBar3Vertical": "Barra de Ação Vertical 3",
+      "menuRailHorizontal": "Menu Horizontal",
+      "snapToGrid": "Alinhar à Grade",
+      "previewMemberName": "{className} {number}",
+      "resetFrameSize": "Redefinir tamanho",
+      "resetFrameSizeFor": "Redefinir tamanho de {name}",
+      "previewSpell": "Feitiço de Exemplo"
+    },
+    "transfer": {
+      "frameLayout": "Layout dos Quadros",
+      "allSettings": "Todas as Configurações",
+      "exportAction": "Exportar",
+      "importAction": "Importar",
+      "copy": "Copiar",
+      "copied": "Copiado para a área de transferência.",
+      "copyFailed": "Falha ao copiar. Selecione o código e copie-o manualmente.",
+      "applyReload": "Aplicar e Recarregar",
+      "pastePlaceholder": "Cole um código exportado aqui.",
+      "invalid": "Esse não é um código de exportação válido.",
+      "wrongKind": "Esse código é de um tipo de exportação diferente."
+    },
     "itemTooltip": {
       "requiresLevel": "Requer Nível {level}",
       "riftTier": "Item da Fenda de nível {tier}",
       "riftUpgrade": "Aprimoramento da fenda {level}/{max}",
       "riftSockets": "Gemas da fenda {used}/{total}",
       "statEnchanted": "+{value} {stat} (Encantado)",
-      "enchantedFallback": "Encantado"
+      "enchantedFallback": "Encantado",
+      "partyTradeWindow": "Você pode negociar este item com jogadores que compartilharam esse saque pelos próximos {time}. Equipá-lo encerra a janela de troca."
     },
     "materialHint": {
       "fineGrade": "Grau fino. Coletado de um veio de nível pleno com uma ferramenta de nível acima do material, e conta como a versão comum sempre que uma for exigida.",
@@ -3013,7 +3316,10 @@ export const pt_BR: EnTranslations = {
       "unlink": "Desvincular Steam",
       "linked": "Vinculado à conta Steam {id}",
       "benefits": "Vincule sua conta Steam pelo aplicativo para desktop para espelhar os feitos que você ganhar como conquistas do Steam.",
-      "noTicket": "O Steam não forneceu um tíquete de vinculação. Inicie o Steam e tente novamente."
+      "noTicket": "O Steam não forneceu um tíquete de vinculação. Inicie o Steam e tente novamente.",
+      "wishlist": "Adicionar à lista de desejos no Steam",
+      "wishlistAria": "Adicionar à lista de desejos no Steam: abrir a página de World of ClaudeCraft na loja",
+      "wishlistShort": "Lista de desejos"
     },
     "epic": {
       "title": "Epic",
@@ -3080,7 +3386,12 @@ export const pt_BR: EnTranslations = {
       "tip": "Receita de vendas ou itens devolvidos estão esperando por você com o Mercador."
     },
     "noticeboard": {
-      "empty": "Parece que não há nada afixado."
+      "empty": "Parece que não há nada afixado.",
+      "subtitle": "Guildas do reino",
+      "rosterTitle": "Ver a lista de membros de {guild}",
+      "back": "Voltar",
+      "popupTitle": "Placa da Guilda",
+      "close": "Fechar"
     },
     "bank": {
       "title": "Banco",
@@ -3094,6 +3405,26 @@ export const pt_BR: EnTranslations = {
       "buySlotsMaxed": "Totalmente expandido",
       "buyConfirm": "Comprar {count} espaços de banco adicionais por {price}?",
       "buyConfirmAccept": "Comprar",
+      "meterLabel": "{used} de {total} espaços",
+      "meterPoolGeneral": "Geral: {used} de {total}",
+      "meterPoolMaterials": "Materiais: {used} de {total}",
+      "meterPoolsAria": "Espaços do banco usados: {used} de {total}. Itens gerais: {generalUsed} de {generalTotal}. Materiais: {materialsUsed} de {materialsTotal}.",
+      "meterMaterialsNote": "Espaço exclusivo para materiais, vindo de bolsas encaixadas. Outros itens não podem usá-lo.",
+      "priceDisclaimer": "Os preços podem mudar de acordo com a economia do jogo.",
+      "rungItemName": "{count} espaços de banco",
+      "buySlotsDualAria": "Comprar {count} espaços por {price} ou {cost} Claudium",
+      "buyConfirmDual": "Comprar {count} espaços de banco adicionais?",
+      "buyConfirmGold": "Comprar por {price}",
+      "buyConfirmClaudium": "Comprar por {cost} Claudium",
+      "rungGranted": "Os espaços de banco foram adicionados. O banco deste personagem agora é maior.",
+      "rungAlreadyGranted": "Esses espaços já estão neste personagem. Você não foi cobrado novamente.",
+      "rungApplyDeferred": "Pagamento concluído. Os espaços serão aplicados automaticamente na próxima vez que este personagem entrar no jogo.",
+      "rungGrantUnresolved": "Pagamento concluído, mas os espaços ainda não puderam ser aplicados. A compra foi registrada e o suporte pode concluí-la para você.",
+      "rungInProgress": "Uma compra para este personagem ainda está sendo concluída. Tente novamente em instantes.",
+      "rungDoesNotFit": "O banco deste personagem não comporta outra expansão.",
+      "rungNotPurchasable": "Esses espaços de banco não podem ser comprados no momento.",
+      "rungFailed": "Não foi possível concluir a compra.",
+      "rungOutage": "Não foi possível confirmar a compra. Tente novamente com este botão e você não será cobrado duas vezes. Recarregar o jogo antes disso pode fazer você perder essa proteção.",
       "withdrawHint": "Clique para retirar",
       "withdrawPartialHint": "Shift-clique para retirar uma quantidade parcial",
       "depositHint": "Clique para depositar",
@@ -3106,6 +3437,9 @@ export const pt_BR: EnTranslations = {
       "withdrawQuantityTitle": "Retirar {item}",
       "withdrawQuantityInput": "Quantidade a retirar",
       "withdrawQuantityConfirm": "Retirar",
+      "vaultRowWithdrawName": "Retirar {item}",
+      "priceChanged": "O preço mudou antes da compra ser concluída. Revise o preço atualizado e confirme novamente.",
+      "withdrawQuantityAction": "Quantidade a retirar: {item}",
       "filterGroupAria": "Filtrar o banco por categoria",
       "sortAria": "Ordenar itens do banco",
       "searchAria": "Buscar itens do banco pelo nome",
@@ -3127,6 +3461,34 @@ export const pt_BR: EnTranslations = {
       "bonusReferralProgress": "{count}/{cap}",
       "bonusReferralExplainer": "Convide um amigo: quando ele alcançar o nível 10, cada um de vocês ganha 2 espaços, até 5 amigos.",
       "bonusSectionAria": "Espaços bônus do banco e como ganhar mais",
+      "socketRowAria": "Espaços de bolsa do banco",
+      "socketEmpty": "Espaço de bolsa do banco vazio",
+      "socketEmptyHint": "Clique em uma bolsa nas suas bolsas para guardá-la no banco",
+      "socketLocked": "Espaço de bolsa bloqueado",
+      "socketLockedLater": "Os espaços de bolsa são desbloqueados em ordem, do mais barato para o mais caro",
+      "socketUnlockAria": "Desbloquear um espaço de bolsa do banco por {price}",
+      "socketUnlockHint": "Clique para desbloquear este espaço de bolsa",
+      "socketUnlockConfirm": "Desbloquear um espaço de bolsa do banco por {price}?",
+      "socketUnlockAccept": "Desbloquear",
+      "unsocketHint": "Clique para devolver esta bolsa às suas bolsas",
+      "socketHint": "Clique para encaixar esta bolsa no seu banco",
+      "vaultTab": "Depósito",
+      "vaultCapacityNote": "Cada material comporta até {cap}.",
+      "vaultEmpty": "Seu depósito está vazio. Clique em um material nas suas bolsas para depositá-lo.",
+      "vaultRowAria": "{item}: {count} de {cap} armazenado",
+      "vaultLockedIntro": "Desbloqueie o Depósito de Materiais para estocar materiais de criação ao lado do seu banco. Cada material ganha seu próprio espaço, até {cap} cada.",
+      "vaultUnlockButton": "Desbloquear o Depósito de Materiais",
+      "vaultUnlockConfirm": "Desbloquear o Depósito de Materiais por {price}?",
+      "vaultUpgrade": "Ampliar todos os limites para {cap}",
+      "vaultUpgradeConfirm": "Ampliar todos os limites de material para {cap} por {price}?",
+      "vaultDepositAll": "Depositar todos os materiais",
+      "vaultDepositAllTooltip": "Envia todos os materiais das suas bolsas para o seu depósito de uma vez, enchendo cada material até o seu limite. Equipamentos, ferramentas, itens de missão e consumíveis nunca são tocados.",
+      "vaultDepositAllDone": "Materiais depositados: {count}.",
+      "vaultDepositAllFull": "Materiais depositados: {count}. Alguns limites estão cheios.",
+      "vaultDepositAllNone": "Limites do depósito cheios: nada foi depositado.",
+      "vaultWithdrawShort": "Apenas {fit} de {count} cabem nas suas bolsas.",
+      "vaultDepositHint": "Clique para depositar no seu depósito",
+      "vaultCannotDeposit": "Não pode ir para o depósito",
       "tabsAria": "Abas do banco",
       "personalTab": "Pessoal",
       "guildTab": "Guilda",
@@ -3212,6 +3574,10 @@ export const pt_BR: EnTranslations = {
         "arenaClash": {
           "title": "Confronto na Arena",
           "note": "Duelistas acorrem ao Coliseu Cinzento. Entre na fila e suba na classificação."
+        },
+        "doubleHonor": {
+          "title": "Fim de Semana de Honra em Dobro",
+          "note": "Os acampamentos de guerra soam a convocação: o fim de semana inteiro, a Honra dos Campos de Thornhollow paga em dobro e uma derrota jogada até o fim paga como uma vitória."
         },
         "fishingDerby": {
           "title": "Torneio de Pesca",
@@ -3522,7 +3888,9 @@ export const pt_BR: EnTranslations = {
       "reagentsNeeded": "Requer:",
       "reagentLine": "{name}x{have}/{required}",
       "reagentFineSub": "(gasta {count} de grau fino)",
-      "craftFeeLine": "Craft fee: {fee} each",
+      "reagentVaultDraw": "(retira {count} do seu depósito)",
+      "vaultUnreachable": "O Depósito de Materiais está fora de alcance aqui.",
+      "craftFeeLine": "Taxa de criação: {fee} cada",
       "empty": "Nenhuma receita conhecida ainda.",
       "resultAria": "Artesanato {name}",
       "craftedToast": "Feito: {name}",
@@ -3620,7 +3988,9 @@ export const pt_BR: EnTranslations = {
       "equip": "Equipar",
       "disenchant": "Desencantar",
       "salvage": "Recuperar",
-      "applyEnchant": "Aplicar Encantamento"
+      "applyEnchant": "Aplicar Encantamento",
+      "sell": "Vender",
+      "sellAll": "Vender tudo ({count})"
     },
     "enchanting": {
       "disenchantedLine": "Você desencanta {item}.",
@@ -4074,7 +4444,7 @@ export const pt_BR: EnTranslations = {
       "unlockedBorderHint": "Nova moldura conquistada: {name}. Use-a pelo Livro dos Feitos.",
       "broadcastLine": "{name} realizou um feito: {deed}",
       "rarityLine": "Conquistado por {percent} dos aventureiros",
-      "stillToVisit": "Still to visit: {places}",
+      "stillToVisit": "Ainda por visitar: {places}",
       "trackerLabel": "Feitos",
       "collapseHint": "Recolher o rastreador de feitos",
       "expandHint": "Expandir o rastreador de feitos",
@@ -4104,218 +4474,224 @@ export const pt_BR: EnTranslations = {
       "minLevelNote": "Requer nível {level}"
     },
     "walletBridge": {
-      "cancelled": "The wallet request was cancelled. Nothing was sent.",
-      "timeout": "Your wallet did not respond in time. Open the wallet and try again.",
-      "notConnected": "Connect and verify a wallet, then try again.",
-      "unsupported": "This wallet cannot complete that action. Connect a different wallet.",
-      "unavailable": "No wallet connection is available here. Reconnect your wallet and try again.",
-      "badResponse": "Your wallet returned an unusable answer. Try again."
+      "cancelled": "A solicitação da carteira foi cancelada. Nada foi enviado.",
+      "timeout": "Sua carteira não respondeu a tempo. Abra a carteira e tente novamente.",
+      "notConnected": "Conecte e verifique uma carteira, depois tente novamente.",
+      "unsupported": "Esta carteira não pode concluir essa ação. Conecte uma carteira diferente.",
+      "unavailable": "Nenhuma conexão de carteira está disponível aqui. Reconecte sua carteira e tente novamente.",
+      "badResponse": "Sua carteira retornou uma resposta inutilizável. Tente novamente."
     },
     "wocMarket": {
-      "title": "$WOC Exchange",
-      "close": "Close the Exchange",
-      "launcherLabel": "$WOC Exchange",
-      "tabBrowse": "Browse",
-      "tabSell": "Sell",
-      "tabActivity": "My Activities",
-      "tabsLabel": "$WOC Exchange sections",
-      "loading": "Loading the Exchange...",
-      "loadFailed": "The Exchange could not be reached. Try again shortly.",
-      "disabledRealm": "The $WOC Exchange is not available on this realm.",
-      "pausedBanner": "Trading is paused. Auctions keep counting down; new listings, bids, offers, and payments wait until trading resumes, and a payment already sent still settles.",
-      "walletBanner": "Link and verify a wallet to bid, buy, or sell on the Exchange.",
-      "walletBannerCta": "Connect wallet",
-      "rateNote": "Rate: about {tokens} $WOC per $1.00 USD as of {time}.",
-      "rateNotePaused": "Last known rate: about {tokens} $WOC per $1.00 USD as of {time}.",
-      "estimateNote": "About {tokens} $WOC for {usd} at the current rate.",
-      "browseEmpty": "No listings right now. Check back soon.",
-      "browseError": "Listings could not be loaded.",
+      "title": "Bolsa $WOC",
+      "close": "Fechar a Bolsa",
+      "launcherLabel": "Bolsa $WOC",
+      "tabBrowse": "Procurar",
+      "tabSell": "Vender",
+      "tabActivity": "Minhas atividades",
+      "tabsLabel": "Seções da Bolsa $WOC",
+      "loading": "Carregando a Bolsa...",
+      "loadFailed": "Não foi possível acessar a Bolsa. Tente novamente em instantes.",
+      "disabledRealm": "A Bolsa $WOC não está disponível neste reino.",
+      "browserOnlyConfirmTitle": "Abrir a Bolsa $WOC no navegador?",
+      "browserOnlyConfirmBody": "A Bolsa $WOC funciona apenas na versão de navegador de World of ClaudeCraft. Isto abre World of ClaudeCraft no seu navegador, onde você pode entrar e abrir a Bolsa; o jogo continua rodando aqui.",
+      "browserOnlyConfirmOpen": "Abrir no navegador",
+      "browserOnlyConfirmCancel": "Cancelar",
+      "pausedBanner": "As negociações estão pausadas. Os leilões continuam a contagem regressiva; novas listagens, lances, ofertas e pagamentos aguardam até que as negociações sejam retomadas, e um pagamento já enviado ainda é liquidado.",
+      "walletLinkedDisconnected": "Seu endereço público está vinculado. Reconecte esse aplicativo de carteira quando quiser pagar com $WOC.",
+      "walletLinkedConnected": "O aplicativo da sua carteira vinculada está conectado e pronto para compras com $WOC.",
+      "walletUsdBalance": "{amount} USD",
+      "walletUsdUnknown": "Desconhecido",
+      "rateNote": "Taxa: cerca de {tokens} $WOC por $1,00 USD em {time}.",
+      "rateNotePaused": "Última taxa conhecida: cerca de {tokens} $WOC por $1,00 USD em {time}.",
+      "estimateNote": "Cerca de {tokens} $WOC por {usd} na taxa atual.",
+      "browseEmpty": "Nenhum anúncio no momento. Volte em breve.",
+      "browseError": "Não foi possível carregar os anúncios.",
       "colItem": "Item",
-      "colSeller": "Seller",
-      "colCurrentBid": "Current bid",
-      "colBuyNow": "Buy now",
-      "colTimeLeft": "Time left",
-      "reserveMet": "Reserve met",
-      "reserveNotMet": "Reserve not met",
-      "yourListing": "Your listing",
-      "buyNowLockedBadge": "Purchase in progress",
-      "reserveMetTip": "The seller set a hidden minimum price, and the current bid meets it.",
-      "reserveNotMetTip": "The seller set a hidden minimum price. If the highest bid at close is below it, the item is not sold and every bond is returned.",
-      "yourListingTip": "You listed this item. You cannot bid on your own listing; while it has no bids you can cancel it here or from Activity.",
-      "buyNowLockedTip": "Another buyer holds this listing while they pay. If they do not pay in time, it reopens.",
-      "pagePrev": "Previous page",
-      "pageNext": "Next page",
-      "pageNumber": "Page {current}",
-      "sortLabel": "Sort",
-      "sortEnding": "Ending soonest",
-      "sortNewest": "Newest",
-      "sortPriceAsc": "Price: low to high",
-      "sortPriceDesc": "Price: high to low",
-      "filterQuality": "Quality",
-      "filterFormat": "Format",
-      "filterAny": "Any",
-      "filterFormatAuction": "Auction",
-      "filterFormatBuyNow": "Buy now",
+      "colSeller": "Vendedor",
+      "colCurrentBid": "Lance atual",
+      "colBuyNow": "Compra imediata",
+      "colTimeLeft": "Tempo restante",
+      "reserveMet": "Reserva atingida",
+      "reserveNotMet": "Reserva não atingida",
+      "yourListing": "Sua listagem",
+      "buyNowLockedBadge": "Compra em andamento",
+      "reserveMetTip": "O vendedor definiu um preço mínimo oculto, e o lance atual o atinge.",
+      "reserveNotMetTip": "O vendedor definiu um preço mínimo oculto. Se o maior lance no fechamento ficar abaixo dele, o item não é vendido e toda caução é devolvida.",
+      "yourListingTip": "Você listou este item. Não é possível dar lances na sua própria listagem; enquanto ela não tiver lances, você pode cancelá-la aqui ou em Atividades.",
+      "buyNowLockedTip": "Outro comprador está segurando esta listagem enquanto paga. Se ele não pagar a tempo, ela reabre.",
+      "pagePrev": "Página anterior",
+      "pageNext": "Próxima página",
+      "pageNumber": "Página {current}",
+      "sortLabel": "Ordenar",
+      "sortEnding": "Terminando em breve",
+      "sortNewest": "Mais recentes",
+      "sortPriceAsc": "Preço: menor para maior",
+      "sortPriceDesc": "Preço: maior para menor",
+      "filterQuality": "Qualidade",
+      "filterFormat": "Formato",
+      "filterAny": "Qualquer",
+      "filterFormatAuction": "Leilão",
+      "filterFormatBuyNow": "Compra imediata",
       "filterItemLabel": "Item",
-      "filterItemPlaceholder": "Search by item name",
-      "filterCategory": "Category",
-      "filterCategoryWeapon": "Weapons",
-      "filterCategoryArmor": "Armor",
-      "filterCategoryMount": "Mounts",
-      "filterSubcategory": "Type",
-      "sellerLinkAria": "View recent trades by {name}",
-      "sellerTitle": "Recent trades by {name}",
-      "sellerBack": "Back to Browse",
-      "sellerEmpty": "No completed trades yet.",
-      "sellerError": "Recent trades could not be loaded.",
-      "sellerSaleRow": "{time}: {item} to {buyer} for {usd}",
-      "detailTitle": "Listing",
-      "detailSeller": "Sold by {name}",
-      "detailEndsAt": "Ends {utc} UTC ({local} local)",
-      "detailStartingBid": "Starting bid: {usd}",
-      "detailCurrentBid": "Current bid: {usd}",
-      "detailNoBids": "No bids yet",
-      "detailMinNext": "Minimum next bid: {usd}",
-      "detailBuyNow": "Buy now: {usd}",
-      "detailSales": "Recent sales",
-      "detailSaleRow": "{time}: {seller} sold to {buyer} for {usd}",
-      "detailNoSales": "No recorded sales for this item yet.",
-      "detailSalesLoading": "Loading recent sales...",
-      "bidLabel": "Your bid (USD)",
-      "bidPlaceholder": "Enter a USD amount",
-      "bidButton": "Place bid",
-      "bidAria": "Place a bid on {item}",
-      "bidTermsToggle": "Bid terms",
-      "rowOpenAria": "View the listing for {item}",
-      "buyNowButton": "Buy now for {usd}",
-      "buyNowAria": "Buy {item} now for {usd}",
-      "cancelButton": "Cancel listing",
-      "cancelAria": "Cancel your listing of {item}",
-      "bidBondNote": "Placing a bid holds a refundable bond in $WOC on top of the bid: {bond} for a bid of {bid}, more for a higher bid. It is returned when you are outbid or lose, or after you pay if you win; a second-chance offer holds it again.",
-      "bidBondSchedule": "The bond is {rate} percent of your bid, at least {min} and at most {max}.",
-      "bidBondPayWindow": "Pay the bond within {duration} of placing your bid, or the bid lapses.",
-      "bidBindingNote": "A bid is binding once you sign its bond transaction: it cannot be withdrawn, and if you win and do not pay, the bond is forfeited and your account earns a Marketplace strike.",
-      "bidCloseNote": "A bid whose bond confirms in the last 2 minutes extends the auction to 2 minutes after that bid, up to 30 minutes past the listed end. A bond that confirms after the auction closes does not count and is refunded.",
-      "offerNextNote": "If the winner does not pay, you may become the buyer at your own bid: your bond is held again (or asked for again if it was already returned) and payment is due within {duration}.",
-      "buyNowNote": "Buy now holds this listing for you for about four and a half minutes while you pay. If you do not pay in time, you cannot try this listing again for 30 minutes, and three unpaid Buy Nows within an hour pause Buy Now for you until the oldest is an hour old.",
-      "variableTokenWarning": "You are committing to pay a USD value in $WOC. The exact token amount is set by a fresh quote when payment is requested and may differ from the estimate.",
-      "quoteFixedNote": "This quote fixes the $WOC amount until it expires. A new quote may differ.",
-      "settlementDeadlineNote": "If you win, payment is due within {duration} of the auction closing.",
-      "claimCooldownRetry": "You recently walked away from a Buy Now. Try again in {duration}.",
-      "termsLabel": "I accept the Marketplace terms.",
-      "termsLink": "View the Marketplace terms (opens in a new tab)",
-      "quoteTitle": "Confirm payment",
+      "filterItemPlaceholder": "Pesquisar pelo nome do item",
+      "filterCategory": "Categoria",
+      "filterCategoryWeapon": "Armas",
+      "filterCategoryArmor": "Armadura",
+      "filterCategoryMount": "Montarias",
+      "filterSubcategory": "Tipo",
+      "sellerLinkAria": "Ver negociações recentes de {name}",
+      "sellerTitle": "Negociações recentes de {name}",
+      "sellerBack": "Voltar para Procurar",
+      "sellerEmpty": "Ainda não há negociações concluídas.",
+      "sellerError": "Não foi possível carregar as negociações recentes.",
+      "sellerSaleRow": "{time}: {item} para {buyer} por {usd}",
+      "detailTitle": "Listagem",
+      "detailSeller": "Vendido por {name}",
+      "detailEndsAt": "Termina às {utc} UTC ({local} local)",
+      "detailStartingBid": "Lance inicial: {usd}",
+      "detailCurrentBid": "Lance atual: {usd}",
+      "detailNoBids": "Ainda sem lances",
+      "detailMinNext": "Lance mínimo seguinte: {usd}",
+      "detailBuyNow": "Compra imediata: {usd}",
+      "detailSales": "Vendas recentes",
+      "detailSaleRow": "{time}: {seller} vendeu para {buyer} por {usd}",
+      "detailNoSales": "Ainda não há vendas registradas para este item.",
+      "detailSalesLoading": "Carregando vendas recentes...",
+      "bidLabel": "Seu lance (USD)",
+      "bidPlaceholder": "Digite um valor em USD",
+      "bidButton": "Dar lance",
+      "bidAria": "Dar um lance em {item}",
+      "bidTermsToggle": "Termos do lance",
+      "rowOpenAria": "Ver a listagem de {item}",
+      "buyNowButton": "Comprar agora por {usd}",
+      "buyNowAria": "Comprar {item} agora por {usd}",
+      "cancelButton": "Cancelar listagem",
+      "cancelAria": "Cancelar sua listagem de {item}",
+      "bidBondNote": "Dar um lance retém uma caução reembolsável em $WOC além do valor do lance: {bond} para um lance de {bid}, mais para um lance maior. Ela é devolvida quando você é superado ou perde, ou depois que você paga se vencer; uma oferta de segunda chance a retém de novo.",
+      "bidBondSchedule": "A caução é de {rate} por cento do seu lance, no mínimo {min} e no máximo {max}.",
+      "bidBondPayWindow": "Pague a caução em até {duration} depois de dar o lance, ou o lance caduca.",
+      "bidBindingNote": "Um lance passa a valer assim que você assina a transação da caução: ele não pode ser retirado, e se você vencer e não pagar, a caução é perdida e sua conta recebe uma falta no Mercado $WOC.",
+      "bidCloseNote": "Um lance cuja caução é confirmada nos últimos 2 minutos estende o leilão para 2 minutos depois desse lance, até no máximo 30 minutos além do horário de encerramento anunciado. Uma caução confirmada depois que o leilão fecha não conta e é reembolsada.",
+      "offerNextNote": "Se o vencedor não pagar, você pode se tornar o comprador pelo seu próprio lance: sua caução é retida novamente (ou solicitada de novo, caso já tenha sido devolvida), e o pagamento vence em até {duration}.",
+      "buyNowNote": "Comprar agora reserva esta listagem para você por cerca de quatro minutos e meio enquanto paga. Se você não pagar a tempo, não poderá tentar esta listagem de novo por 30 minutos, e três compras imediatas não pagas em uma hora pausam a compra imediata para você até que a mais antiga complete uma hora.",
+      "variableTokenWarning": "Você está se comprometendo a pagar um valor em USD, em $WOC. A quantidade exata de tokens é definida por uma nova cotação quando o pagamento é solicitado e pode ser diferente da estimativa.",
+      "quoteFixedNote": "Esta cotação fixa o valor em $WOC até expirar. Uma nova cotação pode ser diferente.",
+      "settlementDeadlineNote": "Se você vencer, o pagamento vence em até {duration} após o fechamento do leilão.",
+      "claimCooldownRetry": "Você desistiu recentemente de uma compra imediata. Tente novamente em {duration}.",
+      "termsLabel": "Eu aceito os termos do Mercado.",
+      "termsLink": "Ver os termos do Mercado (abre em uma nova aba)",
+      "quoteTitle": "Confirmar pagamento",
       "quoteTotal": "Total: {tokens} $WOC",
-      "quoteSeller": "Seller receives: {tokens} $WOC",
-      "quoteBurn": "Burned (removed from supply): {tokens} $WOC",
-      "quoteTreasury": "To the game treasury: {tokens} $WOC",
-      "quoteExpires": "Quote expires in {duration}",
-      "quoteExpiresAt": "Quote expires at {time}.",
-      "quoteExpired": "The quote expired. Request a fresh one.",
-      "quoteSign": "Sign and pay",
-      "quoteRefresh": "New quote",
-      "quoteCancel": "Not now",
-      "quoteBondFor": "Refundable bid bond: {usd}",
-      "quoteBondForItem": "Refundable bid bond for {item}: {usd}",
-      "quoteSettlementFor": "Settlement for {item}: {usd}",
-      "paymentDueAt": "Payment is due by {time}.",
-      "signing": "Waiting for your wallet...",
-      "signFailed": "Your wallet did not complete the payment. Check the wallet and try again.",
-      "signFailedConfirm": "Your wallet did not sign the confirmation. Check the wallet and try again.",
-      "confirming": "Confirming on chain...",
-      "listing": "Listing your item...",
-      "activityCancelPending": "Cancel pending",
-      "activityDirected": "Directed sale",
-      "bidPlacedStanding": "Your bid stands. You are the high bidder.",
-      "bidPlacedOutbid": "Your bond confirmed, but a higher bid landed first.",
-      "purchaseComplete": "Purchase complete. Your item arrives by Ravenpost mail.",
-      "paymentConfirmedDelivering": "Payment confirmed. Your item arrives by Ravenpost mail once delivery completes.",
-      "listingCreated": "Your listing is live.",
-      "listingCancelled": "Listing cancelled. Your item returns by Ravenpost mail.",
-      "listingCancelPending": "Cancel pending: a buyer holds the purchase window. Unless they pay, the listing closes and your item returns by Ravenpost mail.",
-      "sellTitle": "Create a listing",
-      "sellEmptyFloor": "No eligible items in your bags. This realm takes unbound equipment of {floor} quality or better.",
-      "sellCollectiblesBoth": "Mounts and mech chroma plates can also be listed.",
-      "sellCollectiblesMounts": "Mounts can also be listed.",
-      "sellCollectiblesChromas": "Mech chroma plates can also be listed.",
-      "sellLockedHidden": "Locked items are not listed here. Unlock them in your bags to sell them.",
-      "sellSearchPlaceholder": "Type to filter your bags",
-      "sellClear": "Clear {item} and choose another",
-      "sellChoose": "Item to list",
-      "sellNoMatches": "No items match that search",
-      "sellBuyNowAboveStart": "The buy-now price must be higher than the starting bid.",
-      "sellFormat": "Format",
-      "sellFormatAuction": "Auction",
-      "sellFormatBuyNow": "Buy now only",
-      "sellFormatAuctionBuyNow": "Auction with buy now",
-      "sellStart": "Starting bid (USD)",
-      "sellReserve": "Reserve (USD, optional)",
-      "sellReserveNote": "Optional, at least the starting bid. Bidders see only whether it is met; if the highest bid at close is below it, the item comes back to you unsold and every bond is returned.",
-      "sellBuyNowNote": "Required. A buy-now listing sells at this price with no bidding.",
-      "sellBuyNowAuctionNote": "Optional. Set a price a buyer can pay to end the auction early; it must be above the starting bid and the reserve.",
-      "sellBuyNowPrice": "Buy-now price (USD)",
-      "sellDuration": "Duration",
-      "sellOfferNext": "If the winner does not pay, sell to the next-highest bidder whose bid meets the reserve, at their bid, instead of ending unsold.",
-      "sellSubmit": "List item",
-      "sellSubmitAria": "List {item} on the Exchange",
-      "sellFeeNote": "A completed sale pays an Exchange fee out of the price: part is burned and part goes to the treasury, and you receive the remainder at your linked wallet in the settlement transaction. The fee for the price you enter is shown here; on an auction it follows the final price.",
-      "activityListings": "My listings",
-      "activityBids": "My bids",
-      "activitySettlements": "My settlements",
-      "activityEmpty": "You have no bids, listings, or settlements yet. Your Exchange activity appears here.",
-      "activityNoListings": "You have no listings.",
-      "activityNoBids": "You have no bids.",
-      "activityNoSettlements": "You have no settlements.",
-      "activityPayNow": "Pay now",
-      "activityPayNowAria": "Pay for settlement {id} now",
-      "activityPayNowItemAria": "Pay {usd} for {item} now",
-      "activityDeadline": "Payment due in {duration}",
-      "dueAt": "Due {utc} UTC ({local} local)",
-      "activityStrikes": "Marketplace strikes: {count}",
-      "activitySuspended": "Exchange suspended for {duration} after unpaid deals: no bids, purchases, listings, or $WOC trades until then.",
-      "strikesTip": "A strike is earned each time you do not pay for a deal you committed to. After the first, each strike suspends you from the Exchange for longer: 3 days, then 14, then 90, then a year.",
-      "bidStatusPending": "Awaiting bond",
-      "bidStatusActive": "High bidder",
-      "bidStatusOutbid": "Outbid",
-      "bidStatusLapsed": "Lapsed",
-      "bidStatusWon": "Won",
-      "bidStatusDefaulted": "Defaulted",
-      "bidStatusCancelled": "Cancelled",
-      "bidBondPay": "Pay bond",
-      "bidBondPayAria": "Pay the bond for your bid on listing {id}",
-      "bidBondPayItemAria": "Pay the {bond} bond for your bid on {item}",
-      "settlementOffered": "Payment due",
-      "settlementConfirming": "Confirming",
-      "settlementConfirmedDelivering": "Payment confirmed, delivering",
-      "settlementReview": "Payment under review",
-      "settlementDelivered": "Delivered",
-      "settlementExpired": "Expired unpaid",
-      "settlementFailed": "Payment failed",
-      "settlementFailBurnMissing": "The payment did not include the required token burn.",
-      "settlementFailBurnMismatch": "The payment burned the wrong token amount.",
-      "settlementFailBurnAuthority": "The token burn came from a wallet this purchase did not name.",
-      "settlementFailUnexpectedCredit": "The transaction paid a wallet outside this purchase.",
-      "settlementFailQuoteExpired": "The payment quote expired before it was used. Request a fresh one and pay again.",
-      "settlementFailTransaction": "The payment transaction failed on the network. Request a fresh quote and try again.",
-      "settlementFailRefunded": "This payment was returned to your wallet.",
-      "settlementFailSuperseded": "This payment attempt was replaced by a newer one.",
-      "settlementFailConfirmingOverdue": "This payment took too long to confirm and could not be verified.",
-      "settlementFailGeneric": "This payment could not be completed.",
-      "paymentSeenAwaitingFinality": "Payment seen on the ledger. Waiting for final confirmation.",
-      "paymentNotYetVisible": "No payment is visible on the ledger yet. It can take a moment to appear.",
-      "paymentServiceUnreachable": "The payment service is unreachable. Your payment stays recorded and will be re-checked.",
-      "paymentPendingGeneric": "Your payment is submitted and awaiting confirmation.",
-      "bondSeenAwaitingFinality": "Bond payment seen on the ledger. Waiting for final confirmation.",
-      "bondNotYetVisible": "No bond payment is visible on the ledger yet. It can take a moment to appear.",
-      "bondServiceUnreachable": "The payment service is unreachable. Your bond payment stays recorded and will be re-checked.",
-      "bondPendingGeneric": "Your bond payment is submitted and awaiting confirmation.",
-      "listingStatusActive": "Active",
-      "listingStatusSettling": "Awaiting payment",
-      "listingStatusSold": "Sold",
-      "listingStatusReturned": "Returned",
-      "listingStatusCancelled": "Cancelled",
-      "listingStatusSuspended": "Suspended",
-      "listingStatusUnsold": "Unsold"
+      "quoteSeller": "O vendedor recebe: {tokens} $WOC",
+      "quoteBurn": "Queimado (removido do fornecimento): {tokens} $WOC",
+      "quoteTreasury": "Para a tesouraria do jogo: {tokens} $WOC",
+      "quoteExpires": "A cotação expira em {duration}",
+      "quoteExpiresAt": "A cotação expira às {time}.",
+      "quoteExpired": "A cotação expirou. Solicite uma nova.",
+      "quoteSign": "Assinar e pagar",
+      "quoteRefresh": "Nova cotação",
+      "quoteCancel": "Agora não",
+      "quoteBondFor": "Caução reembolsável do lance: {usd}",
+      "quoteBondForItem": "Caução reembolsável do lance por {item}: {usd}",
+      "quoteSettlementFor": "Liquidação de {item}: {usd}",
+      "paymentDueAt": "O pagamento vence até {time}.",
+      "signing": "Aguardando sua carteira...",
+      "signFailed": "Sua carteira não concluiu o pagamento. Verifique a carteira e tente novamente.",
+      "signFailedConfirm": "Sua carteira não assinou a confirmação. Verifique a carteira e tente novamente.",
+      "confirming": "Confirmando na blockchain...",
+      "listing": "Listando seu item...",
+      "activityCancelPending": "Cancelamento pendente",
+      "activityDirected": "Venda direcionada",
+      "bidPlacedStanding": "Seu lance está valendo. Você é o maior licitante.",
+      "bidPlacedOutbid": "Sua caução foi confirmada, mas um lance mais alto chegou primeiro.",
+      "purchaseComplete": "Compra concluída. Seu item chega pelo Correio dos Corvos.",
+      "paymentConfirmedDelivering": "Pagamento confirmado. Seu item chega pelo Correio dos Corvos assim que a entrega for concluída.",
+      "listingCreated": "Sua listagem está ativa.",
+      "listingCancelled": "Listagem cancelada. Seu item retorna pelo Correio dos Corvos.",
+      "listingCancelPending": "Cancelamento pendente: um comprador está com a janela de compra reservada. Se ele não pagar, a listagem fecha e seu item retorna pelo Correio dos Corvos.",
+      "sellTitle": "Criar uma listagem",
+      "sellEmptyFloor": "Nenhum item elegível nas suas bolsas. Este reino aceita equipamento desvinculado de qualidade {floor} ou superior.",
+      "sellCollectiblesBoth": "Montarias e placas de croma Mech também podem ser listadas.",
+      "sellCollectiblesMounts": "Montarias também podem ser listadas.",
+      "sellCollectiblesChromas": "Placas de croma Mech também podem ser listadas.",
+      "sellLockedHidden": "Itens bloqueados não aparecem aqui. Desbloqueie-os nas suas bolsas para vendê-los.",
+      "sellSearchPlaceholder": "Digite para filtrar suas bolsas",
+      "sellClear": "Remover {item} e escolher outro",
+      "sellChoose": "Item a listar",
+      "sellNoMatches": "Nenhum item corresponde a essa pesquisa",
+      "sellBuyNowAboveStart": "O preço de compra imediata deve ser maior que o lance inicial.",
+      "sellFormat": "Formato",
+      "sellFormatAuction": "Leilão",
+      "sellFormatBuyNow": "Somente compra imediata",
+      "sellFormatAuctionBuyNow": "Leilão com compra imediata",
+      "sellStart": "Lance inicial (USD)",
+      "sellReserve": "Reserva (USD, opcional)",
+      "sellReserveNote": "Opcional, pelo menos o lance inicial. Os licitantes veem apenas se ela foi atingida; se o maior lance no fechamento ficar abaixo dela, o item volta para você sem ser vendido e toda caução é devolvida.",
+      "sellBuyNowNote": "Obrigatório. Uma listagem de compra imediata vende por este preço, sem lances.",
+      "sellBuyNowAuctionNote": "Opcional. Defina um preço que um comprador pode pagar para encerrar o leilão antecipadamente; ele deve ser maior que o lance inicial e a reserva.",
+      "sellBuyNowPrice": "Preço de compra imediata (USD)",
+      "sellDuration": "Duração",
+      "sellOfferNext": "Se o vencedor não pagar, vender para o licitante seguinte cujo lance atenda à reserva, pelo valor do lance dele, em vez de terminar sem venda.",
+      "sellSubmit": "Listar item",
+      "sellSubmitAria": "Listar {item} na Bolsa",
+      "sellFeeNote": "Uma venda concluída paga uma taxa da Bolsa retirada do preço: parte é queimada e parte vai para a tesouraria, e você recebe o restante na sua carteira vinculada, na transação de liquidação. A taxa referente ao preço que você inserir é mostrada aqui; em um leilão, ela segue o preço final.",
+      "activityListings": "Meus anúncios",
+      "activityBids": "Meus lances",
+      "activitySettlements": "Minhas liquidações",
+      "activityEmpty": "Você ainda não tem lances, anúncios ou liquidações. Sua atividade no Mercado $WOC aparece aqui.",
+      "activityNoListings": "Você não tem anúncios.",
+      "activityNoBids": "Você não tem lances.",
+      "activityNoSettlements": "Você não tem liquidações.",
+      "activityPayNow": "Pagar agora",
+      "activityPayNowAria": "Pagar agora a liquidação {id}",
+      "activityPayNowItemAria": "Pagar {usd} por {item} agora",
+      "activityDeadline": "Pagamento vence em {duration}",
+      "dueAt": "Vence às {utc} UTC ({local} local)",
+      "activityStrikes": "Faltas no Mercado $WOC: {count}",
+      "activitySuspended": "Mercado $WOC suspenso por {duration} após negócios não pagos: sem lances, compras, anúncios ou negociações em $WOC até lá.",
+      "strikesTip": "Uma falta é registrada cada vez que você não paga por um negócio ao qual se comprometeu. A partir da primeira, cada falta suspende você da Bolsa por mais tempo: 3 dias, depois 14, depois 90, depois um ano.",
+      "bidStatusPending": "Aguardando caução",
+      "bidStatusActive": "Maior licitante",
+      "bidStatusOutbid": "Superado",
+      "bidStatusLapsed": "Caduco",
+      "bidStatusWon": "Vencedor",
+      "bidStatusDefaulted": "Inadimplente",
+      "bidStatusCancelled": "Cancelado",
+      "bidBondPay": "Pagar caução",
+      "bidBondPayAria": "Pagar a caução do seu lance no anúncio {id}",
+      "bidBondPayItemAria": "Pagar a caução de {bond} do seu lance em {item}",
+      "settlementOffered": "Pagamento pendente",
+      "settlementConfirming": "Confirmando",
+      "settlementConfirmedDelivering": "Pagamento confirmado, entregando",
+      "settlementReview": "Pagamento em análise",
+      "settlementDelivered": "Entregue",
+      "settlementExpired": "Expirado sem pagamento",
+      "settlementFailed": "Pagamento falhou",
+      "settlementFailBurnMissing": "O pagamento não incluiu a queima de token exigida.",
+      "settlementFailBurnMismatch": "O pagamento queimou uma quantidade errada de tokens.",
+      "settlementFailBurnAuthority": "A queima de token veio de uma carteira que esta compra não indicou.",
+      "settlementFailUnexpectedCredit": "A transação pagou uma carteira fora desta compra.",
+      "settlementFailQuoteExpired": "A cotação de pagamento expirou antes de ser usada. Solicite uma nova e pague novamente.",
+      "settlementFailTransaction": "A transação de pagamento falhou na rede. Solicite uma nova cotação e tente novamente.",
+      "settlementFailRefunded": "Este pagamento foi devolvido à sua carteira.",
+      "settlementFailSuperseded": "Esta tentativa de pagamento foi substituída por uma mais recente.",
+      "settlementFailConfirmingOverdue": "Este pagamento demorou demais para confirmar e não pôde ser verificado.",
+      "settlementFailGeneric": "Este pagamento não pôde ser concluído.",
+      "paymentSeenAwaitingFinality": "Pagamento visto no registro. Aguardando confirmação final.",
+      "paymentNotYetVisible": "Ainda não há pagamento visível no registro. Pode levar um instante para aparecer.",
+      "paymentServiceUnreachable": "O serviço de pagamento está inacessível. Seu pagamento permanece registrado e será verificado novamente.",
+      "paymentPendingGeneric": "Seu pagamento foi enviado e aguarda confirmação.",
+      "bondSeenAwaitingFinality": "Pagamento de caução visto no livro-razão. Aguardando confirmação final.",
+      "bondNotYetVisible": "Nenhum pagamento de caução está visível no livro-razão ainda. Pode levar um instante para aparecer.",
+      "bondServiceUnreachable": "O serviço de pagamento está inacessível. Seu pagamento de caução continua registrado e será verificado novamente.",
+      "bondPendingGeneric": "Seu pagamento de caução foi enviado e aguarda confirmação.",
+      "listingStatusActive": "Ativa",
+      "listingStatusSettling": "Aguardando pagamento",
+      "listingStatusSold": "Vendida",
+      "listingStatusReturned": "Devolvida",
+      "listingStatusCancelled": "Cancelada",
+      "listingStatusSuspended": "Suspensa",
+      "listingStatusUnsold": "Não vendida"
     }
   },
   "gatherEvent": {
@@ -4378,6 +4754,8 @@ export const pt_BR: EnTranslations = {
       "online": "O personagem está online no momento.",
       "rename_not_permitted": "Não é permitido renomear este personagem.",
       "delete_confirm": "Digite o nome do personagem para confirmar a exclusão.",
+      "storage_purchase_open": "Uma compra de armazenamento precisa ser concluída ou resolvida antes que este personagem possa ser excluído.",
+      "delete_busy": "O reino está ocupado. Tente excluir este personagem novamente em instantes.",
       "already_in_world": "O personagem já está no mundo.",
       "taken_over": "Seu personagem foi assumido por outra sessão.",
       "rename_required": "Este personagem precisa ser renomeado antes de entrar no mundo.",
@@ -4417,6 +4795,10 @@ export const pt_BR: EnTranslations = {
     "deeds": {
       "invalid_input": "Entrada inválida."
     },
+    "guilds": {
+      "invalid_roster_name": "Nome de guilda inválido.",
+      "unknown": "Nenhuma guilda com esse nome."
+    },
     "steam": {
       "disabled": "A vinculação com o Steam não está disponível no momento.",
       "invalid_ticket": "O Steam não conseguiu verificar este pedido de vinculação. Tente novamente pelo aplicativo para desktop.",
@@ -4434,7 +4816,13 @@ export const pt_BR: EnTranslations = {
       "upstream": "A Epic não respondeu. Tente novamente em instantes."
     },
     "wallet": {
-      "handoff_invalid": "Essa autorização de carteira expirou ou não pôde ser verificada. Tente novamente."
+      "handoff_invalid": "Essa autorização de carteira expirou ou não pôde ser verificada. Tente novamente.",
+      "reauth_required": "Confirme esta alteração de carteira com a senha da sua conta.",
+      "reauth_two_factor": "Sua conta tem a autenticação em duas etapas ativada. Digite seu código para confirmar.",
+      "reauth_no_password": "Primeiro defina uma senha nas configurações da conta e tente novamente.",
+      "reauth_bad_signature": "Não foi possível verificar a assinatura da carteira. Tente novamente.",
+      "reauth_bad_password": "Sua senha está incorreta.",
+      "reauth_bad_two_factor": "Esse código não é válido, tente novamente."
     },
     "ota_updates": {
       "invalid_input": "Entrada inválida."
@@ -4456,53 +4844,53 @@ export const pt_BR: EnTranslations = {
       "not_marked": "Essa conta não está marcada."
     },
     "woc_market": {
-      "invalid_input": "Invalid input.",
-      "disabled": "The $WOC Exchange is not available on this realm.",
-      "paused": "Exchange trading is paused. Auctions keep counting down.",
-      "wallet_required": "Link and verify a wallet before trading on the Exchange.",
-      "recipient_wallet_required": "That player must connect a wallet before they can accept $WOC payments.",
-      "self_offer": "You cannot send a $WOC offer to yourself.",
-      "offer_expired": "That $WOC offer expired. Ask for a new one.",
-      "terms_required": "Accept the Marketplace terms to continue.",
-      "totp_required": "This amount requires two-factor authentication. Enable it in account settings, then enter your code.",
-      "totp_invalid": "That two-factor code did not verify. Try again.",
-      "suspended": "Your Exchange access is suspended after unpaid deals: no bids, purchases, listings, or $WOC trades.",
-      "character_invalid": "Play the character you are listing from, and try again.",
-      "not_found": "That Exchange entry no longer exists.",
-      "not_yours": "That Exchange entry no longer exists.",
-      "not_active": "That listing is no longer open for this action.",
-      "own_listing": "You cannot bid on or buy your own listing.",
-      "has_bids": "A listing with bids cannot be withdrawn. Contact support if you must cancel.",
-      "bid_too_low": "Your bid does not clear the current bid plus its increment.",
-      "already_pending": "Confirm or abandon your pending bid on this listing first.",
-      "insufficient_balance": "Your wallet does not hold enough $WOC for this bid and its bond.",
-      "quote_unavailable": "A price quote could not be issued right now. Try again shortly.",
-      "quote_expired": "That quote expired. Request a fresh one; if none is offered, that window has closed.",
-      "not_pending": "That bid is no longer awaiting its bond.",
-      "confirm_failed": "The transaction could not be confirmed. Request a fresh quote and try again.",
-      "confirm_in_flight": "Your payment is still confirming. Try again once it resolves.",
-      "buy_now_locked": "Another buyer is completing this purchase. Try again in a moment.",
-      "cancel_pending": "The seller is cancelling this listing.",
-      "claim_cooldown": "You recently walked away from a Buy Now. Try again later.",
-      "bond_window_closed": "This bid can no longer be paid: its payment window has closed. Bid again for a fresh one.",
-      "settlement_in_flight": "A buyer is paying for this listing. Try again once the payment settles.",
-      "contended": "The Exchange is busy with this listing. Try again in a moment.",
-      "sale_conflict": "Another live sale record stands for this listing. Exclude it first.",
-      "no_buy_now": "This listing has no buy-now price.",
-      "cap_reached": "You have reached your Exchange listing limit.",
-      "stale_item": "That item changed or moved. Re-select it and try again.",
-      "item_mismatch": "That is not the exact copy the buyer agreed to, or its state changed (a lock counts). Start a fresh deal for it.",
-      "offer_pending": "You already have a deal standing with this player. Resolve it first.",
-      "not_eligible": "That item cannot be listed on the $WOC Exchange.",
-      "invalid_params": "Check the starting bid, reserve, buy-now price, and duration.",
-      "signature_reused": "That transaction was already submitted.",
-      "item_locked": "That item is locked. Unlock it in your bags before selling it.",
-      "stepup_required": "Selling on the Exchange needs a signature from your linked wallet.",
-      "stepup_challenge_invalid": "That wallet confirmation is no longer valid. Start the sale again.",
-      "stepup_challenge_expired": "The wallet confirmation expired. Start the sale again.",
-      "stepup_wallet_mismatch": "Your linked wallet changed since this confirmation was issued. Start the sale again.",
-      "stepup_binding_mismatch": "That wallet confirmation does not match this sale. Start the sale again.",
-      "stepup_signature_invalid": "The wallet signature did not verify. Start the sale again."
+      "invalid_input": "Entrada inválida.",
+      "disabled": "A Bolsa $WOC não está disponível neste reino.",
+      "paused": "As negociações da Bolsa estão pausadas. Os leilões continuam contando o tempo.",
+      "wallet_required": "Vincule e verifique uma carteira antes de negociar na Bolsa.",
+      "recipient_wallet_required": "Esse jogador precisa conectar uma carteira antes de poder aceitar pagamentos em $WOC.",
+      "self_offer": "Você não pode enviar uma oferta em $WOC para si mesmo.",
+      "offer_expired": "Essa oferta em $WOC expirou. Peça uma nova.",
+      "terms_required": "Aceite os termos do Mercado para continuar.",
+      "totp_required": "Esse valor exige autenticação de dois fatores. Ative-a nas configurações da conta e depois informe seu código.",
+      "totp_invalid": "Esse código de dois fatores não pôde ser verificado. Tente novamente.",
+      "suspended": "Seu acesso à Bolsa está suspenso após negócios não pagos: sem lances, compras, anúncios ou negociações em $WOC.",
+      "character_invalid": "Jogue com o personagem a partir do qual você está listando, e tente novamente.",
+      "not_found": "Esse registro da Bolsa não existe mais.",
+      "not_yours": "Esse registro da Bolsa não existe mais.",
+      "not_active": "Esse anúncio não está mais aberto para essa ação.",
+      "own_listing": "Você não pode dar lances nem comprar seu próprio anúncio.",
+      "has_bids": "Um anúncio com lances não pode ser retirado. Entre em contato com o suporte se precisar cancelar.",
+      "bid_too_low": "Seu lance não supera o lance atual mais o incremento.",
+      "already_pending": "Primeiro, confirme ou abandone seu lance pendente nesta listagem.",
+      "insufficient_balance": "Sua carteira não tem $WOC suficiente para este lance e sua garantia.",
+      "quote_unavailable": "Não foi possível emitir uma cotação de preço agora. Tente novamente em breve.",
+      "quote_expired": "Essa cotação expirou. Solicite uma nova; se nenhuma for oferecida, essa janela já se fechou.",
+      "not_pending": "Esse lance não está mais aguardando sua garantia.",
+      "confirm_failed": "A transação não pôde ser confirmada. Solicite uma nova cotação e tente novamente.",
+      "confirm_in_flight": "Seu pagamento ainda está sendo confirmado. Tente novamente assim que ele for concluído.",
+      "buy_now_locked": "Outro comprador está concluindo esta compra. Tente novamente em instantes.",
+      "cancel_pending": "O vendedor está cancelando esta listagem.",
+      "claim_cooldown": "Você desistiu recentemente de uma compra imediata. Tente novamente mais tarde.",
+      "bond_window_closed": "Este lance não pode mais ser pago: a janela de pagamento dele já fechou. Dê um novo lance para obter uma nova janela.",
+      "settlement_in_flight": "Um comprador está pagando por esse anúncio. Tente novamente assim que o pagamento for concluído.",
+      "contended": "A Bolsa está ocupada com este anúncio. Tente novamente em instantes.",
+      "sale_conflict": "Já existe outro registro de venda ativo para esse anúncio. Encerre-o primeiro.",
+      "no_buy_now": "Este anúncio não tem preço de compra imediata.",
+      "cap_reached": "Você atingiu seu limite de listagens na Bolsa.",
+      "stale_item": "Esse item mudou ou foi movido. Selecione-o novamente e tente de novo.",
+      "item_mismatch": "Essa não é a cópia exata que o comprador aceitou, ou o estado dela mudou (um bloqueio conta). Inicie um novo negócio para ela.",
+      "offer_pending": "Você já tem um negócio em aberto com esse jogador. Resolva-o primeiro.",
+      "not_eligible": "Esse item não pode ser anunciado na Bolsa $WOC.",
+      "invalid_params": "Verifique o lance inicial, a reserva, o preço de compra imediata e a duração.",
+      "signature_reused": "Essa transação já foi enviada.",
+      "item_locked": "Esse item está bloqueado. Desbloqueie-o nas suas bolsas antes de vendê-lo.",
+      "stepup_required": "Vender na Bolsa exige uma assinatura da sua carteira vinculada.",
+      "stepup_challenge_invalid": "Essa confirmação da carteira não é mais válida. Inicie a venda novamente.",
+      "stepup_challenge_expired": "A confirmação da carteira expirou. Inicie a venda novamente.",
+      "stepup_wallet_mismatch": "Sua carteira vinculada mudou desde que essa confirmação foi emitida. Inicie a venda novamente.",
+      "stepup_binding_mismatch": "Essa confirmação da carteira não corresponde a essa venda. Inicie a venda novamente.",
+      "stepup_signature_invalid": "A assinatura da carteira não pôde ser verificada. Inicie a venda novamente."
     }
   },
   "guide": {
@@ -4540,7 +4928,6 @@ export const pt_BR: EnTranslations = {
       "combat": "Combate",
       "talents": "Talentos",
       "arena": "Arena e JcJ",
-      "valeCup": "Copa do Vale",
       "realmRacers": "Realm Racers",
       "thornhollow": "Campos de Thornhollow",
       "deeds": "Livro dos Feitos",
@@ -4651,6 +5038,8 @@ export const pt_BR: EnTranslations = {
         "fenBlurb": "Além da coroa do outono, um pântano luminoso de salgueiros e águas paradas, e uma cidade atrás de um fosso.",
         "farshoreName": "Farshore",
         "farshoreBlurb": "Uma ilha além do banco de areia, onde o céu se rasga sobre os Campos das Fendas e Gullhaven toca seu sino a cada brecha.",
+        "provingName": "A Costa da Provação",
+        "provingBlurb": "Uma ilha de treinamento tranquila do outro lado do estreito, onde novos aventureiros encontram o próprio ritmo antes de o vale pedir qualquer coisa deles.",
         "nightName": "Nightbloom",
         "nightBlurb": "Um país de meia-noite estrelada onde as flores iluminam os caminhos e Moonrest mantém sua vigília.",
         "hauntName": "Wraithwood",
@@ -4751,7 +5140,6 @@ export const pt_BR: EnTranslations = {
       "reliquary": "O Relicário",
       "sheathe": "Embainhar/Desembainhar Arma",
       "crafting": "Criação",
-      "valeCup": "Copa do Vale",
       "mount": "Montar / Desmontar",
       "calendar": "Calendário de eventos",
       "dungeonFinder": "Localizador de Masmorras",
@@ -4893,6 +5281,7 @@ export const pt_BR: EnTranslations = {
       "ifPartySort": "A ordem em que os membros do grupo são listados: ordem do grupo, função ou nome.",
       "ifPartyShowAuras": "Se benefícios e penalidades aparecem nos quadros do grupo. Interruptores equivalentes cobrem barras de recurso, absorções, mascotes e se você aparece na sua própria lista de grupo.",
       "ifAurasOnPlayerFrame": "Coloca seus benefícios e penalidades também no seu Quadro do Jogador, além da barra de auras.",
+      "ifAlwaysShowAllBuffs": "Mostra todos os benefícios ativos mesmo na predefinição gráfica Baixa, ignorando o limite normal de ícones de benefícios.",
       "ifTargetOfTarget": "Mostra quem o seu alvo está mirando: a forma clássica de saber se o tanque ainda está com a aggro.",
       "ifPetFrame": "Mostra um quadro para o seu mascote.",
       "ifChatFontScale": "Tamanho do texto do chat.",
@@ -5613,6 +6002,10 @@ export const pt_BR: EnTranslations = {
       "farshoreGreeting": "Você veio pelo Ferrywalk? Então é o primeiro em uma semana, e o Guardião vai querer dar uma olhada em você.",
       "farshoreGreeter": "Guardião do Sino Tam, o Desembarque",
       "farshorePlaceNotes": "Gullhaven é a única cidade da ilha e o seu reduto. O Desembarque é onde o Ferrywalk chega à costa, com um sino de vigia erguido sobre a ponta; o Prado da Vigia ocupa o terreno alto a sudeste da cidade, onde um vigia de fendas escuta pela próxima brecha; as Falésias Rompidas se abrem no extremo sul da ilha; e os Campos das Fendas são as fileiras de grãos arruinadas a leste de Gullhaven, ainda fervilhando com o que veio pela brecha ali.",
+      "provingBlurb": "Uma ilha tranquila do outro lado do estreito a partir do vale, mantida como terreno de treinamento: um acampamento, um pátio de treinamento, uma praia semeada de destroços, e uma balsa que vai e volta.",
+      "provingGreeting": "Todos os heróis que o vale já agradeceu estiveram onde você está agora, e nenhum deles sabia qual ponta da lâmina segurar.",
+      "provingGreeter": "Instrutora Maren, Acampamento Dawnrest",
+      "provingPlaceNotes": "O Acampamento Dawnrest é o povoado inteiro da ilha: algumas tendas, uma banca e uma fogueira de reunião. O Cais Antigo encara o vale, onde o círculo de travessia leva os formados pelo estreito; o Pátio de Treinamento ao sul do acampamento mantém suas efígies de palha de pé para quem precisar delas; e a Linha de Destroços é a praia semeada de salvados onde a maré paga a ilha em caixas naufragadas.",
       "travelTitle": "Como se locomover",
       "travelBody": "Cada caminho no reino é percorrido a pé ou a cavalo. Não há rotas de voo, não há táxis, e não há rede de teletransporte: o mapa é um único território conectado, e cada ligação é algo em que você pode pisar. Cumeeiras dividem um reino do próximo, e onde dois reinos compartilham uma cumeeira, a estrada sobe por uma passagem. Nem toda fronteira funciona assim, porém. Ao norte, um longo dique leva a estrada sobre a água, saindo do Vale Velado rumo ao país de neve além dele, e mais ao sul, um fino banco de areia natural chamado Ferrywalk corre para leste desde a costa do Vale até o Desembarque, na ilha da Farshore, que não tem fronteira terrestre alguma. E existe exatamente uma verdadeira porta no mundo aberto inteiro: um véu de crepúsculo no alto de Thornpeak que se abre para o Vale Velado. A cumeeira sul do Vale Velado está selada, sem nenhuma passagem por ela, então é por esse véu que você entra pela primeira vez, e ele se fecha atrás de você na volta.\n\nOnde quer que você caia, a caminhada de volta é curta. Cada zona mantém pelo menos um cemitério com um Guardião Pálido pairando sobre as lápides, e um espírito liberado se ergue no mais próximo deles.\n\nO mapa não termina em uma parede invisível. A terra se esvai em praias e promontórios, e depois em mar aberto. As travessias que o mundo espera que você nade, os estreitos e lagoas entre um reino e o próximo, são calmas e seguras de atravessar. Se você seguir mar aberto adentro, é a própria distância que o faz recuar: você recebe um aviso, e depois outro, e se continuar nadando o mar o esgota até matá-lo. Mergulhar tem seu próprio limite, já que seu fôlego se esgota sob a superfície, então suba para respirar e dê meia-volta quando a água mandar.",
       "mountsTitle": "Montarias",
@@ -5829,36 +6222,6 @@ export const pt_BR: EnTranslations = {
       "ladderBody": "Cada partida move uma classificação de campo de batalha persistente e ligada ao personagem, com vitória ou derrota, e o quadro de todos os tempos ordena os campeões do reino.",
       "rewardsHeading": "O que uma partida paga",
       "rewardsBody": "Toda partida concluída paga Honra: mais por uma vitória, uma consolação por uma derrota ou um empate, além de uma pequena quantia por cada abate que você desfere e por cada um em que presta assistência, então lutar longe das bandeiras ainda vale a pena. Sua primeira vitória de cada dia paga um bônus extra, e o painel avisa enquanto esse bônus ainda está à sua espera. Esse dia pertence só à Honra, e reinicia no seu próprio relógio, não junto com o reinício de instâncias do reino. Enfrentar a mesma equipe repetidamente paga menos pela partida em si depois da primeira vez, estabilizando rápido em um piso em vez de cair a nada, e uma partida abandonada não paga absolutamente nada. Gaste o que você ganhar em qualquer um dos intendentes de Guerra."
-    },
-    "valeCupPage": {
-      "heading": "A Copa do Vale",
-      "intro": "Boarball no Sowfield: escolha um estandarte, escolha uma função e chute um couro de javali empalhado para além do goleiro pelo Balde de Cobre. Sem sangue, sem saque, só o rugido das arquibancadas.",
-      "loreHeading": "O Boarball e a trégua da colheita",
-      "loreOldSow": "Muito antes de os mortos despertarem, os lavradores de Eastbrook jogavam Boarball nos restolhos depois da colheita: dois bandos, um couro de javali recheado de palha e dois portões de carroça arrastados para cada ponta do gramado. A primeira bola, a Velha Porca, pende coberta de bronze sobre a lareira da taverna.",
-      "loreTruce": "Quando o Coliseu Cinzento passou a sancionar jogos de guerra, o marechal Redbrook respondeu com algo mais gentil: uma trégua de colheita permanente no velho gramado. Os portões de carroça viraram traves, o gramado ganhou muros, arquibancadas e um nome, o Sowfield, e o prêmio sempre foi o mesmo balde de leite amassado do qual os vencedores bebiam: o Balde de Cobre.",
-      "howHeading": "Como jogar",
-      "howQueue": "Entre na fila de qualquer lugar pela janela da Copa do Vale, ou fale com o Zelador Bram no portão do Sowfield. Escolha uma chave de um contra um até cinco contra cinco, uma nação de estandarte e uma função esportiva; entre na fila sozinho ou traga seu grupo.",
-      "howMatch": "No pontapé inicial, o kit da sua classe é trocado por um kit esportivo e restaurado com exatidão depois. Os chutes miram no retículo no chão, a bola rebate nas placas laterais, e driblar é só correr com a bola. Marque mais gols que o outro lado antes do fim do tempo; um empate vai para o gol de ouro.",
-      "howTruce": "Ninguém sangra no Sowfield: as ombradas derrubam, nada machuca, e os mascotes ficam de fora da partida.",
-      "spectateBody": "Uma partida acontece por vez no estádio, e qualquer um pode chegar e assistir das arquibancadas.",
-      "bettingHeading": "Uma aposta na grade",
-      "bettingBody": "Os espectadores no Sowfield podem apostar em um lado enquanto uma partida se forma: as apostas se juntam num bolo, e ao apito final os vencedores dividem o bolo dos perdedores na proporção do que apostaram. Uma partida empatada, ou uma zebra em que ninguém apostou, devolve cada moeda. Jogadores escalados na partida não podem apostar nela, e a grade guarda seu registro vitalício de vitórias, derrotas e saldo de moedas.",
-      "practiceHeading": "Partidas de treino e o campo ocioso",
-      "practiceBody": "A janela da Copa do Vale também oferece treino: uma cópia privada do campo onde bots preenchem os dois lados e nada conta para o seu histórico. Faltando um jogador ou dois para valer? Depois de uma curta espera, bots completam os times, e qualquer partida com bots em campo é amistosa, nunca ranqueada. E quando o Sowfield fica ocioso, os bots fazem uma exibição que você pode assistir, e apostar, das arquibancadas; no instante em que jogadores reais ficam prontos, a exibição cede o campo e cada aposta é devolvida.",
-      "nationsHeading": "As oito nações de estandarte",
-      "nationsBody": "Cada time joga sob um estandarte. O capitão escolhe a nação, e se os dois lados hasteiam o mesmo, o time visitante joga com a paleta invertida.",
-      "nationVale": "Verde e dourado, hasteando o feixe de trigo: o time da casa, lavradores até o osso.",
-      "nationMirefen": "Azul-petróleo e cinza sob a garça: pacientes, de pernas longas, nunca apressados.",
-      "nationThornpeak": "Azul-gelo e branco sob o pico da montanha: de passo firme e teimosos.",
-      "nationColiseum": "Vermelho e preto com espadas cruzadas: jogam como se ainda fosse um jogo de guerra.",
-      "nationChoir": "Azul-claro e prata sob o sino: etéreos, precisos e muito calados.",
-      "nationOgre": "Laranja e ocre atrás do punho: ombro na frente e orgulhosos disso.",
-      "nationMoon": "Violeta e prata sob o crescente: jogadores da noite, leves nos pés.",
-      "nationCopperdig": "Cobre e marrom com a picareta: escavadores que nunca param de correr.",
-      "rolesHeading": "Funções esportivas",
-      "rolesBody": "Sua função decide o kit que você leva a campo. Todos chutam; o resto é temperamento. Nas categorias de um contra um e dois contra dois, todos jogam com o kit versátil, então a escolha de função ganha peso a partir do três contra três.",
-      "rewardsHeading": "Regras da trégua",
-      "rewardsBody": "As regras da trégua significam nada de experiência e nada de saque: uma partida decidida conta para o seu histórico e para o quadro de vencedores, e uma vitória também conta para as tarefas de recompensa do dia. Desertar de uma partida suspende sua vaga, e o Zelador não esquece."
     },
     "realmRacersPage": {
       "heading": "Realm Racers",
@@ -6109,7 +6472,7 @@ export const pt_BR: EnTranslations = {
       "deedsHeading": "Feitos que lembram a jornada",
       "deedsBody": "O Livro dos Feitos caminha ao lado de cada passo disso. Sua primeira sintonização conquista Jurado do Ofício e sua primeira obra-prima conquista Mestre Artesão, ambos usáveis como títulos. Cada um dos oito ofícios que podem ser conquistados marca um feito de marco nos 50 de habilidade e coroa seu limite com um título de Grão-Mestre, enquanto a Pesca recebe Sal Velho aos 100 de proficiência e o título de Pescador Mestre aos 200.\n\nHá páginas mais discretas também: feitos para sua primeira coleta e primeira criação, pelos achados raros que a sorte traz no campo, e por começar a desmontar. Tudo é cosmético, apenas títulos e Renome. Um feito nunca concede poder; ele apenas prova que você esteve lá.",
       "startHeading": "Por onde começar",
-      "startBody": "Recém-chegado de estrada em Eastbrook? Procure o Capataz Odell e aceite Um ofício para cada mão: ele vai apontar você para os veios de minério ao redor da Escavação de Cobre, a sudeste da cidade, e te entregar os seus primeiros calos. Cuidado com a escavação em si: os Escavadores de Deeprock acampados nela estão alguns níveis acima de um recém-chegado, então trabalhe primeiro os veios das bordas e deixe o coração do acampamento para quando você tiver subido um pouco de nível. Dali em diante, colha todo veio, arvoredo e canteiro de ervas por que passar enquanto faz missões; a proficiência vem naturalmente para quem viaja.\n\nDe volta à cidade, aperte T para abrir a janela de criação e trabalhe as receitas comuns que todo personagem conhece desde o início. Visite os mestres na forja, nas cozinhas, no tear e na oficina de ferramentas para ver o que eles ensinam, e aceite as encomendas de trabalho deles para uma renda constante. Quando a carta da Guilda te encontrar, você já vai saber qual par parece ser a sua casa.",
+      "startBody": "Recém-chegado de estrada em Eastbrook? Procure o Capataz Odell e aceite Um ofício para cada mão: ele vai apontar você para os veios de minério ao redor da Escavação de Cobre, a nordeste da cidade, e te entregar os seus primeiros calos. Cuidado com a escavação em si: os Escavadores de Deeprock acampados nela estão alguns níveis acima de um recém-chegado, então trabalhe primeiro os veios das bordas e deixe o coração do acampamento para quando você tiver subido um pouco de nível. Dali em diante, colha cada veio, arvoredo e canteiro de ervas por que passar enquanto faz missões; a proficiência vem naturalmente para quem viaja.\n\nDe volta à cidade, aperte T para abrir a janela de criação e trabalhe as receitas comuns que qualquer personagem conhece desde o início. Visite os mestres na forja, nas cozinhas, no tear e na oficina de ferramentas para ver o que eles ensinam, e aceite as encomendas de trabalho deles para uma renda constante. Quando a carta da Guilda te encontrar, você já vai saber qual par parece ser a sua casa.",
       "colStation": "Bancada",
       "colHub": "Centro",
       "colMaster": "Mestre",
@@ -6194,13 +6557,13 @@ export const pt_BR: EnTranslations = {
         },
         "leatherworking": {
           "identityHeading": "Couro para os ágeis",
-          "identityBody": "A escada sobe das simples perneiras, botas e cinto de couro de Fenbridge pelos incomuns gibão, capuz e espaldeira do espreitador do brejo até o raro conjunto do guardião do brejo, o melhor couro que um artesão pode cortar. Duas peças para conjuradores completam o conjunto: o campo comum Couro de Druida de Eastbrook e as Faixas de Couro do Crepúsculo na habilidade 75.\n\nNa roda fica entre Culinária e Alfaiataria. Seu par ativo é o Equipador, Couraria e Alfaiataria, jurado diante da Tecelã Ottilie em Eastbrook; o par Caçador com Culinária existe na roda mas ainda não tem missão de juramento.",
+          "identityBody": "A escada sobe das simples perneiras, botas e cinto de couro de Fenbridge pelos incomuns gibão, capuz e espaldeira do espreitador do brejo até o raro conjunto do guardião do brejo, o melhor couro que um artesão pode cortar. Duas peças para conjuradores completam o conjunto: o campo comum Couro de Druida de Eastbrook e as Faixas de Couro do Crepúsculo na habilidade 50.\n\nNa roda fica entre Culinária e Alfaiataria. Seu par ativo é o Equipador, Couraria e Alfaiataria, jurado diante da Tecelã Ottilie em Eastbrook; o par Caçador com Culinária existe na roda mas ainda não tem missão de juramento.",
           "materialsHeading": "A caçada é a colheita",
-          "materialsBody": "A Couraria é o ofício em que sua rota de nivelamento e sua linha de suprimento são a mesma coisa: a pele áspera é colhida direto de cadáveres que carregam couro, lobos e javalis acima de tudo, e cada cadáver serve a um único coletor, por ordem de chegada. Uma rolagem de colheita rara ou melhor também concede um Couro Imaculado, o espécime assinado que o Gibão do Guardião do Brejo exige, então guarde no banco cada um que encontrar.\n\nO elenco de apoio é pequeno: pernas e seda de aranha, pano feito em casa de humanoides, um único minério de ósmio em cada peça rara do guardião do brejo (seis nas Faixas de Couro do Crepúsculo, a obra máxima), e um Agente de curtimento a 16 cobre no balcão do curtume. O ósmio em si nunca se compra no balcão: minere você mesmo, em Thornpeak ou nos veios iniciais de quase qualquer zona mais nova (só a Farshore extrai ferro), ou compre de outro jogador.",
+          "materialsBody": "A Couraria é o ofício em que sua rota de nivelamento e sua linha de suprimento são a mesma coisa: a pele áspera é colhida direto de cadáveres que carregam couro, lobos e javalis acima de tudo, e cada cadáver serve a um único coletor, por ordem de chegada. Uma rolagem de colheita rara ou melhor também concede um Couro Imaculado, o espécime assinado que o Gibão do Guardião do Brejo exige, então guarde no banco cada um que encontrar.\n\nO elenco de apoio é pequeno: pernas e seda de aranha, pano feito em casa de humanoides, um único minério de ósmio em cada peça rara do guardião do brejo (seis nas Faixas de Couro do Crepúsculo), e um Agente de curtimento a 16 cobre no balcão do curtume. O ósmio em si nunca se compra no balcão: minere você mesmo, em Thornpeak ou nos veios iniciais de quase qualquer zona mais nova (só a Farshore extrai ferro), ou compre de outro jogador.",
           "ladderHeading": "Treinado em Fenbridge",
-          "ladderBody": "Aqui está a peculiaridade: o curtume fica em Fenbridge, na estrada do Pântano de Mirefen, o que faz da Couraria o único ofício profundo treinado lá no pântano. O Curtidor Hesk ensina a escada junto aos seus tanques: o degrau de couro de Fenbridge, gratuito na habilidade 0, o degrau do espreitador do pântano a 25 prata por receita a partir da habilidade 25, e o degrau do guardião do brejo a 1 ouro cada a partir da habilidade 50, cada degrau abrindo conforme seu nível o alcança.\n\nTrês receitas pulam o treinador: os campos comuns (o Gibão de couro curtido e o Couro do Druida de Eastbrook) são criados em qualquer lugar desde o início, e as Faixas de Couro do Crepúsculo são conhecidas por todos, mas ficam na habilidade 75, presas ao curtume. Note que o juramento de Equipador em si é feito de volta em Eastbrook, com Ottilie; só o ensino acontece no pântano.",
+          "ladderBody": "Aqui está a peculiaridade: o curtume fica em Fenbridge, na estrada do Pântano de Mirefen, o que faz da Couraria o único ofício profundo treinado lá no pântano. O Curtidor Hesk ensina a escada junto aos seus tanques: o degrau de couro de Fenbridge, gratuito na habilidade 0, o degrau do espreitador do pântano a 25 prata por receita a partir da habilidade 25, e o degrau do guardião do brejo a 1 ouro cada a partir da habilidade 50, cada degrau abrindo conforme seu nível o alcança.\n\nTrês receitas pulam o treinador: os campos comuns (o Gibão de couro curtido e o Couro do Druida de Eastbrook) são criados em qualquer lugar desde o início, e as Faixas de Couro do Crepúsculo são conhecidas por todos na habilidade 50, presas ao curtume. Note que o juramento de Equipador em si é feito de volta em Eastbrook, com Ottilie; só o ensino acontece no pântano.",
           "routeHeading": "Obras-primas e um caminho funcional até o 125",
-          "routeBody": "Qualquer peça com atributos de verdade rola a chance de obra-prima, desde que a qualidade superior caiba dentro do teto do seu nível, incluído o Couro do Druida de Eastbrook com atributos, e um Couro Imaculado assinado em um Gibão do Guardião do Brejo já garante o bônus de reagente assinado automaticamente; o ósmio conta como material de nível 1 para o proc. Os couros comuns sem atributos não podem gerar proc.\n\nSuba pelo caminho natural: colha cada lobo e cada javali que você abater desde o nível um, deixe os dois campos comuns o levarem até 25 onde quer que você esteja, e então treine o degrau de couro junto aos tanques quando as missões o puxarem para o pântano de qualquer jeito. O espreitador do pântano o leva a 50 e o guardião do brejo a 75; passado isso, as Faixas de Couro do Crepúsculo, uma receita de nível 3 a seis minérios de ósmio, três Couros Imaculados, duas peles ásperas e um Agente de curtimento, pagam a um Equipador sintonizado ganho total até 99 e metade depois, cerca de 75 criações para os cinquenta pontos finais até o limite de 125; abaixo do teto de um ofício principal a receita de nível 3 não ensina nada.\n\nO curtume móvel importa mais para este ofício do que para qualquer outro: especialize-se aos 75 e um alforje de peles vira equipamento acabado na fogueira em vez de uma caminhada de volta a Fenbridge. A ordem de serviço do curtume de Hesk compra oito peles ásperas a cada 30 minutos, um retorno bonito sobre couros que você estava recolhendo de qualquer forma, e o Livro dos Feitos marca O Ofício do Curtidor na habilidade 50, com Grão-Mestre em Couraria no limite."
+          "routeBody": "Qualquer peça com atributos de verdade rola a chance de obra-prima, desde que a qualidade superior caiba dentro do teto do seu nível, incluído o Couro do Druida de Eastbrook com atributos, e um Couro Imaculado assinado em um Gibão do Guardião do Brejo já garante o bônus de reagente assinado automaticamente; o ósmio conta como material de nível 1 para o proc. Os couros comuns sem atributos não podem gerar proc.\n\nSuba pelo caminho natural: colha cada lobo e cada javali que você abater desde o nível um, deixe os dois campos comuns o levarem até 25 onde quer que você esteja, e então treine o degrau de couro junto aos tanques quando as missões o puxarem para o pântano de qualquer jeito. O espreitador do pântano o leva a 50, e as peças do guardião do brejo e as Faixas de Couro do Crepúsculo levam o nível raro de 50 a 75. Passado o 75, essas receitas de nível 2 caem para metade e depois um quarto do ganho, cerca de 150 criações para os cinquenta pontos finais até o limite de 125; abaixo do teto de um ofício principal, elas ainda igualam o teto de criação de qualidade rara em vez de zerar de vez.\n\nO curtume móvel importa mais para este ofício do que para qualquer outro: especialize-se aos 75 e um alforje de peles vira equipamento acabado na fogueira em vez de uma caminhada de volta a Fenbridge. A ordem de serviço do curtume de Hesk compra oito peles ásperas a cada 30 minutos, um retorno bonito sobre couros que você estava recolhendo de qualquer forma, e o Livro dos Feitos marca O Ofício do Curtidor na habilidade 50, com Grão-Mestre em Couraria no limite."
         },
         "cooking": {
           "identityHeading": "A panela que alimenta o grupo",
@@ -6400,7 +6763,7 @@ export const pt_BR: EnTranslations = {
         "q5": "Como desvincular uma peça encomendada e quanto custa?",
         "a5": "Vá a qualquer posto de criação com a peça nas bolsas e pague o mestre. A taxa segue a qualidade do item: 25 pratas para uma peça incomum, 1 ouro para uma rara, 4 ouros para uma épica; uma lendária paga a taxa épica, e uma peça comum encomendada paga a taxa de incomum. Deve ser um posto real: uma estação móvel nunca oferece o serviço.\n\nA taxa compra uma lousa limpa, não uma cura: a peça continua sendo uma encomenda, então ela se vincula novamente a quem a receber na próxima negociação. Se várias cópias vinculadas compartilharem uma pilha, uma cópia é separada e desvinculada por pagamento.",
         "q6": "Onde aprender receitas e quanto custam?",
-        "a6": "As nove receitas comuns de campo e as seis receitas de ferramentas de terra criadas são conhecidas por todos desde o início, e o mesmo vale para três obras máximas vinculadas a bancada (o Manto de Escamas de Forno, o Capuz de Trama Protetora e as Faixas de Couro do Crepúsculo), que não pedem treinador algum, apenas sua bancada. Todo o resto é ensinado pelos mestres residentes em suas bancadas nas três cidades-centro: a maioria fica em Eastbrook, o curtidor mantém o curtume em Fenbridge, e o alquimista mantém o boticário em Highwatch.\n\nAs receitas de treinador correm em degraus: habilidade 0, 25 e 50 para os ofícios de equipamento e de consumíveis, com preços de graça, 25 prata e 1 ouro como taxas únicas; as duas receitas de amuleto do Encantamento ficam no degrau 25, e o fabricante de ferramentas ensina as duas varas de pesca criadas em 75 e 125 por 4 e 16 ouro. Um mestre ensina uma receita assim que a sua faixa naquele ofício alcança a faixa da própria receita, e você precisa estar de pé na bancada dele para aprender: uma bancada móvel não conta.",
+        "a6": "As nove receitas comuns de campo e as seis receitas de ferramentas de terra criadas são conhecidas por todos desde o início, e o mesmo vale para três receitas vinculadas a bancada (o Manto de Escamas de Forno, o Capuz de Trama Protetora e as Faixas de Couro do Crepúsculo), que não pedem treinador algum, apenas sua bancada. O restante é ensinado pelos mestres residentes em suas bancadas nas três cidades-centro: a maioria fica em Eastbrook, o curtidor mantém o curtume em Fenbridge, e o alquimista mantém o boticário em Highwatch.\n\nAs receitas de treinador correm em degraus: habilidade 0, 25 e 50 para os ofícios de equipamento e de consumíveis, com preços de graça, 25 prata e 1 ouro como taxas únicas; as duas receitas de amuleto do Encantamento ficam no degrau 25, e o fabricante de ferramentas ensina as duas varas de pesca criadas em 75 e 125 por 4 e 16 ouro. Um mestre ensina uma receita assim que a sua faixa naquele ofício alcança a faixa da própria receita, e você precisa estar de pé na bancada dele para aprender: uma bancada móvel não conta.",
         "q7": "Por que minha coleta ficou de repente mais lenta?",
         "a7": "O lançamento de coleta começa em 2,5 segundos e é encurtado de duas formas: 0,4 segundos para cada nível de ferramenta que você carrega e consegue manejar acima do nível do próprio nó, e 0,15 segundos assim que o contador do seu ofício cruza a faixa de 100, com um piso de 1,5 segundos. Passe dos nós de nível 1 para os nós de nível 3 e a sua vantagem desaparece, então a mesma picareta volta a golpear mais devagar. Carregar exatamente o nível exigido não compra velocidade nenhuma; ele apenas abre o nó.\n\nO ganho de habilidade desvanece do mesmo jeito que na criação: um nó fica cinza conforme a sua proficiência sobe acima do nível dele (nós de nível 1 não ensinam nada a partir de 75 de proficiência), então a resposta para ganhos lentos são nós de nível mais alto. Esses exigem nas suas bolsas uma ferramenta de pelo menos o nível deles (nenhum nó jamais é trabalhado com as mãos nuas, nível 1 incluído), e uma ferramenta de terra acima do nível 1 ainda pede antes a sua marca de manejo, 40/70/85/100 no próprio ofício dela para os níveis 2 a 5. A Pesca segue a sua própria queda: ganho total abaixo de 50 de proficiência, metade abaixo de 100, um fio de 0,1 abaixo de 150 e 0,02 abaixo de 200, capturas de tralha não ensinam mais nada a partir de 100, e a própria água limita a lição (as águas de nível 1 param de ensinar em 100, as do pântano em 150), então um contador parado também pode significar que você superou aquela água.",
         "q8": "Posso criar longe da cidade?",
@@ -6425,6 +6788,7 @@ export const pt_BR: EnTranslations = {
       "bankBody": "Toda cidade principal mantém uma agência da Arca Dourada, a casa bancária do reino. Fale com o tesoureiro de lá para abrir seu cofre, um espaço particular além das suas bolsas que seu personagem mantém por toda a vida. O que você deixar com eles espera em segurança, seja qual for a agência que você visitar depois.",
       "bankHow": "Com o cofre aberto, clique em um item nas suas bolsas para depositá-lo e clique nele no cofre para pegá-lo de volta. O cofre guarda apenas bens, nunca moedas, e itens de missão ficam com você. Quando suas bolsas lotam no meio da jornada, um único botão recolhe todos os seus materiais de fabricação de uma vez.",
       "bankSlots": "Um cofre novo começa pequeno e cresce com você. O tesoureiro vende espaços adicionais por moedas a preços cada vez mais altos, e jogar online rende espaço bônus por cima, por coisas como um email verificado, contas vinculadas e amigos que você traz para o jogo.",
+      "bankSockets": "Depois da sequência de espaços, o tesoureiro também vende até quatro espaços para bolsas, desbloqueados em ordem e por preços cada vez maiores. Coloque uma bolsa reserva do seu conjunto de transporte em um deles e seus espaços passam a fazer parte do seu cofre: uma bolsa comum amplia todo o armazenamento, enquanto uma bolsa de reagentes adiciona espaço que apenas materiais de criação podem ocupar. Clique em uma bolsa no seu inventário para colocá-la e clique no espaço para retirá-la. Retirá-la nunca custa nada do que você guardou: se o cofre acabar mais cheio do que o espaço reduzido comporta, tudo permanece no lugar e novos depósitos simplesmente aguardam espaço.",
       "buyingTitle": "Comprar e vender",
       "buyingBody": "Fale com um comerciante e escolha ver as mercadorias dele, e a loja abre com três abas: Explorar, Vender e Recompra. Explorar reúne tudo o que ele tem em estoque, seu se você puder pagar. Vender lista o que das suas bolsas ele aceita pagar, e vender uma peça que carrega a própria qualidade sorteada pede que você confirme antes, para que uma cópia valiosa nunca escape por engano. Se você se desfizer de algo de que se arrependa, a aba Recompra guarda suas vendas recentes para você recomprá-las pela moeda que recebeu.",
       "junkTitle": "Limpando a tralha",
@@ -7406,6 +7770,13 @@ export const pt_BR: EnTranslations = {
     "unlink": "Desvincular",
     "unlinkTitle": "Remover a verificação da carteira desta conta",
     "unlinkAria": "Remover a verificação da carteira desta conta",
+    "reauthTitle": "Confirmar alteração de carteira",
+    "reauthUnlinkTitle": "Confirmar remoção de carteira",
+    "reauthHelp": "Para sua segurança, digite a senha da sua conta para autorizar esta alteração.",
+    "reauthNoPassword": "Esta conta entra sem senha. Primeiro defina uma senha nas configurações da conta e tente novamente.",
+    "reauthConfirm": "Confirmar",
+    "reauthCancel": "Cancelar",
+    "reauthClose": "Fechar",
     "signOut": "Desconectar",
     "signOutTitle": "Desconectar o app da carteira neste navegador",
     "signOutAria": "Desconectar o app da carteira neste navegador",
@@ -7461,6 +7832,7 @@ export const pt_BR: EnTranslations = {
       "title": "Conectar uma Carteira Solana",
       "linkBody": "Escolha uma extensão de carteira neste navegador. Você assinará uma mensagem de verificação e depois retornará ao aplicativo para desktop.",
       "paymentBody": "Escolha a carteira vinculada à sua conta e aprove a transação neste navegador.",
+      "stepUpBody": "Escolha a carteira vinculada à sua conta e assine a mensagem de autorização da Exchange $WOC. Assinar é gratuito e não movimenta fundos.",
       "extensionHelp": "Nenhuma extensão de carteira compatível foi encontrada. Instale ou desbloqueie Phantom, Solflare ou outra carteira Solana para navegador e tente novamente.",
       "safety": "O World of ClaudeCraft nunca pede sua frase de recuperação nem sua chave privada.",
       "continueWith": "Continuar com {wallet}",
@@ -7651,7 +8023,7 @@ export const pt_BR: EnTranslations = {
       "portalOpens": "Uma fenda de nível {tier} se abre em {zone}!",
       "portalSealed": "A fenda de nível {tier} em {zone} foi selada.",
       "portalCollapses": "A fenda de nível {tier} em {zone} entra em colapso.",
-      "lootRecoveryNotice": "The rift's entrance will hold a while yet: should your party fall, you may still walk back for what you earned.",
+      "lootRecoveryNotice": "A entrada da fenda ainda vai resistir por um tempo: se seu grupo cair, você ainda pode voltar a pé para pegar o que ganhou.",
       "levelGate": "Somente aventureiros de nível {level} ou superior podem entrar nesta fenda.",
       "deadEntry": "Você não pode entrar em uma fenda enquanto estiver morto.",
       "deadEntryCombat": "Seu grupo ainda está em combate. Os mortos poderão reentrar quando a luta terminar.",
@@ -7848,6 +8220,20 @@ export const pt_BR: EnTranslations = {
     "buyConfirmTitle": "Confirmar compra",
     "buyConfirmBody": "Comprar {item} por {marks} Marcas Heroicas? As compras de marcas não podem ser reembolsadas.",
     "buyConfirmAccept": "Comprar",
+    "buyConfirmCancel": "Cancelar"
+  },
+  "crucibleShop": {
+    "browse": "Trocar sigilos",
+    "browseAria": "Trocar sigilos do Crisol com {name}",
+    "empty": "Nenhuma peça de conjunto pode ser trocada para sua classe.",
+    "balance": "Seus sigilos: {list}",
+    "balanceEntry": "{name} x{count}",
+    "noSigils": "Você não possui sigilos do Crisol.",
+    "price": "1 {sigil}",
+    "buyAria": "Trocar {sigil} por {item}",
+    "buyConfirmTitle": "Confirmar troca",
+    "buyConfirmBody": "Trocar seu {sigil} por {item}? Um sigilo consumido não pode ser reembolsado.",
+    "buyConfirmAccept": "Trocar",
     "buyConfirmCancel": "Cancelar"
   },
   "cardDuel": {
@@ -8678,6 +9064,8 @@ export const pt_BR: EnTranslations = {
         "riftEntrance": "Entrada da fenda: {name}",
         "hostileEnemy": "Inimigo hostil",
         "aggressiveEnemy": "Inimigo atacando você",
+        "bossEnemy": "Chefe: {name}",
+        "bossAggressiveEnemy": "Chefe atacando você: {name}",
         "lootableEnemy": "Inimigo saqueável",
         "corpse": "Seu cadáver",
         "deathZone": "Zona de perigo",
@@ -9067,6 +9455,7 @@ export const pt_BR: EnTranslations = {
       "tradeExpired": "A solicitação de troca expirou.",
       "tradeFailed": "Troca falhou: itens ou dinheiro não estão mais disponíveis.",
       "tradeBound": "Esse item está vinculado e não pode ser negociado.",
+      "tradeWindowIneligible": "Isso só pode ser negociado com jogadores que compartilharam esse saque.",
       "marketListBound": "Esse item está vinculado e não pode ser colocado à venda."
     },
     "logs": {
@@ -9547,7 +9936,8 @@ export const pt_BR: EnTranslations = {
       "clickUseInstant": "Clique para usar instantaneamente em combate",
       "clickUse": "Clique para usar",
       "clickBuyback": "Clique para recomprar",
-      "bagSlots": "Bolsa de {slots} espaços"
+      "bagSlots": "Bolsa de {slots} espaços",
+      "bagSlotsMaterials": "Bolsa de materiais de {slots} espaços"
     },
     "bags": {
       "title": "Bolsas",
@@ -9729,7 +10119,8 @@ export const pt_BR: EnTranslations = {
       "greedAria": "Ganância por {item}",
       "passAria": "Passar em {item}",
       "everyonePassed": "Todos passaram em {item}.",
-      "rolled": "{answered}/{total} rolaram"
+      "rolled": "{answered}/{total} rolaram",
+      "bindsOnPickup": "Vincula ao pegar"
     }
   },
   "entities": {
@@ -9956,7 +10347,7 @@ export const pt_BR: EnTranslations = {
       },
       "ignition": {
         "name": "Ignição",
-        "description": "Passivo: os acertos críticos das suas magias queimam o alvo, causando 40% do dano provocado ao longo de 6 s; acumula. (Maestria de Fogo)"
+        "description": "Passivo: os acertos críticos das suas magias queimam o alvo, causando 30% do dano provocado ao longo de 6 s; acumula. (Maestria de Fogo)"
       },
       "mass_barrier": {
         "name": "Barreira em Massa",
@@ -10126,7 +10517,7 @@ export const pt_BR: EnTranslations = {
       },
       "sap": {
         "name": "Nocaute",
-        "description": "Incapacita o alvo por 8 s. Requer modo furtivo e estar fora de combate. Qualquer dano quebra o efeito."
+        "description": "Incapacita o alvo por 8 s sem quebrar o Duskveil nem iniciar um combate. Requer modo furtivo e estar fora de combate. Qualquer dano quebra o efeito."
       },
       "crippling_poison": {
         "name": "Veneno Plúmbeo",
@@ -10398,7 +10789,7 @@ export const pt_BR: EnTranslations = {
       },
       "aspect_of_the_cheetah": {
         "name": "Forma do Corcel",
-        "description": "Assumi o aspecto do corcel e aumentai vossa velocidade de movimento em 30% por 30 min."
+        "description": "Assumi o aspecto do corcel e aumentai vossa velocidade de movimento em 30% por 30 min. Enquanto estiver ativo, sofrer dano vos desnorteia, reduzindo vossa velocidade de movimento pela metade por 4 s (cada acerto renova a duração)."
       },
       "aimed_shot": {
         "name": "Puxada Longa",
@@ -10522,7 +10913,7 @@ export const pt_BR: EnTranslations = {
       },
       "needle_of_fate": {
         "name": "Needle of Fate",
-        "description": "Perfura o inimigo causando {damage} de dano das Sombras e gera 5 de Condenação se ele carregar seu Evil Eye. Cada acerto no seu Evil Eye primário adiciona um Fio do Destino por 12 s, até 3. Se não houver Evil Eye, a Needle of Fate primeiro marca seu alvo."
+        "description": "Perfura o inimigo causando {damage} de dano das Sombras e gera {needleDoom} de Condenação se ele carregar seu Evil Eye. Cada acerto no seu Evil Eye primário adiciona um Fio do Destino por 12 s, até 3. Se não houver Evil Eye, a Needle of Fate primeiro marca seu alvo."
       },
       "sentence": {
         "name": "Sentence",
@@ -10562,7 +10953,7 @@ export const pt_BR: EnTranslations = {
       },
       "hex_of_violence": {
         "name": "Hex of Violence",
-        "description": "Amaldiçoa o inimigo por 8 s. Suas próximas 3 ações de dano geram 7 de Condenação cada uma e o açoitam com 16 de dano das Sombras."
+        "description": "Amaldiçoa o inimigo por 8 s. Suas próximas 3 ações de dano geram 7 de Condenação cada uma e o açoitam com 17 de dano das Sombras."
       },
       "cruel_pact": {
         "name": "Cruel Pact",
@@ -10620,7 +11011,7 @@ export const pt_BR: EnTranslations = {
       },
       "moonseed": {
         "name": "Semente Lunar",
-        "description": "Somente na Forma de Luniscante. Atinge por {damage} de dano Arcano, adiciona um estágio de Maré Lunar e estende sua Tempestade Lunar em 6 s, até 6 s por aplicação. Com a Maré Lunar cheia, Semente Lunar vira Onda Lunar."
+        "description": "Somente na Forma de Luniscante. Atinge por {damage} de dano Arcano, adiciona um estágio de Maré Lunar e estende sua Tempestade Lunar em 6 s, até {duration} s por aplicação. Com a Maré Lunar cheia, Semente Lunar vira Onda Lunar."
       },
       "rejuvenation": {
         "name": "Florescer Selvagem",
@@ -10768,7 +11159,7 @@ export const pt_BR: EnTranslations = {
       },
       "warspirit_cadence": {
         "name": "Cadência do Espírito Guerreiro",
-        "description": "Passiva: a cada 3.º ataque de arma acertado, aciona 2 Ecos do Coração de Vendaval causando 50% de dano de Natureza e concede Presságio de Tempestade por 12 s. O Presságio de Tempestade torna instantâneo seu próximo Raio em Arco, Abalo ou Águas Restauradoras e reduz o custo de mana em 50%. O Golpe Ancestral conta como 2 ataques. (Espírito Guerreiro)"
+        "description": "Passiva: ataques com duas armas não têm chance extra de errar. A cada 3.º ataque de arma acertado, aciona 2 Ecos do Coração de Vendaval causando 25% de dano de Natureza e concede Presságio de Tempestade por 12 s. O Presságio de Tempestade torna instantâneo seu próximo Raio em Arco, Abalo ou Águas Restauradoras e reduz o custo de mana em 50%. O Golpe Ancestral conta como 2 ataques. (Espírito Guerreiro)"
       },
       "stormsurge": {
         "name": "Ressaca de Tempestade",
@@ -10924,7 +11315,7 @@ export const pt_BR: EnTranslations = {
       },
       "conflagrate": {
         "name": "Conflagrar",
-        "description": "Adianta um pulso futuro de vosso Pacto Ardente, e então incendeia o alvo causando {damage} de dano de Fogo. Gera 1 de Devastação e 1 de Ruína. Guarda 2 cargas. (Distintivo de Destruição)"
+        "description": "Adianta um pulso futuro de vosso Pacto Ardente, e então incendeia o alvo causando {damage} de dano de Fogo. Gera 1 de Devastação e 1 de Ruína. Guarda {charges} cargas. (Distintivo de Destruição)"
       },
       "moonkin_form": {
         "name": "Forma de Luniscante",
@@ -10956,7 +11347,7 @@ export const pt_BR: EnTranslations = {
       },
       "overbloom": {
         "name": "Superflorescência",
-        "description": "Consome 5 de Verdor. Colhe cada cura ao longo do tempo sua em todos os aliados por 60% da cura restante, remove esses efeitos e planta um Florescer Selvagem novo no alvo."
+        "description": "Consome 5 de Verdor. Colhe cada cura ao longo do tempo sua em todos os aliados por {buff}% da cura restante, remove esses efeitos e planta um Florescer Selvagem novo no alvo."
       },
       "summon_imp": {
         "name": "Invocar Emberkin",
@@ -10980,7 +11371,7 @@ export const pt_BR: EnTranslations = {
       },
       "summon_infernal": {
         "name": "Invocar Pyre Colossus",
-        "description": "Faz um Pyre Colossus cair na área-alvo, causando 58-72 de dano de Fogo no impacto. Ele luta por 30 s sem substituir seu demônio, queima inimigos próximos a cada 2 s e gera 1 de Ruína por segundo."
+        "description": "Faz um Pyre Colossus cair na área-alvo, causando 64-79 de dano de Fogo no impacto. Ele luta por 30 s sem substituir seu demônio, queima inimigos próximos a cada 2 s e gera 1 de Ruína por segundo."
       },
       "summon_doomguard": {
         "name": "Invocar Wraithborn",
@@ -11028,7 +11419,7 @@ export const pt_BR: EnTranslations = {
       },
       "iron_resolve": {
         "name": "Determinação de Ferro",
-        "description": "Cerre os dentes e ignore a dor: gasta até 40 de raiva (mínimo de 20) para absorver 4 de dano por ponto de raiva gasto, por até 10 s. (Proteção)"
+        "description": "Cerre os dentes e ignore a dor: gasta até 40 de raiva (mínimo de 20) para absorver {absorbPerRage} de dano por ponto de raiva gasto, por até 10 s. (Proteção)"
       },
       "faultline": {
         "name": "Linha de Falha",
@@ -11328,7 +11719,7 @@ export const pt_BR: EnTranslations = {
       },
       "shadowstep": {
         "name": "Passo Sombrio",
-        "description": "Avança pelas sombras em direção ao seu alvo. (talento de Ladino)"
+        "description": "Avança pelas sombras até seu alvo, amigo ou inimigo, sem quebrar o Duskveil. (talento de Ladino)"
       },
       "silence": {
         "name": "Silêncio",
@@ -11405,7 +11796,7 @@ export const pt_BR: EnTranslations = {
       },
       "seraphic_vigil": {
         "name": "Vigília Seráfica",
-        "description": "Protege um aliado por 30 s. O primeiro golpe que o deixar abaixo de 35% de vida consome a Vigília e o cura em 180. (Distintivo de Bênção)"
+        "description": "Protege um aliado por 30 s. O primeiro golpe que o deixar abaixo de 35% de vida consome a Vigília e o cura em {buff}. (Distintivo de Bênção)"
       },
       "summon_tithefiend": {
         "name": "Invocar Demônio do Dízimo",
@@ -12948,6 +13339,9 @@ export const pt_BR: EnTranslations = {
       "reins_terrorspark_groundshaker": {
         "name": "Chave de ignição: Faíscaterror, Abala-Terra"
       },
+      "reins_rickshaw_mount": {
+        "name": "Rédeas vinculadas: Riquixá de Ossos Vinculados"
+      },
       "reins_drakemaw_raptor": {
         "name": "Rédeas do Raptor de Drakemaw"
       },
@@ -12984,8 +13378,653 @@ export const pt_BR: EnTranslations = {
       "pristine_claw": {
         "name": "Garra Imaculada"
       },
+      "ps_castaway_crate": {
+        "name": "Caixa Naufragada"
+      },
+      "ps_ferry_bell": {
+        "name": "Sino da Balsa"
+      },
       "dawnhold_posy": {
         "name": "Ramalhete do jardim de Dawnhold"
+      },
+      "wayfarers_backpack": {
+        "name": "Mochila do Viajante"
+      },
+      "burlap_reagent_pouch": {
+        "name": "Bolsa de Reagentes de Estopa"
+      },
+      "necromancers_reagent_satchel": {
+        "name": "Bolsa de Reagentes do Necromante"
+      },
+      "duskweave_bag": {
+        "name": "Bolsa da Trama do Crepúsculo"
+      },
+      "resonant_weave_bag": {
+        "name": "Bolsa de Tecido Ressonante"
+      },
+      "foragers_haversack": {
+        "name": "Mochila do Forrageador"
+      },
+      "loombound_reagent_satchel": {
+        "name": "Bornal de Reagentes Loombound"
+      },
+      "ps_briny_lure": {
+        "name": "Isca Salobra"
+      },
+      "ps_lustrous_pearl": {
+        "name": "Pérola Lustrosa"
+      },
+      "mother_of_pearl": {
+        "name": "Madrepérola"
+      },
+      "ps_passing_stone": {
+        "name": "Pedra de Passagem"
+      },
+      "lastflame_core": {
+        "name": "Núcleo da Última Chama"
+      },
+      "slagbreaker_helmet": {
+        "name": "Elmo Quebraescória"
+      },
+      "slagbreaker_shoulder": {
+        "name": "Espaldeiras Quebraescória"
+      },
+      "slagbreaker_chest": {
+        "name": "Hauberque Quebraescória"
+      },
+      "slagbreaker_gloves": {
+        "name": "Manoplas Quebraescória"
+      },
+      "slagbreaker_legs": {
+        "name": "Perneiras Quebraescória"
+      },
+      "emberfury_helmet": {
+        "name": "Elmo da Fúria de Brasa"
+      },
+      "emberfury_shoulder": {
+        "name": "Ombreiras da Fúria de Brasa"
+      },
+      "emberfury_chest": {
+        "name": "Hauberque da Fúria de Brasa"
+      },
+      "emberfury_gloves": {
+        "name": "Manoplas da Fúria de Brasa"
+      },
+      "emberfury_legs": {
+        "name": "Guarda-pernas da Fúria de Brasa"
+      },
+      "forgewall_helmet": {
+        "name": "Elmo da Muralha da Forja"
+      },
+      "forgewall_shoulder": {
+        "name": "Ombreiras da Muralha da Forja"
+      },
+      "forgewall_chest": {
+        "name": "Hauberque da Muralha da Forja"
+      },
+      "forgewall_gloves": {
+        "name": "Manoplas da Muralha da Forja"
+      },
+      "forgewall_legs": {
+        "name": "Guarda-pernas da Muralha da Forja"
+      },
+      "dawnforged_helmet": {
+        "name": "Elmo Forjado pelo Alvorecer"
+      },
+      "dawnforged_shoulder": {
+        "name": "Ombreiras Forjadas pelo Alvorecer"
+      },
+      "dawnforged_chest": {
+        "name": "Hauberque Forjado pelo Alvorecer"
+      },
+      "dawnforged_gloves": {
+        "name": "Manoplas Forjadas pelo Alvorecer"
+      },
+      "dawnforged_legs": {
+        "name": "Guarda-pernas Forjados pelo Alvorecer"
+      },
+      "oathpyre_helmet": {
+        "name": "Elmo Oathpyre"
+      },
+      "oathpyre_shoulder": {
+        "name": "Ombreiras Oathpyre"
+      },
+      "oathpyre_chest": {
+        "name": "Hauberque Oathpyre"
+      },
+      "oathpyre_gloves": {
+        "name": "Manoplas Oathpyre"
+      },
+      "oathpyre_legs": {
+        "name": "Perneiras Oathpyre"
+      },
+      "zealfire_helmet": {
+        "name": "Elmo do Fogo do Zelo"
+      },
+      "zealfire_shoulder": {
+        "name": "Espaldeiras do Fogo do Zelo"
+      },
+      "zealfire_chest": {
+        "name": "Cota de Malha do Fogo do Zelo"
+      },
+      "zealfire_gloves": {
+        "name": "Manoplas do Fogo do Zelo"
+      },
+      "zealfire_legs": {
+        "name": "Perneiras do Fogo do Zelo"
+      },
+      "packlord_emberhide_helmet": {
+        "name": "Capuz do Senhor da Matilha"
+      },
+      "packlord_emberhide_shoulder": {
+        "name": "Espaldares do Senhor da Matilha"
+      },
+      "packlord_emberhide_chest": {
+        "name": "Túnica do Senhor da Matilha"
+      },
+      "packlord_emberhide_gloves": {
+        "name": "Luvas do Senhor da Matilha"
+      },
+      "packlord_emberhide_legs": {
+        "name": "Calças do Senhor da Matilha"
+      },
+      "coldsight_trackers_helmet": {
+        "name": "Capuz dos Rastreadores da Visão Fria"
+      },
+      "coldsight_trackers_shoulder": {
+        "name": "Ombreiras dos Rastreadores da Visão Fria"
+      },
+      "coldsight_trackers_chest": {
+        "name": "Túnica dos Rastreadores da Visão Fria"
+      },
+      "coldsight_trackers_gloves": {
+        "name": "Pegas dos Rastreadores da Visão Fria"
+      },
+      "coldsight_trackers_legs": {
+        "name": "Calças dos Rastreadores da Visão Fria"
+      },
+      "slagsnare_helmet": {
+        "name": "Capuz Laçaescória"
+      },
+      "slagsnare_shoulder": {
+        "name": "Espaldeiras Laçaescória"
+      },
+      "slagsnare_chest": {
+        "name": "Túnica Laçaescória"
+      },
+      "slagsnare_gloves": {
+        "name": "Luvas Laçaescória"
+      },
+      "slagsnare_legs": {
+        "name": "Calções Laçaescória"
+      },
+      "cinderfang_helmet": {
+        "name": "Capuz da Presa de Brasa"
+      },
+      "cinderfang_shoulder": {
+        "name": "Ombreiras da Presa de Brasa"
+      },
+      "cinderfang_chest": {
+        "name": "Túnica da Presa de Brasa"
+      },
+      "cinderfang_gloves": {
+        "name": "Pegas da Presa de Brasa"
+      },
+      "cinderfang_legs": {
+        "name": "Calças da Presa de Brasa"
+      },
+      "smolderstrike_helmet": {
+        "name": "Capuz Golpe de Brasa"
+      },
+      "smolderstrike_shoulder": {
+        "name": "Espaldeiras Golpe de Brasa"
+      },
+      "smolderstrike_chest": {
+        "name": "Túnica Golpe de Brasa"
+      },
+      "smolderstrike_gloves": {
+        "name": "Luvas Golpe de Brasa"
+      },
+      "smolderstrike_legs": {
+        "name": "Calções Golpe de Brasa"
+      },
+      "ashveil_helmet": {
+        "name": "Capuz do Véu de Cinzas"
+      },
+      "ashveil_shoulder": {
+        "name": "Espaldares do Véu de Cinzas"
+      },
+      "ashveil_chest": {
+        "name": "Túnica do Véu de Cinzas"
+      },
+      "ashveil_gloves": {
+        "name": "Pegas do Véu de Cinzas"
+      },
+      "ashveil_legs": {
+        "name": "Calças do Véu de Cinzas"
+      },
+      "emberscreed_helmet": {
+        "name": "Capuz do Credo das Brasas"
+      },
+      "emberscreed_shoulder": {
+        "name": "Manto do Credo das Brasas"
+      },
+      "emberscreed_chest": {
+        "name": "Robe do Credo das Brasas"
+      },
+      "emberscreed_gloves": {
+        "name": "Enfaixamentos do Credo das Brasas"
+      },
+      "emberscreed_legs": {
+        "name": "Perneiras do Credo das Brasas"
+      },
+      "benison_dawnweave_helmet": {
+        "name": "Capuz de Teceluz"
+      },
+      "benison_dawnweave_shoulder": {
+        "name": "Manto de Teceluz"
+      },
+      "benison_dawnweave_chest": {
+        "name": "Veste de Teceluz"
+      },
+      "benison_dawnweave_gloves": {
+        "name": "Bandagens de Mão de Teceluz"
+      },
+      "benison_dawnweave_legs": {
+        "name": "Perneiras de Teceluz"
+      },
+      "vesperash_helmet": {
+        "name": "Capuz de Cinzas de Vésper"
+      },
+      "vesperash_shoulder": {
+        "name": "Manto de Cinzas de Vésper"
+      },
+      "vesperash_chest": {
+        "name": "Robe de Cinzas de Vésper"
+      },
+      "vesperash_gloves": {
+        "name": "Enfaixaduras de Mão de Cinzas de Vésper"
+      },
+      "vesperash_legs": {
+        "name": "Perneiras de Cinzas de Vésper"
+      },
+      "stormkindled_helmet": {
+        "name": "Elmo Acendido pela Tempestade"
+      },
+      "stormkindled_shoulder": {
+        "name": "Espaldeiras Acendidas pela Tempestade"
+      },
+      "stormkindled_chest": {
+        "name": "Hauberque Acendido pela Tempestade"
+      },
+      "stormkindled_gloves": {
+        "name": "Manoplas Acendidas pela Tempestade"
+      },
+      "stormkindled_legs": {
+        "name": "Perneiras Acendidas pela Tempestade"
+      },
+      "warspirit_emberscale_helmet": {
+        "name": "Elmo de Escama de Brasa"
+      },
+      "warspirit_emberscale_shoulder": {
+        "name": "Espaldeiras de Escama de Brasa"
+      },
+      "warspirit_emberscale_chest": {
+        "name": "Cota de Escama de Brasa"
+      },
+      "warspirit_emberscale_gloves": {
+        "name": "Manoplas de Escama de Brasa"
+      },
+      "warspirit_emberscale_legs": {
+        "name": "Perneiras de Escama de Brasa"
+      },
+      "stonehearth_helmet": {
+        "name": "Elmo Coração de Pedra"
+      },
+      "stonehearth_shoulder": {
+        "name": "Espaldeiras Coração de Pedra"
+      },
+      "stonehearth_chest": {
+        "name": "Hauberque Coração de Pedra"
+      },
+      "stonehearth_gloves": {
+        "name": "Manoplas Coração de Pedra"
+      },
+      "stonehearth_legs": {
+        "name": "Perneiras Coração de Pedra"
+      },
+      "springmender_helmet": {
+        "name": "Elmo Curador da Nascente"
+      },
+      "springmender_shoulder": {
+        "name": "Espaldeiras Curador da Nascente"
+      },
+      "springmender_chest": {
+        "name": "Hauberque Curador da Nascente"
+      },
+      "springmender_gloves": {
+        "name": "Manoplas Curador da Nascente"
+      },
+      "springmender_legs": {
+        "name": "Perneiras Curador da Nascente"
+      },
+      "chronoweave_helmet": {
+        "name": "Capuz de Tecelume"
+      },
+      "chronoweave_shoulder": {
+        "name": "Manto de Tecelume"
+      },
+      "chronoweave_chest": {
+        "name": "Veste de Tecelume"
+      },
+      "chronoweave_gloves": {
+        "name": "Bandagens de Mão de Tecelume"
+      },
+      "chronoweave_legs": {
+        "name": "Perneiras de Tecelume"
+      },
+      "pyroclast_helmet": {
+        "name": "Capuz Piroclasta"
+      },
+      "pyroclast_shoulder": {
+        "name": "Manto Piroclasta"
+      },
+      "pyroclast_chest": {
+        "name": "Robe Piroclasta"
+      },
+      "pyroclast_gloves": {
+        "name": "Enfaixamentos Piroclastas"
+      },
+      "pyroclast_legs": {
+        "name": "Perneiras Piroclastas"
+      },
+      "frostquench_helmet": {
+        "name": "Capuz do Gelo Extinto"
+      },
+      "frostquench_shoulder": {
+        "name": "Manto do Gelo Extinto"
+      },
+      "frostquench_chest": {
+        "name": "Veste do Gelo Extinto"
+      },
+      "frostquench_gloves": {
+        "name": "Enfaixamentos do Gelo Extinto"
+      },
+      "frostquench_legs": {
+        "name": "Perneiras do Gelo Extinto"
+      },
+      "hexthread_helmet": {
+        "name": "Capuz Hexthread"
+      },
+      "hexthread_shoulder": {
+        "name": "Manto Hexthread"
+      },
+      "hexthread_chest": {
+        "name": "Robe Hexthread"
+      },
+      "hexthread_gloves": {
+        "name": "Enfaixamentos Hexthread"
+      },
+      "hexthread_legs": {
+        "name": "Perneiras Hexthread"
+      },
+      "gravebrand_helmet": {
+        "name": "Capuz da Marca Tumular"
+      },
+      "gravebrand_shoulder": {
+        "name": "Manto da Marca Tumular"
+      },
+      "gravebrand_chest": {
+        "name": "Veste da Marca Tumular"
+      },
+      "gravebrand_gloves": {
+        "name": "Enfaixamentos da Marca Tumular"
+      },
+      "gravebrand_legs": {
+        "name": "Perneiras da Marca Tumular"
+      },
+      "ruincaller_helmet": {
+        "name": "Capuz do Chamador de Ruínas"
+      },
+      "ruincaller_shoulder": {
+        "name": "Manto do Chamador de Ruínas"
+      },
+      "ruincaller_chest": {
+        "name": "Robe do Chamador de Ruínas"
+      },
+      "ruincaller_gloves": {
+        "name": "Enfaixamentos do Chamador de Ruínas"
+      },
+      "ruincaller_legs": {
+        "name": "Perneiras do Chamador de Ruínas"
+      },
+      "moonscorch_helmet": {
+        "name": "Capuz Moonscorch"
+      },
+      "moonscorch_shoulder": {
+        "name": "Ombreiras Moonscorch"
+      },
+      "moonscorch_chest": {
+        "name": "Túnica Moonscorch"
+      },
+      "moonscorch_gloves": {
+        "name": "Pegas Moonscorch"
+      },
+      "moonscorch_legs": {
+        "name": "Calças Moonscorch"
+      },
+      "wildfang_emberhide_helmet": {
+        "name": "Capuz de Pele de Brasa da Presa Selvagem"
+      },
+      "wildfang_emberhide_shoulder": {
+        "name": "Espaldeiras de Pele de Brasa da Presa Selvagem"
+      },
+      "wildfang_emberhide_chest": {
+        "name": "Túnica de Pele de Brasa da Presa Selvagem"
+      },
+      "wildfang_emberhide_gloves": {
+        "name": "Luvas de Pele de Brasa da Presa Selvagem"
+      },
+      "wildfang_emberhide_legs": {
+        "name": "Calções de Pele de Brasa da Presa Selvagem"
+      },
+      "cinderbark_helmet": {
+        "name": "Capuz de Casca Incandescente"
+      },
+      "cinderbark_shoulder": {
+        "name": "Ombreiras de Casca Incandescente"
+      },
+      "cinderbark_chest": {
+        "name": "Túnica de Casca Incandescente"
+      },
+      "cinderbark_gloves": {
+        "name": "Pegas de Casca Incandescente"
+      },
+      "cinderbark_legs": {
+        "name": "Calças de Casca Incandescente"
+      },
+      "grovespring_helmet": {
+        "name": "Capuz da Nascente do Bosque"
+      },
+      "grovespring_shoulder": {
+        "name": "Ombreiras da Nascente do Bosque"
+      },
+      "grovespring_chest": {
+        "name": "Túnica da Nascente do Bosque"
+      },
+      "grovespring_gloves": {
+        "name": "Pegas da Nascente do Bosque"
+      },
+      "grovespring_legs": {
+        "name": "Calças da Nascente do Bosque"
+      },
+      "sigil_anvil_helmet": {
+        "name": "Elmo do Sigilo da Bigorna"
+      },
+      "sigil_ember_helmet": {
+        "name": "Elmo do Sigilo da Brasa"
+      },
+      "sigil_tempest_helmet": {
+        "name": "Elmo do Sigilo da Tempestade"
+      },
+      "sigil_anvil_shoulder": {
+        "name": "Manto do Sigilo da Bigorna"
+      },
+      "sigil_ember_shoulder": {
+        "name": "Manto do Sigilo da Brasa"
+      },
+      "sigil_tempest_shoulder": {
+        "name": "Manto do Sigilo da Tempestade"
+      },
+      "sigil_anvil_chest": {
+        "name": "Robe do Sigilo da Bigorna"
+      },
+      "sigil_ember_chest": {
+        "name": "Robe do Sigilo da Brasa"
+      },
+      "sigil_tempest_chest": {
+        "name": "Robe do Sigilo da Tempestade"
+      },
+      "sigil_anvil_gloves": {
+        "name": "Luvas do Sigilo da Bigorna"
+      },
+      "sigil_ember_gloves": {
+        "name": "Luvas do Sigilo da Brasa"
+      },
+      "sigil_tempest_gloves": {
+        "name": "Luvas do Sigilo da Tempestade"
+      },
+      "sigil_anvil_legs": {
+        "name": "Perneiras do Sigilo da Bigorna"
+      },
+      "sigil_ember_legs": {
+        "name": "Perneiras do Sigilo da Brasa"
+      },
+      "sigil_tempest_legs": {
+        "name": "Perneiras do Sigilo da Tempestade"
+      },
+      "cord_of_the_last_flame": {
+        "name": "Cordão da Última Chama"
+      },
+      "cindersoaked_slippers": {
+        "name": "Chinelos Encharcados de Cinza"
+      },
+      "springbinder_sash": {
+        "name": "Faixa Atador da Nascente"
+      },
+      "steps_of_quiet_water": {
+        "name": "Passos das Águas Silenciosas"
+      },
+      "cinderbark_cinch": {
+        "name": "Cinturão de Casca Incandescente"
+      },
+      "ashenbark_treads": {
+        "name": "Pisantes de Casca Cinzenta"
+      },
+      "slagstalker_belt": {
+        "name": "Cinto Perseguidor de Escória"
+      },
+      "ashrunner_boots": {
+        "name": "Botas do Corredor de Cinzas"
+      },
+      "moonscorch_waistwrap": {
+        "name": "Faixa de Cintura Moonscorch"
+      },
+      "scorchgrove_striders": {
+        "name": "Passos do Bosque Calcinado"
+      },
+      "grovetender_belt": {
+        "name": "Cinturão do Guardião do Bosque"
+      },
+      "dewfall_moccasins": {
+        "name": "Mocassins da Queda de Orvalho"
+      },
+      "forgewall_girdle": {
+        "name": "Cinturão da Muralha da Forja"
+      },
+      "anvilstance_sabatons": {
+        "name": "Escarpes da Postura da Bigorna"
+      },
+      "warforged_waistguard": {
+        "name": "Cinturão Forjado para a Guerra"
+      },
+      "furnace_march_greaves": {
+        "name": "Grevas da Marcha da Fornalha"
+      },
+      "stormkindled_chain": {
+        "name": "Cota Acendida pela Tempestade"
+      },
+      "thundershock_treads": {
+        "name": "Passos do Choque do Trovão"
+      },
+      "tidebinder_links": {
+        "name": "Elos Atadores das Marés"
+      },
+      "springwarden_sabatons": {
+        "name": "Sabatons Guardião da Nascente"
+      },
+      "pendant_of_the_first_tempering": {
+        "name": "Pingente da Primeira Têmpera"
+      },
+      "ignivars_ember_choker": {
+        "name": "Gargantilha de Brasas de Ignivar"
+      },
+      "locket_of_the_last_flame": {
+        "name": "Medalhão da Última Chama"
+      },
+      "heartspring_amulet": {
+        "name": "Amuleto da Nascente do Coração"
+      },
+      "seal_of_the_forgewall": {
+        "name": "Sinete da Muralha da Forja"
+      },
+      "band_of_marked_strikes": {
+        "name": "Anel dos Golpes Marcados"
+      },
+      "circle_of_cinders": {
+        "name": "Círculo das Cinzas"
+      },
+      "loop_of_quiet_springs": {
+        "name": "Elo das Nascentes Silenciosas"
+      },
+      "bulwark_of_the_inner_crucible": {
+        "name": "Bastião do Crisol Interior"
+      },
+      "ember_wardens_barrier": {
+        "name": "Barreira do Guardião das Brasas"
+      },
+      "orb_of_the_last_spring": {
+        "name": "Orbe da Última Primavera"
+      },
+      "cinder_of_the_first_design": {
+        "name": "Brasa do Primeiro Projeto"
+      },
+      "forgefathers_warhammer": {
+        "name": "Martelo de Guerra do Pai da Forja"
+      },
+      "cinderfang_kris": {
+        "name": "Kris da Presa de Brasa"
+      },
+      "slagrender_cleaver": {
+        "name": "Cortante Rasgaescória"
+      },
+      "anvilguard_blade": {
+        "name": "Lâmina da Guarda da Bigorna"
+      },
+      "heart_of_the_end_greatblade": {
+        "name": "Montante do Coração do Fim"
+      },
+      "staff_of_the_last_spring": {
+        "name": "Cajado da Última Nascente"
+      },
+      "forgefire_spire": {
+        "name": "Pináculo do Fogo da Forja"
+      },
+      "springtouched_crozier": {
+        "name": "Cajado Tocado pela Nascente"
+      },
+      "wand_of_quenched_sparks": {
+        "name": "Varinha das Faíscas Extintas"
       },
       "conjured_water4": {
         "name": "Água de Nascente Conjurada"
@@ -13763,6 +14802,12 @@ export const pt_BR: EnTranslations = {
       },
       "reins_thunderstrut_gobbler": {
         "name": "Rédeas de Pavoneia-Trovões, o Grande Peru"
+      },
+      "varkhul_forgebreaker": {
+        "name": "Quebraforja, Engenho de Varkhul"
+      },
+      "varkhul_emberward": {
+        "name": "Guarda da Brasa, Baluarte de Varkhul"
       }
     },
     "mobs": {
@@ -13958,6 +15003,27 @@ export const pt_BR: EnTranslations = {
       "nythraxis_scourge_of_thornpeak": {
         "name": "Nythraxis, Flagelo de Thornpeak"
       },
+      "ignivar_herald_of_the_last_flame": {
+        "name": "Ignivar, Arauto da Última Chama"
+      },
+      "ignivar_heart_of_the_end": {
+        "name": "Chamacinzas Ignivar"
+      },
+      "ignivar_ember_sentinel": {
+        "name": "Sentinela das Brasas"
+      },
+      "ignivar_crucible_warden": {
+        "name": "Guardião do Crisol"
+      },
+      "ignivar_cinder_artificer": {
+        "name": "Artífice das Brasas"
+      },
+      "varkhul_forgefather_of_the_last_flame": {
+        "name": "Varkhul, Pai da Forja da Última Chama"
+      },
+      "derelict_mech": {
+        "name": "Mecanoide Abandonado"
+      },
       "reliquary_ledger_wraith": {
         "name": "Espectro do Registro"
       },
@@ -14026,9 +15092,6 @@ export const pt_BR: EnTranslations = {
       },
       "tolling_bell": {
         "name": "Sino Badalante"
-      },
-      "vale_cup_ball": {
-        "name": "Bola de Javali"
       },
       "thunzharr_waking_peak": {
         "name": "Thunzharr, o Pico Desperto"
@@ -14327,6 +15390,15 @@ export const pt_BR: EnTranslations = {
       "fisher_bram": {
         "name": "Pescador Bram"
       },
+      "training_effigy": {
+        "name": "Efígie de Treinamento"
+      },
+      "shore_scuttler": {
+        "name": "Corredor da Costa"
+      },
+      "mister_crabs": {
+        "name": "Senhor Caranguejos"
+      },
       "rift_hellguard": {
         "name": "Guarda Infernal"
       },
@@ -14485,7 +15557,7 @@ export const pt_BR: EnTranslations = {
       "apothecary_lin": {
         "name": "Boticária Lin",
         "title": "Herbalista",
-        "greeting": "Cuidado onde pisa nas matas do leste, amigo."
+        "greeting": "Cuidado onde pisa nas matas do nordeste, amigo."
       },
       "brother_aldric": {
         "name": "Irmão Aldric",
@@ -14612,6 +15684,21 @@ export const pt_BR: EnTranslations = {
         "title": "Sacerdote do Vale",
         "greeting": "Do cemitério da capela ao teto do mundo... a trilha termina aqui. Sinto a montanha ouvindo."
       },
+      "archivist_maelin_emberward": {
+        "name": "Arquivista Maelin Guarda da Brasa",
+        "title": "Arquivista do Crisol",
+        "greeting": "Cada marca de martelo neste lugar é uma frase. Ajude-me a ler o que Varkhul tentou esconder."
+      },
+      "archivist_maelin_ember_projection": {
+        "name": "Projeção de Brasa de Maelin",
+        "title": "Projeção de Brasa",
+        "greeting": "As brasas levam a voz de Maelin adiante pela forja."
+      },
+      "crucible_quartermaster": {
+        "name": "Intendente Bronn Guarda da Brasa",
+        "title": "Intendente do Crisol",
+        "greeting": "A forja reconhece os seus. Traga-me um sigilo do Crisol e eu o prepararei para a guerra."
+      },
       "brother_halven": {
         "name": "Irmão Halven",
         "title": "Guardião do Relicário",
@@ -14626,11 +15713,6 @@ export const pt_BR: EnTranslations = {
         "name": "O Guardião Pálido",
         "title": "Vigia dos Mortos",
         "greeting": "Descanse agora, espírito. Posso devolver você ao seu corpo, mas a travessia de volta deixa você fraco."
-      },
-      "groundskeeper_bram": {
-        "name": "Zelador Bram",
-        "title": "Zelador do Sowfield",
-        "greeting": "A trégua vale no Sowfield, {className}: só chutes e ombradas. Quer jogar pelo Balde de Cobre?"
       },
       "chronicler_saul": {
         "name": "Saul, o Cronista",
@@ -14917,6 +15999,51 @@ export const pt_BR: EnTranslations = {
         "title": "Mestre do Boticário",
         "greeting": "Meça duas vezes e despeje uma vez, {className}. O boticário não tem paciência com reagentes derramados."
       },
+      "wayfarer_bryn": {
+        "name": "Viajante Bryn",
+        "title": "Guia do Porto",
+        "greeting": "Eastbrook recebe todos que chegam, amigo. E para os inseguros, sempre há a Costa da Provação: o sino da balsa junto à caixa de correio do Correio dos Corvos te leva para lá em qualquer dia do ano, e seu gêmeo na ilha te traz de volta para casa."
+      },
+      "instructor_maren": {
+        "name": "Instrutora Maren",
+        "title": "Mestra da Provação",
+        "greeting": "Todos os heróis que o vale já agradeceu estiveram onde você está agora, {className}, e nenhum deles sabia qual ponta da lâmina segurar. É para isso que esta costa existe. Pergunte, pratique e falhe onde falhar não custa nada."
+      },
+      "quartermaster_finch": {
+        "name": "Intendente Finch",
+        "title": "Equipadora do Acampamento",
+        "greeting": "Meu balcão guarda exatamente uma coisa à venda, {playerName}: uma bolsa extra para o que você for pegando pelo caminho, quando sua lição pedir isso. Tudo o mais aqui é salvado destinado ao vale. Moeda compra a bolsa, e trabalho ganha a moeda. Essa é a economia inteira, e ela nunca fica mais complicada. Só maior."
+      },
+      "ferryman_odo": {
+        "name": "Barqueiro Odo",
+        "title": "Guardião da Travessia",
+        "greeting": "Recém-saído da travessia, {playerName}? O Guardião Tam mantém a Pista na praia logo ao sul do meu cais: percorra as raias dele primeiro, e suas pernas vão agradecer. Cada guardião nesta costa te passa adiante quando seu trabalho termina, e o cartão no alto da sua tela sempre sabe o caminho. Quando o vale te chamar de volta, toque o sino ao lado do meu cais, e a travessia vai te deixar na cidade de Eastbrook."
+      },
+      "bursar_wick": {
+        "name": "Tesoureiro Wick",
+        "title": "A Arca Dourada",
+        "greeting": "A Arca Dourada mantém uma mesa até mesmo aqui, {playerName}. Tudo o que você deposita comigo espera no mesmo cofre por trás de cada tesoureiro em cada cidade, protegido de lobos, água e do seu próprio julgamento pior."
+      },
+      "warden_tam": {
+        "name": "Guardião Tam",
+        "title": "Guardião da Pista",
+        "greeting": "Estas raias são a Pista, {playerName}, e todos os aventureiros que o vale respeita já as percorreram. Os postes de lanterna ficam acesos a noite toda, então as raias nunca fecham."
+      },
+      "overseer_pell": {
+        "name": "Supervisor Pell",
+        "title": "Supervisor da Pista",
+        "greeting": "Eu cronometro cada corrida que desce por estas raias, {playerName}, e já vi um jogo de pernas bem pior. O caminho atrás de mim sobe até o pátio de treinamento: é lá que o jogo de pernas vira jogo de espada."
+      },
+      "drillmaster_rook": {
+        "name": "Sargento Rook",
+        "title": "Mestre do Pátio",
+        "greeting": "Palha primeiro, cascos depois, {playerName}. Uma efígie ensina seu braço a golpear; os corredores lá na praia ensinam o golpe a acertar algo que se importa."
+      },
+      "tidewarden_nel": {
+        "name": "Guardiã da Maré Nel",
+        "title": "Guardiã da Praia",
+        "greeting": "A maré leva e a maré paga, {playerName}. Eu mantenho a conta das duas coisas: o que os corredores arrancam dos destroços, e o que mãos honestas trazem de volta por este caminho."
+      },
       "tidewatcher_ondrel": {
         "name": "Ondrel Vane",
         "title": "Vigia das Marés",
@@ -14926,7 +16053,7 @@ export const pt_BR: EnTranslations = {
     "quests": {
       "q_prof_intro": {
         "title": "Um ofício para cada mão",
-        "text": "Toda alma em Eastbrook exerce um ofício além da espada, {playerName}. Há veios de minério nas rochas ao redor da Escavação de Cobre, a sudeste da cidade. Vá bater com uma picareta e trabalhe 5 deles você mesmo; eu saberei a diferença.",
+        "text": "Toda alma em Eastbrook exerce um ofício além da espada, {playerName}. Há veios de minério nas rochas ao redor da Escavação de Cobre, a nordeste da cidade, além das trilhas dos lobos. Vá bater com uma picareta e trabalhe 5 deles você mesmo; eu saberei a diferença.",
         "completion": "Viu? Minério coletado e calos nas mãos. Continue com a mineração, a lenharia e a colheita de ervas durante suas viagens, e quando estiver de volta à cidade, observe o quadro do Foco do Vilarejo perto do mercado e a bancada de artesanato por perto. Há uma troca justa esperando em tudo isso, se você quiser.",
         "objectives": {
           "0": {
@@ -14956,7 +16083,7 @@ export const pt_BR: EnTranslations = {
       },
       "q_boars": {
         "title": "Peles de Javali Eriçado",
-        "text": "Pele de javali faz ótimas mochilas de viagem, e os campos estão cheios deles. Traga-me 5 peles eriçadas.",
+        "text": "Pele de javali faz ótimas mochilas de viagem, e os campos a noroeste da cidade estão cheios deles. Traga-me 5 peles eriçadas.",
         "completion": "Ah, belas peles eriçadas. Vão render bom preço.",
         "objectives": {
           "0": {
@@ -14966,7 +16093,7 @@ export const pt_BR: EnTranslations = {
       },
       "q_spiders": {
         "title": "A Ameaça de Sableweb",
-        "text": "Os espreitadores da floresta oriental fiam uma seda que preciso para meus emplastros, e além disso se multiplicaram demais. Abata 6 Espreitadores de Sableweb e corte 4 glândulas de seda de suas barrigas.",
+        "text": "Os espreitadores da floresta a nordeste fiam uma seda que preciso para meus emplastros, e além disso se multiplicaram demais. Abata 6 Espreitadores de Sableweb e corte 4 glândulas de seda de suas barrigas.",
         "completion": "Ugh, ainda se mexem. Perfeito. Você mereceu isto.",
         "objectives": {
           "0": {
@@ -15009,7 +16136,7 @@ export const pt_BR: EnTranslations = {
       },
       "q_supplies": {
         "title": "Suprimentos roubados",
-        "text": "Os bandidos levaram minha última carroça: ferramentas, sal e bom linho de Eastbrook. Recupere 4 caixas no acampamento sudoeste.",
+        "text": "Os bandidos levaram minha última carroça: ferramentas, sal e bom linho de Eastbrook. Recupere 4 caixas no acampamento noroeste.",
         "completion": "Minhas caixas! Quase sem arranhões. Você é uma maravilha.",
         "objectives": {
           "0": {
@@ -15102,7 +16229,7 @@ export const pt_BR: EnTranslations = {
       },
       "q_bandits": {
         "title": "Bandidos do Vale",
-        "text": "Um bando de degoladores acampou nas colinas sudoeste. Três carroças foram roubadas esta semana. Mate 10 bandidos do Vale.",
+        "text": "Um bando de degoladores acampou nas colinas noroeste. Três carroças foram roubadas esta semana. Mate 10 bandidos do Vale.",
         "completion": "Dez lâminas a menos no escuro. Pegue isto, você mereceu.",
         "objectives": {
           "0": {
@@ -15720,6 +16847,39 @@ export const pt_BR: EnTranslations = {
           }
         }
       },
+      "q_ignivar_echoes_in_iron": {
+        "title": "Ecos no Ferro",
+        "text": "Esses autômatos não são soldados. São rascunhos. Rompa cada linha de montagem e escute quando o casco final cair. A forja se lembra do que Varkhul tentou apagar.",
+        "completion": "Os ecos confirmam. Varkhul aprisionou a água da Última Nascente moribunda em metal vivo. Esses autômatos foram têmperas malsucedidas. Apenas Ignivar resistiu.",
+        "objectives": {
+          "0": {
+            "label": "Sentinelas das Brasas destruídas"
+          },
+          "1": {
+            "label": "Guardiões do Crisol destruídos"
+          }
+        }
+      },
+      "q_ignivar_heralds_heart": {
+        "title": "O Coração do Arauto",
+        "text": "O sobrevivente citado em cada eco é Ignivar. Varkhul o chamou de arauto, selo e chave. Derrote-o. Se os registros estiverem certos, sua morte revelará o que ele foi forjado para guardar.",
+        "completion": "Ignivar nunca foi apenas um guardião. Seu coração era a chave, e suas placas finais abriram o Crisol selado abaixo.",
+        "objectives": {
+          "0": {
+            "label": "Ignivar derrotado"
+          }
+        }
+      },
+      "q_ignivar_the_forgefather": {
+        "title": "O Pai da Forja",
+        "text": "O caminho abaixo leva a Varkhul, Pai da Forja da Última Chama. Ele aprisionou a Última Nascente para dar vida ao metal e depois forjou Ignivar para manter o crime selado. Entre no Crisol Interior e encerre sua obra.",
+        "completion": "A forja enfim está silenciosa. A nascente talvez nunca se recupere, mas Varkhul não transformará mais vidas em correntes.",
+        "objectives": {
+          "0": {
+            "label": "Varkhul derrotado"
+          }
+        }
+      },
       "q_mogger": {
         "title": "Mogger deve cair",
         "text": "Mogger partiu carroças, achatou cercas e matou gado suficiente para esvaziar metade do Vale. Não o enfrente só. Leve dois companheiros fortes ao prado oeste e derrube a fera de vez.",
@@ -15782,7 +16942,7 @@ export const pt_BR: EnTranslations = {
       },
       "q_prof_amends_outfitter": {
         "title": "Fios Reunidos",
-        "text": "De volta ao meu tear afinal. Não guardo rancor, {playerName}, mas o fio lembra uma mão que o largou, e o custo de retomá-lo se mede cada vez mais longo. Abata as aranhas da web que lotam os bosques a leste, e o trabalho vai assentar suas mãos antes de tocarem boa seda de novo.",
+        "text": "De volta ao meu tear afinal. Não guardo rancor, {playerName}, mas o fio lembra uma mão que o largou, e o custo de retomá-lo se mede cada vez mais longo. Abata os Espreitadores de Sableweb que lotam os bosques a nordeste, e o trabalho vai assentar suas mãos antes de tocarem boa seda de novo.",
         "completion": "Estável de novo. Couraria e Alfaiataria voltam às suas mãos como principais. Meça duas vezes desta vez antes de se afastar.",
         "objectives": {
           "0": {
@@ -15792,7 +16952,7 @@ export const pt_BR: EnTranslations = {
       },
       "q_prof_amends_apothecary": {
         "title": "De Volta ao Fogão",
-        "text": "Veja quem voltou à minha panela. Sem ressentimentos, {playerName}, uma cozinha sempre tem espaço, mas sabe que a conta fica maior cada vez que você vai embora. Vá diminuir os javalis selvagens no prado a oeste, porque suor honesto é o primeiro ingrediente, e vai lembrar suas mãos do trabalho.",
+        "text": "Veja quem voltou à minha panela. Sem ressentimentos, {playerName}, uma cozinha sempre tem espaço, mas sabe que a conta fica maior cada vez que você vai embora. Vá diminuir os javalis selvagens no prado a noroeste, porque suor honesto é o primeiro ingrediente, e vai lembrar suas mãos do trabalho.",
         "completion": "O velho sabor voltou. Alquimia e Culinária estão de volta ao seu fogo como principais. Fique um tempo desta vez.",
         "objectives": {
           "0": {
@@ -16883,6 +18043,109 @@ export const pt_BR: EnTranslations = {
           }
         }
       },
+      "q_ps_the_gauntlet": {
+        "title": "Percorra a Pista",
+        "text": "Todos os pares de pernas que o vale respeita já percorreram estas raias antes, {playerName}. Ande pela primeira raia a oeste até sua bandeira, gire ao redor dela, ande pela raia sul até a segunda, depois se desvie pela última raia até a bandeira vermelha. Passe pelas bandeiras em ordem, e o cartão no alto da sua tela vai te mostrar cada botão conforme você avança. O Supervisor Pell cronometra cada corrida do outro lado: quando a bandeira vermelha ficar para trás, ele está bem ali para registrar.",
+        "completion": "Cronometrei essa corrida, {playerName}, e já reprovei pernas mais rápidas. A Pista é sua. O caminho atrás de mim sobe até o pátio de treinamento, onde o Sargento Rook transforma jogo de pernas em jogo de espada: ele tem sua próxima tarefa.",
+        "objectives": {
+          "0": {
+            "label": "Bandeira da Pista ultrapassada"
+          }
+        }
+      },
+      "q_ps_strike_true": {
+        "title": "Golpeie Certeiro",
+        "text": "Primeiro o jogo de pernas, agora o braço, {playerName}. O pátio de treinamento fica no caminho atrás de mim, e suas efígies de palha foram feitas para levar pancada. Se você se perder, pressione M para abrir o mapa: toda tarefa que você carrega está marcada nele. Ande até uma efígie e clique com o botão esquerdo nela: isso a torna seu alvo, e o nome dela vai aparecer no alto da sua tela. Só então pressione 1, ou clique no primeiro ícone da barra de ação embaixo, para golpear. Continue golpeando até uma ceder; ela não vai revidar, efígies nunca revidam. O Sargento Rook vigia o pátio pelo lado oeste, onde o caminho da praia começa: pressione F nele para entregar sua derrubada.",
+        "completion": "Um só golpe limpo, e sua pegada já mais firme. Lembre-se dessa sensação, {playerName}: mire, golpeie e continue golpeando. A palha nunca se importa. A próxima coisa em que você golpear vai se importar.",
+        "objectives": {
+          "0": {
+            "label": "Efígie de Treinamento derrubada"
+          }
+        }
+      },
+      "q_ps_hone_the_edge": {
+        "title": "Afie o Fio",
+        "text": "Um golpe é só um golpe, {playerName}, e a palha aguenta o dia inteiro. Isso não vence nada para você. Olhe para a fileira de botões na parte de baixo da sua tela: essa fileira é o seu ofício, e cada um deles faz algo que só o seu braço não consegue. Você já tem um. Volte às efígies e use-o: escolha seu alvo, depois pressione o botão que o pátio marcar para você, três vezes seguidas. Não fique só cortando a palha à toa; faça a coisa que você sabe fazer realmente acontecer. Depois volte até mim.",
+        "completion": "Agora você está lutando, não se debatendo à toa. Essa fileira cresce a cada nível que você ganha, {playerName}, e quem vive mais é quem sabe lê-la. A palha não liga para qual botão você usou. O vale vai ligar.",
+        "objectives": {
+          "0": {
+            "label": "Habilidade acertada em uma efígie"
+          }
+        }
+      },
+      "q_ps_shell_and_claw": {
+        "title": "Casco e Garra",
+        "text": "A palha nunca se importa, {playerName}, então aqui está algo que se importa. Os corredores da costa vasculham a linha de destroços na praia distante: siga o caminho a oeste do meu pátio e ele te leva direto até eles. Eles beliscam de volta, então observe sua barra de vida e continue golpeando: clique com o botão esquerdo em um deles para torná-lo seu alvo, depois use a habilidade que o pátio te ensinou (o instrutor nomeia seu botão), e não pare até o casco rachar. Três bastam. Depois suba o caminho até a elevação ao norte: a Guardiã da Maré Nel mantém a contagem da praia, e ela conta seus cascos.",
+        "completion": "Três cascos rachados e todos os seus dedos intactos: uma primeira luta e tanto, {playerName}. Os corredores beliscam os destroços mais rápido do que a maré traz salvados, então cada um que você abate é moeda que alguém mantém.",
+        "objectives": {
+          "0": {
+            "label": "Corredor da Costa abatido"
+          }
+        }
+      },
+      "q_ps_mother_of_pearl": {
+        "title": "Madrepérola",
+        "text": "Três cascos rachados, {playerName}, mas a linha de destroços guarda um rei, e ele senta sobre um prêmio que vale mais que todas as caixas desta praia. Leve esta Isca Salobra até a poça de maré na ponta oeste da praia, além dos destroços. Fique na beira da água, pressione B para abrir suas bolsas, e clique com o botão esquerdo na isca para acordá-lo. O Senhor Caranguejos belisca bem mais forte que seus primos pequenos, então observe sua barra de vida, continue atacando, e recue pela areia se precisar recuperar o fôlego. Quando ele cair, ande até o casco dele e pressione F para saquear a Pérola Lustrosa. Traga essa pérola de volta para mim.",
+        "completion": "A Pérola Lustrosa, arrancada do próprio velho rei dos baixios. Meu pai tirava o chapéu para aquele caranguejo toda manhã de sua vida de trabalho; um respeito é devido. Fique parado... pronto. Enfiada, montada e sua, {playerName}: a Madrepérola. Pressione B para abrir suas bolsas e clique com o botão esquerdo no anel para colocá-lo, depois pressione C para abrir sua ficha de personagem e vê-lo na sua mão. Uma coisa pequena, mas cada parte de você fica melhor usando-a.",
+        "objectives": {
+          "0": {
+            "label": "Senhor Caranguejos morto"
+          },
+          "1": {
+            "label": "Pérola Lustrosa recolhida"
+          }
+        }
+      },
+      "q_ps_the_wreck_line": {
+        "title": "A Linha de Destroços",
+        "text": "Meus carregadores tiram salvados dos destroços antigos e carregam pela subida até o Acampamento Dawnrest, {playerName}, e metade das caixas nunca termina a subida: são largadas pelo caminho e esquecidas. Siga meu caminho em direção ao acampamento e você vai passar bem ao lado das perdidas. Abrir uma é simples: ande até uma caixa até o nome dela aparecer, depois pressione F, ou clique com o botão esquerdo na própria caixa, e ela vai entregar o que guarda. Seis delas vão limpar a linha, e lembre-se: F é a mesma tecla para qualquer baú, nó de coleta ou porta que você for encontrar. A Intendente Finch mantém a banca do acampamento e compra cada pedaço de salvado: entregue a ela o que você recolher.",
+        "completion": "Corda, alcatrão, e meia roda de queijo que o mar de algum jeito poupou: eu fico com tudo, {playerName}. Um par de costas que carrega o que encontra vale mais para este acampamento do que qualquer lâmina, e as suas acabaram de limpar a linha inteira numa única subida.",
+        "objectives": {
+          "0": {
+            "label": "Caixa Naufragada aberta"
+          }
+        }
+      },
+      "q_ps_pouch_and_purse": {
+        "title": "Bolsa e Bolso",
+        "text": "Mais uma lição antes do vale, {playerName}, e é a que mantém aventureiros vivos: o que você carrega. Sua mochila tem dezesseis compartimentos, e ao lado dela esperam quatro espaços de bolsa vazios; cada bolsa que você prende soma seu próprio espaço ao total. Então: pressione F em mim de novo para abrir minha banca, clique com o botão esquerdo na Bolsa de Linho entre minhas mercadorias para comprá-la, depois pressione B para abrir suas bolsas e clique com o botão esquerdo na bolsa ali para prendê-la em um espaço livre. A Instrutora Maren treina junto à fogueira alguns passos a leste: mostre a ela a bolsa no seu cinto.",
+        "completion": "Uma bela bolsa. Prenda-a se ainda não o fez: pressione B para abrir suas bolsas, depois clique com o botão esquerdo na bolsa para encaixá-la em um espaço livre, e mais seis compartimentos são seus para encher de encrenca. Agora a metade da lição que nenhuma bolsa comporta, {playerName}: o que você não pode carregar, a Arca Dourada guarda. O Tesoureiro Wick mantém sua mesa de arca subindo o caminho a oeste, e ele abre o mesmo cofre que cada tesoureiro em cada cidade compartilha; mais espaço de cofre pode ser comprado assim que sua bolsa de moedas crescer o bastante. Mantenha seus objetos de valor no banco e suas bolsas com espaço sobrando. Uma mochila cheia já encerrou mais aventuras do que qualquer lobo.",
+        "objectives": {
+          "0": {
+            "label": "Bolsa de linho comprada"
+          }
+        }
+      },
+      "q_ps_the_signpost": {
+        "title": "Notícias ao Vento",
+        "text": "Falta um hábito para aprender, {playerName}, e ele não precisa de lâmina nenhuma: leia os quadros. A placa da guilda fica no portão do acampamento a poucos passos a sudoeste da minha fogueira, e guildas e grupos viajantes publicam seus chamados nela. Ande até ela e pressione F, ou clique com o botão esquerdo, para ler o que está publicado, depois volte e me conte o que o vento trouxe. Uma placa como essa fica em cada cidade em que você algum dia vai entrar.",
+        "completion": "Então agora você sabe como as notícias se espalham pelo vale, {playerName}: não por mensageiros, por quadros. Confira-os em cada cidade por onde passar; metade de uma aventura começa com três linhas de tinta em um deles.",
+        "objectives": {
+          "0": {
+            "label": "Placa da guilda lida"
+          }
+        }
+      },
+      "q_ps_the_long_walk": {
+        "title": "A Longa Caminhada",
+        "text": "Falta uma lição, {playerName}, e é a que eu não posso te contar: você precisa ter feito isso uma vez. Você vai morrer lá fora. Todos morrem, e isso não é o fim de nada. Pegue esta Pedra de Passagem. Pressione B para abrir suas bolsas e clique com o botão esquerdo nela, e ela vai te derrubar bem onde você está. Depois siga as instruções na sua tela: libere seu espírito, caminhe de volta até seu próprio corpo, e entre nele. Seu corpo espera, a caminhada é grátis, e você não perde nada ao fazê-la.",
+        "completion": "E aqui está você de volta, sem nenhum estrago. Lembre-se de como foi essa sensação, {playerName}, porque da próxima vez vai ter dentes envolvidos, e ninguém por perto para explicar. Seu corpo espera, a caminhada é grátis, e a única coisa que a morte realmente custa é o tempo que leva para voltar.",
+        "objectives": {
+          "0": {
+            "label": "Caminhou de volta dentre os mortos"
+          }
+        }
+      },
+      "q_ps_set_sail": {
+        "title": "Zarpar",
+        "text": "Não sobrou nada nesta costa que você já não tenha corrido, vencido, aberto ou comprado, {playerName}. Você está pronto, e Eastbrook tem trabalho de verdade esperando. Volte pela estrada da costa até o cais, pressione F no Barqueiro Odo, e diga a ele que eu disse que você ganhou sua travessia. Pressione L sempre que perder o fio do que deve a quem: esse é o seu diário de missões.",
+        "completion": "A Maren disse isso, foi? Elogio e tanto, vindo de uma mulher que uma vez me fez praticar nós de amarração por uma semana inteira. Toque o sino ao lado do meu cais sempre que estiver pronto, {playerName}, e a travessia vai te deixar bem no meio da cidade de Eastbrook. Cuidado com os lobos.",
+        "objectives": {
+          "0": {
+            "label": "Reportar-se ao Barqueiro Odo"
+          }
+        }
+      },
       "q_gc_down_the_windway": {
         "title": "Descendo a Trilha do Vento",
         "text": "Você fez a subida, {playerName}, então o vento decidiu te manter. Wickharbor fica a leste ao longo da estrada das colinas, protegida a sotavento de sua enseada. A Capitã do Porto Odile conta toda alma que atravessa o desfiladeiro, e vai querer contar você também. Diga a ela que a Trilha do Vento ainda está aberta.",
@@ -17080,6 +18343,9 @@ export const pt_BR: EnTranslations = {
           },
           "11": {
             "label": "A Calçada de Farshore"
+          },
+          "12": {
+            "label": "Docas de Eastbrook"
           }
         }
       },
@@ -17442,6 +18708,27 @@ export const pt_BR: EnTranslations = {
             "label": "Os Campos das Fendas"
           }
         }
+      },
+      "proving_shore": {
+        "name": "A Costa da Provação",
+        "welcome": "A Costa da Provação não pede nada de você além de tempo. Conheça o acampamento, golpeie as efígies, percorra a linha de destroços, e quando estiver pronto, o Barqueiro Odo vai te levar através até o vale.",
+        "pois": {
+          "0": {
+            "label": "Acampamento Dawnrest"
+          },
+          "1": {
+            "label": "O Cais Antigo"
+          },
+          "2": {
+            "label": "O Pátio de Treinamento"
+          },
+          "3": {
+            "label": "A Linha de Destroços"
+          },
+          "4": {
+            "label": "A Pista"
+          }
+        }
       }
     },
     "dungeons": {
@@ -17469,6 +18756,31 @@ export const pt_BR: EnTranslations = {
         "name": "Arena de raide de Nythraxis",
         "enterText": "Você atravessa a porta real selada.",
         "leaveText": "Você retorna ao ar frio de Thornpeak."
+      },
+      "ignivar_forge_lift": {
+        "name": "Elevador da Forja",
+        "enterText": "O elevador da forja estremece e desce; o estrondo dos martelos sobe para encontrá-lo.",
+        "leaveText": "O elevador o leva de volta ao ar livre da fortaleza."
+      },
+      "ignivar_forge_approach": {
+        "name": "Salões da Primeira Forja",
+        "enterText": "O estrondo dos martelos ecoa pelos Salões da Primeira Forja.",
+        "leaveText": "Você se afasta da primeira forja e volta a respirar livremente."
+      },
+      "ignivar_raid_arena": {
+        "name": "Crisol da Última Nascente",
+        "enterText": "O calor tremula sobre as águas seladas do Crisol.",
+        "leaveText": "Você se afasta do Crisol e volta a respirar livremente."
+      },
+      "ignivar_molten_assembly": {
+        "name": "Montagem Incandescente",
+        "enterText": "O portão aberto leva a um salão de montagem incandescente.",
+        "leaveText": "Você deixa a linha de montagem e retorna ao Crisol."
+      },
+      "ignivar_inner_crucible": {
+        "name": "Crisol Interior",
+        "enterText": "O portão aberto leva mais fundo ao Crisol.",
+        "leaveText": "Você deixa as profundezas silenciosas do Crisol."
       },
       "wildheart_basin": {
         "name": "A Bacia de Wildheart",
@@ -17685,69 +18997,199 @@ export const pt_BR: EnTranslations = {
         "body": "Um de seus principais atingiu a maestria, o TOPO mesmo, kaboom, a escada toda, feito. Não distribuo elogios, distribuo pavios, mas aqui, pegue os dois: você é brilhante e ligeiramente assustador. Vá deixar as montanhas nervosas."
       },
       "woc_market_delivery": {
-        "sender": "The Exchange Broker",
-        "subject": "Your Exchange purchase",
-        "body": "The sale is settled and the goods are yours. The attached parcel carries the exact item you paid for, held in escrow from the moment it was listed until your payment cleared.\n\nA record of the sale lives in the Exchange ledger.\n\n- The Exchange Broker"
+        "sender": "O Corretor da Bolsa",
+        "subject": "Sua compra na Bolsa",
+        "body": "A venda foi concluída e os bens são seus. O pacote anexado traz exatamente o item pelo qual você pagou, mantido em custódia desde o momento em que foi anunciado até seu pagamento ser confirmado.\n\nUm registro da venda fica no livro-razão da Bolsa.\n\n- O Corretor da Bolsa"
       },
       "woc_market_return": {
-        "sender": "The Exchange Broker",
-        "subject": "Your Exchange listing has ended",
-        "body": "Your listing ended without a completed sale: the auction found no buyer, the reserve was not met, the listing was withdrawn, or the winning bidder failed to settle. Your goods return to you unharmed with this letter, exactly as they were escrowed.\n\n- The Exchange Broker"
+        "sender": "O Corretor da Bolsa",
+        "subject": "Seu anúncio na Bolsa terminou",
+        "body": "Seu anúncio terminou sem uma venda concluída: o leilão não encontrou comprador, a reserva não foi atingida, o anúncio foi retirado, ou o arrematante vencedor não concluiu o pagamento. Seus bens voltam a você intactos com esta carta, exatamente como foram colocados em custódia.\n\n- O Corretor da Bolsa"
       },
       "woc_market_sold": {
-        "sender": "The Exchange Broker",
-        "subject": "Your Exchange listing sold",
-        "body": "Your listing sold and the buyer settled in full. The Exchange ledger carries the record of the sale, and your Exchange activity shows the settled amount and its breakdown.\n\n- The Exchange Broker"
+        "sender": "O Corretor da Bolsa",
+        "subject": "Seu anúncio na Bolsa foi vendido",
+        "body": "Seu anúncio foi vendido e o comprador pagou o valor total. O livro-razão da Bolsa traz o registro da venda, e sua atividade na Bolsa mostra o valor recebido e seu detalhamento.\n\n- O Corretor da Bolsa"
       }
     },
     "itemSets": {
+      "ashveil": {
+        "name": "Traje do Véu de Cinzas",
+        "bonus2": "Golpe do Ocultador causa 25% a mais de dano.",
+        "bonus4": "Seu golpe de Lâmina Velada causa o triplo do dano, em vez do dobro."
+      },
+      "benison_dawnweave": {
+        "name": "Trama do Alvorecer Benévolo",
+        "bonus2": "A cura de resgate da Vigilância Seráfica sobe para 270, em vez de 180. Dano sofrido não atrasa mais suas conjurações.",
+        "bonus4": "Quando a Vigilância Seráfica é ativada, seu aliado também é curado em 15% da vida máxima dele ao longo de 10 s."
+      },
       "boundstone_vanguard": {
         "name": "Vanguarda Pedra-vínculo",
         "bonus3": "Aumenta a velocidade de ataque e de lançamento em 15%."
       },
+      "chronoweave": {
+        "name": "Vestes da Trama Etérea",
+        "bonus2": "Eco Temporal converte 50% do seu dano Arcano de alvo único em cura. Dano sofrido não atrasa mais suas conjurações.",
+        "bonus4": "O tempo de recarga da Cascata Temporal é reduzido em 5 s."
+      },
+      "cinderbark": {
+        "name": "Proteção de Casca de Brasa",
+        "bonus2": "Garras Varredoras têm 30% de chance de armazenar um Sangue Antigo adicional.",
+        "bonus4": "Rompemedula causa 30% mais dano, e sua guarda emergencial não substitui mais o golpe."
+      },
+      "cinderfang": {
+        "name": "Sudário da Presa de Brasa",
+        "bonus2": "O reembolso de energia do Ritual Venenoso aumenta para 20 por gerador.",
+        "bonus4": "O tempo de recarga do Dardo Venenoso é reduzido para 4 s."
+      },
+      "coldsight_trackers": {
+        "name": "Rastreadores da Visão Fria",
+        "bonus2": "Tiro Medido restaura 5 de Foco adicionais.",
+        "bonus4": "Acertos críticos de Puxada Longa prolongam o Foco Frio em 2 s, até 6 s por ativação."
+      },
       "crownforged": {
         "name": "Traje de Batalha Bonewrought",
         "bonus2": "Aumenta o poder de ataque em 40.",
-        "bonus3": "Aumenta a força em 15, o vigor em 15 e a velocidade de ataque e de lançamento em 15%.",
-        "bonus4": "Seus acertos críticos com armas estilhaçam o alvo com Estilhaço Ósseo, causando 8 de sangramento a cada 2 s por 12 s. Acumula até 3 vezes."
+        "bonus4": "Seus acertos críticos com armas estilhaçam o alvo com Estilhaço Ósseo, causando 8 de sangramento a cada 2 s por 12 s. Acumula até 3 vezes.",
+        "bonus6": "Aumenta em 4% as velocidades de ataque e conjuração e em 3% o Acerto. Acertos críticos da sua arma estilhaçam o alvo com Estilhaçaossos, causando 5 de dano a cada 2 s por 12 s. Acumula até 3 vezes."
+      },
+      "dawnforged": {
+        "name": "Vestes Forjadas pelo Alvorecer",
+        "bonus2": "Farol de Luz copia 55% das suas curas diretas. Dano sofrido não atrasa mais suas conjurações.",
+        "bonus4": "O Abraço do Alvorecer fortalecido da Ressonância Radiante é instantâneo."
       },
       "deathlord": {
         "name": "Traje de Batalha Barrowlord",
         "bonus2": "Aumenta o poder de ataque em 40.",
-        "bonus3": "Aumenta a força em 15 e o vigor em 15.",
-        "bonus4": "Seus acertos críticos com armas têm 50% de chance de conceder Poderio Tumular, aumentando o poder de ataque em 60 por 10 s."
+        "bonus4": "Seus acertos críticos com armas têm 50% de chance de conceder Poderio Tumular, aumentando o poder de ataque em 60 por 10 s.",
+        "bonus6": "Aumenta em 4% as velocidades de ataque e conjuração e em 3% o Acerto. Acertos críticos da sua arma estilhaçam o alvo com Estilhaçaossos, causando 5 de dano a cada 2 s por 12 s. Acumula até 3 vezes."
+      },
+      "emberfury": {
+        "name": "Arreios da Fúria de Brasa",
+        "bonus2": "Sua Fúria dura 6 s em vez de 4.",
+        "bonus4": "Sangria sempre deixa você Enfurecido, e sua cura aumenta para 8% da sua vida máxima."
+      },
+      "emberscreed": {
+        "name": "Vestes do Credo das Brasas",
+        "bonus2": "O vínculo da sua Doutrina converte 10% a mais do seu dano Sagrado em cura. Dano sofrido não atrasa mais suas conjurações.",
+        "bonus4": "Quando seu Salmo de Proteção é totalmente consumido, seu próximo Hino Purificador em até 10 s é instantâneo. Só pode ocorrer uma vez a cada 15 s."
+      },
+      "forgewall": {
+        "name": "Égide da Muralha da Forja",
+        "bonus2": "Determinação de Ferro converte raiva em 5 de absorção por ponto, em vez de 4.",
+        "bonus4": "Conjurar Quebra-escudo reduz o tempo de recarga restante de Determinação de Ferro em 2 s."
+      },
+      "frostquench": {
+        "name": "Trama do Gelo Extinto",
+        "bonus2": "Acertos críticos de Lança de Geada armazenam um segundo Pingente de Gelo, até o máximo de 5. Dano sofrido não atrasa mais suas conjurações.",
+        "bonus4": "Talho Invernal aplica 3 cargas de Frio do Inverno, em vez de 2."
+      },
+      "gravebrand": {
+        "name": "Regalia da Marca Tumular",
+        "bonus2": "O tempo de recarga do Comando Ceifador é reduzido em 2 s. Dano sofrido não atrasa mais suas conjurações.",
+        "bonus4": "Os golpes uníssonos do Comando Ceifador causam 25% a mais de dano."
       },
       "greyjaw_stalker": {
         "name": "Equipamento do Espreitador de Greyjaw",
         "bonus3": "Aumenta a velocidade de ataque e de lançamento em 15%."
       },
+      "grovespring": {
+        "name": "Paramento da Nascente do Bosque",
+        "bonus2": "Cura Rápida consome primeiro sua própria Florescência Selvagem ou Segunda Florescência e cura 25% a mais. Dano sofrido não atrasa mais suas conjurações.",
+        "bonus4": "Florescência Excedente colhe 75% dos seus efeitos restantes e armazena 1 Verdância depois."
+      },
+      "hexthread": {
+        "name": "Sudário Hexthread",
+        "bonus2": "Needle of Fate concede 2 de Condenação adicionais. Dano recebido não atrasa mais suas conjurações.",
+        "bonus4": "Passing Sentence devolve 10 de Condenação."
+      },
+      "moonscorch": {
+        "name": "Vestimenta Moonscorch",
+        "bonus2": "Semente Lunar pode estender Tempestade Lunar duas vezes por aplicação, até o máximo de 12 s. Dano recebido não atrasa mais suas conjurações.",
+        "bonus4": "Surto Lunar e Despertar Solar causam 25% mais dano."
+      },
       "necromancers": {
         "name": "Vestes Mournweave",
         "bonus2": "Aumenta o poder mágico em 20. Dano recebido não atrasa mais suas conjurações (100% de resistência a atraso de conjuração).",
-        "bonus3": "Aumenta o intelecto em 10 e o vigor em 10.",
-        "bonus4": "Suas magias têm 10% de chance de conceder Conjuração Clara, tornando sua próxima magia gratuita."
+        "bonus4": "Suas magias têm 10% de chance de conceder Conjuração Clara, tornando sua próxima magia gratuita.",
+        "bonus6": "Aumenta a velocidade de ataque e de lançamento em 4%. Suas magias têm 10% de chance de conceder Soulblaze, aumentando o poder mágico em 25 por 10 s."
       },
       "nighttalon": {
         "name": "Traje de Couro Direfang",
         "bonus2": "Aumenta o poder de ataque em 40.",
-        "bonus3": "Aumenta a agilidade em 15, a chance de crítico em 2% e a velocidade de ataque e de lançamento em 15%.",
-        "bonus4": "Seus acertos críticos com armas abrem um Corte Dilacerado, causando 6 de sangramento no alvo a cada 2 s por 12 s. Acumula até 3 vezes."
+        "bonus4": "Seus acertos críticos com armas abrem um Corte Dilacerado, causando 6 de sangramento no alvo a cada 2 s por 12 s. Acumula até 3 vezes.",
+        "bonus6": "Aumenta a velocidade de ataque e de lançamento em 4% e o Acerto em 3%. Seus acertos críticos com armas abrem um Corte Dilacerado, causando 4 de sangramento no alvo a cada 2 s por 12 s. Acumula até 3 vezes."
+      },
+      "oathpyre": {
+        "name": "Bastião Oathpyre",
+        "bonus2": "A chance de Golpe do Guardião dos Votos preparar Represália Solar aumenta para 30%, e bloquear um ataque a prepara 40% das vezes.",
+        "bonus4": "Consumir Represália Solar concede um escudo equivalente a 6% da sua vida máxima por 10 s."
+      },
+      "packlord_emberhide": {
+        "name": "Pele de Brasa do Packlord",
+        "bonus2": "O tempo de recarga de Comando da Matilha é reduzido para 3 s.",
+        "bonus4": "A chance de Comando da Matilha reiniciar o tempo de recarga de Debandada aumenta para 30%."
+      },
+      "pyroclast": {
+        "name": "Regalia Pyroclast",
+        "bonus2": "Escaldar sempre desfere um acerto crítico contra alvos com 35% de vida ou menos. Dano recebido não atrasa mais suas conjurações.",
+        "bonus4": "Acertos críticos das suas magias de Fogo fora de Transe da Fênix reduzem o tempo de recarga restante em 1,5 s."
+      },
+      "ruincaller": {
+        "name": "Vestes Ruincaller",
+        "bonus2": "Conflagrar acumula 3 cargas. Dano recebido não atrasa mais suas conjurações.",
+        "bonus4": "Seta da Ruína causa 20% mais dano."
+      },
+      "slagbreaker": {
+        "name": "Equipamento de Batalha Slagbreaker",
+        "bonus2": "Mão Vermelha fortalece seu próximo Golpe Mutilador em 30% por acúmulo, em vez de 20%.",
+        "bonus4": "A cada segunda conjuração de Mão Vermelha, o tempo de recarga restante de Abre-Brechas é reduzido em 3 s."
+      },
+      "slagsnare": {
+        "name": "Paramentos Slagsnare",
+        "bonus2": "Golpe Estripador gera 20 de Foco.",
+        "bonus4": "Rasga-Feridas que consome 3 de Ímpeto de Caça os preserva. Isso não pode ocorrer mais de uma vez a cada 8 s."
+      },
+      "smolderstrike": {
+        "name": "Couros Smolderstrike",
+        "bonus2": "Golpe no Corpo causa 20% mais dano.",
+        "bonus4": "Golpe de Nocaute devolve 6 s do tempo de recarga restante de Torrente de Lâminas."
       },
       "soulflame": {
         "name": "Vestes Wraithfire",
         "bonus2": "Aumenta o poder mágico em 20. Dano recebido não atrasa mais suas conjurações (100% de resistência a atraso de conjuração).",
-        "bonus3": "Aumenta o intelecto em 15, o espírito em 15 e a velocidade de ataque e de lançamento em 15%.",
-        "bonus4": "Suas magias têm 10% de chance de conceder Chama da Alma, aumentando o poder mágico em 40 por 10 s."
+        "bonus4": "Suas magias têm 10% de chance de conceder Chama da Alma, aumentando o poder mágico em 40 por 10 s.",
+        "bonus6": "Aumenta a velocidade de ataque e de lançamento em 4%. Suas magias têm 10% de chance de conceder Soulblaze, aumentando o poder mágico em 25 por 10 s."
+      },
+      "springmender": {
+        "name": "Escamas Springmender",
+        "bonus2": "O tempo de recarga de Chamado da Maré é reduzido em 4 s. Dano recebido não atrasa mais suas conjurações.",
+        "bonus4": "Cura em Cascata alcança um quarto aliado e coleta Correntes Curativas em 150%."
+      },
+      "stonehearth": {
+        "name": "Bastião Stonehearth",
+        "bonus2": "Enquanto estiver sob Vínculo de Pedra, Águas Curativas Conjuradas pela Tempestade não custam mana e curam 25% a mais.",
+        "bonus4": "Enquanto estiver sob Vínculo de Pedra, completar uma cadência cura você em 3% da sua vida máxima."
       },
       "stormcallers": {
         "name": "Vestes Galecall",
         "bonus2": "Aumenta o poder mágico em 20. Dano recebido não atrasa mais suas conjurações (100% de resistência a atraso de conjuração).",
-        "bonus3": "Aumenta o intelecto em 15, o espírito em 15 e a velocidade de ataque e de lançamento em 15%.",
-        "bonus4": "Suas magias têm 10% de chance de conceder Chama da Alma, aumentando o poder mágico em 40 por 10 s."
+        "bonus4": "Suas magias têm 10% de chance de conceder Chama da Alma, aumentando o poder mágico em 40 por 10 s.",
+        "bonus6": "Aumenta a velocidade de ataque e de lançamento em 4%. Suas magias têm 10% de chance de conceder Soulblaze, aumentando o poder mágico em 25 por 10 s."
+      },
+      "stormkindled": {
+        "name": "Regalia Stormkindled",
+        "bonus2": "Desencadear Arma em Marca Pírica concede 3 de Trovão. Dano recebido não atrasa mais suas conjurações.",
+        "bonus4": "O bônus de Abalo Terreno por Trovão aumenta para 30%."
       },
       "vale_arcanist": {
         "name": "Vestes do Arcanista do Vale",
         "bonus3": "Aumenta a velocidade de ataque e de lançamento em 15%."
+      },
+      "vesperash": {
+        "name": "Sudário Vesperash",
+        "bonus2": "O tempo de recarga de Invocar Diabrete do Dízimo é reduzido em 6 s. Dano recebido não atrasa mais suas conjurações.",
+        "bonus4": "Invocar seu Diabrete do Dízimo reinicia o tempo de recarga de Fratura Mental, e o diabrete devolve o dobro de mana por acerto."
       },
       "warfare_ashstalker": {
         "name": "Equipamento Ashstalker",
@@ -17779,11 +19221,26 @@ export const pt_BR: EnTranslations = {
         "bonus4": "Aumenta o Ataque de Guerra em 40, e o controle de grupo lançado sobre vós por jogadores hostis dura 15% menos.",
         "bonus7": "Aumenta o Ataque e a Defesa de Guerra em 80. Vossas magias têm 15% de chance de conceder Guarda de Espinhos, aumentando a esquiva em 15% por 6 s."
       },
+      "warspirit_emberscale": {
+        "name": "Escama de Brasa do Espírito de Guerra",
+        "bonus2": "Golpe Ancestral avança sua cadência em 3 etapas.",
+        "bonus4": "Golpe Ancestral desfere 30% mais dano."
+      },
+      "wildfang_emberhide": {
+        "name": "Pele de Brasa da Presa Selvagem",
+        "bonus2": "Colheita Rubra restaura 45 de energia, em vez de 30.",
+        "bonus4": "Colheita Rubra aplica um novo Esfolamento ao alvo."
+      },
       "wyrmshadow": {
         "name": "Traje Nightfang",
         "bonus2": "Aumenta o poder de ataque em 40.",
-        "bonus3": "Aumenta a agilidade em 15 e a chance de crítico em 2%.",
-        "bonus4": "Seus acertos críticos com armas têm 50% de chance de conceder Ímpeto de Presas, aumentando a velocidade de ataque em 25% por 8 s."
+        "bonus4": "Seus acertos críticos com armas têm 50% de chance de conceder Ímpeto de Presas, aumentando a velocidade de ataque em 25% por 8 s.",
+        "bonus6": "Aumenta a velocidade de ataque e de lançamento em 4% e o Acerto em 3%. Seus acertos críticos com armas abrem uma Fenda Esfarrapada, causando 4 de sangramento no alvo a cada 2 s por 12 s. Acumula até 3 vezes."
+      },
+      "zealfire": {
+        "name": "Armadura de Guerra Fogo do Zelo",
+        "bonus2": "Édito Final e Queda da Alvorada reduzem o tempo de recarga restante um do outro em 3 s, em vez de 2.",
+        "bonus4": "Martelo da Ira lançado sob a Ira da Alvorada desfere 40% mais dano, em vez de 20%."
       }
     }
   },

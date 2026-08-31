@@ -15,8 +15,8 @@
     {
       "tick": 0,
       "time": 0,
-      "nextId": 968,
-      "state": "aeaf2d86",
+      "nextId": 999,
+      "state": "a98ac9a6",
       "events": "741638a5",
       "rng": {
         "draws": 0,
@@ -36,7 +36,14 @@
             null,
             null
           ],
-          "bank": {},
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
           "bgRating": 1500,
           "cls": "mage",
           "companionUpgrades": {},
@@ -54,7 +61,7 @@
           },
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 963,
+          "entityId": 994,
           "equipment": {
             "chest": "apprentice_robe",
             "mainhand": "gnarled_staff"
@@ -82,7 +89,10 @@
           "talents": {
             "rows": {}
           },
-          "townFocus": {}
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          }
         }
       ],
       "entities": [
@@ -94,10 +104,11 @@
           "critChance": 0.056,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.056,
-          "fallStartY": 1.5,
+          "fallStartY": -2,
           "fiveSecondRule": 99,
+          "healPower": 13,
           "hp": 54,
-          "id": 963,
+          "id": 994,
           "kind": "player",
           "level": 1,
           "lootFfaTimer": "Infinity",
@@ -108,17 +119,17 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 2,
-            "y": 1.5,
-            "z": -2
+            "x": -94,
+            "y": -2,
+            "z": -58
           },
           "potionCooldownUntil": -1,
           "resource": 195,
           "resourceType": "mana",
           "spawnPos": {
-            "x": 2,
-            "y": 1.5,
-            "z": -2
+            "x": -94,
+            "y": -2,
+            "z": -58
           },
           "spellPower": 13,
           "stats": {
@@ -141,9 +152,9 @@
     {
       "tick": 20,
       "time": 1,
-      "nextId": 969,
-      "state": "5a945ef4",
-      "events": "229f2a95",
+      "nextId": 1000,
+      "state": "6c514070",
+      "events": "85f8927d",
       "rng": {
         "draws": 1,
         "digest": "cf5e57a1"
@@ -152,9 +163,9 @@
     {
       "tick": 40,
       "time": 2,
-      "nextId": 969,
-      "state": "5a253d92",
-      "events": "a260e853",
+      "nextId": 1000,
+      "state": "21f0d2ba",
+      "events": "5dc5958c",
       "rng": {
         "draws": 2,
         "digest": "6d172bb5"
@@ -163,9 +174,9 @@
     {
       "tick": 60,
       "time": 3,
-      "nextId": 969,
-      "state": "add00afd",
-      "events": "9161473c",
+      "nextId": 1000,
+      "state": "c93382b9",
+      "events": "a5322ab5",
       "rng": {
         "draws": 150,
         "digest": "478ace8d"
@@ -174,9 +185,9 @@
     {
       "tick": 80,
       "time": 4,
-      "nextId": 969,
-      "state": "3962da7c",
-      "events": "712979a7",
+      "nextId": 1000,
+      "state": "79e79602",
+      "events": "b2ce815a",
       "rng": {
         "draws": 316,
         "digest": "650546d2"
@@ -185,9 +196,9 @@
     {
       "tick": 84,
       "time": 4.2,
-      "nextId": 969,
-      "state": "8f08be0a",
-      "events": "e5552b0a",
+      "nextId": 1000,
+      "state": "9159ae16",
+      "events": "9ec3fe76",
       "rng": {
         "draws": 356,
         "digest": "6ca1a356"
@@ -206,7 +217,14 @@
             null,
             null
           ],
-          "bank": {},
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
           "bgRating": 1500,
           "cls": "mage",
           "companionUpgrades": {},
@@ -226,7 +244,7 @@
               "spring_water"
             ],
             "visited": [
-              "poi:eastbrook_vale:eastbrook"
+              "poi:eastbrook_vale:eastbrook_docks"
             ]
           },
           "deedsEarned": [
@@ -261,7 +279,7 @@
           ],
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 963,
+          "entityId": 994,
           "equipment": {
             "chest": "apprentice_robe",
             "mainhand": "gnarled_staff"
@@ -292,7 +310,10 @@
             "rows": {},
             "spec": "frost"
           },
-          "townFocus": {}
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          }
         }
       ],
       "entities": [
@@ -307,7 +328,7 @@
               "name": "Icicles",
               "remaining": 29.95,
               "school": "frost",
-              "sourceId": 963,
+              "sourceId": 994,
               "stacks": 5
             }
           ],
@@ -323,10 +344,11 @@
           "critChance": 0.056,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.056,
-          "fallStartY": 1.5,
+          "fallStartY": -2,
           "fiveSecondRule": 0.25,
+          "healPower": 41,
           "hp": 418,
-          "id": 963,
+          "id": 994,
           "inCombat": true,
           "kind": "player",
           "level": 20,
@@ -338,17 +360,17 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 2,
-            "y": 1.5,
-            "z": -2
+            "x": -94,
+            "y": -2,
+            "z": -58
           },
           "potionCooldownUntil": -1,
           "resource": 1444,
           "resourceType": "mana",
           "spawnPos": {
-            "x": 2,
-            "y": 1.5,
-            "z": -2
+            "x": -94,
+            "y": -2,
+            "z": -58
           },
           "spellPower": 41,
           "stats": {
@@ -359,7 +381,7 @@
             "sta": 33,
             "str": 10
           },
-          "targetId": 968,
+          "targetId": 999,
           "templateId": "mage",
           "weapon": {
             "max": 6,
@@ -377,7 +399,7 @@
               "name": "Frozen Orb",
               "remaining": 2.25,
               "school": "frost",
-              "sourceId": 963,
+              "sourceId": 994,
               "value": 0.7
             },
             {
@@ -387,7 +409,7 @@
               "name": "Rimelance",
               "remaining": 8.95,
               "school": "frost",
-              "sourceId": 963,
+              "sourceId": 994,
               "value": 0.6
             }
           ],
@@ -396,17 +418,17 @@
           "critChance": 0.05,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.05,
-          "fallStartY": 1.5,
+          "fallStartY": -2,
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 499781,
-          "id": 968,
+          "id": 999,
           "inCombat": true,
           "kind": "mob",
           "leashAnchor": {
-            "x": 2,
-            "y": 1.5,
-            "z": 2
+            "x": -94,
+            "y": -2,
+            "z": -54
           },
           "level": 20,
           "lootFfaTimer": "Infinity",
@@ -415,22 +437,22 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 2,
-            "y": 1.5,
-            "z": 2
+            "x": -94,
+            "y": -2,
+            "z": -54
           },
           "potionCooldownUntil": -1,
           "spawnPos": {
-            "x": 2,
-            "y": 1.5,
-            "z": 2
+            "x": -94,
+            "y": -2,
+            "z": -54
           },
           "stats": {},
-          "tappedById": 963,
+          "tappedById": 994,
           "templateId": "training_dummy",
           "threat": [
             [
-              963,
+              994,
               219
             ]
           ],
@@ -443,8 +465,8 @@
     {
       "tick": 84,
       "time": 4.2,
-      "nextId": 969,
-      "state": "8f08be0a",
+      "nextId": 1000,
+      "state": "9159ae16",
       "events": "741638a5",
       "rng": {
         "draws": 356,
@@ -464,7 +486,14 @@
             null,
             null
           ],
-          "bank": {},
+          "bank": {
+            "socketBags": [
+              null,
+              null,
+              null,
+              null
+            ]
+          },
           "bgRating": 1500,
           "cls": "mage",
           "companionUpgrades": {},
@@ -484,7 +513,7 @@
               "spring_water"
             ],
             "visited": [
-              "poi:eastbrook_vale:eastbrook"
+              "poi:eastbrook_vale:eastbrook_docks"
             ]
           },
           "deedsEarned": [
@@ -519,7 +548,7 @@
           ],
           "delveClears": {},
           "delveDaily": {},
-          "entityId": 963,
+          "entityId": 994,
           "equipment": {
             "chest": "apprentice_robe",
             "mainhand": "gnarled_staff"
@@ -550,7 +579,10 @@
             "rows": {},
             "spec": "frost"
           },
-          "townFocus": {}
+          "townFocus": {},
+          "vault": {
+            "stock": {}
+          }
         }
       ],
       "entities": [
@@ -565,7 +597,7 @@
               "name": "Icicles",
               "remaining": 29.95,
               "school": "frost",
-              "sourceId": 963,
+              "sourceId": 994,
               "stacks": 5
             }
           ],
@@ -581,10 +613,11 @@
           "critChance": 0.056,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.056,
-          "fallStartY": 1.5,
+          "fallStartY": -2,
           "fiveSecondRule": 0.25,
+          "healPower": 41,
           "hp": 418,
-          "id": 963,
+          "id": 994,
           "inCombat": true,
           "kind": "player",
           "level": 20,
@@ -596,17 +629,17 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 2,
-            "y": 1.5,
-            "z": -2
+            "x": -94,
+            "y": -2,
+            "z": -58
           },
           "potionCooldownUntil": -1,
           "resource": 1444,
           "resourceType": "mana",
           "spawnPos": {
-            "x": 2,
-            "y": 1.5,
-            "z": -2
+            "x": -94,
+            "y": -2,
+            "z": -58
           },
           "spellPower": 41,
           "stats": {
@@ -617,7 +650,7 @@
             "sta": 33,
             "str": 10
           },
-          "targetId": 968,
+          "targetId": 999,
           "templateId": "mage",
           "weapon": {
             "max": 6,
@@ -635,7 +668,7 @@
               "name": "Frozen Orb",
               "remaining": 2.25,
               "school": "frost",
-              "sourceId": 963,
+              "sourceId": 994,
               "value": 0.7
             },
             {
@@ -645,7 +678,7 @@
               "name": "Rimelance",
               "remaining": 8.95,
               "school": "frost",
-              "sourceId": 963,
+              "sourceId": 994,
               "value": 0.6
             }
           ],
@@ -654,17 +687,17 @@
           "critChance": 0.05,
           "detonateTimer": "Infinity",
           "dodgeChance": 0.05,
-          "fallStartY": 1.5,
+          "fallStartY": -2,
           "fiveSecondRule": 99,
           "hostile": true,
           "hp": 499781,
-          "id": 968,
+          "id": 999,
           "inCombat": true,
           "kind": "mob",
           "leashAnchor": {
-            "x": 2,
-            "y": 1.5,
-            "z": 2
+            "x": -94,
+            "y": -2,
+            "z": -54
           },
           "level": 20,
           "lootFfaTimer": "Infinity",
@@ -673,22 +706,22 @@
           "overpowerUntil": -1,
           "petMode": "defensive",
           "pos": {
-            "x": 2,
-            "y": 1.5,
-            "z": 2
+            "x": -94,
+            "y": -2,
+            "z": -54
           },
           "potionCooldownUntil": -1,
           "spawnPos": {
-            "x": 2,
-            "y": 1.5,
-            "z": 2
+            "x": -94,
+            "y": -2,
+            "z": -54
           },
           "stats": {},
-          "tappedById": 963,
+          "tappedById": 994,
           "templateId": "training_dummy",
           "threat": [
             [
-              963,
+              994,
               219
             ]
           ],

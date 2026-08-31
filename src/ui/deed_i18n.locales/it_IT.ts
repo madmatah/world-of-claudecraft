@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: "Pronto per l'Avventura",
+    desc: "Diplomati alla Riva della Prova: completa ogni lezione sull'isola, poi suona la campana del traghetto per tornare a Eastbrook.",
+  },
   exp_dawnhold_castle: {
     name: 'Una Porta Aperta nel Giardino',
     desc: 'Fai visita al Castello Dawnhold e passeggia per le sue sale soleggiate del giardino.',
@@ -1071,5 +1075,34 @@ export const table: DeedLocaleTable = {
     name: 'Santuario miniato',
     desc: 'Minia la pagina Eroico: Santuario del Gravewyrm del Reliquiario.',
     title: 'Luce del Santuario',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Il Primo Alloggiamento',
+    desc: 'Sblocca il tuo primo alloggiamento per sacca della banca.',
+  },
+  soc_four_bags_deep: {
+    name: 'Tutti gli Alloggiamenti',
+    desc: 'Sblocca tutti e quattro gli alloggiamenti per sacca della banca.',
+  },
+  dgn_ignivar: {
+    name: "L'Araldo Cade",
+    desc: 'Sconfiggi Ignivar, Herald of the Last Flame, nel Crucible of the Last Spring.',
+  },
+  dgn_ignivar_heroic: {
+    name: "Eroico: L'Araldo Cade",
+    desc: 'Sconfiggi Ignivar, Herald of the Last Flame, in difficoltà Eroica.',
+  },
+  dgn_varkhul: {
+    name: 'La Forgia si Spegne',
+    desc: "Sconfiggi Varkhul, Forgefather of the Last Flame, nell'Inner Crucible.",
+  },
+  dgn_varkhul_heroic: {
+    name: 'Eroico: La Forgia si Spegne',
+    desc: 'Sconfiggi Varkhul, Forgefather of the Last Flame, in difficoltà Eroica.',
+  },
+  dgn_varkhul_flawless: {
+    name: 'Nemmeno una Brace Perduta',
+    desc: 'Sconfiggi Varkhul, Forgefather of the Last Flame, in difficoltà Eroica senza che un solo membro del raid muoia.',
+    title: "l'Incombusto",
   },
 };

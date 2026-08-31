@@ -188,14 +188,6 @@ describe('MusicDirector streamed combat / background mix', () => {
     expect(el.currentTime).toBe(55);
     expect(el.play).toHaveBeenCalledTimes(2);
   });
-
-  it('plays the vale_cup zone as silence on the zone bus (the Sowfield mp3s own it)', () => {
-    director.update('vale', false);
-    director.update('vale_cup', false);
-    expect(internals(director).zoneStreams.vale?.target).toBe(0);
-    expect(internals(director).zoneStreams.vale_cup).toBeUndefined();
-    expect(FakeAudio.instances.map((el) => el.src)).not.toContain('/audio/music/vale_cup.mp3');
-  });
 });
 
 describe('MusicDirector random combat theme pick', () => {
@@ -453,12 +445,12 @@ describe('MusicDirector area file tracks', () => {
     director.setAreaTrack('realm_racers_evergarden');
     expect(Object.keys(areaEls()).sort()).toEqual(['realm_racers_evergarden']);
 
-    director.setAreaTrack('sowfield_waiting');
-    // the Sowfield pair warms together: its kickoff crossfade is instant
+    // Each circuit track is its own group (AREA_TRACK_GROUP), so arriving at
+    // the second one warms it alone and leaves the first one downloaded.
+    director.setAreaTrack('realm_racers_nightbloom');
     expect(Object.keys(areaEls()).sort()).toEqual([
       'realm_racers_evergarden',
-      'sowfield_match',
-      'sowfield_waiting',
+      'realm_racers_nightbloom',
     ]);
   });
 
@@ -483,12 +475,7 @@ describe('MusicDirector area file tracks', () => {
 
   it('never fades two area tracks up at once', () => {
     const gains = (director as unknown as { areaGains: Record<string, FakeGain> }).areaGains;
-    for (const track of [
-      'sowfield_waiting',
-      'sowfield_match',
-      'realm_racers_evergarden',
-      null,
-    ] as const) {
+    for (const track of ['realm_racers_evergarden', 'realm_racers_nightbloom', null] as const) {
       director.setAreaTrack(track);
       const up = Object.values(gains).filter((gain) => gain.gain.value > 0);
       expect(up).toHaveLength(track === null ? 0 : 1);
@@ -734,6 +721,27 @@ describe('world music zone selection', () => {
     expect(musicZoneForLocation('farshore_isle', 'vale', true, false)).toBe('farshore');
   });
 
+  it('gives the Proving Shore its own cue, camp included, not the vale loop', () => {
+    // The island paints as vale, so without its own ZONE_MUSIC row the first
+    // music a new player ever hears would be the mainland's. Dawnrest Camp is
+    // a hub with no town theme, which is the path that falls through to
+    // ZONE_MUSIC, so one row has to cover both the strand and the camp.
+    expect(musicZoneForLocation('proving_shore', 'vale', false, false)).toBe('proving_shore');
+    expect(musicZoneForLocation('proving_shore', 'vale', true, false)).toBe('proving_shore');
+    // ...and a dungeon still outranks it, exactly as everywhere else.
+    expect(musicZoneForLocation('proving_shore', 'vale', false, true, 'hollow_crypt')).toBe(
+      'dungeon_hollow_crypt',
+    );
+  });
+
+  it('streams the island cue rather than composing it', () => {
+    // The one supplied track with no composed counterpart: it was written for
+    // the island, not remastered from the procedural score. Pinned so the
+    // absence reads as deliberate and nobody "fixes" it by inventing a theme.
+    expect(ZONE_STREAM_URLS.proving_shore).toBe('/audio/music/proving_shore.mp3?v=51e9b5a6c01f');
+    expect(buildMusicThemes().proving_shore).toBeUndefined();
+  });
+
   it('borrows the nearest-mood cue for paint-only biomes', () => {
     expect(musicZoneForLocation('custom', 'beach', false, false)).toBe('jungle');
     expect(musicZoneForLocation('custom', 'desert', false, false)).toBe('ember');
@@ -745,6 +753,22 @@ describe('world music zone selection', () => {
     expect(musicZoneForLocation('frostveil', 'frost', false, true, 'hollow_crypt')).toBe(
       'dungeon_hollow_crypt',
     );
+  });
+
+  it('maps every Ignivar raid room to its authored ambient composition', () => {
+    const rooms = [
+      { id: 'ignivar_forge_approach', zone: 'ignivar_forge_approach' },
+      { id: 'ignivar_raid_arena', zone: 'ignivar_raid_arena' },
+      { id: 'ignivar_molten_assembly', zone: 'ignivar_forge_approach' },
+      { id: 'ignivar_inner_crucible', zone: 'ignivar_inner_crucible' },
+    ] as const;
+    const themes = buildMusicThemes();
+
+    for (const room of rooms) {
+      expect(dungeonMusicZoneForDungeon(room.id)).toBe(room.zone);
+      expect(musicZoneForLocation('custom', 'ember', false, true, room.id)).toBe(room.zone);
+      expect(themes[room.zone]).toBeDefined();
+    }
   });
 });
 

@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const fr_CA: Record<string, string> = {
+  'error.flagActiveExists': 'ce compte a déjà un drapeau ouvert de ce type',
+  'wealth.largeMovementsUnavailable':
+    "les grands mouvements bancaires n'ont pas pu être chargés (la lecture du grand livre a expiré), le détail de l'or ci-dessus est complet",
   'app.title': 'World of ClaudeCraft - Administration',
   'app.shortTitle': 'Administrateur WoC',
   'auth.username': "Nom d'utilisateur",
@@ -90,6 +93,8 @@ export const fr_CA: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Défis de portefeuille limités',
   'usage.metric.walletLinkRequest': 'Requêtes de liaison de portefeuille',
   'usage.metric.walletLinkFailure': 'Échecs de liaison de portefeuille',
+  'usage.metric.walletUnlinkFailure': 'Refus de dissociation de portefeuille',
+  'usage.metric.walletUnlinkSuccess': 'Dissociations de portefeuille effectuées',
   'usage.metric.walletLinkRateLimited': 'Liaisons de portefeuille limitées',
   'usage.metric.cardPublishRequest': 'Requêtes de publication de carte joueur',
   'usage.metric.cardPublishRejected': 'Publications de carte rejetées',

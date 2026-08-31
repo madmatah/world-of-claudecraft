@@ -65,7 +65,7 @@ import {
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
 import { TICK_RATE } from '../src/sim/types';
-import { addAt, makeWorld } from './vale_cup_util';
+import { addAt, makeWorld } from './realm_racers_util';
 
 const GARDEN = REALM_RACERS_PRACTICE_CIRCUIT;
 

@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const it_IT: Record<string, string> = {
+  'error.flagActiveExists': 'questo account ha già una segnalazione aperta di quel tipo',
+  'wealth.largeMovementsUnavailable':
+    "i movimenti bancari di grande entità non sono stati caricati (la lettura del registro è scaduta); la ripartizione dell'oro qui sopra è comunque completa",
   'error.guildBankDeleting':
     'Questa gilda è in fase di eliminazione, quindi la sua banca è chiusa. Nessuna modifica è stata effettuata.',
   'error.guildBankItemRequired':
@@ -313,6 +316,8 @@ export const it_IT: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Challenge wallet limitate',
   'usage.metric.walletLinkRequest': 'Richieste collegamento wallet',
   'usage.metric.walletLinkFailure': 'Errori collegamento wallet',
+  'usage.metric.walletUnlinkFailure': 'Rifiuti scollegamento wallet',
+  'usage.metric.walletUnlinkSuccess': 'Scollegamenti wallet completati',
   'usage.metric.walletLinkRateLimited': 'Collegamenti wallet limitati',
   'usage.metric.cardPublishRequest': 'Richieste pubblicazione carta giocatore',
   'usage.metric.cardPublishRejected': 'Pubblicazioni carta respinte',
@@ -1189,4 +1194,6 @@ export const it_IT: Record<string, string> = {
   'wealth.purse': 'Sui personaggi:',
   'wealth.total': 'Totale:',
   'wealth.updatedAt': 'aggiornato {when}',
+  'usage.metric.walletHandoffAuthorizationEvicted': 'Espulsioni handoff wallet desktop',
+  'usage.metric.walletHandoffCreateRejected': 'Rifiuti handoff wallet desktop',
 };

@@ -647,7 +647,6 @@ function eligible(ctx: SimContext, pid: number): boolean {
   if (!meta || !e || meta.leaving || e.dead || e.ghost) return false;
   if (e.pos.x > DUNGEON_X_THRESHOLD) return false;
   if (ctx.arenaMatches.has(pid) || isArenaQueued(ctx, pid)) return false;
-  if (ctx.vcupSeatedOrQueued(pid)) return false;
   if (ctx.duels.has(pid) || ctx.trades.has(pid)) return false;
   if (ctx.cardDuelQueue.includes(pid) || ctx.cardDuels.has(pid)) return false;
   return realmRacersMatchOf(ctx, pid) === null;

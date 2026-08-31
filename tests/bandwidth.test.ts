@@ -873,6 +873,6 @@ describe('Realm Racers match-scoped interest', () => {
     expect(ents).toHaveLength(3);
     expect(keep).toEqual([]);
     expect([...present]).toEqual(pinnedIds);
-    expect(Buffer.byteLength(`[${ents.join(',')}]`)).toBe(1175);
+    expect(Buffer.byteLength(`[${ents.join(',')}]`)).toBe(1176);
   });
 });

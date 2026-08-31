@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_RAID_RESET_TIME_ZONE,
+  eventLeadDayKey,
   isSupportedTimeZone,
   nextRaidResetMs,
+  nextWeeklyRaidResetMs,
   RAID_RESET_HOUR,
   resetDayKey,
 } from '../server/raid_reset';
 import { resolveRaidResetTimeZone } from '../server/realm';
 import { DAILY_RESET_HOUR } from '../src/game/utc_day';
+import { DOUBLE_HONOR_LEAD_MS } from '../src/sim/pvp/honor_event';
 
 // The daily raid reset lands at 03:00 (3 AM, the classic daily-reset hour) in the realm's
 // civil time zone (default US Eastern, America/New_York), so a realm shares one
@@ -190,11 +193,52 @@ describe('resetDayKey: the ONE daily boundary a realm turns over on', () => {
     expect(resetDayKey(now, DEFAULT_RAID_RESET_TIME_ZONE)).toBe('2026-08-07');
   });
 
+  it('memoizes within an epoch minute without blurring the reset boundary', () => {
+    // Two instants in the same epoch minute answer identically (the memo
+    // path), and the reset instant starts a new minute, so the 02:59 to 03:00
+    // flip still lands exactly where the boundary test above pins it.
+    const base = Date.UTC(2026, 7, 7, 6, 59, 0); // 02:59 Eastern
+    expect(resetDayKey(base)).toBe('2026-08-06');
+    expect(resetDayKey(base + 30_000)).toBe('2026-08-06');
+    expect(resetDayKey(base + 59_999)).toBe('2026-08-06');
+    expect(resetDayKey(base + 60_000)).toBe('2026-08-07');
+  });
+
   it('shares its reset hour with the offline client, which has no realm zone', () => {
     // Offline there is no realm, so src/game/utc_day.ts applies the same rule in
     // the player's OWN local zone. The hour is the promise both make ("a daily
     // never turns over mid-evening"), so a drift between them is a bug.
     expect(DAILY_RESET_HOUR).toBe(RAID_RESET_HOUR);
+  });
+});
+
+describe('eventLeadDayKey: the weekend event early-open probe', () => {
+  it('reads the reset window the lead ahead: Friday 3 PM realm time already reads Saturday', () => {
+    // 2026-08-21 is a Friday. 18:59 UTC is 14:59 Eastern (EDT, UTC-4): the
+    // probe instant is Saturday 02:59 Eastern, still before the reset hour,
+    // so the key reads Friday and the event window is not yet open.
+    expect(eventLeadDayKey(Date.UTC(2026, 7, 21, 18, 59, 0))).toBe('2026-08-21');
+    // 19:00 UTC is 15:00 Eastern: the probe crosses Saturday's 3 AM reset,
+    // which is the instant honor_event.ts opens the weekend window.
+    expect(eventLeadDayKey(Date.UTC(2026, 7, 21, 19, 0, 0))).toBe('2026-08-22');
+  });
+
+  it('is resetDayKey shifted by DOUBLE_HONOR_LEAD_MS, in any realm zone', () => {
+    const now = Date.UTC(2026, 7, 21, 10, 0, 0);
+    for (const zone of [DEFAULT_RAID_RESET_TIME_ZONE, 'Asia/Tokyo', 'Pacific/Auckland']) {
+      expect(eventLeadDayKey(now, zone), zone).toBe(resetDayKey(now + DOUBLE_HONOR_LEAD_MS, zone));
+    }
+  });
+
+  it('holds across the US DST shifts: the lead is real time, not wall-clock', () => {
+    // Spring forward (2026-03-08): Saturday 3 PM EST probes 04:00 EDT Sunday
+    // (an 11-hour wall-clock lead), still past the reset hour, so Sunday.
+    expect(eventLeadDayKey(Date.UTC(2026, 2, 7, 20, 0, 0))).toBe('2026-03-08');
+    // Fall back (2026-11-01): Saturday 3 PM EDT probes 02:00 EST Sunday (a
+    // 13-hour wall-clock lead), BEFORE the reset hour, so the key still reads
+    // Saturday. Benign for the event: both candidate keys are weekend days,
+    // and the resetDay arm governs the Sunday close either way.
+    expect(eventLeadDayKey(Date.UTC(2026, 9, 31, 19, 0, 0))).toBe('2026-10-31');
   });
 });
 
@@ -213,5 +257,70 @@ describe('resolveRaidResetTimeZone', () => {
     expect(resolveRaidResetTimeZone('Bad/Zone')).toBe(DEFAULT_RAID_RESET_TIME_ZONE);
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
+  });
+});
+
+describe('nextWeeklyRaidResetMs', () => {
+  // The weekly raid lockout boundary: RAID_RESET_HOUR on WEEKLY_RESET_WEEKDAY
+  // (Tuesday) in the realm zone. Chosen from 28 days of prod concurrency: the
+  // population is EU-evening/US-afternoon shaped with its weekly peak Sunday
+  // evening UTC and its trough 00:00-06:00 UTC, so Tuesday 3 AM US Eastern
+  // lands in the dead band, gives every lockout week one full weekend, and
+  // reuses the classic Tuesday-reset convention on the realm's existing
+  // daily-reset hour.
+
+  it('walks a mid-week instant forward to next Tuesday 3 AM Eastern', () => {
+    // Wednesday 2026-08-26 12:00 EDT (16:00 UTC) resets Tuesday 2026-09-01
+    // 03:00 EDT (07:00 UTC).
+    expect(nextWeeklyRaidResetMs(Date.UTC(2026, 7, 26, 16, 0, 0))).toBe(
+      Date.UTC(2026, 8, 1, 7, 0, 0),
+    );
+  });
+
+  it('a kill in the small hours of Tuesday unlocks at that same morning reset', () => {
+    // Tuesday 2026-08-25 02:59 EDT (06:59 UTC) resets 03:00 EDT the same day.
+    expect(nextWeeklyRaidResetMs(Date.UTC(2026, 7, 25, 6, 59, 0))).toBe(
+      Date.UTC(2026, 7, 25, 7, 0, 0),
+    );
+  });
+
+  it('the boundary itself belongs to the NEXT week (strictly after)', () => {
+    // Exactly Tuesday 03:00:00.000 EDT rolls a full week forward, matching
+    // nextRaidResetMs's strictly-after contract.
+    expect(nextWeeklyRaidResetMs(Date.UTC(2026, 7, 25, 7, 0, 0))).toBe(
+      Date.UTC(2026, 8, 1, 7, 0, 0),
+    );
+  });
+
+  it('crosses the US fall-back transition onto standard time', () => {
+    // Monday 2026-11-02 12:00 EST (17:00 UTC): the next Tuesday reset is
+    // 2026-11-03 03:00 EST = 08:00 UTC (the zone fell back on 11-01).
+    expect(nextWeeklyRaidResetMs(Date.UTC(2026, 10, 2, 17, 0, 0))).toBe(
+      Date.UTC(2026, 10, 3, 8, 0, 0),
+    );
+  });
+
+  it('crosses the US spring-forward transition onto daylight time', () => {
+    // Monday 2027-03-15 12:00 EDT (16:00 UTC): next Tuesday 2027-03-16
+    // 03:00 EDT = 07:00 UTC (the zone sprang forward on 03-14).
+    expect(nextWeeklyRaidResetMs(Date.UTC(2027, 2, 15, 16, 0, 0))).toBe(
+      Date.UTC(2027, 2, 16, 7, 0, 0),
+    );
+  });
+
+  it('honors an explicit zone and weekday', () => {
+    // Wednesday convention in Europe/Paris (CEST, UTC+2 in August): from
+    // Monday 2026-08-24 12:00 CEST, the next Wednesday 03:00 CEST is
+    // 2026-08-26 01:00 UTC.
+    expect(nextWeeklyRaidResetMs(Date.UTC(2026, 7, 24, 10, 0, 0), 'Europe/Paris', 3)).toBe(
+      Date.UTC(2026, 7, 26, 1, 0, 0),
+    );
+  });
+
+  it('is always strictly in the future and exactly one week apart when chained', () => {
+    const first = nextWeeklyRaidResetMs(Date.UTC(2026, 7, 26, 16, 0, 0));
+    const second = nextWeeklyRaidResetMs(first);
+    expect(first).toBeGreaterThan(Date.UTC(2026, 7, 26, 16, 0, 0));
+    expect(second - first).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });

@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const zh_TW: Record<string, string> = {
+  'error.flagActiveExists': '這個帳號已經有一筆同類型的未結案標記。',
+  'wealth.largeMovementsUnavailable':
+    '無法載入大額銀行異動紀錄（帳本讀取逾時）；上方的金幣明細仍完整無缺。',
   'error.guildBankDeleting': '此公會正在被刪除，因此其銀行已關閉。未做任何變更。',
   'error.guildBankItemRequired': '請輸入你預期該格位應持有的物品 ID。',
   'error.guildBankNoCarrier': '必須有此公會的成員在線上，變更才能被儲存。',
@@ -343,7 +346,11 @@ export const zh_TW: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': '錢包挑戰限流',
   'usage.metric.walletLinkRequest': '錢包連結請求',
   'usage.metric.walletLinkFailure': '錢包連結失敗',
+  'usage.metric.walletUnlinkFailure': '錢包解除連結被拒',
+  'usage.metric.walletUnlinkSuccess': '錢包解除連結完成',
   'usage.metric.walletLinkRateLimited': '錢包連結限流',
+  'usage.metric.walletHandoffAuthorizationEvicted': '桌面版錢包交接逐出',
+  'usage.metric.walletHandoffCreateRejected': '桌面版錢包交接被拒',
   'usage.metric.cardPublishRequest': '玩家卡片發布請求',
   'usage.metric.cardPublishRejected': '玩家卡片發布遭拒',
   'usage.metric.cardPublishRateLimited': '玩家卡片發布限流',

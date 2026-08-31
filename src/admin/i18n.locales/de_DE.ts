@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const de_DE: Record<string, string> = {
+  'error.flagActiveExists': 'dieses Konto hat bereits eine offene Meldung dieser Art',
+  'wealth.largeMovementsUnavailable':
+    'große Bankbewegungen konnten nicht geladen werden (das Zeitlimit beim Lesen des Hauptbuchs wurde überschritten); die Goldaufschlüsselung oben ist vollständig',
   'error.guildBankDeleting':
     'Diese Gilde wird gerade gelöscht, daher ist ihre Bank geschlossen. Es wurde nichts geändert.',
   'error.guildBankItemRequired':
@@ -311,7 +314,11 @@ export const de_DE: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Gedrosselte Wallet-Challenges',
   'usage.metric.walletLinkRequest': 'Wallet-Verknüpfungsanfragen',
   'usage.metric.walletLinkFailure': 'Wallet-Verknüpfungsfehler',
+  'usage.metric.walletUnlinkFailure': 'Abgelehnte Wallet-Trennungen',
+  'usage.metric.walletUnlinkSuccess': 'Abgeschlossene Wallet-Trennungen',
   'usage.metric.walletLinkRateLimited': 'Gedrosselte Wallet-Verknüpfungen',
+  'usage.metric.walletHandoffAuthorizationEvicted': 'Entfernte Desktop-Wallet-Übergaben',
+  'usage.metric.walletHandoffCreateRejected': 'Abgelehnte Desktop-Wallet-Übergaben',
   'usage.metric.cardPublishRequest': 'Veröffentlichungen von Spielerkarten',
   'usage.metric.cardPublishRejected': 'Abgelehnte Spielerkarten-Veröffentlichungen',
   'usage.metric.cardPublishRateLimited': 'Gedrosselte Spielerkarten-Veröffentlichungen',

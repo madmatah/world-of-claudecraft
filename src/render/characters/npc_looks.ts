@@ -1726,6 +1726,65 @@ export const NPC_LOOKS: Record<string, NpcLookDef> = {
     worn: kit('druid'),
     props: 'none',
   },
+  // Archivist Maelin Emberward, Crucible Archivist of the hidden Ignivar
+  // forge: ash-grey bun, ember eyes that read Varkhul's records by forgelight.
+  archivist_maelin_emberward: {
+    app: {
+      gender: 'female',
+      hair: 'lowbun',
+      ...hair(24, 0.12, 0.55),
+      brows: 'arched',
+      eyeShape: 'narrow',
+      ...eyes(32, 0.6, 0.42),
+      ...skin(25, 0.42, 0.5),
+      mouth: 'neutral',
+      face: face({ cheeks: -0.2, brow: 0.15, eyes: 0.1 }),
+      body: body({ shoulders: -0.1 }),
+      outfit: 'ember',
+    },
+    worn: kit('mage', { head: 'mage' }),
+    props: 'tome',
+  },
+  // Quartermaster Bronn Emberward, the Crucible sigil broker: a forge-broad
+  // quartermaster in ember-tempered plate, hammer at hand, the counter he
+  // keeps standing a few paces from the raid door.
+  crucible_quartermaster: {
+    app: {
+      gender: 'male',
+      hair: 'mohawk',
+      ...hair(18, 0.25, 0.2),
+      beard: 'scruff',
+      brows: 'sharp',
+      eyeShape: 'narrow',
+      ...eyes(30, 0.6, 0.4),
+      ...skin(24, 0.45, 0.4),
+      mouth: 'frown',
+      face: face({ jaw: 0.35, brow: 0.3 }),
+      body: body({ shoulders: 0.35, chest: 0.25, hands: 0.2 }),
+      outfit: 'ember',
+    },
+    worn: kit('paladin', { chest: 'knight', arms: 'knight' }),
+    props: 'hammer',
+  },
+  // Maelin's Ember Projection: the same archivist carried forward through the
+  // forge as living flame; her silhouette holds, her colours burn.
+  archivist_maelin_ember_projection: {
+    app: {
+      gender: 'female',
+      hair: 'lowbun',
+      ...hair(20, 0.85, 0.6),
+      brows: 'arched',
+      eyeShape: 'narrow',
+      ...eyes(46, 0.85, 0.55),
+      ...skin(22, 0.75, 0.6),
+      mouth: 'neutral',
+      face: face({ cheeks: -0.2, brow: 0.15, eyes: 0.1 }),
+      body: body({ shoulders: -0.1 }),
+      outfit: 'ember',
+    },
+    worn: kit('mage', { head: 'mage' }),
+    props: 'tome',
+  },
 
   // === Palmreach and the far shores ========================================
   // Castaway Navigator: sun-bleached, half-dressed, still reading the stars.
@@ -1763,6 +1822,193 @@ export const NPC_LOOKS: Record<string, NpcLookDef> = {
     },
     worn: kit('rogue', { arms: null }),
     props: 'none',
+  },
+
+  // === The Proving Shore: the tutorial island, salt, sailcloth and sun ======
+  // The island is the first face the game shows, so its keepers read as a crew
+  // that works outdoors: sun-darkened skin, salt-bleached or weather-greyed
+  // hair, and each one's outfit colourway matched to the nameplate colour their
+  // NpcDef already carries (src/sim/content/proving_shore.ts), so the person and
+  // the marker agree. Gender follows the shipped voice casting (each line is
+  // recorded by an existing actor: Bryn on Waykeeper Pell, Nel on Captain
+  // Thessaly, Rook on Marshal Redbrook, Pell on Foreman Odell, Tam on Warden
+  // Fenwick, Finch on Quartermaster Bree, Wick on Bursar Fernando, Maren on
+  // Stablemaster Marla) and the English quest copy's pronouns.
+
+  // Wayfarer Bryn: the Eastbrook-side greeter who points at the crossing, not
+  // an islander; town clothes with a traveller's road-worn edge.
+  wayfarer_bryn: {
+    app: {
+      gender: 'female',
+      hair: 'halfbun',
+      ...hair(30, 0.42, 0.28),
+      brows: 'soft',
+      eyeShape: 'doe',
+      ...eyes(268, 0.3, 0.42),
+      ...skin(28, 0.42, 0.6),
+      mouth: 'smile',
+      face: face({ cheeks: 0.25, eyes: 0.15 }),
+      outfit: 'violet',
+    },
+    worn: kit('ranger', { back: null }),
+    props: 'none',
+  },
+  // Instructor Maren: the Proving Master who signs off the whole island; the
+  // only islander in a full kit, because the graduation is hers to give.
+  instructor_maren: {
+    app: {
+      gender: 'female',
+      hair: 'warriorbraid',
+      ...hair(24, 0.28, 0.18),
+      brows: 'angled',
+      eyeShape: 'sharp',
+      ...eyes(272, 0.38, 0.34),
+      ...skin(27, 0.46, 0.52),
+      face: face({ jaw: 0.25, brow: 0.15 }),
+      body: body({ shoulders: 0.18 }),
+      outfit: 'royal',
+    },
+    worn: kit('knight'),
+    props: 'sword',
+  },
+  // Quartermaster Finch: the camp stall; buys salvage all day, so she is the
+  // one islander with rolled sleeves and an apron-drab colourway.
+  quartermaster_finch: {
+    app: {
+      gender: 'female',
+      hair: 'chinbob',
+      ...hair(38, 0.5, 0.44),
+      brows: 'round',
+      eyeShape: 'round',
+      ...eyes(96, 0.32, 0.36),
+      ...skin(29, 0.44, 0.64),
+      mouth: 'grin',
+      face: face({ cheeks: 0.3, nose: 0.15 }),
+      earrings: 'hoop',
+      earringMaterial: 'copper',
+      outfit: 'forest',
+    },
+    worn: kit('rogue', { arms: null }),
+    props: 'none',
+  },
+  // Bursar Wick: the Gilded Strongbox, a clerk not a fighter; robes, a ledger,
+  // and the one gold colourway on the island because the name promises it.
+  bursar_wick: {
+    app: {
+      gender: 'male',
+      hair: 'sidepart',
+      ...hair(40, 0.2, 0.66),
+      beard: 'goatee',
+      brows: 'thin',
+      eyeShape: 'narrow',
+      ...eyes(44, 0.45, 0.38),
+      ...skin(30, 0.34, 0.68),
+      face: face({ chin: 0.2, cheeks: -0.2 }),
+      body: body({ shoulders: -0.15 }),
+      earrings: 'stud',
+      earringMaterial: 'gold',
+      outfit: 'gilded',
+    },
+    worn: kit('mage'),
+    props: 'tome',
+  },
+  // Ferryman Odo: the oldest hand on the shore and the first voice a new player
+  // hears; weathered, white-bearded, punt pole still in his fist.
+  ferryman_odo: {
+    app: {
+      gender: 'male',
+      hair: 'longcenterpart',
+      ...hair(36, 0.08, 0.78),
+      beard: 'full',
+      brows: 'bushy',
+      eyeShape: 'droopy',
+      ...eyes(206, 0.32, 0.46),
+      ...skin(26, 0.5, 0.48),
+      face: face({ jaw: 0.2, cheeks: -0.35, nose: 0.3 }),
+      body: body({ shoulders: 0.15, hands: 0.2 }),
+      outfit: 'azure',
+    },
+    worn: kit('druid', { arms: null, back: null }),
+    props: 'walking_staff',
+  },
+  // Warden Tam: keeps the Gauntlet on the strand; lean, sun-cured, a spear he
+  // uses as a lane marker more than a weapon.
+  warden_tam: {
+    app: {
+      gender: 'male',
+      hair: 'crew',
+      ...hair(22, 0.4, 0.24),
+      beard: 'stubble',
+      brows: 'flat',
+      eyeShape: 'almond',
+      ...eyes(32, 0.4, 0.3),
+      ...skin(25, 0.52, 0.44),
+      face: face({ jaw: 0.3, cheeks: -0.25 }),
+      body: body({ shoulders: 0.1, knees: 0.15 }),
+      outfit: 'classic',
+    },
+    worn: kit('ranger'),
+    props: 'spear',
+  },
+  // Overseer Pell: clocks every Gauntlet run from the far end; a foreman's
+  // build, arms crossed, nothing in his hands but the count.
+  overseer_pell: {
+    app: {
+      gender: 'male',
+      hair: 'buzz',
+      ...hair(18, 0.22, 0.32),
+      beard: 'horseshoe',
+      brows: 'thick',
+      eyeShape: 'wideset',
+      ...eyes(84, 0.36, 0.32),
+      ...skin(24, 0.48, 0.5),
+      mouth: 'wide',
+      face: face({ jaw: 0.35, chin: 0.25 }),
+      body: body({ shoulders: 0.3, chest: 0.25 }),
+      outfit: 'verdigris',
+    },
+    worn: kit('rogue'),
+    props: 'none',
+  },
+  // Drillmaster Rook: turns footwork into swordwork in the practice yard; the
+  // island's one sword-and-board silhouette, brick red to match his nameplate.
+  drillmaster_rook: {
+    app: {
+      gender: 'male',
+      hair: 'topknot',
+      ...hair(16, 0.34, 0.2),
+      beard: 'shortbox',
+      brows: 'sharp',
+      eyeShape: 'narrow',
+      ...eyes(8, 0.42, 0.3),
+      ...skin(23, 0.5, 0.46),
+      mouth: 'frown',
+      face: face({ brow: 0.3, jaw: 0.25, smirk: -0.2 }),
+      body: body({ shoulders: 0.35, chest: 0.2, elbows: 0.15 }),
+      outfit: 'crimson',
+    },
+    worn: kit('knight'),
+    props: 'sword_shield',
+  },
+  // Tidewarden Nel: keeps the strand tally out where the wrecks are; salt-white
+  // hair, teal oilskins, a stave she walks the tide line with.
+  tidewarden_nel: {
+    app: {
+      gender: 'female',
+      hair: 'fantasybraid',
+      ...hair(190, 0.12, 0.82),
+      brows: 'arched',
+      eyeShape: 'cat',
+      ...eyes(178, 0.44, 0.4),
+      ...skin(31, 0.4, 0.56),
+      face: face({ cheeks: -0.2, eyes: 0.2, chin: 0.15 }),
+      body: body({ shoulders: 0.12 }),
+      earrings: 'bonehoop',
+      earringMaterial: 'turquoise',
+      outfit: 'teal',
+    },
+    worn: kit('druid'),
+    props: 'oak_stave',
   },
 };
 

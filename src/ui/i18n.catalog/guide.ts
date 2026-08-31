@@ -49,7 +49,6 @@ export const guideStrings = {
     combat: 'Combat',
     talents: 'Talents',
     arena: 'Arena & PvP',
-    valeCup: 'Vale Cup',
     realmRacers: 'Realm Racers',
     thornhollow: 'Thornhollow Fields',
     deeds: 'Book of Deeds',
@@ -202,6 +201,11 @@ export const guideStrings = {
       farshoreName: 'The Farshore',
       farshoreBlurb:
         'An island across the sandbar, where the sky tears open over the Riftfields and Gullhaven rings its bell for every breach.',
+      // The Proving Shore shares the Vale's biome too, so it carries its own
+      // slug and copy (the tutorial island).
+      provingName: 'The Proving Shore',
+      provingBlurb:
+        'A quiet training island across the strait, where new adventurers find their feet before the vale asks anything of them.',
       nightName: 'The Nightbloom',
       nightBlurb:
         'A country of starry midnight where the flowers light the paths and Moonrest keeps its vigil.',
@@ -344,7 +348,6 @@ export const guideStrings = {
     reliquary: 'The Reliquary',
     sheathe: 'Sheathe/Unsheathe Weapon',
     crafting: 'Crafting',
-    valeCup: 'Vale Cup',
     mount: 'Mount / Dismount',
     calendar: 'Event Calendar',
     dungeonFinder: 'Dungeon Finder',
@@ -567,6 +570,8 @@ export const guideStrings = {
       'Whether buffs and debuffs show on the party frames. Matching switches cover resource bars, absorbs, pets, and whether you appear in your own party list.',
     ifAurasOnPlayerFrame:
       'Puts your buffs and debuffs on your own unit frame as well as the aura bar.',
+    ifAlwaysShowAllBuffs:
+      'Shows every active buff even on the Low graphics preset, bypassing its usual buff-icon cap.',
     ifTargetOfTarget:
       'Shows who your target is targeting, the classic way to tell whether the tank still has it.',
     ifPetFrame: 'Shows a frame for your pet.',
@@ -703,7 +708,7 @@ export const guideStrings = {
 
     barsTitle: 'Bars, timers, and combat text',
     barsBody:
-      "Your cast bar appears in the middle of the screen, just above your action bars, whenever you cast or channel, and carries the spell's name and the time left. Your target gets a cast bar of its own on its frame, so you can see what is coming and answer it.\n\nA thin swing bar sits under your cast bar and fills between your weapon swings, so a melee or ranged attacker can see when the next automatic hit lands.\n\nYour experience bar runs the full width under your action bars, ticked into segments, with a lighter stretch showing the rested experience you have banked.\n\nSwim under water and a blue breath bar appears at the top of the screen. It drains while your head is under, flashes red once it runs out and you begin to drown, and refills quickly the moment you surface. Space swims you up, and the Swim Down key, Ctrl by default, takes you deeper.\n\nDamage and healing float up over whatever they landed on as small numbers, so you can read a fight without reading text. The Combat tab in your chat box keeps the full written record.",
+      "Your cast bar appears in the middle of the screen, just above your action bars, whenever you cast or channel, and carries the spell's name and the time left. Your target gets a cast bar of its own on its frame, so you can see what is coming and answer it.\n\nA thin swing bar sits under your cast bar and fills between your weapon swings, so a melee or ranged attacker can see when the next automatic hit lands. Fighting with a weapon in each hand adds a second bar right below it, filling on its own separate clock, so you can time your abilities between BOTH swings instead of just one.\n\nYour experience bar runs the full width under your action bars, ticked into segments, with a lighter stretch showing the rested experience you have banked.\n\nSwim under water and a blue breath bar appears at the top of the screen. It drains while your head is under, flashes red once it runs out and you begin to drown, and refills quickly the moment you surface. Space swims you up, and the Swim Down key, Ctrl by default, takes you deeper.\n\nDamage and healing float up over whatever they landed on as small numbers, so you can read a fight without reading text. The Combat tab in your chat box keeps the full written record.",
 
     aurasTitle: 'Buffs and debuffs',
     aurasBody:
@@ -1688,6 +1693,16 @@ export const guideStrings = {
     farshoreGreeter: 'Bellkeeper Tam, the Landing',
     farshorePlaceNotes:
       "Gullhaven is the island's only town and its redoubt. The Landing is where the Ferrywalk comes ashore, with a watchbell standing over the point; the Watch Meadow keeps the high ground southeast of town, where a riftwatcher listens for the next break; the Sundered Cliffs crack open at the island's southern end; and the Riftfields are the wracked grain rows east of Gullhaven, still crawling with what came through the break there.",
+    // The Proving Shore (proving_shore). It renders in the vale biome, so it
+    // carries its own stem for the same anchor-collision reason as the
+    // Farshore above.
+    provingBlurb:
+      'A quiet island across the strait from the vale, kept as a training ground: a camp, a practice yard, a wreck-strewn strand, and a ferry that runs both ways.',
+    provingGreeting:
+      'Every hero the vale has ever thanked stood where you stand now, and not one of them knew which end of a blade to hold.',
+    provingGreeter: 'Instructor Maren, Dawnrest Camp',
+    provingPlaceNotes:
+      "Dawnrest Camp is the island's whole settlement: a few tents, a stall, and a muster fire. The Old Pier faces the vale, where the crossing circle carries graduates over the strait; the Practice Yard south of camp keeps its straw effigies standing for whoever needs them; and the Wreck Line is the salvage-strewn strand where the tide pays the island in castaway crates.",
     // Getting around: the on-foot rule, the passes and causeways, the one overworld
     // doorway, the graveyards, and the sea at the map's edge. Paragraphs are split on
     // blank lines by paras().
@@ -2116,54 +2131,6 @@ export const guideStrings = {
     rewardsBody:
       "Every finished match pays Honor: more for a win, a consolation for a loss or a draw, plus a small amount for every killing blow you land and every one you help with, so fighting away from the flags is still worth doing. Your first win of each day pays a bonus on top, and the panel tells you while that bonus is still waiting for you. That day is Honor's own, and it rolls over on its own clock rather than with the realm's instance reset. Meeting the same team over and over pays less for the match itself after the first, quickly settling at a floor instead of falling away to nothing, and a forfeited match pays nothing at all. Spend what you earn at either Warfare quartermaster.",
   },
-  // The Vale Cup boarball minigame page (docs/prd/vale-cup.md). Spoiler-safe:
-  // lore, how to play, nations, roles; no kick powers, timers, or matchmaker
-  // internals. Nation/role NAMES render from the shared hudChrome.vcup.* keys.
-  valeCupPage: {
-    heading: 'The Vale Cup',
-    intro:
-      'Boarball at the Sowfield: pick a banner, pick a role, and kick a stuffed boar hide past a keeper for the Copper Pail. No blood, no loot, just the roar of the stands.',
-    loreHeading: 'Boarball and the harvest truce',
-    loreOldSow:
-      "Long before the dead woke, Eastbrook's farmhands played boarball on the stubble fields after harvest: two mobs, one boar's hide stuffed with straw, and two wagon gates dragged to either end of the green. The first ball, the Old Sow, hangs bronzed above the tavern hearth.",
-    loreTruce:
-      'When the Ashen Coliseum began sanctioning war games, Marshal Redbrook answered with something gentler: a standing harvest truce on the old green. The wagon gates became goalposts, the green got walls, stands, and a name, the Sowfield, and the prize was always the same dented milk pail the winners drank from: the Copper Pail.',
-    howHeading: 'How to play',
-    howQueue:
-      'Queue from anywhere through the Vale Cup window, or talk to Groundskeeper Bram at the Sowfield gate. Pick a bracket from one-a-side up to five-a-side, a banner nation, and a sport role; queue solo or bring your party.',
-    howMatch:
-      'On kickoff your class kit is swapped for a sport kit and restored exactly afterward. Kicks aim at the ground reticle, the ball banks off the boards, and dribbling is just running with the ball. Score more goals than the other side before full time; a draw goes to golden goal.',
-    howTruce:
-      'Nobody bleeds at the Sowfield: tackles tumble, nothing hurts, and pets sit the match out.',
-    spectateBody:
-      'One match plays at a time at the stadium, and anyone can walk up and watch from the stands.',
-    // Spectator wagering and the bot-backed modes. Spoiler-safe: no stake amounts, caps,
-    // wait timers, or matchmaker internals.
-    bettingHeading: 'A flutter at the rail',
-    bettingBody:
-      "Spectators at the Sowfield can back a side while a match is forming: stakes pool together, and at the final whistle the winners split the losers' pool in proportion to what they staked. A drawn match, or an upset nobody backed, refunds every coin. Players seated in the match cannot bet on it, and the rail keeps your lifetime record of wins, losses, and net coin.",
-    practiceHeading: 'Practice bouts and the idle pitch',
-    practiceBody:
-      'The Vale Cup window also offers practice: a private copy of the pitch where bots fill both sides and nothing counts toward your record. Short a player or two for the real thing? After a short wait, bots round out the teams, and any match with bots on the pitch is a friendly, never rated. And when the Sowfield sits idle, the bots put on an exhibition you can watch, and bet on, from the stands; the moment real players ready up, the exhibition yields the pitch and every stake is returned.',
-    nationsHeading: 'The eight banner nations',
-    nationsBody:
-      'Every team plays under a banner. The captain picks the nation, and if both sides fly the same one, the away side plays the inverted palette.',
-    nationVale: 'Green and gold, flying the wheat sheaf: the home side, farmhands to the bone.',
-    nationMirefen: 'Teal and grey under the heron: patient, long-legged, never hurried.',
-    nationThornpeak: 'Ice blue and white under the mountain peak: sure-footed and stubborn.',
-    nationColiseum: 'Red and black with crossed swords: they play like it is still a war game.',
-    nationChoir: 'Pale blue and silver under the bell: eerie, precise, and very quiet.',
-    nationOgre: 'Orange and umber behind the fist: shoulder-first and proud of it.',
-    nationMoon: 'Violet and silver under the crescent: night players, light on their feet.',
-    nationCopperdig: 'Copper and brown with the pickaxe: diggers who never stop running.',
-    rolesHeading: 'Sport roles',
-    rolesBody:
-      'Your role decides the kit you carry onto the pitch. Everyone kicks; the rest is temperament. In the one-a-side and two-a-side brackets everyone plays the all-rounder kit, so role picks come into their own from three-a-side up.',
-    rewardsHeading: 'Truce rules',
-    rewardsBody:
-      "Truce rules mean no experience and no loot: a decided match counts toward your record and the winners board, and a win also counts toward the day's reward tasks. Deserting a match benches your slot, and the Groundskeeper remembers.",
-  },
-
   // Realm Racers, the vehicle-circuit minigame at the Evergarden (docs/design/deeds.md's
   // Book of Deeds entry, and the rally minigame proper). Spoiler-safe: no lap times, damage
   // numbers, or weapon cooldowns, only the shape of the sport.
@@ -2632,7 +2599,7 @@ export const guideStrings = {
       'The Book of Deeds walks beside every step of this. Your first attunement earns Craftsworn and your first masterwork earns Masterwright, both wearable as titles. Each of the eight earnable crafts marks a milestone deed at 50 skill and crowns its cap with a Grandmaster title, while Fishing gets Old Salt at 100 proficiency and the Master Angler title at 200.\n\nThere are quieter pages too: deeds for your first harvest and first craft, for the rare finds luck turns up in the field, and for taking up salvage. All of it is cosmetic, titles and Renown only. A deed never grants power; it only proves you were there.',
     startHeading: 'Where to start',
     startBody:
-      "Fresh off the road in Eastbrook? Find Foreman Odell and take A Trade for Every Hand: he will point you at the ore veins around the Copper Dig southeast of town and hand you your first calluses. Mind the dig itself: the Deeprock Diggers camped on it stand a few levels above a fresh arrival, so work the outlying veins first and save the camp's heart for when you have leveled a little. From then on, harvest every vein, timber stand, and herb patch you pass while questing; proficiency comes naturally to travelers.\n\nBack in town, press T to open the crafting window and work the common recipes every character knows from the start. Visit the masters at the forge, kitchens, loom, and toolworks to see what they teach, and take their work orders for steady coin. By the time the Guild's letter finds you, you will already know which pair feels like home.",
+      "Fresh off the road in Eastbrook? Find Foreman Odell and take A Trade for Every Hand: he will point you at the ore veins around the Copper Dig northeast of town and hand you your first calluses. Mind the dig itself: the Deeprock Diggers camped on it stand a few levels above a fresh arrival, so work the outlying veins first and save the camp's heart for when you have leveled a little. From then on, harvest every vein, timber stand, and herb patch you pass while questing; proficiency comes naturally to travelers.\n\nBack in town, press T to open the crafting window and work the common recipes every character knows from the start. Visit the masters at the forge, kitchens, loom, and toolworks to see what they teach, and take their work orders for steady coin. By the time the Guild's letter finds you, you will already know which pair feels like home.",
     colStation: 'Station',
     colHub: 'Hub',
     colMaster: 'Master',
@@ -3113,6 +3080,9 @@ export const guideStrings = {
       'With the vault open, click an item in your bags to deposit it and click it in the vault to take it back. The vault holds goods only, never coin, and quest items stay with you. When your bags fill up mid-journey, one button sweeps all your crafting materials in at once.',
     bankSlots:
       'A fresh vault starts small and grows with you. The bursar sells further slots for coin at ever-steeper prices, and playing online earns bonus room on top, for things like a verified email, linked accounts, and friends you bring into the game.',
+    // The bag-socket tier above the slot ladder (Bank Storage phase 07).
+    bankSockets:
+      'Past the slot ladder, the bursar also sells up to four bag sockets, unlocked in order at ever-steeper prices. Seat a spare bag from your carrying set in one and its slots join your vault room: an everyday bag widens the whole store, while a reagent satchel adds room only crafting materials may take. Click a bag in your bags to seat it and click the socket to take it back. Taking one back never costs you a thing you stored: if the vault ends up fuller than its shrunken room, everything stays put and new deposits simply wait for space.',
 
     // Buying and selling at a vendor.
     buyingTitle: 'Buying and selling',

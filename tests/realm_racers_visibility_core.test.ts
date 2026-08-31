@@ -7,7 +7,7 @@ import {
 } from '../src/render/realm_racers_visibility_core';
 import { Renderer } from '../src/render/renderer';
 import type { Entity, QuestProgress } from '../src/sim/types';
-import { addAt, makeWorld } from './vale_cup_util';
+import { addAt, makeWorld } from './realm_racers_util';
 
 interface RequiredViewsHarness {
   sim: { entities: Map<number, Entity>; questLog: Map<string, QuestProgress> };

@@ -452,7 +452,7 @@ export const nl_NL: EnTranslations = {
       "remainingDaysHours": "{days} d {hours} u",
       "score": "Score",
       "walletValue": "Portemonneewaarde (WOC)",
-      "usd": "{amount} USD",
+      "usd": "{amount}",
       "sol": "{amount} SOL",
       "unknown": "Onbekend",
       "spinTitle": "Dagelijkse draai",
@@ -494,85 +494,85 @@ export const nl_NL: EnTranslations = {
       }
     },
     "trade": {
-      "windowClosed": "Trade window closed.",
+      "windowClosed": "Ruilvenster gesloten.",
       "woc": {
-        "tabGold": "Gold",
+        "tabGold": "Goud",
         "tabWoc": "$WOC",
-        "modesLabel": "Payment currency",
-        "tabWocHint": "Paying in $WOC is available when your side of the table is empty and no gold is offered.",
-        "priceLabel": "Price in USD",
+        "modesLabel": "Betaalvaluta",
+        "tabWocHint": "Betalen in $WOC is mogelijk wanneer jouw kant van de tafel leeg is en er geen goud wordt aangeboden.",
+        "priceLabel": "Prijs in USD",
         "pricePlaceholder": "0.00",
-        "equivalent": "About {tokens} $WOC at the current rate",
-        "variableWarning": "The $WOC amount is a preview, not a fixed price. The exact number is set by a fresh quote when you pay.",
-        "feeLine": "Exchange fee {fee}, taken out of the price.",
-        "netLine": "You receive {net}",
-        "netLineBuyer": "The seller receives {net}",
-        "sendOffer": "Offer $WOC",
-        "offerSent": "Offer sent. It expires in 10 minutes unless {name} accepts.",
-        "offerSentUntil": "Offer sent. It expires at {time} unless {name} accepts.",
-        "incomingAccept": "{name} offers {price} for your items.",
-        "notInstant": "A $WOC sale is not instant. The item moves into escrow once both sides accept, and reaches the buyer once payment is verified.",
-        "blockDisabled": "The $WOC Exchange is not available on this realm.",
-        "blockNoWallet": "Link and verify a wallet to sell items for $WOC.",
-        "blockPartnerUnknown": "Checking whether that player can accept $WOC...",
-        "blockRecipientNoWallet": "That player must connect a wallet to accept $WOC payments.",
-        "hintClearYourItems": "Remove your own items: a $WOC offer buys what they are selling.",
-        "hintAwaitTheirItems": "Waiting for them to offer something that can be sold for $WOC.",
-        "hintOneItem": "A $WOC deal covers exactly one item. Only the item being sold can be on the table.",
-        "hintEnterPrice": "Enter a price in USD.",
-        "hintAcceptNeedsItem": "Add the item you are selling before accepting.",
-        "hintAcceptLocked": "That item is locked. Unlock it in your bags, then remove it from the trade and add it again.",
-        "hintGoldOffered": "Remove your gold offer first: a trade is gold or $WOC, not both.",
-        "ineligibleReason": "Soulbound, quest, and locked items, and items outside the Exchange categories, cannot be sold for $WOC.",
-        "incomingTitle": "$WOC offer from {name}",
-        "incomingBody": "{name} offers to sell you {item} for {price}.",
+        "equivalent": "Ongeveer {tokens} $WOC tegen de huidige koers",
+        "variableWarning": "Het $WOC-bedrag is een voorbeeld, geen vaste prijs. Het exacte aantal wordt bepaald door een nieuwe prijsopgave op het moment van betalen.",
+        "feeLine": "Beursvergoeding {fee}, afgetrokken van de prijs.",
+        "netLine": "Je ontvangt {net}",
+        "netLineBuyer": "De verkoper ontvangt {net}",
+        "sendOffer": "$WOC aanbieden",
+        "offerSent": "Aanbod verstuurd. Het verloopt over 10 minuten, tenzij {name} accepteert.",
+        "offerSentUntil": "Aanbod verstuurd. Het verloopt om {time}, tenzij {name} accepteert.",
+        "incomingAccept": "{name} biedt {price} voor je voorwerpen.",
+        "notInstant": "Een $WOC-verkoop gaat niet direct. Het voorwerp gaat in bewaring zodra beide partijen accepteren, en bereikt de koper zodra de betaling is geverifieerd.",
+        "blockDisabled": "De $WOC-beurs is niet beschikbaar op deze wereld.",
+        "blockNoWallet": "Koppel en verifieer een portemonnee om voorwerpen voor $WOC te verkopen.",
+        "blockPartnerUnknown": "Controleren of die speler $WOC kan accepteren...",
+        "blockRecipientNoWallet": "Die speler moet een portemonnee koppelen om $WOC-betalingen te accepteren.",
+        "hintClearYourItems": "Verwijder je eigen voorwerpen: een $WOC-aanbod koopt wat zij verkopen.",
+        "hintAwaitTheirItems": "Wachten tot zij iets aanbieden dat voor $WOC kan worden verkocht.",
+        "hintOneItem": "Een $WOC-deal omvat precies één voorwerp. Alleen het verkochte voorwerp mag op tafel liggen.",
+        "hintEnterPrice": "Voer een prijs in USD in.",
+        "hintAcceptNeedsItem": "Voeg het voorwerp toe dat je verkoopt voordat je accepteert.",
+        "hintAcceptLocked": "Dat voorwerp is vergrendeld. Ontgrendel het in je tassen, verwijder het dan uit de ruil en voeg het opnieuw toe.",
+        "hintGoldOffered": "Verwijder eerst je goudaanbod: een ruil is goud of $WOC, niet beide.",
+        "ineligibleReason": "Zielgebonden voorwerpen, questvoorwerpen, vergrendelde voorwerpen en voorwerpen buiten de categorieën van de Beurs kunnen niet voor $WOC worden verkocht.",
+        "incomingTitle": "$WOC-aanbod van {name}",
+        "incomingBody": "{name} biedt aan om je {item} te verkopen voor {price}.",
         "moneyUsd": "{usd}",
         "moneyLine": "{usd} (~ {tokens} $WOC)",
-        "waitingOther": "Offer accepted. Waiting for the other player to accept.",
-        "payNow": "Pay {usd}",
-        "awaitingPayment": "Waiting for payment confirmation...",
-        "paying": "Confirm the payment in your wallet...",
-        "settled": "Paid. Your item is in your bags, or arrives by Ravenpost mail if they were full.",
-        "settledSeller": "Paid. The item was delivered to the buyer.",
-        "accept": "Accept offer",
-        "accepted": "Offer accepted. Your item is held until payment is verified.",
-        "decline": "Decline",
-        "withdraw": "Withdraw offer",
-        "hintInsufficientBalance": "That is more $WOC than your connected wallet holds.",
-        "statusAwaitingBuyer": "Waiting for the buyer to pay.",
-        "statusPayingBuyer": "Confirming your payment on the network...",
-        "statusPayingSeller": "The buyer's payment is confirming on the network...",
-        "statusReviewBuyer": "Your payment is under review.",
-        "statusReviewSeller": "The buyer's payment is under review.",
-        "paidSeller": "You have received a payment of {price} for your {item}.",
-        "paidBuyer": "You have sent a payment of {price} for {item}.",
-        "closedCancelled": "This sale was cancelled. The item returns to the seller by Ravenpost mail.",
-        "closedSuspended": "This sale was suspended by a Game Master. The item returns to the seller by Ravenpost mail.",
-        "closedUnpaid": "This sale ended without payment. The item returns to the seller by Ravenpost mail.",
-        "closedUnpaidBuyer": "This sale ended without your payment. The item returns to the seller by Ravenpost mail; not paying an accepted deal earns a Marketplace strike.",
-        "cancelSale": "Cancel sale",
-        "cancelPendingSeller": "Cancel requested. The sale ends on its own unless the buyer pays first.",
-        "youDeclined": "You declined the offer.",
-        "youWithdrew": "You withdrew your offer.",
-        "offerNotPending": "This offer is no longer pending.",
-        "offerDeclined": "The $WOC offer was declined.",
-        "offerWithdrawn": "The $WOC offer was withdrawn.",
-        "offerExpired": "The $WOC offer expired.",
-        "offerExpiresAt": "Offer expires at {time}.",
-        "offerStandsUntil": "Your $WOC offer still stands until {time}. Trade with the seller again to finish the deal if they accept.",
-        "dealAwaitsPayment": "Your $WOC purchase is still unpaid. Trade with the seller again to pay; the deal expires on its own if you do not, and not paying earns a Marketplace strike.",
-        "closeSellerHold": "Your item stays held for the buyer's payment. Cancel the sale from the Exchange's Activity tab if you change your mind.",
-        "closePaymentContinuesBuyer": "Your payment is still being confirmed. Delivery completes on its own.",
-        "closePaymentContinuesSeller": "The buyer's payment is still being confirmed. The sale completes on its own.",
-        "p2pBindingNote": "Once both sides accept, payment is due within {duration}, or within the shorter window that opens when you press Pay. Not paying earns a Marketplace strike.",
-        "p2pBindingNoteUntimed": "Once both sides accept, payment is due shortly after, or within the shorter window that opens when you press Pay. Not paying earns a Marketplace strike.",
-        "p2pPaymentDueAt": "Payment is due by {time}. Not paying earns a Marketplace strike.",
-        "quoteExpiredTrade": "The quote expired. Press Not now, then Pay again for a fresh one.",
-        "quoteStaged": "Payment quote ready for {usd}: {tokens} $WOC, valid until {time}.",
-        "paymentConfirmed": "Payment confirmed. Your item arrives in your bags, or by Ravenpost mail if they are full, once delivery completes.",
-        "statusConfirmedBuyer": "Payment confirmed. Delivery is completing...",
-        "statusConfirmedSeller": "Payment confirmed. The sale is completing...",
-        "hintBelowMin": "The Exchange minimum price is {usd}."
+        "waitingOther": "Aanbod geaccepteerd. Wachten tot de andere speler accepteert.",
+        "payNow": "{usd} betalen",
+        "awaitingPayment": "Wachten op betalingsbevestiging...",
+        "paying": "Bevestig de betaling in je portemonnee...",
+        "settled": "Betaald. Je voorwerp zit in je tassen, of komt via de Ravenpost als die vol waren.",
+        "settledSeller": "Betaald. Het voorwerp is bij de koper afgeleverd.",
+        "accept": "Aanbod accepteren",
+        "accepted": "Aanbod geaccepteerd. Je voorwerp wordt vastgehouden tot de betaling is geverifieerd.",
+        "decline": "Weigeren",
+        "withdraw": "Aanbod intrekken",
+        "hintInsufficientBalance": "Dat is meer $WOC dan je gekoppelde portemonnee bevat.",
+        "statusAwaitingBuyer": "Wachten tot de koper betaalt.",
+        "statusPayingBuyer": "Je betaling wordt bevestigd op het netwerk...",
+        "statusPayingSeller": "De betaling van de koper wordt bevestigd op het netwerk...",
+        "statusReviewBuyer": "Je betaling wordt beoordeeld.",
+        "statusReviewSeller": "De betaling van de koper wordt beoordeeld.",
+        "paidSeller": "Je hebt een betaling van {price} ontvangen voor je {item}.",
+        "paidBuyer": "Je hebt een betaling van {price} verstuurd voor {item}.",
+        "closedCancelled": "Deze verkoop is geannuleerd. Het voorwerp gaat terug naar de verkoper via de Ravenpost.",
+        "closedSuspended": "Deze verkoop is opgeschort door een Spelmeester. Het voorwerp gaat terug naar de verkoper via de Ravenpost.",
+        "closedUnpaid": "Deze verkoop eindigde zonder betaling. Het voorwerp gaat terug naar de verkoper via de Ravenpost.",
+        "closedUnpaidBuyer": "Deze verkoop eindigde zonder jouw betaling. Het voorwerp gaat terug naar de verkoper via de Ravenpost; een geaccepteerde deal niet betalen levert een Beursovertreding op.",
+        "cancelSale": "Verkoop annuleren",
+        "cancelPendingSeller": "Annulering aangevraagd. De verkoop eindigt vanzelf, tenzij de koper eerst betaalt.",
+        "youDeclined": "Je hebt het aanbod geweigerd.",
+        "youWithdrew": "Je hebt je aanbod ingetrokken.",
+        "offerNotPending": "Dit aanbod staat niet langer in behandeling.",
+        "offerDeclined": "Het $WOC-aanbod is geweigerd.",
+        "offerWithdrawn": "Het $WOC-aanbod is ingetrokken.",
+        "offerExpired": "Het $WOC-aanbod is verlopen.",
+        "offerExpiresAt": "Aanbod verloopt om {time}.",
+        "offerStandsUntil": "Je $WOC-aanbod blijft geldig tot {time}. Ruil opnieuw met de verkoper om de deal af te ronden als die accepteert.",
+        "dealAwaitsPayment": "Je $WOC-aankoop is nog niet betaald. Ruil opnieuw met de verkoper om te betalen; de deal verloopt vanzelf als je dat niet doet, en niet betalen levert een Beursovertreding op.",
+        "closeSellerHold": "Je voorwerp blijft vastgehouden in afwachting van de betaling van de koper. Annuleer de verkoop via het tabblad Activiteit van de Beurs als je van gedachten verandert.",
+        "closePaymentContinuesBuyer": "Je betaling wordt nog bevestigd. De levering voltooit zichzelf.",
+        "closePaymentContinuesSeller": "De betaling van de koper wordt nog bevestigd. De verkoop voltooit zichzelf.",
+        "p2pBindingNote": "Zodra beide partijen accepteren, moet er binnen {duration} betaald worden, of binnen het kortere venster dat opent wanneer je op Betalen drukt. Niet betalen levert een Beursovertreding op.",
+        "p2pBindingNoteUntimed": "Zodra beide partijen accepteren, moet er kort daarna betaald worden, of binnen het kortere venster dat opent wanneer je op Betalen drukt. Niet betalen levert een Beursovertreding op.",
+        "p2pPaymentDueAt": "Betaling is verschuldigd voor {time}. Niet betalen levert een Beursovertreding op.",
+        "quoteExpiredTrade": "De prijsopgave is verlopen. Druk op Niet nu, en dan opnieuw op Betalen voor een nieuwe.",
+        "quoteStaged": "Betalingsprijsopgave klaar voor {usd}: {tokens} $WOC, geldig tot {time}.",
+        "paymentConfirmed": "Betaling bevestigd. Je voorwerp komt in je tassen, of via de Ravenpost als die vol zijn, zodra de levering voltooid is.",
+        "statusConfirmedBuyer": "Betaling bevestigd. De levering wordt voltooid...",
+        "statusConfirmedSeller": "Betaling bevestigd. De verkoop wordt voltooid...",
+        "hintBelowMin": "De minimumprijs van de Beurs is {usd}."
       }
     },
     "wocStore": {
@@ -800,7 +800,37 @@ export const nl_NL: EnTranslations = {
       "applied": "In gebruik",
       "apply": "Skin toepassen",
       "detach": "Skin verwijderen",
-      "equipHint": "Rust een {type} uit om deze skin aan te brengen."
+      "equipHint": "Rust een {type} uit om deze skin aan te brengen.",
+      "charter": {
+        "eyebrow": "Geldkist",
+        "title": "Geldkistcharters",
+        "scope": "Een charter breidt alleen de bank van dit personage uit. De thesaurier verkoopt dezelfde vakken voor goud.",
+        "grant": "Voegt {slots} bankvakken toe",
+        "buy": "Charter Kopen",
+        "buyAria": "{item} kopen",
+        "confirmTitle": "Aankoop van Charter Bevestigen",
+        "confirmBody": "{item} kopen voor {cost} Claudium?",
+        "resultContext": "{item} ({sku}): {message}",
+        "granted": "Het charter is toegepast. De bank van dit personage is nu groter.",
+        "alreadyGranted": "Dit charter staat al op dit personage. Je bent niet opnieuw belast.",
+        "applyDeferred": "Betaling voltooid. De vakken worden automatisch toegepast de volgende keer dat dit personage inlogt.",
+        "grantUnresolved": "Betaling voltooid, maar de vakken konden nog niet worden toegepast. De aankoop is geregistreerd en support kan dit voor je afronden.",
+        "inProgress": "Een aankoop voor dit personage wordt nog voltooid. Probeer het straks opnieuw.",
+        "doesNotFit": "De bank van dit personage heeft geen ruimte voor de volledige toekenning van dit charter.",
+        "notPurchasable": "Dit charter kan nu niet worden gekocht.",
+        "noRoom": "De bank van dit personage heeft geen ruimte meer voor een charter.",
+        "noCharterFits": "Geen enkel charter past in de resterende ruimte van de bank van dit personage.",
+        "someHiddenByFit": "Charters die te groot zijn voor de resterende ruimte in de bank van dit personage worden niet getoond.",
+        "outage": "De aankoop kon niet worden bevestigd. Probeer het opnieuw met deze knop; je wordt niet dubbel belast. Als je het spel eerst herlaadt, kan die bescherming verloren gaan.",
+        "outageStale": "Ga terug naar de Winkel en gebruik dezelfde actie Charter Kopen opnieuw. Je wordt niet dubbel belast. Als je het spel eerst herlaadt, kan die bescherming verloren gaan.",
+        "failed": "De aankoop kon niet worden voltooid.",
+        "names": {
+          "strongbox_charter_1": "Mindere Geldkistcharter",
+          "strongbox_charter_2": "Grotere Geldkistcharter",
+          "strongbox_charter_3": "Grootse Geldkistcharter",
+          "strongbox_charter_complete": "Volledige Geldkistcharter"
+        }
+      }
     },
     "claudium": {
       "title": "Claudium",
@@ -856,6 +886,7 @@ export const nl_NL: EnTranslations = {
       "reset": "Herstellen",
       "presets": {
         "classic": "Klassiek Goud",
+        "fancyGold": "Chique Goud (WIP)",
         "midnight": "Middernacht",
         "parchment": "Perkament",
         "highContrast": "Hoog Contrast"
@@ -936,7 +967,8 @@ export const nl_NL: EnTranslations = {
       "durationUnitSeconds": "s",
       "durationUnitMinutes": "m",
       "durationUnitHours": "u",
-      "durationUnitDays": "d"
+      "durationUnitDays": "d",
+      "buffOverflowLabel": "+{n}"
     },
     "character": {
       "modelPreview": "Voorbeeld van Personagemodel"
@@ -949,7 +981,7 @@ export const nl_NL: EnTranslations = {
       "jump": "Springen",
       "leaderboard": "Ranglijst",
       "dailyRewards": "Winkel",
-      "wocMarket": "Exchange",
+      "wocMarket": "Beurs",
       "deeds": "Daden",
       "mounts": "Rijdieren",
       "professions": "Beroepen",
@@ -963,52 +995,62 @@ export const nl_NL: EnTranslations = {
       "actionRing": "Gevechtsacties",
       "actionPageToggle": "Actiepagina wisselen",
       "actionPageIndicator": "Pag. {page}",
-      "actionRadial": "Action directions",
-      "actionRadialCancel": "Cancel action",
-      "radialCenter": "Centre",
-      "radialUp": "Up",
-      "radialRight": "Right",
-      "radialDown": "Down",
-      "radialLeft": "Left",
-      "consumableSeat": "Consumables",
-      "menuControl": "Menus",
-      "menuControlAria": "Menus. Tap to open chat, or hold and swipe right for mounts, map, bags and more.",
-      "menuControlAriaTap": "Menus. Tap to open the menu row: mounts, map, bags and more. Tap again for chat.",
+      "actionRadial": "Actierichtingen",
+      "actionRadialCancel": "Actie annuleren",
+      "radialCenter": "Midden",
+      "radialUp": "Omhoog",
+      "radialRight": "Rechts",
+      "radialDown": "Omlaag",
+      "radialLeft": "Links",
+      "consumableSeat": "Verbruiksartikelen",
+      "menuControl": "Menu's",
+      "menuControlAria": "Menu's. Tik om chat te openen, of houd vast en veeg naar rechts voor rijdieren, kaart, tassen en meer.",
+      "menuControlAriaTap": "Menu's. Tik om de menurij te openen: rijdieren, kaart, tassen en meer. Tik nogmaals voor chat.",
       "menuLabel": "Menu",
-      "quickActions": "Quick Actions",
-      "quickActionsAria": "Quick Actions. Tap to open the row of mount, chat, map, bags and more, or hold and swipe right to pick one.",
-      "quickActionsAriaTap": "Quick Actions. Tap to open the row of mount, chat, map, bags and more, then tap an item. Tap the control again to close.",
-      "quickActionsLabel": "Actions",
-      "stanceRadial": "Stances",
-      "stanceAnchorAria": "Stance: {stance}. Tap to open the stance ring, then pick another stance.",
-      "stanceAnchorEmptyAria": "No stance. Tap to open the stance ring, then pick a stance.",
-      "questStripAria": "Tracked quest {position} of {total}: {title}. Activate for the next quest.",
-      "questStripAriaSingle": "Tracked quest: {title}",
+      "quickActions": "Snelacties",
+      "quickActionsAria": "Snelacties. Tik om de rij met rijdier, chat, kaart, tassen en meer te openen, of houd vast en veeg naar rechts om er een te kiezen.",
+      "quickActionsAriaTap": "Snelacties. Tik om de rij met rijdier, chat, kaart, tassen en meer te openen, tik dan op een item. Tik nogmaals op de knop om te sluiten.",
+      "quickActionsLabel": "Acties",
+      "stanceRadial": "Houdingen",
+      "stanceAnchorAria": "Houding: {stance}. Tik om de houdingsring te openen en kies dan een andere houding.",
+      "stanceAnchorEmptyAria": "Geen houding. Tik om de houdingsring te openen en kies dan een houding.",
+      "questStripAria": "Gevolgde quest {position} van {total}: {title}. Activeer voor de volgende quest.",
+      "questStripAriaSingle": "Gevolgde quest: {title}",
       "questStripCounter": "{position}/{total}",
-      "questStripMore": "+{count} more",
+      "questStripMore": "+{count} meer",
       "targetCycle": "Wissel van doel",
       "targetCycleShort": "Doel",
       "spellbookPageLabel": "Pagina {page}",
       "hideKeyboard": "Toetsenbord verbergen",
       "chatPlaceholder": "Zeg iets...",
-      "barEditor": "Edit Bars",
-      "barEditorAria": "Edit the action bar layout"
+      "barEditor": "Balken Bewerken",
+      "barEditorAria": "Bewerk de actiebalkindeling"
     },
     "barEditor": {
-      "title": "Edit Action Bar",
-      "close": "Close bar editor",
-      "pages": "Action bar pages",
-      "pageTab": "Page {page}",
-      "buttonHeader": "Button {button}",
-      "cellAria": "Button {button}, {direction}: {action}",
-      "emptyCellAria": "Button {button}, {direction}: empty",
-      "hint": "Tap a slot, then another, to swap them.",
-      "armed": "Tap a slot to place {name}.",
-      "picked": "Tap another slot to swap with {name}.",
-      "locked": "Action bars are locked in Interface options.",
-      "clear": "Clear",
-      "clearAria": "Clear a slot",
-      "clearArmed": "Tap a slot to clear it."
+      "title": "Actiebalk Bewerken",
+      "close": "Balkbewerker sluiten",
+      "pages": "Actiebalkpagina's",
+      "pageTab": "Pagina {page}",
+      "buttonHeader": "Knop {button}",
+      "cellAria": "Knop {button}, {direction}: {action}",
+      "emptyCellAria": "Knop {button}, {direction}: leeg",
+      "hint": "Tik op een vak, dan op een ander, om ze te verwisselen.",
+      "armed": "Tik op een vak om {name} te plaatsen.",
+      "picked": "Tik op een ander vak om te verwisselen met {name}.",
+      "locked": "Actiebalken zijn vergrendeld in de interface-opties.",
+      "clear": "Wissen",
+      "clearAria": "Een vak wissen",
+      "clearArmed": "Tik op een vak om het te wissen."
+    },
+    "tutorialGreeting": {
+      "bodyFirst": "Ik heb je hier nog niet eerder gezien, vriend. Het is traditie in deze landen dat wie aan zijn avontuur begint, eerst de Beproevingskust bezoekt, een rustig eiland net buiten de zeestraat. Daar kun je je vaardigheden slijpen en aan de wereld wennen voordat je haar beproevingen aangaat. De veerboot vaart beide kanten op, en niemand zal minder over je denken, wat je ook kiest.",
+      "bodyRefresher": "Weer terug met een nieuw gezicht, hè? Dan weet je hoe dit werkt. Toch, als je liever nog wat oefent voordat je vertrekt: de Beproevingskust wijst nooit een terugkerende leerling af, en de veerboot ligt klaar wanneer jij dat bent.",
+      "play": "Volg de tutorial",
+      "skip": "Sla de tutorial over",
+      "declineNote": "Zoals je wilt, vriend. Mocht je ooit van gedachten veranderen: de veerbel bij de brievenbus van de Ravenpost brengt je op elk moment, dag of nacht, naar de Beproevingskust. Ze staat er nog wanneer de wolven dat niet meer doen.",
+      "bellHomeNote": "Alweer terug van de kust? Dat was de veerbel die je luidde. Zijn tweelingbroer hangt daar bij de brievenbus van de Ravenpost: luid hem wanneer je wilt en de overtocht brengt je terug naar de Beproevingskust. Geen kwaad geschied, hoe dan ook.",
+      "islandArrivalNote": "Welkom op de Beproevingskust. Warden Tam wacht verderop op het strand: ga naar hem toe.",
+      "noteClose": "Begrepen"
     },
     "tutorial": {
       "moveBodyTouch": "Gebruik de bewegingsstick om te bewegen en sleep over het scherm om rond te kijken. Zet een paar stappen om te beginnen.",
@@ -1021,6 +1063,117 @@ export const nl_NL: EnTranslations = {
       "nextTipQuestLog": "Open je questlogboek ({key}) om je volgende taak in de buurt te vinden.",
       "nextTipMap": "Bekijk de wereldkaart ({key}) om te zien waar speurtochten wachten.",
       "nextTipSocial": "Open Sociaal ({key}) om een groep te vinden voor zwaardere gevechten."
+    },
+    "bootcamp": {
+      "title": "Eerste Stappen",
+      "talkTitle": "Spreek met Wachter Tam",
+      "talkBody": "Wachter Tam bewaakt de Beproevingspoort iets verderop. Loop naar hem toe tot zijn naam verschijnt, druk dan op {interactKey}, of klik met links op hem, om te praten: hij geeft je de run op.",
+      "talkBodyTouch": "Wachter Tam bewaakt de Beproevingspoort iets verderop. Loop naar hem toe tot zijn naam verschijnt, tik dan op hem, of tik op de Gebruik-knop, om te praten: hij geeft je de run op.",
+      "talkBodyPad": "Wachter Tam bewaakt de Beproevingspoort iets verderop. Loop naar hem toe tot zijn naam verschijnt, druk dan op je interactieknop om te praten: hij geeft je de run op.",
+      "forwardTitle": "Loop de eerste baan",
+      "forwardBody": "Stap in de baan naast Tam en houd {forwardKey} ingedrukt om hem westwaarts naar zijn vlag te lopen.",
+      "forwardBodyTouch": "Stap in de baan naast Tam en duw de bewegingsstick omhoog om hem westwaarts naar zijn vlag te lopen.",
+      "forwardBodyPad": "Stap in de baan naast Tam en duw de linkerstick omhoog om hem westwaarts naar zijn vlag te lopen.",
+      "turnwalkTitle": "Draai, loop dan",
+      "turnwalkBody": "Eén vlag binnen. Houd {turnKey} ingedrukt om ter plekke te draaien tot je de ommuurde baan naar het zuiden in kijkt, houd dan weer {forwardKey} ingedrukt en loop hem naar de tweede vlag.",
+      "turnwalkBodyTouch": "Eén vlag binnen. Sleep een vinger over de wereld (niet de bewegingsstick) om te draaien tot je de ommuurde baan naar het zuiden in kijkt, duw dan de stick omhoog en loop hem naar de tweede vlag.",
+      "turnwalkBodyPad": "Eén vlag binnen. Duw de rechterstick om te draaien tot je de ommuurde baan naar het zuiden in kijkt, duw dan de linkerstick omhoog en loop hem naar de tweede vlag.",
+      "strafeTitle": "Draai, loop dan",
+      "strafeBody": "Nog een hoek te gaan. Houd {turnLeftKey} ingedrukt om ter plekke te draaien tot je de laatste baan in kijkt, houd dan weer {forwardKey} ingedrukt en loop hem tot de rode vlag achter je ligt.",
+      "strafeBodyTouch": "Nog een hoek te gaan. Sleep een vinger over de wereld (niet de bewegingsstick) om te draaien tot je de laatste baan in kijkt, duw dan de stick omhoog en loop hem tot de rode vlag achter je ligt.",
+      "strafeBodyPad": "Nog een hoek te gaan. Duw de rechterstick om te draaien tot je de laatste baan in kijkt, duw dan de linkerstick omhoog en loop hem tot de rode vlag achter je ligt.",
+      "cameraTitle": "Draai de camera rond",
+      "cameraBody": "Nog een laatste les voordat je de run inlevert: houd de rechtermuisknop ingedrukt en sleep om de camera helemaal om je heen te laten draaien. Weten wat er achter je staat, wint gevechten.",
+      "cameraBodyTouch": "Nog een laatste les voordat je de run inlevert: sleep een vinger over de wereld om de camera helemaal om je heen te laten draaien. Weten wat er achter je staat, wint gevechten.",
+      "cameraBodyPad": "Nog een laatste les voordat je de run inlevert: duw de rechterstick om de camera helemaal om je heen te laten draaien. Weten wat er achter je staat, wint gevechten.",
+      "courseProgress": "Vlag {current} van {total}",
+      "doneTitle": "Run voltooid",
+      "doneBody": "Dat is alles wat je benen moeten weten. Opzichter Pell staat bij de rode vlag: druk op {interactKey} op hem, of klik met links op hem, om je run in te leveren en je eerste beloning op te halen.",
+      "doneBodyTouch": "Dat is alles wat je benen moeten weten. Opzichter Pell staat bij de rode vlag: tik op hem om je run in te leveren en je eerste beloning op te halen.",
+      "doneBodyPad": "Dat is alles wat je benen moeten weten. Opzichter Pell staat bij de rode vlag: druk je interactieknop op hem in om je run in te leveren en je eerste beloning op te halen.",
+      "coachNextTitle": "Volgende: {npc}",
+      "coachNextBody": "Volg het gouden pad naar {npc}. Loop naar hen toe tot de naam verschijnt, druk dan op {interactKey}, of klik met links op hen, om je volgende taak aan te nemen.",
+      "coachNextBodyTouch": "Volg het gouden pad naar {npc}. Loop naar hen toe tot de naam verschijnt, tik dan op hen, of tik op de Gebruik-knop, om je volgende taak aan te nemen.",
+      "coachNextBodyPad": "Volg het gouden pad naar {npc}. Loop naar hen toe tot de naam verschijnt, druk dan op je interactieknop om je volgende taak aan te nemen.",
+      "coachTaskBody": "Volg het gouden pad naar je taak. De tracker rechts houdt de tel bij, en {mapKey} opent de kaart als je de weg kwijtraakt.",
+      "coachTaskBodyTouch": "Volg het gouden pad naar je taak. De tracker rechts houdt de tel bij, en de kaartknop wijst je de weg als je hem kwijtraakt.",
+      "coachTaskBodyPad": "Volg het gouden pad naar je taak. De tracker rechts houdt de tel bij, en je kaartknop wijst je de weg als je hem kwijtraakt.",
+      "coachReadyTitle": "Taak voltooid",
+      "coachReadyBody": "Ga naar {npc} en druk op {interactKey}, of klik met links op hen, om het in te leveren en je beloning op te halen.",
+      "coachReadyBodyTouch": "Ga naar {npc} en tik op hen om het in te leveren en je beloning op te halen.",
+      "coachReadyBodyPad": "Ga naar {npc} en druk op je interactieknop om het in te leveren en je beloning op te halen.",
+      "taskStrikeTrueBody": "Loop naar een strooien oefenpop en klik er met links op om hem als doelwit te kiezen: zijn naam verschijnt boven in je scherm. Druk dan op {attackKey} om te beginnen met zwaaien. Die eerste knop is je gewone aanval, geen spreuk. Blijf raken tot er een het begeeft.",
+      "taskStrikeTrueBodyTouch": "Loop naar een strooien oefenpop en tik erop om hem als doelwit te kiezen. Tik dan op de eerste knop op de actiebalk om te zwaaien. Blijf raken tot er een het begeeft.",
+      "taskStrikeTrueBodyPad": "Loop naar een strooien oefenpop en druk op je doelknop om hem als doelwit te kiezen. Druk dan op je eerste actieknop om te zwaaien. Blijf raken tot er een het begeeft.",
+      "taskHoneBody": "Klik met links op een oefenpop om hem als doelwit te kiezen, druk dan op {abilityKey} om {ability} te gebruiken. Dat is jouw eigen vaardigheid, geen gewone zwaai. Land hem drie keer.",
+      "taskHoneBodyTouch": "Tik op een oefenpop om hem als doelwit te kiezen, tik dan op {ability} op de actiebalk. Dat is jouw eigen vaardigheid, geen gewone zwaai. Land hem drie keer.",
+      "taskHoneBodyPad": "Kies een oefenpop als doelwit, druk dan op de actieknop met {ability} erop. Dat is jouw eigen vaardigheid, geen gewone zwaai. Land hem drie keer.",
+      "taskLongWalkBody": "Druk op {bagsKey} om je tassen te openen, en klik dan met links op de Doorgangssteen. Hij legt je neer waar je staat. Niets hier kan je kwaad doen, en dit kost je niets.",
+      "taskLongWalkBodyTouch": "Open je tassen en tik op de Doorgangssteen. Hij legt je neer waar je staat. Niets hier kan je kwaad doen, en dit kost je niets.",
+      "taskLongWalkBodyPad": "Open je tassen en kies de Doorgangssteen. Hij legt je neer waar je staat. Niets hier kan je kwaad doen, en dit kost je niets.",
+      "taskLongWalkDeadBody": "Je bent gestorven, en je hebt niets verloren: geen voorwerpen, geen munten, geen ervaring. Stap 1 van 2: klik op de knop Geest Vrijlaten in het midden van je scherm. Je herrijst als geest op het kerkhof achter het kamp.",
+      "taskLongWalkDeadBodyTouch": "Je bent gestorven, en je hebt niets verloren: geen voorwerpen, geen munten, geen ervaring. Stap 1 van 2: tik op de knop Geest Vrijlaten in het midden van je scherm. Je herrijst als geest op het kerkhof achter het kamp.",
+      "taskLongWalkDeadBodyPad": "Je bent gestorven, en je hebt niets verloren: geen voorwerpen, geen munten, geen ervaring. Stap 1 van 2: kies Geest Vrijlaten in het midden van je scherm. Je herrijst als geest op het kerkhof achter het kamp.",
+      "taskLongWalkGhostBody": "Stap 2 van 2: je bent nu een geest, en niets kan je raken. Je lichaam is de markering op je minikaart. Loop ernaartoe. Zodra je dichtbij komt, verschijnt een knop Herrijs bij je lijk: klik erop en je bent weer levend, zonder enige straf. Die wandeling is ALTIJD gratis, en zo kom je elke keer terug wanneer je sterft.",
+      "taskLongWalkGhostBodyTouch": "Stap 2 van 2: je bent nu een geest, en niets kan je raken. Je lichaam is de markering op je minikaart. Loop ernaartoe. Zodra je dichtbij komt, verschijnt een knop Herrijs bij je lijk: tik erop en je bent weer levend, zonder enige straf. Die wandeling is ALTIJD gratis, en zo kom je elke keer terug wanneer je sterft.",
+      "taskLongWalkGhostBodyPad": "Stap 2 van 2: je bent nu een geest, en niets kan je raken. Je lichaam is de markering op je minikaart. Loop ernaartoe. Zodra je dichtbij komt, verschijnt een knop Herrijs bij je lijk: kies hem en je bent weer levend, zonder enige straf. Die wandeling is ALTIJD gratis, en zo kom je elke keer terug wanneer je sterft.",
+      "taskShellBody": "De scharrelaars knijpen terug. Klik met links op een van hen om hem als doelwit te kiezen, druk dan op {abilityKey} voor {ability}, en blijf aanvallen. Vallen er te veel tegelijk aan, trek je dan terug de weg op: ze geven de achtervolging snel op, en je gezondheid herstelt terwijl je rust.",
+      "taskShellBodyTouch": "De scharrelaars knijpen terug. Tik op een van hen om hem als doelwit te kiezen, tik dan op {ability} op de actiebalk. Vallen er te veel tegelijk aan, trek je dan terug de weg op: ze geven de achtervolging snel op, en je gezondheid herstelt terwijl je rust.",
+      "taskShellBodyPad": "De scharrelaars knijpen terug. Kies er een als doelwit, druk dan op de actieknop met {ability} erop. Vallen er te veel tegelijk aan, trek je dan terug de weg op: ze geven de achtervolging snel op, en je gezondheid herstelt terwijl je rust.",
+      "taskStrikeTrueBodyCaster": "Loop naar een strooien oefenpop en klik er met links op om hem als doelwit te kiezen: zijn naam verschijnt boven in je scherm. Druk dan op {attackKey}, of klik op de tweede knop op de actiebalk, om je spreuk te werpen. Blijf spreuken tot er een het begeeft.",
+      "taskStrikeTrueBodyCasterTouch": "Loop naar een strooien oefenpop en tik erop om hem als doelwit te kiezen. Tik dan op de tweede knop op de actiebalk om je spreuk te werpen. Blijf spreuken tot er een het begeeft.",
+      "taskStrikeTrueBodyCasterPad": "Loop naar een strooien oefenpop en druk op je doelknop om hem als doelwit te kiezen. Druk dan op je tweede actieknop om je spreuk te werpen. Blijf spreuken tot er een het begeeft.",
+      "taskShellBodyCaster": "De scharrelaars knijpen terug. Klik met links op een van hen om hem als doelwit te kiezen, druk dan op {abilityKey} voor {ability}, en blijf op afstand spreuken werpen. Vallen er te veel tegelijk aan, trek je dan terug de weg op: ze geven de achtervolging snel op, en je gezondheid herstelt terwijl je rust.",
+      "taskShellBodyCasterTouch": "De scharrelaars knijpen terug. Tik op een van hen om hem als doelwit te kiezen, tik dan op {ability} op de actiebalk, en blijf op afstand spreuken werpen. Vallen er te veel tegelijk aan, trek je dan terug de weg op: ze geven de achtervolging snel op, en je gezondheid herstelt terwijl je rust.",
+      "taskShellBodyCasterPad": "De scharrelaars knijpen terug. Kies er een als doelwit, druk dan op de actieknop met {ability} erop, en blijf op afstand spreuken werpen. Vallen er te veel tegelijk aan, trek je dan terug de weg op: ze geven de achtervolging snel op, en je gezondheid herstelt terwijl je rust.",
+      "taskPearlBody": "Volg het gouden pad naar de getijdenpoel aan de westkant van het strand. Druk, staand aan de waterrand, op {bagsKey} om je tassen te openen en klik met links op het Ziltig Lokaas om hem op te roepen. Bevecht hem zoals je de scharrelaars bevocht, en druk wanneer hij valt op {interactKey} op zijn schild om de Glanzende Parel te claimen.",
+      "taskPearlBodyTouch": "Volg het gouden pad naar de getijdenpoel aan de westkant van het strand. Open, staand aan de waterrand, je tassen en tik op het Ziltig Lokaas om hem op te roepen. Bevecht hem zoals je de scharrelaars bevocht, en tik wanneer hij valt op zijn schild om de Glanzende Parel te claimen.",
+      "taskPearlBodyPad": "Volg het gouden pad naar de getijdenpoel aan de westkant van het strand. Open, staand aan de waterrand, je tassen en kies het Ziltig Lokaas om hem op te roepen. Bevecht hem zoals je de scharrelaars bevocht, en druk wanneer hij valt je interactieknop op zijn schild in om de Glanzende Parel te claimen.",
+      "taskWreckLineBody": "De aangespoelde kratten liggen langs het pad naar Kamp Dawnrest. Loop naar een toe tot de naam verschijnt, druk dan op {interactKey}, of klik met links op de krat, om hem op te rapen. Zes maken de buit compleet.",
+      "taskWreckLineBodyTouch": "De aangespoelde kratten liggen langs het pad naar Kamp Dawnrest. Loop naar een toe tot de naam verschijnt, tik dan op de krat, of tik op de Gebruik-knop, om hem op te rapen. Zes maken de buit compleet.",
+      "taskWreckLineBodyPad": "De aangespoelde kratten liggen langs het pad naar Kamp Dawnrest. Loop naar een toe tot de naam verschijnt, druk dan op je interactieknop om hem op te rapen. Zes maken de buit compleet.",
+      "taskPouchBody": "Druk op {interactKey} op {npc}, of klik met links op hen, om de kraam te openen, en klik dan met links op de Linnen buidel om hem te kopen.",
+      "taskPouchBodyTouch": "Tik op {npc} om de kraam te openen, en tik dan op de Linnen buidel om hem te kopen.",
+      "taskPouchBodyPad": "Druk op je interactieknop op {npc} om de kraam te openen, en kies dan de Linnen buidel om hem te kopen.",
+      "readyPouchBody": "Buidel gekocht. Druk op {bagsKey} om je tassen te openen en klik met links op de Linnen buidel om hem in een vrije taslus te gespen. Ga dan naar {npc} en druk op {interactKey} om hem te showen.",
+      "readyPouchBodyTouch": "Buidel gekocht. Open je tassen en tik op de Linnen buidel om hem in een vrije taslus te gespen. Ga dan naar {npc} en tik op hen om hem te showen.",
+      "readyPouchBodyPad": "Buidel gekocht. Open je tassen en kies de Linnen buidel om hem in een vrije taslus te gespen. Ga dan naar {npc} en druk op je interactieknop om hem te showen.",
+      "promptTalk": "Praten",
+      "promptTurnIn": "Quest inleveren",
+      "promptPickUp": "Oprapen",
+      "promptLootPearl": "Plunder de parel",
+      "promptRead": "Lezen",
+      "promptRing": "Luiden",
+      "promptHold": "Vasthouden",
+      "promptSelect": "Selecteren",
+      "promptAttack": "Aanvallen",
+      "promptUseAbility": "Vaardigheid gebruiken",
+      "promptKneel": "Knielen",
+      "promptOpenBags": "Open je tassen",
+      "promptCharacterSheet": "Open je personageblad",
+      "promptLookAround": "Houd de rechtermuisknop ingedrukt en sleep om rond te kijken",
+      "promptJump": "Springen",
+      "promptSummon": "Oproepen",
+      "ringEquipTitle": "Draag je prijs",
+      "ringEquipBody": "Je hebt de Parelmoer gekregen, en een beloning doet niets terwijl hij in een tas zit. Stap 1 van 2: druk op {bagsKey} om je tassen te openen, en klik dan met links op de ring om hem aan te doen.",
+      "ringEquipBodyTouch": "Je hebt de Parelmoer gekregen, en een beloning doet niets terwijl hij in een tas zit. Stap 1 van 2: open je tassen en tik op de ring om hem aan te doen.",
+      "ringEquipBodyPad": "Je hebt de Parelmoer gekregen, en een beloning doet niets terwijl hij in een tas zit. Stap 1 van 2: open je tassen en kies de ring om hem aan te doen.",
+      "ringAdmireTitle": "Kijk jou nou",
+      "ringAdmireBody": "Stap 2 van 2: druk op {charKey} om je personageblad te openen. Dat scherm toont alles wat je draagt en de stats die het je geeft, en de ring zit nu aan je hand. Kijk het na wanneer je nieuwe uitrusting oppakt.",
+      "ringAdmireBodyTouch": "Stap 2 van 2: open je personageblad vanuit het menu. Dat scherm toont alles wat je draagt en de stats die het je geeft, en de ring zit nu aan je hand. Kijk het na wanneer je nieuwe uitrusting oppakt.",
+      "ringAdmireBodyPad": "Stap 2 van 2: open je personageblad vanuit het menu. Dat scherm toont alles wat je draagt en de stats die het je geeft, en de ring zit nu aan je hand. Kijk het na wanneer je nieuwe uitrusting oppakt.",
+      "keycapThen": "dan",
+      "voiceArrival": "Rustig aan de wal, vriend. Zie je het gouden pad onder je voeten? Dat kent de weg beter dan ik. Volg het.",
+      "voiceFirstFlag": "Dat is één vlag binnen. Blijf die benen bewegen, nog maar twee te gaan.",
+      "voiceRunDone": "Een schone run, dat. Opzichter Pell heeft je beloning, ga hem halen.",
+      "voiceStationDoneA": "Prima werk. Op naar de volgende, het pad brandt al voor je.",
+      "voiceStationDoneB": "Je krijgt hier de slag van te pakken, geen vergissing mogelijk.",
+      "voiceVeerOff": "Wacht even, vriend, dat is de verkeerde kant op. Het gouden pad ligt achter je.",
+      "voiceGraduate": "De bel is voor je geluid. Oostbeek wacht aan de overkant van het water, en jij bent er klaar voor.",
+      "bellTitle": "Luid de bel",
+      "bellBody": "Je oversteek is verdiend. Loop naar de veerbel bij de steiger en druk op {interactKey}, of klik er met links op, om naar Oostbeek te varen.",
+      "bellBodyTouch": "Je oversteek is verdiend. Loop naar de veerbel bij de steiger en tik erop om naar Oostbeek te varen.",
+      "bellBodyPad": "Je oversteek is verdiend. Loop naar de veerbel bij de steiger en druk je interactieknop erop in om naar Oostbeek te varen."
     },
     "widgets": {
       "clockTitle": "Lokale tijd - klik om te wisselen tussen 12/24-uurs",
@@ -1072,6 +1225,31 @@ export const nl_NL: EnTranslations = {
       "devTierCol": "Insigne",
       "mergedPrs": "Samengevoegde PR's",
       "devEmpty": "Nog geen gerangschikte bijdragers."
+    },
+    "pledge": {
+      "open": "Accepteert geloften",
+      "closed": "Accepteert geen geloften",
+      "minLevel": "Niveau {level}+",
+      "action": "Zweren",
+      "actionTitle": "Trouw zweren aan {guild}",
+      "pledged": "Gezworen",
+      "yourGuild": "Je gilde",
+      "tab": "Geloften",
+      "tabWithCount": "Geloften ({count})",
+      "empty": "Nog niemand heeft trouw gezworen aan je gilde.",
+      "accept": "Accepteren",
+      "acceptTitle": "Gelofte van {name} accepteren",
+      "reject": "Weigeren",
+      "rejectTitle": "Gelofte van {name} weigeren",
+      "settings": "Rekrutering",
+      "acceptingLabel": "Geloften accepteren",
+      "minLevelLabel": "Minimumniveau",
+      "noteLabel": "Bordnotitie",
+      "notePlaceholder": "Vertel aspirant-leden waarnaar je gilde op zoek is",
+      "save": "Opslaan",
+      "yourPledge": "Je gelofte: {guild}",
+      "since": "Gezworen op {date}",
+      "withdraw": "Gelofte intrekken"
     },
     "raidLockout": {
       "title": "Raidvergrendelingen",
@@ -1164,7 +1342,6 @@ export const nl_NL: EnTranslations = {
       "targetFriendlyNext": "Door Bondgenoten Bladeren",
       "targetPrev": "Achteruit Door Doelwitten Bladeren",
       "discord": "Discord",
-      "valecup": "Dalbeker",
       "rally": "Realm Racers",
       "bgFlag": "Slagveldvlag-actie",
       "sheathe": "Wapen Schede In/Uit",
@@ -1188,6 +1365,11 @@ export const nl_NL: EnTranslations = {
       "reset": "Herstellen",
       "done": "Klaar",
       "cancel": "Annuleren",
+      "showExtraBar": "Nog een Actiebalk Tonen",
+      "hideExtraBar": "Een Actiebalk Verbergen",
+      "conflictTitle": "Toets Al Gebonden",
+      "conflictBody": "{key} is al gebonden aan {other}. Als je het bindt aan {action}, wordt {other} ontbonden.",
+      "conflictAccept": "Toch Herbinden",
       "resetConfirmTitle": "Actiebalktoetsen herstellen?",
       "resetConfirmBody": "De eerste balk keert terug naar zijn standaardtoetsen. De tweede en derde balk raken hun toewijzing kwijt. Dit kan niet ongedaan worden gemaakt."
     },
@@ -1217,6 +1399,7 @@ export const nl_NL: EnTranslations = {
       "name_thunderstrut_gobbler": "Donderstap de Grote Kalkoen",
       "name_terrorspark_groundshaker": "Schrikvonk, de Grondschudder",
       "name_drakemaw_raptor": "Drakenmuil-Raptor",
+      "name_rickshaw_mount": "Beengebonden Riksja",
       "desc_valorsteed": "Een sterk, standvastig strijdros dat extra reissnelheid geeft.",
       "desc_grag_bear": "Een sterke, standvastige beer die extra reissnelheid geeft.",
       "desc_stalkglider_snail": "Een taaie, langzaam brandende slak die extra reissnelheid geeft.",
@@ -1225,7 +1408,8 @@ export const nl_NL: EnTranslations = {
       "desc_stormfeather_griffin": "Een koninklijke stormgriffioen die met runenbeslagen klauwen over de grond sluipt, vleugels opgevouwen.",
       "desc_thunderstrut_gobbler": "Een kolossale, uit de storm geboren kalkoen die vanaf de Ontwakende Piek naar beneden stapt, staart gespreid als een onweerswolk.",
       "desc_terrorspark_groundshaker": "Een compacte gepantserde machine met zware rupsbanden, een grootkaliberkanon en een zadel gebouwd voor onverschrokken piloten.",
-      "desc_drakemaw_raptor": "Een zadelmakke broedraptor uit de Drakenmuil-Caldera, één en al pezen en vaart, nog altijd zwak naar as geurend."
+      "desc_drakemaw_raptor": "Een zadelmakke broedraptor uit de Drakenmuil-Caldera, één en al pezen en vaart, nog altijd zwak naar as geurend.",
+      "desc_rickshaw_mount": "Een ratelende bottenkar met een benige handlanger aan de disselbomen, die je in volle vaart voortsleurt."
     },
     "mountTraining": {
       "mountPrompt": "Druk op {key} om op de trainings-Moedros te stijgen.",
@@ -1322,6 +1506,7 @@ export const nl_NL: EnTranslations = {
       "endedForfeitLog": "De wedstrijd werd opgegeven.",
       "firstWinBonusLine": "Eerste overwinning van de dag: +{honor} Eer",
       "firstWinBonusLog": "Eerste overwinning van de dag: je krijgt {honor} bonus Eer.",
+      "doubleHonorLine": "Weekend van Dubbele Eer: Eer op de Doornholte-Velden betaalt vandaag {mult}x, en een uitgevochten nederlaag betaalt als een overwinning",
       "timeWarningMinutes": "Nog {minutes} minuten te gaan",
       "timeWarningOneMinute": "Nog een minuut te gaan",
       "timeWarningMinutesLog": "Nog {minutes} minuten te gaan in het gevecht.",
@@ -1331,146 +1516,6 @@ export const nl_NL: EnTranslations = {
         "azureKeep": "Azuur Burcht",
         "ruinCourtyard": "Het Ruïnehof",
         "graveyard": "Begraafplaats"
-      }
-    },
-    "vcup": {
-      "title": "De Dalbeker",
-      "shootPower": "KRACHT",
-      "close": "Sluit het Dalbeker-venster",
-      "offlineNote": "Het wedstrijdboek is gesloten. De Dalbeker is op dit moment niet beschikbaar.",
-      "recordLine": "Jouw staat van dienst: {wins} overwinningen, {losses} nederlagen, {draws} gelijke spelen.",
-      "bracketsAria": "Wedstrijdcategorie",
-      "bracketLabel": "{n}v{n}",
-      "waitingCount": "{count} wachtend",
-      "nationsHeading": "Baniernatie",
-      "nation": {
-        "vale": "Oostbeekdal",
-        "mirefen": "Het Slijkveen",
-        "thornpeak": "Doorntop",
-        "coliseum": "Het Asgrauwe Colosseum",
-        "choir": "Het Bleke Koor",
-        "ogre": "De Ogerclans",
-        "moon": "De Bleke Maan",
-        "copperdig": "De Kopergroeve"
-      },
-      "awayNote": "Als beide kanten dezelfde banier voeren, speelt de uitploeg in het omgekeerde kleurenpalet.",
-      "rolesHeading": "Sportrol",
-      "rolesSmallBracketNote": "In de categorieën 1v1 en 2v2 speelt elke vechter met de Allrounder-uitrusting. Daden die de categorie 3v3 of groter vragen, kun je hier niet behalen.",
-      "role": {
-        "allrounder": {
-          "name": "Allrounder",
-          "desc": "Van alles wat: trappen, uithalen en een eerlijke schouderduw."
-        },
-        "striker": {
-          "name": "Spits",
-          "desc": "Leeft voor de verre uithaal en de snelle zijstap."
-        },
-        "sweeper": {
-          "name": "Laatste Man",
-          "desc": "Duwt lopers van de bal en pegelt hem weg."
-        },
-        "keeper": {
-          "name": "Keeper",
-          "desc": "Bewaakt het doelgebied met grip, duik en uittrap."
-        }
-      },
-      "queue": "Sluit je aan in de wachtrij",
-      "leaveQueue": "Wachtrij verlaten",
-      "queueNote": "Meld je aan vanaf elke plek; de fluit roept je naar het Zeugveld.",
-      "queuedStatus": "In de wachtrij voor {bracket}: plaats {position} van {count}.",
-      "blockNation": "Kies eerst een baniernatie.",
-      "blockPartySize": "Die categorie vraagt een kleinere groep.",
-      "blockNotLeader": "Alleen de groepsleider kan het team aanmelden.",
-      "inMatchNote": "Je team staat op het veld. Doorspelen!",
-      "deserterNote": "De Terreinmeester onthoudt het. Je mag je over {seconds} sec weer aanmelden.",
-      "liveHeading": "Nu op het Zeugveld",
-      "liveAria": "Dalbeker: {nationA} {scoreA}, {nationB} {scoreB}",
-      "walkUp": "Loop naar het Zeugveld om toe te kijken vanaf de tribunes.",
-      "noLive": "Het veld ligt er stil bij. Er wordt geen wedstrijd gespeeld.",
-      "boardHeading": "Winnaarsbord",
-      "boardEmpty": "Nog geen winnaars opgetekend. De Koperen Emmer wacht.",
-      "boardWins": "{count} overwinningen",
-      "enterAsGuild": "Treed aan onder de banier van {guild}",
-      "guildRecordLine": "Staat van dienst van je gilde: {wins} overwinningen, {losses} nederlagen.",
-      "guildBoardHeading": "Gildebanieren",
-      "guildBoardEmpty": "Nog geen gilde heeft het veld betreden. Hijs je banier!",
-      "guildBoardWl": "{wins} W, {losses} V",
-      "practice": "Oefenen tegen bots",
-      "practiceNote": "Start meteen een besloten botwedstrijd op je eigen oefenveld.",
-      "practiceUnratedNote": "Oefenpartijen tellen niet mee voor de ranglijst: standen en voortgang in het Boek der Daden tellen niet.",
-      "practicingNow": "Nu aan het oefenen ({count}):",
-      "clock": "{minutes}:{seconds}",
-      "indicatorQueued": "Dalbeker-wachtrij: {bracket}, plaats {position} van {count}",
-      "indicatorLive": "Dalbeker",
-      "indicatorOpen": "Open het Dalbeker-venster",
-      "phaseCountdown": "Aftrap over {seconds}",
-      "phaseGoal": "GOAL!",
-      "phaseGolden": "GOUDEN GOAL",
-      "phaseOver": "EINDSIGNAAL",
-      "bannerFound": "De Dalbeker roept: {nationA} tegen {nationB}!",
-      "bannerCountdown": "Aftrap over {seconds}...",
-      "bannerKickoff": "AFTRAP!",
-      "bannerGoal": "GOAL! {nation} scoort!",
-      "bannerSave": "{name} REDT!",
-      "bannerGolden": "GOUDEN GOAL: de volgende treffer wint!",
-      "bannerEnd": "Eindstand: {nationA} {scoreA}, {nationB} {scoreB}",
-      "bannerWin": "Overwinning op het Zeugveld!",
-      "bannerDraw": "Een gelijkspel op het Zeugveld.",
-      "bannerLoss": "Nederlaag op het Zeugveld.",
-      "logQueued": "Je sluit je aan bij de Dalbeker-wachtrij voor {bracket} (plaats {position}).",
-      "logUnqueued": "Je verlaat de Dalbeker-wachtrij.",
-      "logFound": "Je Dalbeker-wedstrijd staat klaar: {nationA} tegen {nationB}.",
-      "logRoster": "Jouw kant: {allies}. Hun kant: {enemies}.",
-      "logGoal": "{name} scoort voor {nation}! {nationA} {scoreA}, {nationB} {scoreB}.",
-      "logSave": "{name} redt de bal!",
-      "logWin": "Je wint de partij op het Zeugveld.",
-      "logDraw": "De partij op het Zeugveld eindigt in een gelijkspel.",
-      "logLoss": "Je verliest de partij op het Zeugveld.",
-      "gossipOpen": "Het wedstrijdboek",
-      "gossipOpenAria": "Open het Dalbeker-venster",
-      "mobileLabel": "Beker",
-      "briefing": {
-        "subtitle": "Wedstrijdbespreking",
-        "vs": "tegen",
-        "rulesHeading": "Hoe je speelt",
-        "rule1": "Trap of speel de bal in het vijandelijke doel om te scoren.",
-        "rule2": "Wie het eerst 5 doelpunten maakt wint, of wie de meeste heeft bij het eindsignaal.",
-        "rule3": "Staat het gelijk bij het eindsignaal, dan volgt de gouden goal: de volgende treffer wint.",
-        "rule4": "Tackles laten je alleen omtuimelen. Niemand raakt gewond onder het oogstbestand.",
-        "rule5": "Iedereen kan aan komen lopen en je aanmoedigen vanaf de tribunes.",
-        "kitHeading": "Jouw uitrusting",
-        "kitNote": "Deze zetten vervangen je klassevaardigheden voor de duur van de wedstrijd.",
-        "unratedNote": "Er staan bots op het veld, dus deze partij telt niet mee voor de ranglijst: de standen bewegen niet en daden voor goals, reddingen en het houden van de nul tellen niet.",
-        "practiceUnratedNote": "Dit is een oefenpartij en telt dus niet mee voor de ranglijst: de standen bewegen niet en voortgang in het Boek der Daden telt niet.",
-        "rosterHeading": "De opstelling",
-        "you": "Jij",
-        "bot": "Bot",
-        "ready": "Ik ben er klaar voor",
-        "readyDone": "Klaar",
-        "readyAria": "Meld je klaar voor de aftrap",
-        "waiting": "Wachten tot de tegenpartij zich klaar meldt...",
-        "whistle": "De fluit klinkt over {seconds}s.",
-        "readyCount": "{ready} van {total} klaar"
-      },
-      "bet": {
-        "title": "Wedstrijdweddenschappen",
-        "aria": "Weddenschappen op de Dalbeker-wedstrijd",
-        "closesIn": "Inzetten sluiten over {seconds}s",
-        "closed": "Inzetten gesloten",
-        "prize": "Pot {amount}",
-        "splitAria": "Aandeel van de wedpot per team",
-        "expand": "Weddenschappen bekijken en inzetten",
-        "collapse": "Weddenschappen verbergen",
-        "oddsLabel": "Keert uit",
-        "back": "Zet in op {team}",
-        "form": "{wins}W-{losses}V",
-        "mine": "Jouw inzet: {amount} op {team}",
-        "none": "Je hebt nog geen weddenschap op deze wedstrijd.",
-        "record": "Wedbalans: {wins}W-{losses}V, {sign}{net}",
-        "wonBanner": "Je weddenschap is gewonnen!",
-        "wonLog": "Je Dalbeker-weddenschap is gewonnen: {amount} uitgekeerd.",
-        "lostLog": "Je Dalbeker-weddenschap is verloren: {amount}.",
-        "refundLog": "Weddenschappen nietig verklaard, je inzet van {amount} is teruggegeven."
       }
     },
     "rally": {
@@ -1521,6 +1566,7 @@ export const nl_NL: EnTranslations = {
       "lost": "You finish {position} of {total}. The next starting grid awaits.",
       "draw": "Dead heat. The race stewards declare a draw.",
       "standingsYou": "YOU",
+      "standingsBot": "Bot",
       "standingsFinished": "Finished",
       "standingsRetired": "Out",
       "circuitName_evergarden_practice": "Evergarden Bootcamp",
@@ -1621,6 +1667,7 @@ export const nl_NL: EnTranslations = {
       "playerFrameScale": "Schaal spelerframe",
       "targetFrameScale": "Schaal doelwitframe",
       "aurasOnPlayerFrame": "Buffs op het spelerframe",
+      "alwaysShowAllBuffs": "Altijd Alle Buffs Tonen",
       "highContrastBackground": "Hoog-contrastachtergrond",
       "startAttackOnAbility": "Auto-aanval bij gebruik van vaardigheid",
       "stopAutoAttackOnTargetSwitch": "Auto-Aanval Stoppen bij Doelwitwissel",
@@ -1630,21 +1677,27 @@ export const nl_NL: EnTranslations = {
       "stickyTarget": "Doel behouden bij klikken op de grond",
       "showItemLevel": "Itemniveau tonen",
       "showReliquaryTracker": "Toon Relikwieëntracker",
+      "confirmVendorSell": "Bevestigen Voor Verkoop",
+      "confirmVendorSellNote": "Dit uitzetten verkoopt voorwerpen met één klik zonder bevestiging, dus een verschoven tasvak zou het verkeerde voorwerp aan de handelaar kunnen verkopen.",
       "itemLevelLine": "Itemniveau {level}",
       "itemScoreLine": "Score {score}",
       "showSecondaryActionBar": "Secundaire actiebalk tonen",
       "showThirdActionBar": "Derde actiebalk tonen",
+      "combineActionBars": "Actiebalken Combineren",
       "hideUnusedActionSlots": "Ongebruikte actievakjes verbergen",
       "lockActionBars": "Actiebalken vergrendelen",
       "showTargetOfTarget": "Doelwit van doelwit tonen",
+      "showTargetSwingTimer": "Aanvalstimer van doelwit tonen",
       "showPetFrame": "Je huisdier tonen",
       "waterRipples": "Waterrimpels (kielzog)",
       "showAttackButton": "Aanvalsknop Tonen",
       "showDailyRewardsChest": "Kist met dagelijkse beloningen tonen",
       "mobileCameraJoystick": "Camerajoystick",
       "mobileLeftHanded": "Linkshandige indeling",
-      "touchTapMenus": "Tap menus",
-      "touchTapMenusNote": "Open the action, consumable and menu controls with a tap instead of a swipe. Tap an item to use it, tap the control again for its usual action, or tap outside to close."
+      "touchPreciseAim": "Nauwkeurig Grondmikken",
+      "touchPreciseAimNote": "Mik voordat je grondspreuken werpt. Zet dit uit om direct op het voorgestelde punt te werpen.",
+      "touchTapMenus": "Tik voor menu's",
+      "touchTapMenusNote": "Open de actie-, verbruiksartikelen- en menuknoppen met een tik in plaats van een veeg. Tik op een item om het te gebruiken, tik nogmaals op de knop voor de gebruikelijke actie, of tik buiten het venster om te sluiten."
     },
     "talentRows": {
       "tab": "Keuzes",
@@ -1669,10 +1722,16 @@ export const nl_NL: EnTranslations = {
     },
     "controller": {
       "title": "Controller",
+      "glyphStyle": "Knoplabels",
+      "glyphStyleAuto": "Automatisch",
+      "glyphStyleXbox": "Xbox",
+      "glyphStylePlayStation": "PlayStation",
+      "glyphStyleNintendo": "Nintendo",
       "enable": "Controller inschakelen",
       "invertY": "Camera omkeren (Y)",
       "deadzone": "Stickdode zone",
       "cameraSpeed": "Camerasnelheid",
+      "reticleSpeed": "Richtkruissnelheid",
       "vibration": "Trilling",
       "buttons": "Knopindeling",
       "resetButtons": "Knopindeling resetten",
@@ -2053,6 +2112,7 @@ export const nl_NL: EnTranslations = {
       "fromYour": "Van je {value} {stat}:",
       "names": {
         "spellPower": "Spreukkracht",
+        "healPower": "Genezingskracht",
         "critRating": "Crit-waardering",
         "hasteRating": "Snelheidswaardering",
         "parry": "Parering",
@@ -2159,16 +2219,16 @@ export const nl_NL: EnTranslations = {
         "other": "je bent {rank}, {count} leden"
       },
       "wocMarketSellChoose": {
-        "one": "Choose from {count} item",
-        "few": "Choose from {count} items",
-        "many": "Choose from {count} items",
-        "other": "Choose from {count} items"
+        "one": "Kies uit {count} voorwerp",
+        "few": "Kies uit {count} voorwerpen",
+        "many": "Kies uit {count} voorwerpen",
+        "other": "Kies uit {count} voorwerpen"
       },
       "wocTradeIneligible": {
-        "one": "{count} staged item cannot be sold for $WOC.",
-        "few": "{count} staged items cannot be sold for $WOC.",
-        "many": "{count} staged items cannot be sold for $WOC.",
-        "other": "{count} staged items cannot be sold for $WOC."
+        "one": "{count} klaargezet voorwerp kan niet voor $WOC worden verkocht.",
+        "few": "{count} klaargezette voorwerpen kunnen niet voor $WOC worden verkocht.",
+        "many": "{count} klaargezette voorwerpen kunnen niet voor $WOC worden verkocht.",
+        "other": "{count} klaargezette voorwerpen kunnen niet voor $WOC worden verkocht."
       },
       "finderPartySize": {
         "one": "{count} speler",
@@ -2187,6 +2247,12 @@ export const nl_NL: EnTranslations = {
         "few": "{count} seconden resterend",
         "many": "{count} seconden resterend",
         "other": "{count} seconden resterend"
+      },
+      "buffsHidden": {
+        "one": "Er is nog {count} verbetering actief, maar die is verborgen in deze grafische preset",
+        "few": "Er zijn nog {count} verbeteringen actief, maar die zijn verborgen in deze grafische preset",
+        "many": "Er zijn nog {count} verbeteringen actief, maar die zijn verborgen in deze grafische preset",
+        "other": "Er zijn nog {count} verbeteringen actief, maar die zijn verborgen in deze grafische preset"
       },
       "playtimeDays": {
         "one": "{count} dag",
@@ -2521,7 +2587,10 @@ export const nl_NL: EnTranslations = {
       "backpack": "Rugzak",
       "bagSocketAria": "{name}: {slots}",
       "socketEmpty": "Leeg tasvak",
-      "unequipHint": "Klik om deze tas af te doen"
+      "unequipHint": "Klik om deze tas af te doen",
+      "poolGeneral": "Algemeen: {used} van {total}",
+      "poolMaterials": "Materialen: {used} van {total}",
+      "capacityPoolsAria": "Tasvakken gebruikt: {used} van {total}. Algemene voorwerpen: {generalUsed} van {generalTotal}. Materialen: {materialsUsed} van {materialsTotal}."
     },
     "raidConvert": {
       "toPartyDone": "Je raid is terug omgezet naar een groep.",
@@ -2534,7 +2603,180 @@ export const nl_NL: EnTranslations = {
       "leather": "Leer",
       "mail": "Maliën"
     },
+    "varkhulCallout": {
+      "leftPillarCharging": "De linker smidspijler laadt op. Hij ontsteekt over 3 sec!",
+      "rightPillarCharging": "De rechter smidspijler laadt op. Hij ontsteekt over 3 sec!",
+      "bothPillarsCharging": "De smidspijlers laden op. Ze ontsteken over 3 sec!",
+      "artificerApproaches": "Een Cinder Artificer nadert de smidse!",
+      "leftPillar": "De linker smidspijler ontsteekt!",
+      "rightPillar": "De rechter smidspijler ontsteekt!",
+      "bothPillars": "De smidspijlers ontsteken!",
+      "portalsOpening": "De smidsportalen gaan open!",
+      "heat75": "De smidse staat op 75% hitte!",
+      "heat90": "Smidsinstorting is op handen!",
+      "addsDefeated": "Het Smidslegioen is verslagen: Varkhul ligt bloot!",
+      "worldfireBegins": "Wereldvuur ontsteekt aan de rand van de ruimte. De Smeltkroes wordt over 42 sec verteerd!",
+      "worldfireClosing": "Wereldvuur sluit zich. Beweeg naar het midden!",
+      "worldfireConsumed": "De hele Smeltkroes staat in brand!"
+    },
+    "varkhulWaveStatus": "Golf {wave}/{waves} | Vijanden: {remaining}",
+    "raidBossGuide": {
+      "title": "Baasgids",
+      "button": "Baasgids: {boss}",
+      "subtitle": "{boss} | {difficulty}",
+      "close": "Baasgids sluiten",
+      "bossesLabel": "Raidbazen",
+      "difficultyLabel": "Moeilijkheidsgraad",
+      "normal": "Normaal",
+      "heroic": "Heroïsch",
+      "portraitAlt": "Gevechtsportret van {boss}",
+      "overviewHeading": "Overzicht",
+      "abilitiesHeading": "Vaardigheden",
+      "whatToDo": "Wat te doen",
+      "whatToDoResponse": "Wat te doen: {response}",
+      "rolesLabel": "Rolverantwoordelijkheden",
+      "flagsLabel": "Mechaniekwaarschuwingen",
+      "roleTank": "Tank",
+      "roleHealer": "Genezer",
+      "roleDamage": "Schade",
+      "roleAll": "Alle rollen",
+      "flagDeadly": "Dodelijk",
+      "flagInterruptible": "Onderbreekbaar",
+      "flagImportant": "Belangrijk",
+      "flagCleansable": "Reinigbaar",
+      "browseBoss": "Bekijk {boss}",
+      "chooseDifficulty": "Bekijk {difficulty}-mechanieken",
+      "expandAbility": "{ability} uitklappen",
+      "collapseAbility": "{ability} inklappen",
+      "abilityControlLabel": "{action}. {details}",
+      "tooltipMeta": "{phase} | {difficulty}",
+      "ignivar": {
+        "overview": "Varkhul smeedde Ignivar als heraut, een levend zegel, en de sleutel tot The Inner Crucible. Het gevecht test controle over waterkanalen, precieze beweging, en snelle prioriteitsschade.",
+        "phaseOpeningName": "De Heraut Ontwaakt",
+        "phaseOpeningSummary": "Beheers Brandmerk van de Brandstapel met de waterkanalen, terwijl je Ignivars herhalende frontale aanval, hemelvuur, roterende stralen en uitdijende Smidsgolf opvangt.",
+        "phaseApocalypseName": "Tussenspel: Apocalyps",
+        "phaseApocalypseSummary": "Bij {health} gezondheid roept Ignivar een Ashcaller op die probeert het gevecht te beëindigen.",
+        "phaseJudgmentName": "Oordeel van de Smidse",
+        "phaseJudgmentSummary": "Bij {health} gezondheid ontsteekt Ignivar de arena en onthult één veilige schuilplaats tussen drie schuilplaatsen.",
+        "phaseJudgmentHeroicSummary": "Bij {health} gezondheid ontsteekt Ignivar de arena, terwijl actieve Brandmerken nabije spelers binnen de schuilplaats blijven bedreigen.",
+        "phaseFinaleName": "Finale: Laatste Inferno",
+        "phaseFinaleSummary": "Bij {health} gezondheid begint Ignivar aan een laatste verbrandingsfase met een harde deadline en snellere herhalende mechanieken.",
+        "forgeStrikeName": "Smidsslag",
+        "forgeStrikeSummary": "Ignivar slaat zijn huidige tank en past Gesmolten Pantser toe, wat de schade die je van Ignivar oploopt verhoogt.",
+        "forgeStrikeResponse": "Tanks wisselen bij {stacks} stapels. Genezers bereiden zich voor op de slag en de eerste melee-klappen van de nieuwe tank.",
+        "brandName": "Brandmerk van de Brandstapel",
+        "brandSummary": "Ignivar markeert niet-tankspelers met aanhoudende vuurschade. Gebrandmerkte spelers verbranden ook nabije bondgenoten.",
+        "brandResponse": "Spreid je uit. Richt Verzengende Vuurstroom op een gereed waterkanaal, en laat elke gemarkeerde speler daarna alleen door het geactiveerde water steken om te reinigen.",
+        "brandHeroicResponse": "Spreid je uit. Open een kanaal met Verzengende Vuurstroom en reinig steeds één gemarkeerde speler tegelijk. Elke reiniging veroorzaakt raidbrede Reinigingsterugslag.",
+        "searingTorrentName": "Verzengende Vuurstroom",
+        "searingTorrentSummary": "Ignivar volgt een speler, en lost dan een brede frontale uitbarsting. Een gereed waterkanaal dat door de uitbarsting wordt geraakt, wordt korte tijd actief.",
+        "searingTorrentHeroicSummary": "Ignivar volgt een speler, en lost dan een bijna dodelijke frontale uitbarsting. Een gereed waterkanaal dat door de uitbarsting wordt geraakt, wordt korte tijd actief.",
+        "searingTorrentResponse": "Richt de waarschuwing door precies één gereed kanaal. Iedereen anders verlaat de frontale aanval voordat de spreuk voltooid is.",
+        "rainName": "Sintelregen",
+        "rainSummary": "Drie vuursectoren en gemarkeerde meteorinslagen bestraffen spelers die binnen hun waarschuwingen blijven staan.",
+        "rainHeroicSummary": "Drie vuursectoren en gemarkeerde meteorinslagen richten extreme schade aan bij spelers die binnen hun waarschuwingen blijven staan.",
+        "rainResponse": "Beweeg naar een ongemarkeerde opening en verlaat elke meteorcirkel voor de inslag.",
+        "raysName": "Ronddraaiend Inferno",
+        "raysSummary": "Roterende vuurstralen zwiepen rond Ignivar en beschadigen herhaaldelijk spelers die ze raken.",
+        "raysHeroicSummary": "Roterende vuurstralen zwiepen rond Ignivar en veroorzaken bij contact zware herhaalde schade.",
+        "raysResponse": "Beweeg mee met de open ruimte tussen de stralen. Snijd nooit door een straal, zelfs niet met een snelle bewegingsvaardigheid.",
+        "forgeWaveName": "Smidsgolf",
+        "forgeWaveSummary": "Een uitdijende muur van vuur trekt door de arena, met twee tegenoverliggende openingen, en stoot geraakte spelers achteruit.",
+        "forgeWaveHeroicSummary": "Een uitdijende muur van vuur trekt door de arena, met twee tegenoverliggende openingen, en stoot geraakte spelers veel verder weg.",
+        "forgeWaveResponse": "Vind een van de openingen tijdens de oplaadtijd, lijn je ermee uit, en vermijd weggestoten te worden richting de rand van de arena.",
+        "apocalypseName": "Apocalyps",
+        "apocalypseSummary": "Ignivar roept een Ashcaller op. Als deze versterking Apocalyps voltooit, wordt de raid onmiddellijk verslagen.",
+        "apocalypseResponse": "Schakel alle beschikbare schade over naar de Ignivar Ashcaller en versla hem voordat de spreuk voltooid is.",
+        "judgmentName": "Oordeel van de Smidse",
+        "judgmentSummary": "Ignivar markeert drie schuilplaatsen, wijst er één als veilige schuilplaats aan, en verbrandt daarna herhaaldelijk de rest van de arena.",
+        "judgmentHeroicSummary": "Ignivar markeert één veilige schuilplaats terwijl de arena brandt. Brandmerk van de Brandstapel blijft actief en beschadigt nog steeds nabije bondgenoten.",
+        "judgmentResponse": "Identificeer de uniek gemarkeerde schuilplaats tijdens de waarschuwing en stapel volledig binnen de grens voordat de vloer ontsteekt.",
+        "chainsName": "Ketenen van de Smidse",
+        "chainsSummary": "Ignivar koppelt nabije paren aan elkaar. Te ver uit elkaar gaan of de keten van een ander paar kruisen veroorzaakt dodelijke schade.",
+        "chainsResponse": "Blijf dicht bij je gekoppelde partner, beweeg samen, en houd elke andere speler weg van jullie keten.",
+        "lastInfernoName": "Laatste Inferno",
+        "lastInfernoSummary": "Ignivar raakt woedend en bereidt een totale nederlaag voor, terwijl Sintelregen, Verzengende Vuurstroom en Ronddraaiend Inferno versnellen.",
+        "lastInfernoResponse": "Gebruik je resterende schade- en genezingsafkoeltijden, blijf de bewegingsmechanieken uitvoeren, en versla Ignivar voordat het aftellen eindigt.",
+        "brand": "Brandmerk van de Brandstapel: spreid je uit. Richt Verzengende Vuurstroom op een gereed waterkanaal, en steek dan alleen door het water om te reinigen.",
+        "movement": "Beweging: vermijd de kegels en meteoren van Sintelregen, beweeg mee met Ronddraaiend Inferno, en gebruik de twee openingen van Smidsgolf.",
+        "apocalypse": "Apocalyps: dood Ignivar Ashcaller voordat zijn spreuk voltooid is.",
+        "judgment": "Oordeel van de Smidse: identificeer de unieke schuilplaats tijdens de waarschuwing, en stapel dan binnen de gemarkeerde grens zodra de vloer ontsteekt.",
+        "finale": "Laatste Inferno: maak Ignivar af voordat de totale nederlaag volgt, terwijl snellere meteoren, frontale aanvallen en Ronddraaiend Inferno doorgaan.",
+        "heroic": "Heroïsch: gekoppelde spelers blijven dicht bij elkaar tijdens Ketenen van de Smidse, Brandmerk blijft actief binnen Oordeel, en Smidsgolf stoot verder weg."
+      },
+      "varkhul": {
+        "overview": "Varkhul kluisterde de stervende Last Spring om levend metaal te smeden, en schiep daarna Ignivar om de misdaad te bewaken. Zijn gevecht combineert persoonlijke positionering met raidbrede controle over de grote smidse.",
+        "phaseOpeningName": "De Smidsvader",
+        "phaseOpeningSummary": "Varkhul wisselt tussen tankdruk, brede frontale aanvallen, bewegende projectielen, groepsklappen, meteorengolven, en aanvallen vanaf het grote aambeeld.",
+        "phaseAssemblyName": "Tussenspel: De Samenkomst van de Meester",
+        "phaseAssemblySummary": "Bij {health} gezondheid wordt Varkhul beschermd, terwijl zijn Smidslegioen door portalen binnenkomt en de pijlerstralen een Smidsinstorting dreigen te veroorzaken.",
+        "phaseFinaleName": "Finale: Ontketend Meesterwerk",
+        "phaseFinaleSummary": "Bij {health} gezondheid valt Varkhul sneller aan, richt meer schade aan, en stuurt golven vuur door de raid tot de laatste deadline.",
+        "phaseFinaleHeroicSummary": "Bij {health} gezondheid laat Varkhul de meeste eerdere mechanieken varen terwijl Wereldvuur naar binnen sluit en de Smeltkroes verteert.",
+        "makersBrandName": "Brandmerk van de Maker",
+        "makersBrandSummary": "Varkhul slaat zijn huidige tank en past een stapelend effect toe dat alle schade die je van hem oploopt verhoogt.",
+        "makersBrandResponse": "Tanks wisselen bij {stacks} stapels. Genezers bereiden de binnenkomende tank voor voordat Varkhul van doelwit wisselt.",
+        "frontalName": "Zwaai van de Smidsvader",
+        "frontalSummary": "Varkhul lost een zeer brede frontale zwaai die zware vuurschade aanricht bij iedereen voor hem.",
+        "frontalHeroicSummary": "Varkhul lost een zeer brede frontale zwaai die bijna dodelijke vuurschade aanricht bij iedereen voor hem.",
+        "frontalResponse": "Houd Varkhul van de groep af gericht en beweeg achter hem zodra de waarschuwing verschijnt.",
+        "orbsName": "Sintelbollen",
+        "orbsSummary": "Gemarkeerde niet-tanks laten blijvende sintelpoelen achter en zenden vuurbollen in alle richtingen uit. Roodgloeiend Metaal absorbeert bovendien inkomende genezing.",
+        "orbsHeroicSummary": "Gemarkeerde niet-tanks laten zwaar beschadigende, blijvende sintelpoelen achter en zenden gevaarlijke vuurbollen in alle richtingen uit. Roodgloeiend Metaal absorbeert bovendien inkomende genezing.",
+        "orbsResponse": "Draag elke markering naar de rand van de ruimte, houd de poelen gescheiden, en ontwijk dan de bollen terwijl ze de arena kruisen. Genezers verwijderen de absorptie snel.",
+        "pyreName": "Gedeelde Brandstapel",
+        "pyreSummary": "Een bewegende cirkel volgt één speler zonder Roodgloeiend Metaal. De schade wordt verdeeld onder de spelers erbinnen, en elke ontbrekende speler doet {missingPenalty} schade aan maximale gezondheid bij de hele raid.",
+        "pyreHeroicSummary": "Een bewegende cirkel volgt één speler zonder Roodgloeiend Metaal en verdeelt een grotere klap. Elke ontbrekende speler doet bovendien {missingPenalty} schade aan maximale gezondheid bij de hele raid.",
+        "pyreResponse": "Stapel minstens {players} spelers binnen de cirkel en beweeg mee met het doelwit ervan tot de spreuk voltooid is.",
+        "forgestormName": "Smidsstorm",
+        "forgestormSummary": "Varkhul roept {waves} opeenvolgende golven gemarkeerde meteorinslagen op door de hele arena.",
+        "forgestormHeroicSummary": "Varkhul roept {waves} opeenvolgende golven gemarkeerde meteorinslagen op die extreme schade aanrichten.",
+        "forgestormResponse": "Let op elke nieuwe set grondwaarschuwingen en beweeg weg voordat die golf landt. Keer niet terug naar een vorige positie zonder de volgende golf te controleren.",
+        "rayName": "Hardingsstraal",
+        "raySummary": "Een straal volgt een gemarkeerde speler tijdens een lange oplaadtijd. De eerste andere speler tussen Varkhul en het doelwit onderschept de klap en krijgt Geharde Wond.",
+        "rayResponse": "Wijs een gezonde speler aan, meestal de off-tank, om in de lijn te stappen. Houd andere spelers eruit en wissel de onderscheppers terwijl Geharde Wond actief is.",
+        "anvilName": "Decreet van het Aambeeld",
+        "anvilSummary": "Varkhul loopt naar de grote smidse en slaat er {strikes} keer op, wat oplopende raidbrede schade veroorzaakt.",
+        "anvilHeroicSummary": "Varkhul slaat {strikes} keer op de grote smidse voor oplopende raidschade, terwijl gemarkeerde meteoren op spelers vallen.",
+        "anvilResponse": "Groepeer voor raidgenezing en gebruik defensieve afkoeltijden bij de laatste klap.",
+        "anvilHeroicResponse": "Spreid gemarkeerde meteoren weg van de groep, terwijl genezers en defensieve afkoeltijden alle {strikes} klappen opvangen.",
+        "assemblyName": "De Samenkomst van de Meester",
+        "assemblySummary": "Varkhul wordt beschermd en start een getimede samenkomst. De raid moet elke portaalgolf verslaan voordat de smidse zijn meesterwerk voltooit.",
+        "assemblyResponse": "Verdeel je aandacht tussen straalcontrole en prioriteitsversterkingen. Versla het volledige Smidslegioen voordat de samenkomsttimer afloopt.",
+        "beamName": "Smeltkroesstraal",
+        "beamSummary": "Actieve pijlerstralen verhitten de smidse tenzij een speler ze blokkeert. Blokkeerders lopen oplopende schade op van Smeltkroesblootstelling, terwijl geblokkeerde en inactieve stralen de hitte laten dalen.",
+        "beamHeroicSummary": "Actieve pijlerstralen verhitten de smidse tenzij een speler ze blokkeert. Blokkeerders lopen oplopende schade op van Smeltkroesblootstelling, en de hitte van de smidse daalt nooit.",
+        "beamResponse": "Ga tussen elke actieve pijler en de smidse staan, en wissel dan de blokkeerders voordat de blootstelling gevaarlijk wordt. Volledige hitte bereiken veroorzaakt een dodelijke Smidsinstorting.",
+        "legionName": "Smidslegioen",
+        "legionSummary": "Crucible Wardens werpen Smeltkroesbeving om hitte aan de smidse toe te voegen, terwijl Cinder Artificers Reparatieprotocol gebruiken om Varkhul te genezen.",
+        "legionResponse": "Onderbreek Smeltkroesbeving, stop Reparatieprotocol, en focus elke gevaarlijke caster voordat je de overige versterkingen opruimt.",
+        "masterpieceName": "Ontketend Meesterwerk",
+        "masterpieceSummary": "Varkhul valt sneller aan, richt meer schade aan, en verbrandt de raid herhaaldelijk tot de totale nederlaag.",
+        "masterpieceHeroicSummary": "Varkhul valt sneller aan en richt meer schade aan, terwijl Wereldvuur de meeste eerdere mechanieken vervangt voor de laatste verbranding.",
+        "masterpieceResponse": "Zet je resterende offensieve en defensieve afkoeltijden in en versla Varkhul voordat het laatste aftellen eindigt.",
+        "worldfireName": "Wereldvuur",
+        "worldfireSummary": "Op Heroïsch rukt het vuur in fasen op van de rand van de arena naar het midden, tot de hele Smeltkroes brandt.",
+        "worldfireResponse": "Beweeg naar binnen, vóór elke oprukkende vuurband, behoud de krimpende veilige ruimte, en maak Varkhul af voordat het midden ontsteekt.",
+        "tanks": "Tanks: wissel bij twee stapels van Brandmerk van de Maker en houd Varkhul binnen meleebereik.",
+        "orbs": "Sintelbollen: gemarkeerde spelers spreiden zich naar de rand van de ruimte. Hun vuurpoelen blijven liggen en de vrijgekomen bollen kruisen de ruimte.",
+        "pyre": "Gedeelde Brandstapel: alleen een speler zonder Roodgloeiend Metaal wordt gekozen. Stapel vier spelers binnen de bewegende cirkel, in beide moeilijkheidsgraden. Elke ontbrekende speler doet 15% van de maximale gezondheid aan de hele raid.",
+        "forgestorm": "Smidsstorm: let op de vallende meteoren en verlaat elke gemarkeerde inslag voordat elk van de drie golven landt.",
+        "anvil": "Decreet van het Aambeeld: Varkhul beweegt naar de grote smidse en slaat er drie keer op voor raidschade. Op Heroïsch vallen er ook gemarkeerde meteoren.",
+        "ray": "Hardingsstraal: een andere speler, meestal een tank, onderschept de bewegende lijn voordat de lange oplaadtijd eindigt. De geraakte speler krijgt Geharde Wond.",
+        "forge": "Smidspijlers: blokkeer actieve stralen voordat ze de smidse bereiken en wissel de blokkeerders naarmate Smeltkroesblootstelling toeneemt. Een volle hittemeter veroorzaakt Smidsinstorting.",
+        "assembly": "De Samenkomst van de Meester: blokkeer beide smidsstralen, dood elke portaalgolf, onderbreek Smeltkroesbeving, en houd Cinder Artificers tegen die Varkhul genezen.",
+        "worldfire": "Wereldvuur: op Heroïsch sluit de brandende rand zich naar het midden tijdens de laatste fase. Versla Varkhul voordat de hele Smeltkroes brandt.",
+        "heroic": "Heroïsch: de hitte van de smidse koelt nooit af, Decreet van het Aambeeld voegt meteoren toe, en de laatste fase verwijdert de meeste mechanieken om zich te richten op Wereldvuur."
+      }
+    },
     "auraEffect": {
+      "sharedPyre": "Doet {total}% van de maximale gezondheid van elke speler, verdeeld over het aantal spelers in de cirkel ({perPlayer}% elk bij {players} spelers).",
+      "varkhulSharedPyre": "Doet {total}% van de maximale gezondheid van elke speler, verdeeld over de spelers in de cirkel ({perPlayer}% elk bij {players} spelers). Elke ontbrekende speler doet bovendien {missingPenalty}% van de maximale gezondheid aan de hele raid, inclusief spelers in de cirkel.",
+      "makersBrand": "Gedurende {duration} sec verhoogt elke stapeling de schade die je van Varkhul oploopt met {pct}%. Stapelt tot {max} keer. Tanks moeten wisselen bij {swap} stapelingen.",
+      "varkhulSentinelsGaze": "De Ember Sentinel achtervolgt je. Houd hem weg van de raid tot hij vernietigd is.",
+      "varkhulMoltenCore": "Draag deze kern naar de smidse. Gesmolten Last richt elke {interval} sec oplopende schade aan, van {min}% tot {max}% van de maximale gezondheid.",
+      "varkhulForgeLink": "Onderschep een actieve pijlerstraal voordat hij de smidse bereikt. Open stralen voegen elke seconde 6% hitte toe. Op Normaal koelen geblokkeerde stralen en inactieve pijlers de smidse af; op Heroïsch daalt de hitte nooit. Bij 100% ondergaat de smidse een dodelijke Smidsinstorting.",
+      "varkhulCrucibleExposure": "Het blokkeren van een Smeltkroesstraal richt elke seconde oplopende schade aan je maximale gezondheid aan. De stapelingen resetten 10 seconden na het verlaten van een straal op Normaal, en na 60 seconden op Heroïsch.",
       "dot": "Brengt elke {interval} s {value} {school}schade toe",
       "hot": "Herstelt elke {interval} s {value} gezondheid",
       "mendingCurrent": "Slaat {value} genezing op, na verloop van tijd vrijgegeven of verbruikt door Cascadeherstel",
@@ -2745,18 +2987,21 @@ export const nl_NL: EnTranslations = {
       "chestTitle": "Kist",
       "takeLootButton": "Buit Nemen",
       "takeLootTooltip": "Neemt de munten en gevallen voorwerpen. Verbruikt de oogst niet.",
-      "unifiedPressHint": "De interactietoets berooft en oogst in een keer, op basis van je stadsfocus."
+      "unifiedPressHint": "De interactietoets berooft en oogst in een keer, op basis van je stadsfocus.",
+      "bindConfirmTitle": "Bindt bij het oprapen",
+      "bindConfirmBody": "Deze buit bevat een voorwerp dat aan jou gebonden raakt zodra je het meeneemt. Een gebonden voorwerp kan alleen worden geruild met spelers die de buit deelden, en dat ook maar voor een beperkte tijd."
     },
     "spellbook": {
       "addToBarAria": "{name} toevoegen aan actiebalk",
       "removeFromBarAria": "{name} verwijderen van actiebalk",
-      "assignAria": "Choose a slot for {name}"
+      "assignAria": "Kies een actievak voor {name}"
     },
     "nameplate": {
       "mobLevel": "{level}",
       "mobEliteLevel": "{level}+",
       "afkTag": "AFK",
-      "cheaterTag": "< Valsspeler >"
+      "cheaterTag": "< Valsspeler >",
+      "pledgeTag": "Gelofte aan {guild}"
     },
     "mobTooltip": {
       "levelFamily": "Niveau {level} {family}",
@@ -2776,6 +3021,7 @@ export const nl_NL: EnTranslations = {
     },
     "partyFrames": {
       "section": "Groeps- en raidframes",
+      "optionsSection": "Groepsframe-opties",
       "unlock": "Groeps- en raidframes verplaatsen",
       "lock": "Groeps- en raidframes vergrendelen",
       "style": "Framestijl",
@@ -2806,13 +3052,70 @@ export const nl_NL: EnTranslations = {
     "frameReset": {
       "label": "Frameposities herstellen"
     },
+    "interfaceUnlock": {
+      "label": "Frames Bewerken",
+      "unlock": "Interface ontgrendelen",
+      "lock": "Interface vergrendelen",
+      "lockAll": "Interface Vergrendelen",
+      "barsNote": "Alleen de actiebalken die je hebt ingeschakeld, verschijnen tijdens het bewerken. Voeg eerst meer balken toe met de plus- en minknoppen op de hoofdactiebalk om ze te kunnen plaatsen.",
+      "frozenNote": "Tijdens het bewerken staan de interface en de camera stil: knoppen en frames zijn stilstaande afbeeldingen om te rangschikken, en klikken bereiken de spelwereld niet.",
+      "unlockFrame": "Dit frame ontgrendelen",
+      "lockFrame": "Dit frame vergrendelen",
+      "resizeFrame": "Formaat van dit frame aanpassen",
+      "frameNames": {
+        "actionBar1": "Actiebalk",
+        "actionBar2": "Actiebalk 2",
+        "actionBar3": "Actiebalk 3",
+        "steamWishlist": "Verlanglijstherinnering",
+        "menu": "Menu",
+        "minimap": "Minimap",
+        "stanceBar": "Houdingsbalk",
+        "xpBar": "XP-balk",
+        "chat": "Chat",
+        "actionBarGroup": "Actiebalken",
+        "playerFrame": "Speler",
+        "targetFrame": "Doelwit",
+        "partyFrames": "Groep",
+        "swingBar": "Automatische Aanval"
+      },
+      "framesMenu": "Frame-instellingen",
+      "framesMenuTitle": "Toon of verberg afzonderlijke frames. Een uitgevinkt frame blijft verborgen tot je het weer aanvinkt of terugzet naar de standaardinstellingen.",
+      "showHideFrames": "Frames Tonen of Verbergen",
+      "buffsLeftToRight": "Buffs van links naar rechts",
+      "debuffsLeftToRight": "Debuffs van links naar rechts",
+      "lockPlayerFrameToBar": "Spelerframe Vergrendelen aan Actiebalk",
+      "actionBarsVertical": "Verticale Actiebalken",
+      "actionBar1Vertical": "Verticale Actiebalk",
+      "actionBar2Vertical": "Verticale Actiebalk 2",
+      "actionBar3Vertical": "Verticale Actiebalk 3",
+      "menuRailHorizontal": "Horizontaal Menu",
+      "snapToGrid": "Uitlijnen op Raster",
+      "previewMemberName": "{className} {number}",
+      "resetFrameSize": "Grootte resetten",
+      "resetFrameSizeFor": "Grootte resetten voor {name}",
+      "previewSpell": "Voorbeeldspreuk"
+    },
+    "transfer": {
+      "frameLayout": "Frame-indeling",
+      "allSettings": "Alle Instellingen",
+      "exportAction": "Exporteren",
+      "importAction": "Importeren",
+      "copy": "Kopiëren",
+      "copied": "Gekopieerd naar klembord.",
+      "copyFailed": "Kopiëren mislukt. Selecteer de code en kopieer hem zelf.",
+      "applyReload": "Toepassen en Herladen",
+      "pastePlaceholder": "Plak hier een geëxporteerde code.",
+      "invalid": "Dat is geen geldige exportcode.",
+      "wrongKind": "Die code is een ander exporttype."
+    },
     "itemTooltip": {
       "requiresLevel": "Vereist niveau {level}",
       "riftTier": "{tier}-rangs Rift-voorwerp",
       "riftUpgrade": "Rift-verbetering {level}/{max}",
       "riftSockets": "Riftjuwelen {used}/{total}",
       "statEnchanted": "+{value} {stat} (Betoverd)",
-      "enchantedFallback": "Betoverd"
+      "enchantedFallback": "Betoverd",
+      "partyTradeWindow": "Je kunt dit voorwerp de komende {time} ruilen met spelers die deze buit deelden. Uitrusten beëindigt het ruilvenster."
     },
     "materialHint": {
       "fineGrade": "Fijne kwaliteit. Verzameld uit een grondstoffenpunt op volle rang met gereedschap boven de rang van het materiaal, en telt overal waar de gewone versie vereist is als die versie.",
@@ -3013,7 +3316,10 @@ export const nl_NL: EnTranslations = {
       "unlink": "Steam ontkoppelen",
       "linked": "Gekoppeld aan Steam-account {id}",
       "benefits": "Koppel je Steam-account vanuit de desktop-app om de daden die je behaalt te spiegelen naar Steam-prestaties.",
-      "noTicket": "Steam gaf geen koppelticket af. Start Steam en probeer het daarna opnieuw."
+      "noTicket": "Steam gaf geen koppelticket af. Start Steam en probeer het daarna opnieuw.",
+      "wishlist": "Op verlanglijst zetten op Steam",
+      "wishlistAria": "Op verlanglijst zetten op Steam: open de winkelpagina van World of ClaudeCraft",
+      "wishlistShort": "Verlanglijst"
     },
     "epic": {
       "title": "Epic",
@@ -3080,7 +3386,12 @@ export const nl_NL: EnTranslations = {
       "tip": "Verkoopopbrengst of teruggekeerde voorwerpen wachten op je bij de Koopman."
     },
     "noticeboard": {
-      "empty": "Er lijkt niets opgehangen te zijn."
+      "empty": "Er lijkt niets opgehangen te zijn.",
+      "subtitle": "Gildes van het rijk",
+      "rosterTitle": "Bekijk de ledenlijst van {guild}",
+      "back": "Terug",
+      "popupTitle": "Gildebord",
+      "close": "Sluiten"
     },
     "bank": {
       "title": "Bank",
@@ -3094,6 +3405,26 @@ export const nl_NL: EnTranslations = {
       "buySlotsMaxed": "Volledig uitgebreid",
       "buyConfirm": "{count} extra bankvakken kopen voor {price}?",
       "buyConfirmAccept": "Kopen",
+      "meterLabel": "{used} van {total} vakken",
+      "meterPoolGeneral": "Algemeen: {used} van {total}",
+      "meterPoolMaterials": "Materialen: {used} van {total}",
+      "meterPoolsAria": "Bankvakken gebruikt: {used} van {total}. Algemene voorwerpen: {generalUsed} van {generalTotal}. Materialen: {materialsUsed} van {materialsTotal}.",
+      "meterMaterialsNote": "Alleen-materialenruimte van geplaatste buidels. Andere voorwerpen kunnen dit niet gebruiken.",
+      "priceDisclaimer": "Prijzen kunnen veranderen met de spel-economie.",
+      "rungItemName": "{count} bankvakken",
+      "buySlotsDualAria": "Koop {count} vakken voor {price} of {cost} Claudium",
+      "buyConfirmDual": "{count} extra bankvakken kopen?",
+      "buyConfirmGold": "Kopen voor {price}",
+      "buyConfirmClaudium": "Kopen voor {cost} Claudium",
+      "rungGranted": "De bankvakken zijn toegevoegd. De bank van dit personage is nu groter.",
+      "rungAlreadyGranted": "Deze vakken staan al op dit personage. Je bent niet opnieuw belast.",
+      "rungApplyDeferred": "Betaling voltooid. De vakken worden automatisch toegepast de volgende keer dat dit personage inlogt.",
+      "rungGrantUnresolved": "Betaling voltooid, maar de vakken konden nog niet worden toegepast. De aankoop is geregistreerd en support kan dit voor je afronden.",
+      "rungInProgress": "Een aankoop voor dit personage wordt nog voltooid. Probeer het straks opnieuw.",
+      "rungDoesNotFit": "De bank van dit personage heeft geen ruimte voor nog een uitbreiding.",
+      "rungNotPurchasable": "Deze bankvakken kunnen nu niet worden gekocht.",
+      "rungFailed": "De aankoop kon niet worden voltooid.",
+      "rungOutage": "De aankoop kon niet worden bevestigd. Probeer het opnieuw met deze knop; je wordt niet dubbel belast. Als je het spel eerst herlaadt, kan die bescherming verloren gaan.",
       "withdrawHint": "Klik om op te nemen",
       "withdrawPartialHint": "Shift-klik om een deel op te nemen",
       "depositHint": "Klik om te storten",
@@ -3106,6 +3437,9 @@ export const nl_NL: EnTranslations = {
       "withdrawQuantityTitle": "{item} opnemen",
       "withdrawQuantityInput": "Aantal om op te nemen",
       "withdrawQuantityConfirm": "Opnemen",
+      "vaultRowWithdrawName": "{item} opnemen",
+      "priceChanged": "De prijs is veranderd voordat de aankoop werd voltooid. Bekijk de vernieuwde prijs en bevestig opnieuw.",
+      "withdrawQuantityAction": "Aantal om op te nemen: {item}",
       "filterGroupAria": "Bank filteren op categorie",
       "sortAria": "Bankvoorwerpen sorteren",
       "searchAria": "Bankvoorwerpen zoeken op naam",
@@ -3127,6 +3461,34 @@ export const nl_NL: EnTranslations = {
       "bonusReferralProgress": "{count}/{cap}",
       "bonusReferralExplainer": "Nodig een vriend uit: wanneer die niveau 10 bereikt, verdienen jullie allebei 2 vakken, tot 5 vrienden.",
       "bonusSectionAria": "Bonusbankvakken en hoe je er meer verdient",
+      "socketRowAria": "Banktasvakken",
+      "socketEmpty": "Leeg banktasvak",
+      "socketEmptyHint": "Klik op een tas in je tassen om hem in de bank op te bergen",
+      "socketLocked": "Vergrendeld tasvak",
+      "socketLockedLater": "Tasvakken ontgrendelen in volgorde, goedkoopste eerst",
+      "socketUnlockAria": "Ontgrendel een banktasvak voor {price}",
+      "socketUnlockHint": "Klik om dit tasvak te ontgrendelen",
+      "socketUnlockConfirm": "Een banktasvak ontgrendelen voor {price}?",
+      "socketUnlockAccept": "Ontgrendelen",
+      "unsocketHint": "Klik om deze tas terug naar je tassen te verplaatsen",
+      "socketHint": "Klik om deze tas in je bank te plaatsen",
+      "vaultTab": "Materialenkluis",
+      "vaultCapacityNote": "Elk materiaal heeft een plafond van {cap}.",
+      "vaultEmpty": "Je Materialenkluis is leeg. Klik op een materiaal in je tassen om het te storten.",
+      "vaultRowAria": "{item}: {count} van {cap} opgeslagen",
+      "vaultLockedIntro": "Ontgrendel de Materialenkluis om ambachtsmaterialen naast je bank op te slaan. Elk materiaal krijgt zijn eigen ruimte, tot {cap} per stuk.",
+      "vaultUnlockButton": "Ontgrendel de Materialenkluis",
+      "vaultUnlockConfirm": "De Materialenkluis ontgrendelen voor {price}?",
+      "vaultUpgrade": "Verhoog elk plafond naar {cap}",
+      "vaultUpgradeConfirm": "Elk materiaalplafond verhogen naar {cap} voor {price}?",
+      "vaultDepositAll": "Alle materialen storten",
+      "vaultDepositAllTooltip": "Stuurt alle materialen uit je tassen in één keer naar je Materialenkluis, tot elk materiaal zijn plafond bereikt. Uitrusting, gereedschap, questvoorwerpen en verbruiksartikelen worden nooit aangeraakt.",
+      "vaultDepositAllDone": "Materialen gestort: {count}.",
+      "vaultDepositAllFull": "Materialen gestort: {count}. Sommige plafonds zijn vol.",
+      "vaultDepositAllNone": "Plafonds van de Materialenkluis vol: niets gestort.",
+      "vaultWithdrawShort": "Slechts {fit} van {count} past in je tassen.",
+      "vaultDepositHint": "Klik om in je Materialenkluis te storten",
+      "vaultCannotDeposit": "Kan niet in de Materialenkluis",
       "tabsAria": "Banktabbladen",
       "personalTab": "Persoonlijk",
       "guildTab": "Gilde",
@@ -3212,6 +3574,10 @@ export const nl_NL: EnTranslations = {
         "arenaClash": {
           "title": "Arenatreffen",
           "note": "Duellisten stromen naar het Asgrauwe Colosseum. Sluit aan in de wachtrij en klim de ladder op."
+        },
+        "doubleHonor": {
+          "title": "Weekend van Dubbele Eer",
+          "note": "De oorlogskampen blazen de verzamelroep: het hele weekend betaalt Eer op de Doornholte-Velden dubbel, en een uitgevochten nederlaag betaalt als een overwinning."
         },
         "fishingDerby": {
           "title": "Visderby",
@@ -3522,7 +3888,9 @@ export const nl_NL: EnTranslations = {
       "reagentsNeeded": "Vereist:",
       "reagentLine": "{name}: {have}/{required}",
       "reagentFineSub": "(verbruikt {count} van fijne kwaliteit)",
-      "craftFeeLine": "Craft fee: {fee} each",
+      "reagentVaultDraw": "(haalt {count} uit je Materialenkluis)",
+      "vaultUnreachable": "De Materialenkluis is hier niet bereikbaar.",
+      "craftFeeLine": "Ambachtskosten: {fee} per stuk",
       "empty": "Nog geen recepten bekend.",
       "resultAria": "Ambacht {name}",
       "craftedToast": "Gemaakt: {name}",
@@ -3620,7 +3988,9 @@ export const nl_NL: EnTranslations = {
       "equip": "Uitrusten",
       "disenchant": "Onbetoveren",
       "salvage": "Salvagen",
-      "applyEnchant": "Betovering aanbrengen"
+      "applyEnchant": "Betovering aanbrengen",
+      "sell": "Verkopen",
+      "sellAll": "Alles verkopen ({count})"
     },
     "enchanting": {
       "disenchantedLine": "Je onbetoverd {item}.",
@@ -4074,7 +4444,7 @@ export const nl_NL: EnTranslations = {
       "unlockedBorderHint": "Nieuwe rand verdiend: {name}. Draag hem via het Boek der Daden.",
       "broadcastLine": "{name} heeft een daad volbracht: {deed}",
       "rarityLine": "Behaald door {percent} van de avonturiers",
-      "stillToVisit": "Still to visit: {places}",
+      "stillToVisit": "Nog te bezoeken: {places}",
       "trackerLabel": "Daden",
       "collapseHint": "Klap de dadenvolglijst in",
       "expandHint": "Klap de dadenvolglijst uit",
@@ -4104,218 +4474,224 @@ export const nl_NL: EnTranslations = {
       "minLevelNote": "Vereist niveau {level}"
     },
     "walletBridge": {
-      "cancelled": "The wallet request was cancelled. Nothing was sent.",
-      "timeout": "Your wallet did not respond in time. Open the wallet and try again.",
-      "notConnected": "Connect and verify a wallet, then try again.",
-      "unsupported": "This wallet cannot complete that action. Connect a different wallet.",
-      "unavailable": "No wallet connection is available here. Reconnect your wallet and try again.",
-      "badResponse": "Your wallet returned an unusable answer. Try again."
+      "cancelled": "Het portemonneeverzoek is geannuleerd. Er is niets verstuurd.",
+      "timeout": "Je portemonnee reageerde niet op tijd. Open de portemonnee en probeer het opnieuw.",
+      "notConnected": "Koppel en verifieer een portemonnee, en probeer het opnieuw.",
+      "unsupported": "Deze portemonnee kan die actie niet voltooien. Koppel een andere portemonnee.",
+      "unavailable": "Hier is geen portemonneeverbinding beschikbaar. Koppel je portemonnee opnieuw en probeer het nogmaals.",
+      "badResponse": "Je portemonnee gaf een onbruikbaar antwoord terug. Probeer het opnieuw."
     },
     "wocMarket": {
-      "title": "$WOC Exchange",
-      "close": "Close the Exchange",
-      "launcherLabel": "$WOC Exchange",
-      "tabBrowse": "Browse",
-      "tabSell": "Sell",
-      "tabActivity": "My Activities",
-      "tabsLabel": "$WOC Exchange sections",
-      "loading": "Loading the Exchange...",
-      "loadFailed": "The Exchange could not be reached. Try again shortly.",
-      "disabledRealm": "The $WOC Exchange is not available on this realm.",
-      "pausedBanner": "Trading is paused. Auctions keep counting down; new listings, bids, offers, and payments wait until trading resumes, and a payment already sent still settles.",
-      "walletBanner": "Link and verify a wallet to bid, buy, or sell on the Exchange.",
-      "walletBannerCta": "Connect wallet",
-      "rateNote": "Rate: about {tokens} $WOC per $1.00 USD as of {time}.",
-      "rateNotePaused": "Last known rate: about {tokens} $WOC per $1.00 USD as of {time}.",
-      "estimateNote": "About {tokens} $WOC for {usd} at the current rate.",
-      "browseEmpty": "No listings right now. Check back soon.",
-      "browseError": "Listings could not be loaded.",
-      "colItem": "Item",
-      "colSeller": "Seller",
-      "colCurrentBid": "Current bid",
-      "colBuyNow": "Buy now",
-      "colTimeLeft": "Time left",
-      "reserveMet": "Reserve met",
-      "reserveNotMet": "Reserve not met",
-      "yourListing": "Your listing",
-      "buyNowLockedBadge": "Purchase in progress",
-      "reserveMetTip": "The seller set a hidden minimum price, and the current bid meets it.",
-      "reserveNotMetTip": "The seller set a hidden minimum price. If the highest bid at close is below it, the item is not sold and every bond is returned.",
-      "yourListingTip": "You listed this item. You cannot bid on your own listing; while it has no bids you can cancel it here or from Activity.",
-      "buyNowLockedTip": "Another buyer holds this listing while they pay. If they do not pay in time, it reopens.",
-      "pagePrev": "Previous page",
-      "pageNext": "Next page",
-      "pageNumber": "Page {current}",
-      "sortLabel": "Sort",
-      "sortEnding": "Ending soonest",
-      "sortNewest": "Newest",
-      "sortPriceAsc": "Price: low to high",
-      "sortPriceDesc": "Price: high to low",
-      "filterQuality": "Quality",
-      "filterFormat": "Format",
-      "filterAny": "Any",
-      "filterFormatAuction": "Auction",
-      "filterFormatBuyNow": "Buy now",
-      "filterItemLabel": "Item",
-      "filterItemPlaceholder": "Search by item name",
-      "filterCategory": "Category",
-      "filterCategoryWeapon": "Weapons",
-      "filterCategoryArmor": "Armor",
-      "filterCategoryMount": "Mounts",
+      "title": "$WOC-beurs",
+      "close": "Beurs sluiten",
+      "launcherLabel": "$WOC-beurs",
+      "tabBrowse": "Bladeren",
+      "tabSell": "Verkopen",
+      "tabActivity": "Mijn Activiteiten",
+      "tabsLabel": "Onderdelen van de $WOC-beurs",
+      "loading": "De Beurs laden...",
+      "loadFailed": "De Beurs kon niet worden bereikt. Probeer het straks opnieuw.",
+      "disabledRealm": "De $WOC-beurs is niet beschikbaar op deze wereld.",
+      "browserOnlyConfirmTitle": "De $WOC-beurs in je browser openen?",
+      "browserOnlyConfirmBody": "De $WOC-beurs werkt alleen in de browserversie van World of ClaudeCraft. Hiermee wordt World of ClaudeCraft in je browser geopend, waar je kunt inloggen en de beurs kunt openen; het spel blijft hier doorgaan.",
+      "browserOnlyConfirmOpen": "Openen in browser",
+      "browserOnlyConfirmCancel": "Annuleren",
+      "pausedBanner": "Handel is gepauzeerd. Veilingen blijven aftellen; nieuwe aanbiedingen, biedingen, offertes en betalingen wachten tot de handel wordt hervat, en een betaling die al is verzonden, wordt nog steeds afgewikkeld.",
+      "walletLinkedDisconnected": "Je openbare adres is gekoppeld. Verbind die portemonnee-app opnieuw wanneer je met $WOC wilt betalen.",
+      "walletLinkedConnected": "Je gekoppelde portemonnee-app is verbonden en klaar voor $WOC-aankopen.",
+      "walletUsdBalance": "{amount} USD",
+      "walletUsdUnknown": "Onbekend",
+      "rateNote": "Koers: ongeveer {tokens} $WOC per $1.00 USD, vanaf {time}.",
+      "rateNotePaused": "Laatst bekende koers: ongeveer {tokens} $WOC per $1.00 USD, vanaf {time}.",
+      "estimateNote": "Ongeveer {tokens} $WOC voor {usd} tegen de huidige koers.",
+      "browseEmpty": "Nu geen aanbiedingen. Kom snel terug.",
+      "browseError": "Aanbiedingen konden niet worden geladen.",
+      "colItem": "Voorwerp",
+      "colSeller": "Verkoper",
+      "colCurrentBid": "Huidig bod",
+      "colBuyNow": "Nu kopen",
+      "colTimeLeft": "Resterende tijd",
+      "reserveMet": "Reserveprijs behaald",
+      "reserveNotMet": "Reserveprijs niet behaald",
+      "yourListing": "Jouw aanbieding",
+      "buyNowLockedBadge": "Aankoop bezig",
+      "reserveMetTip": "De verkoper heeft een verborgen minimumprijs ingesteld, en het huidige bod haalt die.",
+      "reserveNotMetTip": "De verkoper heeft een verborgen minimumprijs ingesteld. Als het hoogste bod bij sluiting daaronder blijft, wordt het voorwerp niet verkocht en wordt elke borg terugbetaald.",
+      "yourListingTip": "Je hebt dit voorwerp aangeboden. Je kunt niet bieden op je eigen aanbieding; zolang er geen biedingen op staan, kun je ze hier of via Activiteiten annuleren.",
+      "buyNowLockedTip": "Een andere koper houdt deze aanbieding vast tijdens het betalen. Als de betaling niet op tijd binnenkomt, gaat de aanbieding weer open.",
+      "pagePrev": "Vorige pagina",
+      "pageNext": "Volgende pagina",
+      "pageNumber": "Pagina {current}",
+      "sortLabel": "Sorteren",
+      "sortEnding": "Eindigt eerst",
+      "sortNewest": "Nieuwste",
+      "sortPriceAsc": "Prijs: laag naar hoog",
+      "sortPriceDesc": "Prijs: hoog naar laag",
+      "filterQuality": "Kwaliteit",
+      "filterFormat": "Soort",
+      "filterAny": "Alle",
+      "filterFormatAuction": "Veiling",
+      "filterFormatBuyNow": "Nu kopen",
+      "filterItemLabel": "Voorwerp",
+      "filterItemPlaceholder": "Zoek op voorwerpnaam",
+      "filterCategory": "Categorie",
+      "filterCategoryWeapon": "Wapens",
+      "filterCategoryArmor": "Pantser",
+      "filterCategoryMount": "Rijdieren",
       "filterSubcategory": "Type",
-      "sellerLinkAria": "View recent trades by {name}",
-      "sellerTitle": "Recent trades by {name}",
-      "sellerBack": "Back to Browse",
-      "sellerEmpty": "No completed trades yet.",
-      "sellerError": "Recent trades could not be loaded.",
-      "sellerSaleRow": "{time}: {item} to {buyer} for {usd}",
-      "detailTitle": "Listing",
-      "detailSeller": "Sold by {name}",
-      "detailEndsAt": "Ends {utc} UTC ({local} local)",
-      "detailStartingBid": "Starting bid: {usd}",
-      "detailCurrentBid": "Current bid: {usd}",
-      "detailNoBids": "No bids yet",
-      "detailMinNext": "Minimum next bid: {usd}",
-      "detailBuyNow": "Buy now: {usd}",
-      "detailSales": "Recent sales",
-      "detailSaleRow": "{time}: {seller} sold to {buyer} for {usd}",
-      "detailNoSales": "No recorded sales for this item yet.",
-      "detailSalesLoading": "Loading recent sales...",
-      "bidLabel": "Your bid (USD)",
-      "bidPlaceholder": "Enter a USD amount",
-      "bidButton": "Place bid",
-      "bidAria": "Place a bid on {item}",
-      "bidTermsToggle": "Bid terms",
-      "rowOpenAria": "View the listing for {item}",
-      "buyNowButton": "Buy now for {usd}",
-      "buyNowAria": "Buy {item} now for {usd}",
-      "cancelButton": "Cancel listing",
-      "cancelAria": "Cancel your listing of {item}",
-      "bidBondNote": "Placing a bid holds a refundable bond in $WOC on top of the bid: {bond} for a bid of {bid}, more for a higher bid. It is returned when you are outbid or lose, or after you pay if you win; a second-chance offer holds it again.",
-      "bidBondSchedule": "The bond is {rate} percent of your bid, at least {min} and at most {max}.",
-      "bidBondPayWindow": "Pay the bond within {duration} of placing your bid, or the bid lapses.",
-      "bidBindingNote": "A bid is binding once you sign its bond transaction: it cannot be withdrawn, and if you win and do not pay, the bond is forfeited and your account earns a Marketplace strike.",
-      "bidCloseNote": "A bid whose bond confirms in the last 2 minutes extends the auction to 2 minutes after that bid, up to 30 minutes past the listed end. A bond that confirms after the auction closes does not count and is refunded.",
-      "offerNextNote": "If the winner does not pay, you may become the buyer at your own bid: your bond is held again (or asked for again if it was already returned) and payment is due within {duration}.",
-      "buyNowNote": "Buy now holds this listing for you for about four and a half minutes while you pay. If you do not pay in time, you cannot try this listing again for 30 minutes, and three unpaid Buy Nows within an hour pause Buy Now for you until the oldest is an hour old.",
-      "variableTokenWarning": "You are committing to pay a USD value in $WOC. The exact token amount is set by a fresh quote when payment is requested and may differ from the estimate.",
-      "quoteFixedNote": "This quote fixes the $WOC amount until it expires. A new quote may differ.",
-      "settlementDeadlineNote": "If you win, payment is due within {duration} of the auction closing.",
-      "claimCooldownRetry": "You recently walked away from a Buy Now. Try again in {duration}.",
-      "termsLabel": "I accept the Marketplace terms.",
-      "termsLink": "View the Marketplace terms (opens in a new tab)",
-      "quoteTitle": "Confirm payment",
-      "quoteTotal": "Total: {tokens} $WOC",
-      "quoteSeller": "Seller receives: {tokens} $WOC",
-      "quoteBurn": "Burned (removed from supply): {tokens} $WOC",
-      "quoteTreasury": "To the game treasury: {tokens} $WOC",
-      "quoteExpires": "Quote expires in {duration}",
-      "quoteExpiresAt": "Quote expires at {time}.",
-      "quoteExpired": "The quote expired. Request a fresh one.",
-      "quoteSign": "Sign and pay",
-      "quoteRefresh": "New quote",
-      "quoteCancel": "Not now",
-      "quoteBondFor": "Refundable bid bond: {usd}",
-      "quoteBondForItem": "Refundable bid bond for {item}: {usd}",
-      "quoteSettlementFor": "Settlement for {item}: {usd}",
-      "paymentDueAt": "Payment is due by {time}.",
-      "signing": "Waiting for your wallet...",
-      "signFailed": "Your wallet did not complete the payment. Check the wallet and try again.",
-      "signFailedConfirm": "Your wallet did not sign the confirmation. Check the wallet and try again.",
-      "confirming": "Confirming on chain...",
-      "listing": "Listing your item...",
-      "activityCancelPending": "Cancel pending",
-      "activityDirected": "Directed sale",
-      "bidPlacedStanding": "Your bid stands. You are the high bidder.",
-      "bidPlacedOutbid": "Your bond confirmed, but a higher bid landed first.",
-      "purchaseComplete": "Purchase complete. Your item arrives by Ravenpost mail.",
-      "paymentConfirmedDelivering": "Payment confirmed. Your item arrives by Ravenpost mail once delivery completes.",
-      "listingCreated": "Your listing is live.",
-      "listingCancelled": "Listing cancelled. Your item returns by Ravenpost mail.",
-      "listingCancelPending": "Cancel pending: a buyer holds the purchase window. Unless they pay, the listing closes and your item returns by Ravenpost mail.",
-      "sellTitle": "Create a listing",
-      "sellEmptyFloor": "No eligible items in your bags. This realm takes unbound equipment of {floor} quality or better.",
-      "sellCollectiblesBoth": "Mounts and mech chroma plates can also be listed.",
-      "sellCollectiblesMounts": "Mounts can also be listed.",
-      "sellCollectiblesChromas": "Mech chroma plates can also be listed.",
-      "sellLockedHidden": "Locked items are not listed here. Unlock them in your bags to sell them.",
-      "sellSearchPlaceholder": "Type to filter your bags",
-      "sellClear": "Clear {item} and choose another",
-      "sellChoose": "Item to list",
-      "sellNoMatches": "No items match that search",
-      "sellBuyNowAboveStart": "The buy-now price must be higher than the starting bid.",
-      "sellFormat": "Format",
-      "sellFormatAuction": "Auction",
-      "sellFormatBuyNow": "Buy now only",
-      "sellFormatAuctionBuyNow": "Auction with buy now",
-      "sellStart": "Starting bid (USD)",
-      "sellReserve": "Reserve (USD, optional)",
-      "sellReserveNote": "Optional, at least the starting bid. Bidders see only whether it is met; if the highest bid at close is below it, the item comes back to you unsold and every bond is returned.",
-      "sellBuyNowNote": "Required. A buy-now listing sells at this price with no bidding.",
-      "sellBuyNowAuctionNote": "Optional. Set a price a buyer can pay to end the auction early; it must be above the starting bid and the reserve.",
-      "sellBuyNowPrice": "Buy-now price (USD)",
-      "sellDuration": "Duration",
-      "sellOfferNext": "If the winner does not pay, sell to the next-highest bidder whose bid meets the reserve, at their bid, instead of ending unsold.",
-      "sellSubmit": "List item",
-      "sellSubmitAria": "List {item} on the Exchange",
-      "sellFeeNote": "A completed sale pays an Exchange fee out of the price: part is burned and part goes to the treasury, and you receive the remainder at your linked wallet in the settlement transaction. The fee for the price you enter is shown here; on an auction it follows the final price.",
-      "activityListings": "My listings",
-      "activityBids": "My bids",
-      "activitySettlements": "My settlements",
-      "activityEmpty": "You have no bids, listings, or settlements yet. Your Exchange activity appears here.",
-      "activityNoListings": "You have no listings.",
-      "activityNoBids": "You have no bids.",
-      "activityNoSettlements": "You have no settlements.",
-      "activityPayNow": "Pay now",
-      "activityPayNowAria": "Pay for settlement {id} now",
-      "activityPayNowItemAria": "Pay {usd} for {item} now",
-      "activityDeadline": "Payment due in {duration}",
-      "dueAt": "Due {utc} UTC ({local} local)",
-      "activityStrikes": "Marketplace strikes: {count}",
-      "activitySuspended": "Exchange suspended for {duration} after unpaid deals: no bids, purchases, listings, or $WOC trades until then.",
-      "strikesTip": "A strike is earned each time you do not pay for a deal you committed to. After the first, each strike suspends you from the Exchange for longer: 3 days, then 14, then 90, then a year.",
-      "bidStatusPending": "Awaiting bond",
-      "bidStatusActive": "High bidder",
-      "bidStatusOutbid": "Outbid",
-      "bidStatusLapsed": "Lapsed",
-      "bidStatusWon": "Won",
-      "bidStatusDefaulted": "Defaulted",
-      "bidStatusCancelled": "Cancelled",
-      "bidBondPay": "Pay bond",
-      "bidBondPayAria": "Pay the bond for your bid on listing {id}",
-      "bidBondPayItemAria": "Pay the {bond} bond for your bid on {item}",
-      "settlementOffered": "Payment due",
-      "settlementConfirming": "Confirming",
-      "settlementConfirmedDelivering": "Payment confirmed, delivering",
-      "settlementReview": "Payment under review",
-      "settlementDelivered": "Delivered",
-      "settlementExpired": "Expired unpaid",
-      "settlementFailed": "Payment failed",
-      "settlementFailBurnMissing": "The payment did not include the required token burn.",
-      "settlementFailBurnMismatch": "The payment burned the wrong token amount.",
-      "settlementFailBurnAuthority": "The token burn came from a wallet this purchase did not name.",
-      "settlementFailUnexpectedCredit": "The transaction paid a wallet outside this purchase.",
-      "settlementFailQuoteExpired": "The payment quote expired before it was used. Request a fresh one and pay again.",
-      "settlementFailTransaction": "The payment transaction failed on the network. Request a fresh quote and try again.",
-      "settlementFailRefunded": "This payment was returned to your wallet.",
-      "settlementFailSuperseded": "This payment attempt was replaced by a newer one.",
-      "settlementFailConfirmingOverdue": "This payment took too long to confirm and could not be verified.",
-      "settlementFailGeneric": "This payment could not be completed.",
-      "paymentSeenAwaitingFinality": "Payment seen on the ledger. Waiting for final confirmation.",
-      "paymentNotYetVisible": "No payment is visible on the ledger yet. It can take a moment to appear.",
-      "paymentServiceUnreachable": "The payment service is unreachable. Your payment stays recorded and will be re-checked.",
-      "paymentPendingGeneric": "Your payment is submitted and awaiting confirmation.",
-      "bondSeenAwaitingFinality": "Bond payment seen on the ledger. Waiting for final confirmation.",
-      "bondNotYetVisible": "No bond payment is visible on the ledger yet. It can take a moment to appear.",
-      "bondServiceUnreachable": "The payment service is unreachable. Your bond payment stays recorded and will be re-checked.",
-      "bondPendingGeneric": "Your bond payment is submitted and awaiting confirmation.",
-      "listingStatusActive": "Active",
-      "listingStatusSettling": "Awaiting payment",
-      "listingStatusSold": "Sold",
-      "listingStatusReturned": "Returned",
-      "listingStatusCancelled": "Cancelled",
-      "listingStatusSuspended": "Suspended",
-      "listingStatusUnsold": "Unsold"
+      "sellerLinkAria": "Bekijk recente transacties van {name}",
+      "sellerTitle": "Recente transacties van {name}",
+      "sellerBack": "Terug naar Bladeren",
+      "sellerEmpty": "Nog geen voltooide transacties.",
+      "sellerError": "Recente transacties konden niet worden geladen.",
+      "sellerSaleRow": "{time}: {item} aan {buyer} voor {usd}",
+      "detailTitle": "Aanbieding",
+      "detailSeller": "Verkocht door {name}",
+      "detailEndsAt": "Eindigt om {utc} UTC ({local} lokale tijd)",
+      "detailStartingBid": "Startbod: {usd}",
+      "detailCurrentBid": "Huidig bod: {usd}",
+      "detailNoBids": "Nog geen biedingen",
+      "detailMinNext": "Minimaal volgend bod: {usd}",
+      "detailBuyNow": "Nu kopen: {usd}",
+      "detailSales": "Recente verkopen",
+      "detailSaleRow": "{time}: {seller} verkocht aan {buyer} voor {usd}",
+      "detailNoSales": "Nog geen geregistreerde verkopen voor dit voorwerp.",
+      "detailSalesLoading": "Recente verkopen laden...",
+      "bidLabel": "Je bod (USD)",
+      "bidPlaceholder": "Voer een bedrag in USD in",
+      "bidButton": "Bod plaatsen",
+      "bidAria": "Plaats een bod op {item}",
+      "bidTermsToggle": "Biedvoorwaarden",
+      "rowOpenAria": "Bekijk de aanbieding voor {item}",
+      "buyNowButton": "Nu kopen voor {usd}",
+      "buyNowAria": "Koop {item} nu voor {usd}",
+      "cancelButton": "Aanbieding annuleren",
+      "cancelAria": "Je aanbieding van {item} annuleren",
+      "bidBondNote": "Een bod plaatsen houdt een terugbetaalbare borg in $WOC vast, boven op het bod: {bond} voor een bod van {bid}, meer voor een hoger bod. Ze wordt teruggegeven wanneer je wordt overboden of verliest, of nadat je betaalt als je wint; een tweedekansaanbod houdt haar opnieuw vast.",
+      "bidBondSchedule": "De borg is {rate} procent van je bod, met een minimum van {min} en een maximum van {max}.",
+      "bidBondPayWindow": "Betaal de borg binnen {duration} na het plaatsen van je bod, anders vervalt het bod.",
+      "bidBindingNote": "Een bod is bindend zodra je de bijbehorende borgtransactie ondertekent: het kan niet worden ingetrokken, en als je wint en niet betaalt, vervalt de borg en krijgt je account een Beursovertreding.",
+      "bidCloseNote": "Een bod waarvan de borg in de laatste 2 minuten wordt bevestigd, verlengt de veiling tot 2 minuten na dat bod, tot maximaal 30 minuten na de vermelde eindtijd. Een borg die wordt bevestigd nadat de veiling is gesloten, telt niet mee en wordt terugbetaald.",
+      "offerNextNote": "Als de winnaar niet betaalt, kun jij de koper worden tegen je eigen bod: je borg wordt opnieuw vastgehouden (of opnieuw gevraagd als het al is teruggegeven), en de betaling is verschuldigd binnen {duration}.",
+      "buyNowNote": "Nu kopen houdt deze aanbieding ongeveer viereneenhalve minuut voor je vast terwijl je betaalt. Betaal je niet op tijd, dan kun je deze aanbieding 30 minuten lang niet opnieuw proberen, en na drie onbetaalde Nu kopen-pogingen binnen een uur wordt Nu kopen voor jou onderbroken totdat de oudste ervan een uur oud is.",
+      "variableTokenWarning": "Je verbindt je ertoe een USD-waarde in $WOC te betalen. Het exacte aantal tokens wordt bepaald door een nieuwe prijsopgave op het moment dat de betaling wordt aangevraagd, en kan afwijken van de schatting.",
+      "quoteFixedNote": "Deze prijsopgave legt het $WOC-bedrag vast tot de vervaldatum. Een nieuwe prijsopgave kan afwijken.",
+      "settlementDeadlineNote": "Als je wint, is de betaling verschuldigd binnen {duration} na het sluiten van de veiling.",
+      "claimCooldownRetry": "Je hebt onlangs een Nu kopen-aankoop laten schieten. Probeer het over {duration} opnieuw.",
+      "termsLabel": "Ik ga akkoord met de voorwaarden van de Beurs.",
+      "termsLink": "Bekijk de voorwaarden van de Beurs (opent in een nieuw tabblad)",
+      "quoteTitle": "Bevestig betaling",
+      "quoteTotal": "Totaal: {tokens} $WOC",
+      "quoteSeller": "Verkoper ontvangt: {tokens} $WOC",
+      "quoteBurn": "Verbrand (uit de voorraad verwijderd): {tokens} $WOC",
+      "quoteTreasury": "Naar de schatkist van het spel: {tokens} $WOC",
+      "quoteExpires": "Prijsopgave verloopt over {duration}",
+      "quoteExpiresAt": "Prijsopgave verloopt om {time}.",
+      "quoteExpired": "De prijsopgave is verlopen. Vraag een nieuwe aan.",
+      "quoteSign": "Ondertekenen en betalen",
+      "quoteRefresh": "Nieuwe prijsopgave",
+      "quoteCancel": "Niet nu",
+      "quoteBondFor": "Terugbetaalbare biedingsborg: {usd}",
+      "quoteBondForItem": "Terugbetaalbare biedingsborg voor {item}: {usd}",
+      "quoteSettlementFor": "Afwikkeling voor {item}: {usd}",
+      "paymentDueAt": "De betaling is verschuldigd voor {time}.",
+      "signing": "Wachten op je portemonnee...",
+      "signFailed": "Je portemonnee heeft de betaling niet voltooid. Controleer de portemonnee en probeer het opnieuw.",
+      "signFailedConfirm": "Je portemonnee heeft de bevestiging niet ondertekend. Controleer de portemonnee en probeer het opnieuw.",
+      "confirming": "Bevestigen op de blockchain...",
+      "listing": "Je voorwerp wordt aangeboden...",
+      "activityCancelPending": "Annulering in behandeling",
+      "activityDirected": "Gerichte verkoop",
+      "bidPlacedStanding": "Je bod staat. Je bent de hoogste bieder.",
+      "bidPlacedOutbid": "Je borg is bevestigd, maar een hoger bod kwam eerder binnen.",
+      "purchaseComplete": "Aankoop voltooid. Je voorwerp arriveert via De Ravenpost.",
+      "paymentConfirmedDelivering": "Betaling bevestigd. Je voorwerp arriveert via De Ravenpost zodra de levering is voltooid.",
+      "listingCreated": "Je aanbieding staat live.",
+      "listingCancelled": "Aanbieding geannuleerd. Je voorwerp komt terug via De Ravenpost.",
+      "listingCancelPending": "Annuleren in behandeling: een koper houdt het aankoopvenster vast. Betaalt deze niet, dan sluit de aanbieding en komt je voorwerp terug via De Ravenpost.",
+      "sellTitle": "Een aanbieding maken",
+      "sellEmptyFloor": "Geen geschikte voorwerpen in je tassen. Deze wereld accepteert ongebonden uitrusting van kwaliteit {floor} of hoger.",
+      "sellCollectiblesBoth": "Rijdieren en mech-chromaplaten kunnen ook worden aangeboden.",
+      "sellCollectiblesMounts": "Rijdieren kunnen ook worden aangeboden.",
+      "sellCollectiblesChromas": "Mech-chromaplaten kunnen ook worden aangeboden.",
+      "sellLockedHidden": "Vergrendelde voorwerpen worden hier niet aangeboden. Ontgrendel ze in je tassen om ze te verkopen.",
+      "sellSearchPlaceholder": "Typ om je tassen te filteren",
+      "sellClear": "{item} wissen en een ander kiezen",
+      "sellChoose": "Aan te bieden voorwerp",
+      "sellNoMatches": "Geen voorwerpen komen overeen met die zoekopdracht",
+      "sellBuyNowAboveStart": "De Nu kopen-prijs moet hoger zijn dan het startbod.",
+      "sellFormat": "Soort",
+      "sellFormatAuction": "Veiling",
+      "sellFormatBuyNow": "Alleen Nu kopen",
+      "sellFormatAuctionBuyNow": "Veiling met Nu kopen",
+      "sellStart": "Startbod (USD)",
+      "sellReserve": "Reserveprijs (USD, optioneel)",
+      "sellReserveNote": "Optioneel, minstens het startbod. Bieders zien alleen of de reserveprijs is behaald; als het hoogste bod bij sluiting daaronder blijft, komt het voorwerp onverkocht bij je terug en wordt elke borg terugbetaald.",
+      "sellBuyNowNote": "Verplicht. Een Nu kopen-aanbieding wordt tegen deze prijs verkocht, zonder bieden.",
+      "sellBuyNowAuctionNote": "Optioneel. Stel een prijs in die een koper kan betalen om de veiling vroegtijdig te beëindigen; deze moet boven het startbod en de reserveprijs liggen.",
+      "sellBuyNowPrice": "Nu kopen-prijs (USD)",
+      "sellDuration": "Duur",
+      "sellOfferNext": "Als de winnaar niet betaalt, verkoop dan aan de op één na hoogste bieder wiens bod de reserveprijs haalt, tegen dat bod, in plaats van onverkocht te eindigen.",
+      "sellSubmit": "Voorwerp aanbieden",
+      "sellSubmitAria": "{item} aanbieden op de Beurs",
+      "sellFeeNote": "Een voltooide verkoop betaalt een Beursvergoeding uit de prijs: een deel wordt verbrand en een deel gaat naar de schatkist, en je ontvangt de rest op je gekoppelde portemonnee in de afwikkelingstransactie. De vergoeding voor de prijs die je invoert, wordt hier getoond; bij een veiling volgt ze de uiteindelijke prijs.",
+      "activityListings": "Mijn aanbiedingen",
+      "activityBids": "Mijn biedingen",
+      "activitySettlements": "Mijn afwikkelingen",
+      "activityEmpty": "Je hebt nog geen biedingen, aanbiedingen of afwikkelingen. Je Beursactiviteit verschijnt hier.",
+      "activityNoListings": "Je hebt geen aanbiedingen.",
+      "activityNoBids": "Je hebt geen biedingen.",
+      "activityNoSettlements": "Je hebt geen afwikkelingen.",
+      "activityPayNow": "Nu betalen",
+      "activityPayNowAria": "Betaal nu voor afwikkeling {id}",
+      "activityPayNowItemAria": "Betaal nu {usd} voor {item}",
+      "activityDeadline": "Betaling verschuldigd over {duration}",
+      "dueAt": "Verschuldigd om {utc} UTC ({local} lokale tijd)",
+      "activityStrikes": "Beursovertredingen: {count}",
+      "activitySuspended": "Beurs geschorst voor {duration} na onbetaalde deals: geen biedingen, aankopen, aanbiedingen of $WOC-ruilen tot dan.",
+      "strikesTip": "Je krijgt een overtreding elke keer dat je niet betaalt voor een deal waar je je aan hebt verbonden. Vanaf de eerste schorst elke overtreding je langer van de Beurs: 3 dagen, dan 14, dan 90, dan een jaar.",
+      "bidStatusPending": "Wacht op borg",
+      "bidStatusActive": "Hoogste bieder",
+      "bidStatusOutbid": "Overboden",
+      "bidStatusLapsed": "Vervallen",
+      "bidStatusWon": "Gewonnen",
+      "bidStatusDefaulted": "In gebreke",
+      "bidStatusCancelled": "Geannuleerd",
+      "bidBondPay": "Borg betalen",
+      "bidBondPayAria": "Betaal de borg voor je bod op aanbieding {id}",
+      "bidBondPayItemAria": "Betaal de borg van {bond} voor je bod op {item}",
+      "settlementOffered": "Betaling verschuldigd",
+      "settlementConfirming": "Bevestigen",
+      "settlementConfirmedDelivering": "Betaling bevestigd, wordt geleverd",
+      "settlementReview": "Betaling wordt beoordeeld",
+      "settlementDelivered": "Afgeleverd",
+      "settlementExpired": "Verlopen, onbetaald",
+      "settlementFailed": "Betaling mislukt",
+      "settlementFailBurnMissing": "De betaling bevatte niet de vereiste tokenverbranding.",
+      "settlementFailBurnMismatch": "De betaling verbrandde het verkeerde aantal tokens.",
+      "settlementFailBurnAuthority": "De tokenverbranding kwam van een portemonnee die niet bij deze aankoop hoort.",
+      "settlementFailUnexpectedCredit": "De transactie betaalde een portemonnee die niet bij deze aankoop hoort.",
+      "settlementFailQuoteExpired": "De betalingsprijsopgave verliep voordat ze werd gebruikt. Vraag een nieuwe aan en betaal opnieuw.",
+      "settlementFailTransaction": "De betalingstransactie is mislukt op het netwerk. Vraag een nieuwe prijsopgave aan en probeer het opnieuw.",
+      "settlementFailRefunded": "Deze betaling is teruggestort naar je portemonnee.",
+      "settlementFailSuperseded": "Deze betalingspoging is vervangen door een nieuwere.",
+      "settlementFailConfirmingOverdue": "Deze betaling duurde te lang om te bevestigen en kon niet worden geverifieerd.",
+      "settlementFailGeneric": "Deze betaling kon niet worden voltooid.",
+      "paymentSeenAwaitingFinality": "Betaling gezien in het grootboek. Wachten op definitieve bevestiging.",
+      "paymentNotYetVisible": "Er is nog geen betaling zichtbaar in het grootboek. Het kan even duren voordat deze verschijnt.",
+      "paymentServiceUnreachable": "De betaaldienst is niet bereikbaar. Je betaling blijft geregistreerd en wordt opnieuw gecontroleerd.",
+      "paymentPendingGeneric": "Je betaling is ingediend en wacht op bevestiging.",
+      "bondSeenAwaitingFinality": "Borgbetaling gezien in het grootboek. Wachten op de definitieve bevestiging.",
+      "bondNotYetVisible": "Er is nog geen borgbetaling zichtbaar in het grootboek. Het kan even duren voordat die verschijnt.",
+      "bondServiceUnreachable": "De betalingsdienst is niet bereikbaar. Je borgbetaling blijft geregistreerd en wordt opnieuw gecontroleerd.",
+      "bondPendingGeneric": "Je borgbetaling is ingediend en wacht op bevestiging.",
+      "listingStatusActive": "Actief",
+      "listingStatusSettling": "Wacht op betaling",
+      "listingStatusSold": "Verkocht",
+      "listingStatusReturned": "Geretourneerd",
+      "listingStatusCancelled": "Geannuleerd",
+      "listingStatusSuspended": "Geschorst",
+      "listingStatusUnsold": "Onverkocht"
     }
   },
   "gatherEvent": {
@@ -4378,6 +4754,8 @@ export const nl_NL: EnTranslations = {
       "online": "Personage is momenteel online.",
       "rename_not_permitted": "Dit personage hernoemen is niet toegestaan.",
       "delete_confirm": "Typ de personagenaam om de verwijdering te bevestigen.",
+      "storage_purchase_open": "Een opslag-aankoop moet voltooid of opgelost zijn voordat dit personage kan worden verwijderd.",
+      "delete_busy": "De wereld is bezet. Probeer dit personage zo meteen opnieuw te verwijderen.",
       "already_in_world": "Personage is al in de wereld.",
       "taken_over": "Je personage is overgenomen door een andere sessie.",
       "rename_required": "Dit personage moet hernoemd worden voordat het de wereld kan betreden.",
@@ -4417,6 +4795,10 @@ export const nl_NL: EnTranslations = {
     "deeds": {
       "invalid_input": "Ongeldige invoer."
     },
+    "guilds": {
+      "invalid_roster_name": "Ongeldige gildenaam.",
+      "unknown": "Geen gilde met die naam."
+    },
     "steam": {
       "disabled": "Koppelen met Steam is op dit moment niet beschikbaar.",
       "invalid_ticket": "Steam kon dit koppelverzoek niet verifiëren. Probeer het opnieuw vanuit de desktop-app.",
@@ -4434,7 +4816,13 @@ export const nl_NL: EnTranslations = {
       "upstream": "Epic reageerde niet. Probeer het zo meteen opnieuw."
     },
     "wallet": {
-      "handoff_invalid": "Die portemonnee-autorisatie is verlopen of kon niet worden geverifieerd. Probeer het opnieuw."
+      "handoff_invalid": "Die portemonnee-autorisatie is verlopen of kon niet worden geverifieerd. Probeer het opnieuw.",
+      "reauth_required": "Bevestig deze portemonneewijziging met je accountwachtwoord.",
+      "reauth_two_factor": "Je account heeft tweestapsverificatie ingeschakeld. Voer je code in om te bevestigen.",
+      "reauth_no_password": "Stel eerst een wachtwoord in bij de accountinstellingen en probeer het opnieuw.",
+      "reauth_bad_signature": "De handtekening van de portemonnee kon niet worden geverifieerd. Probeer het opnieuw.",
+      "reauth_bad_password": "Je wachtwoord is onjuist.",
+      "reauth_bad_two_factor": "Die code is niet geldig, probeer het opnieuw."
     },
     "ota_updates": {
       "invalid_input": "Ongeldige invoer."
@@ -4456,53 +4844,53 @@ export const nl_NL: EnTranslations = {
       "not_marked": "Dat account is niet gemarkeerd."
     },
     "woc_market": {
-      "invalid_input": "Invalid input.",
-      "disabled": "The $WOC Exchange is not available on this realm.",
-      "paused": "Exchange trading is paused. Auctions keep counting down.",
-      "wallet_required": "Link and verify a wallet before trading on the Exchange.",
-      "recipient_wallet_required": "That player must connect a wallet before they can accept $WOC payments.",
-      "self_offer": "You cannot send a $WOC offer to yourself.",
-      "offer_expired": "That $WOC offer expired. Ask for a new one.",
-      "terms_required": "Accept the Marketplace terms to continue.",
-      "totp_required": "This amount requires two-factor authentication. Enable it in account settings, then enter your code.",
-      "totp_invalid": "That two-factor code did not verify. Try again.",
-      "suspended": "Your Exchange access is suspended after unpaid deals: no bids, purchases, listings, or $WOC trades.",
-      "character_invalid": "Play the character you are listing from, and try again.",
-      "not_found": "That Exchange entry no longer exists.",
-      "not_yours": "That Exchange entry no longer exists.",
-      "not_active": "That listing is no longer open for this action.",
-      "own_listing": "You cannot bid on or buy your own listing.",
-      "has_bids": "A listing with bids cannot be withdrawn. Contact support if you must cancel.",
-      "bid_too_low": "Your bid does not clear the current bid plus its increment.",
-      "already_pending": "Confirm or abandon your pending bid on this listing first.",
-      "insufficient_balance": "Your wallet does not hold enough $WOC for this bid and its bond.",
-      "quote_unavailable": "A price quote could not be issued right now. Try again shortly.",
-      "quote_expired": "That quote expired. Request a fresh one; if none is offered, that window has closed.",
-      "not_pending": "That bid is no longer awaiting its bond.",
-      "confirm_failed": "The transaction could not be confirmed. Request a fresh quote and try again.",
-      "confirm_in_flight": "Your payment is still confirming. Try again once it resolves.",
-      "buy_now_locked": "Another buyer is completing this purchase. Try again in a moment.",
-      "cancel_pending": "The seller is cancelling this listing.",
-      "claim_cooldown": "You recently walked away from a Buy Now. Try again later.",
-      "bond_window_closed": "This bid can no longer be paid: its payment window has closed. Bid again for a fresh one.",
-      "settlement_in_flight": "A buyer is paying for this listing. Try again once the payment settles.",
-      "contended": "The Exchange is busy with this listing. Try again in a moment.",
-      "sale_conflict": "Another live sale record stands for this listing. Exclude it first.",
-      "no_buy_now": "This listing has no buy-now price.",
-      "cap_reached": "You have reached your Exchange listing limit.",
-      "stale_item": "That item changed or moved. Re-select it and try again.",
-      "item_mismatch": "That is not the exact copy the buyer agreed to, or its state changed (a lock counts). Start a fresh deal for it.",
-      "offer_pending": "You already have a deal standing with this player. Resolve it first.",
-      "not_eligible": "That item cannot be listed on the $WOC Exchange.",
-      "invalid_params": "Check the starting bid, reserve, buy-now price, and duration.",
-      "signature_reused": "That transaction was already submitted.",
-      "item_locked": "That item is locked. Unlock it in your bags before selling it.",
-      "stepup_required": "Selling on the Exchange needs a signature from your linked wallet.",
-      "stepup_challenge_invalid": "That wallet confirmation is no longer valid. Start the sale again.",
-      "stepup_challenge_expired": "The wallet confirmation expired. Start the sale again.",
-      "stepup_wallet_mismatch": "Your linked wallet changed since this confirmation was issued. Start the sale again.",
-      "stepup_binding_mismatch": "That wallet confirmation does not match this sale. Start the sale again.",
-      "stepup_signature_invalid": "The wallet signature did not verify. Start the sale again."
+      "invalid_input": "Ongeldige invoer.",
+      "disabled": "De $WOC-beurs is niet beschikbaar op deze wereld.",
+      "paused": "Handelen op de Beurs is gepauzeerd. Veilingen blijven wel aftellen.",
+      "wallet_required": "Koppel en verifieer een portemonnee voordat je handelt op de Beurs.",
+      "recipient_wallet_required": "Die speler moet eerst een portemonnee koppelen voordat deze $WOC-betalingen kan accepteren.",
+      "self_offer": "Je kunt geen $WOC-aanbod naar jezelf sturen.",
+      "offer_expired": "Dat $WOC-aanbod is verlopen. Vraag om een nieuw aanbod.",
+      "terms_required": "Accepteer de voorwaarden van de Beurs om door te gaan.",
+      "totp_required": "Dit bedrag vereist tweestapsverificatie. Schakel dit in bij je accountinstellingen en voer daarna je code in.",
+      "totp_invalid": "Die tweestapscode kon niet worden geverifieerd. Probeer het opnieuw.",
+      "suspended": "Je toegang tot de Beurs is geschorst na onbetaalde deals: geen biedingen, aankopen, aanbiedingen of $WOC-transacties meer.",
+      "character_invalid": "Speel het personage van waaruit je aanbiedt, en probeer het opnieuw.",
+      "not_found": "Die beursvermelding bestaat niet meer.",
+      "not_yours": "Die beursvermelding bestaat niet meer.",
+      "not_active": "Die aanbieding staat niet meer open voor deze actie.",
+      "own_listing": "Je kunt niet bieden op of kopen van je eigen aanbieding.",
+      "has_bids": "Een aanbieding met biedingen kan niet worden ingetrokken. Neem contact op met support als je toch moet annuleren.",
+      "bid_too_low": "Je bod is niet hoog genoeg: het moet het huidige bod plus de verhoging overschrijden.",
+      "already_pending": "Bevestig je openstaande bod op deze aanbieding eerst, of trek het in.",
+      "insufficient_balance": "Je portemonnee bevat niet genoeg $WOC voor dit bod en de bijbehorende borg.",
+      "quote_unavailable": "Er kon nu geen prijsopgave worden afgegeven. Probeer het straks opnieuw.",
+      "quote_expired": "Die prijsopgave is verlopen. Vraag een nieuwe aan; wordt er geen aangeboden, dan is dat venster gesloten.",
+      "not_pending": "Dat bod wacht niet langer op zijn borg.",
+      "confirm_failed": "De transactie kon niet worden bevestigd. Vraag een nieuwe prijsopgave aan en probeer het opnieuw.",
+      "confirm_in_flight": "Je betaling wordt nog bevestigd. Probeer het opnieuw zodra dit is afgerond.",
+      "buy_now_locked": "Een andere koper rondt deze aankoop momenteel af. Probeer het straks opnieuw.",
+      "cancel_pending": "De verkoper annuleert deze aanbieding.",
+      "claim_cooldown": "Je hebt onlangs een Nu kopen-aankoop laten schieten. Probeer het later opnieuw.",
+      "bond_window_closed": "Dit bod kan niet meer worden betaald: het betaalvenster is gesloten. Bied opnieuw voor een nieuw venster.",
+      "settlement_in_flight": "Een koper is deze aanbieding aan het afrekenen. Probeer het opnieuw zodra de betaling is verwerkt.",
+      "contended": "De Beurs is druk bezig met deze aanbieding. Probeer het straks opnieuw.",
+      "sale_conflict": "Er staat al een actieve verkoop open voor deze aanbieding. Sluit die eerst uit.",
+      "no_buy_now": "Deze aanbieding heeft geen directe koopprijs.",
+      "cap_reached": "Je hebt je limiet voor aanbiedingen op de Beurs bereikt.",
+      "stale_item": "Dat voorwerp is veranderd of verplaatst. Selecteer het opnieuw en probeer het nogmaals.",
+      "item_mismatch": "Dat is niet precies de kopie waarmee de koper akkoord ging, of de status ervan is veranderd (een vergrendeling telt mee). Start er een nieuwe deal voor.",
+      "offer_pending": "Je hebt al een openstaande deal met deze speler. Handel die eerst af.",
+      "not_eligible": "Dat voorwerp kan niet op de $WOC-beurs worden aangeboden.",
+      "invalid_params": "Controleer het startbod, de reserveprijs, de directe koopprijs en de duur.",
+      "signature_reused": "Die transactie is al ingediend.",
+      "item_locked": "Dat voorwerp is vergrendeld. Ontgrendel het in je tassen voordat je het verkoopt.",
+      "stepup_required": "Verkopen op de Beurs vereist een handtekening van je gekoppelde portemonnee.",
+      "stepup_challenge_invalid": "Die portemonneebevestiging is niet langer geldig. Start de verkoop opnieuw.",
+      "stepup_challenge_expired": "De portemonneebevestiging is verlopen. Start de verkoop opnieuw.",
+      "stepup_wallet_mismatch": "Je gekoppelde portemonnee is veranderd sinds deze bevestiging werd uitgegeven. Start de verkoop opnieuw.",
+      "stepup_binding_mismatch": "Die portemonneebevestiging komt niet overeen met deze verkoop. Start de verkoop opnieuw.",
+      "stepup_signature_invalid": "De portemonneehandtekening kon niet worden geverifieerd. Start de verkoop opnieuw."
     }
   },
   "guide": {
@@ -4540,7 +4928,6 @@ export const nl_NL: EnTranslations = {
       "combat": "Gevecht",
       "talents": "Talenten",
       "arena": "Arena & PvP",
-      "valeCup": "Dalbeker",
       "realmRacers": "Realm Racers",
       "thornhollow": "Doornholte-Velden",
       "deeds": "Boek der Daden",
@@ -4651,6 +5038,8 @@ export const nl_NL: EnTranslations = {
         "fenBlurb": "Voorbij de herfstkroon, een helder veen van wilgen en stil water, en een stad achter een slotgracht.",
         "farshoreName": "De Verrekust",
         "farshoreBlurb": "Een eiland voorbij de zandbank, waar de lucht openscheurt boven de Riftvelden en Meeuwenhaven bij elke breuk haar klok luidt.",
+        "provingName": "De Beproevingskust",
+        "provingBlurb": "Een rustig trainingseiland aan de overkant van de zeeëngte, waar nieuwe avonturiers hun draai vinden voordat het dal iets van hen vraagt.",
         "nightName": "De Nachtbloesem",
         "nightBlurb": "Een land van sterrenheldere middernacht waar de bloemen de paden verlichten en Maanrust de wake houdt.",
         "hauntName": "Het Schimmenwoud",
@@ -4751,7 +5140,6 @@ export const nl_NL: EnTranslations = {
       "reliquary": "Het Reliquarium",
       "sheathe": "Wapen Schede In/Uit",
       "crafting": "Vervaardigen",
-      "valeCup": "De Dalbeker",
       "mount": "Opstijgen / Afstijgen",
       "calendar": "Evenementenkalender",
       "dungeonFinder": "Kerkerzoeker",
@@ -4893,6 +5281,7 @@ export const nl_NL: EnTranslations = {
       "ifPartySort": "De volgorde waarin groepsleden worden weergegeven: groepsvolgorde, rol, of naam.",
       "ifPartyShowAuras": "Of buffs en debuffs op de groepsframes worden getoond. Bijbehorende schakelaars beslaan resourcebalken, absorpties, huisdieren, en of je in je eigen groepslijst verschijnt.",
       "ifAurasOnPlayerFrame": "Zet je buffs en debuffs ook op je eigen spelerframe, naast de aurabalk.",
+      "ifAlwaysShowAllBuffs": "Toont elke actieve buff, zelfs met de preset Lage graphics, en omzeilt de gebruikelijke limiet voor buffpictogrammen.",
       "ifTargetOfTarget": "Toont wie het doelwit van jouw doelwit is, de klassieke manier om te zien of de tank het nog vasthoudt.",
       "ifPetFrame": "Toont een frame voor je huisdier.",
       "ifChatFontScale": "Tekstgrootte van de chat.",
@@ -5613,6 +6002,10 @@ export const nl_NL: EnTranslations = {
       "farshoreGreeting": "Je kwam over de Veerloop? Dan ben je de eerste in een week, en de Wachter zal je willen bekijken.",
       "farshoreGreeter": "Klokwachter Tam, De Aanlegplaats",
       "farshorePlaceNotes": "Meeuwenhaven is het enige stadje van het eiland en zijn bolwerk. De Aanlegplaats is waar de Veerloop aan land komt, met een wachtklok die over de punt uitkijkt; de Wachtweide bewaart de hoge grond ten zuidoosten van het stadje, waar een riftwaker naar de volgende breuk luistert; de Gespleten Kliffen barsten open aan de zuidpunt van het eiland; en de Riftvelden zijn de geteisterde graanrijen ten oosten van Meeuwenhaven, nog altijd krioelend van wat daar door de breuk kwam.",
+      "provingBlurb": "Een rustig eiland aan de overkant van de zeeëngte, tegenover het dal, gehouden als trainingsterrein: een kamp, een oefenterrein, een met wrakken bezaaid strand, en een veerpont die beide kanten op vaart.",
+      "provingGreeting": "Elke held die het dal ooit heeft bedankt, stond waar jij nu staat, en geen van hen wist welk eind van een kling je vast moest houden.",
+      "provingGreeter": "Instructeur Maren, Kamp Dageraadrust",
+      "provingPlaceNotes": "Kamp Dageraadrust is de hele nederzetting van het eiland: een paar tenten, een kraam, en een verzamelvuur. De Oude Pier kijkt uit op het dal, waar de oversteekcirkel afgestudeerden over de zeeëngte draagt; het Oefenterrein ten zuiden van het kamp houdt zijn stropoppen overeind voor wie ze nodig heeft; en de Wraklijn is het met berging bezaaide strand waar het getij het eiland uitbetaalt in aangespoelde kisten.",
       "travelTitle": "Je verplaatsen",
       "travelBody": "Elke weg in het rijk leg je te voet of te paard af. Er zijn geen vliegroutes, geen taxi's en geen teleportnetwerk: de kaart is één aaneengesloten landmassa, en elke verbinding is iets waar je op kunt staan. Bergkammen scheiden het ene rijk van het volgende, en waar twee rijken een bergkam delen, klimt de weg door een pas. Niet elke grens werkt zo, overigens. In het noorden voert een lange dijk de weg over het water vanuit De Sluierholte naar het sneeuwland daarachter, en verder naar het zuiden loopt een dunne natuurlijke zandbank genaamd de Veerloop oostwaarts van de kust van het Dal naar De Aanlegplaats op het eiland van de Verrekust, dat helemaal geen landgrens heeft. En er is precies één echte doorgang in de hele bovenwereld: een sluier van schemering hoog op Doorntop die toegang geeft tot De Sluierholte. De zuidelijke bergkam van de Holte is verzegeld zonder pas erdoorheen, dus die sluier is hoe je er voor het eerst binnenkomt, en hij sluit zich achter je op de terugweg.\n\nWaar je ook valt, de terugweg is kort. Elke zone bewaart minstens één begraafplaats met een Bleke Hoeder die boven de stenen zweeft, en een losgelaten geest herrijst bij de dichtstbijzijnde daarvan.\n\nDe kaart eindigt niet in een onzichtbare muur. Het land loopt uit in stranden en landtongen, en dan in open water. De oversteekplaatsen die de wereld je laat zwemmen, de zeestraten en wateren tussen het ene rijk en het volgende, zijn kalm en veilig om over te steken. Zwem in plaats daarvan de open zee op en de afstand zelf stuurt je terug: je wordt gewaarschuwd, en nogmaals gewaarschuwd, en als je blijft zwemmen, put de zee je uit tot ze je doodt. Duiken heeft zijn eigen grens, want je adem raakt op onder het oppervlak, dus kom boven voor lucht en keer om zodra het water het je zegt.",
       "mountsTitle": "Rijdieren",
@@ -5829,36 +6222,6 @@ export const nl_NL: EnTranslations = {
       "ladderBody": "Elke partij verschuift een blijvende, aan het personage gebonden slagveldwaardering, of je nu wint of verliest, en het aller-tijden-bord rangschikt de kampioenen van het rijk.",
       "rewardsHeading": "Wat een wedstrijd oplevert",
       "rewardsBody": "Elke afgeronde wedstrijd betaalt Eer uit: meer voor een overwinning, een troostprijs voor een nederlaag of een gelijkspel, plus een klein bedrag voor elke fatale klap die je uitdeelt en elke waar je aan bijdraagt, dus vechten ver van de vlaggen blijft de moeite waard. Je eerste overwinning van elke dag levert daarbovenop een bonus op, en het paneel laat je weten zolang die bonus nog op je wacht. Die dag is van Eer zelf, en hij vernieuwt zich op zijn eigen klok in plaats van met de instantiereset van het rijk. Hetzelfde team steeds opnieuw tegenkomen levert na de eerste keer minder op voor de wedstrijd zelf, en zakt snel naar een bodem in plaats van weg te vallen naar niets, en een opgegeven wedstrijd levert helemaal niets op. Geef uit wat je verdient bij een van beide Erekwartiermeesters."
-    },
-    "valeCupPage": {
-      "heading": "De Dalbeker",
-      "intro": "Zwijnenbal op het Zeugveld: kies een banier, kies een rol, en trap een opgezette zwijnenhuid langs een keeper voor de Koperen Emmer. Geen bloed, geen buit, alleen het gebrul van de tribunes.",
-      "loreHeading": "Zwijnenbal en het oogstbestand",
-      "loreOldSow": "Lang voordat de doden ontwaakten, speelden de boerenknechten van Oostbeek zwijnenbal op de stoppelvelden na de oogst: twee horden, één zwijnenhuid gevuld met stro, en twee wagenhekken die naar de uiteinden van het veld werden gesleept. De eerste bal, de Oude Zeug, hangt in brons boven de taveernehaard.",
-      "loreTruce": "Toen het Asgrauwe Colosseum oorlogsspelen begon te sanctioneren, antwoordde Maarschalk Redbrook met iets zachtaardigers: een blijvend oogstbestand op het oude veld. De wagenhekken werden doelpalen, het veld kreeg muren, tribunes en een naam, het Zeugveld, en de prijs was altijd dezelfde gedeukte melkemmer waar de winnaars uit dronken: de Koperen Emmer.",
-      "howHeading": "Hoe je speelt",
-      "howQueue": "Meld je vanaf elke plek aan via het Dalbeker-venster, of praat met Terreinmeester Bram bij de poort van het Zeugveld. Kies een categorie van één tegen één tot vijf tegen vijf, een baniernatie en een sportrol; meld je solo aan of neem je groep mee.",
-      "howMatch": "Bij de aftrap wordt je klasse-uitrusting omgeruild voor een sportuitrusting en daarna exact hersteld. Trappen mikken op het grondvizier, de bal kaatst tegen de boarding, en dribbelen is gewoon rennen met de bal. Maak meer doelpunten dan de tegenpartij voor het eindsignaal; bij een gelijkspel volgt de gouden goal.",
-      "howTruce": "Niemand bloedt op het Zeugveld: tackles laten je tuimelen, niets doet pijn, en huisdieren zitten de wedstrijd uit.",
-      "spectateBody": "Er wordt één wedstrijd tegelijk gespeeld in het stadion, en iedereen kan aan komen lopen en toekijken vanaf de tribunes.",
-      "bettingHeading": "Een gokje bij de balustrade",
-      "bettingBody": "Toeschouwers bij het Zeugveld kunnen een kant steunen terwijl een wedstrijd zich vormt: de inzetten worden samengevoegd, en bij het eindsignaal verdelen de winnaars de pot van de verliezers naar rato van wat ze inzetten. Een gelijkspel, of een verrassing die niemand steunde, betaalt elke munt terug. Spelers die in de wedstrijd staan, kunnen er niet op wedden, en de balustrade houdt je levenslange record van winst, verlies en nettomunten bij.",
-      "practiceHeading": "Oefenpartijen en het stille veld",
-      "practiceBody": "Het venster van De Dalbeker biedt ook oefening: een privékopie van het veld waar bots beide kanten vullen en niets meetelt voor je record. Kom je een speler of twee tekort voor het echte werk? Na een korte wachttijd vullen bots de teams aan, en elke wedstrijd met bots op het veld is een vriendschappelijke, nooit voor de ranglijst. En wanneer het Zeugveld stilligt, geven de bots een demonstratie die je vanaf de tribune kunt bekijken, en waarop je kunt wedden; zodra echte spelers zich gereedmelden, geeft de demonstratie het veld vrij en wordt elke inzet teruggegeven.",
-      "nationsHeading": "De acht baniernaties",
-      "nationsBody": "Elk team speelt onder een banier. De aanvoerder kiest de natie, en als beide kanten dezelfde banier voeren, speelt de uitploeg in het omgekeerde kleurenpalet.",
-      "nationVale": "Groen en goud, onder de korenschoof: de thuisploeg, boerenknechten in hart en nieren.",
-      "nationMirefen": "Groenblauw en grijs onder de reiger: geduldig, met lange benen, nooit gehaast.",
-      "nationThornpeak": "IJsblauw en wit onder de bergtop: vast ter been en koppig.",
-      "nationColiseum": "Rood en zwart met gekruiste zwaarden: ze spelen alsof het nog steeds een oorlogsspel is.",
-      "nationChoir": "Bleekblauw en zilver onder de klok: onheilspellend, precies en heel stil.",
-      "nationOgre": "Oranje en omber achter de vuist: schouder eerst, en er trots op.",
-      "nationMoon": "Violet en zilver onder de maansikkel: nachtspelers, licht op de voeten.",
-      "nationCopperdig": "Koper en bruin met het houweel: delvers die nooit stoppen met rennen.",
-      "rolesHeading": "Sportrollen",
-      "rolesBody": "Je rol bepaalt de uitrusting die je het veld op draagt. Iedereen trapt; de rest is temperament. In de categorieën één-tegen-één en twee-tegen-twee speelt iedereen de allrounder-uitrusting, dus rolkeuzes komen pas vanaf drie-tegen-drie tot hun recht.",
-      "rewardsHeading": "Bestandsregels",
-      "rewardsBody": "Bestandsregels betekenen geen ervaring en geen buit: een besliste wedstrijd telt mee voor je staat van dienst en het winnaarsbord, en een overwinning telt ook mee voor de beloningstaken van de dag. Wie een wedstrijd in de steek laat, zet zijn plek op de bank, en de Terreinmeester onthoudt het."
     },
     "realmRacersPage": {
       "heading": "Realm Racers",
@@ -6109,7 +6472,7 @@ export const nl_NL: EnTranslations = {
       "deedsHeading": "Daden die de reis herinneren",
       "deedsBody": "Het Boek der Daden loopt naast elke stap hiervan mee. Je eerste afstemming verdient Ambachtsgetrouwe en je eerste meesterwerk verdient Meestersmaker, beide te dragen als titels. Elk van de acht te verdienen ambachten markeert een mijlpaaldaad bij vaardigheid 50 en kroont zijn grens met een Grootmeesters-titel, terwijl Vissen Oude Zout krijgt bij 100 vaardigheid en de titel Meesterhengelaar bij 200.\n\nEr zijn ook stillere pagina's: daden voor je eerste oogst en eerste vervaardiging, voor de zeldzame vondsten die geluk in het veld oplevert, en voor het oppakken van salvage. Dit alles is cosmetisch, alleen titels en Roem. Een daad schenkt nooit macht; het bewijst alleen dat je er was.",
       "startHeading": "Waar te beginnen",
-      "startBody": "Net van de weg gestapt in Oostbeek? Zoek Voorman Odell op en neem Een Vak voor Elke Hand aan: hij wijst je naar de ertsaders rond de Kopergroeve ten zuidoosten van de stad en bezorgt je je eerste eelt. Pas op met de groeve zelf: de Dieprots-Gravers die erop gekampeerd zijn staan een paar niveaus boven een verse aankomst, dus bewerk eerst de buitenste aders en bewaar het hart van het kamp tot je een beetje geleveld bent. Vanaf dan oogst je elke ader, elke houtopstand en elk kruidenveld dat je tijdens het questen passeert; vaardigheid komt reizigers vanzelf aanwaaien.\n\nTerug in de stad druk je op T om het vervaardigingsvenster te openen en werk je de gewone recepten die elk personage vanaf het begin kent. Bezoek de meesters bij de smidse, de keukens, het weefgetouw en de gereedschapsmakerij om te zien wat zij onderwijzen, en neem hun werkopdrachten aan voor gestage munt. Tegen de tijd dat de brief van het Gilde je vindt, weet je al welk paar als thuis voelt.",
+      "startBody": "Net van de weg gestapt in Oostbeek? Zoek Voorman Odell op en neem Een Vak voor Elke Hand aan: hij wijst je naar de ertsaders rond de Kopergroeve ten noordoosten van de stad en bezorgt je je eerste eelt. Pas op met de groeve zelf: de Dieprots-Gravers die erop gekampeerd zijn staan een paar niveaus boven een verse aankomst, dus bewerk eerst de buitenste aders en bewaar het hart van het kamp tot je een beetje geleveld bent. Vanaf dan oogst je elke ader, elke houtopstand en elk kruidenveld dat je tijdens het questen passeert; vaardigheid komt reizigers vanzelf aanwaaien.\n\nTerug in de stad druk je op T om het vervaardigingsvenster te openen en werk je de gewone recepten die elk personage vanaf het begin kent. Bezoek de meesters bij de smidse, de keukens, het weefgetouw en de gereedschapsmakerij om te zien wat zij onderwijzen, en neem hun werkopdrachten aan voor gestage munt. Tegen de tijd dat de brief van het Gilde je vindt, weet je al welk paar als thuis voelt.",
       "colStation": "Station",
       "colHub": "Hub",
       "colMaster": "Meester",
@@ -6194,13 +6557,13 @@ export const nl_NL: EnTranslations = {
         },
         "leatherworking": {
           "identityHeading": "Leer voor de snellen",
-          "identityBody": "De ladder klimt van de gewone Fenbruggen-leren beenstukken, laarzen en riem door het ongewone moerasspeurder-wambuis, kap en schouderstukken tot de zeldzame moeraswachterset, het beste leer dat een vakman kan snijden. Twee tovenaarsstukken ronden het af: het Oostbeekse Druide-Leer als veldgewone en de Schemerleer-Wikkelaars op vaardigheid 75.\n\nOp de ring staat het tussen Koken en Kleermaken. Zijn levende paar is de Uitrusser, Leerbewerken en Kleermaken, gezworen voor Weefster Ottilie in Oostbeek; het Jager-paar met Koken staat op de ring als naam maar heeft nog geen eedquest.",
+          "identityBody": "De ladder klimt van de gewone Fenbruggen-leren beenstukken, laarzen en riem door het ongewone moerasspeurder-wambuis, kap en schouderstukken tot de zeldzame moeraswachterset, het beste leer dat een vakman kan snijden. Twee casterstukken ronden het af: de Druïdenhuid uit Oostbeek als veldgewone en de Schemerleer-Wikkelaars op vaardigheid 50.\n\nOp de ring staat het tussen Koken en Kleermaken. Zijn levende paar is de Uitrusser, Leerbewerken en Kleermaken, gezworen voor Weefster Ottilie in Oostbeek; het Jager-paar met Koken staat op de ring als naam maar heeft nog geen eedquest.",
           "materialsHeading": "De jacht is de oogst",
-          "materialsBody": "Leerbewerken is het ambacht waar je levelroute en je bevoorradingslijn hetzelfde zijn: ruwe huid oogst je rechtstreeks van lijken die huid dragen, wolven en everzwijnen bovenal, en elk lijk bedient maar één oogster, wie het eerst komt wie het eerst maalt. Een zeldzame of betere oogstrol geeft daarnaast een Ongeschonden Huid, een gesigneerd exemplaar waar het Moeraswachterwambuis om vraagt, dus zet elke huid die je vindt op de bank.\n\nDe bijrol is klein: spinnenpoten en spinnenzijde, huisgesponnen doek van humanoïden, één osmiumerts in elk zeldzaam moeraswachter-stuk (zes in het sluitstuk Schemerleer-Wikkelaars), en een Looimiddel voor 16 koper aan de balie van de looierij. Osmium zelf koop je nooit aan een balie: mijn het zelf, op Doorntop of in de beginaders van bijna elke jongere zone (alleen De Verrekust levert ijzer), of koop het van een andere speler.",
+          "materialsBody": "Leerbewerken is het ambacht waar je levelroute en je bevoorradingslijn hetzelfde zijn: ruwe huid oogst je rechtstreeks van lijken die huid dragen, wolven en everzwijnen bovenal, en elk lijk bedient maar één oogster, wie het eerst komt wie het eerst maalt. Een zeldzame of betere oogstrol geeft daarnaast een Ongeschonden Huid, een gesigneerd exemplaar waar het Moeraswachterwambuis om vraagt, dus zet elke huid die je vindt op de bank.\n\nDe bijrol is klein: spinnenpoten en spinnenzijde, huisgesponnen doek van humanoïden, één osmiumerts in elk zeldzaam moeraswachter-stuk (zes in de Schemerleer-Wikkelaars), en een Looimiddel voor 16 koper aan de balie van de looierij. Osmium zelf koop je nooit aan een balie: mijn het zelf, op Doorntop of in de beginaders van bijna elke jongere zone (alleen De Verrekust levert ijzer), of koop het van een andere speler.",
           "ladderHeading": "Geleerd in Fenbridge",
-          "ladderBody": "Hier zit de kronkel: de looierij staat in Fenbridge, aan de weg door Slijkveenmoeras, waardoor Leerbewerken het enige diepe ambacht is dat buiten de stad in het moeras wordt onderwezen. Leerlooier Hesk onderwijst de ladder bij zijn kuipen: de Fenbruggen-leren trede gratis op vaardigheid 0, de moerasspeurder-trede voor 25 zilver per recept vanaf vaardigheid 25, en de moeraswachter-trede voor 1 goud per stuk vanaf vaardigheid 50, waarbij elke trede opengaat zodra jouw rang die bereikt.\n\nDrie recepten slaan de leermeester over: de veldgewone stukken (het Gelooid Leren Wambuis en het Oostbeekse Druide-Leer) maak je vanaf het begin overal, en de Schemerleer-Wikkelaars kent iedereen, maar die staan op vaardigheid 75 en zijn gebonden aan de looierij. Let op: de Uitrusser-eed zelf wordt terug in Oostbeek bij Ottilie gezworen; alleen het onderricht gebeurt in het moeras.",
+          "ladderBody": "Hier zit de kronkel: de looierij staat in Fenbridge, aan de weg door Slijkveenmoeras, waardoor Leerbewerken het enige diepe ambacht is dat buiten de stad in het moeras wordt onderwezen. Leerlooier Hesk onderwijst de ladder bij zijn kuipen: de Fenbruggen-leren trede gratis op vaardigheid 0, de moerasspeurder-trede voor 25 zilver per recept vanaf vaardigheid 25, en de moeraswachter-trede voor 1 goud per stuk vanaf vaardigheid 50, waarbij elke trede opengaat zodra jouw rang die bereikt.\n\nDrie recepten slaan de leermeester over: de veldgewone stukken (het Gelooid Leren Wambuis en de Druïdenhuid uit Oostbeek) maak je vanaf het begin overal, en de Schemerleer-Wikkelaars kent iedereen op vaardigheid 50, gebonden aan de looierij. Let op: de Uitrusser-eed zelf wordt terug in Oostbeek bij Ottilie gezworen; alleen het onderricht gebeurt in het moeras.",
           "routeHeading": "Meesterwerken, en een werkbare weg naar 125",
-          "routeBody": "Elk stuk met echte statistieken gooit de meesterwerkkans, zolang de fijnere kwaliteit binnen je rangplafond past, het Oostbeekse Druide-Leer met zijn statistieken inbegrepen, en een gesigneerde Ongeschonden Huid in een Moeraswachterwambuis levert de gesigneerde-reagens-bonus vanzelf; osmium telt als rang 1-materiaal voor de proc. De statloze gewone lerenstukken kunnen niet procen.\n\nLevel het op de natuurlijke manier: oogst vanaf niveau één elke wolf en elk everzwijn dat je velt, laat de twee veldgewone stukken je overal naar 25 dragen, en train dan de lerentrede bij de kuipen wanneer de quests je toch al het moeras in trekken. Moerasspeurder brengt je naar 50 en moeraswachter naar 75; daarna leveren de Schemerleer-Wikkelaars, een rang 3-recept van zes osmiumerts, drie Ongeschonden Huid, twee ruwe huid en een Looimiddel, een afgestemde Uitrusser volle winst tot 99 en de helft daarna, ongeveer 75 vervaardigingen voor de laatste vijftig punten tot de limiet van 125; onder het plafond van een hoofdambacht leert het rang 3-recept niets.\n\nDe mobiele looierij telt voor dit ambacht zwaarder dan voor welk ander ook: specialiseer op 75 en een zadeltas vol huiden wordt bij het kampvuur afgewerkte uitrusting in plaats van een wandeling terug naar Fenbridge. Hesks looierijwerkopdracht koopt elke 30 minuten acht ruwe huiden, een nette opbrengst op vellen die je toch al verzamelde, en het Boek der Daden markeert Het Looiersvak op vaardigheid 50 met Grootmeester-Leerbewerken bij de limiet."
+          "routeBody": "Elk stuk met echte statistieken gooit de meesterwerkkans, zolang de fijnere kwaliteit binnen je rangplafond past, de Druïdenhuid uit Oostbeek met haar statistieken inbegrepen, en een gesigneerde Ongeschonden Huid in een Moeraswachterwambuis levert de gesigneerde-reagens-bonus vanzelf; osmium telt als rang 1-materiaal voor de proc. De statloze gewone lerenstukken kunnen niet procen.\n\nLevel het op de natuurlijke manier: oogst vanaf niveau één elke wolf en elk everzwijn dat je velt, laat de twee veldgewone stukken je overal naar 25 dragen, en train dan de lerentrede bij de kuipen wanneer de quests je toch al het moeras in trekken. Moerasspeurder brengt je naar 50, en de moeraswachterstukken en de Schemerleer-Wikkelaars dragen de zeldzame rang van 50 naar 75. Voorbij 75 vervalt de winst van die rang 2-recepten tot de helft en daarna een kwart, ongeveer 150 vervaardigingen voor de laatste vijftig punten tot de limiet van 125; onder het plafond van een hoofdambacht evenaren ze nog steeds het vervaardigingsplafond van zeldzame kwaliteit, in plaats van hard op nul te vallen.\n\nDe mobiele looierij telt voor dit ambacht zwaarder dan voor welk ander ook: specialiseer op 75 en een zadeltas vol huiden wordt bij het kampvuur afgewerkte uitrusting in plaats van een wandeling terug naar Fenbridge. Hesks looierijwerkopdracht koopt elke 30 minuten acht ruwe huiden, een nette opbrengst op vellen die je toch al verzamelde, en het Boek der Daden markeert Het Looiersvak op vaardigheid 50 met Grootmeester-Leerbewerken bij de limiet."
         },
         "cooking": {
           "identityHeading": "De pot die de groep voedt",
@@ -6400,7 +6763,7 @@ export const nl_NL: EnTranslations = {
         "q5": "Hoe maak ik een opdrachtsstuk los, en wat kost dat?",
         "a5": "Loop naar een willekeurig ambachtsstation met het stuk in je tassen en betaal de meester. De vergoeding volgt de kwaliteit van het voorwerp: 25 zilver voor een ongewoon stuk, 1 goud voor een zeldzaam, 4 goud voor een episch; een legendarisch betaalt het epische tarief, en een gewoon opdrachtsstuk betaalt het ongewone tarief. Het moet een echt station zijn: een mobiel station biedt de dienst nooit aan.\n\nDe vergoeding koopt een schone lei, geen genezing: het stuk blijft een opdracht, dus het bindt opnieuw aan wie het in de volgende ruil ontvangt. Als verschillende gebonden kopieën een stapel delen, wordt per betaling één kopie afgeschild en losgemaakt.",
         "q6": "Waar leer ik recepten, en wat kosten ze?",
-        "a6": "De negen gewone veldrecepten en de zes gemaakte landgereedschapsrecepten kent iedereen vanaf het begin, en dat geldt ook voor drie stationsgebonden sluitstukken (de Ovenschubben-Mantel, de Kap van beschermweefsel en de Schemerhuid-wikkels), die geen leermeester nodig hebben, alleen hun station. Al het overige wordt onderwezen door de vaste meesters bij hun stations in de drie stadshubs: de meesten staan in Oostbeek, de leerlooier houdt de leerlooierij in Fenbridge, en de alchemist houdt de apotheek in Highwatch.\n\nLeermeestersrecepten lopen in treden: vaardigheid 0, 25 en 50 voor de uitrustings- en verbruiksambachten, geprijsd als gratis, 25 zilver en 1 goud aan eenmalige vergoedingen; de twee amuletrecepten van Betovering staan op de trede van 25, en de gereedschapsmaker leert de twee gemaakte hengels op 75 en 125 voor 4 en 16 goud. Een meester leert je een recept zodra jouw band in dat ambacht de eigen band van het recept heeft bereikt, en je moet bij zijn station staan om te leren: een mobiel station telt niet.",
+        "a6": "De negen gewone veldrecepten en de zes gemaakte landgereedschapsrecepten kent iedereen vanaf het begin, en dat geldt ook voor drie stationsgebonden recepten (de Ovenschubben-Mantel, de Kap van beschermweefsel en de Schemerhuid-wikkels), die geen leermeester nodig hebben, alleen hun station. Al het overige wordt onderwezen door de vaste meesters bij hun stations in de drie stadshubs: de meesten staan in Oostbeek, de leerlooier houdt de leerlooierij in Fenbridge, en de alchemist houdt de apotheek in Highwatch.\n\nLeermeestersrecepten lopen in treden: vaardigheid 0, 25 en 50 voor de uitrustings- en verbruiksambachten, geprijsd als gratis, 25 zilver en 1 goud aan eenmalige vergoedingen; de twee amuletrecepten van Betovering staan op de trede van 25, en de gereedschapsmaker leert de twee gemaakte hengels op 75 en 125 voor 4 en 16 goud. Een meester leert je een recept zodra jouw band in dat ambacht de eigen band van het recept heeft bereikt, en je moet bij zijn station staan om te leren: een mobiel station telt niet.",
         "q7": "Waarom ging mijn verzamelen ineens langzamer?",
         "a7": "De verzamelworp begint op 2,5 seconde en wordt op twee manieren afgeknipt: 0,4 seconde voor elke gereedschapsrang die je draagt en kunt hanteren boven de eigen rang van het grondstoffenpunt, en 0,15 seconde zodra de teller van je vak zijn band van 100 passeert, met een ondergrens van 1,5 seconde. Ga van rang 1-grondstoffenpunten naar rang 3-grondstoffenpunten en je overschot verdwijnt, dus dezelfde houweel zwaait weer trager. Precies de vereiste rang in handen hebben koopt geen snelheid; het opent alleen het grondstoffenpunt.\n\nVaardigheidswinst vervaagt op dezelfde manier als bij vervaardigen: een grondstoffenpunt wordt grijs naarmate je vaardigheid zijn rang voorbijklimt (rang 1-grondstoffenpunten leren je vanaf vaardigheid 75 niets meer), dus het antwoord op trage winst zijn grondstoffenpunten van hogere rang. Die vragen minstens gereedschap van hun eigen rang in je tassen (geen enkel grondstoffenpunt wordt ooit met blote handen bewerkt, rang 1 inbegrepen), en landgereedschap boven rang 1 wil eerst ook zijn hanteringsmerk, 40/70/85/100 in zijn eigen vak voor de rangen 2 tot en met 5. Vissen volgt zijn eigen aflopende schema: volle winst onder vaardigheid 50, de helft onder 100, een druppel van 0,1 onder 150 en 0,02 onder 200, rommelvangsten leren vanaf 100 helemaal niets meer, en het water zelf begrenst de les (rang 1-wateren stoppen met leren bij 100, het moeras bij 150), dus een vastgelopen teller kan ook betekenen dat je het water ontgroeid bent.",
         "q8": "Kan ik buiten de stad ambachten maken?",
@@ -6425,6 +6788,7 @@ export const nl_NL: EnTranslations = {
       "bankBody": "Elke hoofdplaats heeft een filiaal van De Vergulde Geldkist, het bankhuis van het rijk. Spreek daar met de thesaurier om je kluis te openen: een eigen bergruimte naast je tassen die je personage levenslang behoudt. Wat je bij hen achterlaat, wacht veilig op je, welk filiaal je daarna ook bezoekt.",
       "bankHow": "Met de kluis open klik je op een voorwerp in je tassen om het te storten, en klik je erop in de kluis om het terug te nemen. De kluis bewaart alleen waren, nooit geld, en questvoorwerpen blijven bij je. Raken je tassen onderweg vol, dan veegt één knop al je ambachtsmaterialen in één keer naar binnen.",
       "bankSlots": "Een nieuwe kluis begint klein en groeit met je mee. De thesaurier verkoopt extra vakken voor geld tegen steeds hogere prijzen, en online spelen levert daarbovenop bonusruimte op, voor zaken als een geverifieerd e-mailadres, gekoppelde accounts en vrienden die je naar het spel brengt.",
+      "bankSockets": "Na de stapsgewijze kluisuitbreidingen verkoopt de thesaurier ook maximaal vier tassenleuven, die achtereenvolgens tegen steeds hogere prijzen worden ontgrendeld. Plaats een extra tas uit je draagset in een leuf en de sleuven ervan worden aan je kluisruimte toegevoegd: een gewone tas vergroot de hele opslag, terwijl een reagentia-tas alleen ruimte toevoegt voor knutselmaterialen. Klik op een tas in je tassen om hem te plaatsen en klik op de leuf om hem weer weg te nemen. Dat kost je nooit iets wat je had opgeslagen: als de kluis voller is dan de verkleinde ruimte, blijft alles liggen en wachten nieuwe stortingen gewoon tot er plaats is.",
       "buyingTitle": "Kopen en verkopen",
       "buyingBody": "Spreek een handelaar aan en kies om zijn waar te bekijken, en zijn winkel opent met drie tabbladen: Bekijken, Verkopen en Terugkopen. Bekijken bevat alles wat ze op voorraad hebben, van jou als je het kunt betalen. Verkopen toont welke spullen uit je tassen zij willen kopen, en een stuk verkopen dat zijn eigen gerolde kwaliteit draagt, vraagt je eerst te bevestigen, zodat een gewild exemplaar nooit per ongeluk wegglipt. Doe je afstand van iets waar je spijt van krijgt, dan houdt het tabblad Terugkopen je recente verkopen vast zodat je ze kunt terugkopen voor de munten die je kreeg.",
       "junkTitle": "Rommel opruimen",
@@ -7406,6 +7770,13 @@ export const nl_NL: EnTranslations = {
     "unlink": "Ontkoppelen",
     "unlinkTitle": "Verwijder portemonneeverificatie van dit account",
     "unlinkAria": "Verwijder portemonneeverificatie van dit account",
+    "reauthTitle": "Portemonneewijziging bevestigen",
+    "reauthUnlinkTitle": "Portemonneeverwijdering bevestigen",
+    "reauthHelp": "Voer voor je veiligheid je accountwachtwoord in om deze wijziging toe te staan.",
+    "reauthNoPassword": "Dit account logt in zonder wachtwoord. Stel eerst een wachtwoord in bij de accountinstellingen en probeer het opnieuw.",
+    "reauthConfirm": "Bevestigen",
+    "reauthCancel": "Annuleren",
+    "reauthClose": "Sluiten",
     "signOut": "Verbinding verbreken",
     "signOutTitle": "Verbreek de verbinding met de portemonnee-app in deze browser",
     "signOutAria": "Verbreek de verbinding met de portemonnee-app in deze browser",
@@ -7461,6 +7832,7 @@ export const nl_NL: EnTranslations = {
       "title": "Een Solana-portemonnee verbinden",
       "linkBody": "Kies een portemonnee-extensie in deze browser. Je tekent een verificatiebericht en keert dan terug naar de desktop-app.",
       "paymentBody": "Kies de aan je account gekoppelde portemonnee en keur de transactie goed in deze browser.",
+      "stepUpBody": "Kies de portemonnee die aan je account is gekoppeld en onderteken het autorisatiebericht voor $WOC Exchange. Ondertekenen is gratis en verplaatst geen geld.",
       "extensionHelp": "Geen compatibele portemonnee-extensie gevonden. Installeer of ontgrendel Phantom, Solflare of een andere Solana-browserportemonnee en probeer het opnieuw.",
       "safety": "World of ClaudeCraft vraagt nooit naar je herstelzin of privésleutel.",
       "continueWith": "Doorgaan met {wallet}",
@@ -7651,7 +8023,7 @@ export const nl_NL: EnTranslations = {
       "portalOpens": "Een {tier}-rangs rift scheurt open in {zone}!",
       "portalSealed": "De {tier}-rangs rift in {zone} is verzegeld.",
       "portalCollapses": "De {tier}-rangs rift in {zone} stort in.",
-      "lootRecoveryNotice": "The rift's entrance will hold a while yet: should your party fall, you may still walk back for what you earned.",
+      "lootRecoveryNotice": "De ingang van de rift blijft nog een tijdje toegankelijk: mocht je groep sneuvelen, dan kun je nog terug lopen voor wat je hebt verdiend.",
       "levelGate": "Alleen avonturiers van niveau {level} of hoger mogen deze rift betreden.",
       "deadEntry": "Je kunt geen rift betreden terwijl je dood bent.",
       "deadEntryCombat": "Je groep is nog in gevecht. De doden kunnen opnieuw binnengaan zodra het gevecht stopt.",
@@ -7848,6 +8220,20 @@ export const nl_NL: EnTranslations = {
     "buyConfirmTitle": "Bevestig aankoop",
     "buyConfirmBody": "{item} kopen voor {marks} Heroïsche Merken? Aankopen met merken kunnen niet worden terugbetaald.",
     "buyConfirmAccept": "Kopen",
+    "buyConfirmCancel": "Annuleren"
+  },
+  "crucibleShop": {
+    "browse": "Zegels inwisselen",
+    "browseAria": "Smeltkroeszegels met {name} inwisselen",
+    "empty": "Er kunnen geen setstukken voor jouw klasse worden ingewisseld.",
+    "balance": "Je zegels: {list}",
+    "balanceEntry": "{name} x{count}",
+    "noSigils": "Je hebt geen Smeltkroeszegels.",
+    "price": "1 {sigil}",
+    "buyAria": "{sigil} inwisselen voor {item}",
+    "buyConfirmTitle": "Inwisseling bevestigen",
+    "buyConfirmBody": "Je {sigil} inwisselen voor {item}? Een gebruikt zegel kan niet worden terugbetaald.",
+    "buyConfirmAccept": "Inwisselen",
     "buyConfirmCancel": "Annuleren"
   },
   "cardDuel": {
@@ -8678,6 +9064,8 @@ export const nl_NL: EnTranslations = {
         "riftEntrance": "Rift-ingang: {name}",
         "hostileEnemy": "Vijandig doelwit",
         "aggressiveEnemy": "Vijand valt je aan",
+        "bossEnemy": "Baas: {name}",
+        "bossAggressiveEnemy": "Baas valt je aan: {name}",
         "lootableEnemy": "Plunderbare vijand",
         "corpse": "Je lichaam",
         "deathZone": "Gevarenzone",
@@ -9067,6 +9455,7 @@ export const nl_NL: EnTranslations = {
       "tradeExpired": "Het ruilverzoek is verlopen.",
       "tradeFailed": "Ruil mislukt: voorwerpen of geld niet langer beschikbaar.",
       "tradeBound": "Dat voorwerp is gebonden en kan niet worden verhandeld.",
+      "tradeWindowIneligible": "Dat kan alleen worden geruild met spelers die deze buit deelden.",
       "marketListBound": "Dat voorwerp is gebonden en kan niet te koop worden aangeboden."
     },
     "logs": {
@@ -9547,7 +9936,8 @@ export const nl_NL: EnTranslations = {
       "clickUseInstant": "Klik om direct te gebruiken in gevecht",
       "clickUse": "Klik om te gebruiken",
       "clickBuyback": "Klik om terug te kopen",
-      "bagSlots": "Tas met {slots} vakken"
+      "bagSlots": "Tas met {slots} vakken",
+      "bagSlotsMaterials": "Materialentas met {slots} vakken"
     },
     "bags": {
       "title": "Tassen",
@@ -9729,7 +10119,8 @@ export const nl_NL: EnTranslations = {
       "greedAria": "Hebzucht voor {item}",
       "passAria": "{item} passeren",
       "everyonePassed": "Iedereen passeerde {item}.",
-      "rolled": "{answered}/{total} geworpen"
+      "rolled": "{answered}/{total} geworpen",
+      "bindsOnPickup": "Bindt bij het oprapen"
     }
   },
   "entities": {
@@ -9956,7 +10347,7 @@ export const nl_NL: EnTranslations = {
       },
       "ignition": {
         "name": "Ontbranding",
-        "description": "Passief: kritieke treffers van je spreuken verbranden het doelwit voor 40% van de toegebrachte schade gedurende 6 sec. en stapelen. (Vuurmeesterschap)"
+        "description": "Passief: kritieke treffers van je spreuken verbranden het doelwit voor 30% van de toegebrachte schade gedurende 6 sec. en stapelen. (Vuurmeesterschap)"
       },
       "mass_barrier": {
         "name": "Massabarrière",
@@ -10126,7 +10517,7 @@ export const nl_NL: EnTranslations = {
       },
       "sap": {
         "name": "Verdoven",
-        "description": "Schakelt het doelwit 8 sec lang uit. Je moet gesluipt zijn en buiten gevecht. Elke schade verbreekt het effect."
+        "description": "Schakelt het doelwit 8 sec lang uit zonder Schemersluier te verbreken of een gevecht te starten. Je moet gesluipt zijn en buiten gevecht. Elke schade verbreekt het effect."
       },
       "crippling_poison": {
         "name": "Loodzwaar Gif",
@@ -10398,7 +10789,7 @@ export const nl_NL: EnTranslations = {
       },
       "aspect_of_the_cheetah": {
         "name": "Gedaante van de Renner",
-        "description": "Neem de gedaante van de renner aan en verhoog uw bewegingssnelheid 30 min lang met 30%."
+        "description": "Neem de gedaante van de renner aan en verhoog uw bewegingssnelheid 30 min lang met 30%. Zolang actief, verdooft opgelopen schade u, wat uw bewegingssnelheid 4 sec lang halveert (elke treffer vernieuwt de verdoving)."
       },
       "aimed_shot": {
         "name": "Lange Trek",
@@ -10522,7 +10913,7 @@ export const nl_NL: EnTranslations = {
       },
       "needle_of_fate": {
         "name": "Needle of Fate",
-        "description": "Doorboort de vijand voor {damage} Schaduwschade en genereert 5 Verdoemenis als het je Evil Eye draagt. Elke treffer op je primaire Evil Eye voegt een Lotsdraad toe voor 12 sec, tot 3. Als er geen Evil Eye bestaat, markeert de Needle eerst zijn doelwit."
+        "description": "Doorboort de vijand voor {damage} Schaduwschade en genereert {needleDoom} Verdoemenis als het je Evil Eye draagt. Elke treffer op je primaire Evil Eye voegt een Lotsdraad toe voor 12 sec, tot 3. Als er geen Evil Eye bestaat, markeert de Needle eerst zijn doelwit."
       },
       "sentence": {
         "name": "Sentence",
@@ -10562,7 +10953,7 @@ export const nl_NL: EnTranslations = {
       },
       "hex_of_violence": {
         "name": "Hex of Violence",
-        "description": "Betovert de vijand gedurende 8 sec. Zijn volgende 3 schadelijke acties genereren elk 7 Verdoemenis en geselen het voor 16 Schaduwschade."
+        "description": "Betovert de vijand gedurende 8 sec. Zijn volgende 3 schadelijke acties genereren elk 7 Verdoemenis en geselen het voor 17 Schaduwschade."
       },
       "cruel_pact": {
         "name": "Cruel Pact",
@@ -10620,7 +11011,7 @@ export const nl_NL: EnTranslations = {
       },
       "moonseed": {
         "name": "Maanzaad",
-        "description": "Alleen in Maanuilvorm. Slaat toe voor {damage} Arcane-schade, voegt een Maanvloed-stadium toe en verlengt je Maanstorm met 6 sec, tot 6 sec per toepassing. Bij volle Maanvloed wordt Maanzaad Maangolf."
+        "description": "Alleen in Maanuilvorm. Slaat toe voor {damage} Arcane-schade, voegt een Maanvloed-stadium toe en verlengt je Maanstorm met 6 sec, tot {duration} sec per toepassing. Bij volle Maanvloed wordt Maanzaad Maangolf."
       },
       "rejuvenation": {
         "name": "Wildbloei",
@@ -10768,7 +11159,7 @@ export const nl_NL: EnTranslations = {
       },
       "warspirit_cadence": {
         "name": "Krijgsgeestcadans",
-        "description": "Passief: elke 3e geraakte wapenaanval veroorzaakt 2 Stormhartecho's voor 50% Natuurschade en verleent 12 sec. lang een Stormteken. Het Stormteken maakt je volgende Boogbliksem, Schok of Helende Wateren direct en verlaagt de manakosten met 50%. De Voorouderslag telt als 2 aanvallen. (Krijgsgeest)"
+        "description": "Passief: elke 3e geraakte wapenaanval veroorzaakt 2 Stormhartecho's voor 25% Natuurschade en verleent 12 sec. lang een Stormteken. Het Stormteken maakt je volgende Boogbliksem, Schok of Helende Wateren direct en verlaagt de manakosten met 50%. De Voorouderslag telt als 2 aanvallen. (Krijgsgeest)"
       },
       "stormsurge": {
         "name": "Stormvloed",
@@ -10924,7 +11315,7 @@ export const nl_NL: EnTranslations = {
       },
       "conflagrate": {
         "name": "Ontvlamming",
-        "description": "Haalt een toekomstige tik van uw Brandpact naar voren en ontsteekt dan het doelwit voor {damage} Vuurschade. Wekt 1 Verwoesting en 1 Ondergang op. Houdt 2 ladingen. (Kenmerk van Vernietiging)"
+        "description": "Haalt een toekomstige tik van uw Brandpact naar voren en ontsteekt dan het doelwit voor {damage} Vuurschade. Wekt 1 Verwoesting en 1 Ondergang op. Houdt {charges} ladingen. (Kenmerk van Vernietiging)"
       },
       "moonkin_form": {
         "name": "Maanuilvorm",
@@ -10956,7 +11347,7 @@ export const nl_NL: EnTranslations = {
       },
       "overbloom": {
         "name": "Overbloei",
-        "description": "Verbruikt 5 Groenkracht. Oogst elke genezing over tijd die je op alle bondgenoten hebt voor 60% van de resterende genezing, verwijdert die effecten en plant een verse Wildbloei op het doelwit."
+        "description": "Verbruikt 5 Groenkracht. Oogst elke genezing over tijd die je op alle bondgenoten hebt voor {buff}% van de resterende genezing, verwijdert die effecten en plant een verse Wildbloei op het doelwit."
       },
       "summon_imp": {
         "name": "Emberkin Oproepen",
@@ -10980,7 +11371,7 @@ export const nl_NL: EnTranslations = {
       },
       "summon_infernal": {
         "name": "Pyre-Kolos Oproepen",
-        "description": "Laat een Pyre-Kolos neerkomen in het doelgebied en brengt bij de inslag 58-72 Vuurschade toe. Hij vecht 30 sec. zonder je demon te vervangen, verbrandt elke 2 sec. vijanden in de buurt en genereert elke seconde 1 Ruïne."
+        "description": "Laat een Pyre-Kolos neerkomen in het doelgebied en brengt bij de inslag 64-79 Vuurschade toe. Hij vecht 30 sec. zonder je demon te vervangen, verbrandt elke 2 sec. vijanden in de buurt en genereert elke seconde 1 Ruïne."
       },
       "summon_doomguard": {
         "name": "Wraithborn Oproepen",
@@ -11028,7 +11419,7 @@ export const nl_NL: EnTranslations = {
       },
       "iron_resolve": {
         "name": "IJzeren Vastberadenheid",
-        "description": "Bijt op je tanden en negeer de pijn: verbruikt maximaal 40 woede (minimaal 20) om 4 schade per verbruikt woedepunt te absorberen, tot 10 sec. lang. (Protectie)"
+        "description": "Bijt op je tanden en negeer de pijn: verbruikt maximaal 40 woede (minimaal 20) om {absorbPerRage} schade per verbruikt woedepunt te absorberen, tot 10 sec. lang. (Protectie)"
       },
       "faultline": {
         "name": "Breuklijn",
@@ -11328,7 +11719,7 @@ export const nl_NL: EnTranslations = {
       },
       "shadowstep": {
         "name": "Schaduwglip",
-        "description": "Stapt door de schaduwen naar je doelwit. (schurkentalent)"
+        "description": "Stapt door de schaduwen naar je doelwit, vriend of vijand, zonder Schemersluier te verbreken. (schurkentalent)"
       },
       "silence": {
         "name": "Stilte",
@@ -11405,7 +11796,7 @@ export const nl_NL: EnTranslations = {
       },
       "seraphic_vigil": {
         "name": "Serafijnse Wake",
-        "description": "Beschermt een bondgenoot 30 sec. De eerste treffer die hem onder 35% gezondheid brengt verbruikt de Wake en geneest hem voor 180. (Zegen-kenmerk)"
+        "description": "Beschermt een bondgenoot 30 sec. De eerste treffer die hem onder 35% gezondheid brengt verbruikt de Wake en geneest hem voor {buff}. (Zegen-kenmerk)"
       },
       "summon_tithefiend": {
         "name": "Roep Tiendduivel op",
@@ -12948,6 +13339,9 @@ export const nl_NL: EnTranslations = {
       "reins_terrorspark_groundshaker": {
         "name": "Contactsleutel: Schrikvonk, de Grondschudder"
       },
+      "reins_rickshaw_mount": {
+        "name": "Gebonden teugels: Beengebonden Riksja"
+      },
       "reins_drakemaw_raptor": {
         "name": "Teugels van de Drakenmuil-Raptor"
       },
@@ -12984,8 +13378,653 @@ export const nl_NL: EnTranslations = {
       "pristine_claw": {
         "name": "Ongerepte Klauw"
       },
+      "ps_castaway_crate": {
+        "name": "Aangespoelde Kist"
+      },
+      "ps_ferry_bell": {
+        "name": "Veerklok"
+      },
       "dawnhold_posy": {
         "name": "Boeketje uit de tuin van Dawnhold"
+      },
+      "wayfarers_backpack": {
+        "name": "Rugzak van de Reiziger"
+      },
+      "burlap_reagent_pouch": {
+        "name": "Jutezak voor Reagentia"
+      },
+      "necromancers_reagent_satchel": {
+        "name": "Reagentiazak van de Necromancer"
+      },
+      "duskweave_bag": {
+        "name": "Schemerweefsel-Tas"
+      },
+      "resonant_weave_bag": {
+        "name": "Tas van Resonant Weefsel"
+      },
+      "foragers_haversack": {
+        "name": "Foerageerders-Rugzak"
+      },
+      "loombound_reagent_satchel": {
+        "name": "Weefgetouwgebonden Reagentiazak"
+      },
+      "ps_briny_lure": {
+        "name": "Ziltig Lokaas"
+      },
+      "ps_lustrous_pearl": {
+        "name": "Glanzende Parel"
+      },
+      "mother_of_pearl": {
+        "name": "Parelmoer"
+      },
+      "ps_passing_stone": {
+        "name": "Doorgangssteen"
+      },
+      "lastflame_core": {
+        "name": "Kern van de Laatste Vlam"
+      },
+      "slagbreaker_helmet": {
+        "name": "Helm van de Slakkenbreker"
+      },
+      "slagbreaker_shoulder": {
+        "name": "Schouderplaten van de Slakkenbreker"
+      },
+      "slagbreaker_chest": {
+        "name": "Pantser van de Slakkenbreker"
+      },
+      "slagbreaker_gloves": {
+        "name": "Handschoenen van de Slakkenbreker"
+      },
+      "slagbreaker_legs": {
+        "name": "Beenplaten van de Slakkenbreker"
+      },
+      "emberfury_helmet": {
+        "name": "Sintelwoede-Helm"
+      },
+      "emberfury_shoulder": {
+        "name": "Sintelwoede-Schouderplaten"
+      },
+      "emberfury_chest": {
+        "name": "Sintelwoede-Kolder"
+      },
+      "emberfury_gloves": {
+        "name": "Sintelwoede-Handplaten"
+      },
+      "emberfury_legs": {
+        "name": "Sintelwoede-Beenkappen"
+      },
+      "forgewall_helmet": {
+        "name": "Smederijmuur-Helm"
+      },
+      "forgewall_shoulder": {
+        "name": "Smederijmuur-Schouderplaten"
+      },
+      "forgewall_chest": {
+        "name": "Smederijmuur-Kolder"
+      },
+      "forgewall_gloves": {
+        "name": "Smederijmuur-Handplaten"
+      },
+      "forgewall_legs": {
+        "name": "Smederijmuur-Beenkappen"
+      },
+      "dawnforged_helmet": {
+        "name": "Dageraadgesmeed-Helm"
+      },
+      "dawnforged_shoulder": {
+        "name": "Dageraadgesmeed-Schouderplaten"
+      },
+      "dawnforged_chest": {
+        "name": "Dageraadgesmeed-Kolder"
+      },
+      "dawnforged_gloves": {
+        "name": "Dageraadgesmeed-Handplaten"
+      },
+      "dawnforged_legs": {
+        "name": "Dageraadgesmeed-Beenkappen"
+      },
+      "oathpyre_helmet": {
+        "name": "Eedbrand-Helm"
+      },
+      "oathpyre_shoulder": {
+        "name": "Eedbrand-Schouderplaten"
+      },
+      "oathpyre_chest": {
+        "name": "Eedbrand-Kolder"
+      },
+      "oathpyre_gloves": {
+        "name": "Eedbrand-Handplaten"
+      },
+      "oathpyre_legs": {
+        "name": "Eedbrand-Beenkappen"
+      },
+      "zealfire_helmet": {
+        "name": "Zealvuurhelm"
+      },
+      "zealfire_shoulder": {
+        "name": "Zealvuur-schouderplaten"
+      },
+      "zealfire_chest": {
+        "name": "Zealvuurgambeson"
+      },
+      "zealfire_gloves": {
+        "name": "Zealvuur-handschoenen"
+      },
+      "zealfire_legs": {
+        "name": "Zealvuur-beenbeschermers"
+      },
+      "packlord_emberhide_helmet": {
+        "name": "Kap van de Roedelleider"
+      },
+      "packlord_emberhide_shoulder": {
+        "name": "Schouderplaten van de Roedelleider"
+      },
+      "packlord_emberhide_chest": {
+        "name": "Kolder van de Roedelleider"
+      },
+      "packlord_emberhide_gloves": {
+        "name": "Handplaten van de Roedelleider"
+      },
+      "packlord_emberhide_legs": {
+        "name": "Beenkappen van de Roedelleider"
+      },
+      "coldsight_trackers_helmet": {
+        "name": "Koudzicht-Kap"
+      },
+      "coldsight_trackers_shoulder": {
+        "name": "Koudzicht-Schouderplaten"
+      },
+      "coldsight_trackers_chest": {
+        "name": "Koudzicht-Tuniek"
+      },
+      "coldsight_trackers_gloves": {
+        "name": "Koudzicht-Handgrepen"
+      },
+      "coldsight_trackers_legs": {
+        "name": "Koudzicht-Broek"
+      },
+      "slagsnare_helmet": {
+        "name": "Kap van de Slakkenvanger"
+      },
+      "slagsnare_shoulder": {
+        "name": "Schouderplaten van de Slakkenvanger"
+      },
+      "slagsnare_chest": {
+        "name": "Tuniek van de Slakkenvanger"
+      },
+      "slagsnare_gloves": {
+        "name": "Handgrepen van de Slakkenvanger"
+      },
+      "slagsnare_legs": {
+        "name": "Broek van de Slakkenvanger"
+      },
+      "cinderfang_helmet": {
+        "name": "Sinteltand-Kap"
+      },
+      "cinderfang_shoulder": {
+        "name": "Sinteltand-Schouderplaten"
+      },
+      "cinderfang_chest": {
+        "name": "Sinteltand-Tuniek"
+      },
+      "cinderfang_gloves": {
+        "name": "Sinteltand-Handgrepen"
+      },
+      "cinderfang_legs": {
+        "name": "Sinteltand-Broek"
+      },
+      "smolderstrike_helmet": {
+        "name": "Smeulslag-kap"
+      },
+      "smolderstrike_shoulder": {
+        "name": "Smeulslag-schouderplaten"
+      },
+      "smolderstrike_chest": {
+        "name": "Smeulslag-tuniek"
+      },
+      "smolderstrike_gloves": {
+        "name": "Smeulslag-handgrepen"
+      },
+      "smolderstrike_legs": {
+        "name": "Smeulslag-broek"
+      },
+      "ashveil_helmet": {
+        "name": "Aswaas-Kap"
+      },
+      "ashveil_shoulder": {
+        "name": "Aswaas-Schouderplaten"
+      },
+      "ashveil_chest": {
+        "name": "Aswaas-Tuniek"
+      },
+      "ashveil_gloves": {
+        "name": "Aswaas-Handgrepen"
+      },
+      "ashveil_legs": {
+        "name": "Aswaas-Broek"
+      },
+      "emberscreed_helmet": {
+        "name": "Geloofsbelijdenis van de Sintels-Kap"
+      },
+      "emberscreed_shoulder": {
+        "name": "Geloofsbelijdenis van de Sintels-Mantel"
+      },
+      "emberscreed_chest": {
+        "name": "Geloofsbelijdenis van de Sintels-Kleed"
+      },
+      "emberscreed_gloves": {
+        "name": "Geloofsbelijdenis van de Sintels-Handwikkels"
+      },
+      "emberscreed_legs": {
+        "name": "Geloofsbelijdenis van de Sintels-Beenkappen"
+      },
+      "benison_dawnweave_helmet": {
+        "name": "Dageraadweefsel-Kap"
+      },
+      "benison_dawnweave_shoulder": {
+        "name": "Dageraadweefsel-Mantel"
+      },
+      "benison_dawnweave_chest": {
+        "name": "Dageraadweefsel-Kleed"
+      },
+      "benison_dawnweave_gloves": {
+        "name": "Dageraadweefsel-Handwikkels"
+      },
+      "benison_dawnweave_legs": {
+        "name": "Dageraadweefsel-Beenkappen"
+      },
+      "vesperash_helmet": {
+        "name": "Vesperas-kap"
+      },
+      "vesperash_shoulder": {
+        "name": "Vesperas-mantel"
+      },
+      "vesperash_chest": {
+        "name": "Vesperas-robe"
+      },
+      "vesperash_gloves": {
+        "name": "Vesperas-handwindsels"
+      },
+      "vesperash_legs": {
+        "name": "Vesperas-beenbekleding"
+      },
+      "stormkindled_helmet": {
+        "name": "Helm van de Stormontsteking"
+      },
+      "stormkindled_shoulder": {
+        "name": "Schouderplaten van de Stormontsteking"
+      },
+      "stormkindled_chest": {
+        "name": "Harnas van de Stormontsteking"
+      },
+      "stormkindled_gloves": {
+        "name": "Wanten van de Stormontsteking"
+      },
+      "stormkindled_legs": {
+        "name": "Beenbeschermers van de Stormontsteking"
+      },
+      "warspirit_emberscale_helmet": {
+        "name": "Sintelschubbenhelm van de Oorlogsgeest"
+      },
+      "warspirit_emberscale_shoulder": {
+        "name": "Sintelschubben-schouderplaten van de Oorlogsgeest"
+      },
+      "warspirit_emberscale_chest": {
+        "name": "Sintelschubben-harnas van de Oorlogsgeest"
+      },
+      "warspirit_emberscale_gloves": {
+        "name": "Sintelschubben-wanten van de Oorlogsgeest"
+      },
+      "warspirit_emberscale_legs": {
+        "name": "Sintelschubben-beenbeschermers van de Oorlogsgeest"
+      },
+      "stonehearth_helmet": {
+        "name": "Helm van het Steenhart"
+      },
+      "stonehearth_shoulder": {
+        "name": "Schouderplaten van het Steenhart"
+      },
+      "stonehearth_chest": {
+        "name": "Harnas van het Steenhart"
+      },
+      "stonehearth_gloves": {
+        "name": "Wanten van het Steenhart"
+      },
+      "stonehearth_legs": {
+        "name": "Beenbeschermers van het Steenhart"
+      },
+      "springmender_helmet": {
+        "name": "Helm van de Lentegenezer"
+      },
+      "springmender_shoulder": {
+        "name": "Schouderplaten van de Lentegenezer"
+      },
+      "springmender_chest": {
+        "name": "Harnas van de Lentegenezer"
+      },
+      "springmender_gloves": {
+        "name": "Wanten van de Lentegenezer"
+      },
+      "springmender_legs": {
+        "name": "Beenbeschermers van de Lentegenezer"
+      },
+      "chronoweave_helmet": {
+        "name": "Aetherweefsel-Kap"
+      },
+      "chronoweave_shoulder": {
+        "name": "Aetherweefsel-Mantel"
+      },
+      "chronoweave_chest": {
+        "name": "Aetherweefsel-Kleed"
+      },
+      "chronoweave_gloves": {
+        "name": "Aetherweefsel-Handwikkels"
+      },
+      "chronoweave_legs": {
+        "name": "Aetherweefsel-Beenkappen"
+      },
+      "pyroclast_helmet": {
+        "name": "Pyroclastische Kap"
+      },
+      "pyroclast_shoulder": {
+        "name": "Pyroclastische Mantel"
+      },
+      "pyroclast_chest": {
+        "name": "Pyroclastisch Kleed"
+      },
+      "pyroclast_gloves": {
+        "name": "Pyroclastische Handwikkels"
+      },
+      "pyroclast_legs": {
+        "name": "Pyroclastische Beenbekleding"
+      },
+      "frostquench_helmet": {
+        "name": "Vorstblussing-Kap"
+      },
+      "frostquench_shoulder": {
+        "name": "Vorstblussing-Mantel"
+      },
+      "frostquench_chest": {
+        "name": "Vorstblussing-Kleed"
+      },
+      "frostquench_gloves": {
+        "name": "Vorstblussing-Handwikkels"
+      },
+      "frostquench_legs": {
+        "name": "Vorstblussing-Beenkappen"
+      },
+      "hexthread_helmet": {
+        "name": "Vloekdraad-Kap"
+      },
+      "hexthread_shoulder": {
+        "name": "Vloekdraad-Mantel"
+      },
+      "hexthread_chest": {
+        "name": "Vloekdraad-Kleed"
+      },
+      "hexthread_gloves": {
+        "name": "Vloekdraad-Handwikkels"
+      },
+      "hexthread_legs": {
+        "name": "Vloekdraad-Beenkappen"
+      },
+      "gravebrand_helmet": {
+        "name": "Grafmerk-Kap"
+      },
+      "gravebrand_shoulder": {
+        "name": "Grafmerk-Mantel"
+      },
+      "gravebrand_chest": {
+        "name": "Grafmerk-Kleed"
+      },
+      "gravebrand_gloves": {
+        "name": "Grafmerk-Handwikkels"
+      },
+      "gravebrand_legs": {
+        "name": "Grafmerk-Beenkappen"
+      },
+      "ruincaller_helmet": {
+        "name": "Kap van de Verderfroepster"
+      },
+      "ruincaller_shoulder": {
+        "name": "Mantel van de Verderfroepster"
+      },
+      "ruincaller_chest": {
+        "name": "Kleed van de Verderfroepster"
+      },
+      "ruincaller_gloves": {
+        "name": "Handwikkels van de Verderfroepster"
+      },
+      "ruincaller_legs": {
+        "name": "Beenbekleding van de Verderfroepster"
+      },
+      "moonscorch_helmet": {
+        "name": "Maanschroe-Kap"
+      },
+      "moonscorch_shoulder": {
+        "name": "Maanschroe-Schouderplaten"
+      },
+      "moonscorch_chest": {
+        "name": "Maanschroe-Kleed"
+      },
+      "moonscorch_gloves": {
+        "name": "Maanschroe-Handplaten"
+      },
+      "moonscorch_legs": {
+        "name": "Maanschroe-Beenkappen"
+      },
+      "wildfang_emberhide_helmet": {
+        "name": "Wildtandkap"
+      },
+      "wildfang_emberhide_shoulder": {
+        "name": "Wildtand-schouderplaten"
+      },
+      "wildfang_emberhide_chest": {
+        "name": "Wildtandtuniek"
+      },
+      "wildfang_emberhide_gloves": {
+        "name": "Wildtandwanten"
+      },
+      "wildfang_emberhide_legs": {
+        "name": "Wildtandbroek"
+      },
+      "cinderbark_helmet": {
+        "name": "Sintelschors-Kap"
+      },
+      "cinderbark_shoulder": {
+        "name": "Sintelschors-Schouderplaten"
+      },
+      "cinderbark_chest": {
+        "name": "Sintelschors-Tuniek"
+      },
+      "cinderbark_gloves": {
+        "name": "Sintelschors-Handgrepen"
+      },
+      "cinderbark_legs": {
+        "name": "Sintelschors-Broek"
+      },
+      "grovespring_helmet": {
+        "name": "Groevebron-Kap"
+      },
+      "grovespring_shoulder": {
+        "name": "Groevebron-Schouderplaten"
+      },
+      "grovespring_chest": {
+        "name": "Groevebron-Kleed"
+      },
+      "grovespring_gloves": {
+        "name": "Groevebron-Handwikkels"
+      },
+      "grovespring_legs": {
+        "name": "Groevebron-Beenkappen"
+      },
+      "sigil_anvil_helmet": {
+        "name": "Helm van het Aambeeldsigil"
+      },
+      "sigil_ember_helmet": {
+        "name": "Helm van het Sintelsigil"
+      },
+      "sigil_tempest_helmet": {
+        "name": "Helm van het Stormsigil"
+      },
+      "sigil_anvil_shoulder": {
+        "name": "Mantel van het Aambeeldsigil"
+      },
+      "sigil_ember_shoulder": {
+        "name": "Mantel van het Sintelsigil"
+      },
+      "sigil_tempest_shoulder": {
+        "name": "Mantel van het Stormsigil"
+      },
+      "sigil_anvil_chest": {
+        "name": "Kleed van het Aambeeldsigil"
+      },
+      "sigil_ember_chest": {
+        "name": "Kleed van het Sintelsigil"
+      },
+      "sigil_tempest_chest": {
+        "name": "Kleed van het Stormsigil"
+      },
+      "sigil_anvil_gloves": {
+        "name": "Handgrepen van het Aambeeldsigil"
+      },
+      "sigil_ember_gloves": {
+        "name": "Handgrepen van het Sintelsigil"
+      },
+      "sigil_tempest_gloves": {
+        "name": "Handgrepen van het Stormsigil"
+      },
+      "sigil_anvil_legs": {
+        "name": "Beenbekleding van het Aambeeldsigil"
+      },
+      "sigil_ember_legs": {
+        "name": "Beenbekleding van het Sintelsigil"
+      },
+      "sigil_tempest_legs": {
+        "name": "Beenbekleding van het Stormsigil"
+      },
+      "cord_of_the_last_flame": {
+        "name": "Koord van de Laatste Vlam"
+      },
+      "cindersoaked_slippers": {
+        "name": "Sinteldoordrenkte Pantoffels"
+      },
+      "springbinder_sash": {
+        "name": "Sjerp van de Lentebinder"
+      },
+      "steps_of_quiet_water": {
+        "name": "Stappen van Stil Water"
+      },
+      "cinderbark_cinch": {
+        "name": "Sintelschors-Riem"
+      },
+      "ashenbark_treads": {
+        "name": "Assebast-Laarzen"
+      },
+      "slagstalker_belt": {
+        "name": "Gordel van de Slakkenjager"
+      },
+      "ashrunner_boots": {
+        "name": "Asloper-Laarzen"
+      },
+      "moonscorch_waistwrap": {
+        "name": "Maanschroe-Taillewikkel"
+      },
+      "scorchgrove_striders": {
+        "name": "Schroeibos-Laarzen"
+      },
+      "grovetender_belt": {
+        "name": "Woudhoeder-Riem"
+      },
+      "dewfall_moccasins": {
+        "name": "Dauwval-Mocassins"
+      },
+      "forgewall_girdle": {
+        "name": "Smederijmuur-Riem"
+      },
+      "anvilstance_sabatons": {
+        "name": "Aambeeldhouding-Voetplaten"
+      },
+      "warforged_waistguard": {
+        "name": "Oorlogsgesmede middelgordel"
+      },
+      "furnace_march_greaves": {
+        "name": "Ovenmars-Scheenplaten"
+      },
+      "stormkindled_chain": {
+        "name": "Stormontstoken keten"
+      },
+      "thundershock_treads": {
+        "name": "Donderschok-laarzen"
+      },
+      "tidebinder_links": {
+        "name": "Schakels van de Getijdenbinder"
+      },
+      "springwarden_sabatons": {
+        "name": "Sabatons van de Lentewachter"
+      },
+      "pendant_of_the_first_tempering": {
+        "name": "Hanger van de Eerste Harding"
+      },
+      "ignivars_ember_choker": {
+        "name": "Sintelchoker van Ignivar"
+      },
+      "locket_of_the_last_flame": {
+        "name": "Medaillon van de Laatste Vlam"
+      },
+      "heartspring_amulet": {
+        "name": "Amulet van de Hartbron"
+      },
+      "seal_of_the_forgewall": {
+        "name": "Zegel van de Smederijmuur"
+      },
+      "band_of_marked_strikes": {
+        "name": "Ring van Gemarkeerde Slagen"
+      },
+      "circle_of_cinders": {
+        "name": "Cirkel van Sintels"
+      },
+      "loop_of_quiet_springs": {
+        "name": "Ring van de Stille Bronnen"
+      },
+      "bulwark_of_the_inner_crucible": {
+        "name": "Bolwerk van de Innerlijke Smeltkroes"
+      },
+      "ember_wardens_barrier": {
+        "name": "Barrière van de Sintelwachter"
+      },
+      "orb_of_the_last_spring": {
+        "name": "Bol van de Laatste Bron"
+      },
+      "cinder_of_the_first_design": {
+        "name": "Sintels van het Eerste Ontwerp"
+      },
+      "forgefathers_warhammer": {
+        "name": "Smederijvaders-Strijdhamer"
+      },
+      "cinderfang_kris": {
+        "name": "Sinteltand-Kris"
+      },
+      "slagrender_cleaver": {
+        "name": "Slakkenkliever"
+      },
+      "anvilguard_blade": {
+        "name": "Aambeeldwacht-Kling"
+      },
+      "heart_of_the_end_greatblade": {
+        "name": "Grootzwaard van het Eindhart"
+      },
+      "staff_of_the_last_spring": {
+        "name": "Staf van de Laatste Lente"
+      },
+      "forgefire_spire": {
+        "name": "Smederijvuur-Spits"
+      },
+      "springtouched_crozier": {
+        "name": "Lenteraakte kromstaf"
+      },
+      "wand_of_quenched_sparks": {
+        "name": "Toverstaf van Gedoofde Vonken"
       },
       "conjured_water4": {
         "name": "Getoverd bronwater"
@@ -13763,6 +14802,12 @@ export const nl_NL: EnTranslations = {
       },
       "reins_thunderstrut_gobbler": {
         "name": "Teugels van Donderpronker, de Grote Kalkoen"
+      },
+      "varkhul_forgebreaker": {
+        "name": "Smederijbreker, Motor van Varkhul"
+      },
+      "varkhul_emberward": {
+        "name": "Sintelschild, Bolwerk van Varkhul"
       }
     },
     "mobs": {
@@ -13958,6 +15003,27 @@ export const nl_NL: EnTranslations = {
       "nythraxis_scourge_of_thornpeak": {
         "name": "Nythraxis, Gesel van Doorntop"
       },
+      "ignivar_herald_of_the_last_flame": {
+        "name": "Ignivar, Heraut van de Laatste Vlam"
+      },
+      "ignivar_heart_of_the_end": {
+        "name": "Ignivar, Asroeper"
+      },
+      "ignivar_ember_sentinel": {
+        "name": "Sintelschildwacht"
+      },
+      "ignivar_crucible_warden": {
+        "name": "Bewaker van de Smeltkroes"
+      },
+      "ignivar_cinder_artificer": {
+        "name": "Sintelambachtsman"
+      },
+      "varkhul_forgefather_of_the_last_flame": {
+        "name": "Varkhul, Smidvader van de Laatste Vlam"
+      },
+      "derelict_mech": {
+        "name": "Verlaten Mech"
+      },
       "reliquary_ledger_wraith": {
         "name": "Grootboek-Schim"
       },
@@ -14026,9 +15092,6 @@ export const nl_NL: EnTranslations = {
       },
       "tolling_bell": {
         "name": "Luidende Klok"
-      },
-      "vale_cup_ball": {
-        "name": "Zwijnenbal"
       },
       "thunzharr_waking_peak": {
         "name": "Thunzharr, de Ontwakende Piek"
@@ -14327,6 +15390,15 @@ export const nl_NL: EnTranslations = {
       "fisher_bram": {
         "name": "Visser Bram"
       },
+      "training_effigy": {
+        "name": "Stropop"
+      },
+      "shore_scuttler": {
+        "name": "Strandscharrelaar"
+      },
+      "mister_crabs": {
+        "name": "Meneer Krab"
+      },
       "rift_hellguard": {
         "name": "Hellewacht"
       },
@@ -14485,7 +15557,7 @@ export const nl_NL: EnTranslations = {
       "apothecary_lin": {
         "name": "Apotheker Lin",
         "title": "Kruidenkundige",
-        "greeting": "Wees voorzichtig waar je loopt in de oostelijke bossen, vriend."
+        "greeting": "Wees voorzichtig waar je loopt in de noordoostelijke bossen, vriend."
       },
       "brother_aldric": {
         "name": "Broeder Aldric",
@@ -14612,6 +15684,21 @@ export const nl_NL: EnTranslations = {
         "title": "Priester van het Dal",
         "greeting": "Van een kapelhof in het Dal tot het dak van de wereld... het spoor dat we hebben gevolgd eindigt hier. Ik voel de berg luisteren."
       },
+      "archivist_maelin_emberward": {
+        "name": "Archivaris Maelin Sintelwacht",
+        "title": "Archivaris van de Smeltkroes",
+        "greeting": "Elke hamerslag hier is een zin. Help me lezen wat Varkhul probeerde te verbergen."
+      },
+      "archivist_maelin_ember_projection": {
+        "name": "Maelins Sintelprojectie",
+        "title": "Sintelprojectie",
+        "greeting": "De sintels dragen Maelins stem door de smidse naar voren."
+      },
+      "crucible_quartermaster": {
+        "name": "Kwartiermeester Bronn Sintelwacht",
+        "title": "Kwartiermeester van de Smeltkroes",
+        "greeting": "De smidse herkent haar eigen volk. Breng me een zegel uit de Smeltkroes en ik rust je uit voor de oorlog."
+      },
       "brother_halven": {
         "name": "Broeder Halven",
         "title": "Reliekbewaarder",
@@ -14626,11 +15713,6 @@ export const nl_NL: EnTranslations = {
         "name": "De Bleke Hoeder",
         "title": "Wachter van de Doden",
         "greeting": "Rust nu, geest. Ik kan je terugbrengen naar je lichaam, maar de overtocht terug laat je verzwakt achter."
-      },
-      "groundskeeper_bram": {
-        "name": "Terreinmeester Bram",
-        "title": "Hoeder van het Zeugveld",
-        "greeting": "Het bestand houdt stand op het Zeugveld, {className}: alleen trappen en schouders. Zin om te spelen voor de Koperen Emmer?"
       },
       "chronicler_saul": {
         "name": "Saul de Kroniekschrijver",
@@ -14917,6 +15999,51 @@ export const nl_NL: EnTranslations = {
         "title": "Meester van de apotheek",
         "greeting": "Meet twee keer en giet één keer, {className}. De apotheker heeft geen geduld voor gemorste reagentia."
       },
+      "wayfarer_bryn": {
+        "name": "Reiziger Bryn",
+        "title": "Havengids",
+        "greeting": "Oostbeek verwelkomt iedereen, vriend. En voor wie nog onvast ter been is, is er altijd de Beproevingskust: de veerklok bij de brievenbus van de Ravenpost brengt je elke dag van het jaar over, en zijn tweeling op het eiland brengt je weer thuis."
+      },
+      "instructor_maren": {
+        "name": "Instructeur Maren",
+        "title": "Meester van de Beproeving",
+        "greeting": "Elke held die het dal ooit heeft bedankt, stond waar jij nu staat, {className}, en geen van hen wist welk eind van een kling je vast moest houden. Daarvoor is deze kust er. Vraag, oefen, en faal waar falen niets kost."
+      },
+      "quartermaster_finch": {
+        "name": "Kwartiermeester Finch",
+        "title": "Kampuitrusser",
+        "greeting": "Mijn toonbank heeft precies één ding te koop, {playerName}: een extra buidel voor wat je onderweg oppikt, wanneer je les erom vraagt. Al het andere hier is berging op weg naar het dal. Munt koopt de buidel, en werk verdient de munt. Dat is de hele economie, en die wordt nooit ingewikkelder. Alleen groter."
+      },
+      "ferryman_odo": {
+        "name": "Veerman Odo",
+        "title": "Hoeder van de Oversteek",
+        "greeting": "Net van de oversteek, {playerName}? Wachter Tam beheert de Hindernisbaan op het strand net ten zuiden van mijn pier: doorloop eerst zijn banen, je benen zullen je dankbaar zijn. Elke hoeder op deze kust stuurt je door naar de volgende zodra je werk gedaan is, en de kaart bovenaan je scherm kent altijd de weg. Wanneer het dal je terugroept, luid dan de bel naast mijn pier en de oversteek zet je af in de stad Oostbeek."
+      },
+      "bursar_wick": {
+        "name": "Thesaurier Wick",
+        "title": "De Vergulde Geldkist",
+        "greeting": "De Vergulde Geldkist houdt zelfs hier een balie open, {playerName}. Wat je bij mij stort wacht in dezelfde kluis achter elke thesaurier in elke stad, veilig voor wolven, water en je eigen slechtere ingevingen."
+      },
+      "warden_tam": {
+        "name": "Wachter Tam",
+        "title": "Hoeder van de Hindernisbaan",
+        "greeting": "Deze banen vormen de Hindernisbaan, {playerName}, en elke avonturier die het dal respecteert heeft ze gelopen. De lantaarnpalen blijven de hele nacht branden, dus de banen sluiten nooit."
+      },
+      "overseer_pell": {
+        "name": "Opzichter Pell",
+        "title": "Opzichter van de Hindernisbaan",
+        "greeting": "Ik klok elke run die deze banen afkomt, {playerName}, en ik heb veel slechter voetenwerk gezien. Het pad achter me klimt naar het oefenterrein: daar wordt voetenwerk zwaardwerk."
+      },
+      "drillmaster_rook": {
+        "name": "Drilmeester Rook",
+        "title": "Meester van het Oefenterrein",
+        "greeting": "Eerst stro, dan schelpen, {playerName}. Een stropop leert je arm de zwaai; de scharrelaars verderop het strand leren hem die te laten landen op iets dat er iets om geeft."
+      },
+      "tidewarden_nel": {
+        "name": "Getijwachter Nel",
+        "title": "Hoeder van het Strand",
+        "greeting": "Het getij neemt en het getij betaalt, {playerName}. Ik houd van beide de tel bij: wat de scharrelaars van de wrakken pikken, en wat eerlijke handen dit pad weer op dragen."
+      },
       "tidewatcher_ondrel": {
         "name": "Ondrel Vane",
         "title": "Tijwachter",
@@ -14926,7 +16053,7 @@ export const nl_NL: EnTranslations = {
     "quests": {
       "q_prof_intro": {
         "title": "Een ambacht voor iedere hand",
-        "text": "Elke ziel in Oostbeekdal beoefent een ambacht naast het zwaard, {playerName}. Er zijn ertsslagaders in de rotsen rond de Kopergat, ten zuidoosten van de stad. Ga zelf een houweel zwaaien en bewerk er 5; ik zie het verschil.",
+        "text": "Elke ziel in Oostbeek beoefent een ambacht naast het zwaard, {playerName}. Er zijn ertsslagaders in de rotsen rond de Kopergroeve, ten noordoosten van de stad, voorbij de wolvenrennen. Ga zelf een houweel zwaaien en bewerk er 5; ik zie het verschil.",
         "completion": "Zie je? Erts verzameld en eelt op je handen. Ga door met het mijnen, houtkappen en kruidenplukken terwijl je de wegen afloopt, en als je terug in de stad bent, let dan op het Stadsfocusbord bij de markt en de nabijgelegen knutselbank. Er zit een eerlijke handel in dit alles, als je dat wilt.",
         "objectives": {
           "0": {
@@ -14956,7 +16083,7 @@ export const nl_NL: EnTranslations = {
       },
       "q_boars": {
         "title": "Borstelige Everzwijnhuiden",
-        "text": "Zwijnenhuid maakt de beste reistassen, en de weiden ten westen van de stad wemelen van de beesten. Breng me 5 Borstelige Zwijnenhuiden en ik zal het de moeite waard maken.",
+        "text": "Zwijnenhuid maakt de beste reistassen, en de weiden ten noordwesten van de stad wemelen van de beesten. Breng me 5 Borstelige Zwijnenhuiden en ik zal het de moeite waard maken.",
         "completion": "Ah, mooie borstelige huiden! Die zullen een goede prijs opbrengen.",
         "objectives": {
           "0": {
@@ -14966,7 +16093,7 @@ export const nl_NL: EnTranslations = {
       },
       "q_spiders": {
         "title": "De Sableweb-Plaag",
-        "text": "De loerders in de oostelijke bossen spinnen een zijde die ik nodig heb voor mijn kompressen, en ze zijn bovendien veel te talrijk geworden. Vel 6 Sableweb-Loerders en snijd 4 zijdeklieren uit hun buiken.",
+        "text": "De loerders in de noordoostelijke bossen spinnen een zijde die ik nodig heb voor mijn kompressen, en ze zijn bovendien veel te talrijk geworden. Vel 6 Sableweb-Loerders en snijd 4 zijdeklieren uit hun buiken.",
         "completion": "Bah, beweegt nog. Perfect. Hier, dit heb je verdiend.",
         "objectives": {
           "0": {
@@ -15009,7 +16136,7 @@ export const nl_NL: EnTranslations = {
       },
       "q_supplies": {
         "title": "Gestolen Voorraden",
-        "text": "Die bandieten overvielen mijn laatste wagen en gingen ervandoor met vier kratten goederen - gereedschap, zout, goed Eastbrook-linnen. De kratten staan opgestapeld rond hun kamp in de zuidwestelijke heuvels. Steel ze voor me terug, wil je?",
+        "text": "Die bandieten overvielen mijn laatste wagen en gingen ervandoor met vier kratten goederen: gereedschap, zout, goed Oostbeeks linnen. De kratten staan opgestapeld rond hun kamp in de noordwestelijke heuvels. Steel ze voor me terug, wil je?",
         "completion": "Mijn kratten! Amper een schram erop. Je bent een wonder.",
         "objectives": {
           "0": {
@@ -15102,7 +16229,7 @@ export const nl_NL: EnTranslations = {
       },
       "q_bandits": {
         "title": "Dieven van het Dal",
-        "text": "Een bende moordenaars heeft een kamp opgeslagen in de zuidwestelijke heuvels. Ze hebben deze week drie wagens beroofd. Verdrijf ze, dood 10 Daldieven.",
+        "text": "Een bende moordenaars heeft een kamp opgeslagen in de noordwestelijke heuvels. Ze hebben deze week drie wagens beroofd. Verdrijf ze, dood 10 Daldieven.",
         "completion": "Tien messen minder in het donker. Neem dit aan, je hebt het verdiend.",
         "objectives": {
           "0": {
@@ -15720,6 +16847,39 @@ export const nl_NL: EnTranslations = {
           }
         }
       },
+      "q_ignivar_echoes_in_iron": {
+        "title": "Echo’s in IJzer",
+        "text": "Deze automaten zijn geen soldaten. Het zijn ontwerpen. Breek elke productielijn en luister wanneer de laatste huls valt. De smidse onthoudt wat Varkhul probeerde uit te wissen.",
+        "completion": "De echo’s stemmen overeen. Varkhul bond water uit de stervende Laatste Bron aan levend metaal. Deze automaten waren mislukte hardingen. Alleen Ignivar hield stand.",
+        "objectives": {
+          "0": {
+            "label": "Sintelschildwachten vernietigd"
+          },
+          "1": {
+            "label": "Bewakers van de Smeltkroes vernietigd"
+          }
+        }
+      },
+      "q_ignivar_heralds_heart": {
+        "title": "Het Hart van de Heraut",
+        "text": "De overlevende die in elke echo wordt genoemd is Ignivar. Varkhul noemde hem heraut, zegel en sleutel. Versla hem. Als de archieven kloppen, zal zijn dood onthullen wat hij moest bewaken.",
+        "completion": "Ignivar was nooit slechts een bewaker. Zijn hart was de sleutel, en de laatste platen ervan openden de verzegelde smeltkroes beneden.",
+        "objectives": {
+          "0": {
+            "label": "Ignivar verslagen"
+          }
+        }
+      },
+      "q_ignivar_the_forgefather": {
+        "title": "De Smidvader",
+        "text": "Het pad hieronder leidt naar Varkhul, Smidvader van de Laatste Vlam. Hij zette de Laatste Bron gevangen om metaal tot leven te wekken en smeedde daarna Ignivar om de misdaad verborgen te houden. Betreed de Binnenste Smeltkroes en maak een einde aan zijn werk.",
+        "completion": "De smidse is eindelijk stil. De Bron herstelt misschien nooit, maar Varkhul zal geen levens meer tot ketenen smeden.",
+        "objectives": {
+          "0": {
+            "label": "Varkhul verslagen"
+          }
+        }
+      },
       "q_mogger": {
         "title": "Mogger Moet Vallen",
         "text": "Mogger heeft karren gespleten, hekken platgewalst en genoeg vee gedood om het halve Dal leeg te maken. Sta hem niet alleen tegenover. Neem twee sterke metgezellen mee de westelijke weide in en leg het beest voorgoed neer.",
@@ -15782,7 +16942,7 @@ export const nl_NL: EnTranslations = {
       },
       "q_prof_amends_outfitter": {
         "title": "Draden Hernomen",
-        "text": "Toch terug bij mijn weefgetouw. Ik koester geen wrok, {playerName}, maar de draad herinnert een hand die hem losliet, en de kosten om hem weer op te pakken worden elke keer gemeten aan een langere maat. Maai de webhoutspin nen die het oostelijke woud verdringen, en de inspanning zal je handen kalmeren voordat ze goede zijde aanraken.",
+        "text": "Toch terug bij mijn weefgetouw. Ik koester geen wrok, {playerName}, maar de draad herinnert een hand die hem losliet, en de kosten om hem weer op te pakken worden elke keer gemeten aan een langere maat. Maai de Sableweb-Loerders die het noordoostelijke woud verdringen, en de inspanning zal je handen kalmeren voordat ze goede zijde aanraken.",
         "completion": "Stabiel weer. Leerbewerking en Kleermakerij keren terug naar je handen als hoofdvakken. Meet twee keer voordat je weer gaat dwalen.",
         "objectives": {
           "0": {
@@ -15792,7 +16952,7 @@ export const nl_NL: EnTranslations = {
       },
       "q_prof_amends_apothecary": {
         "title": "Terug op het Fornuis",
-        "text": "Wel, kijk wie er terug is bij mijn pot. Geen wrok, {playerName}, een keuken heeft altijd ruimte, maar weet dat de rekening langer wordt elke keer dat je weggaat. Ga de wilde everzwijnen in het westelijke weide uitdunnen, want eerlijk zweet is het eerste ingrediënt, en het zal je handen herinneren aan het werk.",
+        "text": "Wel, kijk wie er terug is bij mijn pot. Geen wrok, {playerName}, een keuken heeft altijd ruimte, maar weet dat de rekening langer wordt elke keer dat je weggaat. Ga de wilde everzwijnen in de noordwestelijke weide uitdunnen, want eerlijk zweet is het eerste ingrediënt, en het zal je handen herinneren aan het werk.",
         "completion": "Dat is de oude smaak. Alchemie en Koken zijn weer als hoofdvakken op je fornuis. Blijf deze keer wat langer.",
         "objectives": {
           "0": {
@@ -16883,6 +18043,109 @@ export const nl_NL: EnTranslations = {
           }
         }
       },
+      "q_ps_the_gauntlet": {
+        "title": "Loop de Hindernisbaan",
+        "text": "Elk paar benen dat het dal respecteert, heeft deze banen eerst gelopen, {playerName}. Loop de eerste baan naar het westen tot aan zijn vlag, zwaai jezelf om, loop de zuidelijke baan naar de tweede, en zijstap dan de laatste baan naar de rode vlag. Passeer de vlaggen in volgorde, en de kaart bovenaan je scherm toont je elke knop terwijl je gaat. Opzichter Pell klokt elke run vanaf het verre eind: zodra de rode vlag achter je ligt, staat hij daar klaar om het in ontvangst te nemen.",
+        "completion": "Ik heb die run geklokt, {playerName}, en ik heb sneller voeten laten zakken. De Hindernisbaan is van jou. Het pad achter me klimt naar het oefenterrein, waar Drilmeester Rook voetenwerk in zwaardwerk verandert: hij heeft je volgende taak.",
+        "objectives": {
+          "0": {
+            "label": "Vlag van de Hindernisbaan gepasseerd"
+          }
+        }
+      },
+      "q_ps_strike_true": {
+        "title": "Sla Raak",
+        "text": "Eerst voetenwerk, nu de arm, {playerName}. Het oefenterrein ligt het pad op achter me, en zijn stropoppen zijn gebouwd om geraakt te worden. Als je de weg kwijtraakt, druk dan op M om de kaart te openen: elke taak die je draagt staat erop gemarkeerd. Loop naar een stropop toe en klik erop: dat maakt hem tot je doelwit, en zijn naam verschijnt bovenaan je scherm. Pas dan druk je op 1, of klik je op het eerste icoon op de actiebalk onderaan, om te zwaaien. Blijf toeslaan tot er een omvalt; hij slaat nooit terug, stropoppen doen dat nooit. Drilmeester Rook houdt het oefenterrein in de gaten vanaf de westflank, waar het strandpad begint: druk op F op hem om de val te melden.",
+        "completion": "Eén schone val, en je greep al vaster. Onthou hoe dat voelde, {playerName}: doelwit kiezen, toeslaan, en blijven toeslaan. Stro geeft nergens om. Het volgende waar je op zwaait wel.",
+        "objectives": {
+          "0": {
+            "label": "Stropop geveld"
+          }
+        }
+      },
+      "q_ps_hone_the_edge": {
+        "title": "Slijp de Snede",
+        "text": "Een zwaai is een zwaai, {playerName}, en stro incasseert die de hele dag. Daar win je niets mee. Kijk naar de rij knoppen onderaan je scherm: die rij is je vakmanschap, en elk ervan doet iets wat je arm alleen niet kan. Je hebt er al één. Ga terug naar de stropoppen en gebruik hem: kies je doelwit, druk dan drie keer op de knop die het oefenterrein je aanwijst. Hak niet zomaar op het stro in; laat het ding dat je kent daadwerkelijk gebeuren. Kom daarna terug naar mij.",
+        "completion": "Nu vecht je in plaats van maar wat te zwaaien. Die rij groeit met elk niveau dat je haalt, {playerName}, en wie het langst leeft, is wie hem leest. Stro maakt het niet uit welke knop je gebruikte. Het dal wel.",
+        "objectives": {
+          "0": {
+            "label": "Vaardigheid geraakt op een stropop"
+          }
+        }
+      },
+      "q_ps_shell_and_claw": {
+        "title": "Schelp en Klauw",
+        "text": "Stro geeft nergens om, {playerName}, dus hier is iets dat dat wel doet. Strandscharrelaars struinen de wraklijn af op het verre strand: volg het pad naar het westen vanaf mijn oefenterrein en het brengt je recht naar ze toe. Ze knijpen terug, dus houd je gezondheidsbalk in de gaten en blijf toeslaan: klik op een om hem tot doelwit te maken, gebruik dan de vaardigheid die het oefenterrein je leerde (de coach noemt je knop), en stop niet tot zijn schelp kraakt. Drie is genoeg. Beklim daarna het pad de noordelijke helling op: Getijwachter Nel houdt de strandtelling bij, en zij telt je schelpen.",
+        "completion": "Drie schelpen gekraakt en al je vingers nog heel: een eerlijk eerste gevecht, {playerName}. De scharrelaars knijpen sneller van de wrakken af dan het getij berging aanspoelt, dus elke die je velt is munt die iemand overhoudt.",
+        "objectives": {
+          "0": {
+            "label": "Strandscharrelaar geveld"
+          }
+        }
+      },
+      "q_ps_mother_of_pearl": {
+        "title": "Parelmoer",
+        "text": "Drie schelpen gekraakt, {playerName}, maar de wraklijn herbergt een koning, en hij zit op een prijs die meer waard is dan elke kist op dit strand. Neem dit Ziltig Lokaas mee naar de getijpoel aan het uiterste westen van het strand, voorbij de wrakken. Ga aan de waterrand staan, druk op B om je tassen te openen, en klik op het lokaas om hem te wekken. Meneer Krab knijpt veel harder dan zijn kleine neefjes, dus houd je gezondheidsbalk in de gaten, blijf toeslaan, en wijk terug het zand op als je op adem moet komen. Zodra hij valt, loop recht naar zijn schild en druk op F om de Glanzende Parel van hem te plunderen. Breng die parel terug naar mij.",
+        "completion": "De Glanzende Parel, losgewrikt van de oude koning van de ondiepten zelf. Mijn vader tikte elke ochtend van zijn werkende leven zijn hoed af voor die krab; er is respect verschuldigd. Hou even stil... zo. Geregen, gezet, en van jou, {playerName}: de Parelmoer. Druk op B om je tassen te openen en klik op de ring om hem aan te schuiven, druk dan op C om je personageblad te openen en hem aan je hand te zien zitten. Een klein ding, maar je bent er in elk opzicht beter van.",
+        "objectives": {
+          "0": {
+            "label": "Meneer Krab verslagen"
+          },
+          "1": {
+            "label": "Glanzende Parel bemachtigd"
+          }
+        }
+      },
+      "q_ps_the_wreck_line": {
+        "title": "De Wraklijn",
+        "text": "Mijn dragers slepen berging van de oude wrakken en dragen het de helling op naar Kamp Dageraadrust, {playerName}, en de helft van de kisten haalt de klim nooit: ze worden langs het pad neergezet en vergeten. Volg mijn pad naar het kamp en je loopt recht langs de achtergeblevene. Er een openen is simpel: loop naar een kist toe tot zijn naam verschijnt, druk dan op F, of klik op de kist zelf, en hij geeft prijs wat hij bevat. Zes ervan ruimen de lijn op, en onthou dat F dezelfde toets is voor elke kist, knooppunt en doorgang die je ooit zult tegenkomen. Kwartiermeester Finch houdt de kampkraam bij en koopt elk stukje berging op: geef de buit aan haar.",
+        "completion": "Touw, teer, en een halve kaaswiel die de zee op een of andere manier heeft gespaard: ik neem het allemaal, {playerName}. Een rug die draagt wat hij vindt is meer waard voor dit kamp dan welke kling ook, en die van jou heeft net de hele lijn in één klim leeggehaald.",
+        "objectives": {
+          "0": {
+            "label": "Aangespoelde Kist geopend"
+          }
+        }
+      },
+      "q_ps_pouch_and_purse": {
+        "title": "Buidel en Beurs",
+        "text": "Nog één les voor het dal, {playerName}, en het is degene die avonturiers in leven houdt: wat je meedraagt. Je rugzak heeft zestien vakken, en ernaast wachten vier lege taslussen; elke tas die je omgespt voegt zijn eigen ruimte toe aan de pool. Dus: druk nog eens op F op mij om mijn kraam te openen, klik op de Linnen buidel in mijn waren om hem te kopen, druk dan op B om je tassen te openen en klik op de buidel daar om hem in een vrije lus te gespen. Instructeur Maren oefent bij het verzamelvuur een paar stappen naar het oosten: laat haar de buidel aan je riem zien.",
+        "completion": "Een prima buidel. Gesp hem om als je dat nog niet hebt gedaan: druk op B om je tassen te openen, klik dan op de buidel om hem in een vrije taslus te zetten, en zes extra vakken zijn van jou om met problemen te vullen. Nu de helft van de les die geen tas kan bevatten, {playerName}: wat je niet kunt dragen, bewaart de Vergulde Geldkist. Thesaurier Wick houdt zijn geldkistbalie boven aan het westelijke pad, en hij opent dezelfde kluis die elke thesaurier in elke stad deelt; meer kluisruimte kun je kopen zodra je beurs ernaar groeit. Houd je kostbaarheden in de bank en je tassen ruim. Een volle rugzak heeft meer avonturen beëindigd dan welke wolf ook.",
+        "objectives": {
+          "0": {
+            "label": "Linnen buidel gekocht"
+          }
+        }
+      },
+      "q_ps_the_signpost": {
+        "title": "Woord op de Wind",
+        "text": "Nog één gewoonte om te leren, {playerName}, en die heeft geen kling nodig: lees de borden. De gildewegwijzer staat bij de kamppoort een paar stappen ten zuidwesten van mijn vuur, en gilden en rondtrekkende ploegen plaatsen er hun oproepen op. Loop naar het bord toe en druk op F, of klik erop, om te lezen wat er geplaatst is, kom dan terug en vertel me wat de wind heeft binnengebracht. Zo'n bord staat in elke stad waar je ooit binnen zult lopen.",
+        "completion": "Dus nu weet je hoe nieuws zich verspreidt in het dal, {playerName}: niet via boodschappers, maar via borden. Controleer ze in elke stad die je passeert; de helft van elk avontuur begint als drie regels inkt op zo'n bord.",
+        "objectives": {
+          "0": {
+            "label": "Gildewegwijzer gelezen"
+          }
+        }
+      },
+      "q_ps_the_long_walk": {
+        "title": "De Lange Wandeling",
+        "text": "Nog één les over, {playerName}, en het is degene die ik je niet kan vertellen: je moet het één keer hebben meegemaakt. Je gaat daarbuiten sterven. Iedereen gaat dat, en het is nergens het einde van. Neem deze Doorgangssteen. Druk op B om je tassen te openen en klik erop, en hij legt je neer precies waar je staat. Volg dan de instructies op je scherm: laat je geest los, loop terug naar je eigen lichaam, en stap erin. Je lichaam wacht, de wandeling is gratis, en je verliest niets door hem te maken.",
+        "completion": "En daar ben je weer, geen haar slechter. Onthou hoe dat voelde, {playerName}, want de volgende keer dat het gebeurt, zijn er tanden bij betrokken en staat er niemand klaar om het uit te leggen. Je lichaam wacht, de wandeling is gratis, en het enige wat de dood je echt kost, is de tijd die het duurt om terug te komen.",
+        "objectives": {
+          "0": {
+            "label": "Teruggelopen uit de dood"
+          }
+        }
+      },
+      "q_ps_set_sail": {
+        "title": "Vaar Uit",
+        "text": "Er is niets meer op dit strand dat je niet al hebt gelopen, verslagen, geopend of gekocht, {playerName}. Je bent klaar, en Oostbeek heeft echt werk klaarliggen. Loop de kustweg terug naar de pier, druk op F op Veerman Odo, en zeg hem dat ik zei dat je je oversteek hebt verdiend. Druk op L wanneer je de tel kwijtraakt van wie je nog iets verschuldigd bent: dat is je questlogboek.",
+        "completion": "Zei Maren dat? Groot compliment van een vrouw die mij ooit een week lang meerknopen liet oefenen. Luid de bel naast mijn pier zodra je klaar bent, {playerName}, en de oversteek zet je af midden in de stad Oostbeek. Pas op voor de wolven.",
+        "objectives": {
+          "0": {
+            "label": "Meld je bij Veerman Odo"
+          }
+        }
+      },
       "q_gc_down_the_windway": {
         "title": "De Windweg Af",
         "text": "Je hebt de klim gemaakt, {playerName}, dus heeft de wind besloten je te houden. Wijkhaven ligt oostwaarts langs de heuvelweg, weggedoken in de luwte van zijn baai. Havenmeester Odile telt elke ziel die over de pas komt, en ze zal jou willen tellen. Vertel haar dat de Windweg nog open is.",
@@ -17080,6 +18343,9 @@ export const nl_NL: EnTranslations = {
           },
           "11": {
             "label": "De Verrekust-Dam"
+          },
+          "12": {
+            "label": "Oostbeekse Dokken"
           }
         }
       },
@@ -17442,6 +18708,27 @@ export const nl_NL: EnTranslations = {
             "label": "De Riftvelden"
           }
         }
+      },
+      "proving_shore": {
+        "name": "De Beproevingskust",
+        "welcome": "De Beproevingskust vraagt niets van je dan tijd. Leer het kamp kennen, sla de stropoppen, loop de wraklijn af, en wanneer je klaar bent, brengt Veerman Odo je over naar het dal.",
+        "pois": {
+          "0": {
+            "label": "Kamp Dageraadrust"
+          },
+          "1": {
+            "label": "De Oude Pier"
+          },
+          "2": {
+            "label": "Het Oefenterrein"
+          },
+          "3": {
+            "label": "De Wraklijn"
+          },
+          "4": {
+            "label": "De Hindernisbaan"
+          }
+        }
       }
     },
     "dungeons": {
@@ -17469,6 +18756,31 @@ export const nl_NL: EnTranslations = {
         "name": "Nythraxis Raid-Arena",
         "enterText": "Je gaat door de verzegelde koninklijke deur.",
         "leaveText": "Je keert terug naar de koude lucht van Doorntop."
+      },
+      "ignivar_forge_lift": {
+        "name": "De Smederij-Lift",
+        "enterText": "De smidslift schudt en daalt; hamerklappen stijgen je tegemoet.",
+        "leaveText": "De lift brengt je terug naar de open lucht van de vesting."
+      },
+      "ignivar_forge_approach": {
+        "name": "Zalen van de Eerste Tempering",
+        "enterText": "Hamerklappen weerklinken door de Zalen van de Eerste Tempering.",
+        "leaveText": "Je stapt weg van de eerste smidse en ademt weer vrij."
+      },
+      "ignivar_raid_arena": {
+        "name": "Smeltkroes van de Laatste Bron",
+        "enterText": "Hitte trilt boven de verzegelde wateren van de Smeltkroes.",
+        "leaveText": "Je stapt weg van de Smeltkroes en ademt weer vrij."
+      },
+      "ignivar_molten_assembly": {
+        "name": "Gloeiende Assemblage",
+        "enterText": "De geopende poort leidt naar een gloeiende assemblagehal.",
+        "leaveText": "Je verlaat de assemblagelijn en keert terug naar de Smeltkroes."
+      },
+      "ignivar_inner_crucible": {
+        "name": "De Binnenste Smeltkroes",
+        "enterText": "De geopende poort leidt dieper de Smeltkroes in.",
+        "leaveText": "Je verlaat de stille diepten van de Smeltkroes."
       },
       "wildheart_basin": {
         "name": "Het Wildhartbekken",
@@ -17685,69 +18997,199 @@ export const nl_NL: EnTranslations = {
         "body": "Een van je hoofdvakken heeft meesterschap bereikt, de allerHOOGSTE, kaboom, de hele ladder, klaar. Ik deel geen lof uit, ik deel lonten uit, maar hier, neem allebei: je bent briljant en enigszins angstaanjagend. Ga de bergen zenuwachtig maken."
       },
       "woc_market_delivery": {
-        "sender": "The Exchange Broker",
-        "subject": "Your Exchange purchase",
-        "body": "The sale is settled and the goods are yours. The attached parcel carries the exact item you paid for, held in escrow from the moment it was listed until your payment cleared.\n\nA record of the sale lives in the Exchange ledger.\n\n- The Exchange Broker"
+        "sender": "De Beursmakelaar",
+        "subject": "Je aankoop op de Beurs",
+        "body": "De verkoop is afgerond en de waar is van jou. Het bijgevoegde pakket bevat precies het voorwerp waarvoor je hebt betaald, veilig in bewaring gehouden vanaf het moment dat het werd aangeboden tot je betaling werd verwerkt.\n\nEen verslag van de verkoop staat vermeld in het beursregister.\n\n- De Beursmakelaar"
       },
       "woc_market_return": {
-        "sender": "The Exchange Broker",
-        "subject": "Your Exchange listing has ended",
-        "body": "Your listing ended without a completed sale: the auction found no buyer, the reserve was not met, the listing was withdrawn, or the winning bidder failed to settle. Your goods return to you unharmed with this letter, exactly as they were escrowed.\n\n- The Exchange Broker"
+        "sender": "De Beursmakelaar",
+        "subject": "Je aanbieding op de Beurs is beëindigd",
+        "body": "Je aanbieding is beëindigd zonder voltooide verkoop: de veiling vond geen koper, de reserveprijs werd niet gehaald, de aanbieding werd ingetrokken, of de winnende bieder heeft niet afgerekend. Je waar keert ongeschonden naar je terug met deze brief, precies zoals ze in bewaring was gehouden.\n\n- De Beursmakelaar"
       },
       "woc_market_sold": {
-        "sender": "The Exchange Broker",
-        "subject": "Your Exchange listing sold",
-        "body": "Your listing sold and the buyer settled in full. The Exchange ledger carries the record of the sale, and your Exchange activity shows the settled amount and its breakdown.\n\n- The Exchange Broker"
+        "sender": "De Beursmakelaar",
+        "subject": "Je aanbieding op de Beurs is verkocht",
+        "body": "Je aanbieding is verkocht en de koper heeft volledig afgerekend. Het beursregister bevat het verslag van de verkoop, en je beursactiviteit toont het afgerekende bedrag met de bijbehorende uitsplitsing.\n\n- De Beursmakelaar"
       }
     },
     "itemSets": {
+      "ashveil": {
+        "name": "Ashveil-kledij",
+        "bonus2": "Lurker’s Strike treft 25 procent harder.",
+        "bonus4": "Je Veiled Edge-aanval treft driemaal zo hard, in plaats van tweemaal."
+      },
+      "benison_dawnweave": {
+        "name": "Benison Dageraadweefsel",
+        "bonus2": "De redding van Seraphic Vigil geneest 270, in plaats van 180. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "Wanneer Seraphic Vigil wordt geactiveerd, wordt zijn bondgenoot ook gedurende 10 sec. genezen voor 15 procent van diens maximale gezondheid."
+      },
       "boundstone_vanguard": {
         "name": "Bandsteen-voorhoede",
         "bonus3": "Verhoogt aanvals- en spreuksnelheid met 15%."
       },
+      "chronoweave": {
+        "name": "Aetherweefsel-Gewaden",
+        "bonus2": "Temporal Echo zet 50 procent van je Arcane-schade tegen één doel om in genezing. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "De afkoeltijd van Temporal Cascade wordt met 5 sec. verkort."
+      },
+      "cinderbark": {
+        "name": "Cinderbast-Bescherming",
+        "bonus2": "Sweeping Claws heeft 30 procent kans om een extra Old Blood op te slaan.",
+        "bonus4": "Marrowbreak treft 30 procent harder en zijn noodbescherming vervangt de aanval niet meer."
+      },
+      "cinderfang": {
+        "name": "Cinderfang-Sluier",
+        "bonus2": "De energieteruggave van Venom Ritual stijgt naar 20 per opbouwer.",
+        "bonus4": "De afkoeltijd van Venom Dart wordt verkort tot 4 sec."
+      },
+      "coldsight_trackers": {
+        "name": "Koudzicht-Verkenners",
+        "bonus2": "Measured Shot herstelt 5 extra Focus.",
+        "bonus4": "Kritieke treffers van Long Draw verlengen Cold Focus met 2 sec., tot maximaal 6 sec. per activering."
+      },
       "crownforged": {
         "name": "Bonewrought-Regalia",
         "bonus2": "Verhoogt aanvalskracht met 40.",
-        "bonus3": "Verhoogt kracht met 15, uithoudingsvermogen met 15 en aanvals- en spreuksnelheid met 15%.",
-        "bonus4": "Je kritieke wapentreffers splinteren het doelwit met Beensplinter, waardoor het 8 schade bloedt elke 2 sec gedurende 12 sec. Stapelt tot 3 keer."
+        "bonus4": "Je kritieke wapentreffers splinteren het doelwit met Beensplinter, waardoor het 8 schade bloedt elke 2 sec gedurende 12 sec. Stapelt tot 3 keer.",
+        "bonus6": "Verhoogt aanvals- en spreuksnelheid met 4% en Trefferkans met 3%. Kritieke treffers van je wapen splijten het doel met Bonesplinter, waardoor het 12 sec. lang elke 2 sec. 5 schade oploopt. Stapelt tot 3 keer."
+      },
+      "dawnforged": {
+        "name": "Dageraadgesmede Gewaden",
+        "bonus2": "Beacon of Light kopieert 55 procent van je directe genezingen. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "De versterkte Dawn’s Embrace van Radiant Resonance is onmiddellijk."
       },
       "deathlord": {
         "name": "Barrowlord-Strijduitrusting",
         "bonus2": "Verhoogt aanvalskracht met 40.",
-        "bonus3": "Verhoogt kracht met 15 en uithoudingsvermogen met 15.",
-        "bonus4": "Je kritieke wapentreffers hebben 50% kans om Grafmacht te verlenen, waardoor je aanvalskracht met 60 toeneemt gedurende 10 sec."
+        "bonus4": "Je kritieke wapentreffers hebben 50% kans om Grafmacht te verlenen, waardoor je aanvalskracht met 60 toeneemt gedurende 10 sec.",
+        "bonus6": "Verhoogt aanvals- en spreuksnelheid met 4% en Trefferkans met 3%. Kritieke treffers van je wapen splijten het doel met Bonesplinter, waardoor het 12 sec. lang elke 2 sec. 5 schade oploopt. Stapelt tot 3 keer."
+      },
+      "emberfury": {
+        "name": "Sintelwoede-Harnas",
+        "bonus2": "Je Enrage duurt 6 sec. in plaats van 4.",
+        "bonus4": "Bloodletting activeert altijd Enrage bij jou en de genezing ervan stijgt naar 8 procent van je maximale gezondheid."
+      },
+      "emberscreed": {
+        "name": "Gewaden van de Beloofde Sintels",
+        "bonus2": "Je Doctrine-link zet 10 procent meer van je Holy-schade om in genezing. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "Wanneer je Psalm of Warding volledig is verbruikt, is je volgende Scouring Hymn binnen 10 sec. onmiddellijk. Kan niet vaker dan eens per 15 sec. optreden."
+      },
+      "forgewall": {
+        "name": "Smederijmuur-Aegis",
+        "bonus2": "Iron Resolve zet woede om in 5 absorptie per punt in plaats van 4.",
+        "bonus4": "Het uitspreken van Schildbreuk verkort de resterende afkoelperiode van IJzeren Vastberadenheid met 2 sec."
+      },
+      "frostquench": {
+        "name": "Vorstblus-Weefsel",
+        "bonus2": "Kritieke treffers van Rimelance slaan een tweede Icicle op, tot een maximum van 5. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "Winterlash plaatst 3 Winter’s Chill-ladingen, in plaats van 2."
+      },
+      "gravebrand": {
+        "name": "Grafmerk-Regalia",
+        "bonus2": "De afkoeltijd van Reaping Command wordt met 2 sec. verkort. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "De unisono-aanvallen van Reaping Command richten 25 procent meer schade aan."
       },
       "greyjaw_stalker": {
         "name": "Uitrusting van de Grijskaak-sluiper",
         "bonus3": "Verhoogt aanvals- en spreuksnelheid met 15%."
       },
+      "grovespring": {
+        "name": "Bosbron-Kledij",
+        "bonus2": "Swiftmend verbruikt eerst je eigen Wildbloom of Second Bloom en geneest 25 procent meer. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "Overbloom oogst 75 procent van je resterende effecten en slaat daarna 1 Verdance op."
+      },
+      "hexthread": {
+        "name": "Hexdraad-Sluier",
+        "bonus2": "Needle of Fate verleent 2 extra Condemnation. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "Passing Sentence geeft 10 Condemnation terug."
+      },
+      "moonscorch": {
+        "name": "Maanschroeisel-Kledij",
+        "bonus2": "Moonseed kan Lunar Tempest per toepassing tweemaal verlengen, tot maximaal 12 sec. Opgelopen schade vertraagt het uitspreken van je spreuken niet meer.",
+        "bonus4": "Moonsurge en Sunwake treffen 25 procent harder."
+      },
       "necromancers": {
         "name": "Mournweave-Gewaden",
         "bonus2": "Verhoogt spreukkracht met 20. Opgelopen schade vertraagt je spreuken niet meer (100% weerstand tegen spreukvertraging).",
-        "bonus3": "Verhoogt intellect met 10 en uithoudingsvermogen met 10.",
-        "bonus4": "Je spreuken hebben 10% kans om Helder Bezweren te verlenen, waardoor je volgende spreuk gratis is."
+        "bonus4": "Je spreuken hebben 10% kans om Helder Bezweren te verlenen, waardoor je volgende spreuk gratis is.",
+        "bonus6": "Verhoogt aanvals- en spreuksnelheid met 4%. Je spreuken hebben 10% kans om Soulblaze te verlenen, waardoor spreukkracht gedurende 10 sec. met 25 toeneemt."
       },
       "nighttalon": {
         "name": "Direfang-Pels",
         "bonus2": "Verhoogt aanvalskracht met 40.",
-        "bonus3": "Verhoogt behendigheid met 15, kritieke kans met 2% en aanvals- en spreuksnelheid met 15%.",
-        "bonus4": "Je kritieke wapentreffers rijten een Rafelige Snee, waardoor het doelwit 6 schade bloedt elke 2 sec gedurende 12 sec. Stapelt tot 3 keer."
+        "bonus4": "Je kritieke wapentreffers rijten een Rafelige Snee, waardoor het doelwit 6 schade bloedt elke 2 sec gedurende 12 sec. Stapelt tot 3 keer.",
+        "bonus6": "Verhoogt aanvals- en spreuksnelheid met 4% en Trefferkans met 3%. Kritieke treffers van je wapen slaan een Ragged Gash, waardoor het doel 12 sec. lang elke 2 sec. 4 schade oploopt. Stapelt tot 3 keer."
+      },
+      "oathpyre": {
+        "name": "Eedvuur-Bastion",
+        "bonus2": "De kans van Vowkeeper Strike om Solar Reprisal te activeren stijgt naar 30 procent, en een aanval blokkeren activeert het 40 procent van de tijd.",
+        "bonus4": "Door Solar Reprisal te verbruiken krijg je 10 sec. lang een schild ter waarde van 6 procent van je maximale gezondheid."
+      },
+      "packlord_emberhide": {
+        "name": "Emberhuid van de Meester van de Roedel",
+        "bonus2": "De afkoeltijd van Pack Command wordt verkort tot 3 sec.",
+        "bonus4": "De kans van Pack Command om de afkoeltijd van Stampede te resetten stijgt naar 30%."
+      },
+      "pyroclast": {
+        "name": "Pyroclast-Regalia",
+        "bonus2": "Scald deelt altijd kritieke treffers uit aan doelen met 35% gezondheid of minder. Opgelopen schade vertraagt je spreuken niet meer.",
+        "bonus4": "Kritieke treffers van je Vuurspreuken buiten Phoenix Trance verkorten de resterende afkoeltijd ervan met 1,5 sec."
+      },
+      "ruincaller": {
+        "name": "Ruincaller-Gewaden",
+        "bonus2": "Conflagrate heeft 3 ladingen. Opgelopen schade vertraagt je spreuken niet meer.",
+        "bonus4": "Ruinbolt treft 20% harder."
+      },
+      "slagbreaker": {
+        "name": "Slagbreaker-Strijduitrusting",
+        "bonus2": "Redhand versterkt je volgende Maiming Strike met 30% per stapel in plaats van 20%.",
+        "bonus4": "Elke tweede keer dat je Redhand gebruikt, wordt de resterende afkoeltijd van Breachmaker met 3 sec. verkort."
+      },
+      "slagsnare": {
+        "name": "Slagsnare-Uitrusting",
+        "bonus2": "Gutting Strike genereert 20 Focus.",
+        "bonus4": "Woundrend die 3 Hunting Momentum verbruikt, bewaart ze. Dit kan niet vaker dan eenmaal per 8 sec. gebeuren."
+      },
+      "smolderstrike": {
+        "name": "Smolderstrike-Leder",
+        "bonus2": "Haymaker treft 20% harder.",
+        "bonus4": "Lights Out geeft 6 sec. van de resterende afkoeltijd van Mirrored Blades terug."
       },
       "soulflame": {
         "name": "Wraithfire-Regalia",
         "bonus2": "Verhoogt spreukkracht met 20. Opgelopen schade vertraagt je spreuken niet meer (100% weerstand tegen spreukvertraging).",
-        "bonus3": "Verhoogt intellect met 15, geest met 15 en aanvals- en spreuksnelheid met 15%.",
-        "bonus4": "Je spreuken hebben 10% kans om Zielevlam te verlenen, waardoor je spreukkracht met 40 toeneemt gedurende 10 sec."
+        "bonus4": "Je spreuken hebben 10% kans om Zielevlam te verlenen, waardoor je spreukkracht met 40 toeneemt gedurende 10 sec.",
+        "bonus6": "Verhoogt aanvals- en spreuksnelheid met 4%. Je spreuken hebben 10% kans om Soulblaze toe te kennen, wat spreukkracht met 25 verhoogt gedurende 10 sec."
+      },
+      "springmender": {
+        "name": "Springmender-Schubben",
+        "bonus2": "De afkoeltijd van Tidecall wordt met 4 sec. verkort. Opgelopen schade vertraagt je spreuken niet meer.",
+        "bonus4": "Cascading Mend bereikt een vierde bondgenoot en oogst Mending Currents op 150%."
+      },
+      "stonehearth": {
+        "name": "Stonehearth-Bastion",
+        "bonus2": "Terwijl je Stonebound bent, kost Stormcast Mending Waters geen mana en geneest het 25% meer.",
+        "bonus4": "Terwijl je Stonebound bent, geneest het voltooien van een cadans je voor 3% van je maximale gezondheid."
       },
       "stormcallers": {
         "name": "Galecall-Gewaden",
         "bonus2": "Verhoogt spreukkracht met 20. Opgelopen schade vertraagt je spreuken niet meer (100% weerstand tegen spreukvertraging).",
-        "bonus3": "Verhoogt intellect met 15, geest met 15 en aanvals- en spreuksnelheid met 15%.",
-        "bonus4": "Je spreuken hebben 10% kans om Zielevlam te verlenen, waardoor je spreukkracht met 40 toeneemt gedurende 10 sec."
+        "bonus4": "Je spreuken hebben 10% kans om Zielevlam te verlenen, waardoor je spreukkracht met 40 toeneemt gedurende 10 sec.",
+        "bonus6": "Verhoogt aanvals- en spreuksnelheid met 4%. Je spreuken hebben 10% kans om Soulblaze toe te kennen, wat spreukkracht met 25 verhoogt gedurende 10 sec."
+      },
+      "stormkindled": {
+        "name": "Stormkindled-Regalia",
+        "bonus2": "Unleash Weapon op Pyrebrand kent 3 Thunder toe. Opgelopen schade vertraagt je spreuken niet meer.",
+        "bonus4": "De bonus van Earthen Jolt per Thunder stijgt naar 30%."
       },
       "vale_arcanist": {
         "name": "Gewaden van de Dal-arcanist",
         "bonus3": "Verhoogt aanvals- en spreuksnelheid met 15%."
+      },
+      "vesperash": {
+        "name": "Vesperash-Sluier",
+        "bonus2": "De afkoeltijd van Call Tithefiend wordt met 6 sec. verkort. Opgelopen schade vertraagt je spreuken niet meer.",
+        "bonus4": "Het oproepen van je Tithefiend reset de afkoeltijd van Mindfracture, en de demon geeft per treffer tweemaal zoveel mana terug."
       },
       "warfare_ashstalker": {
         "name": "Uitrusting van de Asjager",
@@ -17779,11 +19221,26 @@ export const nl_NL: EnTranslations = {
         "bonus4": "Verhoogt de Oorlogvoering-Aanvalswaardering met 40, en beheersing die vijandige spelers op u leggen duurt 15% korter.",
         "bonus7": "Verhoogt de Oorlogvoering-Aanvals- en Verdedigingswaardering met 80. Uw spreuken hebben 15% kans om Doornwacht te verlenen, wat het ontwijken 6 sec lang met 15% verhoogt."
       },
+      "warspirit_emberscale": {
+        "name": "Warspirit-Emberscale",
+        "bonus2": "Ancestral Strike brengt je cadans 3 stappen vooruit.",
+        "bonus4": "Ancestral Strike treft 30% harder."
+      },
+      "wildfang_emberhide": {
+        "name": "Wildfang-Emberhuid",
+        "bonus2": "Redharvest herstelt 45 energie, verhoogd van 30.",
+        "bonus4": "Redharvest brengt een nieuwe Flense aan op het doelwit."
+      },
       "wyrmshadow": {
         "name": "Nightfang-Gewaden",
         "bonus2": "Verhoogt aanvalskracht met 40.",
-        "bonus3": "Verhoogt behendigheid met 15 en kritieke kans met 2%.",
-        "bonus4": "Je kritieke wapentreffers hebben 50% kans om Slagtandstorm te verlenen, waardoor je aanvalssnelheid met 25% toeneemt gedurende 8 sec."
+        "bonus4": "Je kritieke wapentreffers hebben 50% kans om Slagtandstorm te verlenen, waardoor je aanvalssnelheid met 25% toeneemt gedurende 8 sec.",
+        "bonus6": "Verhoogt aanvals- en spreuksnelheid met 4% en Hit met 3%. Kritieke treffers met je wapen scheuren een Ragged Gash, waardoor het doelwit gedurende 12 sec. elke 2 sec. 4 schade oploopt. Stapelt tot 3 keer."
+      },
+      "zealfire": {
+        "name": "Zealfire-Strijduitrusting",
+        "bonus2": "Final Edict en Dawnfall verkorten elkaars resterende afkoeltijd met 3 sec. in plaats van 2.",
+        "bonus4": "Hammer of Wrath die onder Dawn's Wrath wordt uitgesproken, treft 40% harder in plaats van 20%."
       }
     }
   },

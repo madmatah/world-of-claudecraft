@@ -38,7 +38,7 @@ const ACCEPTED_ART_SHA256 = '3d8cb36726050e3a708720b650744005f4ce23d3ac49c032376
 const SECOND_PASS_RECORD =
   'docs/achievements/release-v039-icon-art-second-pass-2026-08-16/accepted-art.json';
 const SECOND_PASS_RECORD_SHA256 =
-  '42b1766c855357277f6ff60a92f6a8157099aec84d6e358b5db626c27e7bfc0a';
+  '95d1b967dd1f9601d1a207b29a3ea5069d0f03fbe94d20a424e69b05276e23d0';
 const EVIDENCE = {
   'icon-art-before-after-desktop.png': {
     sha256: '61d19fb321f2b30eb3749e0966f26efea0fa4df53edae4b253cfd70edb82cd7a',
@@ -60,7 +60,6 @@ const inventoryController = new ActionBarController({
   talentSpec: () => null,
   knownAbilityIds: () => [],
   hasAura: () => false,
-  isInSportMatch: () => false,
   showAttackButton: () => true,
 });
 
@@ -328,8 +327,11 @@ describe('release v0.39 icon-art second-pass lineage', () => {
         retriedAssets: ['dismiss_pet'],
       },
       runtimeClosure: {
-        abilities: { live: 412, painted: 412 },
-        hotbarItems: { live: 72, painted: 72 },
+        // 402: the ten Vale Cup sport abilities retired with the New
+        // Eastbrook program's Sowfield demolition, plus the release arm's
+        // two new abilities riding the v0.40.0 sync merge.
+        abilities: { live: 402, painted: 402 },
+        hotbarItems: { live: 73, painted: 73 },
         fixedActions: { painted: 11 },
         mobAuraRouting: { paintedFamilies: 44, exactRuntimeIds: 89 },
         fiesta: { augments: 20, powerups: 4, painted: 24 },
@@ -420,8 +422,8 @@ describe('release v0.39 icon-art second-pass lineage', () => {
     expect(new Set(liveAbilityIds).size, 'live ability ids remain unique').toBe(
       liveAbilityIds.length,
     );
-    expect(liveAbilityIds, 'live production ability inventory').toHaveLength(415);
-    expect(sealedAbilityIds, 'the ability inventory the record sealed').toHaveLength(412);
+    expect(liveAbilityIds, 'live production ability inventory').toHaveLength(405);
+    expect(sealedAbilityIds, 'the ability inventory the record sealed').toHaveLength(402);
     expect(
       sealedAbilityIds.filter((id) => !paintedAbilityIds.has(id)),
       'every sealed ability resolves through production to committed painted art',
@@ -438,7 +440,7 @@ describe('release v0.39 icon-art second-pass lineage', () => {
     expect(new Set(liveHotbarItemIds).size, 'live hotbar item ids remain unique').toBe(
       liveHotbarItemIds.length,
     );
-    expect(liveHotbarItemIds, 'production isHotbarItemId inventory').toHaveLength(72);
+    expect(liveHotbarItemIds, 'production isHotbarItemId inventory').toHaveLength(73);
     expect(
       liveHotbarItemIds.filter((id) => !paintedHotbarItemIds.has(id)),
       'every production-eligible hotbar item resolves to committed painted art',

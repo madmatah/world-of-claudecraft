@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const pt_BR: Record<string, string> = {
+  'error.flagActiveExists': 'esta conta já possui uma sinalização em aberto desse tipo',
+  'wealth.largeMovementsUnavailable':
+    'não foi possível carregar as movimentações bancárias de grande valor (a leitura do registro expirou); o detalhamento de ouro acima está completo',
   'error.guildBankDeleting':
     'Esta guilda está sendo excluída, então seu banco está fechado. Nada foi alterado.',
   'error.guildBankItemRequired': 'Informe o id do item que você espera encontrar nesse espaço.',
@@ -309,6 +312,8 @@ export const pt_BR: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Desafios de carteira limitados',
   'usage.metric.walletLinkRequest': 'Solicitações de vinculação de carteira',
   'usage.metric.walletLinkFailure': 'Falhas ao vincular carteira',
+  'usage.metric.walletUnlinkFailure': 'Recusas ao desvincular carteira',
+  'usage.metric.walletUnlinkSuccess': 'Desvinculações de carteira concluídas',
   'usage.metric.walletLinkRateLimited': 'Vinculações de carteira limitadas',
   'usage.metric.cardPublishRequest': 'Solicitações de publicação de cartão do jogador',
   'usage.metric.cardPublishRejected': 'Publicações de cartão rejeitadas',
@@ -1171,4 +1176,6 @@ export const pt_BR: Record<string, string> = {
   'wealth.purse': 'Nos personagens:',
   'wealth.total': 'Total:',
   'wealth.updatedAt': 'atualizado {when}',
+  'usage.metric.walletHandoffAuthorizationEvicted': 'Expulsões de repasse de carteira do desktop',
+  'usage.metric.walletHandoffCreateRejected': 'Rejeições de repasse de carteira do desktop',
 };

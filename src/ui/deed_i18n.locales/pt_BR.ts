@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: 'Pronto para uma Aventura',
+    desc: 'Forme-se na Costa da Provação: termine cada lição na ilha e depois toque o sino da balsa para voltar a Eastbrook.',
+  },
   exp_dawnhold_castle: {
     name: 'Uma Porta Aberta no Jardim',
     desc: 'Visite o Castelo Dawnhold e passeie por seus salões ensolarados do jardim.',
@@ -1041,5 +1045,34 @@ export const table: DeedLocaleTable = {
     name: 'Santuário iluminado',
     desc: "Ilumine a página Heroico: Santuário do Gravewyrm d'O Relicário.",
     title: 'Luz do Santuário',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Primeiro Espaço',
+    desc: 'Desbloqueie seu primeiro espaço de bolsa do banco.',
+  },
+  soc_four_bags_deep: {
+    name: 'Todos os Espaços',
+    desc: 'Desbloqueie todos os quatro espaços de bolsa do banco.',
+  },
+  dgn_ignivar: {
+    name: 'O Arauto Cai',
+    desc: 'Derrote Ignivar, Herald of the Last Flame, na Crucible of the Last Spring.',
+  },
+  dgn_ignivar_heroic: {
+    name: 'Heroico: O Arauto Cai',
+    desc: 'Derrote Ignivar, Herald of the Last Flame, na dificuldade Heroica.',
+  },
+  dgn_varkhul: {
+    name: 'A Forja Esfria',
+    desc: 'Derrote Varkhul, Forgefather of the Last Flame, na Inner Crucible.',
+  },
+  dgn_varkhul_heroic: {
+    name: 'Heroico: A Forja Esfria',
+    desc: 'Derrote Varkhul, Forgefather of the Last Flame, na dificuldade Heroica.',
+  },
+  dgn_varkhul_flawless: {
+    name: 'Nenhuma Brasa Perdida',
+    desc: 'Derrote Varkhul, Forgefather of the Last Flame, na dificuldade Heroica sem que um único membro da raide morra.',
+    title: 'o Incólume',
   },
 };

@@ -7,9 +7,10 @@ import {
   BG_GRAVEYARDS,
   BG_POWER_RUNES,
   BG_SPEED_RUNES,
+  battlegroundColliders,
   bgFieldPlanWalls,
 } from '../src/sim/battleground_layout';
-import { resolvePosition } from '../src/sim/colliders';
+import { colliderTopAt, moverHeight, resolvePosition } from '../src/sim/colliders';
 import { GREATER_INVISIBILITY_DR_AURA_ID } from '../src/sim/combat/greater_invisibility';
 import { offerResurrection } from '../src/sim/combat/resurrection_offer';
 import { battlegroundOrigin, DUNGEON_X_THRESHOLD, instanceOrigin, isBgPos } from '../src/sim/data';
@@ -170,6 +171,85 @@ function forceIntoBgWallTrap(sim: Sim, match: BgMatch, pid: number): Entity {
   sim.ctx.rebucket(e);
   const resolved = resolvePosition(sim.cfg.seed, e.pos.x, e.pos.z, PLAYER_BODY_RADIUS);
   expect(Math.hypot(resolved.x - e.pos.x, resolved.z - e.pos.z)).toBeGreaterThan(0.01);
+  return e;
+}
+
+function forceReportedBgWallContactShortcut(
+  sim: Sim,
+  match: BgMatch,
+  pid: number,
+  heldMovement = true,
+): Entity {
+  const origin = battlegroundOrigin(match.slot);
+  const e = must(sim.entities.get(pid), 'entity');
+  e.pos = sim.ctx.groundPos(origin.x - 48.5, origin.z - 133.5);
+  e.prevPos = { ...e.pos };
+  e.facing = -Math.PI / 2;
+  e.prevFacing = e.facing;
+  e.vx = 0;
+  e.vy = 0;
+  e.vz = 0;
+  e.onGround = true;
+  e.jumping = false;
+  e.inCombat = false;
+  e.combatTimer = 999;
+  const meta = must(sim.meta(pid), 'player meta');
+  meta.moveInput.forward = heldMovement;
+  sim.ctx.rebucket(e);
+  expectClearPlayerPosition(sim, e);
+  expect(e.pos.x - origin.x).toBeCloseTo(-48.5, 6);
+  expect(e.pos.z - origin.z).toBeCloseTo(-133.5, 6);
+  return e;
+}
+
+function forceOntoBgStandableCollider(sim: Sim, match: BgMatch, pid: number): Entity {
+  const origin = battlegroundOrigin(match.slot);
+  const standable = must(
+    battlegroundColliders().find((candidate) => {
+      if (!candidate.standable || candidate.moveTopY === undefined) return false;
+      const x = origin.x + candidate.x;
+      const z = origin.z + candidate.z;
+      const y = colliderTopAt(candidate, candidate.x, candidate.z);
+      const fullHeight = resolvePosition(sim.cfg.seed, x, z, PLAYER_BODY_RADIUS);
+      const heightAware = resolvePosition(
+        sim.cfg.seed,
+        x,
+        z,
+        PLAYER_BODY_RADIUS,
+        false,
+        undefined,
+        { y, lift: 0 },
+      );
+      return (
+        Math.hypot(fullHeight.x - x, fullHeight.z - z) > 0.01 &&
+        Math.hypot(heightAware.x - x, heightAware.z - z) <= 1e-6
+      );
+    }),
+    'clear battleground standable collider',
+  );
+  const e = must(sim.entities.get(pid), 'entity');
+  e.pos = {
+    x: origin.x + standable.x,
+    y: colliderTopAt(standable, standable.x, standable.z),
+    z: origin.z + standable.z,
+  };
+  e.prevPos = { ...e.pos };
+  e.vx = 0;
+  e.vy = 0;
+  e.vz = 0;
+  e.onGround = true;
+  e.jumping = false;
+  sim.ctx.rebucket(e);
+  const resolved = resolvePosition(
+    sim.cfg.seed,
+    e.pos.x,
+    e.pos.z,
+    PLAYER_BODY_RADIUS,
+    false,
+    undefined,
+    moverHeight(e),
+  );
+  expect(Math.hypot(resolved.x - e.pos.x, resolved.z - e.pos.z)).toBeLessThanOrEqual(1e-6);
   return e;
 }
 
@@ -1250,6 +1330,108 @@ describe('Thornhollow Fields: the graveyard rite', () => {
     expect(sim.meta(pid)?.pendingUnstuck).toBeNull();
   });
 
+  it('Unstuck accepts the reported legal battleground wall-contact rescue', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    const pid = match.teams[0][0];
+    const e = forceReportedBgWallContactShortcut(sim, match, pid);
+    const meta = must(sim.meta(pid), 'player meta');
+
+    expect(sim.unstuck(pid)).toBe(true);
+    expect(sim.drainEvents()).toContainEqual(
+      expect.objectContaining({
+        type: 'unstuck',
+        phase: 'started',
+        pid,
+      }),
+    );
+    const events: SimEvent[] = [];
+    for (let i = 0; i < UNSTUCK_COUNTDOWN_SECONDS * 20; i++) events.push(...sim.tick());
+
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'unstuck', phase: 'completed', pid }),
+    );
+    expect(meta.pendingUnstuck).toBeNull();
+    expect(sim.bgMatchFor(pid)).toBe(match);
+    expect(inGraveyard(sim, match, pid, 0)).toBe(true);
+    expectClearPlayerPosition(sim, e);
+  });
+
+  it('Unstuck refuses idle clear wall-adjacent battleground footing as a shortcut', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    const pid = match.teams[0][0];
+    const e = forceReportedBgWallContactShortcut(sim, match, pid, false);
+    const meta = must(sim.meta(pid), 'player meta');
+
+    expect(sim.unstuck(pid)).toBe(false);
+    expect(sim.drainEvents()).toContainEqual(
+      expect.objectContaining({
+        type: 'unstuck',
+        phase: 'blocked',
+        reason: 'competitive',
+        pid,
+      }),
+    );
+    expect(meta.pendingUnstuck).toBeNull();
+    expect(sim.bgMatchFor(pid)).toBe(match);
+    expectClearPlayerPosition(sim, e);
+  });
+
+  it('Unstuck still refuses an idle clear battleground fighter as a shortcut', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    const pid = match.teams[0][0];
+    const e = must(sim.entities.get(pid), 'entity');
+    const meta = must(sim.meta(pid), 'player meta');
+    e.vx = 0;
+    e.vy = 0;
+    e.vz = 0;
+    e.onGround = true;
+    e.jumping = false;
+    meta.moveInput.forward = false;
+    meta.moveInput.back = false;
+    meta.moveInput.strafeLeft = false;
+    meta.moveInput.strafeRight = false;
+    meta.moveInput.jump = false;
+    expectClearPlayerPosition(sim, e);
+
+    expect(sim.unstuck(pid)).toBe(false);
+    expect(sim.drainEvents()).toContainEqual(
+      expect.objectContaining({
+        type: 'unstuck',
+        phase: 'blocked',
+        reason: 'competitive',
+        pid,
+      }),
+    );
+    expect(meta.pendingUnstuck).toBeNull();
+  });
+
+  it('Unstuck does not treat clear standable battleground footing as a wall trap', () => {
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    const pid = match.teams[0][0];
+    forceOntoBgStandableCollider(sim, match, pid);
+    const meta = must(sim.meta(pid), 'player meta');
+    meta.moveInput.forward = true;
+
+    expect(sim.unstuck(pid)).toBe(false);
+    expect(sim.drainEvents()).toContainEqual(
+      expect.objectContaining({
+        type: 'unstuck',
+        phase: 'blocked',
+        reason: 'moving',
+        pid,
+      }),
+    );
+    expect(meta.pendingUnstuck).toBeNull();
+  });
+
   it('combat still cancels a battleground wall-trap Unstuck countdown', () => {
     const { sim, pids } = tenInQueue();
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
@@ -1279,16 +1461,8 @@ describe('Thornhollow Fields: the graveyard rite', () => {
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const pid = match.teams[0][0];
-    const e = must(sim.entities.get(pid), 'entity');
     const origin = battlegroundOrigin(match.slot);
-    e.pos = sim.ctx.groundPos(origin.x + 50, origin.z);
-    e.prevPos = { ...e.pos };
-    e.vx = 0;
-    e.vy = 0;
-    e.vz = 0;
-    e.onGround = true;
-    e.jumping = false;
-    sim.ctx.rebucket(e);
+    const e = forceIntoBgWallTrap(sim, match, pid);
 
     const originalPlot = { ...BG_GRAVEYARDS[0] };
     Object.assign(BG_GRAVEYARDS[0], { x: 50, z: -140, hw: 0.25, hd: 0.25 });
@@ -1316,22 +1490,12 @@ describe('Thornhollow Fields: the graveyard rite', () => {
     }
   });
 
-  it('Unstuck relocates a fighter trapped on their indexed spawn point', () => {
+  it('Unstuck relocates a fighter trapped in battleground collision', () => {
     const { sim, pids } = tenInQueue();
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const pid = match.teams[0][0];
-    const e = must(sim.entities.get(pid), 'entity');
-    const origin = battlegroundOrigin(match.slot);
-    const trapped = BG_BASES[0].spawns[0];
-    e.pos = sim.ctx.groundPos(origin.x + trapped.x, origin.z + trapped.z);
-    e.prevPos = { ...e.pos };
-    e.vx = 0;
-    e.vy = 0;
-    e.vz = 0;
-    e.onGround = true;
-    e.jumping = false;
-    sim.ctx.rebucket(e);
+    const e = forceIntoBgWallTrap(sim, match, pid);
     const before = { ...e.pos };
 
     expect(sim.unstuck(pid)).toBe(true);
@@ -1555,6 +1719,29 @@ describe('Thornhollow Fields: deliberate pickup + automatic return', () => {
     sim.tick();
     expect(match.flags[1].state).toBe('carried');
     expect(match.flags[1].carrier).toBe(raider);
+  });
+
+  it('a flag entity never becomes generically pickable, however long the match runs', () => {
+    // Regression: the flag ships lootable=false (spawnFlagEntity), but its
+    // respawnTimer defaulted to 0 like every ground object, and the generic
+    // per-tick object sweep (sim.ts) flips lootable back true once that timer
+    // crosses zero, one tick after spawn. Fully dormant while the general
+    // Interact key always short-circuited to bgFlagAction during a live
+    // match (see bg_flag_interact.ts), but the flag then silently outranked
+    // a real interactable standing farther away in tryNearbyInteraction's
+    // object scan (a Warlock's Soulwell, say), because it is CLOSER and
+    // reads lootable=true, and picking it up is a harmless no-op
+    // (objectItemId is null) that swallows the press with zero feedback.
+    const { sim, pids } = tenInQueue();
+    const match = must(sim.bgMatchFor(pids[0]), 'bg match');
+    toActive(sim, match);
+    for (let i = 0; i < 200; i++) sim.tick();
+    const flagEntity = must(sim.entities.get(match.flags[0].entityId), 'flag entity');
+    // The load-bearing assertion: pickUpObject itself would return false here
+    // either way (its objectItemId===null guard fires regardless of
+    // lootable), so it cannot distinguish fixed from unfixed. lootable is
+    // what tryNearbyInteraction's object scan actually keys its priority on.
+    expect(flagEntity.lootable).toBe(false);
   });
 
   it('the flag action errors politely with no flag in reach and never grabs the OWN flag', () => {
@@ -2510,7 +2697,7 @@ describe('Thornhollow Fields: review-hardening pins', () => {
 
   it('the honor DR window round-trips through CharacterState and clears on UTC rollover', () => {
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const winner = match.teams[0][0];
@@ -2518,12 +2705,12 @@ describe('Thornhollow Fields: review-hardening pins', () => {
     const daily = must(must(sim.meta(winner), 'player meta').honorArenaDaily, 'honor daily');
     expect(daily.bgResultsByOpponent).toBeTruthy();
     expect(Object.values(must(daily.bgResultsByOpponent, 'bg results'))).toEqual([1]);
-    expect(daily.date).toBe('2026-07-26');
+    expect(daily.date).toBe('2026-07-22');
     // ROLLOVER: the next award on a new UTC day re-keys the window and pays
     // the full price again (the reset arm in pvp/honor.ts dailyWindow)
     const honorAfterDayOne = must(sim.meta(winner), 'player meta').honor;
     for (let i = 0; i < 20 * (BG_END_HOLD + 1); i++) sim.tick(); // run out the result screen
-    sim.resetDay = '2026-07-27';
+    sim.resetDay = '2026-07-23';
     for (const pid of pids) sim.bgQueueJoin(pid);
     sim.tick();
     acceptAllBgOffers(sim);
@@ -2533,7 +2720,7 @@ describe('Thornhollow Fields: review-hardening pins', () => {
     for (let cap = 0; cap < BG_CAPS_TO_WIN; cap++) captureOnce(sim, rematch, rematch.teams[0][0]);
     const team0Won = rematch.teams[0].includes(rewinner);
     const meta = must(sim.meta(rewinner), 'player meta');
-    expect(must(meta.honorArenaDaily, 'honor daily').date).toBe('2026-07-27'); // window re-keyed
+    expect(must(meta.honorArenaDaily, 'honor daily').date).toBe('2026-07-23'); // window re-keyed
     expect(
       Object.values(must(meta.honorArenaDaily, 'honor daily').bgResultsByOpponent ?? {}),
     ).toEqual([1]);
@@ -2967,7 +3154,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
 
   it('pays exactly once per reset day, under its own honor reason', () => {
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const winner = match.teams[0][0];
@@ -2993,7 +3180,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
 
   it('a SECOND win the same day pays the base award only', () => {
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const winner = match.teams[0][0];
@@ -3020,7 +3207,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
 
   it('the UTC rollover re-arms it, and the claim survives a save/load round trip', () => {
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const winner = match.teams[0][0];
@@ -3031,7 +3218,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
     const state = must(sim.serializeCharacter(winner), 'character');
     expect(must(state.honorArenaDaily, 'honor daily').bgFirstWinClaimed).toBe(true);
     const sim2 = makeWorld();
-    sim2.resetDay = '2026-07-26';
+    sim2.resetDay = '2026-07-22';
     const reloaded = sim2.addPlayer('warrior', 'Reload', { state });
     expect(
       must(must(sim2.meta(reloaded), 'player meta').honorArenaDaily, 'honor daily')
@@ -3042,7 +3229,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
       'still spent after a relog',
     ).toBe(false);
     // ...and the NEXT day re-arms it without any award having run.
-    sim2.resetDay = '2026-07-27';
+    sim2.resetDay = '2026-07-23';
     expect(must(sim2.bgInfoFor(reloaded), 'bg info').firstWinBonusReady).toBe(true);
 
     // A clean character writes NOTHING (byte-stable saves): absent until claimed.
@@ -3053,7 +3240,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
     ).toBeUndefined();
 
     for (let i = 0; i < 20 * (BG_END_HOLD + 1); i++) sim.tick();
-    sim.resetDay = '2026-07-27';
+    sim.resetDay = '2026-07-23';
     expect(
       must(sim.bgInfoFor(winner), 'bg info').firstWinBonusReady,
       'a new day re-arms the chip',
@@ -3106,9 +3293,28 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
     ).toBe(true);
   });
 
+  it('reports the Double Honor Weekend window on the bg readout', () => {
+    const sim = makeWorld();
+    const pid = sim.addPlayer('warrior', 'Chip');
+    sim.resetDay = '2026-08-08'; // a Saturday
+    expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(true);
+    sim.resetDay = '2026-08-09'; // Sunday: still inside the weekend window
+    expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(true);
+    sim.resetDay = '2026-08-10'; // Monday: the chip drops on the rollover
+    expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(false);
+    // The 12-hour early open: Friday, once the host's lead probe reads Saturday.
+    sim.resetDay = '2026-08-07';
+    sim.eventLeadDay = '2026-08-08';
+    expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(true);
+    // No host calendar, no event (headless and parity runs stay untouched).
+    sim.resetDay = '';
+    sim.eventLeadDay = '';
+    expect(must(sim.bgInfoFor(pid), 'bg info').doubleHonorActive).toBe(false);
+  });
+
   it('an UNRATED dev match never claims it', () => {
     const sim = makeWorld();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const pids: number[] = [];
     for (let i = 0; i < 4; i++) {
       const p = sim.addPlayer('warrior', `D${i}`);
@@ -3136,7 +3342,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
 
   it('a FORFEIT win never claims it (forfeits pay no honor at all)', () => {
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const winner = match.teams[0][0];
@@ -3152,7 +3358,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
 
   it('a DRAW never claims it', () => {
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const pid = match.teams[0][0];
@@ -3167,7 +3373,7 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
 
   it('the bgEnd event carries the bonus so the finish surface can name it', () => {
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const winner = match.teams[0][0];
@@ -3194,17 +3400,17 @@ describe('Thornhollow Fields: the first win of the day pays a bonus', () => {
     // stored date reads as re-armed, and the stored date is left for the next
     // real award to roll over.
     const { sim, pids } = tenInQueue();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const match = must(sim.bgMatchFor(pids[0]), 'bg match');
     toActive(sim, match);
     const winner = match.teams[0][0];
     playedOutWin(sim, match, winner);
-    sim.resetDay = '2026-07-27';
+    sim.resetDay = '2026-07-23';
     expect(must(sim.bgInfoFor(winner), 'bg info').firstWinBonusReady).toBe(true);
     expect(
       must(must(sim.meta(winner), 'player meta').honorArenaDaily, 'honor daily').date,
       'the read wrote nothing',
-    ).toBe('2026-07-26');
+    ).toBe('2026-07-22');
     expect(
       must(must(sim.meta(winner), 'player meta').honorArenaDaily, 'honor daily').bgFirstWinClaimed,
     ).toBe(true);
@@ -3527,7 +3733,7 @@ describe('Thornhollow Fields: the honor award reports what it paid', () => {
     // The bgEnd event needs the BONUS on its own (the finish surface names it),
     // and the caller needs the total to stay honest about what was credited.
     const sim = makeWorld();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const pid = sim.addPlayer('warrior', 'Champ');
     const meta = must(sim.meta(pid), 'player meta');
 
@@ -3553,7 +3759,7 @@ describe('Thornhollow Fields: the honor award reports what it paid', () => {
     // grantHonor credits zero once a purse is at the honor ceiling; spending the
     // day's one bonus for zero honor is the wrong way to lose that race.
     const sim = makeWorld();
-    sim.resetDay = '2026-07-26';
+    sim.resetDay = '2026-07-22';
     const pid = sim.addPlayer('warrior', 'Capped');
     const meta = must(sim.meta(pid), 'player meta');
     meta.honor = Number.MAX_SAFE_INTEGER;
@@ -3636,6 +3842,73 @@ describe('Thornhollow Fields: a queued solo backfills a deserted seat', () => {
 
     expect(match.teams[0], 'the younger eligible solo filled the seat').toContain(fresh);
     expect(match.teams[0]).toHaveLength(BG_TEAM_SIZE);
+  });
+
+  it('keeps sweeping past a match a solo declined, so a second short match still gets offered them', () => {
+    // Review catch: an empty eligible list was read as proof no LATER match
+    // could do better either, which only holds for the four match-independent
+    // filters. backfillDeclined is scoped to the one match that made the offer,
+    // so a solo who turned down match A's seat blanked match A's list on every
+    // following tick, and that used to abort the whole sweep: match B stayed a
+    // fighter short forever even though the same solo was still fair game for it.
+    const sim = makeWorld();
+    const classes = ['warrior', 'mage', 'priest', 'rogue', 'hunter'] as const;
+    const pids: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const pid = sim.addPlayer(classes[i % 5], `P${i}`);
+      tp(sim, pid, (i % 5) * 2 - 4, -40);
+      must(sim.entities.get(pid), 'entity').level = 20;
+      pids.push(pid);
+    }
+    for (const pid of pids) sim.bgQueueJoin(pid);
+    sim.tick(); // both 5v5 pops land as offers in the same tick
+    acceptAllBgOffers(sim);
+
+    const matches: BgMatch[] = [];
+    const seenMatches = new Set<BgMatch>();
+    for (const m of sim.ctx.bgMatches.values()) {
+      if (seenMatches.has(m)) continue;
+      seenMatches.add(m);
+      matches.push(m);
+    }
+    expect(matches, 'twenty queued solos really seat two concurrent matches').toHaveLength(2);
+    const [matchA, matchB] = matches;
+    toActive(sim, matchA);
+    toActive(sim, matchB);
+
+    // Both matches go a fighter down.
+    bgResolveDesertion(sim.ctx, matchA.teams[0][4]);
+    bgResolveDesertion(sim.ctx, matchB.teams[0][4]);
+    expect(matchA.teams[0]).toHaveLength(BG_TEAM_SIZE - 1);
+    expect(matchB.teams[0]).toHaveLength(BG_TEAM_SIZE - 1);
+
+    // The lone queued solo is offered match A's seat first (the older match)...
+    const solo = sim.addPlayer('warrior', 'Solo');
+    tp(sim, solo, 6, -40);
+    must(sim.entities.get(solo), 'entity').level = 20;
+    sim.bgQueueJoin(solo);
+    sim.tick();
+    const firstOffer = must(bgProposalFor(sim.ctx, solo), 'match A offer');
+    expect(firstOffer.backfill?.match, 'match A is offered first').toBe(matchA);
+    bgRespond(sim.ctx, false, solo); // ...and turns it down.
+
+    // The next tick used to stop dead on match A's now-empty eligible list.
+    sim.tick();
+    const secondOffer = must(bgProposalFor(sim.ctx, solo), 'match B offer after the decline');
+    expect(
+      secondOffer.backfill?.match,
+      'the sweep kept going and match B offered the same solo the seat',
+    ).toBe(matchB);
+
+    acceptBackfillOffer(sim, solo);
+    expect(matchB.teams[0], 'match B got its fifth back').toHaveLength(BG_TEAM_SIZE);
+    expect(matchA.teams[0], 'match A never got a second chance at the decliner').toHaveLength(
+      BG_TEAM_SIZE - 1,
+    );
+    expect(
+      sim.ctx.bgProposals.some((p) => p.backfill?.match === matchA),
+      'match A holds no re-offer to the decliner',
+    ).toBe(false);
   });
 
   // The leaver already pays (bgResolveDesertion charges rating and an L). This

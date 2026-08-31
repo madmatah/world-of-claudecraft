@@ -45,7 +45,7 @@ import {
 import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { TICK_RATE } from '../src/sim/types';
 import { installScriptedRng, type ScriptedRng } from './helpers/realm_racers_rng';
-import { addAt, makeWorld, teleport } from './vale_cup_util';
+import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 /** The circuit a QUEUED race runs on, which is what every live case here seats. */
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];

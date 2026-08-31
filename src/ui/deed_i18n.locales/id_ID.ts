@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: 'Siap Berpetualang',
+    desc: 'Lulus dari Pesisir Pembuktian: selesaikan setiap pelajaran di pulau itu, lalu bunyikan lonceng feri pulang ke Eastbrook.',
+  },
   exp_dawnhold_castle: {
     name: 'Pintu Terbuka di Taman',
     desc: 'Kunjungi Kastil Dawnhold dan jelajahi aula tamannya yang bermandikan cahaya.',
@@ -1038,5 +1042,34 @@ export const table: DeedLocaleTable = {
     name: 'Sanktum Diterangi',
     desc: 'Terangi halaman Heroik: Sanktum Gravewyrm pada Relikuari.',
     title: 'Cahaya Sanktum',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Penata Brankas',
+    desc: 'Buka slot tas bank pertamamu.',
+  },
+  soc_four_bags_deep: {
+    name: 'Keempat Tas',
+    desc: 'Buka keempat slot tas bank.',
+  },
+  dgn_ignivar: {
+    name: 'Sang Utusan Tumbang',
+    desc: 'Kalahkan Ignivar, Utusan Api Terakhir, di Tungku Mata Air Terakhir.',
+  },
+  dgn_ignivar_heroic: {
+    name: 'Heroik: Sang Utusan Tumbang',
+    desc: 'Kalahkan Ignivar, Utusan Api Terakhir, pada tingkat kesulitan Heroik.',
+  },
+  dgn_varkhul: {
+    name: 'Tungku Mendingin',
+    desc: 'Kalahkan Varkhul, Bapak Penempa Api Terakhir, di Tungku Dalam.',
+  },
+  dgn_varkhul_heroic: {
+    name: 'Heroik: Tungku Mendingin',
+    desc: 'Kalahkan Varkhul, Bapak Penempa Api Terakhir, pada tingkat kesulitan Heroik.',
+  },
+  dgn_varkhul_flawless: {
+    name: 'Tak Sebutir Bara Pun Hilang',
+    desc: 'Kalahkan Varkhul, Bapak Penempa Api Terakhir, pada tingkat kesulitan Heroik tanpa satu pun anggota raid yang mati.',
+    title: 'sang Nirbakar',
   },
 };

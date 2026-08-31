@@ -64,6 +64,7 @@ interface RendererHarness {
     vehicle: ReturnType<typeof vi.fn>;
     stopVehicle: ReturnType<typeof vi.fn>;
     mountEngineReset: ReturnType<typeof vi.fn>;
+    stopMountLoop: ReturnType<typeof vi.fn>;
   };
   spawnAoeRing: ReturnType<typeof vi.fn>;
   sim: { playerId: number };
@@ -91,6 +92,8 @@ function rendererHarness(): RendererHarness {
     vehicle: vi.fn(),
     stopVehicle: vi.fn(),
     mountEngineReset: vi.fn(),
+    // removeView also stops the release's mount loop for the dropped view.
+    stopMountLoop: vi.fn(),
   };
   renderer.spawnAoeRing = vi.fn();
   renderer.sim = { playerId: 1 };
@@ -288,7 +291,9 @@ describe('Realm Racers coordinator audio wiring', () => {
     renderer.clickTargets = [];
     const view = {
       vehicleAudioActive: true,
-      group: {},
+      // removeView also runs the release's raid-encounter teardown over the
+      // group, which probes it by name; a bare object is enough for a racer.
+      group: { getObjectByName: () => undefined },
       viewLights: [],
       clickTarget: {},
       visual: { dispose: vi.fn() },
@@ -333,6 +338,8 @@ describe('Realm Racers coordinator audio wiring', () => {
     expect(cameraSource).toMatch(
       /const feelFovOffset = stepCameraFeelForDriving\([\s\S]*?driving\s*\)/,
     );
-    expect(cameraSource).toContain('cameraFeelFovTarget(CAMERA_BASE_FOV, feelFovOffset)');
+    // The base is the player's own setCameraFov value (the release made it
+    // configurable), and the offset stays the driving-aware feel profile's.
+    expect(cameraSource).toContain('cameraFeelFovTarget(this.baseFov, feelFovOffset)');
   });
 });

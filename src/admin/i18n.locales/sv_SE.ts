@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const sv_SE: Record<string, string> = {
+  'error.flagActiveExists': 'det här kontot har redan en öppen flagga av den typen',
+  'wealth.largeMovementsUnavailable':
+    'stora bankrörelser kunde inte laddas (inläsningen av liggaren tog för lång tid), guldsammanställningen ovan är fullständig',
   'error.guildBankDeleting':
     'Det här gillet håller på att raderas, så dess bank är stängd. Inget ändrades.',
   'error.guildBankItemRequired': 'Ange det föremåls-id du förväntar dig att facket innehåller.',
@@ -308,6 +311,8 @@ export const sv_SE: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Strypta begäranden om plånboksutmaning',
   'usage.metric.walletLinkRequest': 'Begäranden om plånbokslänkning',
   'usage.metric.walletLinkFailure': 'Misslyckade plånbokslänkningar',
+  'usage.metric.walletUnlinkFailure': 'Avvisade plånboksfrånkopplingar',
+  'usage.metric.walletUnlinkSuccess': 'Slutförda plånboksfrånkopplingar',
   'usage.metric.walletLinkRateLimited': 'Strypta begäranden om plånbokslänkning',
   'usage.metric.cardPublishRequest': 'Begäranden om publicering av spelarkort',
   'usage.metric.cardPublishRejected': 'Avvisade publiceringar av spelarkort',
@@ -1163,4 +1168,7 @@ export const sv_SE: Record<string, string> = {
   'wealth.purse': 'På karaktärer:',
   'wealth.total': 'Total:',
   'wealth.updatedAt': 'uppdaterad {when}',
+  'usage.metric.walletHandoffAuthorizationEvicted':
+    'Utrensade plånboksöverlämningar för skrivbordsappen',
+  'usage.metric.walletHandoffCreateRejected': 'Avvisade plånboksöverlämningar för skrivbordsappen',
 };

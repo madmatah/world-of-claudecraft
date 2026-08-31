@@ -6,6 +6,7 @@ import {
   REALM_RACERS_WEAPON_CHARGES,
 } from '../src/sim/content/realm_racers';
 import { REALM_RACERS_PRACTICE_CIRCUIT } from '../src/sim/content/realm_racers_circuits';
+import { parseBisGearFor } from '../src/sim/dev/parse_bis_loadouts';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
@@ -32,6 +33,69 @@ function devSpawns(sim: Sim, ownerId = sim.playerId) {
 }
 
 describe('dev commands', () => {
+  it('/dev bis uses the selected spec parse loadout without changing the live spec', () => {
+    const sim = new Sim({
+      seed: 42,
+      playerClass: 'mage',
+      autoEquip: true,
+      devCommands: true,
+      world: EMPTY_TEST_WORLD,
+    });
+    sim.setPlayerLevel(20);
+    expect(sim.setSpec('frost')).toBe(true);
+
+    sim.chat('/dev bis fire');
+
+    expect(sim.meta(sim.playerId)?.talents.spec).toBe('frost');
+    expect(sim.meta(sim.playerId)?.equipment).toEqual(parseBisGearFor('mage', 'fire'));
+    expect(
+      sim
+        .drainEvents()
+        .some(
+          (event) => event.type === 'log' && event.text.includes('top-parse mage fire loadout'),
+        ),
+    ).toBe(true);
+  });
+
+  it('/dev bis rejects a spec owned by another class without changing gear', () => {
+    const sim = devSim();
+    const before = { ...sim.meta(sim.playerId)?.equipment };
+
+    sim.chat('/dev bis fire');
+
+    expect(sim.meta(sim.playerId)?.equipment).toEqual(before);
+    expect(
+      sim
+        .drainEvents()
+        .some(
+          (event) =>
+            event.type === 'error' &&
+            event.text === "[dev] 'fire' is not a warrior spec. Try: arms, fury, prot.",
+        ),
+    ).toBe(true);
+  });
+
+  it('/dev bis removes stale pieces that are not part of the selected parse loadout', () => {
+    const sim = new Sim({
+      seed: 42,
+      playerClass: 'paladin',
+      autoEquip: true,
+      devCommands: true,
+      world: EMPTY_TEST_WORLD,
+    });
+    const meta = sim.meta(sim.playerId);
+    expect(meta).toBeDefined();
+    if (!meta) throw new Error('missing player metadata');
+    meta.equipment.offhand = 'highwatch_wallshield';
+    meta.equipmentInstance.offhand = { rolled: { quality: 'fine' } };
+
+    sim.chat('/dev bis retribution');
+
+    expect(meta.equipment).toEqual(parseBisGearFor('paladin', 'retribution'));
+    expect(meta.equipment.offhand).toBeUndefined();
+    expect(meta.equipmentInstance.offhand).toBeUndefined();
+  });
+
   it('spawns concrete mob templates without drawing RNG', () => {
     const sim = devSim();
     let draws = 0;

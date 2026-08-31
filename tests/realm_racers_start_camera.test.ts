@@ -542,7 +542,7 @@ describe('Realm Racers start camera', () => {
     expect(main).toContain('applyRealmRacersStartCameraFromWorld(');
     expect(main).toContain('renderer.selfMotionFacing');
     expect(main).toMatch(
-      /onlineJitterMs,\s+net\.lastSnapAt,\s+alpha,\s+frameDt,\s+selfDriveImpulse/,
+      /inputEcho\.jitterMs,\s+net\.lastSnapAt,\s+alpha,\s+frameDt,\s+selfDriveImpulse/,
     );
     expect(main).toContain('updateCamera(frameDt, onlineCameraFacing)');
     expect(main).toContain('rallyCameraTick(onlineCameraFacing)');
@@ -550,8 +550,8 @@ describe('Realm Racers start camera', () => {
     expect(renderer).toContain(`const CAMERA_BASE_FOV = ${CAMERA_BASE_FOV};`);
     expect(renderer).toContain('stepCameraBoomForDriving(');
     expect(renderer).toContain('stepCameraFeelForDriving(');
-    expect(renderer).toContain('this.selfMotionPredictor.velocityX');
-    expect(renderer).toContain('this.selfMotionPredictor.velocityZ');
+    expect(renderer).toContain('this.selfRender.predictor.velocityX');
+    expect(renderer).toContain('this.selfRender.predictor.velocityZ');
     expect(renderer).toContain('vehicleVelocityX(p.drive, p.facing)');
     expect(renderer).toContain('vehicleVelocityZ(p.drive, p.facing)');
   });

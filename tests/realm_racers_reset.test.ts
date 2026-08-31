@@ -27,7 +27,7 @@ import {
   updateRealmRacers,
 } from '../src/sim/social/realm_racers';
 import { type Entity, TICK_RATE } from '../src/sim/types';
-import { addAt, makeWorld, teleport } from './vale_cup_util';
+import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 function required<T>(value: T | null | undefined, label: string): T {
   if (value === null || value === undefined) throw new Error(`Missing ${label}`);

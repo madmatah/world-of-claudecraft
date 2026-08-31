@@ -192,15 +192,24 @@ describe('v0.36 release-audit Reliquary deed art', () => {
 
   it('closes the exhaustive live deed debt ledger at 271 painted deeds', () => {
     // The audit's own claim is historical: the 271 deeds live at the v0.36
-    // audit are ALL painted. Deeds appended after it ride the
-    // DEED_ART_PENDING ledger until their art lands: the walk-in castle
-    // visit pair, and the seven Realm Racers placing deeds, both waves
-    // commissioned in docs/achievements/icon-brief.md and neither yet
-    // ingested. The audit holds exactly when the pending set and the artless
-    // set are the same post-audit appends and every other deed is painted.
+    // audit are ALL painted. Deeds appended after it (the walk-in castle
+    // visit pair, the bank socket ladder pair, the Proving Shore graduation,
+    // the Crucible raid block, and the seven Realm Racers placing deeds) ride
+    // the DEED_ART_PENDING ledger until their art lands, each wave
+    // commissioned in docs/achievements/icon-brief.md and none yet ingested;
+    // the audit holds exactly when the pending set and the artless set are
+    // the same post-audit appends and every other deed is painted.
     expect([...DEED_ART_PENDING]).toEqual([
       'exp_the_last_keep',
       'exp_dawnhold_castle',
+      'soc_strongbox_outfitter',
+      'soc_four_bags_deep',
+      'prog_ready_for_an_adventure',
+      'dgn_ignivar',
+      'dgn_ignivar_heroic',
+      'dgn_varkhul',
+      'dgn_varkhul_heroic',
+      'dgn_varkhul_flawless',
       'pvp_rr_first_race',
       'pvp_rr_first_win',
       'pvp_rr_wins_10',
@@ -209,7 +218,7 @@ describe('v0.36 release-audit Reliquary deed art', () => {
       'pvp_rr_clean_race',
       'pvp_rr_comeback',
     ]);
-    expect(DEED_ORDER).toHaveLength(280);
+    expect(DEED_ORDER).toHaveLength(288);
     expect(DEED_IMAGE_IDS.size).toBe(271);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     expect(sorted(DEED_IMAGE_IDS)).toEqual(

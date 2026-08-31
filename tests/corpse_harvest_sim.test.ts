@@ -867,32 +867,29 @@ describe('corpse signed-guard capacity vs merge room (#2139)', () => {
   });
 
   it('the filed crossing case: zero free slots + a partial plain stack tops up, never overflows', () => {
-    // Hunted seed, the dedupe-pin idiom: probe on roomy bags proves the fang
-    // roll clears the signable floor, then a FRESH same-seed world reproduces
-    // the same draws (they are inventory-independent, pinned by the
-    // grant-order contract above) against the issue's exact inventory shape.
-    for (let seed = 1; seed <= 200; seed++) {
-      const probe = setup(seed);
-      probe.sim.harvestCorpse(probe.mob.id, ['fang'], probe.a);
-      const pm = expectDefined(probe.internals.players.get(probe.a));
-      if (!pm.inventory.some((s) => s.itemId === 'wolf_fang' && s.instance?.signer)) continue;
-      const { sim, internals, a, mob } = setup(seed);
-      fillBags(sim, internals, a);
-      const m = expectDefined(internals.players.get(a));
-      const cap = bagCapacity(m.bags);
-      m.inventory[0] = { itemId: 'wolf_fang', count: 1 };
-      expect(m.inventory.length).toBe(cap);
-      sim.drainEvents();
-      sim.harvestCorpse(mob.id, ['fang'], a);
-      expect(mob.harvestClaimedBy).toBe(a);
-      // The issue's acceptance: never past capacity, and the yield arrived as
-      // the plain top-up (the signature truncated, the yield did not).
-      expect(m.inventory.length).toBeLessThanOrEqual(cap);
-      expect(m.inventory.some((s) => s.itemId === 'wolf_fang' && s.instance)).toBe(false);
-      expect(sim.countItem('wolf_fang', a)).toBeGreaterThan(1);
-      return;
-    }
-    throw new Error('no seed with a signable fang roll within 200');
+    // Seed 31 is the suite's pinned signable fang roll. A roomy-bag probe
+    // proves the premise, then a FRESH same-seed world reproduces the same
+    // inventory-independent draws against the issue's exact inventory shape.
+    const seed = 31;
+    const probe = setup(seed);
+    probe.sim.harvestCorpse(probe.mob.id, ['fang'], probe.a);
+    const pm = expectDefined(probe.internals.players.get(probe.a));
+    expect(pm.inventory.some((s) => s.itemId === 'wolf_fang' && s.instance?.signer)).toBe(true);
+
+    const { sim, internals, a, mob } = setup(seed);
+    fillBags(sim, internals, a);
+    const m = expectDefined(internals.players.get(a));
+    const cap = bagCapacity(m.bags);
+    m.inventory[0] = { itemId: 'wolf_fang', count: 1 };
+    expect(m.inventory.length).toBe(cap);
+    sim.drainEvents();
+    sim.harvestCorpse(mob.id, ['fang'], a);
+    expect(mob.harvestClaimedBy).toBe(a);
+    // The issue's acceptance: never past capacity, and the yield arrived as
+    // the plain top-up (the signature truncated, the yield did not).
+    expect(m.inventory.length).toBeLessThanOrEqual(cap);
+    expect(m.inventory.some((s) => s.itemId === 'wolf_fang' && s.instance)).toBe(false);
+    expect(sim.countItem('wolf_fang', a)).toBeGreaterThan(1);
   });
 
   it('a slot-full bag with a same-signer stack WITH room keeps the signature: the grant merges (seed 31)', () => {
@@ -3482,9 +3479,14 @@ describe('a corpse whose EVERY family is unmapped is never offered a harvest (#2
     // every-beast-pays-in-components rule then owes it hide/fang/meat, and three
     // mapped families contribute all 8 of its masks to spent and none to
     // refused (all three are mapped), exactly +8/+0.
-    expect(spent).toBe(196);
+    // 196 to 200 for the Proving Shore: shore_scuttler AND its tide-pool king
+    // mister_crabs each carry the meat tag the tide_scuttler twin already has,
+    // so all four of their subsets spend and none refuse, exactly +2/+0 per
+    // template (training_effigy has no tags and never enters the sweep, and
+    // neither do the Highwatch practice dummies).
+    expect(spent).toBe(200);
     expect(refused).toBe(6);
-    expect(spent + refused).toBe(202);
+    expect(spent + refused).toBe(206);
   });
 
   // The eight mapped families and their item ids, spelled out. Deriving them
@@ -3578,7 +3580,9 @@ describe('a corpse whose EVERY family is unmapped is never offered a harvest (#2
     // to beast then adds its hide/fang/meat subsets to `extracted` (286 to 301)
     // and nothing to `unmappedOffered`, since all three tags are mapped.
     expect(unmappedOffered).toBe(14);
-    expect(extracted).toBe(301);
+    // 301 to 305 with the Proving Shore's two meat-tagged templates
+    // (shore_scuttler and mister_crabs) and their mapped-family extractions.
+    expect(extracted).toBe(305);
   });
 
   it('keeps every mixed template harvestable, so the gate is not a blanket refusal', () => {

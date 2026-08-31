@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: 'Maceraya Hazır',
+    desc: "Sınav Kıyısı'ndan mezun ol: adadaki her dersi bitir, sonra Doğudere'ye dönmek için feribot çanını çal.",
+  },
   exp_dawnhold_castle: {
     name: 'Bahçede Açık Bir Kapı',
     desc: "Dawnhold Şatosu'na uğra ve güneşli bahçe salonlarında dolaş.",
@@ -995,5 +999,34 @@ export const table: DeedLocaleTable = {
     name: 'Mabet Tezhiplendi',
     desc: "Yadigârlık'ın Kahramanca: Mezarejderi Mabedi sayfasını tezhiple.",
     title: 'Mabedin Işığı',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Kasa Donanımcısı',
+    desc: 'İlk banka çanta yuvanı aç.',
+  },
+  soc_four_bags_deep: {
+    name: 'Dört Çanta Tam Kapasite',
+    desc: 'Bankadaki dört çanta yuvasının tamamını aç.',
+  },
+  dgn_ignivar: {
+    name: 'Haberci Düştü',
+    desc: "Crucible of the Last Spring'de Ignivar, Herald of the Last Flame'yi alt et.",
+  },
+  dgn_ignivar_heroic: {
+    name: 'Kahramanca: Haberci Düştü',
+    desc: "Ignivar, Herald of the Last Flame'yi Kahramanca zorlukta alt et.",
+  },
+  dgn_varkhul: {
+    name: 'Ocak Soğuyor',
+    desc: "The Inner Crucible'de Varkhul, Forgefather of the Last Flame'yi alt et.",
+  },
+  dgn_varkhul_heroic: {
+    name: 'Kahramanca: Ocak Soğuyor',
+    desc: "Varkhul, Forgefather of the Last Flame'yi Kahramanca zorlukta alt et.",
+  },
+  dgn_varkhul_flawless: {
+    name: 'Tek Bir Kor Bile Sönmedi',
+    desc: "Tek bir akıncı bile ölmeden Varkhul, Forgefather of the Last Flame'yi Kahramanca zorlukta alt et.",
+    title: 'Yanmaz',
   },
 };

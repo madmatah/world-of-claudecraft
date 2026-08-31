@@ -306,19 +306,20 @@ describe('missing painted icon accepted-art manifest', () => {
     // heroic_duskwhisper resolver, so 209/194/90/15 became 206/190/86/16.
     // The 2026-08-09 wave adds the 13 missing overhaul ability icons plus the
     // bespoke Elemental Trance replacing its interim duplicate: 206/190/86
-    // become 220/204/100.
+    // become 220/204/100. The Sowfield demolition retires the 10 sport_*
+    // Vale Cup abilities with their art: 220/204/100 become 210/194/90.
     expect(accepted.scope).toEqual({
-      targetRows: 220,
-      rasterPaintings: 204,
-      abilities: 100,
+      targetRows: 210,
+      rasterPaintings: 194,
+      abilities: 90,
       items: 101,
       deeds: 3,
       heroicWeaponResolvers: 16,
       originalInventoryRows: 197,
       supplementalCurrentHeadRows: 12,
     });
-    expect(accepted.assets).toHaveLength(204);
-    expect(accepted.assets.filter((asset) => asset.kind === 'ability')).toHaveLength(100);
+    expect(accepted.assets).toHaveLength(194);
+    expect(accepted.assets.filter((asset) => asset.kind === 'ability')).toHaveLength(90);
     expect(accepted.assets.filter((asset) => asset.kind === 'item')).toHaveLength(101);
     expect(accepted.assets.filter((asset) => asset.kind === 'deed')).toHaveLength(3);
 
@@ -463,9 +464,9 @@ describe('missing painted icon accepted-art manifest', () => {
         ).toBe(true);
       }
     }
-    expect(shippingHashes.size).toBe(204);
-    expect(sourceHashes.size).toBe(204);
-    expect(masterHashes.size).toBe(204);
+    expect(shippingHashes.size).toBe(194);
+    expect(sourceHashes.size).toBe(194);
+    expect(masterHashes.size).toBe(194);
     expect(sorted(referenceRoles)).toEqual([...ALLOWED_REFERENCE_ROLES]);
   });
 });
@@ -473,7 +474,7 @@ describe('missing painted icon accepted-art manifest', () => {
 describe('missing painted ability integration', () => {
   it('makes every live ability image-backed while preserving non-ABILITY image ids', () => {
     const accepted = manifest();
-    expect(accepted.targetSets.abilities).toHaveLength(100);
+    expect(accepted.targetSets.abilities).toHaveLength(90);
     // Read from ABILITY_ART_PENDING, the one enumeration of the painted-ability
     // debt (src/ui/icons.ts), so unenumerated debt still reddens this line. The
     // release painted every ability that existed when the wave landed; the only
@@ -649,15 +650,16 @@ describe('missing painted deed and Heroic weapon integration', () => {
     // Later releases appended more deeds after this historical wave. The
     // release art audit painted those additions, so the wave's own claim is
     // unchanged: every deed that existed when it landed is painted. The only
-    // artless ids are the walk-in castle visit pair appended after the audit
-    // and the seven Realm Racers placing deeds, riding the category-crest
-    // fallback the Icons authoring rule in docs/design/deeds.md sanctions
-    // until their 512px sources are commissioned (flagged in
-    // docs/achievements/icon-brief.md). Read from DEED_ART_PENDING, the one
-    // enumeration of that debt (src/ui/icons.ts), so this file cannot end up
-    // naming a different pending set than the other two art suites.
-    // Exhaustive: one more artless deed still reds here.
-    expect(DEED_ORDER).toHaveLength(280);
+    // artless ids are the post-audit appends (the walk-in castle visit pair,
+    // the bank socket ladder pair, the Proving Shore graduation, the Crucible
+    // raid block, and the seven Realm Racers placing deeds), riding the
+    // category-crest fallback the Icons authoring rule in
+    // docs/design/deeds.md sanctions until their 512px sources are
+    // commissioned (flagged in docs/achievements/icon-brief.md). Read from
+    // DEED_ART_PENDING, the one enumeration of that debt (src/ui/icons.ts),
+    // so this file cannot end up naming a different pending set than the
+    // other two art suites. Exhaustive: another artless deed still reds here.
+    expect(DEED_ORDER).toHaveLength(288);
     expect(DEED_ORDER.filter((id) => !DEED_IMAGE_IDS.has(id))).toEqual([...DEED_ART_PENDING]);
     const credits = readFileSync(path.join(repoRoot, 'CREDITS.md'), 'utf8');
     const provenance = readFileSync(

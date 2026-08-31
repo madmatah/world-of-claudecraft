@@ -109,6 +109,7 @@ const EXCLUDED_PATHS = new Set<string>(ORPHAN_DEVIATION?.routes ?? []);
 // router-owned-only shape instead (the same assertion pair as the orphan).
 const REGISTRY_ONLY_PATHS = new Set<string>([
   '/api/deeds/rarity',
+  '/api/guilds/roster',
   '/api/reliquary/rarity',
   '/api/deeds/broadcasts',
   '/api/characters/:id/deeds-recent',
@@ -342,6 +343,9 @@ describe('registry completeness: migrated baseline (public reads + auth + charac
     // never an inline ladder arm), so they have no legacy twin to retain; the
     // REGISTRY_ONLY_PATHS branch below asserts the router-owned-only shape.
     { method: 'GET', path: '/api/deeds/rarity' },
+    // The signpost guild board's roster drill-in (server/guild_roster.ts):
+    // registry-only on the same terms as the deeds family.
+    { method: 'GET', path: '/api/guilds/roster' },
     { method: 'GET', path: '/api/deeds/broadcasts' },
     { method: 'POST', path: '/api/deeds/broadcasts' },
     // The reliquary rarity read (server/reliquary.ts): registry-only on the
@@ -648,8 +652,9 @@ describe('registry completeness: oauth + internal surfaces (server/oauth.ts, ser
     // /internal/discord/flex-batch, GET /internal/discord/outbox, and the ops
     // dashboard's three Exchange reads, the stuck-custody readout included),
     // which have no legacy ladder arm by design and so are the internal rows
-    // with no twin.
-    expect(internalLadder.length).toBe(21);
+    // with no twin, plus the parked-review resolve arm (the surface's one
+    // write, registry-only like its read siblings).
+    expect(internalLadder.length).toBe(22);
     expect(opsFamilyRows.length).toBe(7);
   });
 

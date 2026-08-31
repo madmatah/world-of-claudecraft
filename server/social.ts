@@ -9,9 +9,14 @@
 // the real Postgres + socket implementations in.
 
 import type { ChatSenderFlair } from '../src/sim/account_flair';
+import { GUILD_CREATION_FEE_COPPER } from '../src/sim/guild_bank';
+import { pledgeCooldownActive } from '../src/sim/guild_pledge_ladder';
+import { guildTierForLifetimeXp } from '../src/sim/guild_tier';
 import type { PlayerClass } from '../src/sim/types';
 
 export type GuildRank = 'leader' | 'officer' | 'member';
+
+const GUILD_CREATION_FEE_GOLD = GUILD_CREATION_FEE_COPPER / 10_000;
 
 // Where a character is and what they're doing, for friend/guild rosters.
 // `realm` is the world/shard the character lives on (stored per character so
@@ -87,6 +92,12 @@ export interface GuildView {
   motdSetBy: string;
   members: GuildMemberEntry[];
   events: GuildEventRow[];
+  // Guild pledge board: the recruiting settings every member sees, and the
+  // open pledges (officer-plus only; empty for plain members).
+  pledgeSettings: { enabled: boolean; minLevel: number; note: string };
+  pledges: (CharInfo & { sinceMs: number })[];
+  // The guild colour tier (sim/guild_tier.ts) for the nameplate line.
+  tier: number;
 }
 
 export interface SocialSnapshot {
@@ -94,10 +105,17 @@ export interface SocialSnapshot {
   blocks: CharRef[];
   ignores: CharRef[];
   guild: GuildView | null;
+  // The viewer's own pledge ('' family when none): the public aspiration line.
+  myPledge: { guildName: string; sinceMs: number; tier: number } | null;
 }
 
 // Storage abstraction. The Postgres implementation lives in social_db.ts; the
 // tests provide an in-memory one. Every method is keyed by character id.
+/** One pledge per character per window: the officer-notification fan-out is
+ *  the spam vector, so the cooldown applies to ANY new pledge (switch or
+ *  withdraw-and-re-pledge included; the stamp survives withdraw). */
+export const PLEDGE_REPLEDGE_COOLDOWN_MS = 5 * 60_000;
+
 export interface SocialDb {
   findCharacterByName(name: string): Promise<CharInfo | null>;
   getCharacter(id: number): Promise<CharInfo | null>;
@@ -121,21 +139,23 @@ export interface SocialDb {
   // guilds (a character belongs to at most one)
   // create the guild and seat its leader in one transaction, so a racing or
   // duplicate create packet can never orphan a leaderless guild
-  createGuildWithLeader(
-    name: string,
-    leaderId: number,
-  ): Promise<{ guildId: number } | { error: 'name_taken' | 'already_in_guild' }>;
+  createGuildWithLeader(name: string, leaderId: number): Promise<GuildCreateResult>;
   deleteGuild(id: number): Promise<void>;
   guildMembership(
     charId: number,
   ): Promise<{ guildId: number; guildName: string; rank: GuildRank } | null>;
-  // seat a member atomically, enforcing the cap under concurrent accepts
+  // seat a member atomically, enforcing the cap under concurrent accepts.
+  // requirePledge additionally consumes the character's pledge to THIS guild
+  // inside the same transaction and refuses with 'no_pledge' when it is gone:
+  // the pledge is the seat's consent, so a withdraw or decline racing the
+  // caller's read must roll the seat back, never seat a player who said no.
   addGuildMemberAtomic(
     guildId: number,
     charId: number,
     rank: GuildRank,
     limit: number,
-  ): Promise<'ok' | 'full' | 'already_member' | 'no_guild'>;
+    requirePledge?: boolean,
+  ): Promise<'ok' | 'full' | 'already_member' | 'no_guild' | 'no_pledge'>;
   removeGuildMember(charId: number): Promise<void>;
   // Rank write predicated on BOTH the character and the guild the caller
   // authorized against, returning whether a row actually moved. False means
@@ -164,6 +184,32 @@ export interface SocialDb {
   // guild billboard (motd): the officer-set message + setter name on the guilds row
   setGuildMotd(guildId: number, motd: string, setBy: string): Promise<void>;
   guildMotd(guildId: number): Promise<{ motd: string; motdSetBy: string }>;
+  // guild pledge board (docs/prd/guild-pledge-board.md)
+  guildByName(name: string): Promise<{ id: number; name: string } | null>;
+  guildPledgeSettings(
+    guildId: number,
+  ): Promise<{ enabled: boolean; minLevel: number; note: string }>;
+  setGuildPledgeSettings(
+    guildId: number,
+    settings: { enabled: boolean; minLevel: number; note: string },
+  ): Promise<void>;
+  guildPledges(guildId: number): Promise<(CharInfo & { sinceMs: number })[]>;
+  pledgeOf(charId: number): Promise<{ guildId: number; guildName: string; sinceMs: number } | null>;
+  upsertPledge(charId: number, guildId: number): Promise<void>;
+  deletePledge(charId: number): Promise<void>;
+  /** The last time this character PLEDGED (epoch ms), surviving withdraw;
+   *  null when they never pledged. Backs the re-pledge cooldown. */
+  lastPledgeAtMs(charId: number): Promise<number | null>;
+  /** Stamp now() as the character's last pledge time (upsert). */
+  touchPledgeCooldown(charId: number): Promise<void>;
+  accountIdForCharacter(charId: number): Promise<number | null>;
+  pledgeLadder(
+    guildId: number,
+    accountId: number,
+  ): Promise<{ rejectCount: number; rejectedAtMs: number } | null>;
+  bumpPledgeLadder(guildId: number, accountId: number): Promise<number>;
+  wipePledgeLadder(guildId: number, accountId: number): Promise<void>;
+  guildLifetimeXpTotal(guildId: number): Promise<number>;
   // guild calendar events (the event calendar's guild lane)
   guildEvents(guildId: number, fromDay: string): Promise<GuildEventRow[]>;
   guildEventCount(guildId: number, fromDay: string): Promise<number>;
@@ -178,6 +224,12 @@ export interface SocialDb {
   deleteGuildEvent(eventId: number, guildId: number): Promise<boolean>;
   pruneGuildEvents(guildId: number, beforeDay: string): Promise<void>;
 }
+
+export type GuildCreateResult =
+  | { guildId: number }
+  | { error: 'name_taken' | 'already_in_guild' | 'busy' | 'insufficient_funds' };
+
+export type GuildCreator = (name: string, leaderId: number) => Promise<GuildCreateResult>;
 
 export interface SocialActor {
   characterId: number;
@@ -211,6 +263,9 @@ export interface SocialTransport {
   // live Sim state and notify their client without re-reading or rebuilding
   // the full social snapshot.
   onGuildRenamed(characterId: number, guildId: number, oldName: string, newName: string): void;
+  // Stamp an online character's guild pledge nameplate line + guild colour
+  // tier onto the live sim (sim.setPlayerPledge); no-op when offline.
+  applyPledge(characterId: number, pledgeGuild: string, guildTier: number): void;
   // a character's block set changed; refresh the in-memory chat filter
   onBlocksChanged(characterId: number, blockedIds: number[]): void;
   // a character's ignore set changed; refresh the in-memory chat filter
@@ -235,11 +290,9 @@ export interface SocialTransport {
   ): void;
   // The guild CREATE just committed (the same success arm that stamps the
   // founder, after onGuildMembershipChanged). The transport owner seeds the
-  // new guild's EMPTY book into the LIVE sim (ops never lazily create a book:
-  // loadGuildBank is load-once, and a lazy book would shadow the persisted
-  // row after a restart) and consumes the gate-reserved creation fee
-  // (reserve-at-gate, state.md): the create_fee ledger row and the escrow
-  // save of the already-charged purse.
+  // new guild's EMPTY book into the LIVE sim. Production's injected creator
+  // has already committed the durable empty book and paid founder state in
+  // the same transaction; this hook is deliberately live-state-only.
   onGuildCreated(characterId: number, guildId: number): void;
   // The guild DELETE just committed (the empty-bank guard below passed). The
   // transport owner EVICTS the guild's book from the live sim so the map
@@ -407,6 +460,17 @@ export class SocialService {
   >();
   private pendingGuildInviteesByGuild = new Map<number, Set<number>>();
 
+  /** Once the creator reports a commit, durable truth cannot be demoted by a
+   *  live notification failure. Isolate every follow-up so callers never
+   *  mistake a thrown transport hook for a rolled-back guild creation. */
+  private afterGuildCreateCommit(label: string, run: () => void): void {
+    try {
+      run();
+    } catch (error) {
+      console.error(`guild create post-commit ${label} failed:`, error);
+    }
+  }
+
   constructor(
     private readonly db: SocialDb,
     private readonly tx: SocialTransport,
@@ -417,6 +481,14 @@ export class SocialService {
     // it screens. Applies at creation only; existing guild names are never
     // retro-scanned here.
     private readonly isNameOffensive: (name: string) => boolean,
+    // Chat-filter hard tier for the pledge board note, the same injected-screen
+    // doctrine as isNameOffensive (production wires ChatFilter.findHardHit,
+    // server/game.ts): the note fans out to every town signpost's guild board
+    // (src/ui/hud/guild_board/), so a hard word is refused at write time like
+    // a chat line, never stored. Soft words are
+    // deliberately untouched here; each client masks them by its own filter
+    // setting, the chat doctrine.
+    private readonly findHardHit: (text: string) => string | null,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -434,10 +506,16 @@ export class SocialService {
     let guild: GuildView | null = null;
     if (membership) {
       const fromDay = shiftDay(this.todayIso(), -GUILD_EVENT_KEEP_PAST_DAYS);
-      const [members, events, motd] = await Promise.all([
+      const officerPlus = membership.rank !== 'member';
+      const [members, events, motd, pledgeSettings, pledges, xpTotal] = await Promise.all([
         this.db.guildMembers(membership.guildId),
         this.db.guildEvents(membership.guildId, fromDay),
         this.db.guildMotd(membership.guildId),
+        this.db.guildPledgeSettings(membership.guildId),
+        officerPlus
+          ? this.db.guildPledges(membership.guildId)
+          : Promise.resolve([] as (CharInfo & { sinceMs: number })[]),
+        this.db.guildLifetimeXpTotal(membership.guildId),
       ]);
       guild = {
         id: membership.guildId,
@@ -449,9 +527,20 @@ export class SocialService {
           .map((m) => ({ ...m, ...this.presence(charId, m.id, blockedByViewer) }))
           .sort((a, b) => rankOrder(a.rank) - rankOrder(b.rank) || a.name.localeCompare(b.name)),
         events,
+        pledgeSettings,
+        pledges,
+        tier: guildTierForLifetimeXp(xpTotal),
       };
     }
+    const myPledgeRow = membership ? null : await this.db.pledgeOf(charId);
     return {
+      myPledge: myPledgeRow
+        ? {
+            guildName: myPledgeRow.guildName,
+            sinceMs: myPledgeRow.sinceMs,
+            tier: guildTierForLifetimeXp(await this.db.guildLifetimeXpTotal(myPledgeRow.guildId)),
+          }
+        : null,
       friends: friends
         .map((f) => ({ ...f, ...this.presence(charId, f.id, blockedByViewer) }))
         .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name)),
@@ -834,9 +923,13 @@ export class SocialService {
   // -------------------------------------------------------------------------
 
   // Returns true ONLY on the committed success arm; false on every refusal.
-  // The caller reserved the creation fee at its dispatch gate (reserve-at-gate,
-  // Guild Bank Phase 3 QA) and refunds it when this reports false (or throws).
-  async guildCreate(actor: SocialActor, rawName: string): Promise<boolean> {
+  // Production injects its paid atomic creator after validation and content
+  // screening; hermetic callers retain the social DB's membership-only path.
+  async guildCreate(
+    actor: SocialActor,
+    rawName: string,
+    create: GuildCreator = (name, leaderId) => this.db.createGuildWithLeader(name, leaderId),
+  ): Promise<boolean> {
     const name = validateGuildName(rawName);
     if (!name) {
       this.err(actor.characterId, 'Guild names are 3-24 letters (spaces allowed).');
@@ -846,79 +939,105 @@ export class SocialService {
     // offensive name before any row is created, so a refused create never exists.
     if (this.isNameOffensive(name)) {
       this.err(actor.characterId, 'That guild name is not allowed.');
-      // false, never a bare return: the caller reserves the creation fee at the
-      // dispatch gate and refunds on every falsy arm, so returning undefined
-      // here would charge a founder for a guild that was never created.
+      // false, never a bare return: the caller still owns a bounded in-flight
+      // identity and ledger-capacity reservation even though the paid creator
+      // was never invoked.
       return false;
     }
-    const result = await this.db.createGuildWithLeader(name, actor.characterId);
+    // Read before the create: its transaction clears any standing pledge
+    // (founding a guild is joining one), and the live tag plus the old
+    // guild's board need the pre-clear row to know what to refresh.
+    const priorPledge = await this.db.pledgeOf(actor.characterId);
+    const result = await create(name, actor.characterId);
     if ('error' in result) {
-      this.err(
-        actor.characterId,
+      const message =
         result.error === 'name_taken'
           ? `A guild named '${name}' already exists.`
-          : 'You are already in a guild.',
-      );
+          : result.error === 'already_in_guild'
+            ? 'You are already in a guild.'
+            : result.error === 'insufficient_funds'
+              ? `You need ${GUILD_CREATION_FEE_GOLD} gold to found a guild.`
+              : 'You are busy. Try again in a moment.';
+      this.err(actor.characterId, message);
       return false;
     }
     // Founder is seated as leader in the same transaction as the create: stamp
     // the live sim before any push resolves (the guild bank rank gate).
-    this.tx.onGuildMembershipChanged(actor.characterId, {
-      guildId: result.guildId,
-      guildName: name,
-      rank: 'leader',
-    });
-    // Same success arm, right after the stamp: seed the empty book into the
-    // live sim and consume the gate-reserved creation fee (the create_fee
-    // ledger row; the transport owner does both). A refused create above must
-    // never reach this.
-    this.tx.onGuildCreated(actor.characterId, result.guildId);
+    this.afterGuildCreateCommit('membership stamp', () =>
+      this.tx.onGuildMembershipChanged(actor.characterId, {
+        guildId: result.guildId,
+        guildName: name,
+        rank: 'leader',
+      }),
+    );
+    // Same success arm, right after the stamp: mirror the already-committed
+    // empty book into the live sim. The injected creator owns the durable fee
+    // and receipt; this transport hook is live-state-only.
+    this.afterGuildCreateCommit('bank seed', () =>
+      this.tx.onGuildCreated(actor.characterId, result.guildId),
+    );
     // Founder credit rides the transport seam: soc_guild_founded reads the
     // guildsFounded deed stat, which only this success arm may ever produce
     // (a refused create above must never reach it).
-    this.tx.onGuildFounded(actor.characterId);
-    this.info(
-      actor.characterId,
-      `You found the guild <${name}>! You are its Guild Master.`,
-      '#40ff7f',
+    this.afterGuildCreateCommit('founder credit', () => this.tx.onGuildFounded(actor.characterId));
+    if (priorPledge) {
+      // The create transaction consumed the founder's standing pledge:
+      // restamp the live tag from durable truth (now empty) so a later guild
+      // leave cannot resurface it, and refresh the pledged guild's board so
+      // the row does not linger there. Awaited rather than routed through
+      // afterGuildCreateCommit: that helper is synchronous, so a rejection
+      // here would escape its try/catch as an unhandled rejection.
+      await this.refreshPledgeBadge(actor.characterId);
+      await this.pushGuild(priorPledge.guildId);
+    }
+    this.afterGuildCreateCommit('success notice', () =>
+      this.info(
+        actor.characterId,
+        `You found the guild <${name}>! You are its Guild Master.`,
+        '#40ff7f',
+      ),
     );
-    this.push(actor.characterId);
+    this.afterGuildCreateCommit('snapshot push', () => this.push(actor.characterId));
     return true;
   }
 
-  async guildInvite(actor: SocialActor, name: string): Promise<void> {
+  /** 'sent' when a real invite went out, 'blocked' for the silent fake-success
+   *  arm (the target blocks the inviter), 'refused' when the actor was told
+   *  why nothing happened. Callers that resolve a pledge off this outcome
+   *  (guildPledgeDecide) must only do so on a definite resolution. */
+  async guildInvite(actor: SocialActor, name: string): Promise<'sent' | 'blocked' | 'refused'> {
     const membership = await this.db.guildMembership(actor.characterId);
     if (!membership) {
       this.err(actor.characterId, 'You are not in a guild.');
-      return;
+      return 'refused';
     }
     if (membership.rank === 'member') {
       this.err(actor.characterId, 'Only officers and the Guild Master may invite.');
-      return;
+      return 'refused';
     }
     const target = await this.resolveTarget(actor, name);
-    if (!target) return;
+    if (!target) return 'refused';
     if (target.id === actor.characterId) {
       this.err(actor.characterId, 'You are already in the guild.');
-      return;
+      return 'refused';
     }
     if (!this.tx.isOnline(target.id)) {
       this.err(actor.characterId, `${target.name} must be online to be invited.`);
-      return;
+      return 'refused';
     }
     if (await this.db.guildMembership(target.id)) {
       this.err(actor.characterId, `${target.name} is already in a guild.`);
-      return;
+      return 'refused';
     }
     const existing = this.pendingGuildInvites.get(target.id);
     if (existing && existing.expiresAt >= this.now()) {
       this.err(actor.characterId, `${target.name} already has a pending guild invitation.`);
-      return;
+      return 'refused';
     }
     const members = await this.db.guildMembers(membership.guildId);
     if (members.length >= GUILD_MEMBER_LIMIT) {
       this.err(actor.characterId, 'Your guild is full.');
-      return;
+      return 'refused';
     }
     // A target who has the inviter on their ignore list never sees the invite.
     // From the inviter's side this is indistinguishable from an ordinary
@@ -926,7 +1045,7 @@ export class SocialService {
     // No pending state is created, so other guilds can still invite the target.
     if (this.tx.isBlocking(target.id, actor.characterId)) {
       this.info(actor.characterId, `You have invited ${target.name} to the guild.`);
-      return;
+      return 'blocked';
     }
     this.rememberGuildInvite(target.id, {
       guildId: membership.guildId,
@@ -935,10 +1054,15 @@ export class SocialService {
       fromName: actor.name,
       expiresAt: this.now() + GUILD_INVITE_TTL_MS,
     });
+    // A real invite wipes the pledge rejection ladder for this guild: the
+    // guild saying "we do want you" (docs/prd/guild-pledge-board.md).
+    const invitedAccount = await this.db.accountIdForCharacter(target.id);
+    if (invitedAccount !== null) await this.db.wipePledgeLadder(membership.guildId, invitedAccount);
     this.tx.deliver(target.id, [
       { type: 'guildInvite', fromName: actor.name, guildName: membership.guildName },
     ]);
     this.info(actor.characterId, `You have invited ${target.name} to the guild.`);
+    return 'sent';
   }
 
   async guildAccept(actor: SocialActor): Promise<void> {
@@ -965,20 +1089,319 @@ export class SocialService {
       this.err(actor.characterId, 'That guild is full.');
       return;
     }
+    // Joining any guild clears the character's pledge (the aspiration ended,
+    // one way or the other).
+    const priorPledge = await this.db.pledgeOf(actor.characterId);
+    await this.db.deletePledge(actor.characterId);
     // Seated in the DB: stamp the live sim before any push resolves.
     this.tx.onGuildMembershipChanged(actor.characterId, {
       guildId: invite.guildId,
       guildName: invite.guildName,
       rank: 'member',
     });
+    if (priorPledge) {
+      // Restamp the live pledge tag from durable truth (now empty): the guild
+      // label shadows it while guilded, but without the restamp a later guild
+      // leave resurfaces a stale "pledged" nameplate line until relog. When
+      // the pledge was to a DIFFERENT guild, refresh that board too so the
+      // row does not linger there.
+      await this.refreshPledgeBadge(actor.characterId);
+      if (priorPledge.guildId !== invite.guildId) await this.pushGuild(priorPledge.guildId);
+    }
     await this.broadcastGuild(invite.guildId, [
       { type: 'log', text: `${actor.name} has joined the guild.`, color: '#40ff7f' },
     ]);
     await this.pushGuild(invite.guildId);
   }
 
-  guildDecline(actor: SocialActor): void {
-    this.takeGuildInvite(actor.characterId);
+  // ---- guild pledges (docs/prd/guild-pledge-board.md) ----
+
+  /** Deliver a log line to every ONLINE officer-plus member of a guild. */
+  private async notifyGuildOfficers(guildId: number, text: string): Promise<void> {
+    const members = await this.db.guildMembers(guildId);
+    for (const m of members) {
+      if (m.rank !== 'leader' && m.rank !== 'officer') continue;
+      if (!this.tx.isOnline(m.id)) continue;
+      this.tx.deliver(m.id, [{ type: 'log', text, color: '#ffd070' }]);
+    }
+  }
+
+  async guildPledge(actor: SocialActor, guildName: string): Promise<void> {
+    // Anti-spam cooldown: every successful pledge notifies the target guild's
+    // online officers, so rapid pledge-hopping (pledge, switch, withdraw and
+    // re-pledge) is a broadcast spam vector. One pledge per character per
+    // window, whatever the target; the stamp survives withdraw by design.
+    const lastPledgeMs = await this.db.lastPledgeAtMs(actor.characterId);
+    if (lastPledgeMs !== null) {
+      const remainingMs = PLEDGE_REPLEDGE_COOLDOWN_MS - (this.now() - lastPledgeMs);
+      if (remainingMs > 0) {
+        const minutes = Math.max(1, Math.ceil(remainingMs / 60_000));
+        this.err(
+          actor.characterId,
+          `You can pledge again in ${minutes} more minute${minutes === 1 ? '' : 's'}.`,
+        );
+        return;
+      }
+    }
+    if (await this.db.guildMembership(actor.characterId)) {
+      this.err(actor.characterId, 'You are already in a guild.');
+      return;
+    }
+    const guild = await this.db.guildByName(guildName);
+    if (!guild) {
+      this.err(actor.characterId, 'No guild by that name.');
+      return;
+    }
+    const settings = await this.db.guildPledgeSettings(guild.id);
+    if (!settings.enabled) {
+      this.err(actor.characterId, `${guild.name} is not accepting pledges.`);
+      return;
+    }
+    const me = await this.db.getCharacter(actor.characterId);
+    if (!me) return;
+    if (me.level < settings.minLevel) {
+      this.err(actor.characterId, `${guild.name} accepts pledges from level ${settings.minLevel}.`);
+      return;
+    }
+    const accountId = await this.db.accountIdForCharacter(actor.characterId);
+    if (accountId !== null) {
+      const ladder = await this.db.pledgeLadder(guild.id, accountId);
+      if (
+        ladder &&
+        ladder.rejectCount > 0 &&
+        pledgeCooldownActive(ladder.rejectCount, ladder.rejectedAtMs, this.now())
+      ) {
+        this.err(actor.characterId, `${guild.name} has declined your pledge for now.`);
+        return;
+      }
+    }
+    const prior = await this.db.pledgeOf(actor.characterId);
+    await this.db.upsertPledge(actor.characterId, guild.id);
+    await this.db.touchPledgeCooldown(actor.characterId);
+    this.info(actor.characterId, `You have pledged to ${guild.name}.`);
+    if (prior && prior.guildId !== guild.id) {
+      // Replacing a pledge is one implicit withdraw; the old guild's officers
+      // simply see the pledge gone on their next look, no noise.
+      void this.pushGuild(prior.guildId);
+    }
+    await this.notifyGuildOfficers(guild.id, `${actor.name} has pledged to your guild.`);
+    await this.refreshPledgeBadge(actor.characterId);
+    await this.pushGuild(guild.id);
+    this.tx.pushSnapshot(actor.characterId);
+  }
+
+  async guildPledgeWithdraw(actor: SocialActor): Promise<void> {
+    const pledge = await this.db.pledgeOf(actor.characterId);
+    if (!pledge) {
+      this.err(actor.characterId, 'You have no pledge to withdraw.');
+      return;
+    }
+    await this.db.deletePledge(actor.characterId);
+    this.info(actor.characterId, `You have withdrawn your pledge to ${pledge.guildName}.`);
+    await this.refreshPledgeBadge(actor.characterId);
+    await this.pushGuild(pledge.guildId);
+    this.tx.pushSnapshot(actor.characterId);
+  }
+
+  async guildPledgeDecide(actor: SocialActor, name: string, accept: boolean): Promise<void> {
+    const membership = await this.db.guildMembership(actor.characterId);
+    if (!membership) {
+      this.err(actor.characterId, 'You are not in a guild.');
+      return;
+    }
+    if (membership.rank === 'member') {
+      this.err(actor.characterId, 'Only officers and the Guild Master may manage pledges.');
+      return;
+    }
+    const target = await this.db.findCharacterByName(name);
+    if (!target) {
+      this.err(actor.characterId, `No character named '${name}' exists.`);
+      return;
+    }
+    const pledge = await this.db.pledgeOf(target.id);
+    if (!pledge || pledge.guildId !== membership.guildId) {
+      this.err(actor.characterId, `${target.name} has no pledge to your guild.`);
+      return;
+    }
+    if (accept) {
+      if (!this.tx.isOnline(target.id)) {
+        await this.seatOfflinePledger(actor, target, membership);
+        return;
+      }
+      // Online: accept sends the standard guild invite; membership stays the
+      // invite flow's (which also wipes the ladder). The pledge is the
+      // player's standing request, so it only resolves on a definite outcome:
+      // joining deletes it (guildAccept), and a pledger who already joined a
+      // guild since pledging left the request stale, so it drops here. Every
+      // other refusal (full, a pending invite) AND the silent blocked arm
+      // leave the request standing: whether the row survives an accept never
+      // depends on the block relationship, so the BOARD is not a block
+      // oracle. (The invite flow's own refusal messages remain a separate,
+      // pre-existing observation surface; see guildInvite.)
+      const outcome = await this.guildInvite(actor, target.name);
+      if (outcome === 'refused' && (await this.db.guildMembership(target.id))) {
+        await this.db.deletePledge(target.id);
+        await this.refreshPledgeBadge(target.id);
+        this.tx.pushSnapshot(target.id);
+      }
+      await this.pushGuild(membership.guildId);
+      return;
+    }
+    // With the pledge surviving an accept, reject is now reachable while the
+    // accept's invite is still pending. The officer's explicit "no" must stop
+    // the join, not just bump the ladder, so a same-guild pending invite is
+    // cancelled here, both sides notified (the guildRenamed cancel shape).
+    const pending = this.pendingGuildInvites.get(target.id);
+    if (pending && pending.guildId === membership.guildId) {
+      this.takeGuildInvite(target.id);
+      const cancelled: SocialEvent[] = [{ type: 'guildInviteCancelled' }];
+      this.tx.deliver(target.id, cancelled);
+      if (pending.fromCharacterId !== target.id) {
+        this.tx.deliver(pending.fromCharacterId, cancelled);
+      }
+    }
+    await this.db.deletePledge(target.id);
+    const accountId = await this.db.accountIdForCharacter(target.id);
+    if (accountId !== null) await this.db.bumpPledgeLadder(membership.guildId, accountId);
+    this.info(actor.characterId, `You have declined ${target.name}'s pledge.`);
+    if (this.tx.isOnline(target.id)) {
+      this.tx.deliver(target.id, [
+        {
+          type: 'log',
+          text: `${membership.guildName} has declined your pledge.`,
+          color: '#ff8080',
+        },
+      ]);
+    }
+    await this.refreshPledgeBadge(target.id);
+    await this.pushGuild(membership.guildId);
+    this.tx.pushSnapshot(target.id);
+  }
+
+  /** Seat an OFFLINE pledger directly. The pledge is the player's standing
+   *  request to join, so officer acceptance completes membership without the
+   *  online invite handshake (which cannot reach an offline character); they
+   *  find themselves in the guild on their next login (the join path stamps
+   *  membership from durable truth). A full guild keeps the request on the
+   *  board so the officer can free a seat and accept again; a pledger who
+   *  joined a guild since pledging left the request stale, so that arm
+   *  drops it. */
+  private async seatOfflinePledger(
+    actor: SocialActor,
+    target: { id: number; name: string },
+    membership: { guildId: number; guildName: string },
+  ): Promise<void> {
+    const result = await this.db.addGuildMemberAtomic(
+      membership.guildId,
+      target.id,
+      'member',
+      GUILD_MEMBER_LIMIT,
+      true,
+    );
+    if (result === 'no_guild') {
+      this.err(actor.characterId, 'That guild no longer exists.');
+      return;
+    }
+    if (result === 'full') {
+      // The pledge stays: the officer can free a seat and accept again.
+      this.err(actor.characterId, 'Your guild is full.');
+      return;
+    }
+    if (result === 'already_member') {
+      // The pledger joined a guild since pledging: the pledge is stale. The
+      // badge restamp covers a login racing this arm (no-op while offline).
+      await this.db.deletePledge(target.id);
+      await this.refreshPledgeBadge(target.id);
+      this.err(actor.characterId, `${target.name} is already in a guild.`);
+      await this.pushGuild(membership.guildId);
+      this.tx.pushSnapshot(target.id);
+      return;
+    }
+    if (result === 'no_pledge') {
+      // A withdraw or decline landed between the officer's pledge read and
+      // the seat transaction: the consent is gone, so the seat rolled back.
+      this.err(actor.characterId, `${target.name} has no pledge to your guild.`);
+      await this.pushGuild(membership.guildId);
+      return;
+    }
+    // Seated in the DB with the pledge consumed in the same transaction, and
+    // acceptance wipes the rejection ladder exactly like a real invite (the
+    // guild said "we do want you", docs/prd/guild-pledge-board.md).
+    const accountId = await this.db.accountIdForCharacter(target.id);
+    if (accountId !== null) await this.db.wipePledgeLadder(membership.guildId, accountId);
+    // No-ops while they stay offline; covers a login racing the seat.
+    this.tx.onGuildMembershipChanged(target.id, {
+      guildId: membership.guildId,
+      guildName: membership.guildName,
+      rank: 'member',
+    });
+    await this.refreshPledgeBadge(target.id);
+    await this.broadcastGuild(membership.guildId, [
+      { type: 'log', text: `${target.name} has joined the guild.`, color: '#40ff7f' },
+    ]);
+    await this.pushGuild(membership.guildId);
+  }
+
+  async setGuildPledgeSettings(
+    actor: SocialActor,
+    settings: { enabled: boolean; minLevel: number; note: string },
+  ): Promise<void> {
+    const membership = await this.db.guildMembership(actor.characterId);
+    if (!membership) {
+      this.err(actor.characterId, 'You are not in a guild.');
+      return;
+    }
+    if (membership.rank === 'member') {
+      this.err(actor.characterId, 'Only officers and the Guild Master may manage pledges.');
+      return;
+    }
+    const minLevel = Math.max(1, Math.min(60, Math.floor(settings.minLevel) || 1));
+    // The guildSetMotd clamp treatment: the slice cuts UTF-16 code units, so a
+    // boundary landing inside a surrogate pair would store a lone surrogate
+    // that pg encodes as U+FFFD; drop the orphaned half instead.
+    let note = String(settings.note ?? '')
+      .trim()
+      .slice(0, 90);
+    const last = note.charCodeAt(note.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) note = note.slice(0, -1);
+    if (note !== '' && this.findHardHit(note) !== null) {
+      this.err(actor.characterId, 'That board note is not allowed.');
+      return;
+    }
+    await this.db.setGuildPledgeSettings(membership.guildId, {
+      enabled: !!settings.enabled,
+      minLevel,
+      note,
+    });
+    await this.pushGuild(membership.guildId);
+  }
+
+  /** Restamp an online character's nameplate pledge line + guild colour tier
+   *  from durable truth (tx no-ops when offline). */
+  private async refreshPledgeBadge(charId: number): Promise<void> {
+    if (!this.tx.isOnline(charId)) return;
+    const pledge = await this.db.pledgeOf(charId);
+    const tier = pledge
+      ? guildTierForLifetimeXp(await this.db.guildLifetimeXpTotal(pledge.guildId))
+      : 0;
+    this.tx.applyPledge(charId, pledge?.guildName ?? '', tier);
+  }
+
+  async guildDecline(actor: SocialActor): Promise<void> {
+    const invite = this.takeGuildInvite(actor.characterId);
+    if (!invite) return;
+    // Declining the invite from the guild you pledged to is an explicit
+    // withdrawal of that standing request. Without this, the surviving
+    // pledge would let an officer seat the decliner directly the moment
+    // they log off (a consent bypass). An invite from any OTHER guild
+    // leaves the pledge untouched.
+    const pledge = await this.db.pledgeOf(actor.characterId);
+    if (pledge && pledge.guildId === invite.guildId) {
+      await this.db.deletePledge(actor.characterId);
+      await this.refreshPledgeBadge(actor.characterId);
+      await this.pushGuild(invite.guildId);
+      this.tx.pushSnapshot(actor.characterId);
+    }
   }
 
   async guildLeave(actor: SocialActor): Promise<void> {

@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: 'Bereit für ein Abenteuer',
+    desc: 'Schließe die Bewährungsküste ab: Beende jede Lektion auf der Insel und läute dann die Fährglocke heim nach Eastbrook.',
+  },
   exp_dawnhold_castle: {
     name: 'Eine offene Tür im Garten',
     desc: 'Statte Schloss Dawnhold einen Besuch ab und wandle durch seine sonnigen Gartenhallen.',
@@ -1036,5 +1040,34 @@ export const table: DeedLocaleTable = {
     name: 'Heiligtum illuminiert',
     desc: 'Illuminiere die Seite Heroisch: Gravewyrm-Heiligtum des Reliquiars.',
     title: 'Licht des Heiligtums',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Schatullenausstatter',
+    desc: 'Schalte deinen ersten Banktaschen-Steckplatz frei.',
+  },
+  soc_four_bags_deep: {
+    name: 'Alle vier Taschen',
+    desc: 'Schalte alle vier Banktaschen-Steckplätze frei.',
+  },
+  dgn_ignivar: {
+    name: 'Der Herold fällt',
+    desc: 'Besiege Ignivar, Herold der Letzten Flamme, im Schmelztiegel der Letzten Quelle.',
+  },
+  dgn_ignivar_heroic: {
+    name: 'Heroisch: Der Herold fällt',
+    desc: 'Besiege Ignivar, Herold der Letzten Flamme, auf heroischem Schwierigkeitsgrad.',
+  },
+  dgn_varkhul: {
+    name: 'Die Schmiede erkaltet',
+    desc: 'Besiege Varkhul, Schmiedevater der Letzten Flamme, im Inneren Schmelztiegel.',
+  },
+  dgn_varkhul_heroic: {
+    name: 'Heroisch: Die Schmiede erkaltet',
+    desc: 'Besiege Varkhul, Schmiedevater der Letzten Flamme, auf heroischem Schwierigkeitsgrad.',
+  },
+  dgn_varkhul_flawless: {
+    name: 'Keine Glut geht verloren',
+    desc: 'Besiege Varkhul, Schmiedevater der Letzten Flamme, auf heroischem Schwierigkeitsgrad, ohne dass ein einziges Schlachtzugsmitglied stirbt.',
+    title: 'Unversengt',
   },
 };

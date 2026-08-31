@@ -23,6 +23,7 @@
 // MOVED VERBATIM from terrain.ts. The geometry pin proves it byte for byte.
 
 import * as THREE from 'three';
+import { forgefatherIsleRockWeight } from '../sim/content/ember_coast';
 import {
   COLUMN_ZONES,
   columnBlendAt,
@@ -36,6 +37,7 @@ import { fbm2 } from '../sim/rng';
 import { roadDistance, WATER_LEVEL, zoneBiomeAt } from '../sim/world';
 import { impactCraterTerrainBlend } from './impact_terrain';
 import { clamp01 } from './num_clamp';
+import { makeShoreProbe, type ShoreProbe, shoreWaterGate } from './shore_water_gate_core';
 import { meshTerrainHeight } from './terrain_mesh_height';
 import { BIOME_PALETTE, ROCK_SLOPE_START, TERRAIN_TONES } from './terrain_palette';
 
@@ -200,6 +202,22 @@ function ensureHeightRow(state: ChunkGeometryBuildState, hcj: number): void {
   }
 }
 
+// One shore-band probe per seed, reused across chunk builds (the far tier
+// keeps the same pair, far_terrain_core.ts): its memo is what keeps the ring
+// sampling affordable. Reset on a seed change because the memo is keyed on
+// position alone. The sampler is this tier's OWN meshTerrainHeight, not raw
+// terrainHeight, so the gate probes the same surface the vertices sit on
+// (castle-pad corrections included) and the two can never disagree.
+let shoreProbeSeed = Number.NaN;
+let shoreProbe = makeShoreProbe(() => 0);
+function shoreProbeFor(seed: number): ShoreProbe {
+  if (seed !== shoreProbeSeed) {
+    shoreProbeSeed = seed;
+    shoreProbe = makeShoreProbe((x, z) => meshTerrainHeight(x, z, seed));
+  }
+  return shoreProbe;
+}
+
 function sampleVertex(state: ChunkGeometryBuildState, ci: number, cj: number): VertexSample {
   const { nx, x0, z0, stepX, stepZ, seed, lowShade } = state;
   const x = x0 + ci * stepX;
@@ -258,6 +276,7 @@ function sampleVertex(state: ChunkGeometryBuildState, ci: number, cj: number): V
       lerpSplat(w, 1, dryW * 0.45);
     }
   }
+  let isleRock = 0;
   if (biome === 'ember') {
     // the gatewood is green in the south near Wyrmwatch and dries into sand
     // northward; the volcanic belt then darkens toward scorched basalt
@@ -278,6 +297,14 @@ function sampleVertex(state: ChunkGeometryBuildState, ci: number, cj: number): V
       cTmp.lerp(emberForestC, valley * 0.8);
       lerpSplat(w, 0, valley * 0.6);
     }
+    // The Forgefather's Isle is bare volcanic rock, never sand (the shared
+    // sim weight keeps the world, vista, and map tiers in agreement).
+    isleRock = forgefatherIsleRockWeight(x, z);
+    if (isleRock > 0) {
+      cTmp.lerp(emberScorchC, isleRock * 0.75);
+      cTmp.lerp(emberBasaltC, isleRock * 0.45);
+      lerpSplat(w, 2, isleRock * 0.85);
+    }
   }
   // the marsh reads muddier: patches of wet dirt across the lowland
   if (biome === 'marsh') lerpSplat(w, 1, 0.3 * v2 * clamp01((4 - h) / 6));
@@ -285,8 +312,12 @@ function sampleVertex(state: ChunkGeometryBuildState, ci: number, cj: number): V
   // instead), rocky/ashen biomes get a darker wet-rock tint, everywhere else
   // keeps the classic sandy bank. Color and splat weight share one feathered
   // falloff so the shore blends out instead of cutting a razor-hard edge.
+  // Gated on water actually being there by the same rule the far vista uses
+  // (shore_water_gate_core), so a dry inland dip at beach elevation (the Wolf
+  // Run basin) reads as plain ground instead of a pale coast.
   const wl = WATER_LEVEL;
-  const shore = clamp01((wl + 1.6 - h) / 1.6);
+  let shore = clamp01((wl + 1.6 - h) / 1.6);
+  if (shore > 0) shore *= shoreWaterGate(x, z, h, wl, shoreProbeFor(seed));
   if (biome === 'marsh') {
     cTmp.lerp(dirtDarkC, shore);
     lerpSplat(w, 1, shore);
@@ -294,8 +325,30 @@ function sampleVertex(state: ChunkGeometryBuildState, ci: number, cj: number): V
     cTmp.lerp(wetRockC, shore);
     lerpSplat(w, 2, shore);
   } else {
-    cTmp.lerp(sandC, shore);
-    lerpSplat(w, 3, shore);
+    // the isle's strand is dark wet gravel, not gold sand: the shore blend
+    // splits by the same rock weight so the ring fades with the feather
+    const rockShore = shore * isleRock;
+    const sandShore = shore - rockShore;
+    if (sandShore > 0) {
+      cTmp.lerp(sandC, sandShore);
+      lerpSplat(w, 3, sandShore);
+    }
+    if (rockShore > 0) {
+      cTmp.lerp(wetRockC, rockShore);
+      lerpSplat(w, 2, rockShore);
+    }
+  }
+  // New Eastbrook's strand (owner refinement): the vale's beach band reads as
+  // full sand well above the wet lip, so the shore is unambiguous sand rather
+  // than the base cover showing through. Fades out by ~2.2yd above the
+  // waterline, under the quay pad's working grade.
+  if (biome === 'vale') {
+    let strand = clamp01((wl + 2.5 - h) / 1.3);
+    if (strand > 0) strand *= shoreWaterGate(x, z, h, wl, shoreProbeFor(seed));
+    if (strand > 0) {
+      cTmp.lerp(sandC, Math.min(1, strand));
+      lerpSplat(w, 3, Math.min(1, strand));
+    }
   }
   // packed dirt at each hub settlement (same feather as the splat weight —
   // a constant lerp stamped a clean-edged brown disc on the grass)

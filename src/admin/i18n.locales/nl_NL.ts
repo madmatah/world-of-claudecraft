@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const nl_NL: Record<string, string> = {
+  'error.flagActiveExists': 'dit account heeft al een openstaande markering van dat type',
+  'wealth.largeMovementsUnavailable':
+    'grote bankmutaties konden niet worden geladen (het uitlezen van het grootboek gaf een time-out); het goudoverzicht hierboven is volledig',
   'error.guildBankDeleting':
     'Deze gilde wordt verwijderd, dus de bank ervan is gesloten. Er is niets gewijzigd.',
   'error.guildBankItemRequired':
@@ -308,6 +311,8 @@ export const nl_NL: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Beperkte verzoeken portemonnee-uitdaging',
   'usage.metric.walletLinkRequest': 'Verzoeken portemonnee-koppeling',
   'usage.metric.walletLinkFailure': 'Mislukte portemonnee-koppelingen',
+  'usage.metric.walletUnlinkFailure': 'Geweigerde portemonnee-ontkoppelingen',
+  'usage.metric.walletUnlinkSuccess': 'Voltooide portemonnee-ontkoppelingen',
   'usage.metric.walletLinkRateLimited': 'Beperkte verzoeken portemonnee-koppeling',
   'usage.metric.cardPublishRequest': 'Publicatieverzoeken spelerskaart',
   'usage.metric.cardPublishRejected': 'Geweigerde publicaties spelerskaart',
@@ -1172,4 +1177,8 @@ export const nl_NL: Record<string, string> = {
   'wealth.purse': 'Over karakters:',
   'wealth.total': 'Totaal:',
   'wealth.updatedAt': 'bijgewerkt {when}',
+  // nl_NL release i18n fill (autoFillable batch).
+  'usage.metric.walletHandoffAuthorizationEvicted':
+    'Verwijderde autorisaties voor desktop-portemonnee-overdracht',
+  'usage.metric.walletHandoffCreateRejected': 'Geweigerde desktop-portemonnee-overdrachten',
 };

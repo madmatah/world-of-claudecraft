@@ -283,8 +283,10 @@ describe('isHarvestableCorpse', () => {
     // frostmane_yeti left the ogre family for beast (it renders as a yeti and
     // was only ever tagged ogre from the generic-giant era), which puts it under
     // the every-beast-pays-in-components rule and so gives it hide/fang/meat.
-    expect(included).toHaveLength(46);
-    // ...and the untagged templates are counted rather than assumed: 187 of
+    // The Proving Shore tutorial island's shore_scuttler (a beast, meat) makes
+    // 47, and its tide-pool king mister_crabs (also meat) makes 48.
+    expect(included).toHaveLength(48);
+    // ...and the untagged templates are counted rather than assumed: 188 of
     // them ship, all excluded before this change and all excluded after it,
     // since fen_troll was already tagged (claw, tusk) and only moves from
     // `excluded` into this list, never through `untagged`. (184 before the
@@ -294,9 +296,14 @@ describe('isHarvestableCorpse', () => {
     // dummies the Highwatch row added: a straw target carries no components.
     // Minus frostmane_yeti, which gained hide/fang/meat with its move into
     // the beast family: the same template the `included` count above picked
-    // up.)
+    // up. Minus vale_cup_ball once it retired with the Vale Cup. Plus the
+    // Proving Shore tutorial island's training_effigy, a straw target that
+    // yields nothing either. Plus the seven Ignivar raid templates (the
+    // derelict mech, Varkhul, the three crucible automatons, the herald and
+    // the Heart of the End): all elemental-family forge constructs, and a
+    // construct corpse carries no skinnable or butcherable components.)
     const untagged = Object.values(MOBS).filter((m) => !m.componentTags?.length);
-    expect(untagged).toHaveLength(187);
+    expect(untagged).toHaveLength(194);
     for (const m of untagged) expect(isHarvestableCorpse(m.componentTags)).toBe(false);
     // The three literals above are the load-bearing ones; this sum states that
     // they partition MOBS, so a template that fell out of all three would read

@@ -11,9 +11,11 @@
 
 import type { BiomeId } from '../sim/types';
 import { resumeWhenAllowed } from './audio_unlock';
+import { dungeonMusicZoneForDungeon } from './dungeon_music_zones';
 import type { MusicMixState } from './music_mix_policy';
 import { isMusicMixAudible, musicMixMasterTarget } from './music_mix_policy';
 import { MUSIC_OVERRIDES } from './music_overrides.generated';
+import { composeDungeonGravewyrmSanctum } from './music_theme_gravewyrm_sanctum';
 import {
   AREA_TRACK_GROUP,
   AREA_TRACK_URLS,
@@ -23,6 +25,7 @@ import {
   REALM_RACERS_AREA_TRACKS,
   ZONE_STREAM_URLS,
 } from './music_tracks';
+import { buildIgnivarRaidThemes } from './raid_music_themes';
 
 export type MusicZone =
   | 'town_eastbrook'
@@ -43,10 +46,13 @@ export type MusicZone =
   | 'garden'
   | 'gale'
   | 'farshore'
-  | 'vale_cup'
+  | 'proving_shore'
   | 'dungeon_hollow_crypt'
   | 'dungeon_sunken_bastion'
   | 'dungeon_gravewyrm_sanctum'
+  | 'ignivar_forge_approach'
+  | 'ignivar_raid_arena'
+  | 'ignivar_inner_crucible'
   | 'rift_frost'
   | 'rift_ember'
   | 'rift_venom'
@@ -67,6 +73,12 @@ const TOWN_MUSIC: Record<string, MusicZone> = {
 // its own vigil theme instead of the vale's playful loop.
 const ZONE_MUSIC: Partial<Record<string, MusicZone>> = {
   farshore_isle: 'farshore',
+  // The tutorial island paints as vale, but it is the first thing a new
+  // player ever hears and it deserves its own cue rather than the mainland's.
+  // One entry covers the whole island: Dawnrest Camp is a hub with no town
+  // theme, and that path falls through to ZONE_MUSIC (same as Gullhaven on
+  // the Farshore).
+  proving_shore: 'proving_shore',
 };
 
 // Every overworld biome resolves to a bespoke theme; the paint-only biomes
@@ -115,15 +127,9 @@ export function riftMusicZoneForTheme(themeName: string): MusicZone {
   return RIFT_MUSIC[themeName] ?? 'rift_void';
 }
 
-const DUNGEON_MUSIC: Record<string, MusicZone> = {
-  hollow_crypt: 'dungeon_hollow_crypt',
-  sunken_bastion: 'dungeon_sunken_bastion',
-  gravewyrm_sanctum: 'dungeon_gravewyrm_sanctum',
-};
-
-export function dungeonMusicZoneForDungeon(dungeonId: string): MusicZone {
-  return DUNGEON_MUSIC[dungeonId] ?? 'dungeon_hollow_crypt';
-}
+// DUNGEON_MUSIC moved to dungeon_music_zones.ts; re-exported for the existing
+// music.ts consumers (tests and instance music).
+export { dungeonMusicZoneForDungeon } from './dungeon_music_zones';
 
 export function shouldResetMusicForDungeonEntry(
   previousDungeonId: string | null,
@@ -243,7 +249,7 @@ function triad(c: ChordDef): number[] {
   return [c.root, c.root + (c.minor ? 3 : 4), c.root + 7];
 }
 
-function pushNote(
+export function pushNote(
   out: NoteEvent[],
   beat: number,
   midi: number,
@@ -255,9 +261,9 @@ function pushNote(
 }
 
 // melody phrases written as [beatOffset, midi, durBeats]
-type Phrase = [number, number, number][];
+export type Phrase = [number, number, number][];
 
-function pushPhrase(
+export function pushPhrase(
   out: NoteEvent[],
   startBeat: number,
   phrase: Phrase,
@@ -374,7 +380,7 @@ function pushRepeated(
   }
 }
 
-function pushDrumHits(
+export function pushDrumHits(
   out: NoteEvent[],
   startBeat: number,
   offsets: number[],
@@ -393,7 +399,7 @@ function pushPedal(out: NoteEvent[], beat: number, root: number, inst: Inst, vel
 }
 
 // explicit chord voicing: absolute midi pitches sounded together
-function pushVoicing(
+export function pushVoicing(
   out: NoteEvent[],
   beat: number,
   midis: number[],
@@ -1267,120 +1273,6 @@ function composePeaks(): Theme {
   return { bpm: 100, bars: 24, events: ev };
 }
 
-/** The Sowfield: "Boots and Banners". D major, 108 bpm, 16 bars. The Vale Cup
- *  match-day tune (docs/prd/vale-cup.md): a jaunty harvest-festival stomp that
- *  stays kin to Eastbrook's D major so the walk-up crossfade from the vale
- *  never clashes. Oom-pah lute-and-bass under a whistling pipe tune, frame
- *  drum on the boots, wood block and shaker for the clapping stands, and a
- *  dulcimer answer in the back eight where the crowd starts singing along. */
-function composeValeCup(): Theme {
-  const ev: NoteEvent[] = [];
-  const D = { root: 62 },
-    G = { root: 55 },
-    A = { root: 57 },
-    Bm = { root: 59, minor: true };
-  const chords: ChordDef[] = [D, G, D, A, D, G, A, D, Bm, G, D, A, G, D, A, D];
-
-  chords.forEach((c, bar) => {
-    const b0 = bar * 4;
-    const t = triad(c);
-    // oom-pah: bass root on 1 and 3, lute chord stabs on 2, 2.5, 4, 4.5
-    pushNote(ev, b0, c.root - 24, 0.9, 0.55, 'bass');
-    pushNote(ev, b0 + 2, c.root - 17, 0.9, 0.46, 'bass');
-    for (const off of [1, 1.5, 3, 3.5]) {
-      for (const n of t) pushNote(ev, b0 + off, n, 0.4, 0.2, 'lute');
-    }
-    // boots on the boards: frame drum 1 and 3, wood block offbeats, shaker run
-    pushDrumHits(ev, b0, [0, 2], 'frameDrum', 0.5, 40);
-    pushDrumHits(ev, b0, [1, 3], 'woodBlock', 0.3, 60);
-    pushDrumHits(ev, b0, [0.5, 1.5, 2.5, 3.5], 'shaker', 0.16, 70);
-    // the stands hum along in the back eight
-    if (bar >= 8) {
-      for (const n of t) pushNote(ev, b0, n - 12, 4.05, 0.16, 'strings');
-      pushNote(ev, b0 + 2, t[2] - 5, 2, 0.12, 'horn');
-    }
-  });
-
-  // pipe tune: an eight-bar kick-about phrase, then answered up the octave
-  const phraseA: Phrase = [
-    [0, 74, 0.5],
-    [0.5, 76, 0.5],
-    [1, 78, 1],
-    [2, 74, 1],
-    [3, 69, 1],
-    [4, 71, 0.5],
-    [4.5, 74, 0.5],
-    [5, 79, 1.5],
-    [6.5, 78, 0.5],
-    [7, 74, 1],
-    [8, 74, 0.5],
-    [8.5, 76, 0.5],
-    [9, 78, 1],
-    [10, 81, 1],
-    [11, 78, 1],
-    [12, 76, 0.5],
-    [12.5, 74, 0.5],
-    [13, 76, 1.5],
-    [14.5, 73, 0.5],
-    [15, 74, 1],
-    [16, 78, 0.5],
-    [16.5, 79, 0.5],
-    [17, 81, 1],
-    [18, 78, 1],
-    [19, 74, 1],
-    [20, 76, 0.5],
-    [20.5, 78, 0.5],
-    [21, 79, 1.5],
-    [22.5, 78, 0.5],
-    [23, 76, 1],
-    [24, 74, 0.5],
-    [24.5, 73, 0.5],
-    [25, 74, 1],
-    [26, 76, 1],
-    [27, 78, 1],
-    [28, 74, 2.5],
-    [31, 69, 1],
-  ];
-  pushPhrase(ev, 0, phraseA, 0.4, 'pipe');
-  // the dulcimer picks the tune up an octave over the humming stands
-  pushPhrase(
-    ev,
-    32,
-    phraseA.map(([b, m, d]) => [b, m + 12, d] as [number, number, number]),
-    0.3,
-    'dulcimer',
-  );
-  // and the pipe rides along in harmony a third below
-  pushPhrase(
-    ev,
-    32,
-    phraseA.map(([b, m, d]) => [b, m - 3, d] as [number, number, number]),
-    0.22,
-    'pipe',
-  );
-
-  ev.sort((a, b) => a.beat - b.beat);
-  return { bpm: 108, bars: 16, events: ev };
-}
-
-// ---------------------------------------------------------------------------
-// The eleven new-world themes. Every zone the world grid added carries its own
-// through-composed cue grown from its look and lore (the briefs live in each
-// zone's content module): a vigil for the besieged landfall isle, a lydian
-// hymn for the sealed hollow, a gallop for the drake wastes, and so on. Each
-// states a leitmotif, develops it over terraced sections, and loops without a
-// dead seam, exactly like the original three-zone set.
-// ---------------------------------------------------------------------------
-
-/** Farshore Isle: "The Bell of Gullhaven". A aeolian, 72 bpm, 24 bars, ABA'.
- *  The landfall isle holds its shore against the breaks: a fishing town
- *  turned redoubt, wardens at the barricades, and a bell that finds you
- *  before the town does. Harp surf rolls under an oboe lament for the tired
- *  defenders; the middle eight turns to C major (the muster fire, the
- *  wardens holding) with a horn resolve theme; the reprise brings the
- *  lament back over a far war drum. The bell itself tells the island's
- *  warning code across the form: one toll for the fields, two for the
- *  cliffs, three when it is too close to outrun. */
 function composeFarshore(): Theme {
   const ev: NoteEvent[] = [];
   type BarSpec = { root: number; surf: number[]; pad: number[] };
@@ -2980,140 +2872,6 @@ function composeDungeonSunkenBastion(): Theme {
   return { bpm: 116, bars: 16, events: ev };
 }
 
-/** Gravewyrm Sanctum: "It Breathes Below". B phrygian, 126 bpm. The final
- *  crawl is a ritual procession over a heartbeat: paired war-drum thumps,
- *  a cult chant that a lower choir answers back, phrygian staccato risers,
- *  brass on the chamber thresholds, and a serpent figure slithering in the
- *  low square lead as the party nears the dais. */
-function composeDungeonGravewyrmSanctum(): Theme {
-  const ev: NoteEvent[] = [];
-  type BarSpec = { root: number; drone: number; chant: number[]; cell: number[] };
-  const B5: BarSpec = { root: 35, drone: 35, chant: [59, 60, 59, 57], cell: [0, 1, 3, 1] };
-  const Cma: BarSpec = { root: 36, drone: 36, chant: [60, 62, 60, 59], cell: [0, 2, 4, 2] };
-  const Em: BarSpec = { root: 40, drone: 40, chant: [64, 66, 64, 62], cell: [0, 2, 3, 2] };
-  const D5: BarSpec = { root: 38, drone: 38, chant: [62, 64, 62, 60], cell: [0, 2, 4, 2] };
-  const Gma: BarSpec = { root: 43, drone: 43, chant: [67, 69, 67, 66], cell: [0, 2, 4, 2] };
-  const bars: BarSpec[] = [B5, Cma, B5, Cma, Em, Cma, D5, B5, B5, Cma, Gma, Em, Cma, D5, Cma, B5];
-
-  bars.forEach((c, bar) => {
-    const b0 = bar * 4;
-    // the heartbeat: paired thumps, lub-dub, twice a bar
-    pushNote(ev, b0, 38, 0.9, 0.29, 'warDrum');
-    pushNote(ev, b0 + 0.375, 38, 0.7, 0.19, 'warDrum');
-    pushNote(ev, b0 + 2, 38, 0.9, 0.25, 'warDrum');
-    pushNote(ev, b0 + 2.375, 38, 0.7, 0.17, 'warDrum');
-    // drone and bass
-    pushNote(ev, b0, c.drone, 4.1, 0.16, 'choir');
-    pushNote(ev, b0, c.drone + 7, 4.1, 0.1, 'choir');
-    pushNote(ev, b0, c.root + 12, 0.9, 0.4, 'bass');
-    pushNote(ev, b0 + 1.5, c.root + 12, 0.45, 0.22, 'bass');
-    pushNote(ev, b0 + 2.5, c.root + 19, 0.45, 0.2, 'bass');
-    pushNote(ev, b0 + 3.5, c.root + 12, 0.4, 0.18, 'bass');
-    // the chant, and the thing beneath chanting back
-    for (const [i, m] of c.chant.entries()) {
-      pushNote(ev, b0 + i, m, 0.9, 0.13, 'choir');
-    }
-    if (bar % 4 === 3) {
-      pushNote(ev, b0 + 2, c.chant[0] - 24, 1, 0.13, 'choir');
-      pushNote(ev, b0 + 3, c.chant[1] - 24, 1, 0.13, 'choir');
-    }
-    // phrygian risers
-    for (let i = 0; i < 16; i++) {
-      pushNote(
-        ev,
-        b0 + i * 0.25,
-        c.root + 24 + c.cell[i % 4],
-        0.18,
-        i % 4 === 0 ? 0.2 : 0.12,
-        'stacc',
-      );
-    }
-    // thresholds
-    pushVoicing(ev, b0, [c.root + 24, c.root + 31], 0.75, 0.24, 'brassStab');
-    if (bar % 4 === 3)
-      pushVoicing(ev, b0 + 2.5, [c.root + 24, c.root + 31], 0.4, 0.18, 'brassStab');
-    if (bar % 2 === 1) pushDrumHits(ev, b0, [1.25, 3.25], 'woodBlock', 0.08, 70);
-    if (bar % 8 === 0) pushNote(ev, b0, 38, 1, 0.45, 'timpani');
-    if (bar % 8 === 7) {
-      const fill = bar === 15 ? [2, 2.5, 3, 3.25, 3.5, 3.75] : [3, 3.25, 3.5, 3.75];
-      for (const [i, t] of fill.entries()) {
-        pushNote(ev, b0 + t, 38, 0.3, 0.18 + i * 0.05, 'timpani');
-      }
-    }
-  });
-
-  pushNote(ev, 0, 59, 3.5, 0.15, 'bell');
-  pushNote(ev, 32, 59, 3.5, 0.15, 'bell');
-  // the incantation
-  const incant: Phrase = [
-    [0, 64, 0.5],
-    [0.5, 67, 0.5],
-    [1, 66, 0.5],
-    [1.5, 64, 0.5],
-    [2, 67, 1],
-    [3, 69, 1],
-    [4, 67, 1.5],
-    [5.5, 64, 0.5],
-    [6, 72, 1],
-    [7, 71, 1],
-    [8, 69, 1],
-    [9, 66, 0.5],
-    [9.5, 62, 0.5],
-    [10, 74, 1.5],
-    [11.5, 72, 0.5],
-    [12, 72, 1],
-    [13, 71, 0.5],
-    [13.5, 69, 0.5],
-    [14, 71, 2],
-  ];
-  pushPhrase(ev, 16, incant, 0.14, 'reed');
-  // a distant wail on the phrygian second, sighing down onto the B root
-  pushPhrase(
-    ev,
-    32,
-    [
-      [0, 84, 2],
-      [2, 83, 2],
-    ],
-    0.06,
-    'pipe',
-  );
-  pushPhrase(
-    ev,
-    44,
-    [
-      [0, 79, 2],
-      [2, 78, 2],
-    ],
-    0.06,
-    'pipe',
-  );
-  // the serpent below, slithering in the low square
-  const serpent: Phrase = [
-    [0, 48, 1],
-    [1, 50, 0.5],
-    [1.5, 52, 0.5],
-    [2, 50, 1],
-    [3, 48, 1],
-    [4, 50, 1],
-    [5, 52, 0.5],
-    [5.5, 54, 0.5],
-    [6, 52, 1],
-    [7, 50, 1],
-    [8, 48, 0.75],
-    [8.75, 48, 0.25],
-    [9, 52, 1],
-    [10, 50, 0.5],
-    [10.5, 48, 0.5],
-    [11, 47, 1],
-    [12, 47, 2.5],
-  ];
-  pushPhrase(ev, 48, serpent, 0.12, 'squareLead');
-
-  ev.sort((a, b) => a.beat - b.beat);
-  return { bpm: 126, bars: 16, events: ev };
-}
-
 // ---------------------------------------------------------------------------
 // The eight Rift crawls. A procedural Rift floor rolls one environment
 // archetype (content/rift/themes.ts) and the cue follows it, so a single run
@@ -3947,8 +3705,7 @@ const FADE_SECONDS = 2.2;
 const STORAGE_KEY = 'ev_music_on';
 
 // All remasters are mastered to one loudness (about -15 LUFS), so streamed
-// cues share a single level through the master gain; 0.5 matches the level
-// the Sowfield file tracks already play at.
+// cues share a single level through the master gain.
 const STREAM_LEVEL = 0.5;
 // Pause a stream once it has been silent this long: the slowest fade time
 // constant in play (FADE_SECONDS / 3, about 0.73s) has decayed below 0.5%
@@ -3982,10 +3739,10 @@ export function buildMusicThemes(withOverrides = true): Record<string, Theme> {
     garden: composeGarden(),
     gale: composeGale(),
     farshore: composeFarshore(),
-    vale_cup: composeValeCup(),
     dungeon_hollow_crypt: composeDungeonHollowCrypt(),
     dungeon_sunken_bastion: composeDungeonSunkenBastion(),
     dungeon_gravewyrm_sanctum: composeDungeonGravewyrmSanctum(),
+    ...buildIgnivarRaidThemes(),
     rift_frost: composeRiftFrost(),
     rift_ember: composeRiftEmber(),
     rift_venom: composeRiftVenom(),
@@ -4017,14 +3774,13 @@ export const THEME_TRIM: Record<string, number> = {
   vale_legacy: 1.35,
   marsh: 1.85,
   peaks: 2.05,
-  // ESTIMATED (not yet measured): the Sowfield tune is voiced close to the
-  // Eastbrook town density (lute strum + oom-pah bass + drums + pipe lead), so
-  // it starts near the town reference. Recompute with scripts/render_music.mjs
-  // + the gated-RMS pass alongside the next soundtrack measurement batch.
-  vale_cup: 1.4,
   dungeon_hollow_crypt: 2.95,
   dungeon_sunken_bastion: 2.95,
   dungeon_gravewyrm_sanctum: 1.8,
+  // Measured against town_eastbrook with scripts/music_gated_rms.mjs.
+  ignivar_forge_approach: 2.34,
+  ignivar_raid_arena: 1.59,
+  ignivar_inner_crucible: 1.39,
   combat: 1.35,
   // The nineteen new-environment cues, MEASURED by the same gated-RMS pass:
   // rendered at trim 1 via scripts/render_music.mjs, then
@@ -4808,7 +4564,6 @@ export class MusicDirector {
   private zoneStreams: Partial<Record<MusicZone, StreamTrack>> = {};
   private combatStreams: StreamTrack[] = [];
   private combatIdx = 0;
-  private timer: number | undefined;
   // null until the first update() so the initial state always applies
   private zone: MusicZone | null = null;
   private combat = false;
@@ -4825,10 +4580,9 @@ export class MusicDirector {
   // Boss-fight override: a looped file track routed through the same AudioContext
   // that user gestures already unlock for the procedural soundtrack.
   private bossActive = false;
-  // Area music (the Sowfield stadium's waiting/match pair, the Realm Racers
-  // circuit): looped mp3s that crossfade against each other and duck the
-  // procedural score while you stand there. Same file-track pattern as the boss
-  // loop; catalog in music_tracks.ts.
+  // Area music (a Realm Racers circuit): looped mp3s that crossfade against
+  // each other and duck the procedural score while you stand there. Same
+  // file-track pattern as the boss loop; catalog in music_tracks.ts.
   private areaEls: Partial<Record<AreaTrackId, HTMLAudioElement>> = {};
   private areaGains: Partial<Record<AreaTrackId, GainNode>> = {};
   private areaPauseTimer = 0;
@@ -4845,11 +4599,10 @@ export class MusicDirector {
     return {
       enabled: this._enabled,
       menuPaused: this._menuPaused,
-      bossActive: this.bossActive,
-      // Any AREA track owns the mix, not just the Sowfield one the policy
-      // field is still named for (music_mix_policy.ts): a rally circuit ducks
-      // the procedural score exactly the same way.
-      sowfieldActive: this.areaTrack !== null,
+      // A dedicated file track owns the mix, and an AREA track is one: a rally
+      // circuit ducks the procedural score exactly the way the boss loop does,
+      // so it rides the policy's one file-track flag (music_mix_policy.ts).
+      bossActive: this.bossActive || this.areaTrack !== null,
       vol: this._vol,
     };
   }
@@ -4977,10 +4730,9 @@ export class MusicDirector {
   }
 
   /** Drive the area music: which dedicated file track owns the mix right now
-   *  ('sowfield_waiting' before a Vale Cup game, 'sowfield_match' once one has
-   *  kicked off, a circuit's own track on the rally band), null when the player is
-   *  in none of those places. Idempotent; the HUD calls it every frame.
-   *  Crossfades between the tracks and ducks the procedural score while active. */
+   *  (a circuit's own track on the rally band), null when the player is in none
+   *  of those places. Idempotent; the HUD calls it every frame. Crossfades
+   *  between the tracks and ducks the procedural score while active. */
   setAreaTrack(track: AreaTrackId | null, restart = false): void {
     const changed = track !== this.areaTrack;
     if (track !== null && REALM_RACERS_AREA_TRACKS.has(track) && (changed || restart)) {
@@ -5130,7 +4882,7 @@ export class MusicDirector {
       const stream = this.makeStream(url);
       if (stream) this.combatStreams.push(stream);
     }
-    this.timer = window.setInterval(() => this.streamKeeper(), STREAM_KEEPER_MS);
+    window.setInterval(() => this.streamKeeper(), STREAM_KEEPER_MS);
     this.streamKeeper();
   }
 

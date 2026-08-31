@@ -63,25 +63,29 @@ const PREFIX_CATEGORY: Record<string, DeedCategory> = {
 };
 
 describe('audited launch totals (literals: update deliberately with the catalog)', () => {
-  it('ships exactly 280 deeds worth 3250 total Renown', () => {
+  it('ships exactly 288 deeds worth 3435 total Renown', () => {
     // Release base (262 / 3145 after the WARFARE lifetime-honor ladder) plus
     // four Reliquary Curator rank bridges and the five Phase 18 completion
-    // ladder deeds (all nine renown 0, so the Renown sum is UNCHANGED from
-    // the release base: catalog prestige never scores the board), plus the
-    // walk-in castle visit pair (exp_the_last_keep, exp_dawnhold_castle,
-    // renown 5 each), plus the seven Realm Racers placing deeds (95 Renown).
-    expect(DEED_ORDER.length).toBe(280);
-    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(3250);
+    // ladder deeds (all nine renown 0: catalog prestige never scores the
+    // board), the walk-in castle visit pair (exp_the_last_keep,
+    // exp_dawnhold_castle, renown 5 each), the Proving Shore graduation
+    // deed (prog_ready_for_an_adventure, renown 5), the five Crucible
+    // raid deeds (four clears at 25 plus the flawless 50: +150), and the
+    // seven Realm Racers placing deeds (95 Renown).
+    expect(DEED_ORDER.length).toBe(288);
+    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(3435);
   });
 
   it('ships the audited per-category counts', () => {
     const byCategory: Record<string, number> = {};
     for (const d of ALL) byCategory[d.category] = (byCategory[d.category] ?? 0) + 1;
     expect(byCategory).toEqual({
-      progression: 57,
+      // +1 the Proving Shore graduation (prog_ready_for_an_adventure).
+      progression: 58,
       combat: 10,
-      // +2 Rift coverage deeds (dgn_rift, dgn_rift_s_rank).
-      dungeon: 31,
+      // +2 Rift coverage deeds (dgn_rift, dgn_rift_s_rank), +5 Crucible raid
+      // deeds (per-boss clear pairs plus the Varkhul flawless task).
+      dungeon: 36,
       delve: 13,
       chronicle: 49,
       // +4 Reliquary Curator rank bridges and +5 Phase 18 completion ladder
@@ -90,7 +94,9 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       // Release's Thornhollow battlegrounds and WARFARE honor ladder, plus the
       // seven Realm Racers placing deeds.
       pvp: 42,
-      social: 18,
+      // +2 bank socket ladder deeds (soc_strongbox_outfitter,
+      // soc_four_bags_deep; Bank Storage phase 06).
+      social: 20,
       exploration: 11,
       feat: 3,
       hidden: 9,
@@ -217,11 +223,24 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       'col_reliquary_illum_nythraxis_heroic',
       'col_reliquary_illum_thunzharr',
       'col_reliquary_illum_gravewyrm_heroic',
-      // The walk-in castle visit pair appends last: the Last Keep's deed
-      // retro-fixes its shipped-without-deeds gap, Dawnhold's lands with
-      // its castle (both keyed on the enterDungeon markVisited emit).
+      // The walk-in castle visit pair: the Last Keep's deed retro-fixes its
+      // shipped-without-deeds gap, Dawnhold's lands with its castle (both
+      // keyed on the enterDungeon markVisited emit).
       'exp_the_last_keep',
       'exp_dawnhold_castle',
+      'soc_strongbox_outfitter',
+      'soc_four_bags_deep',
+      // The Proving Shore graduation closes the merged tail.
+      'prog_ready_for_an_adventure',
+      // The Crucible of the Last Spring raid block (per-boss clear pairs on
+      // the new FINAL_BOSS_DUNGEONS rows plus the Varkhul flawless task, the
+      // dgn_nythraxis_deathless shape; docs/prd/ignivar-raid-loot.md
+      // "Obligations closeout").
+      'dgn_ignivar',
+      'dgn_ignivar_heroic',
+      'dgn_varkhul',
+      'dgn_varkhul_heroic',
+      'dgn_varkhul_flawless',
       // Realm Racers: placing-based, mirroring the Vale Cup precedent. The
       // block appends after the release tail across this merge.
       'pvp_rr_first_race',
@@ -358,6 +377,55 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       markId: 'dungeon:dawnhold_castle',
     });
     expect(DEEDS.exp_dawnhold_castle.reward).toBeUndefined();
+  });
+
+  it('pins the Crucible raid deeds: renown, trigger, and reward literals', () => {
+    // Per-boss clear pairs (each raid room is its own dungeon id; the
+    // FINAL_BOSS_DUNGEONS rows in src/sim/deeds.ts land in the same change)
+    // plus the raid finale's flawless task on the generic FLAWLESS_TASKS
+    // window, the dgn_nythraxis_deathless shape.
+    expect(DEEDS.dgn_ignivar.renown).toBe(25);
+    expect(DEEDS.dgn_ignivar.trigger).toEqual({
+      kind: 'dungeonClears',
+      dungeonId: 'ignivar_raid_arena',
+      count: 1,
+    });
+    expect(DEEDS.dgn_ignivar.reward).toBeUndefined();
+    expect(DEEDS.dgn_ignivar_heroic.renown).toBe(25);
+    expect(DEEDS.dgn_ignivar_heroic.trigger).toEqual({
+      kind: 'dungeonClears',
+      dungeonId: 'ignivar_raid_arena',
+      difficulty: 'heroic',
+      count: 1,
+    });
+    expect(DEEDS.dgn_varkhul.renown).toBe(25);
+    expect(DEEDS.dgn_varkhul.trigger).toEqual({
+      kind: 'dungeonClears',
+      dungeonId: 'ignivar_inner_crucible',
+      count: 1,
+    });
+    expect(DEEDS.dgn_varkhul.reward).toBeUndefined();
+    expect(DEEDS.dgn_varkhul_heroic.renown).toBe(25);
+    expect(DEEDS.dgn_varkhul_heroic.trigger).toEqual({
+      kind: 'dungeonClears',
+      dungeonId: 'ignivar_inner_crucible',
+      difficulty: 'heroic',
+      count: 1,
+    });
+    expect(DEEDS.dgn_varkhul_flawless.renown).toBe(50);
+    expect(DEEDS.dgn_varkhul_flawless.trigger).toEqual({ kind: 'manual' });
+    expect(DEEDS.dgn_varkhul_flawless.reward).toEqual({ kind: 'title', text: 'the Unscorched' });
+    for (const id of [
+      'dgn_ignivar',
+      'dgn_ignivar_heroic',
+      'dgn_varkhul',
+      'dgn_varkhul_heroic',
+      'dgn_varkhul_flawless',
+    ]) {
+      expect(DEEDS[id].category, id).toBe('dungeon');
+      expect(DEEDS[id].hidden ?? false, id).toBe(false);
+      expect(DEEDS[id].feat ?? false, id).toBe(false);
+    }
   });
 
   it('pins the professions additions: renown and trigger literals', () => {
@@ -511,18 +579,19 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     }
   });
 
-  it('ships exactly 43 titles and 4 borders', () => {
+  it('ships exactly 44 titles and 4 borders', () => {
     const titles = ALL.filter((d) => d.reward?.kind === 'title');
     const borders = ALL.filter((d) => d.reward?.kind === 'border');
     // Reliquary Curator ranks append 3 titles + 1 border, the WARFARE honor
-    // ladder 3 more titles, and the Phase 18 Reliquary completion ladder 5
-    // more on top of the release base (31 + 3); Realm Racers adds the single
+    // ladder 3 more titles, the Phase 18 Reliquary completion ladder 5 more
+    // on top of the release base (31 + 3), and the Crucible raid's flawless
+    // title (dgn_varkhul_flawless) one more; Realm Racers adds the single
     // pvp_rr_wins_25 title and no border.
-    expect(titles.length).toBe(43);
+    expect(titles.length).toBe(44);
     expect(borders.length).toBe(4);
     // Titles and border slugs are unique (one deed per cosmetic).
     const titleTexts = titles.map((d) => (d.reward as { text: string }).text);
-    expect(new Set(titleTexts).size).toBe(43);
+    expect(new Set(titleTexts).size).toBe(44);
     const borderSlugs = borders.map((d) => (d.reward as { slug: string }).slug);
     expect([...borderSlugs].sort()).toEqual([
       'curators_gilt',
@@ -606,17 +675,23 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // dead-end The Whole Book; see the reachability pin below). No other
   // trigger or renown changed (verified by reconstructing the pre-phase
   // catalog, which reproduces the previous literal exactly).
-  // Re-baselined for the walk-in castle visit pair (exp_the_last_keep,
-  // exp_dawnhold_castle), which appends last; no shipped trigger or renown
-  // changed (the pair is new, every prior row reproduces the previous
-  // literal exactly).
-  // Re-baselined at this release/v0.40.0 sync merge for Realm Racers: seven
+  // Re-baselined at the release/v0.39.0 sync merge, which interleaves the
+  // walk-in castle visit pair (exp_the_last_keep, exp_dawnhold_castle) and
+  // the Proving Shore graduation deed (prog_ready_for_an_adventure, on the
+  // new tutorialGraduations stat) at the tail; no shipped trigger or renown
+  // changed on either side.
+  // Re-baselined for the Crucible of the Last Spring raid deeds (the
+  // obligations closeout, docs/prd/ignivar-raid-loot.md): five appended
+  // deeds, the per-boss clear pairs (dgn_ignivar, dgn_ignivar_heroic,
+  // dgn_varkhul, dgn_varkhul_heroic) and the Varkhul flawless task
+  // (dgn_varkhul_flawless). No shipped trigger or renown changed.
+  // Re-baselined at this release/v0.42.0 sync merge for Realm Racers: seven
   // appended placing-based deeds (pvp_rr_first_race, pvp_rr_first_win,
   // pvp_rr_wins_10, pvp_rr_wins_25, pvp_rr_fast_lap, pvp_rr_clean_race,
   // pvp_rr_comeback), which append after the release tail. No shipped trigger
   // or renown changed on either side of the merge; feat_book_complete's meta
   // list grows by construction with the merged catalog.
-  const FROZEN_CATALOG_SHA256 = '71490e1c2ecd3da5db36f607c152a506e88cc27cc4993f6c185aa8d50d9a57af';
+  const FROZEN_CATALOG_SHA256 = '0fde0ff80f765dd7dee08828cf6879ed802d4ebce17bfe4d201c4d4e4dbae816';
 
   it('every shipped deed keeps its trigger and renown unchanged', () => {
     const canonical = JSON.stringify(
@@ -814,8 +889,8 @@ describe('table shape', () => {
     // (forbidden: the order is an append-only determinism contract; new
     // deeds append). hid_codfather's index is pinned in the refresh test.
     expect(DEED_ORDER[0]).toBe('prog_first_steps');
-    // The Realm Racers block appends after the release's walk-in castle visit
-    // pair, so the last placing deed closes the tail.
+    // The Realm Racers block appends after the release's Crucible raid block,
+    // so the last placing deed closes the tail.
     expect(DEED_ORDER[DEED_ORDER.length - 1]).toBe('pvp_rr_comeback');
   });
 

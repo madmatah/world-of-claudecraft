@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const ru_RU: Record<string, string> = {
+  'error.flagActiveExists': 'у этого аккаунта уже есть открытый флаг такого типа',
+  'wealth.largeMovementsUnavailable':
+    'крупные банковские операции не удалось загрузить (истекло время ожидания при чтении бухгалтерской книги); разбивка по золоту выше приведена полностью',
   'error.guildBankDeleting':
     'Эта гильдия удаляется, поэтому её банк закрыт. Ничего не было изменено.',
   'error.guildBankItemRequired':
@@ -353,7 +356,11 @@ export const ru_RU: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Ограниченные испытания кошелька',
   'usage.metric.walletLinkRequest': 'Запросы привязки кошелька',
   'usage.metric.walletLinkFailure': 'Ошибки привязки кошелька',
+  'usage.metric.walletUnlinkFailure': 'Отказы при отвязке кошелька',
+  'usage.metric.walletUnlinkSuccess': 'Завершённые отвязки кошелька',
   'usage.metric.walletLinkRateLimited': 'Ограниченные привязки кошелька',
+  'usage.metric.walletHandoffAuthorizationEvicted': 'Вытеснения настольной передачи кошелька',
+  'usage.metric.walletHandoffCreateRejected': 'Отказы настольной передачи кошелька',
   'usage.metric.cardPublishRequest': 'Запросы публикации карты игрока',
   'usage.metric.cardPublishRejected': 'Отклоненные публикации карты',
   'usage.metric.cardPublishRateLimited': 'Ограниченные публикации карты',

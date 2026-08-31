@@ -81,6 +81,7 @@ export interface SpatialAudioSink {
   ): void;
   /** One custom running stride for a mounted entity. */
   mountRun(x: number, y: number, z: number, mountKey: string, self: boolean): void;
+  mountSummon(x: number, y: number, z: number, mountKey: string, self: boolean): void;
   /** Continuous engine, tyre and surface loops for one visible vehicle. */
   vehicle(
     entityId: number,
@@ -121,6 +122,13 @@ export interface SpatialAudioSink {
    *  e.g. on the mountKey transition that also calls mountEngineReset. A
    *  no-op for a mount with no engine take set. */
   preloadMountEngine(mountKey: string): void;
+  /** Continuous movement loop for a mount that HAS one (a wheeled cart rolls;
+   *  it has no stride to hang a one-shot on). Called every frame per mounted
+   *  entity, keyed by entity id so several riders each get their own voice.
+   *  `moving` false stops it, as does an entity going away (`stopMountLoop`). */
+  mountLoop(id: number, x: number, y: number, z: number, mountKey: string, moving: boolean): void;
+  /** Drop a mount loop when its entity despawns or dismounts. */
+  stopMountLoop(id: number): void;
   /** A discrete movement event (jump / land / water entry / swim stroke). */
   movement(
     kind: 'jump' | 'land' | 'splash' | 'swim',

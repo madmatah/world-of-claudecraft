@@ -41,7 +41,7 @@ import {
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
 import type { Entity, SimEvent } from '../src/sim/types';
 import { TICK_RATE } from '../src/sim/types';
-import { addAt, makeWorld, teleport } from './vale_cup_util';
+import { addAt, makeWorld, teleport } from './realm_racers_util';
 
 const LOANER = vehicleProfile('rally_loaner');
 

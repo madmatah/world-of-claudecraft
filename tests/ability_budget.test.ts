@@ -21,7 +21,7 @@ import { REALM_RACERS_COUNTDOWN_TICKS, realmRacersMatchOf } from '../src/sim/soc
 import type { Entity } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import type { ActionBarPlayerInput } from '../src/ui/hud/action_bar/action_bar_view';
-import { addAt, makeWorld } from './vale_cup_util';
+import { addAt, makeWorld } from './realm_racers_util';
 
 const WEAPON = REALM_RACERS_ABILITY_ID;
 

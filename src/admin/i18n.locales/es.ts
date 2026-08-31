@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const es: Record<string, string> = {
+  'error.flagActiveExists': 'esta cuenta ya tiene una marca abierta de ese tipo',
+  'wealth.largeMovementsUnavailable':
+    'no se pudieron cargar los grandes movimientos bancarios (se agotó el tiempo de la lectura del registro); el desglose de oro anterior está completo',
   'error.guildBankDeleting':
     'Esta hermandad se está eliminando, así que su banco está cerrado. No se realizó ningún cambio.',
   'error.guildBankItemRequired': 'Introduce el id del objeto que esperas que contenga esa ranura.',
@@ -313,6 +316,8 @@ export const es: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Desafíos de cartera limitados',
   'usage.metric.walletLinkRequest': 'Solicitudes de vinculación de cartera',
   'usage.metric.walletLinkFailure': 'Errores al vincular cartera',
+  'usage.metric.walletUnlinkFailure': 'Rechazos al desvincular cartera',
+  'usage.metric.walletUnlinkSuccess': 'Desvinculaciones de cartera completadas',
   'usage.metric.walletLinkRateLimited': 'Vinculaciones de cartera limitadas',
   'usage.metric.cardPublishRequest': 'Solicitudes de publicación de tarjeta de jugador',
   'usage.metric.cardPublishRejected': 'Publicaciones de tarjeta rechazadas',
@@ -1185,4 +1190,7 @@ export const es: Record<string, string> = {
   'wealth.purse': 'Sobre personajes:',
   'wealth.total': 'Total:',
   'wealth.updatedAt': 'actualizado {when}',
+  'usage.metric.walletHandoffAuthorizationEvicted':
+    'Expulsiones de traspasos de cartera de escritorio',
+  'usage.metric.walletHandoffCreateRejected': 'Rechazos de traspasos de cartera de escritorio',
 };

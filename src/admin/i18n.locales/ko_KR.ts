@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const ko_KR: Record<string, string> = {
+  'error.flagActiveExists': '이 계정에는 이미 해당 종류의 열려 있는 플래그가 있습니다.',
+  'wealth.largeMovementsUnavailable':
+    '대규모 은행 이동 내역을 불러오지 못했습니다(장부 조회 시간이 초과되었습니다). 위의 금 내역은 완전합니다.',
   'error.guildBankDeleting':
     '이 길드는 삭제되는 중이라 은행이 닫혀 있습니다. 아무것도 변경되지 않았습니다.',
   'error.guildBankItemRequired': '해당 칸에 있어야 할 아이템 ID를 입력하십시오.',
@@ -337,6 +340,8 @@ export const ko_KR: Record<string, string> = {
   'usage.cacheColEvictions': '제거',
   'usage.cacheEntriesOfMax': '{entries} / {max}',
   'usage.notAvailable': '없음',
+  'usage.metric.walletHandoffAuthorizationEvicted': '데스크톱 지갑 인증 제거',
+  'usage.metric.walletHandoffCreateRejected': '데스크톱 지갑 인증 거부',
   'usage.metric.wocBalanceApi': '$WOC 잔액 API 요청',
   'usage.metric.wocBalanceRateLimited': '$WOC 잔액 제한 요청',
   'usage.metric.wocBalanceRpc': 'Solana RPC 잔액 읽기',
@@ -350,6 +355,8 @@ export const ko_KR: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': '지갑 챌린지 제한',
   'usage.metric.walletLinkRequest': '지갑 연결 요청',
   'usage.metric.walletLinkFailure': '지갑 연결 실패',
+  'usage.metric.walletUnlinkFailure': '지갑 연결 해제 거부',
+  'usage.metric.walletUnlinkSuccess': '지갑 연결 해제 완료',
   'usage.metric.walletLinkRateLimited': '지갑 연결 제한',
   'usage.metric.cardPublishRequest': '플레이어 카드 게시 요청',
   'usage.metric.cardPublishRejected': '거부된 카드 게시',

@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: "Prêt pour l'aventure",
+    desc: "Diplômez-vous du Rivage de l'Épreuve : terminez chaque leçon de l'île, puis sonnez la cloche du bac pour rentrer à Eastbrook.",
+  },
   exp_dawnhold_castle: {
     name: 'Une porte ouverte sur le jardin',
     desc: 'Rendez visite au Château Dawnhold et flânez dans ses salles baignées de soleil.',
@@ -1074,6 +1078,35 @@ export const table: DeedLocaleTable = {
     name: 'Sanctuaire enluminé',
     desc: 'Enluminer la page Héroïque : Sanctuaire du Gravewyrm du Reliquaire.',
     title: 'Lumière du Sanctuaire',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Le Pourvoyeur du coffre',
+    desc: 'Déverrouiller votre premier emplacement de sac de banque.',
+  },
+  soc_four_bags_deep: {
+    name: 'Les quatre sacs',
+    desc: 'Déverrouiller les quatre emplacements de sac de banque.',
+  },
+  dgn_ignivar: {
+    name: 'Le Héraut tombe',
+    desc: 'Vainquez Ignivar, Héraut de la Dernière Flamme, dans le Crucible of the Last Spring.',
+  },
+  dgn_ignivar_heroic: {
+    name: 'Héroïque : Le Héraut tombe',
+    desc: 'Vainquez Ignivar, Héraut de la Dernière Flamme, en difficulté héroïque.',
+  },
+  dgn_varkhul: {
+    name: 'La Forge se refroidit',
+    desc: "Vainquez Varkhul, Père de la Forge de la Dernière Flamme, dans l'Inner Crucible.",
+  },
+  dgn_varkhul_heroic: {
+    name: 'Héroïque : La Forge se refroidit',
+    desc: 'Vainquez Varkhul, Père de la Forge de la Dernière Flamme, en difficulté héroïque.',
+  },
+  dgn_varkhul_flawless: {
+    name: 'Pas une braise perdue',
+    desc: "Vainquez Varkhul, Père de la Forge de la Dernière Flamme, en difficulté héroïque sans qu'un seul membre du raid ne meure.",
+    title: "l'Indemne",
   },
 };
 

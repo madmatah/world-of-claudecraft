@@ -13,8 +13,8 @@ import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
 import { createSimContext, type SimContextHost } from '../src/sim/sim_context';
 import { createRealmRacersState } from '../src/sim/social/realm_racers';
-import { createVcState } from '../src/sim/social/vale_cup';
 import { SpatialGrid } from '../src/sim/spatial';
+import { DEFAULT_STORAGE_PRICES } from '../src/sim/storage_prices';
 import type { Entity, SimEvent } from '../src/sim/types';
 
 // Every cross-system callback on the seam. The list IS the contract: each must be a
@@ -23,6 +23,7 @@ import type { Entity, SimEvent } from '../src/sim/types';
 const CALLBACK_KEYS = [
   'emit',
   'error',
+  'reserveVaultConsumption',
   'dealDamage',
   'handleDeath',
   'cancelCast',
@@ -147,6 +148,7 @@ const CALLBACK_KEYS = [
   // I1 dungeon instancing + the shared raid-lockout clock + the host reset boundary.
   'lockoutNowMs',
   'raidResetMs',
+  'weeklyRaidResetMs',
   'instanceKeyFor',
   'instanceOriginOf',
   'instanceClaimIdAt',
@@ -245,14 +247,9 @@ const CALLBACK_KEYS = [
   'applySetProcs',
   // Book of Deeds lifetime-counter bump (deeds.ts owns the body).
   'bumpDeedStat',
-  // Vale Cup <-> Arena queue exclusion (social/vale_cup.ts).
-  'vcupSeatedOrQueued',
-  // The Vale Cup sport-move arms (social/vale_cup.ts).
-  'vcupBallKick',
-  'vcupBallPass',
-  'vcupShoot',
-  'vcupSportDash',
-  'vcupSportShove',
+  // The six vcup* callbacks were removed here with the Vale Cup retirement
+  // (docs/design/eastbrook-revamp/master-plan.md), the sanctioned exception to
+  // this list's append-only rule.
   // Thornhollow Fields battleground hooks (social/battleground.ts).
   'bgOnPlayerDeath',
   // Realm Racers hooks (social/realm_racers.ts).
@@ -270,6 +267,7 @@ function makeFakeHost() {
   const clock = { time: 0, tick: 0 };
   const host: SimContextHost = {
     riftCollisionToken: 1,
+    storagePrices: DEFAULT_STORAGE_PRICES,
     naturalRiftPortals: [],
     riftEvents: [],
     nextRiftInstanceId: 1,
@@ -338,6 +336,7 @@ function makeFakeHost() {
     delvePetStash: new Map(),
     utcDay: '',
     resetDay: '',
+    eventLeadDay: '',
     pendingMobRespawns: [],
     partyInvites: new Map(),
     readyChecks: new Map(),
@@ -347,12 +346,12 @@ function makeFakeHost() {
     pendingLootRolls: new Map(),
     nextLootRollId: 1,
     devCommands: false,
+    compulsoryTutorial: false,
     marketListings: [],
     commissionOrderBoard: [],
     nextCommissionOrderId: 1,
     bankerIds: [],
     guildBanks: new Map(),
-    vcup: createVcState(),
     realmRacers: createRealmRacersState(),
     deedDirtyPids: new Set<number>(),
     deedDirtyKeys: new Map<number, Set<string>>(),
@@ -368,6 +367,7 @@ function makeFakeHost() {
     grantDeed: vi.fn(() => true),
     emit: vi.fn(),
     error: vi.fn(),
+    reserveVaultConsumption: vi.fn(() => ({ commit: vi.fn(), cancel: vi.fn() })),
     dealDamage: vi.fn(),
     handleDeath: vi.fn(),
     cancelCast: vi.fn(),
@@ -435,6 +435,7 @@ function makeFakeHost() {
     completeCurrentQuestsForDev: vi.fn(() => 0),
     lockoutNowMs: vi.fn(() => 0),
     raidResetMs: vi.fn((nowMs: number) => nowMs),
+    weeklyRaidResetMs: vi.fn((nowMs: number) => nowMs),
     instanceKeyFor: vi.fn(() => 'solo:0'),
     instanceOriginOf: vi.fn(() => ({ x: 0, z: 0 })),
     instanceClaimIdAt: vi.fn(() => null),
@@ -588,14 +589,6 @@ function makeFakeHost() {
     mailAuthoredLetter: vi.fn(),
     mailboxHoldsItem: vi.fn(() => false),
     applySetProcs: vi.fn(),
-    // Vale Cup <-> Arena queue exclusion.
-    vcupSeatedOrQueued: vi.fn(() => false),
-    // The Vale Cup sport-move arms.
-    vcupBallKick: vi.fn(),
-    vcupBallPass: vi.fn(),
-    vcupShoot: vi.fn(),
-    vcupSportDash: vi.fn(),
-    vcupSportShove: vi.fn(),
     // Thornhollow Fields battleground hooks.
     bgOnPlayerDeath: vi.fn(),
     bgOnPlayerDamaged: vi.fn(),

@@ -95,10 +95,10 @@ function harness(
   const openChronicles = vi.fn();
   const openVendor = vi.fn();
   const openHeroicVendor = vi.fn();
+  const openCrucibleVendor = vi.fn();
   const openWarfareVendor = vi.fn();
   const openMarket = vi.fn();
   const openDelveBoard = vi.fn();
-  const openValeCup = vi.fn();
   const openCardDuel = vi.fn();
   const openTrain = vi.fn();
   const openUnbind = vi.fn();
@@ -132,10 +132,10 @@ function harness(
     openChronicles,
     openVendor,
     openHeroicVendor,
+    openCrucibleVendor,
     openWarfareVendor,
     openMarket,
     openDelveBoard,
-    openValeCup,
     openCardDuel,
     openTrain,
     openUnbind,
@@ -164,10 +164,10 @@ function harness(
     openChronicles,
     openVendor,
     openHeroicVendor,
+    openCrucibleVendor,
     openWarfareVendor,
     openMarket,
     openDelveBoard,
-    openValeCup,
     openCardDuel,
     openTrain,
     openUnbind,
@@ -502,11 +502,6 @@ describe('QuestDialogController', () => {
     board.controller.open(43);
     board.element.querySelector<HTMLButtonElement>('[data-delve-board]')?.click();
     expect(board.openDelveBoard).toHaveBeenCalledWith(43);
-
-    const valeCup = harness(npc(44, 'groundskeeper_bram'));
-    valeCup.controller.open(44);
-    valeCup.element.querySelector<HTMLButtonElement>('[data-vcup]')?.click();
-    expect(valeCup.openValeCup).toHaveBeenCalledTimes(1);
 
     const cardMaster = harness(npc(45, 'card_master'));
     cardMaster.controller.open(45);

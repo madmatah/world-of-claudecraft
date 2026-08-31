@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: 'Gotowy na Przygodę',
+    desc: 'Ukończ Wybrzeże Prób: wykonaj każdą lekcję na wyspie, a potem uderz w dzwon promu, by wrócić do domu, do Eastbrook.',
+  },
   exp_dawnhold_castle: {
     name: 'Otwarte drzwi w ogrodzie',
     desc: 'Odwiedź zamek Dawnhold i przespaceruj się po jego słonecznych ogrodowych komnatach.',
@@ -1029,5 +1033,34 @@ export const table: DeedLocaleTable = {
     name: 'Sanktuarium iluminowane',
     desc: 'Iluminuj w Relikwiarzu kartę Heroiczne: Sanktuarium Grobowego Żmija.',
     title: 'Światło Sanktuarium',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Pierwszy Slot',
+    desc: 'Odblokuj swój pierwszy slot na torbę bankową.',
+  },
+  soc_four_bags_deep: {
+    name: 'Wszystkie Sloty',
+    desc: 'Odblokuj wszystkie cztery sloty na torby bankowe.',
+  },
+  dgn_ignivar: {
+    name: 'Herold Upada',
+    desc: 'Pokonaj Ignivar, Herald of the Last Flame, w Crucible of the Last Spring.',
+  },
+  dgn_ignivar_heroic: {
+    name: 'Heroiczny: Herold Upada',
+    desc: 'Pokonaj Ignivar, Herald of the Last Flame, na heroicznym poziomie trudności.',
+  },
+  dgn_varkhul: {
+    name: 'Kuźnia Stygnie',
+    desc: 'Pokonaj Varkhul, Forgefather of the Last Flame, w Inner Crucible.',
+  },
+  dgn_varkhul_heroic: {
+    name: 'Heroiczna: Kuźnia Stygnie',
+    desc: 'Pokonaj Varkhul, Forgefather of the Last Flame, na heroicznym poziomie trudności.',
+  },
+  dgn_varkhul_flawless: {
+    name: 'Ani Jednej Zgasłej Iskry',
+    desc: 'Pokonaj Varkhul, Forgefather of the Last Flame, na heroicznym poziomie trudności tak, by ani jeden rajdowiec nie zginął.',
+    title: 'Niespalony',
   },
 };

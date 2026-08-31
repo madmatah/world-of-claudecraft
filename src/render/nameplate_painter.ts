@@ -12,6 +12,7 @@ import {
   strongerQuestMarker,
 } from '../sim/quests/quest_marker_kind';
 import { type Entity, GATHER_CAST_ID } from '../sim/types';
+import { abilityDisplayNameFromSource } from '../ui/ability_display_name';
 import { cheaterTagLabel } from '../ui/cheater_tag';
 import { deedBorderSlug } from '../ui/deed_border_view';
 import { deedTitleText } from '../ui/deed_i18n';
@@ -36,6 +37,7 @@ import {
 import { COMBO_PIP_MAX } from './nameplate_combo';
 import { declutterNameplatesInPlace, type NameplateAnchor } from './nameplate_declutter';
 import { nameplateHeraldryLift } from './nameplate_heraldry_core';
+import { type NameplatePickCandidate, pickNameplateHealthBarAt } from './nameplate_pick_core';
 import {
   isNameplateScreenAnchorVisible,
   isProjectedNameplateAnchorVisible,
@@ -119,7 +121,7 @@ export class NameplatePainter {
   private readonly tmpV = new THREE.Vector3();
   private readonly tmpV2 = new THREE.Vector3();
   private readonly plan: NameplatePlan = newNameplatePlan();
-  private readonly anchorScratch: NameplateAnchor[] = [];
+  private readonly anchorScratch: Array<NameplateAnchor & NameplatePickCandidate> = [];
   private anchorCount = 0;
   private i18nRevision = -1;
   // Quest-marker inputs (the shared quest_marker_kind rule), resolved lazily
@@ -239,8 +241,21 @@ export class NameplatePainter {
         anchor.sx = screenX;
         anchor.sy = screenY;
         anchor.extraLift = extraLift;
+        anchor.hpVisible = state.hpVisible;
+        anchor.castVisible = state.castVisible;
+        anchor.boss = state.frame === 'boss';
+        anchor.pickable = id !== player.id && !entity.dead;
       } else {
-        this.anchorScratch.push({ id, sx: screenX, sy: screenY, extraLift });
+        this.anchorScratch.push({
+          id,
+          sx: screenX,
+          sy: screenY,
+          extraLift,
+          hpVisible: state.hpVisible,
+          castVisible: state.castVisible,
+          boss: state.frame === 'boss',
+          pickable: id !== player.id && !entity.dead,
+        });
       }
       this.anchorCount++;
     }
@@ -262,9 +277,20 @@ export class NameplatePainter {
 
   remove(id: number): void {
     this.states.delete(id);
+    for (let i = 0; i < this.anchorCount; i++) {
+      const anchor = this.anchorScratch[i];
+      if (anchor.id !== id) continue;
+      anchor.pickable = false;
+      break;
+    }
+  }
+
+  pickEntityAt(clientX: number, clientY: number): number | null {
+    return pickNameplateHealthBarAt(this.anchorScratch, this.anchorCount, clientX, clientY);
   }
 
   dispose(): void {
+    this.anchorCount = 0;
     this.states.clear();
     this.surface.dispose();
   }
@@ -300,7 +326,7 @@ export class NameplatePainter {
           ? t('abilityUi.cast.gathering')
           : ABILITIES[cast.label]
             ? tEntity({ kind: 'ability', id: cast.label, field: 'name' })
-            : cast.label;
+            : abilityDisplayNameFromSource(cast.label);
     } else if (!cast.visible) {
       state.castSource = '';
       state.castLabel = '';
@@ -322,6 +348,7 @@ export class NameplatePainter {
     state.levelColor = '#fff';
     state.guild = '';
     state.guildLabel = '';
+    state.guildTier = 0;
     state.title = '';
     state.border = '';
     state.marker = '';
@@ -373,12 +400,22 @@ export class NameplatePainter {
       const baseName = roleTag ? `[${roleTag}] ${entity.name}` : entity.name;
       state.name = entity.afk ? `<${t('hudChrome.nameplate.afkTag')}> ${baseName}` : baseName;
       state.nameColor = roleColor ?? '#7fb8ff';
-      state.guild = entity.guild;
+      // A member's line is their guild; a PLEDGE (docs/prd/guild-pledge-board.md)
+      // borrows the same line with the localized pledge wording, so an
+      // aspiring character never reads as a member. Either way the fill tiers
+      // by the guild's collective lifetime XP (entity.guildTier).
+      // The `|| ''` / `?? 0` arms cover mirrors that predate the pledge fields
+      // (a partial test fixture, an older server's wire): the plate state must
+      // never hold undefined (the ai_tag pairing pin).
+      state.guild = entity.guild || entity.pledgeGuild || '';
+      state.guildTier = entity.guildTier ?? 0;
       // Build the drawn `<guild>` wrapper here, not in the per-frame drawBase:
       // resolveContent is guild's only writer and runs strictly less often (the
       // init / fullPass / urgent / languageChanged gate), so the label can
       // never diverge from the guild it wraps.
       if (entity.guild) state.guildLabel = `<${entity.guild}>`;
+      else if (entity.pledgeGuild)
+        state.guildLabel = t('hudChrome.nameplate.pledgeTag', { guild: entity.pledgeGuild });
       state.hpVisible = !entity.dead;
       state.title = entity.title ? deedTitleText(entity.title) : '';
       state.border = deedBorderSlug(entity.border);

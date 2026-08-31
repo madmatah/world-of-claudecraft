@@ -78,6 +78,10 @@ export interface MobileActionRingDeps {
   sourceSlot(buttonIndex: number, direction: RadialDirection): number;
   /** Whether that button plus direction maps to a real slot right now. */
   hasSourceSlot(buttonIndex: number, direction: RadialDirection): boolean;
+  /** Whether the active ground aim belongs to this physical ring button. */
+  aimOwnsButton(buttonIndex: number): boolean;
+  /** Cancel the active ground aim owned by a ring button. */
+  cancelAim(): void;
   actionForSlot(slot: number): unknown;
   abilityForSlot(slot: number): ActionBarAbility | null;
   itemForSlot(slot: number): ItemDef | null;
@@ -90,8 +94,6 @@ export interface MobileActionRingDeps {
   takeSuppressedClick(): boolean;
   castSlot(slot: number): void;
   cyclePage(): void;
-  /** The sport ability that replaces Attack during a Vale Cup match. */
-  firstSportAbility(): ActionBarAbility | null;
   activateFixedAttackSlot(): void;
   attackNearest: (() => void) | null;
   attackTapState(): { autoAttack: boolean; hasLiveHostileTarget: boolean };
@@ -177,6 +179,8 @@ export function buildMobileActionRing(deps: MobileActionRingDeps): MobileActionR
     // still casts and only the reveal has nothing to show.
     metricsHost: overlay ?? container,
     hasSlot: (buttonIndex, direction) => deps.hasSourceSlot(buttonIndex, direction),
+    aimOwnsButton: (buttonIndex) => deps.aimOwnsButton(buttonIndex),
+    cancelAim: () => deps.cancelAim(),
     cast: (buttonIndex, direction) => {
       deps.consumePeekGuard();
       deps.hideTooltip();
@@ -199,7 +203,7 @@ export function buildMobileActionRing(deps: MobileActionRingDeps): MobileActionR
   });
 
   slotBtns.forEach((btn, i) => {
-    deps.bindEmpoweredHold(btn, () => deps.sourceSlot(i, 'center'));
+    deps.bindEmpoweredHold(btn, () => (deps.aimOwnsButton(i) ? -1 : deps.sourceSlot(i, 'center')));
   });
   gesture.attach();
 
@@ -221,9 +225,9 @@ export function buildMobileActionRing(deps: MobileActionRingDeps): MobileActionR
       slots: [
         {
           slotIndex: 0,
-          isAttack: () => deps.firstSportAbility() === null,
-          hasAction: () => deps.firstSportAbility() !== null,
-          ability: () => deps.firstSportAbility(),
+          isAttack: () => true,
+          hasAction: () => false,
+          ability: () => null,
           item: () => null,
           keybindLabel: () => '',
         },
@@ -234,6 +238,7 @@ export function buildMobileActionRing(deps: MobileActionRingDeps): MobileActionR
           ability: () => deps.abilityForSlot(deps.sourceSlot(i, 'center')),
           item: () => deps.itemForSlot(deps.sourceSlot(i, 'center')),
           keybindLabel: () => '',
+          ownsAimSlot: () => deps.aimOwnsButton(i),
         })),
       ],
     },
@@ -292,11 +297,6 @@ function wireAttackButton(attackBtn: HTMLButtonElement, deps: MobileActionRingDe
     deps.consumePeekGuard();
     deps.hideTooltip();
     audio.click();
-    if (deps.firstSportAbility()) {
-      deps.activateFixedAttackSlot();
-      attackBtn.blur();
-      return;
-    }
     handleMobileAttackTap(deps.attackTapState(), {
       activateAttack: () => deps.activateFixedAttackSlot(),
       attackNearest: deps.attackNearest,

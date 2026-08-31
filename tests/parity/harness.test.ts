@@ -134,10 +134,12 @@ describe('exclude lists are pinned and real (anti-loosening guard)', () => {
       'castRadiantResonance', // one-cast Dawn reservation; effect pinned via aura + cast outcome
       'color',
       'damageHistory',
+      'dungeonEntrySeq', // transient online acknowledgement generation
       'equippedInstances',
       'equippedItems',
       'firebottleCdRemaining', // derived display copy of PlayerMeta.firebottleReadyAt
       'guild',
+      'guildTier', // server-set display only (pledge board colour ladder)
       'holderBalance',
       'holderTier',
       'mainhandItemId',
@@ -148,6 +150,7 @@ describe('exclude lists are pinned and real (anti-loosening guard)', () => {
       'overheadEmoteId',
       'overheadEmoteSeq',
       'overheadEmoteUntil',
+      'pledgeGuild', // server-set display only (guild pledge board)
       'potionCdRemaining',
       'prevFacing',
       'prevPos',
@@ -169,10 +172,12 @@ describe('exclude lists are pinned and real (anti-loosening guard)', () => {
     expect([...META_EXCLUDE].sort()).toEqual([
       'away',
       'bankBonusSources',
+      'bankWireRev',
       'characterId',
       'craftThrottle',
       'fiestaMods',
       'fiestaSpecial',
+      'firstCharacter',
       'guildMembership',
       'joinedAt',
       'known',
@@ -187,6 +192,7 @@ describe('exclude lists are pinned and real (anti-loosening guard)', () => {
       'skin',
       'skinCatalog',
       'talentMods',
+      'vaultWireRev',
       'wireRev',
     ]);
   });

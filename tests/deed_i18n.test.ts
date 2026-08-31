@@ -49,19 +49,20 @@ describe('deed_i18n English resolution', () => {
 
   it('manifests one row per name and desc plus one per title reward', () => {
     const manifest = deedTranslationManifest();
-    // 280 deeds x (name + desc) + the 43 shipped title rewards (both counts
-    // pinned by tests/deeds_content.test.ts): the release catalog of 273 deeds
-    // and 42 titles (the Drakelands brood pair, the four Thornhollow Fields
+    // 288 deeds x (name + desc) + the 44 shipped title rewards (both counts
+    // pinned by tests/deeds_content.test.ts): the release catalog of 281 deeds
+    // and 43 titles (the Drakelands brood pair, the four Thornhollow Fields
     // battleground deeds, the Rift coverage pair (dgn_rift, dgn_rift_s_rank),
     // the seven per-craft rare-tier profession deeds, the twelve remaining
     // starter-zone chronicle pairs, the four Reliquary Curator rank bridges
     // (3 titles + 1 border; the border has no title manifest row), the three
     // WARFARE lifetime-honor rank titles, the five Reliquary completion-ladder
-    // titles, and the walk-in castle visit pair with no title reward), plus the
-    // seven Realm Racers placing deeds, of which only pvp_rr_wins_25 rewards a
-    // title.
-    expect(manifest.length).toBe(280 * 2 + 43);
-    expect(manifest.filter((row) => row.field === 'title').length).toBe(43);
+    // titles, the walk-in castle visit pair with no title reward, the Proving
+    // Shore graduation deed with no title reward, and the five Crucible raid
+    // deeds whose Varkhul flawless task carries the 43rd title), plus the seven
+    // Realm Racers placing deeds, of which only pvp_rr_wins_25 rewards a title.
+    expect(manifest.length).toBe(288 * 2 + 44);
+    expect(manifest.filter((row) => row.field === 'title').length).toBe(44);
     expect(manifest).toContainEqual({
       id: 'prog_veteran',
       field: 'title',

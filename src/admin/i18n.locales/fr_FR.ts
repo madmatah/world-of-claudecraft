@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const fr_FR: Record<string, string> = {
+  'error.flagActiveExists': 'ce compte a déjà un drapeau ouvert de ce type',
+  'wealth.largeMovementsUnavailable':
+    "les grands mouvements bancaires n'ont pas pu être chargés (la lecture du grand livre a expiré), le détail de l'or ci-dessus est complet",
   'error.guildBankDeleting':
     "Cette guilde est en cours de suppression, sa banque est donc fermée. Rien n'a été modifié.",
   'error.guildBankItemRequired':
@@ -354,10 +357,14 @@ export const fr_FR: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': 'Défis de portefeuille limités',
   'usage.metric.walletLinkRequest': 'Requêtes de liaison de portefeuille',
   'usage.metric.walletLinkFailure': 'Échecs de liaison de portefeuille',
+  'usage.metric.walletUnlinkFailure': 'Refus de dissociation de portefeuille',
+  'usage.metric.walletUnlinkSuccess': 'Dissociations de portefeuille effectuées',
   'usage.metric.walletLinkRateLimited': 'Liaisons de portefeuille limitées',
   'usage.metric.cardPublishRequest': 'Requêtes de publication de carte joueur',
   'usage.metric.cardPublishRejected': 'Publications de carte rejetées',
   'usage.metric.cardPublishRateLimited': 'Publications de carte limitées',
+  'usage.metric.walletHandoffAuthorizationEvicted': 'Évictions de transfert de portefeuille bureau',
+  'usage.metric.walletHandoffCreateRejected': 'Rejets de transfert de portefeuille bureau',
   'usage.cache.wocBalance': 'Cache de solde $WOC',
   'usage.cache.githubReleases': 'Cache des versions GitHub',
   'common.ago': 'il y a {value}',

@@ -583,10 +583,9 @@ describe('Realm Racers practice setup screen', () => {
     // house pilot's says anything, and the stylesheet collapses the empty one.
     expect(badges).toHaveLength(2);
     expect(badges[0].textContent).toBe('');
-    // The game's ONE AI badge, the Vale Cup team sheet's Bot tag: the same key,
-    // not a second marker, and mirrored onto the title so hover says it too.
-    expect(badges[1].textContent).toBe(t('hudChrome.vcup.briefing.bot'));
-    expect(badges[1].getAttribute('title')).toBe(t('hudChrome.vcup.briefing.bot'));
+    // The game's ONE AI badge, mirrored onto the title so hover says it too.
+    expect(badges[1].textContent).toBe(t('hudChrome.rally.standingsBot'));
+    expect(badges[1].getAttribute('title')).toBe(t('hudChrome.rally.standingsBot'));
     // The badge says WHO IS NOT HUMAN, never the tier: that pin (above) holds
     // for a bot-backfilled grid too.
     expect(h.layer.querySelector('.rally-standing-tier')).toBeNull();

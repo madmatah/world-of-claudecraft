@@ -34,29 +34,51 @@ describe('graphics-overhaul integration', () => {
     expect(renderer).toContain(
       'const cx = px - Math.sin(pose.yaw) * Math.cos(pose.pitch) * boomDistance;',
     );
+    expect(renderer).toContain(
+      'const cy = Math.min(eyeY + Math.sin(pose.pitch) * boomDistance, underwaterCeilingY);',
+    );
+    expect(renderer).toContain(
+      'const cz = pz - Math.cos(pose.yaw) * Math.cos(pose.pitch) * boomDistance;',
+    );
     expect(renderer).toContain('this.camera.position.set(cx, Math.max(cy, groundY), cz);');
     const chaseCamera = renderer.slice(
-      renderer.indexOf('const cx = px - Math.sin(pose.yaw)'),
+      renderer.indexOf('const px = this.camBoom.x + this.camFeel.leadX;'),
       renderer.indexOf('// Spatial-audio listener'),
     );
+    // The requested distance is read, never written: the rally boom profile
+    // lengthens the arm through cameraBoomDistance() rather than by moving
+    // pose.dist, so scene geometry still cannot pull the camera in.
+    expect(chaseCamera).not.toMatch(/pose\.dist\s*[-+*/]?=/);
+    expect(chaseCamera.match(/\bconst cx =/g)).toHaveLength(1);
+    expect(chaseCamera.match(/\bconst cy =/g)).toHaveLength(1);
+    expect(chaseCamera.match(/\bconst cz =/g)).toHaveLength(1);
     expect(chaseCamera.match(/\bcx\s*=/g)).toHaveLength(1);
     expect(chaseCamera.match(/\bcy\s*=/g)).toHaveLength(1);
     expect(chaseCamera.match(/\bcz\s*=/g)).toHaveLength(1);
-    expect(renderer).toContain('cameraFeelFovTarget(CAMERA_BASE_FOV, feelFovOffset)');
+    // The FOV base is the player's live setCameraFov value, never the module
+    // constant, or every feel kick would snap the camera back to the default.
+    expect(renderer).toContain('cameraFeelFovTarget(this.baseFov, feelFovOffset)');
+    expect(renderer).not.toContain('cameraFeelFovTarget(CAMERA_BASE_FOV,');
   });
 
   it('routes reduced motion through every occluder-fade consumer', () => {
     const consumers = [
       'src/render/props.ts',
-      'src/render/foliage.ts',
-      'src/render/dungeon.ts',
+      'src/render/tree_hide_fade.ts',
+      // dungeon.ts's occluder loop moved to dungeon_wall_occlusion.ts (the
+      // raid backface cull); the pin follows the consumer.
+      'src/render/dungeon_wall_occlusion.ts',
       'src/render/eastbrook_town.ts',
       'src/render/yumi_maze.ts',
       'src/render/battleground_placements.ts',
     ];
     for (const file of consumers) {
       const text = source(file);
-      expect(text, file).toMatch(/stepOccluderFade\([^)]+,\s*reducedMotion\)/s);
+      // Either the core's step (the instanced-ghost consumers and the raid
+      // backface cull, whose trailing argument is the fade floor) or the
+      // gated stepper over it (occluder_fade.ts advanceOccluderFade, the
+      // fade painters); both take the flag after dt.
+      expect(text, file).toMatch(/(?:step|advance)OccluderFade\([^)]+,\s*reducedMotion\s*[,)]/s);
     }
   });
 

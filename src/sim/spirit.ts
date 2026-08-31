@@ -32,6 +32,7 @@ import { BG_GRAVEYARDS } from './battleground_layout';
 import {
   battlegroundOrigin,
   DELVES,
+  delveAt,
   dungeonAt,
   isDelvePos,
   isRiftPos,
@@ -60,6 +61,7 @@ import {
 import type { PlayerMeta } from './sim';
 import type { SimContext } from './sim_context';
 import type { BgMatch } from './social/battleground';
+import { creditDeathLesson } from './tutorial/death_lesson';
 import { dist2d, type Entity, emptyMoveInput, type Vec3 } from './types';
 
 // --- tuning -----------------------------------------------------------------
@@ -133,6 +135,15 @@ function ghostGraveyard(
     const door = DELVES[delve.delveId]?.doorPos;
     if (door) return nearestOverworldGraveyard(door.x, door.z, graveyards, fallback);
   }
+  const unclaimedDelve = isDelvePos(p.pos.x) ? delveAt(p.pos.x) : null;
+  if (unclaimedDelve) {
+    return nearestOverworldGraveyard(
+      unclaimedDelve.doorPos.x,
+      unclaimedDelve.doorPos.z,
+      graveyards,
+      fallback,
+    );
+  }
   // A rift death returns the spirit to the overworld graveyard nearest where the
   // player STEPPED THROUGH the portal (the instance's returnPos), not the far-off
   // rift band (which would resolve to whatever zone happens to be nearest in raw
@@ -170,11 +181,10 @@ export function releasePlayerSpirit(
   // a stale arenaMatches entry (jail/cross-queue leaks) once held this gate
   // shut for a whole bg match, so the guard must never outrank the bg arm.
   if (ctx.arenaMatches.has(p.id) && !ctx.bgMatches.has(p.id)) return;
-  if (isDelvePos(p.pos.x)) {
-    // Delves keep their own bounded respawn rules (see entity_roster), no ghost run.
-    releaseSpiritInDelve(ctx, meta.entityId);
-    return;
-  }
+  // Delves keep their own bounded respawn rules (see entity_roster), no ghost run.
+  // A delve corpse no run claims falls through to the graveyard instead of staying
+  // dead forever, which is the only escape left once a run cannot be resolved.
+  if (isDelvePos(p.pos.x) && releaseSpiritInDelve(ctx, meta.entityId)) return;
   releaseAtNearestGraveyard(ctx, meta, p, graveyards, fallback);
 }
 
@@ -325,6 +335,8 @@ export function resurrectAtCorpse(ctx: SimContext, pid?: number): void {
   // teleported onto the exact corpse point.
   reviveAt(ctx, meta, p, p.pos, RES_HP_FRACTION, 'none');
   ctx.emit({ type: 'respawn', pid: meta.entityId });
+  // The island's death lesson: this IS the walk it teaches.
+  creditDeathLesson(ctx, meta, true);
 }
 
 // Resurrect at the Spirit Healer: instant, in place, but with Resurrection Sickness.
@@ -339,6 +351,10 @@ export function resurrectAtSpiritHealer(ctx: SimContext, pid?: number): boolean 
   // RES_HEALER_HP_FRACTION of your pools (the corpse run is the penalty-free choice).
   reviveAt(ctx, meta, p, p.pos, RES_HEALER_HP_FRACTION, 'resurrection');
   ctx.emit({ type: 'respawn', pid: meta.entityId });
+  // Credited too, deliberately: the lesson teaches the corpse run, but a
+  // player who took the Keeper instead has no corpse left to walk to, and a
+  // quest they can no longer finish is worse than one finished the long way.
+  creditDeathLesson(ctx, meta, false);
   return true;
 }
 

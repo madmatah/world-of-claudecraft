@@ -41,7 +41,6 @@ export const realmRacers: GuidePage = {
         ${sectionPair('guide.realmRacersPage.rewardsHeading', 'guide.realmRacersPage.rewardsBody')}
         ${related([
           { href: hrefFor('how-to-play'), key: 'guide.nav.howToPlay' },
-          { href: hrefFor('vale-cup'), key: 'guide.nav.valeCup' },
           { href: hrefFor('deeds'), key: 'guide.nav.deeds' },
         ])}
       </article>`;

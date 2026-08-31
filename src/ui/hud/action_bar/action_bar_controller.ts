@@ -1,5 +1,4 @@
 import { REALM_RACERS_ABILITIES, REALM_RACERS_BAR_SLOTS } from '../../../sim/content/realm_racers';
-import { SPORT_ABILITIES } from '../../../sim/content/vale_cup';
 import { ABILITIES, ITEMS } from '../../../sim/data';
 import type { PlayerClass } from '../../../sim/types';
 import type { ActionBarLayout } from '../../../world_api/action_bar';
@@ -38,7 +37,7 @@ import {
 
 export { ACTION_BAR_ABILITY_SLOTS } from './action_bar_layout_core';
 
-export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'sport' | 'rally';
+export type HotbarForm = 'normal' | 'bear' | 'cat' | 'cat_stealth' | 'stealth' | 'rally';
 
 const FORM_TOGGLE_IDS = new Set(['bear_form', 'cat_form', 'travel_form']);
 
@@ -55,7 +54,6 @@ export interface ActionBarControllerDeps {
   talentSpec(): string | null;
   knownAbilityIds(): readonly string[];
   hasAura(kind: string): boolean;
-  isInSportMatch(): boolean;
   isInRealmRacers?(): boolean;
   showAttackButton(): boolean;
   // The persistence seam: called after a user-driven layout change (never during
@@ -145,7 +143,6 @@ export class ActionBarController {
 
   resolveActiveForm(): HotbarForm {
     if (this.deps.isInRealmRacers?.()) return 'rally';
-    if (this.deps.isInSportMatch()) return 'sport';
     if (this.deps.playerClass === 'druid') {
       if (this.deps.hasAura('form_bear')) return 'bear';
       if (this.deps.hasAura('form_cat')) {
@@ -386,10 +383,9 @@ export class ActionBarController {
    * the table in `sim/content/realm_racers.ts`: auto-placement fills the first
    * EMPTY slot, so every effect a pilot drew landed under the same key.
    *
-   * Scope note: the Vale Cup's sport kit has exactly the same shape and is
-   * deliberately NOT changed here, so its bar keeps the behavior it shipped
-   * with; extending this is a one-line change to the form check plus its own
-   * slot table.
+   * Scope note: the pin table is per activity, so a future activity kit of the
+   * same shape extends this with a one-line change to the form check plus its
+   * own slot table.
    */
   private activityKitSlotFor(id: string, form: HotbarForm = this.activeFormState): number | null {
     if (form !== 'rally') return null;
@@ -461,8 +457,7 @@ export class ActionBarController {
     if (form === 'rally') {
       return !!REALM_RACERS_ABILITIES[id] && this.activityKitSlotFor(id, form) === null;
     }
-    if (form === 'sport') return !!SPORT_ABILITIES[id];
-    if (SPORT_ABILITIES[id] || REALM_RACERS_ABILITIES[id]) return false;
+    if (REALM_RACERS_ABILITIES[id]) return false;
     if (this.isStealthForm(form)) return false;
     if (form === 'bear' || form === 'cat') {
       return ABILITIES[id]?.requiresForm === form || FORM_TOGGLE_IDS.has(id);
@@ -479,7 +474,7 @@ export class ActionBarController {
   }
 
   private abilityDef(id: string) {
-    return ABILITIES[id] ?? SPORT_ABILITIES[id] ?? REALM_RACERS_ABILITIES[id];
+    return ABILITIES[id] ?? REALM_RACERS_ABILITIES[id];
   }
 
   private isAbilityPlacementAllowed(id: string): boolean {
@@ -572,7 +567,7 @@ export class ActionBarController {
     const normalActions = parseHotbarActions(
       normalRaw,
       ACTION_BAR_ABILITY_SLOTS,
-      (id) => !!ABILITIES[id] || !!SPORT_ABILITIES[id],
+      (id) => !!ABILITIES[id],
       // The stored-layout keep predicate here too: a normal bar holding an
       // unknown-id slot must still read as occupied, or the seeding decision
       // treats it as emptier than it is.
@@ -616,7 +611,7 @@ export class ActionBarController {
         // Storage can be unavailable in private browsing modes.
       }
     }
-    if (this.activeFormState === 'sport' || this.activeFormState === 'rally') {
+    if (this.activeFormState === 'rally') {
       if (parsed.every((action) => action === null)) {
         this.actionState = buildDefaultFormBar(
           this.formKitAbilityIds(this.activeFormState),

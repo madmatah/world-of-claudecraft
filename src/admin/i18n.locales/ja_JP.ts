@@ -7,6 +7,9 @@
 // (tests/i18n_admin_catalog.test.ts).
 
 export const ja_JP: Record<string, string> = {
+  'error.flagActiveExists': 'このアカウントには、その種類の未処理のフラグがすでにあります。',
+  'wealth.largeMovementsUnavailable':
+    '大規模な銀行の動きを読み込めませんでした（台帳の読み取りがタイムアウトしました）。上記の金の内訳は完全です。',
   'error.guildBankDeleting':
     'このギルドは削除処理中のため、銀行は閉鎖されています。変更は行われませんでした。',
   'error.guildBankItemRequired': 'そのスロットに入っているはずのアイテムIDを入力してください。',
@@ -338,6 +341,8 @@ export const ja_JP: Record<string, string> = {
   'usage.cacheColEvictions': '削除',
   'usage.cacheEntriesOfMax': '{entries} / {max}',
   'usage.notAvailable': 'なし',
+  'usage.metric.walletHandoffAuthorizationEvicted': 'デスクトップウォレット認証の削除',
+  'usage.metric.walletHandoffCreateRejected': 'デスクトップウォレット認証の拒否',
   'usage.metric.wocBalanceApi': '$WOC残高APIリクエスト',
   'usage.metric.wocBalanceRateLimited': '$WOC残高の制限リクエスト',
   'usage.metric.wocBalanceRpc': 'Solana RPC残高読み取り',
@@ -351,6 +356,8 @@ export const ja_JP: Record<string, string> = {
   'usage.metric.walletChallengeRateLimited': '制限されたウォレットチャレンジ',
   'usage.metric.walletLinkRequest': 'ウォレットリンクリクエスト',
   'usage.metric.walletLinkFailure': 'ウォレットリンク失敗',
+  'usage.metric.walletUnlinkFailure': 'ウォレットリンク解除の拒否',
+  'usage.metric.walletUnlinkSuccess': 'ウォレットリンク解除の完了',
   'usage.metric.walletLinkRateLimited': '制限されたウォレットリンク',
   'usage.metric.cardPublishRequest': 'プレイヤーカード公開リクエスト',
   'usage.metric.cardPublishRejected': '拒否されたカード公開',

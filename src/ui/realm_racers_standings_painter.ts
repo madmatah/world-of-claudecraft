@@ -124,11 +124,10 @@ export class RealmRacersStandingsPanel {
     // panel, and a marker glued to its end is the first thing an ellipsis eats.
     w.setText(pooled.name, row.name);
     w.setText(pooled.you, row.isMe ? t('hudChrome.rally.standingsYou') : '');
-    // The house-pilot marker is the game's ONE AI badge, the Vale Cup team
-    // sheet's Bot tag: the same key rather than a second rally-only term. The
-    // title mirrors the text so hover names it too; both ride the row
-    // signature (the core's `bot` flag) and the empty cell collapses in CSS.
-    const botLabel = row.bot ? t('hudChrome.vcup.briefing.bot') : '';
+    // The house-pilot marker, the game's ONE AI badge. The title mirrors the
+    // text so hover names it too; both ride the row signature (the core's
+    // `bot` flag) and the empty cell collapses in CSS.
+    const botLabel = row.bot ? t('hudChrome.rally.standingsBot') : '';
     w.setText(pooled.bot, botLabel);
     w.setAttr(pooled.bot, 'title', botLabel);
     w.setText(pooled.lap, lapLabel(row, totalLaps));

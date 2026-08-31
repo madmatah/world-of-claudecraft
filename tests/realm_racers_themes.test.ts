@@ -349,8 +349,17 @@ describe('Realm Racers circuit themes', () => {
     // rule the ids are authored under (`thornpeak` for `thornpeak_heights`).
     const themeIdForZone = (zoneId: string): string =>
       zoneId.replace(/_(vale|marsh|heights|isle)$/, '');
-    expect(ZONES.length).toBeGreaterThan(13);
-    expect(ZONES.map((zone) => themeIdForZone(zone.id)).sort()).toEqual(
+    // ONE named exemption, and it is a fact about the place rather than a
+    // shortcut: the Proving Shore is the level 1 to 2 tutorial island the
+    // ferry takes a character off for good, so no circuit is ever drawn on
+    // it. It also carries the vale's own biome, and the unique-ground rule
+    // below forbids a second record painting the vale, so it could not have a
+    // theme of its own even if a circuit wanted one. Named here, exactly as
+    // the Farshore's two art exceptions are, rather than exempted quietly.
+    const RACEABLE_ZONES = ZONES.filter((zone) => zone.id !== 'proving_shore');
+    expect(ZONES.length - RACEABLE_ZONES.length).toBe(1);
+    expect(RACEABLE_ZONES.length).toBeGreaterThan(13);
+    expect(RACEABLE_ZONES.map((zone) => themeIdForZone(zone.id)).sort()).toEqual(
       [...REALM_RACERS_THEME_IDS].sort(),
     );
     // ...and each one paints its OWN realm's ground, which is the half an id
@@ -359,7 +368,7 @@ describe('Realm Racers circuit themes', () => {
     // rather than exempted quietly: its isle is a sand shore, so it takes the
     // `beach` paint rather than the `vale` its ZoneDef sits in, which is also
     // what leaves the vale free for Eastbrook under the unique-ground rule.
-    for (const zone of ZONES) {
+    for (const zone of RACEABLE_ZONES) {
       const theme = CIRCUIT_THEMES[themeIdForZone(zone.id)];
       const expected = zone.id === 'farshore_isle' ? 'beach' : zone.biome;
       expect(theme.ground, zone.id).toBe(expected);

@@ -7,6 +7,10 @@
 import type { DeedLocaleTable } from '../deed_i18n';
 
 export const table: DeedLocaleTable = {
+  prog_ready_for_an_adventure: {
+    name: 'Klaar voor een Avontuur',
+    desc: 'Studeer af van de Beproevingskust: voltooi elke les op het eiland, en luid dan de veerklok naar huis, naar Oostbeek.',
+  },
   exp_dawnhold_castle: {
     name: 'Een Open Deur in de Tuin',
     desc: 'Breng een bezoek aan Kasteel Dawnhold en dwaal door zijn zonnige tuinzalen.',
@@ -1044,5 +1048,34 @@ export const table: DeedLocaleTable = {
     name: 'Heiligdom verlucht',
     desc: 'Verlucht de bladzijde Heroïsch: Grafwurm-Heiligdom van Het Reliquarium.',
     title: 'Licht van het Heiligdom',
+  },
+  soc_strongbox_outfitter: {
+    name: 'Het Eerste Vak',
+    desc: 'Ontgrendel je eerste banktasvak.',
+  },
+  soc_four_bags_deep: {
+    name: 'Alle Vier de Vakken',
+    desc: 'Ontgrendel alle vier de banktasvakken.',
+  },
+  dgn_ignivar: {
+    name: 'De Heraut Valt',
+    desc: 'Versla Ignivar, Herald of the Last Flame, in de Crucible of the Last Spring.',
+  },
+  dgn_ignivar_heroic: {
+    name: 'Heroïsch: De Heraut Valt',
+    desc: 'Versla Ignivar, Herald of the Last Flame, op Heroïsche moeilijkheidsgraad.',
+  },
+  dgn_varkhul: {
+    name: 'De Smidse Koelt Af',
+    desc: 'Versla Varkhul, Forgefather of the Last Flame, in de Inner Crucible.',
+  },
+  dgn_varkhul_heroic: {
+    name: 'Heroïsch: De Smidse Koelt Af',
+    desc: 'Versla Varkhul, Forgefather of the Last Flame, op Heroïsche moeilijkheidsgraad.',
+  },
+  dgn_varkhul_flawless: {
+    name: 'Geen Sintel Verloren',
+    desc: 'Versla Varkhul, Forgefather of the Last Flame, op Heroïsche moeilijkheidsgraad zonder dat één raider sterft.',
+    title: 'de Ongeschondene',
   },
 };

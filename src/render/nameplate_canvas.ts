@@ -10,6 +10,7 @@ import {
   nameplateHeraldryLift,
 } from './nameplate_heraldry_core';
 import { drawNameplateLootIcon } from './nameplate_loot_icon';
+import { NAMEPLATE_BASE_WIDTH, nameplateHealthBarWidth } from './nameplate_pick_core';
 
 export type NameplateFrame = '' | 'elite' | 'boss';
 export type NameplateMarkerTone = 'none' | 'quest' | 'active' | 'loot' | 'repeat' | 'cooldown';
@@ -33,6 +34,8 @@ export interface NameplateCanvasState {
    *  alongside `guild` (its only writer), so the per-frame draw path never
    *  allocates the wrapper; drawBase only consumes it. */
   guildLabel: string;
+  /** The guild colour tier for the line's fill (GUILD_TIER_FILLS). */
+  guildTier: number;
   title: string;
   /** The Book of Deeds border SLUG (never a deed id, never display text), '' for
    *  a borderless player and every mob/npc/object. Resolved by the painter
@@ -79,6 +82,7 @@ export function createNameplateCanvasState(): NameplateCanvasState {
     levelColor: '#fff',
     guild: '',
     guildLabel: '',
+    guildTier: 0,
     title: '',
     border: '',
     marker: '',
@@ -109,8 +113,6 @@ export function createNameplateCanvasState(): NameplateCanvasState {
   };
 }
 
-export const NAMEPLATE_BASE_WIDTH = 80;
-export const NAMEPLATE_BOSS_WIDTH = 100;
 export const NAMEPLATE_MARKER_ROW_HEIGHT = 26;
 export const NAMEPLATE_MAX_PIXEL_RATIO = 2;
 // Nameplate labels scale their backing stores with DPR. The count remains a
@@ -172,6 +174,16 @@ const GUILD_STYLE: TextSpriteStyle = {
   stroke: '#000',
   lineWidth: 2,
 };
+/** Guild colour tiers (sim/guild_tier.ts): the guild line's fill by the
+ *  guild's collective lifetime XP. Index IS the tier; 0 keeps the classic
+ *  fill every fresh guild has always had. Cosmetic only. */
+export const GUILD_TIER_FILLS: readonly string[] = [
+  '#c9dcfb', // 0: the classic guild blue
+  '#9fe8a8', // 1: spring green, a few actives
+  '#5fd3e8', // 2: cyan, an established roster
+  '#e8b45f', // 3: amber, a serious guild
+  '#ffcf40', // 4: gold, the realm's elite
+];
 const TARGET_GUILD_STYLE: TextSpriteStyle = {
   font: `700 13px ${TITLE_FONT}`,
   fill: '#c9dcfb',
@@ -407,7 +419,7 @@ export class NameplateCanvasSurface {
         state.guildLabel,
         screenX,
         y + (state.currentTarget ? 11 : 10),
-        this.configureTextStyle(guildStyle, GUILD_STYLE.fill),
+        this.configureTextStyle(guildStyle, GUILD_TIER_FILLS[state.guildTier] ?? GUILD_STYLE.fill),
       );
     }
     if (state.title) y -= NAMEPLATE_HERALDRY_TITLE_STEP;
@@ -706,7 +718,7 @@ export class NameplateCanvasSurface {
   private drawHealth(state: NameplateCanvasState, centerX: number, y: number): void {
     const ctx = this.ctx;
     const forcedColors = this.forcedColorsActive();
-    const width = state.frame === 'boss' ? NAMEPLATE_BOSS_WIDTH : NAMEPLATE_BASE_WIDTH;
+    const width = nameplateHealthBarWidth(state.frame === 'boss');
     const x = centerX - width / 2;
     if (state.threat) {
       ctx.save();

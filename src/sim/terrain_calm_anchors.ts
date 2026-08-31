@@ -36,7 +36,6 @@ import {
 } from './data';
 import { GALE_HARBOR_DECKS } from './gale_harbor';
 import { REACH_DECKS } from './reach_decks';
-import { BANNER_POLES, BRAZIERS, GATE, PLINTH_POS } from './vale_cup_layout';
 import { WORLD_BOSSES } from './world_boss';
 
 // The skirt's own contribution to radial slope is bounded by
@@ -169,7 +168,19 @@ export function collectCalmAnchorPads(): CalmPadRow[] {
   pad('glacierTarn', 50, 1646, 22, 34, false);
   // Dungeon doors: the walk-up entrance in the open world (the instanced
   // interior beyond DUNGEON_X_THRESHOLD is filtered by the world.ts add).
+  // Interior-only rooms (overworldDoor: false) have no walk-up door, so their
+  // placeholder doorPos must not calm open-world ground.
   for (const id in DUNGEONS) {
+    // A room reached only through internal instance doors (overworldDoor:
+    // false, e.g. the Ignivar raid wings) has no surface door to flatten
+    // for; its placeholder doorPos must not register a pad in the open
+    // world. Same skip as dungeon_door_clearance.ts, colliders.ts, and
+    // the sim's door-entity loop (the d14e94fad fix missed this fifth
+    // site). The origin pads these registered are divergence-driven and
+    // measured INERT today (zero height delta over the 88 yd disc at
+    // both seeds), so this changes no terrain; it stops them silently
+    // activating if the character layers near the origin ever diverge.
+    if (DUNGEONS[id].overworldDoor === false) continue;
     const door = DUNGEONS[id].doorPos;
     pad('dungeonDoor', door.x, door.z, 7, 15);
   }
@@ -234,11 +245,6 @@ export function collectCalmAnchorPads(): CalmPadRow[] {
       pad('deckRoot', deck.ax2, deck.az2, 5, 12);
     }
   }
-  // Vale Cup open-world dressing outside the sowfield flat itself.
-  pad('valeCup', PLINTH_POS.x, PLINTH_POS.z, 3, 8);
-  pad('valeCup', GATE.x, GATE.z, 3, 8);
-  for (const pole of BANNER_POLES) pad('valeCup', pole.x, pole.z, 2, 7);
-  for (const brazier of BRAZIERS) pad('valeCup', brazier.x, brazier.z, 2, 7);
   // Structural props: anything with a modeled footprint a player walks up
   // to. Foliage-like dressing (marshReeds, greatTrees) and hub-internal
   // line work (fences, walls) are deliberately absent: a tree or a fence

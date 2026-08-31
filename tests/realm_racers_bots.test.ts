@@ -30,7 +30,7 @@ import {
   REALM_RACERS_BACKFILL_TICKS,
   REALM_RACERS_BACKFILL_TIER,
 } from '../src/sim/social/realm_racers_bots';
-import { addAt, makeWorld } from './vale_cup_util';
+import { addAt, makeWorld } from './realm_racers_util';
 
 /** Ticks a full race may take: the countdown plus the 180 s limit, and a beat
  *  for the result tableau to tear down. */
