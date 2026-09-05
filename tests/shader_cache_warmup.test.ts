@@ -29,6 +29,7 @@ import {
 import { releaseTrackedWebGLContexts } from '../src/render/context_release';
 import { setShaderWarmStoredSettingSource } from '../src/render/shader_warm_client';
 import {
+  cacheKeyDigest,
   createShaderCorpusRecord,
   type ShaderCorpusRecord,
   shaderCorpusIdentity,
@@ -151,7 +152,14 @@ function fakeGl(
 }
 
 function corpusRecord(
-  programs: { vertex: string; fragment: string; index0Attribute: string }[],
+  programs: {
+    vertex: string;
+    fragment: string;
+    index0Attribute: string;
+    type: string;
+    name: string;
+    cacheKey: string;
+  }[],
   extensions: string[] = ENABLED,
 ): ShaderCorpusRecord {
   return createShaderCorpusRecord({
@@ -161,6 +169,7 @@ function corpusRecord(
       adapter: ADAPTER,
       extensions,
     }),
+    tier: TIER,
     extensions,
     savedAt: 1_700_000_000_000,
     contextAttributes: { antialias: false },
@@ -172,6 +181,25 @@ const program = (n: number) => ({
   vertex: `void vertex${n}(){}`,
   fragment: `void frag${n}(){}`,
   index0Attribute: 'position',
+  type: 'MeshStandardMaterial',
+  name: '',
+  // The recorder stores a digest of three's key, never the raw key.
+  cacheKey: cacheKeyDigest(`key${n}`),
+});
+
+/** What the hidden context links: the sources and the bind, never the labels. */
+const linked = (n: number) => ({
+  vertex: `void vertex${n}(){}`,
+  fragment: `void frag${n}(){}`,
+  index0Attribute: 'position',
+});
+
+/** A renderer.info.programs entry as three shapes it (WebGLProgram fields). */
+const entry = (n = 1) => ({
+  program: {},
+  type: 'MeshStandardMaterial',
+  name: '',
+  cacheKey: `key${n}`,
 });
 
 async function storeWith(
@@ -209,6 +237,9 @@ describe('the corpus round trip', () => {
         vertex: `#version 300 es\n${'precision highp float;\n'.repeat(40)}// ${i}`,
         fragment: `#version 300 es\n${'precision highp float;\n'.repeat(40)}// f${i}`,
         index0Attribute: 'position',
+        type: 'MeshStandardMaterial',
+        name: '',
+        cacheKey: `key${i}`,
       })),
     );
     const raw = new TextEncoder().encode(JSON.stringify(bulky)).byteLength;
@@ -334,9 +365,9 @@ describe('startShaderWarmup', () => {
     const ctx = await run({ record: corpusRecord([program(1), program(2), program(3)]) });
     expect(ctx.gl.linked).toHaveLength(0);
     ctx.runFrames(1);
-    expect(ctx.gl.linked).toEqual([program(1)]);
+    expect(ctx.gl.linked).toEqual([linked(1)]);
     ctx.runFrames(1);
-    expect(ctx.gl.linked).toEqual([program(1), program(2)]);
+    expect(ctx.gl.linked).toEqual([linked(1), linked(2)]);
     ctx.runFrames(1);
     expect(ctx.gl.linked).toHaveLength(3);
     expect(shaderWarmupStats()).toMatchObject({ corpusPrograms: 3, submitted: 3, skipped: null });
@@ -366,10 +397,19 @@ describe('startShaderWarmup', () => {
   });
 
   it('binds nothing for a program recorded without an attribute at location 0', async () => {
-    const unbound = { vertex: 'void v(){}', fragment: 'void f(){}', index0Attribute: '' };
+    const unbound = {
+      vertex: 'void v(){}',
+      fragment: 'void f(){}',
+      index0Attribute: '',
+      type: 'MeshStandardMaterial',
+      name: '',
+      cacheKey: 'unbound',
+    };
     const ctx = await run({ record: corpusRecord([unbound]) });
     ctx.runFrames(1);
-    expect(ctx.gl.linked).toEqual([unbound]);
+    expect(ctx.gl.linked).toEqual([
+      { vertex: unbound.vertex, fragment: unbound.fragment, index0Attribute: '' },
+    ]);
   });
 
   it('resolves a completed link with a LINK_STATUS read, and not before', async () => {
@@ -471,7 +511,7 @@ describe('startShaderWarmup', () => {
       const ctx = await run({ record: corpusRecord([program(1)]), stored });
       ctx.runFrames(1);
       expect(shaderWarmupStats().skipped).toBeNull();
-      expect(ctx.gl.linked).toEqual([program(1)]);
+      expect(ctx.gl.linked).toEqual([linked(1)]);
     }
     shaderWarmupInternalsForTest.reset();
     const pinned = await run({
@@ -481,7 +521,7 @@ describe('startShaderWarmup', () => {
     });
     pinned.runFrames(1);
     expect(shaderWarmupStats().skipped).toBeNull();
-    expect(pinned.gl.linked).toEqual([program(1)]);
+    expect(pinned.gl.linked).toEqual([linked(1)]);
   });
 
   it('reads the registered option and the page navigator when the host passes none', async () => {
@@ -578,7 +618,7 @@ describe('startShaderWarmup', () => {
     const android = await run({ record: corpusRecord([program(1)]), platform: 'android' });
     android.runFrames(1);
     expect(shaderWarmupStats().skipped).toBeNull();
-    expect(android.gl.linked).toEqual([program(1)]);
+    expect(android.gl.linked).toEqual([linked(1)]);
   });
 
   it('stops paying out the moment the player enters the world', async () => {
@@ -587,7 +627,7 @@ describe('startShaderWarmup', () => {
     stopShaderWarmup();
     expect(ctx.cancelled).toHaveLength(1);
     ctx.runFrames(3);
-    expect(ctx.gl.linked).toEqual([program(1)]);
+    expect(ctx.gl.linked).toEqual([linked(1)]);
     expect(shaderWarmupStats().submitted).toBe(1);
   });
 
@@ -610,7 +650,7 @@ describe('startShaderWarmup', () => {
     await flush();
     ctx.runFrames(1);
     expect(ctx.frames).toHaveLength(1);
-    expect(ctx.gl.linked).toEqual([program(1), program(2)]);
+    expect(ctx.gl.linked).toEqual([linked(1), linked(2)]);
     expect(shaderWarmupStats().skipped).toBeNull();
   });
 });
@@ -639,7 +679,7 @@ describe('recordShaderCorpus', () => {
     ];
     const values = new Map<string, unknown>();
     const store = createMemoryStore(values);
-    const count = await recordShaderCorpus(renderer(gl, [{ program: {} }, { program: {} }]), {
+    const count = await recordShaderCorpus(renderer(gl, [entry(), entry()]), {
       store,
       buildId: BUILD,
       tier: TIER,
@@ -667,7 +707,7 @@ describe('recordShaderCorpus', () => {
       { type: gl.FRAGMENT_SHADER, source: 'void frag1(){}' },
     ];
     const values = new Map<string, unknown>();
-    await recordShaderCorpus(renderer(gl, [{ program: {} }]), {
+    await recordShaderCorpus(renderer(gl, [entry()]), {
       store: createMemoryStore(values),
       buildId: BUILD,
       tier: TIER,
@@ -678,7 +718,7 @@ describe('recordShaderCorpus', () => {
 
   it('never throws at its caller when the context refuses', async () => {
     const broken = {
-      info: { programs: [{ program: {} }] },
+      info: { programs: [entry()] },
       getContext: () => {
         throw new Error('context lost');
       },
@@ -698,7 +738,7 @@ describe('recordShaderCorpus', () => {
     ];
     let contextReads = 0;
     const counted = (): ShaderCorpusRenderer => ({
-      info: { programs: [{ program: {} }] },
+      info: { programs: [entry()] },
       getContext: () => {
         contextReads += 1;
         return gl;
@@ -746,7 +786,7 @@ describe('recordShaderCorpus', () => {
     ];
     const values = new Map<string, unknown>();
     let scheduledDelay = 0;
-    finishShaderWarmup(renderer(gl, [{ program: {} }]), {
+    finishShaderWarmup(renderer(gl, [entry()]), {
       store: createMemoryStore(values),
       buildId: BUILD,
       tier: TIER,

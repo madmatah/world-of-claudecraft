@@ -51,8 +51,10 @@ import {
   type ShaderWarmPlatform,
 } from './shader_warm_client_core';
 
-/** Bumped when the record shape changes; an older record is ignored. */
-export const SHADER_CORPUS_VERSION = 2;
+/** Bumped when the record shape changes; an older record is ignored. Version 3
+ *  added the program's material type, name and three cache key (the probe's
+ *  corpus keys programs by them) and the tier as its own field. */
+export const SHADER_CORPUS_VERSION = 3;
 
 /** A full ultra-tier set is about 390 programs; the cap bounds a pathological
  *  session (a long play session that keeps minting variants) rather than the
@@ -92,6 +94,36 @@ export const SHADER_CORPUS_IDENTITY_LIMIT = 8 * 1024;
 /** An attribute name at location 0: `position` in practice. */
 export const SHADER_CORPUS_ATTRIBUTE_NAME_LIMIT = 256;
 
+/** A material type or name: three's own are short; a post pass named by the
+ *  naming walk (post_pass_naming_core.ts) is `<pass>.<field>[i]`. */
+export const SHADER_CORPUS_LABEL_LIMIT = 256;
+
+/** The recorded cache key is a DIGEST of three's (cacheKeyDigest): the raw key
+ *  folds every parameter and, for a material with an onBeforeCompile splice,
+ *  its custom key, which reaches tens of kilobytes on the instanced props. */
+export const SHADER_CORPUS_CACHE_KEY_LIMIT = 64;
+
+/** A short, deterministic digest of three's program cache key: FNV-1a over
+ *  the key's UTF-16 code units, 64 bits kept as two 32-bit halves and printed
+ *  as 16 hex characters. Enough to tell two programs apart, and never the raw
+ *  key, which can be tens of kilobytes. */
+export function cacheKeyDigest(key: string): string {
+  let hi = 0xcbf29ce4;
+  let lo = 0x84222325;
+  for (let i = 0; i < key.length; i++) {
+    lo = (lo ^ key.charCodeAt(i)) >>> 0;
+    // Multiply the 64-bit value by the FNV prime 0x100000001b3: the low word
+    // times 0x1b3 (carrying into the high word) plus the low word shifted
+    // up by 40 bits, which lands its low 24 bits in the high word.
+    const shifted = (lo & 0xffffff) * 256;
+    const loTimesPrime = lo * 0x1b3;
+    const carry = Math.floor(loTimesPrime / 0x100000000);
+    lo = loTimesPrime % 0x100000000;
+    hi = (((hi * 0x1b3) % 0x100000000) + carry + shifted) % 0x100000000;
+  }
+  return hi.toString(16).padStart(8, '0') + lo.toString(16).padStart(8, '0');
+}
+
 export interface ShaderProgramSources {
   vertex: string;
   fragment: string;
@@ -99,6 +131,14 @@ export interface ShaderProgramSources {
    *  the replay's link so its program key matches the game's. Empty when the
    *  program has no attribute there. */
   index0Attribute: string;
+  /** three's program `type`: the material class (`MeshStandardMaterial`,
+   *  `MeshDepthMaterial` for a shadow twin, `ShaderMaterial` for a post pass). */
+  type: string;
+  /** three's program `name`: the material's name, empty for most built-ins;
+   *  the post chain's passes are named by the walk in post_pass_naming_core.ts. */
+  name: string;
+  /** three's own program cache key: what its link looks up. */
+  cacheKey: string;
 }
 
 /** Every dimension the browser's program cache key depends on that this page
@@ -119,6 +159,9 @@ export interface ShaderCorpusIdentityInputs {
 export interface ShaderCorpusRecord {
   version: number;
   identity: string;
+  /** The graphics tier the set was recorded under, on its own beside the
+   *  identity string so a consumer can address it without parsing. */
+  tier: string;
   /** The extensions the recording context had enabled, in the sweep's order.
    *  A warm-up context that cannot reproduce this list is refused. */
   extensions: string[];
@@ -206,12 +249,16 @@ export function selectCorpusPrograms(
     // the recorder keeps what fits (first seen, the programs of the first
     // minutes) and drops the rest.
     chars += source.vertex.length + source.fragment.length;
+    chars += source.type.length + source.name.length + source.cacheKey.length;
     if (chars > maxChars) break;
     seen.add(key);
     kept.push({
       vertex: source.vertex,
       fragment: source.fragment,
       index0Attribute: source.index0Attribute,
+      type: source.type,
+      name: source.name,
+      cacheKey: source.cacheKey,
     });
   }
   return kept;
@@ -219,6 +266,7 @@ export function selectCorpusPrograms(
 
 export interface CreateShaderCorpusRecordInputs {
   identity: string;
+  tier: string;
   extensions: readonly string[];
   savedAt: number;
   contextAttributes: Record<string, unknown> | null;
@@ -233,6 +281,7 @@ export function createShaderCorpusRecord(
   return {
     version: SHADER_CORPUS_VERSION,
     identity: inputs.identity,
+    tier: inputs.tier,
     extensions: [...inputs.extensions],
     savedAt: inputs.savedAt,
     contextAttributes: inputs.contextAttributes,
@@ -258,6 +307,9 @@ export function isShaderCorpusRecord(
   if (record.version !== SHADER_CORPUS_VERSION) return false;
   if (typeof record.identity !== 'string' || record.identity.length === 0) return false;
   if (record.identity.length > SHADER_CORPUS_IDENTITY_LIMIT) return false;
+  if (typeof record.tier !== 'string' || record.tier.length > SHADER_CORPUS_LABEL_LIMIT) {
+    return false;
+  }
   if (!Array.isArray(record.extensions)) return false;
   if (record.extensions.length > SHADER_CORPUS_EXTENSION_LIMIT) return false;
   for (const name of record.extensions) {
@@ -270,7 +322,7 @@ export function isShaderCorpusRecord(
   // The identity and the extension names count toward the same ceiling as the
   // sources: they are text this record carries, and a size bound that ignored
   // them would be a bound on part of the record.
-  let chars = record.identity.length;
+  let chars = record.identity.length + record.tier.length;
   for (const name of record.extensions) chars += name.length;
   if (chars > byteLimit) return false;
   for (const program of record.programs) {
@@ -279,7 +331,13 @@ export function isShaderCorpusRecord(
     if (typeof pair.vertex !== 'string' || typeof pair.fragment !== 'string') return false;
     if (typeof pair.index0Attribute !== 'string') return false;
     if (pair.index0Attribute.length > SHADER_CORPUS_ATTRIBUTE_NAME_LIMIT) return false;
-    chars += pair.vertex.length + pair.fragment.length;
+    if (typeof pair.type !== 'string' || pair.type.length > SHADER_CORPUS_LABEL_LIMIT) return false;
+    if (typeof pair.name !== 'string' || pair.name.length > SHADER_CORPUS_LABEL_LIMIT) return false;
+    if (typeof pair.cacheKey !== 'string' || pair.cacheKey.length > SHADER_CORPUS_CACHE_KEY_LIMIT) {
+      return false;
+    }
+    chars += pair.vertex.length + pair.fragment.length + pair.type.length + pair.name.length;
+    chars += pair.cacheKey.length;
     if (chars > byteLimit) return false;
   }
   return true;

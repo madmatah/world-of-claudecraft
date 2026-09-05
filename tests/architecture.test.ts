@@ -695,6 +695,7 @@ const RENDER_PURE_CORES = [
   'src/render/post_bloom_shader_core.ts',
   'src/render/dynamic_resolution_core.ts',
   'src/render/post_plan_core.ts',
+  'src/render/post_pass_naming_core.ts',
   'src/render/nameplate_view.ts',
   'src/render/nameplate_pick_core.ts',
   'src/render/nameplate_heraldry_core.ts',

@@ -49,6 +49,7 @@ import { enableRendererExtensions } from '../render/renderer_extensions';
 import { storedShaderWarmSetting } from '../render/shader_warm_client';
 import type { ShaderWarmPlatform } from '../render/shader_warm_client_core';
 import {
+  cacheKeyDigest,
   createShaderCorpusRecord,
   createWarmupPlan,
   isShaderCorpusRecord,
@@ -611,7 +612,13 @@ function index0AttributeOf(gl: CorpusGl, program: WebGLProgram): string {
 function programSourcesOf(gl: CorpusGl, entries: readonly unknown[]): ShaderProgramSources[] {
   const sources: ShaderProgramSources[] = [];
   for (const entry of entries) {
-    const program = (entry as { program?: unknown } | null)?.program;
+    const item = entry as {
+      program?: unknown;
+      type?: unknown;
+      name?: unknown;
+      cacheKey?: unknown;
+    } | null;
+    const program = item?.program;
     if (!program) continue;
     const shaders = gl.getAttachedShaders(program as WebGLProgram);
     if (!shaders) continue;
@@ -627,6 +634,11 @@ function programSourcesOf(gl: CorpusGl, entries: readonly unknown[]): ShaderProg
         vertex,
         fragment,
         index0Attribute: index0AttributeOf(gl, program as WebGLProgram),
+        // three's WebGLProgram carries the material's type and name and its
+        // own cache key; a foreign entry reads as unnamed rather than dropped.
+        type: typeof item?.type === 'string' ? item.type : '',
+        name: typeof item?.name === 'string' ? item.name : '',
+        cacheKey: typeof item?.cacheKey === 'string' ? cacheKeyDigest(item.cacheKey) : '',
       });
     }
   }
@@ -657,13 +669,15 @@ export async function recordShaderCorpus(
     const gl = renderer.getContext() as CorpusGl;
     const entries = renderer.info.programs ?? [];
     const sweep = enableRendererExtensions(gl);
+    const tier = options.tier ?? String(GFX.tier);
     const record = createShaderCorpusRecord({
       identity: shaderCorpusIdentity({
         buildId: options.buildId ?? appBuildId(),
-        tier: options.tier ?? String(GFX.tier),
+        tier,
         adapter: adapterStringOf(gl),
         extensions: sweep.enabled,
       }),
+      tier,
       extensions: sweep.enabled,
       savedAt: (options.now ?? (() => Date.now()))(),
       contextAttributes: gl.getContextAttributes(),

@@ -27,6 +27,7 @@ dependency set. The one sanctioned exception is the standalone admin dashboard
 | `src/admin/` | Admin dashboard SPA (separate `admin.html` entry). |
 | `src/guide/` | Public guide/wiki SPA (separate `guide.html` entry, served at `/wiki`); spoiler-safe content generated from `src/sim/`. |
 | `src/editor/` | World editor SPA (separate root-level `editor.html` entry); its 3D viewport composes the real `Sim` + `Renderer`. |
+| `src/probe/` | The GPU backend probe ("WoC config detector"): the desktop-only `backend-probe.html` entry the Electron shell opens with `--test-backends` to measure the Windows graphics backends; ships a recorded shader corpus under `src/probe/corpus/` (own `CLAUDE.md`). |
 | `src/world_api.ts` + `src/world_api/` | `IWorld`, the seam render/ui depend on: one facet interface per domain file under `src/world_api/`, re-aggregated by the barrel (see Architecture). |
 | `src/main.ts` | Client entry; fixes the world seed. |
 | `server/` | Authoritative game server: HTTP+WS, world loop, Postgres, auth, social, moderation. |

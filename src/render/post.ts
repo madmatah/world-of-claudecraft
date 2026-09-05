@@ -10,6 +10,7 @@ import { PreparedBloomPass } from './post_bloom';
 import { PostEffectComposer } from './post_composer';
 import { StaticOpaqueN8AOPass } from './post_n8ao';
 import { OutputGradePass } from './post_output_grade';
+import { namePostPassMaterials } from './post_pass_naming_core';
 import { postPipelinePlan } from './post_plan_core';
 import { renderLayerDisabled } from './render_dev_flags';
 
@@ -257,7 +258,15 @@ export function buildComposer(
   // edge pass.
   // ?smaa=off is the dev-only perf-attribution kill switch. It keeps the
   // post-AA cost attributable while comparing the revised tier policy.
-  if (plan.composerPasses.includes('smaa')) composer.addPass(new SMAAPass());
+  const smaa = plan.composerPasses.includes('smaa') ? new SMAAPass() : null;
+  if (smaa) composer.addPass(smaa);
+  // The third-party passes leave their materials unnamed, and three names a
+  // program after its material: the shader corpus keys the post chain by these.
+  namePostPassMaterials([
+    ...(ao ? [{ name: 'n8ao', pass: ao }] : []),
+    ...(bloom ? [{ name: 'bloom', pass: bloom }] : []),
+    ...(smaa ? [{ name: 'smaa', pass: smaa }] : []),
+  ]);
 
   return {
     composer,

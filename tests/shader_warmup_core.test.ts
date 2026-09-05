@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import { RENDERER_CONTEXT_EXTENSIONS } from '../src/render/renderer_extensions';
 import {
+  cacheKeyDigest,
   createShaderCorpusRecord,
   createWarmupPlan,
   isShaderCorpusRecord,
@@ -45,10 +46,23 @@ const IDENTITY: ShaderCorpusIdentityInputs = {
   extensions: ['EXT_color_buffer_float', 'KHR_parallel_shader_compile'],
 };
 
+/** What a program costs against the byte ceiling: its two sources and its
+ *  three labels, on the way out and on the way in alike. */
+const cost = (p: {
+  vertex: string;
+  fragment: string;
+  type: string;
+  name: string;
+  cacheKey: string;
+}) => p.vertex.length + p.fragment.length + p.type.length + p.name.length + p.cacheKey.length;
+
 const pair = (n: number) => ({
   vertex: `vertex ${n}`,
   fragment: `fragment ${n}`,
   index0Attribute: 'position',
+  type: 'MeshStandardMaterial',
+  name: '',
+  cacheKey: `key ${n}`,
 });
 
 describe('shaderCorpusIdentity', () => {
@@ -99,7 +113,7 @@ describe('shaderCorpusIdentity', () => {
 describe('selectCorpusPrograms', () => {
   it('stops at the byte ceiling, keeping the programs seen first', () => {
     // Recorded past the ceiling, the next boot would refuse the whole record.
-    const chars = pair(1).vertex.length + pair(1).fragment.length;
+    const chars = cost(pair(1));
     expect(selectCorpusPrograms([pair(1), pair(2), pair(3)], 1024, chars * 2)).toEqual([
       pair(1),
       pair(2),
@@ -108,6 +122,7 @@ describe('selectCorpusPrograms', () => {
     expect(
       createShaderCorpusRecord({
         identity: 'id',
+        tier: 'ultra',
         extensions: [],
         savedAt: 1,
         contextAttributes: null,
@@ -124,9 +139,30 @@ describe('selectCorpusPrograms', () => {
 
   it('keeps a pair that shares only one half', () => {
     const shared = [
-      { vertex: 'v', fragment: 'f1', index0Attribute: 'position' },
-      { vertex: 'v', fragment: 'f2', index0Attribute: 'position' },
-      { vertex: 'v2', fragment: 'f1', index0Attribute: 'position' },
+      {
+        vertex: 'v',
+        fragment: 'f1',
+        index0Attribute: 'position',
+        type: 'M',
+        name: '',
+        cacheKey: 'k',
+      },
+      {
+        vertex: 'v',
+        fragment: 'f2',
+        index0Attribute: 'position',
+        type: 'M',
+        name: '',
+        cacheKey: 'k',
+      },
+      {
+        vertex: 'v2',
+        fragment: 'f1',
+        index0Attribute: 'position',
+        type: 'M',
+        name: '',
+        cacheKey: 'k',
+      },
     ];
     expect(selectCorpusPrograms(shared)).toEqual(shared);
   });
@@ -134,9 +170,23 @@ describe('selectCorpusPrograms', () => {
   it('keeps two programs that differ only by the attribute bound at location 0', () => {
     // That bind is part of the program cache key, so these are two entries.
     const bound = [
-      { vertex: 'v', fragment: 'f', index0Attribute: 'position' },
-      { vertex: 'v', fragment: 'f', index0Attribute: '' },
-      { vertex: 'v', fragment: 'f', index0Attribute: 'position' },
+      {
+        vertex: 'v',
+        fragment: 'f',
+        index0Attribute: 'position',
+        type: 'M',
+        name: '',
+        cacheKey: 'k',
+      },
+      { vertex: 'v', fragment: 'f', index0Attribute: '', type: 'M', name: '', cacheKey: 'k' },
+      {
+        vertex: 'v',
+        fragment: 'f',
+        index0Attribute: 'position',
+        type: 'M',
+        name: '',
+        cacheKey: 'k',
+      },
     ];
     expect(selectCorpusPrograms(bound)).toEqual([bound[0], bound[1]]);
   });
@@ -150,7 +200,14 @@ describe('selectCorpusPrograms', () => {
   });
 
   it('copies the sources rather than retaining the caller objects', () => {
-    const source = { vertex: 'v', fragment: 'f', index0Attribute: 'position' };
+    const source = {
+      vertex: 'v',
+      fragment: 'f',
+      index0Attribute: 'position',
+      type: 'M',
+      name: '',
+      cacheKey: 'k',
+    };
     const selected = selectCorpusPrograms([source]);
     expect(selected[0]).not.toBe(source);
     expect(selected[0]).toEqual(source);
@@ -161,6 +218,7 @@ describe('createShaderCorpusRecord', () => {
   it('stamps the version and applies the selection', () => {
     const record = createShaderCorpusRecord({
       identity: 'id',
+      tier: 'ultra',
       extensions: ['EXT_color_buffer_float'],
       savedAt: 1234,
       contextAttributes: { antialias: false },
@@ -170,6 +228,7 @@ describe('createShaderCorpusRecord', () => {
     expect(record).toEqual({
       version: SHADER_CORPUS_VERSION,
       identity: 'id',
+      tier: 'ultra',
       extensions: ['EXT_color_buffer_float'],
       savedAt: 1234,
       contextAttributes: { antialias: false },
@@ -181,6 +240,7 @@ describe('createShaderCorpusRecord', () => {
     const extensions = ['EXT_color_buffer_float'];
     const record = createShaderCorpusRecord({
       identity: 'id',
+      tier: 'ultra',
       extensions,
       savedAt: 1,
       contextAttributes: null,
@@ -194,6 +254,7 @@ describe('createShaderCorpusRecord', () => {
 describe('isShaderCorpusRecord', () => {
   const record = createShaderCorpusRecord({
     identity: 'id',
+    tier: 'ultra',
     extensions: ['EXT_color_buffer_float'],
     savedAt: 1,
     contextAttributes: null,
@@ -223,7 +284,9 @@ describe('isShaderCorpusRecord', () => {
     expect(
       isShaderCorpusRecord({
         ...record,
-        programs: [{ vertex: 'v', fragment: 'f', index0Attribute: null }],
+        programs: [
+          { vertex: 'v', fragment: 'f', index0Attribute: null, type: 'M', name: '', cacheKey: 'k' },
+        ],
       }),
     ).toBe(false);
   });
@@ -239,8 +302,9 @@ describe('isShaderCorpusRecord', () => {
     // The identity and the extension names are text this record carries, so
     // they ride the SAME ceiling as the sources: a bound that skipped them
     // would be a bound on part of the record.
-    const overhead = record.identity.length + record.extensions.join('').length;
-    const chars = pair(1).vertex.length + pair(1).fragment.length;
+    const overhead =
+      record.identity.length + record.tier.length + record.extensions.join('').length;
+    const chars = cost(pair(1));
     expect(
       isShaderCorpusRecord({ ...record, programs: [pair(1)] }, { bytes: overhead + chars }),
     ).toBe(true);
@@ -525,5 +589,16 @@ describe('the warm-up plan', () => {
       expect(nextWarmupIndex(plan)).toBeNull();
       expect(warmupProgress(plan).done).toBe(true);
     }
+  });
+});
+
+describe('cacheKeyDigest', () => {
+  it('is a stable 16-hex digest that tells keys apart', () => {
+    expect(cacheKeyDigest('')).toBe('cbf29ce484222325');
+    expect(cacheKeyDigest('a')).toMatch(/^[0-9a-f]{16}$/);
+    expect(cacheKeyDigest('a')).toBe(cacheKeyDigest('a'));
+    expect(cacheKeyDigest('a')).not.toBe(cacheKeyDigest('b'));
+    expect(cacheKeyDigest('x'.repeat(50_000))).toMatch(/^[0-9a-f]{16}$/);
+    expect(cacheKeyDigest('x'.repeat(50_000))).not.toBe(cacheKeyDigest('x'.repeat(49_999)));
   });
 });
