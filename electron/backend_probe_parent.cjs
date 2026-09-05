@@ -223,16 +223,20 @@ function createBackendProbeParent(deps) {
       gpuForceOptOut: deps.gpuForceOptOut === true,
       parentPid: process.pid,
       arm64: deps.arm64 === true,
-      fs: {
+      // The orchestrator's world, the real one unless the test injects its own
+      // (`deps.orchestrator`): the filesystem, the timers, the clock, the spawn.
+      fs: deps.orchestrator?.fs ?? {
         mkdir: (dir) => fs.mkdirSync(dir, { recursive: true }),
         rm: (dir) => fs.rmSync(dir, { recursive: true, force: true }),
         fileMtimeMs,
         readResultFile: readJsonFile,
       },
-      timers: { setInterval, clearInterval },
-      now: () => Date.now(),
-      spawn: ({ env, argv, onExit }) =>
-        spawnWaitingSelf({ env, argv, execPath: process.execPath, onExit }),
+      timers: deps.orchestrator?.timers ?? { setInterval, clearInterval },
+      now: deps.orchestrator?.now ?? (() => Date.now()),
+      spawn:
+        deps.orchestrator?.spawn ??
+        (({ env, argv, onExit }) =>
+          spawnWaitingSelf({ env, argv, execPath: process.execPath, onExit })),
       log,
       onArmStart: ({ arm, round, index, total }) => {
         armInFlight = true;
@@ -287,12 +291,15 @@ function createBackendProbeParent(deps) {
     const runDir = runDirectoryFor(app.getPath('userData'), runId);
     // The previous runs' directories, best-effort: a kept directory survives
     // until the next run starts.
+    const world = deps.orchestrator?.fs;
     try {
-      fs.rmSync(path.dirname(runDir), { recursive: true, force: true });
+      if (world) world.rm(path.dirname(runDir));
+      else fs.rmSync(path.dirname(runDir), { recursive: true, force: true });
     } catch (err) {
       log.warn('[probe] could not remove the previous runs', err?.message ?? err);
     }
-    fs.mkdirSync(runDir, { recursive: true });
+    if (world) world.mkdir(runDir);
+    else fs.mkdirSync(runDir, { recursive: true });
     run = { id: runId, dir: runDir, locale, tier, rounds: [], decision: null, final: null };
     phase = 'running';
     log.info(`[probe] run ${runId} starting`, { locale, tier, arm64: deps.arm64 === true });
@@ -332,7 +339,7 @@ function createBackendProbeParent(deps) {
       const verdict = verdictFromDecision(decision, {
         adapter: winner?.adapter ?? '',
         driverVersion: winnerOutcome?.driverVersion ?? '',
-        chromeVersion: process.versions.chrome,
+        chromeVersion: deps.chromeVersion ?? process.versions.chrome ?? '',
         probeVersion: PROBE_VERSION,
         corpusHash:
           typeof measuredCorpus === 'string' && measuredCorpus !== ''

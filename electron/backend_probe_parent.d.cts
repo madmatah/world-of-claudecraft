@@ -51,6 +51,15 @@ export interface BackendProbeParentDeps {
   gpuForceOptOut?: boolean;
   arm64?: boolean;
   restartIntoGame(): Promise<boolean>;
+  /** The Chromium version the verdict is valid under; process.versions.chrome by default. */
+  chromeVersion?: string;
+  /** Test injection of the orchestrator's world; the real one when absent. */
+  orchestrator?: {
+    fs?: import('./backend_probe_orchestrator.cjs').OrchestratorFs;
+    timers?: import('./backend_probe_orchestrator.cjs').OrchestratorTimers;
+    now?: () => number;
+    spawn?: import('./backend_probe_orchestrator.cjs').OrchestratorContext['spawn'];
+  };
 }
 export interface BackendProbeParent {
   start(): void;
