@@ -42,6 +42,8 @@ export interface LinkPassOptions {
  *  that makes a linked program READY, executed for real. */
 export interface FirstDrawRig {
   draw(program: WebGLProgram): void;
+  /** The same draw in another state: blending on, into a half-float target. */
+  drawSecondState(program: WebGLProgram): void;
   dispose(): void;
 }
 
@@ -57,7 +59,32 @@ export function createFirstDrawRig(gl: WebGL2RenderingContext): FirstDrawRig {
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
   gl.bindVertexArray(null);
+  const target = gl.createTexture();
+  const framebuffer = gl.createFramebuffer();
+  gl.bindTexture(gl.TEXTURE_2D, target);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA16F, 64, 64);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const halfPixel = new Float32Array(4);
   return {
+    drawSecondState(program) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+      gl.viewport(0, 0, 64, 64);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(program);
+      samplers.bind(program);
+      gl.bindVertexArray(vao);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, halfPixel);
+      gl.bindVertexArray(null);
+      gl.useProgram(null);
+      gl.disable(gl.BLEND);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    },
     draw(program) {
       gl.useProgram(program);
       // Every sampler on its own unit with a texture of its kind, or WebGL
@@ -73,6 +100,8 @@ export function createFirstDrawRig(gl: WebGL2RenderingContext): FirstDrawRig {
     },
     dispose() {
       samplers.dispose();
+      gl.deleteFramebuffer(framebuffer);
+      gl.deleteTexture(target);
       gl.deleteBuffer(vbo);
       gl.deleteVertexArray(vao);
     },
@@ -101,7 +130,14 @@ async function linkAll(
     const started = options.now();
     const handle = submitWarmProgram(gl, program);
     if (!handle) {
-      samples.push({ cacheKey: program.cacheKey, ms: 0, linkMs: 0, drawMs: 0, linked: false });
+      samples.push({
+        cacheKey: program.cacheKey,
+        ms: 0,
+        linkMs: 0,
+        drawMs: 0,
+        draw2Ms: 0,
+        linked: false,
+      });
       continue;
     }
     // The resolve, then the immediate first draw: on a backend that links
@@ -112,6 +148,8 @@ async function linkAll(
     const resolved = options.now();
     if (linked) rig.draw(handle.program);
     const drawn = options.now();
+    if (linked) rig.drawSecondState(handle.program);
+    const drawn2 = options.now();
     const ms = drawn - started;
     releaseWarmShaders(gl, handle);
     deleteWarmProgram(gl, handle);
@@ -120,6 +158,7 @@ async function linkAll(
       ms,
       linkMs: resolved - started,
       drawMs: drawn - resolved,
+      draw2Ms: drawn2 - drawn,
       linked,
     });
     if (linked) {

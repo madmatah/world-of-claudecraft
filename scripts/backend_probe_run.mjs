@@ -78,14 +78,14 @@ try {
   if (links) {
     links.passes.forEach((pass, i) => {
       const fmt = (s) =>
-        `n=${s.count} med=${s.medianMs.toFixed(1)} (link ${s.medianLinkMs.toFixed(1)} draw ${s.medianDrawMs.toFixed(1)}) ` +
+        `n=${s.count} med=${s.medianMs.toFixed(1)} (link ${s.medianLinkMs.toFixed(1)} draw ${s.medianDrawMs.toFixed(1)} draw2 ${s.medianDraw2Ms.toFixed(1)}) ` +
         `max=${s.maxMs.toFixed(1)} trim=${s.trimmedMeanMs.toFixed(1)}${s.capped ? ' CAPPED' : ''}${s.failed ? ` failed=${s.failed}` : ''}`;
       console.log(`[probe] links pass ${i}: cold ${fmt(pass.cold)} | hit ${fmt(pass.hit)}`);
     });
   }
   const parallelSection = result.sections?.parallel;
   console.log(
-    `[probe] refresh ${result.refreshMs?.toFixed(2)} ms, load ${result.load?.passes} passes ` +
+    `[probe] boot ${result.bootMs?.toFixed(0)} ms, refresh ${result.refreshMs?.toFixed(2)} ms, load ${result.load?.passes} passes ` +
       `(target ${result.load?.targetMs?.toFixed(1)} ms)`,
   );
   if (parallelSection) {

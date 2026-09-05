@@ -21,6 +21,9 @@ export interface LinkSample {
   ms: number;
   linkMs: number;
   drawMs: number;
+  /** A second draw in another state (blending on, a half-float target):
+   *  a backend that builds a pipeline per state pays again here. */
+  draw2Ms: number;
   linked: boolean;
 }
 
@@ -32,6 +35,8 @@ export interface LinkPassSummary {
   /** The resolve alone and the immediate first draw alone, medians. */
   medianLinkMs: number;
   medianDrawMs: number;
+  /** The second-state draw, median. */
+  medianDraw2Ms: number;
   /** The pass stopped at a link past the cap: the figures are a lower bound. */
   capped: boolean;
   /** Links that failed to link at all (a driver refusing the program). */
@@ -63,6 +68,7 @@ export function summarizeLinkPass(
     trimmedMeanMs: trimmedMean(linked),
     medianLinkMs: median(kept.map((sample) => sample.linkMs)),
     medianDrawMs: median(kept.map((sample) => sample.drawMs)),
+    medianDraw2Ms: median(kept.map((sample) => sample.draw2Ms)),
     capped: options.capped === true,
     failed: samples.length - linked.length,
     reachedMinimum: minimumSampleReached(linked.length, options.minimum ?? 12),

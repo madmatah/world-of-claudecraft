@@ -62,6 +62,8 @@ export interface ProbeResult {
   startedAt: number;
   identity: ProbeIdentity | null;
   capability: CapabilityReport | null;
+  /** Navigation start to the probe's first painted frame, informative. */
+  bootMs: number | null;
   /** The refresh interval the frame figures are relative to. */
   refreshMs: number | null;
   /** The calibrated load: passes per frame and what they cost. */
@@ -320,6 +322,7 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     startedAt: Date.now(),
     identity: null,
     capability: null,
+    bootMs: null,
     refreshMs: null,
     load: null,
     sections: {},
@@ -327,6 +330,7 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
   };
   const post = (): void => options.sink.post(result);
   await paintedFrames(2);
+  result.bootMs = performance.now();
   const width = Math.min(MAX_CANVAS_WIDTH, Math.max(320, window.innerWidth));
   const height = Math.min(MAX_CANVAS_HEIGHT, Math.max(240, window.innerHeight));
   const context = createProbeContext(width, height, options.document);

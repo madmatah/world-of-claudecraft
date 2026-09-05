@@ -12,10 +12,10 @@ describe('the cold-link section core', () => {
 
   it('summarizes a pass over the linked samples and flags a cap and failures', () => {
     const samples = [
-      { cacheKey: 'a', ms: 100, linkMs: 90, drawMs: 10, linked: true },
-      { cacheKey: 'b', ms: 300, linkMs: 10, drawMs: 290, linked: true },
-      { cacheKey: 'c', ms: 200, linkMs: 150, drawMs: 50, linked: true },
-      { cacheKey: 'd', ms: 5, linkMs: 5, drawMs: 0, linked: false },
+      { cacheKey: 'a', ms: 100, linkMs: 90, drawMs: 10, draw2Ms: 1, linked: true },
+      { cacheKey: 'b', ms: 300, linkMs: 10, drawMs: 290, draw2Ms: 30, linked: true },
+      { cacheKey: 'c', ms: 200, linkMs: 150, drawMs: 50, draw2Ms: 2, linked: true },
+      { cacheKey: 'd', ms: 5, linkMs: 5, drawMs: 0, draw2Ms: 0, linked: false },
     ];
     const summary = summarizeLinkPass(samples, { minimum: 3 });
     expect(summary).toEqual({
@@ -25,6 +25,7 @@ describe('the cold-link section core', () => {
       trimmedMeanMs: 200,
       medianLinkMs: 90,
       medianDrawMs: 50,
+      medianDraw2Ms: 2,
       capped: false,
       failed: 1,
       reachedMinimum: true,
