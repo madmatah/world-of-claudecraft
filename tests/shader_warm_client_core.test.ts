@@ -11,7 +11,9 @@ import {
   createShaderWarmOutstandingHolds,
   createShaderWarmPauseState,
   createShaderWarmRequests,
+  isCountingWorkerRetirement,
   noteShaderWarmFrame,
+  parseShaderWorkerVerdict,
   readShaderWarmQuery,
   readShaderWarmReadyDeadline,
   readShaderWarmSetting,
@@ -156,6 +158,62 @@ describe('readShaderWarmSetting', () => {
     expect(readShaderWarmSetting('', 'bogus')).toBe('off');
     expect(readShaderWarmSetting('', null)).toBe('off');
     expect(SHADER_WARM_SETTINGS).toEqual(['auto', 'off', 'reveal', 'all']);
+  });
+});
+
+describe('the probe worker verdict', () => {
+  it('outranks the class rule for auto, on the measured backend only, never an explicit setting', () => {
+    const on = { backend: 'vulkan', worker: true } as const;
+    const off = { backend: 'd3d11', worker: false } as const;
+    expect(shaderWarmModeFor('auto', 'vulkan', 'other', on)).toBe('all');
+    expect(shaderWarmModeFor('auto', 'd3d11', 'other', off)).toBe('off');
+    // Another backend than the measured one: the class rule.
+    expect(shaderWarmModeFor('auto', 'd3d11', 'other', on)).toBe('all');
+    expect(shaderWarmModeFor('auto', 'opengl', 'other', on)).toBe('off');
+    expect(
+      shaderWarmModeFor('auto', 'unknown', 'other', { backend: 'unknown', worker: true }),
+    ).toBe('off');
+    expect(shaderWarmModeFor('auto', null, 'other', on)).toBe('off');
+    expect(shaderWarmModeFor('off', 'vulkan', 'other', on)).toBe('off');
+    expect(shaderWarmModeFor('all', 'd3d11', 'other', off)).toBe('all');
+    expect(shaderWarmModeFor('auto', 'vulkan', 'ios', on)).toBe('off');
+  });
+
+  it('parses the bridge plain value strictly', () => {
+    expect(parseShaderWorkerVerdict({ backend: 'vulkan', worker: true })).toEqual({
+      backend: 'vulkan',
+      worker: true,
+    });
+    expect(parseShaderWorkerVerdict({ backend: 'directx', worker: true })).toBeNull();
+    expect(parseShaderWorkerVerdict({ backend: 'vulkan', worker: 'yes' })).toBeNull();
+    expect(parseShaderWorkerVerdict(null)).toBeNull();
+    expect(parseShaderWorkerVerdict('vulkan:on')).toBeNull();
+  });
+
+  it('names the retirements that count against the verdict', () => {
+    for (const reason of [
+      'cannot-serve:hold-cap',
+      'hold-timeouts:wedged',
+      'hold-timeouts:expired-share',
+      'extension-drift:EXT_x',
+      'worker-error',
+      'extension-mismatch',
+      'no-webgl2',
+    ]) {
+      expect(isCountingWorkerRetirement(reason), reason).toBe(true);
+    }
+    for (const reason of [
+      'ready-timeout',
+      'pagehide',
+      'context-lost',
+      'no-worker',
+      'no-offscreen-canvas',
+      'ios-webkit',
+      null,
+      undefined,
+    ]) {
+      expect(isCountingWorkerRetirement(reason), String(reason)).toBe(false);
+    }
   });
 });
 

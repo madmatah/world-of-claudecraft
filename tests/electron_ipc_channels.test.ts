@@ -87,6 +87,7 @@ describe('electron IPC channel contract (preload <-> main)', () => {
     const listened = matches(mainSide, /ipcMain\.on\('([^']+)'/g);
     expect([...sent]).toContain('desktop-renderer-error');
     expect([...sent]).toContain('desktop-report-gpu-renderer');
+    expect([...sent]).toContain('desktop-worker-session');
     for (const channel of sent) {
       expect(listened, `no ipcMain.on for sent channel ${channel}`).toContain(channel);
     }

@@ -32,6 +32,7 @@ import {
   createShaderWarmPauseState,
   createShaderWarmRequests,
   noteShaderWarmFrame,
+  parseShaderWorkerVerdict,
   readShaderWarmReadyDeadline,
   readShaderWarmSetting,
   SHADER_WARM_EXPIRED_SHARE_BREAKER,
@@ -45,6 +46,7 @@ import {
   type ShaderWarmRequestStats,
   type ShaderWarmRequests,
   type ShaderWarmSetting,
+  type ShaderWorkerVerdict,
   shaderWarmCannotServe,
   shaderWarmDecision,
   shaderWarmModeFor,
@@ -116,6 +118,9 @@ export interface ShaderWarmClientDeps {
   schedule?: (callback: () => void, ms: number) => () => void;
   /** Injectable clock, for the breaker's progress check. */
   now?: () => number;
+  /** The GPU backend probe's worker decision for this machine; the page
+   *  default reads the desktop bridge's plain value (null off the shell). */
+  workerVerdict?: ShaderWorkerVerdict | null;
 }
 
 /** A request a hold can give up on: `settled` resolves with each program's
@@ -153,6 +158,7 @@ const state = {
   search: '',
   mobile: false,
   platform: 'other' as ShaderWarmPlatform,
+  workerVerdict: null as ShaderWorkerVerdict | null,
   /** Sources handed in before the worker answered ready, sent on ready. */
   queuedUntilReady: [] as ShaderWarmSource[],
   cancelReadyDeadline: null as (() => void) | null,
@@ -229,7 +235,9 @@ export function configureShaderWarm(deps: ShaderWarmClientDeps = {}): void {
   state.readyDeadlineMs = readShaderWarmReadyDeadline(search, SHADER_WARM_READY_DEADLINE_MS);
   state.backend = null;
   state.platform = deps.platform ?? defaultPlatform();
-  state.mode = shaderWarmModeFor(state.setting, null, state.platform);
+  state.workerVerdict =
+    deps.workerVerdict !== undefined ? deps.workerVerdict : defaultWorkerVerdict();
+  state.mode = shaderWarmModeFor(state.setting, null, state.platform, state.workerVerdict);
   // The one refusal decided before any context: named so the readout says
   // why an explicit setting did nothing on a phone.
   if (state.platform === 'ios' && state.setting !== 'off') state.refusal = 'ios-webkit';
@@ -241,6 +249,22 @@ export function configureShaderWarm(deps: ShaderWarmClientDeps = {}): void {
 
 function defaultPlatform(): ShaderWarmPlatform {
   return mobilePlatformFromNavigator(typeof navigator === 'undefined' ? null : navigator);
+}
+
+/** The desktop shell's plain value (src/runtime.ts DesktopBridge.shaderWorkerVerdict),
+ *  read off the global directly: this module must not import the runtime seam. */
+function defaultWorkerVerdict(): ShaderWorkerVerdict | null {
+  const bridge = (globalThis as { wocDesktop?: { shaderWorkerVerdict?: unknown } }).wocDesktop;
+  return parseShaderWorkerVerdict(bridge?.shaderWorkerVerdict);
+}
+
+/** Listeners for a worker retirement for cause (the desktop shell's verdict
+ *  streak reads them, src/game/desktop_worker_session.ts). */
+const retiredListeners = new Set<(reason: string | null) => void>();
+
+export function onShaderWarmRetired(listener: (reason: string | null) => void): () => void {
+  retiredListeners.add(listener);
+  return () => retiredListeners.delete(listener);
 }
 
 /** Whether the player's shader warm-up choice can do anything on this host.
@@ -318,6 +342,7 @@ function retireForCause(worker: 'dead' | 'refused', reason: string | null): void
   state.workerState = worker;
   state.refusal = reason;
   state.retiredCause = { worker, reason };
+  for (const listener of retiredListeners) listener(reason);
 }
 
 /** Terminate the worker and fail whoever waits. The browser reclaims the
@@ -424,7 +449,12 @@ export function shaderWarmDecide(
     // Only a definite class is kept: a lost context or a masked string reads
     // as unknown (OFF) and is read again at the next policy call.
     state.backend = readGpuBackend(context).backend;
-    state.mode = shaderWarmModeFor(state.setting, state.backend, state.platform);
+    state.mode = shaderWarmModeFor(
+      state.setting,
+      state.backend,
+      state.platform,
+      state.workerVerdict,
+    );
   }
   if (state.mode !== 'off' && state.workerState === 'idle') startWorker(context);
   const decision = shaderWarmDecision({
@@ -673,7 +703,7 @@ export function noteShaderWarmSettingChanged(): void {
   const setting = readShaderWarmSetting(state.search, storedSettingSource());
   if (setting === state.setting) return;
   state.setting = setting;
-  state.mode = shaderWarmModeFor(setting, state.backend, state.platform);
+  state.mode = shaderWarmModeFor(setting, state.backend, state.platform, state.workerVerdict);
   if (state.mode !== 'off') return;
   const cause = state.retiredCause;
   retireAndForgetWorker();
@@ -696,7 +726,7 @@ export function disposeShaderWarm(): void {
   // The next renderer's context decides the backend again (a rebuild can
   // land on another backend, software included).
   state.backend = null;
-  state.mode = shaderWarmModeFor(state.setting, null, state.platform);
+  state.mode = shaderWarmModeFor(state.setting, null, state.platform, state.workerVerdict);
   retireAndForgetWorker();
   state.armed = false;
 }

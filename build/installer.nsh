@@ -32,8 +32,21 @@
 ; electron/gpu_preference.cjs; tests/desktop_uninstall_cleanup.test.ts pins the
 ; two together so the write and the delete can never drift apart silently.
 
+; The "WoC config detector" Start-menu shortcut: the same exe with the
+; --test-backends flag, which runs the GPU backend probe (src/probe/,
+; electron/backend_probe_parent.cjs) instead of the game. A PRODUCT NAME kept
+; identical in every language, like "World of ClaudeCraft" itself, so it is a
+; literal here and no i18n gate applies. Website NSIS channel only (the Steam
+; depot gets a launch type instead, docs/desktop-release.md). Deleted on a
+; real uninstall under the same isUpdated guard as the registry value: an
+; auto-update reruns the old uninstaller, and the shortcut must survive it.
+!macro customInstall
+  CreateShortCut "$SMPROGRAMS\WoC config detector.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "--test-backends"
+!macroend
+
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     DeleteRegValue HKCU "Software\Microsoft\DirectX\UserGpuPreferences" "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+    Delete "$SMPROGRAMS\WoC config detector.lnk"
   ${endif}
 !macroend

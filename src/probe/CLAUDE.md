@@ -42,6 +42,25 @@ measurement rules are frozen there; the shader corpus tracks the game by regener
 - The salt is a nonce literal in a USED expression in BOTH stages, per section and per
   pass; a comment or a name alone does not survive the translators.
 
+## The shell side (electron/)
+- `electron/entry.cjs` (the package main) hands a probe CHILD to
+  `electron/backend_probe_child.cjs` before `main.cjs` runs; with `--test-backends`
+  `main.cjs` runs the PARENT branch (`electron/backend_probe_parent.cjs`, one window on
+  this page, hardware acceleration off). Pure cores beside them: `backend_probe_plan.cjs`
+  (arms, env, exit taxonomy), `backend_probe_orchestrator.cjs` (spawn, liveness, rounds),
+  `backend_probe_result.cjs` (the result envelope), `backend_probe_verdict.cjs` (the
+  prefs field and its streaks), `gpu_backend_windows.cjs` (the Windows launch decision,
+  judge and rescue ladder). Pins: `tests/electron_backend_probe_*.test.ts`,
+  `tests/electron_gpu_backend_windows.test.ts`.
+- The page decides (`decision_core.ts` is TypeScript): the verdict view reads the rounds
+  over the bridge, runs `decide`, posts the decision back; the parent runs a second
+  round on the triggers and writes the verdict. Bridge members: `probe*` on
+  `DesktopBridge` (`src/runtime.ts`), thin wrappers in `shell_bridge.ts`.
+- A Linux dry run of the whole flow (the arms that cannot bind report so):
+  `WOC_BACKEND_PROBE_FORCE=1 WOC_BACKEND_PROBE_AUTOSTART=1 VITE_DEV_SERVER_URL=<vite>
+  npx electron . --no-sandbox --test-backends` after `scripts/electron-vendor.mjs` built
+  the vendor bundles.
+
 ## Rules
 - Every visible string is a `t()` key in `src/ui/i18n.catalog/probe.ts` (the `probe.*`
   namespace, an en-only-typed domain); the title is `probe.title`, a product name kept

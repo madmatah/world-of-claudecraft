@@ -186,8 +186,25 @@ function verdictFromDecision(decision, facts) {
   });
 }
 
+/** The additionalArguments prefix electron/preload.cjs parses (kept literal on both sides). */
+const SHADER_WORKER_VERDICT_ARG = '--woc-shader-worker-verdict=';
+
+/**
+ * The window arguments that hand the worker decision to the renderer: one
+ * entry when THIS launch runs the verdict's backend (the decision chose it,
+ * so the measured backend is the one running), none otherwise (a rescued or
+ * explicit launch runs another backend, and the verdict must not speak there).
+ */
+function shaderWorkerVerdictArguments(verdict, launch) {
+  if (!verdict || verdict.stale === true || launch?.fromVerdict !== true) return [];
+  if (launch.rung !== verdict.rung) return [];
+  return [`${SHADER_WORKER_VERDICT_ARG}${verdict.backend}:${verdict.worker ? 'on' : 'off'}`];
+}
+
 module.exports = {
   GPU_BACKEND_CLASSES,
+  SHADER_WORKER_VERDICT_ARG,
+  shaderWorkerVerdictArguments,
   VERDICT_FIELD_MAX,
   VERDICT_FIGURES_MAX_BYTES,
   WORKER_RETIRE_STREAK_MAX,

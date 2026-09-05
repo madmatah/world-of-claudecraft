@@ -286,6 +286,13 @@ export interface DesktopBridge {
   // the flag while the game was running. Absent on older shells.
   startBackendProbe?(): Promise<boolean>;
   onProbeRequested?(callback: () => void): () => void;
+  /** The probe's worker decision for this machine, a PLAIN value read once
+   *  from the window's additionalArguments (the shell sets it only when this
+   *  launch runs the verdict's backend); null when none. Absent on older shells. */
+  shaderWorkerVerdict?: { backend: string; worker: boolean } | null;
+  /** The session's worker outcome, for the verdict's retirement streak: a
+   *  send, no answer. Absent on older shells. */
+  reportWorkerSession?(outcome: 'counted' | 'settled'): void;
   probeStart?(payload: { locale: string; tier: string }): Promise<boolean>;
   probeResults?(): Promise<DesktopProbeResults | null>;
   probeVerdict?(decision: unknown): Promise<boolean>;

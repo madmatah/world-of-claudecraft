@@ -67,3 +67,8 @@ export function verdictFromDecision(
   } | null,
   facts: VerdictFacts,
 ): BackendProbeVerdict | null;
+export const SHADER_WORKER_VERDICT_ARG: string;
+export function shaderWorkerVerdictArguments(
+  verdict: BackendProbeVerdict | null | undefined,
+  launch: { fromVerdict?: boolean; rung: string } | null | undefined,
+): string[];

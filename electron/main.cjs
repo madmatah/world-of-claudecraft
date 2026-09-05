@@ -101,8 +101,10 @@ const {
   windowsBackendDidNotBind,
 } = require('./gpu_backend_windows.cjs');
 const {
+  shaderWorkerVerdictArguments,
   verdictAfterHealthySession,
   verdictAfterLaunchDeath,
+  verdictAfterWorkerSession,
   verdictMarkedStale,
   verdictMatchesMachine,
 } = require('./backend_probe_verdict.cjs');
@@ -589,6 +591,12 @@ function createMainWindow() {
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
+      // The probe's worker decision, as a preload plain value: only when this
+      // launch runs the verdict's backend (electron/backend_probe_verdict.cjs).
+      additionalArguments: shaderWorkerVerdictArguments(
+        desktopPrefs.backendProbeVerdict,
+        gpuBackendLaunch,
+      ),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -1264,6 +1272,23 @@ ipcMain.handle('desktop-start-backend-probe', (event) => {
     return started;
   });
   return restartInFlight;
+});
+
+// The session's shader warm worker outcome (src/game/desktop_worker_session.ts):
+// the probe verdict's retirement streak (Windows; a no-op elsewhere).
+ipcMain.on('desktop-worker-session', (event, outcome) => {
+  if (!trustedSender(event)) return;
+  if (outcome !== 'counted' && outcome !== 'settled') return;
+  if (!onWindows) return;
+  const next = verdictAfterWorkerSession(desktopPrefs.backendProbeVerdict, outcome === 'counted');
+  if (next && mergeDesktopPrefs({ backendProbeVerdict: next })) {
+    log.info('[gpu] backend verdict worker streak moved', {
+      outcome,
+      workerRetireStreak: next.workerRetireStreak,
+      worker: next.worker,
+      stale: next.stale,
+    });
+  }
 });
 
 ipcMain.handle('desktop-get-gpu-backend', (event) => {

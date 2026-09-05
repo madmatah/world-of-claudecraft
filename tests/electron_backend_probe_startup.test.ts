@@ -221,3 +221,25 @@ describe('the game-side entry points in main.cjs', () => {
     );
   });
 });
+
+describe('the worker verdict plumbing in main.cjs', () => {
+  it('hands the worker decision to the game window as additionalArguments, off the launch', () => {
+    const window = at(main, 'function createMainWindow() {');
+    const body = main.slice(window, main.indexOf('\n}', window)).replace(/\s+/g, ' ');
+    expect(body).toContain(
+      'additionalArguments: shaderWorkerVerdictArguments( desktopPrefs.backendProbeVerdict, gpuBackendLaunch, ),',
+    );
+  });
+
+  it('moves the worker retirement streak on the session outcome, Windows only, one word accepted', () => {
+    const on = at(main, "ipcMain.on('desktop-worker-session'");
+    const body = main.slice(on, main.indexOf('\n});', on)).replace(/\s+/g, ' ');
+    expect(body).toContain('if (!trustedSender(event)) return;');
+    expect(body).toContain("if (outcome !== 'counted' && outcome !== 'settled') return;");
+    expect(body).toContain('if (!onWindows) return;');
+    expect(body).toContain(
+      "const next = verdictAfterWorkerSession(desktopPrefs.backendProbeVerdict, outcome === 'counted');",
+    );
+    expect(body).toContain('mergeDesktopPrefs({ backendProbeVerdict: next })');
+  });
+});

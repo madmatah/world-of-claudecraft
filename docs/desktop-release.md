@@ -105,9 +105,16 @@ the live Vite page and reloads with it. Env vars that matter on that command lin
 - `WOC_DISTRIBUTION=website|steam|epic`: try a channel unpacked (see above).
 - `WOC_DISABLE_GPU_FORCE=1`: skip every GPU lever for this launch (the discrete-GPU
   force on all platforms, the Linux PRIME relaunch, and the Linux GPU backend switches).
-- `WOC_GPU_BACKEND=vulkan|opengl`: force the Linux GL backend for this launch, never
-  judged into the memory (see "GPU backend on Linux" below); `vulkan` is also how to try
-  Vulkan on a GPU the policy keeps Auto off (AMD, at the time of writing).
+- `WOC_GPU_BACKEND=vulkan|opengl` (Windows also `d3d11`): force the GL backend for this
+  launch, never judged into the memory (see "GPU backend on Linux" and "GPU backend on
+  Windows" below); `vulkan` is also how to try Vulkan on a GPU the policy keeps Auto off
+  (AMD, at the time of writing).
+- `--test-backends` (a command-line FLAG, Windows packaged builds): run the GPU backend
+  probe ("WoC config detector") instead of the game; see "GPU backend on Windows" below.
+  `WOC_BACKEND_PROBE_FORCE=1` lets a developer run it off Windows or unpackaged (the arms
+  that cannot bind there report so), `WOC_BACKEND_PROBE_AUTOSTART=1` skips the consent
+  screen for an unattended dry run, `WOC_PROBE_CORPUS_HASH=<hash>` names the corpus hash an
+  unpackaged checkout has no stamp for.
 
 Where the shell writes: `main.log` (the rotating shell log, `electron/logging.cjs`)
 and `desktop-prefs.json` (the shell's own prefs store, `electron/desktop_prefs.cjs`)
@@ -348,6 +355,59 @@ hybrid detection (`isLinuxHybridGpu`) reads `boot_vga` and skips the offload; sh
 GPU lever still misfire in the dev loop, run it with `WOC_DISABLE_GPU_FORCE=1` (it skips
 the PRIME config in `scripts/electron-dev.mjs` and every GPU lever in the shell) and pick
 the backend with `WOC_GPU_BACKEND=vulkan`, which wins over the rescue env.
+
+## GPU backend on Windows: the probe
+
+Windows has no fixed best backend: ANGLE over D3D11 (Chromium's default), Vulkan and
+OpenGL over WGL trade shader-link hitches, frame cost and presentation pacing
+differently per driver and GPU. Instead of a policy table the shell MEASURES the
+player's machine: `World of ClaudeCraft.exe --test-backends` runs the GPU backend probe
+("WoC config detector"): a parent process (`electron/backend_probe_parent.cjs`) shows a
+consent screen, then spawns one child per backend (`electron/backend_probe_child.cjs`,
+each on its own profile under `<userData>/backend-probe/<run>/`, the arm's Chromium
+switches, the probe page `backend-probe.html` from `src/probe/`), reads each child's
+result file and exit code (the taxonomy in `electron/backend_probe_plan.cjs`), has the
+page decide (`src/probe/decision_core.ts`: D3D11 is the reference, another backend must
+be better on the hitch metrics by a margin and not worse on the frame and pacing ones; a
+second round runs on the canonical triggers, a dead Vulkan child adds the plain-Vulkan
+arm), and writes the verdict into `desktop-prefs.json` (`backendProbeVerdict`,
+`electron/backend_probe_verdict.cjs`). The verdict window offers Play (the game on the
+verdict), Re-run, and, for a player with an explicit backend setting, "switch to Auto".
+
+Entry points, all the same flag: the Start-menu shortcut "WoC config detector" (the NSIS
+installer, `build/installer.nsh`; deleted on uninstall), Options > Graphics > System >
+"Test graphics backends" (the no-payload `desktop-start-backend-probe` channel, main
+appends the flag), a Steam non-default launch type (below), Epic's additional arguments,
+or the flag by hand. While the game runs, a second launch with the flag makes the game
+ASK before restarting into the probe; it never restarts a live session by itself.
+
+What a launch does with it (`electron/gpu_backend_windows.cjs`), first match wins: the
+rescue marker, then `WOC_GPU_BACKEND`, then `WOC_DISABLE_GPU_FORCE=1` (the platform
+default with no pin), then the player's explicit setting (`vulkan`, `opengl`, `d3d11`),
+then a VALID verdict, then D3D11 pinned explicitly (`--use-angle=d3d11`, never the
+platform default that can resolve to d3d11on12 or WARP). A verdict is valid when its
+Chromium version, probe version and corpus hash match the build (the app version is
+informational) and it is not stale. It goes stale on three consecutive launch-time
+GPU-process deaths on its backend (one death is a transient hiccup; a healthy session
+clears the streak), when the adapter or driver no longer matches the machine (detected
+after load, one launch late by construction: that session keeps running under the
+rescue, the next launch runs D3D11), or, for its worker half, on three consecutive game
+sessions whose shader warm worker retired for a counting cause. The options row names
+the last test and asks for a re-run once the verdict is stale. The rescue ladder on
+Windows: `vulkan-parallel-compile` to `vulkan-plain` to `d3d11`, and `opengl` to `d3d11`;
+below D3D11 Chromium's own fallback runs.
+
+The worker half reaches the renderer as a preload plain value
+(`shaderWorkerVerdict`, from `webPreferences.additionalArguments`, set only when the
+launch runs the verdict's backend), which `shaderWarmModeFor` consults for the `auto`
+setting only: `off` and `on` win over it, and a verdict measured on another backend is
+ignored.
+
+Reading the log: `[probe] run <id> starting`, `[probe] arm <rung> round <n> started` /
+`: <outcome>`, each child's log tail, `[probe] second round { triggers }`, `[probe]
+verdict { backend, worker, inconclusive, written }`; at launch `[gpu] backend launch:
+<rung> (verdict <rung>)` when the verdict chose the backend, and `[gpu] backend verdict
+updated after the death` / `is from another machine; marked stale` when it moves.
 
 ## What the maintainer must provision (one-time)
 
@@ -734,9 +794,12 @@ Depot layout (one app, three depots, one package):
 | `<appid>2` | `World of ClaudeCraft.app` (the loose bundle) | macOS |
 | `<appid>3` | `linux-unpacked/*` | Linux, 64-bit |
 
-Launch options (one per OS): Windows `World of ClaudeCraft.exe`; macOS
+Launch options (one DEFAULT per OS): Windows `World of ClaudeCraft.exe`; macOS
 `World of ClaudeCraft.app` (app-bundle launch picks the best arch on Apple Silicon);
-Linux `world-of-claudecraft` (the executable inside linux-unpacked).
+Linux `world-of-claudecraft` (the executable inside linux-unpacked). Windows gets ONE
+more, NON-default launch type (Steam's right-click menu, never a second default, which
+would make Steam show a chooser on every launch): "WoC config detector", the same exe
+with the `--test-backends` argument (see "GPU backend on Windows").
 
 Rules that keep this working:
 - Upload the mac depot from a macOS or Linux machine (a Windows upload destroys the

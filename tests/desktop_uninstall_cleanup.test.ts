@@ -57,6 +57,20 @@ describe('desktop uninstall cleanup (build/installer.nsh)', () => {
     expect(USER_GPU_PREFERENCES_KEY).toBe(`HKCU\\${GPU_PREFERENCES_SUBKEY}`);
   });
 
+  it('creates the "WoC config detector" Start-menu shortcut and deletes it on a real uninstall', () => {
+    // The product name is a literal kept identical in every language, like
+    // the app's own; the shortcut is the same exe with the probe flag.
+    expect(installerNsh).toContain('!macro customInstall');
+    expect(installerNsh).toMatch(
+      /CreateShortCut "\$SMPROGRAMS\\WoC config detector\.lnk" "\$INSTDIR\\\$\{APP_EXECUTABLE_FILENAME\}" "--test-backends"/,
+    );
+    const uninstall = installerNsh.slice(installerNsh.indexOf('!macro customUnInstall'));
+    const guard = uninstall.indexOf('${ifNot} ${isUpdated}');
+    const del = uninstall.indexOf('Delete "$SMPROGRAMS\\WoC config detector.lnk"');
+    expect(del).toBeGreaterThan(guard);
+    expect(del).toBeLessThan(uninstall.indexOf('${endif}'));
+  });
+
   it('pins build/installer.nsh as the electron-builder NSIS custom include', () => {
     // app-builder-lib 26 auto-includes build/installer.nsh, but the explicit
     // nsis.include keeps the wiring reviewable and guards against a future move.

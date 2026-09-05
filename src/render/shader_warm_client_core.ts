@@ -273,14 +273,75 @@ export type ShaderWarmPlatform = 'ios' | 'android' | 'other';
  *  measure a backend, never to mint a second context on a phone-class
  *  WebKit; Android keeps the explicit arm (its GLES class already reads
  *  OFF under auto). */
+/** The GPU backend probe's worker decision for THIS machine (the desktop
+ *  shell hands it over as a preload plain value, read once at window
+ *  creation from `additionalArguments`): the backend it was measured on and
+ *  whether the worker was worth it there. */
+export interface ShaderWorkerVerdict {
+  backend: GpuBackendClass;
+  worker: boolean;
+}
+
+/**
+ * The mode `auto` resolves to. A probe verdict is a per-machine measurement
+ * and outranks the per-backend-class rule (`WORKER_WORTH_BACKENDS`), but ONLY
+ * on the backend it was measured on: a rescued launch runs another backend,
+ * and `unknown` there means ignore. An explicit `off` or `on` wins over both.
+ */
 export function shaderWarmModeFor(
   setting: ShaderWarmSetting,
   backend: GpuBackendClass | null,
   platform: ShaderWarmPlatform = 'other',
+  verdict: ShaderWorkerVerdict | null = null,
 ): ShaderWarmMode {
   if (platform === 'ios') return 'off';
   if (setting !== 'auto') return setting;
+  if (verdict && backend !== null && backend !== 'unknown' && verdict.backend === backend) {
+    return verdict.worker ? 'all' : 'off';
+  }
   return backend !== null && workerWorthWarming(backend) ? 'all' : 'off';
+}
+
+const BACKEND_CLASSES: readonly GpuBackendClass[] = [
+  'd3d11',
+  'vulkan',
+  'metal',
+  'opengl',
+  'software',
+  'unknown',
+];
+
+/** A verdict off the bridge's plain value, or null for anything else. */
+export function parseShaderWorkerVerdict(value: unknown): ShaderWorkerVerdict | null {
+  if (!value || typeof value !== 'object') return null;
+  const { backend, worker } = value as { backend?: unknown; worker?: unknown };
+  if (typeof backend !== 'string' || !(BACKEND_CLASSES as readonly string[]).includes(backend)) {
+    return null;
+  }
+  if (typeof worker !== 'boolean') return null;
+  return { backend: backend as GpuBackendClass, worker };
+}
+
+/**
+ * Whether a worker retirement COUNTS against the probe's worker verdict: the
+ * worker could not serve (the hold cap, a wedged or expired hold budget, an
+ * extension set that drifted, a worker error) or refused outright (a context
+ * without the extensions or WebGL2). A ready-timeout does not count (a busy
+ * boot misses the 3 s deadline for reasons that say nothing about the
+ * worker's worth), nor does a normal quit, a lost context, or a host without
+ * workers at all.
+ */
+export function isCountingWorkerRetirement(reason: string | null | undefined): boolean {
+  if (typeof reason !== 'string') return false;
+  if (reason.startsWith('extension-drift:')) return true;
+  return [
+    'cannot-serve:hold-cap',
+    'hold-timeouts:wedged',
+    'hold-timeouts:expired-share',
+    'worker-error',
+    'extension-mismatch',
+    'no-webgl2',
+  ].includes(reason);
 }
 
 export interface ShaderWarmRequestSource {

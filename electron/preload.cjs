@@ -378,6 +378,24 @@ contextBridge.exposeInMainWorld('wocDesktop', {
   // handover as restartApp. And the request the shell pushes when a second
   // launch carried the flag while the game was running: the game asks the
   // player (never restarts a live session by itself).
+  // The probe's worker decision, handed to THIS window as a plain value: the
+  // shell appends one additionalArguments entry when the launch runs the
+  // verdict's backend, and the renderer's warm policy reads it synchronously
+  // on its first context (an IPC round trip would arrive too late).
+  shaderWorkerVerdict: (() => {
+    const prefix = '--woc-shader-worker-verdict=';
+    const arg = process.argv.find((value) => value.startsWith(prefix));
+    if (!arg) return null;
+    const [backend, worker] = arg.slice(prefix.length).split(':');
+    if (!backend || (worker !== 'on' && worker !== 'off')) return null;
+    return { backend: backend.slice(0, 16), worker: worker === 'on' };
+  })(),
+  // The session's worker outcome (a lifetime retired for a counting cause, or
+  // none): the verdict's retirement streak. One word crosses.
+  reportWorkerSession: (outcome) => {
+    if (outcome !== 'counted' && outcome !== 'settled') return;
+    ipcRenderer.send('desktop-worker-session', outcome);
+  },
   startBackendProbe: () => ipcRenderer.invoke('desktop-start-backend-probe'),
   onProbeRequested: (callback) => {
     if (typeof callback !== 'function') return () => {};

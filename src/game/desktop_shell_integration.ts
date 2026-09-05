@@ -14,6 +14,7 @@ import { initDesktopLoginExit } from './desktop_login_exit';
 import { initDesktopNotifications } from './desktop_notifications';
 import { initDesktopPresentation } from './desktop_presentation';
 import { initDesktopShellStrings } from './desktop_shell_strings';
+import { initDesktopWorkerSession } from './desktop_worker_session';
 import { initDiscordPresence } from './discord_presence';
 
 // The unsubscribe handles the previous composition's subscribing inits
@@ -44,6 +45,8 @@ export function initDesktopShellIntegration(): void {
     // The shell's "run the backend probe?" request (a second launch with the
     // flag while the game runs); no replay either, so it subscribes here.
     initDesktopProbePrompt(bridge),
+    // The session's worker outcome for the probe's verdict streak.
+    initDesktopWorkerSession(bridge),
   ];
   // Last, so the reading order mirrors the data flow: its away-gate reads the
   // presentation latch initDesktopPresentation subscribes above. The position

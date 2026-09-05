@@ -688,10 +688,11 @@ describe('shell startup polish pins (electron/main.cjs)', () => {
     expect(flat).toContain('if (!partial || Object.keys(partial).length === 0) return false;');
     // Every memory write goes through it, and only through it.
     expect(count(code, 'function mergeDesktopPrefs(')).toBe(1);
-    // Four Linux memory writes plus the three Windows verdict writes (the
-    // death streak, its healthy-session reset, the machine mismatch), each
-    // through the one merge (tests/electron_backend_probe_startup.test.ts).
-    expect(count(code, 'mergeDesktopPrefs(')).toBe(7);
+    // Four Linux memory writes plus the four Windows verdict writes (the
+    // death streak, its healthy-session reset, the machine mismatch, the
+    // worker session streak), each through the one merge
+    // (tests/electron_backend_probe_startup.test.ts).
+    expect(count(code, 'mergeDesktopPrefs(')).toBe(8);
 
     // The climb cadence's only driver. Deleting this line left the counter at
     // zero for ever, so a demoted machine never climbed back and the whole

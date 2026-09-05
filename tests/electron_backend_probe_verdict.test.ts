@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import {
   GPU_BACKEND_CLASSES,
   readBackendProbeVerdict,
+  SHADER_WORKER_VERDICT_ARG,
+  shaderWorkerVerdictArguments,
   VERDICT_FIELD_MAX,
   verdictAfterHealthySession,
   verdictAfterLaunchDeath,
@@ -206,5 +208,35 @@ describe('verdictFromDecision', () => {
     expect(verdictFromDecision({ backend: null }, facts)).toBeNull();
     expect(verdictFromDecision({ backend: 'd3d11', backendClass: 'nope' }, facts)).toBeNull();
     expect(verdictFromDecision(null, facts)).toBeNull();
+  });
+});
+
+describe('shaderWorkerVerdictArguments', () => {
+  it('hands the worker decision to the window only when the launch runs the verdict backend', () => {
+    const verdict = readBackendProbeVerdict(stored());
+    expect(
+      shaderWorkerVerdictArguments(verdict, { fromVerdict: true, rung: 'vulkan-parallel-compile' }),
+    ).toEqual([`${SHADER_WORKER_VERDICT_ARG}vulkan:on`]);
+    expect(
+      shaderWorkerVerdictArguments(readBackendProbeVerdict(stored({ worker: false })), {
+        fromVerdict: true,
+        rung: 'vulkan-parallel-compile',
+      }),
+    ).toEqual([`${SHADER_WORKER_VERDICT_ARG}vulkan:off`]);
+    // An explicit or rescued launch, another rung, a stale verdict, or none: nothing.
+    expect(
+      shaderWorkerVerdictArguments(verdict, {
+        fromVerdict: false,
+        rung: 'vulkan-parallel-compile',
+      }),
+    ).toEqual([]);
+    expect(shaderWorkerVerdictArguments(verdict, { fromVerdict: true, rung: 'd3d11' })).toEqual([]);
+    expect(
+      shaderWorkerVerdictArguments(readBackendProbeVerdict(stored({ stale: true })), {
+        fromVerdict: true,
+        rung: 'vulkan-parallel-compile',
+      }),
+    ).toEqual([]);
+    expect(shaderWorkerVerdictArguments(null, { fromVerdict: true, rung: 'd3d11' })).toEqual([]);
   });
 });
