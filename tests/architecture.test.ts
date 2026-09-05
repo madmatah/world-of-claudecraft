@@ -128,6 +128,22 @@ function forbiddenRenderCoreImport(spec: string): string | null {
   return null;
 }
 
+// Same idea for a src/probe pure core (the GPU backend probe's decisions:
+// statistics, the salt, the taxonomy, the decision). It may lean on sibling
+// probe modules and on render-resident pure cores, never on three, the host
+// layers, the desktop shell, Node, a painter, or the i18n runtime: the thin
+// runners own every bridge and GL call (src/probe/CLAUDE.md).
+function forbiddenProbeCoreImport(spec: string): string | null {
+  if (spec === 'three' || spec.startsWith('three/')) return 'three';
+  if (spec === 'electron' || spec.startsWith('electron/')) return 'electron';
+  if (spec.startsWith('node:')) return 'node';
+  const layer = spec.match(/(?:^|\/)(game|net|ui|sim)\//);
+  if (layer) return layer[1];
+  if (/(?:^|\/)(?:[a-z0-9_]+_(?:painter|window)|painter_host)$/.test(spec)) return 'painter';
+  if (/(?:^|\/)[a-z_]*i18n$/.test(spec)) return 'i18n';
+  return null;
+}
+
 const IMPORT_RE = /\b(?:import|export)\b[^;'"]*?\bfrom\s*['"]([^'"]+)['"]/g;
 const DYN_IMPORT_RE = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const DOM_GLOBAL_RE = /\b(document|window|navigator|localStorage|sessionStorage)\s*[.[]/;
@@ -772,6 +788,23 @@ const RENDER_PURE_CORES = [
   'src/render/characters/tinted_material_cache_core.ts',
   'src/render/characters/weapon_attack_style_core.ts',
 ].map((rel) => join(repoRoot, rel));
+// The GPU backend probe's pure cores (src/probe/*_core.ts): DOM-free, Three-free,
+// deterministic, so a Vitest imports them directly. Completeness-swept below the
+// same way as the render cores: an unregistered *_core under src/probe fails.
+const PROBE_PURE_CORES = [
+  'src/probe/capability_core.ts',
+  'src/probe/corpus_core.ts',
+  'src/probe/decision_core.ts',
+  'src/probe/frame_section_core.ts',
+  'src/probe/frame_stats_core.ts',
+  'src/probe/link_section_core.ts',
+  'src/probe/parallel_section_core.ts',
+  'src/probe/probe_view_core.ts',
+  'src/probe/salt_core.ts',
+  'src/probe/stats_core.ts',
+  'src/probe/upload_section_core.ts',
+  'src/probe/worker_section_core.ts',
+].map((rel) => join(repoRoot, rel));
 
 // Bare-named pure cores: registered cores (from UI_PURE_CORES + RENDER_PURE_CORES)
 // whose basename does NOT end in _view / _core, so the onDiskCores() sweep's
@@ -865,6 +898,7 @@ const BARE_NAMED = [
 
 function importSpecs(src: string): string[] {
   const specs: string[] = [];
+
   for (const m of src.matchAll(IMPORT_RE)) specs.push(m[1]);
   for (const m of src.matchAll(DYN_IMPORT_RE)) specs.push(m[1]);
   return specs;
@@ -2827,5 +2861,47 @@ describe('shipping source carries no raw control bytes', () => {
     expect(firstControlByteIndex(`const sep = '\\u0000';`)).toBe(-1);
     // It reports the FIRST offender, not merely "some", so the message locates it.
     expect(firstControlByteIndex(`ab${del}c${nul}`)).toBe(2);
+  });
+});
+
+describe('src/probe pure-core invariants', () => {
+  it('lists only files that exist (the curated probe cores)', () => {
+    const missing = PROBE_PURE_CORES.filter((f) => !statSync(f).isFile());
+    expect(missing, `curated src/probe pure core missing:\n${missing.join('\n')}`).toEqual([]);
+  });
+
+  it('registers every on-disk src/probe *_view / *_core pure core (completeness)', () => {
+    const registered = new Set(PROBE_PURE_CORES);
+    const unregistered = onDiskCores(join(repoRoot, 'src', 'probe')).filter(
+      (f) => !registered.has(f),
+    );
+    expect(
+      unregistered.map((f) => relative(repoRoot, f)),
+      `every src/probe *_view/*_core must be in PROBE_PURE_CORES (register it if pure, or rename it if it is not a pure core):\n${unregistered.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('imports nothing from three, the host layers, the shell, Node, a painter or i18n', () => {
+    const violations = scanImports(PROBE_PURE_CORES, forbiddenProbeCoreImport);
+    expect(
+      violations,
+      `src/probe pure cores must stay host-agnostic:\n${violations.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('touches no DOM/browser globals', () => {
+    const violations = scanLines(PROBE_PURE_CORES, DOM_GLOBAL_RE);
+    expect(
+      violations,
+      `src/probe pure cores must run headless (no DOM globals):\n${violations.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('draws no randomness or wall-clock time', () => {
+    const violations = scanLines(PROBE_PURE_CORES, NONDETERMINISM_RE);
+    expect(
+      violations,
+      `src/probe pure cores must be deterministic:\n${violations.join('\n')}`,
+    ).toEqual([]);
   });
 });
