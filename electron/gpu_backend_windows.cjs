@@ -138,8 +138,27 @@ function windowsBackendDidNotBind(askedRung, boundRung) {
   return boundRung === 'software';
 }
 
+/**
+ * Whether a rescue chain already at `already` may go to `target`: only DOWN
+ * the Windows ladder (the rungs `target` is reachable from by stepping
+ * below). No marker, or a junk one: the rescue runs.
+ */
+function windowsChainAllows(already, target) {
+  if (!WINDOWS_GPU_BACKEND_RUNGS.includes(already)) return true;
+  for (let rung = windowsRungBelow(already); rung; rung = windowsRungBelow(rung)) {
+    if (rung === target) return true;
+  }
+  return false;
+}
+
+/** The Windows ladder as the rescue walks it (electron/gpu_backend.cjs
+ *  relaunchOnLowerBackend takes it as `deps.ladder`). */
+const WINDOWS_LADDER = Object.freeze({ below: windowsRungBelow, chainAllows: windowsChainAllows });
+
 module.exports = {
   WINDOWS_GPU_BACKEND_RUNGS,
+  WINDOWS_LADDER,
+  windowsChainAllows,
   decideWindowsGpuBackendLaunch,
   judgeWindowsGpuBackendLaunch,
   launchForWindowsRung,

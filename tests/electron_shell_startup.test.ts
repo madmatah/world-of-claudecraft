@@ -603,7 +603,7 @@ describe('shell startup polish pins (electron/main.cjs)', () => {
     // on a refused spawn (a child that requested its own lock while the parent
     // still held it would see itself as a second instance and quit).
     expect(flat).toContain(
-      'relaunchOnLowerBackend( { log, onSpawned: () => { app.releaseSingleInstanceLock(); app.exit(0); }, }, gpuBackendLaunch.rung, );',
+      'relaunchOnLowerBackend( { log, ladder: gpuLadder, onSpawned: () => { app.releaseSingleInstanceLock(); app.exit(0); }, }, gpuBackendLaunch.rung, );',
     );
     expect(flat).not.toContain('if (spawned)');
     // The exit lives in the hook and nowhere else, and nothing reads the
@@ -687,7 +687,10 @@ describe('shell startup polish pins (electron/main.cjs)', () => {
     expect(flat).toContain('if (!partial || Object.keys(partial).length === 0) return false;');
     // Every memory write goes through it, and only through it.
     expect(count(code, 'function mergeDesktopPrefs(')).toBe(1);
-    expect(count(code, 'mergeDesktopPrefs(')).toBe(4);
+    // Four Linux memory writes plus the three Windows verdict writes (the
+    // death streak, its healthy-session reset, the machine mismatch), each
+    // through the one merge (tests/electron_backend_probe_startup.test.ts).
+    expect(count(code, 'mergeDesktopPrefs(')).toBe(7);
 
     // The climb cadence's only driver. Deleting this line left the counter at
     // zero for ever, so a demoted machine never climbed back and the whole

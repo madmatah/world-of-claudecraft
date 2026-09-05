@@ -60,6 +60,10 @@ export interface GpuBackendLaunch {
   rescued: boolean;
   /** Auto wanted a higher rung and the policy's ceiling held it here; not `auto`. */
   capped: boolean;
+  /** The Windows decision only: the verdict chose this rung. */
+  fromVerdict?: boolean;
+  /** The Windows decision only: the arm's own switch list, applied verbatim. */
+  switches?: [string, string][];
 }
 
 export interface DecideGpuBackendLaunchInput {
@@ -70,6 +74,10 @@ export interface DecideGpuBackendLaunchInput {
   appVersion?: string;
   /** The policy's ceiling; an Auto launch at or above it runs the ceiling, capped. */
   autoCeiling?: AutoBackendCeiling | null;
+  /** The Windows verdict's validity facts (electron/gpu_backend_windows.cjs). */
+  chromeVersion?: string;
+  probeVersion?: number;
+  corpusHash?: string;
 }
 export function decideGpuBackendLaunch(input: DecideGpuBackendLaunchInput): GpuBackendLaunch;
 
@@ -160,6 +168,11 @@ export interface RelaunchOnLowerBackendDeps {
   onSpawned?: () => void;
   /** The child's 'error' event: it never started; this process keeps running. */
   onSpawnFailed?: (err: unknown) => void;
+  /** The rescue's ladder; the Linux one when absent. */
+  ladder?: {
+    below(rung: string): string | null;
+    chainAllows(already: string | undefined, target: string): boolean;
+  };
 }
 /** Rescue: spawn a child on the rung BELOW `rung`; true when spawn() returned a handle
  *  (the child's start, or its failure to start, is reported through the callbacks). */
@@ -167,3 +180,7 @@ export function relaunchOnLowerBackend(
   deps: RelaunchOnLowerBackendDeps | undefined,
   rung: unknown,
 ): boolean;
+export const LINUX_LADDER: {
+  below(rung: string): string | null;
+  chainAllows(already: string | undefined, target: string): boolean;
+};

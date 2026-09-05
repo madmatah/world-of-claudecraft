@@ -40,3 +40,8 @@ export function judgeWindowsGpuBackendLaunch(input: {
   parallelCompile?: boolean;
 }): string;
 export function windowsBackendDidNotBind(askedRung: string, boundRung: string): boolean;
+export function windowsChainAllows(already: string | undefined, target: string): boolean;
+export const WINDOWS_LADDER: {
+  below(rung: string): string | null;
+  chainAllows(already: string | undefined, target: string): boolean;
+};

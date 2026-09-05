@@ -6,6 +6,7 @@ import {
   judgeWindowsGpuBackendLaunch,
   WINDOWS_GPU_BACKEND_RUNGS,
   windowsBackendDidNotBind,
+  windowsChainAllows,
   windowsRungBelow,
 } from '../electron/gpu_backend_windows.cjs';
 
@@ -180,5 +181,19 @@ describe('windowsBackendDidNotBind', () => {
     expect(windowsBackendDidNotBind('d3d11', 'd3d11')).toBe(false);
     expect(windowsBackendDidNotBind('d3d11', 'unknown')).toBe(false);
     expect(windowsBackendDidNotBind('metal', 'software')).toBe(false);
+  });
+});
+
+describe('windowsChainAllows', () => {
+  it('lets a chain walk only down from its marker, and always without one', () => {
+    expect(windowsChainAllows(undefined, 'd3d11')).toBe(true);
+    expect(windowsChainAllows('junk', 'vulkan-plain')).toBe(true);
+    expect(windowsChainAllows('vulkan-parallel-compile', 'vulkan-plain')).toBe(true);
+    expect(windowsChainAllows('vulkan-parallel-compile', 'd3d11')).toBe(true);
+    expect(windowsChainAllows('vulkan-plain', 'd3d11')).toBe(true);
+    expect(windowsChainAllows('vulkan-plain', 'vulkan-parallel-compile')).toBe(false);
+    expect(windowsChainAllows('d3d11', 'd3d11')).toBe(false);
+    expect(windowsChainAllows('opengl', 'd3d11')).toBe(true);
+    expect(windowsChainAllows('opengl', 'vulkan-plain')).toBe(false);
   });
 });

@@ -357,7 +357,19 @@ describe('decideGpuBackendLaunch under a ceiling', () => {
       appVersion: VERSION,
       autoCeiling: capped,
     });
-    expect(win.ladder).toBe(false);
+    // Windows has its own ladder (electron/gpu_backend_windows.cjs), but the
+    // policy's ceiling never reaches it: D3D11 pinned, uncapped.
+    expect(win.ladder).toBe(true);
+    expect(win.rung).toBe('d3d11');
     expect(win.capped).toBe(false);
+    const mac = decideGpuBackendLaunch({
+      platform: 'darwin',
+      env: {},
+      prefs: { gpuBackend: 'auto' },
+      appVersion: VERSION,
+      autoCeiling: capped,
+    });
+    expect(mac.ladder).toBe(false);
+    expect(mac.capped).toBe(false);
   });
 });

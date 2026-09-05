@@ -203,7 +203,23 @@ function validProof(prefs, appVersion) {
  *   (`autoCeiling`, from electron/gpu_backend_policy.cjs: an excluded GPU keeps Auto on
  *   OpenGL, and Vulkan stays one explicit choice away).
  */
-function decideGpuBackendLaunch({ platform, env, prefs, appVersion, autoCeiling }) {
+function decideGpuBackendLaunch({
+  platform,
+  env,
+  prefs,
+  appVersion,
+  autoCeiling,
+  chromeVersion,
+  probeVersion,
+  corpusHash,
+}) {
+  if (platform === 'win32') {
+    // Windows has its own decision (D3D11 pinned, the probe's verdict as the
+    // memory); required here, not at the top, because that module reads this
+    // one's constants.
+    const { decideWindowsGpuBackendLaunch } = require('./gpu_backend_windows.cjs');
+    return decideWindowsGpuBackendLaunch({ env, prefs, chromeVersion, probeVersion, corpusHash });
+  }
   if (platform !== 'linux') return launchForRung('opengl', 'platform default', { ladder: false });
   const environment = env ?? {};
   const explicit = explicitGpuBackendLaunch(environment, prefs);
@@ -332,6 +348,15 @@ function explicitGpuBackendLaunch(environment, prefs) {
  * module scope right after the discrete-GPU force.
  */
 function applyGpuBackendSwitches(app, launch, cardSwitches = []) {
+  if (Array.isArray(launch?.switches)) {
+    // A launch that carries its own switch list (the Windows decision: every
+    // rung is pinned explicitly there, D3D11 included) applies exactly that.
+    for (const [name, value] of launch.switches) app.commandLine.appendSwitch(name, value);
+    if (launch.backend === 'vulkan') {
+      for (const [name, value] of cardSwitches) app.commandLine.appendSwitch(name, value);
+    }
+    return;
+  }
   if (launch?.backend !== 'vulkan') return;
   for (const [name, value] of VULKAN_BACKEND_SWITCHES) {
     app.commandLine.appendSwitch(name, value);
@@ -564,17 +589,26 @@ function launchCounterAfterAutoLaunch({ prefs, launch }) {
  * still running, with its lock. The child needs far longer to boot to its own lock
  * request than this process needs to release and exit.
  */
+/**
+ * The Linux ladder as the rescue walks it: the rung below, and whether a chain
+ * that already rescued to `already` may go to `target`. A chain only ever walks
+ * DOWN: anything else would re-run a rung this chain has watched die, and that
+ * is also what caps it (three rungs, at most two rescues) without a counter.
+ * Windows hands the rescue its own (electron/gpu_backend_windows.cjs WINDOWS_LADDER).
+ */
+const LINUX_LADDER = Object.freeze({
+  below: rungBelow,
+  chainAllows: (already, target) => !(rungIndex(already) >= 0 && !isHigherRung(already, target)),
+});
+
 function relaunchOnLowerBackend(deps = {}, rung) {
   const env = deps.env ?? process.env;
   const log = deps.log;
-  const target = rungBelow(rung);
+  const ladder = deps.ladder ?? LINUX_LADDER;
+  const target = ladder.below(rung);
   if (!target) return false;
-  // A chain only ever walks DOWN. If this process was itself rescued, the child may
-  // only go below where we already are; anything else would re-run a rung this chain
-  // has watched die. That is also what caps the chain: the ladder is three rungs, so at
-  // most two rescues can ever spawn, without a counter to keep in step.
   const already = env[GPU_BACKEND_RESCUE_ENV];
-  if (rungIndex(already) >= 0 && !isHigherRung(already, target)) return false;
+  if (!ladder.chainAllows(already, target)) return false;
   const argv = deps.argv ?? process.argv.slice(1);
   try {
     const spawnTarget = spawnDetachedSelf({
@@ -593,13 +627,14 @@ function relaunchOnLowerBackend(deps = {}, rung) {
     });
     return true;
   } catch (err) {
-    log?.warn?.(`[gpu] could not relaunch on ${rungBelow(rung)} after a GPU-process death`, err);
+    log?.warn?.(`[gpu] could not relaunch on ${target} after a GPU-process death`, err);
     return false;
   }
 }
 
 module.exports = {
   GPU_BACKEND_ENV,
+  LINUX_LADDER,
   GPU_BACKEND_RESCUE_ENV,
   GPU_BACKEND_RUNGS,
   GPU_BACKEND_SETTINGS,

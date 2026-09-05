@@ -77,19 +77,31 @@ const {
   GPU_BACKEND_SETTINGS,
   activeGpuAdapterKey,
   applyGpuBackendSwitches,
-  backendDidNotBind,
+  backendDidNotBind: linuxBackendDidNotBind,
   decideGpuBackendLaunch,
   demoteAfterRepeatedCrashes,
   gpuBackendMemoryAfterHealthySession,
   launchCounterAfterAutoLaunch,
   hasGetGpuInfoEvidence,
-  judgeGpuBackendLaunch,
+  judgeGpuBackendLaunch: judgeLinuxGpuBackendLaunch,
   relaunchOnLowerBackend,
   requestedBackendUnavailable,
   SESSION_HEALTHY_AFTER_MS,
   shouldRescueMissingGpu,
 } = require('./gpu_backend.cjs');
 const { gpuBackendPolicy } = require('./gpu_backend_policy.cjs');
+const {
+  WINDOWS_LADDER,
+  judgeWindowsGpuBackendLaunch,
+  windowsBackendDidNotBind,
+} = require('./gpu_backend_windows.cjs');
+const {
+  verdictAfterHealthySession,
+  verdictAfterLaunchDeath,
+  verdictMarkedStale,
+  verdictMatchesMachine,
+} = require('./backend_probe_verdict.cjs');
+const { PROBE_VERSION } = require('./backend_probe_result.cjs');
 const {
   gpuBackendSettingForPlatform,
   launchSettingsSnapshot,
@@ -326,7 +338,19 @@ const gpuBackendLaunch = decideGpuBackendLaunch({
   prefs: desktopPrefs,
   appVersion: app.getVersion(),
   autoCeiling: gpuPolicy.autoCeiling,
+  // The Windows decision's validity check on the probe's verdict
+  // (electron/gpu_backend_windows.cjs): Chromium, the probe and the corpus.
+  chromeVersion: process.versions.chrome,
+  probeVersion: PROBE_VERSION,
+  corpusHash: desktopConfig.probeCorpusHash,
 });
+// The judge and the rescue ladder of THIS platform: Windows binds D3D11 and
+// steps the rescue inside Vulkan then onto D3D11 (electron/gpu_backend_windows.cjs),
+// Linux reads any non-Vulkan binding as OpenGL and walks its three rungs.
+const onWindows = process.platform === 'win32';
+const judgeGpuBackendLaunch = onWindows ? judgeWindowsGpuBackendLaunch : judgeLinuxGpuBackendLaunch;
+const backendDidNotBind = onWindows ? windowsBackendDidNotBind : linuxBackendDidNotBind;
+const gpuLadder = onWindows ? WINDOWS_LADDER : undefined;
 applyGpuBackendSwitches(app, gpuBackendLaunch, gpuPolicy.vulkanSwitches);
 log.info(`[gpu] backend launch: ${gpuBackendLaunch.rung} (${gpuBackendLaunch.reason})`);
 if (gpuPolicy.why !== '') {
@@ -1584,6 +1608,7 @@ function rescueOntoLowerBackend(why) {
   relaunchOnLowerBackend(
     {
       log,
+      ladder: gpuLadder,
       // On the child's 'spawn' event, never on spawn() returning: a child that
       // never starts (an async ENOENT) leaves this process running, with its lock.
       onSpawned: () => {
@@ -1619,6 +1644,13 @@ function armHealthySessionTimer() {
       // session still counts as healthy: a death from here is a late crash.
       log.info('[gpu] session healthy, but the launch was never judged (memory untouched)');
       return;
+    }
+    if (onWindows) {
+      // The verdict's death streak clears on a healthy session on its backend.
+      const next = verdictAfterHealthySession(desktopPrefs.backendProbeVerdict, boundRung);
+      if (next && mergeDesktopPrefs({ backendProbeVerdict: next })) {
+        log.info(`[gpu] session healthy on ${boundRung}; verdict death streak cleared`);
+      }
     }
     if (!gpuBackendLaunch.auto) {
       // Only a launch the memory DECIDED writes it back. An explicit setting, an env
@@ -1692,6 +1724,18 @@ app.on('child-process-gone', (_event, details) => {
   // death on the attempt counts, its rescued child runs a rung below and counts
   // nothing more; a re-probe's death above the attempt counts nothing, and its
   // rescued child, which lands ON the attempt, is then the one that counts.
+  // Windows: the probe's verdict is the memory, and it goes stale on the same
+  // streak (three consecutive launch-time deaths on its backend), never on one.
+  if (onWindows && !gpuLaunchDeathCounted) {
+    gpuLaunchDeathCounted = true;
+    const next = verdictAfterLaunchDeath(desktopPrefs.backendProbeVerdict, gpuBackendLaunch.rung);
+    if (next && mergeDesktopPrefs({ backendProbeVerdict: next })) {
+      log.warn('[gpu] backend verdict updated after the death', {
+        deathStreak: next.deathStreak,
+        stale: next.stale,
+      });
+    }
+  }
   if (gpuBackendLaunch.auto && !gpuLaunchDeathCounted) {
     gpuLaunchDeathCounted = true;
     const next = demoteAfterRepeatedCrashes({ prefs: desktopPrefs, rung: gpuBackendLaunch.rung });
@@ -1732,6 +1776,25 @@ function logGpuStatus() {
       // The proof's machine key. Latched on the first reading that names an active
       // adapter; a crash-recovery reload may report the same one again, or nothing.
       if (boundGpuAdapter === '') boundGpuAdapter = activeGpuAdapterKey(devices);
+      // Windows: a verdict from another machine (the adapter or driver moved
+      // under the profile) is marked stale on the first latched reading; this
+      // session keeps running it under the rescue, the NEXT launch runs D3D11.
+      if (onWindows && gpuBackendLaunch.fromVerdict === true) {
+        const verdict = desktopPrefs.backendProbeVerdict;
+        const driverVersion = devices.find((d) => d.active)?.driverVersion ?? '';
+        if (
+          verdict &&
+          !verdictMatchesMachine(verdict, { adapter: boundGpuAdapter, driverVersion })
+        ) {
+          const stale = verdictMarkedStale(verdict);
+          if (stale && mergeDesktopPrefs({ backendProbeVerdict: stale })) {
+            log.warn('[gpu] backend verdict is from another machine; marked stale', {
+              adapter: boundGpuAdapter,
+              driverVersion,
+            });
+          }
+        }
+      }
       // Push the verdict BEFORE the log dedup below: the dedup exists only to keep the log
       // quiet, and after a crash-recovery reload the reading is usually identical, so a send
       // placed after it would never reach the freshly loaded page. This resolves async, so

@@ -140,3 +140,48 @@ describe('the probe parent branch in main.cjs', () => {
     expect(count(main, 'new BrowserWindow(')).toBe(1);
   });
 });
+
+describe('the Windows verdict in main.cjs', () => {
+  it('feeds the Windows decision its validity facts and picks the platform judge and ladder', () => {
+    const decideAt = at(main, 'const gpuBackendLaunch = decideGpuBackendLaunch({');
+    const decision = main.slice(decideAt, main.indexOf('});', decideAt)).replace(/\s+/g, ' ');
+    expect(decision).toContain('chromeVersion: process.versions.chrome,');
+    expect(decision).toContain('probeVersion: PROBE_VERSION,');
+    expect(decision).toContain('corpusHash: desktopConfig.probeCorpusHash,');
+    expect(main).toContain(
+      'const judgeGpuBackendLaunch = onWindows ? judgeWindowsGpuBackendLaunch : judgeLinuxGpuBackendLaunch;',
+    );
+    expect(main).toContain(
+      'const backendDidNotBind = onWindows ? windowsBackendDidNotBind : linuxBackendDidNotBind;',
+    );
+    expect(main).toContain('const gpuLadder = onWindows ? WINDOWS_LADDER : undefined;');
+  });
+
+  it('moves the verdict streaks on a launch death and a healthy session, and marks a moved machine stale', () => {
+    const gone = at(main, "app.on('child-process-gone'");
+    const goneBody = main.slice(gone, main.indexOf('\n});', gone)).replace(/\s+/g, ' ');
+    expect(goneBody).toContain(
+      'if (onWindows && !gpuLaunchDeathCounted) { gpuLaunchDeathCounted = true; const next = verdictAfterLaunchDeath(desktopPrefs.backendProbeVerdict, gpuBackendLaunch.rung); if (next && mergeDesktopPrefs({ backendProbeVerdict: next })) {',
+    );
+    // Before the Linux memory arm, so the auto flag (always false on Windows)
+    // never has to know about the verdict.
+    expect(goneBody.indexOf('verdictAfterLaunchDeath(')).toBeLessThan(
+      goneBody.indexOf('demoteAfterRepeatedCrashes('),
+    );
+    const healthy = at(main, 'function armHealthySessionTimer() {');
+    const healthyBody = main.slice(healthy, main.indexOf('\n}', healthy)).replace(/\s+/g, ' ');
+    expect(healthyBody).toContain(
+      'const next = verdictAfterHealthySession(desktopPrefs.backendProbeVerdict, boundRung); if (next && mergeDesktopPrefs({ backendProbeVerdict: next })) {',
+    );
+    const latch = at(
+      main,
+      "if (boundGpuAdapter === '') boundGpuAdapter = activeGpuAdapterKey(devices);",
+    );
+    const after = main.slice(latch, latch + 1200).replace(/\s+/g, ' ');
+    expect(after).toContain('if (onWindows && gpuBackendLaunch.fromVerdict === true) {');
+    expect(after).toContain(
+      '!verdictMatchesMachine(verdict, { adapter: boundGpuAdapter, driverVersion })',
+    );
+    expect(after).toContain('mergeDesktopPrefs({ backendProbeVerdict: stale })');
+  });
+});

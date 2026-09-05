@@ -25,6 +25,7 @@ import {
   VULKAN_BACKEND_SWITCHES,
   VULKAN_PARALLEL_COMPILE_SWITCH,
 } from '../electron/gpu_backend.cjs';
+import { WINDOWS_LADDER } from '../electron/gpu_backend_windows.cjs';
 import { spawnDetachedSelf } from '../electron/gpu_preference.cjs';
 
 // Real renderer strings as app.getGPUInfo('complete') reports them.
@@ -103,8 +104,24 @@ describe('GPU backend constants (load-bearing literals)', () => {
 });
 
 describe('decideGpuBackendLaunch', () => {
-  it('leaves every non-Linux platform on its default, whatever the prefs say', () => {
-    for (const platform of ['win32', 'darwin', 'freebsd']) {
+  it('hands Windows to its own decision, D3D11 pinned with the rescue on', () => {
+    const launch = decideGpuBackendLaunch({
+      platform: 'win32',
+      env: {},
+      prefs: { gpuBackend: 'auto' },
+      chromeVersion: '150.0.0.0',
+      probeVersion: 1,
+      corpusHash: 'abc',
+    });
+    expect(launch).toMatchObject({ rung: 'd3d11', ladder: true, auto: false, fromVerdict: false });
+    expect(launch.switches).toEqual([
+      ['use-gl', 'angle'],
+      ['use-angle', 'd3d11'],
+    ]);
+  });
+
+  it('leaves every other non-Linux platform on its default, whatever the prefs say', () => {
+    for (const platform of ['darwin', 'freebsd']) {
       const launch = decideGpuBackendLaunch({
         platform,
         env: { [GPU_BACKEND_ENV]: 'vulkan' },
@@ -313,6 +330,32 @@ describe('decideGpuBackendLaunch', () => {
 });
 
 describe('applyGpuBackendSwitches', () => {
+  it('applies a launch that carries its own switch list, the card switches only on Vulkan', () => {
+    const appended: string[] = [];
+    const app = {
+      commandLine: { appendSwitch: (n: string, v: string) => void appended.push(`${n}=${v}`) },
+    };
+    applyGpuBackendSwitches(
+      app,
+      {
+        backend: 'default',
+        switches: [
+          ['use-gl', 'angle'],
+          ['use-angle', 'd3d11'],
+        ],
+      } as never,
+      [['disable-x', 'y']],
+    );
+    expect(appended).toEqual(['use-gl=angle', 'use-angle=d3d11']);
+    appended.length = 0;
+    applyGpuBackendSwitches(
+      app,
+      { backend: 'vulkan', switches: [['use-angle', 'vulkan']] } as never,
+      [['disable-x', 'y']],
+    );
+    expect(appended).toEqual(['use-angle=vulkan', 'disable-x=y']);
+  });
+
   function fakeApp() {
     const switches: Array<[string, string]> = [];
     return {
@@ -1140,6 +1183,36 @@ describe('relaunchOnLowerBackend', () => {
     // There is nothing below OpenGL, so the chain ends rather than looping.
     expect(relaunchOnLowerBackend(base, 'opengl')).toBe(false);
     expect(calls).toHaveLength(2);
+  });
+
+  it('walks an injected ladder (Windows: inside Vulkan, then onto D3D11)', () => {
+    const { spawn, calls } = fakeSpawn();
+    const base = {
+      env: { HOME: '/h' },
+      argv: [],
+      execPath: '/bin/app',
+      spawn,
+      ladder: WINDOWS_LADDER,
+    };
+    expect(relaunchOnLowerBackend(base, 'vulkan-parallel-compile')).toBe(true);
+    expect((calls[0].options.env as Record<string, string>)[GPU_BACKEND_RESCUE_ENV]).toBe(
+      'vulkan-plain',
+    );
+    expect(
+      relaunchOnLowerBackend(
+        { ...base, env: { [GPU_BACKEND_RESCUE_ENV]: 'vulkan-plain' } },
+        'vulkan-plain',
+      ),
+    ).toBe(true);
+    expect((calls[1].options.env as Record<string, string>)[GPU_BACKEND_RESCUE_ENV]).toBe('d3d11');
+    expect(relaunchOnLowerBackend(base, 'opengl')).toBe(true);
+    expect((calls[2].options.env as Record<string, string>)[GPU_BACKEND_RESCUE_ENV]).toBe('d3d11');
+    // Below D3D11 nothing of ours, and a chain at D3D11 never climbs.
+    expect(relaunchOnLowerBackend(base, 'd3d11')).toBe(false);
+    expect(
+      relaunchOnLowerBackend({ ...base, env: { [GPU_BACKEND_RESCUE_ENV]: 'd3d11' } }, 'opengl'),
+    ).toBe(false);
+    expect(calls).toHaveLength(3);
   });
 
   it('never sends a child to a rung this chain has already run', () => {
