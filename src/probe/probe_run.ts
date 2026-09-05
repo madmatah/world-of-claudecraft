@@ -1,9 +1,9 @@
 // The measuring run of one child: the sections in order, each measuring
 // section in two passes on its own salted set, a noise floor before each,
-// the result assembled as it goes and handed to the sink after every
-// section (a child that dies mid-arm leaves what it finished). This file is
-// the host glue over the section runners and their cores; nothing here
-// decides.
+// a disturbed pass replayed once, the result assembled as it goes and handed
+// to the sink after every section (a child that dies mid-arm leaves what it
+// finished). This file is the host glue over the section runners and their
+// cores; nothing here decides.
 
 import { readGpuBackend } from '../render/gpu_backend_class_core';
 import { isSoftwareRendererName } from '../render/software_renderer';
@@ -20,6 +20,7 @@ import {
   type NoiseFloorVerdict,
   noiseFloorVerdict,
 } from './frame_stats_core';
+import { createInterferenceMonitor, type InterferenceMonitor } from './interference';
 import { type LinkPassResult, runLinkPass } from './link_section';
 import { calibrateLoadPasses, createLoadScene, type LoadScene } from './load_scene';
 import { type PacingPassResult, runPacingPass } from './pacing_section';
@@ -46,11 +47,17 @@ export interface ProbeIdentity {
 
 export interface ProbeSectionRecord<T> {
   passes: T[];
+  /** Per pass: false when it was disturbed on its replay too. */
+  validity: boolean[];
   /** Passes that were disturbed and replayed. */
   replays: number;
+  /** What disturbed them. */
+  disturbances: string[];
   /** The noise floor read right before the section. */
   floor: FrameStats;
 }
+
+export type ProbeSectionName = 'links' | 'parallel' | 'worker' | 'uploads' | 'frame' | 'pacing';
 
 export interface ProbeResult {
   probeVersion: number;
@@ -98,6 +105,7 @@ export interface ProbeRunOptions {
   refreshMs?: number;
   /** The link sections' heavy set size. */
   heavyCount?: number;
+  monitor?: InterferenceMonitor;
   now?: () => number;
   document?: Document;
   fetchImpl?: typeof fetch;
@@ -110,6 +118,7 @@ const REFRESH_FRAMES = 60;
 const FLOOR_FRAMES = 45;
 /** The load's share of one refresh interval, per frame. */
 const LOAD_SHARE = 0.4;
+const PASSES = 2;
 
 /** Two painted frames before the context exists: a WebGL context created
  *  before the page's first composite is lost at once on a surface-less
@@ -150,6 +159,7 @@ interface Rig {
   refreshMs: number;
   now: () => number;
   document: Document | undefined;
+  monitor: InterferenceMonitor;
 }
 
 async function trivialFrames(rig: Rig, frames: number): Promise<number[]> {
@@ -163,113 +173,134 @@ async function trivialFrames(rig: Rig, frames: number): Promise<number[]> {
   return loop.intervalsMs;
 }
 
-/** The floor before a section; null when the machine is busy. */
+/** The floor before a section, and whether the machine is clean enough. */
 async function floorBefore(rig: Rig): Promise<{ stats: FrameStats; verdict: NoiseFloorVerdict }> {
   const stats = frameStats(await trivialFrames(rig, FLOOR_FRAMES), rig.refreshMs);
   return { stats, verdict: noiseFloorVerdict(stats) };
 }
 
-async function linkSection(
+/** The pass rule's host half: each pass runs under the monitor; a disturbed
+ *  pass is replayed once with a fresh nonce slot; still disturbed, it is
+ *  kept but marked invalid. A pass that aborts ends the section (null). */
+async function runPasses<T>(
+  rig: Rig,
+  floor: FrameStats,
+  run: (slot: number) => Promise<T | null>,
+): Promise<ProbeSectionRecord<T> | null> {
+  const passes: T[] = [];
+  const validity: boolean[] = [];
+  const disturbances: string[] = [];
+  let replays = 0;
+  for (let pass = 0; pass < PASSES; pass++) {
+    let slot = pass;
+    let result: T | null = null;
+    let valid = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      rig.monitor.mark();
+      result = await run(slot);
+      if (result === null) return null;
+      if (!rig.monitor.disturbed()) {
+        valid = true;
+        break;
+      }
+      disturbances.push(...rig.monitor.reasons());
+      if (attempt === 0) {
+        replays += 1;
+        // A fresh slot so the replay links texts no earlier attempt linked.
+        slot = pass + 10 * (attempt + 1);
+      }
+    }
+    passes.push(result as T);
+    validity.push(valid);
+  }
+  return { passes, validity, replays, disturbances, floor };
+}
+
+function linkSection(
   rig: Rig,
   corpus: ProbeCorpus,
   options: ProbeRunOptions,
   floor: FrameStats,
 ): Promise<ProbeSectionRecord<LinkPassResult> | null> {
   const programs = heavyPrograms(corpus).slice(0, options.heavyCount ?? 12);
-  const passes: LinkPassResult[] = [];
-  for (let pass = 0; pass < 2; pass++) {
-    const nonce = passNonce(options.run, options.round, 'links', pass);
-    const salted = saltPrograms(programs, nonce);
+  return runPasses(rig, floor, async (slot) => {
+    const salted = saltPrograms(programs, passNonce(options.run, options.round, 'links', slot));
     const result = await runLinkPass(rig.context.gl, salted, { now: rig.now });
     if (result.aborted) return null;
-    passes.push({
+    return {
       cold: result.cold,
       hit: result.hit,
       coldSamples: result.coldSamples,
       hitSamples: result.hitSamples,
-    });
-  }
-  return { passes, replays: 0, floor };
+    };
+  });
 }
 
-async function parallelSection(
+function parallelSection(
   rig: Rig,
   corpus: ProbeCorpus,
   options: ProbeRunOptions,
   floor: FrameStats,
-): Promise<ProbeSectionRecord<ParallelPassResult>> {
+): Promise<ProbeSectionRecord<ParallelPassResult> | null> {
   const programs = heavyPrograms(corpus).slice(0, 6);
-  const passes: ParallelPassResult[] = [];
-  for (let pass = 0; pass < 2; pass++) {
-    const nonce = passNonce(options.run, options.round, 'parallel', pass);
-    const salted = saltPrograms(programs, nonce);
-    passes.push(
-      await runParallelPass(salted, {
+  return runPasses(rig, floor, (slot) =>
+    runParallelPass(
+      saltPrograms(programs, passNonce(options.run, options.round, 'parallel', slot)),
+      {
         gl: rig.context.gl,
         scene: rig.scene,
         loadPasses: rig.loadPasses,
         parallelCompile: rig.context.parallelCompile,
         refreshMs: rig.refreshMs,
         now: rig.now,
-      }),
-    );
-  }
-  return { passes, replays: 0, floor };
+      },
+    ),
+  );
 }
 
-async function workerSection(
+function workerSection(
   rig: Rig,
   corpus: ProbeCorpus,
   options: ProbeRunOptions,
   floor: FrameStats,
   coldMedianMs: number,
-): Promise<ProbeSectionRecord<WorkerPassResult>> {
+): Promise<ProbeSectionRecord<WorkerPassResult> | null> {
   const programs = heavyPrograms(corpus).slice(0, 6);
-  const passes: WorkerPassResult[] = [];
-  for (let pass = 0; pass < 2; pass++) {
-    const nonce = passNonce(options.run, options.round, 'worker', pass);
-    const salted = saltPrograms(programs, nonce);
-    passes.push(
-      await runWorkerPass(salted, {
-        gl: rig.context.gl,
-        contextAttributes: rig.context.gl.getContextAttributes() as Record<string, unknown> | null,
-        extensions: rig.context.extensions,
-        scene: rig.scene,
-        loadPasses: rig.loadPasses,
-        refreshMs: rig.refreshMs,
-        coldMedianMs,
-        now: rig.now,
-      }),
-    );
-  }
-  return { passes, replays: 0, floor };
+  return runPasses(rig, floor, (slot) =>
+    runWorkerPass(saltPrograms(programs, passNonce(options.run, options.round, 'worker', slot)), {
+      gl: rig.context.gl,
+      contextAttributes: rig.context.gl.getContextAttributes() as Record<string, unknown> | null,
+      extensions: rig.context.extensions,
+      scene: rig.scene,
+      loadPasses: rig.loadPasses,
+      refreshMs: rig.refreshMs,
+      coldMedianMs,
+      now: rig.now,
+    }),
+  );
 }
 
-async function uploadSection(
+function uploadSection(
   rig: Rig,
   floor: FrameStats,
-): Promise<ProbeSectionRecord<UploadPassResult>> {
-  const passes: UploadPassResult[] = [];
-  for (let pass = 0; pass < 2; pass++) {
-    passes.push(
-      await runUploadPass({
-        gl: rig.context.gl,
-        scene: rig.scene,
-        loadPasses: rig.loadPasses,
-        refreshMs: rig.refreshMs,
-        now: rig.now,
-        document: rig.document,
-      }),
-    );
-  }
-  return { passes, replays: 0, floor };
+): Promise<ProbeSectionRecord<UploadPassResult> | null> {
+  return runPasses(rig, floor, () =>
+    runUploadPass({
+      gl: rig.context.gl,
+      scene: rig.scene,
+      loadPasses: rig.loadPasses,
+      refreshMs: rig.refreshMs,
+      now: rig.now,
+      document: rig.document,
+    }),
+  );
 }
 
 async function frameSection(
   rig: Rig,
   corpus: ProbeCorpus,
   floor: FrameStats,
-): Promise<ProbeSectionRecord<FramePassResult>> {
+): Promise<ProbeSectionRecord<FramePassResult> | null> {
   const gl = rig.context.gl;
   // Four heavy programs and a depth twin, linked unsalted once for the
   // section (the salted sets of the link sections are untouched by them).
@@ -279,34 +310,29 @@ async function frameSection(
     .filter((program): program is WebGLProgram => program !== null);
   const twin = corpus.programs.find((program) => programRole(program) === 'twin');
   const shadowProgram = twin ? linkCorpusProgram(gl, twin) : null;
-  const passes: FramePassResult[] = [];
-  for (let pass = 0; pass < 2; pass++) {
-    passes.push(
-      await runFramePass({
-        gl,
-        refreshMs: rig.refreshMs,
-        colourPrograms,
-        shadowProgram,
-        width: rig.context.canvas.width,
-        height: rig.context.canvas.height,
-        now: rig.now,
-      }),
-    );
-  }
+  const record = await runPasses(rig, floor, () =>
+    runFramePass({
+      gl,
+      refreshMs: rig.refreshMs,
+      colourPrograms,
+      shadowProgram,
+      width: rig.context.canvas.width,
+      height: rig.context.canvas.height,
+      now: rig.now,
+    }),
+  );
   for (const program of colourPrograms) gl.deleteProgram(program);
   if (shadowProgram) gl.deleteProgram(shadowProgram);
-  return { passes, replays: 0, floor };
+  return record;
 }
 
-async function pacingSection(
+function pacingSection(
   rig: Rig,
   floor: FrameStats,
-): Promise<ProbeSectionRecord<PacingPassResult>> {
-  const passes: PacingPassResult[] = [];
-  for (let pass = 0; pass < 2; pass++) {
-    passes.push(await runPacingPass(rig.context.gl, rig.refreshMs, { now: rig.now }));
-  }
-  return { passes, replays: 0, floor };
+): Promise<ProbeSectionRecord<PacingPassResult> | null> {
+  return runPasses(rig, floor, () =>
+    runPacingPass(rig.context.gl, rig.refreshMs, { now: rig.now }),
+  );
 }
 
 /** Run every section on this page's context; the sink hears every section. */
@@ -343,6 +369,7 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
   // presentation and lets a surface-less backend drop the context.
   options.host?.append(context.canvas);
   context.gl.viewport(0, 0, width, height);
+  const monitor = options.monitor ?? createInterferenceMonitor(options.document ?? document);
   try {
     result.identity = identityOf(context);
     result.capability = runCapabilitySection(context);
@@ -368,6 +395,7 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
       refreshMs: Number.NaN,
       now,
       document: options.document,
+      monitor,
     };
     rig.refreshMs =
       options.refreshMs ?? estimateRefreshMs(await trivialFrames(rig, REFRESH_FRAMES));
@@ -380,21 +408,21 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     }
     post();
 
+    const coldMedian = (): number => {
+      const links = result.sections.links;
+      if (!links) return Number.NaN;
+      const valid = links.passes.filter((_, i) => links.validity[i]);
+      return valid.reduce((sum, pass) => sum + pass.cold.medianMs, 0) / Math.max(1, valid.length);
+    };
     const sections: Array<{
-      name: 'links' | 'parallel' | 'worker' | 'uploads' | 'frame' | 'pacing';
+      name: ProbeSectionName;
       run: (floor: FrameStats) => Promise<unknown>;
     }> = [
       { name: 'links', run: (floor) => linkSection(rig, loaded.corpus, options, floor) },
       { name: 'parallel', run: (floor) => parallelSection(rig, loaded.corpus, options, floor) },
       {
         name: 'worker',
-        run: (floor) => {
-          const links = result.sections.links;
-          const cold = links
-            ? links.passes.reduce((sum, pass) => sum + pass.cold.medianMs, 0) / links.passes.length
-            : Number.NaN;
-          return workerSection(rig, loaded.corpus, options, floor, cold);
-        },
+        run: (floor) => workerSection(rig, loaded.corpus, options, floor, coldMedian()),
       },
       { name: 'uploads', run: (floor) => uploadSection(rig, floor) },
       { name: 'frame', run: (floor) => frameSection(rig, loaded.corpus, floor) },
@@ -419,11 +447,8 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     }
     return result;
   } finally {
-    rigDispose(context);
+    if (!options.monitor) monitor.dispose();
+    context.canvas.remove();
+    context.dispose();
   }
-}
-
-function rigDispose(context: ProbeContext): void {
-  context.canvas.remove();
-  context.dispose();
 }
