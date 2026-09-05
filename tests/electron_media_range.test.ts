@@ -213,8 +213,8 @@ describe('rangedFileResponse', () => {
   });
 });
 
-describe('app:// handler wiring (electron/main.cjs)', () => {
-  const main = readFileSync(join(__dirname, '..', 'electron', 'main.cjs'), 'utf8');
+describe('app:// handler wiring (electron/app_protocol.cjs)', () => {
+  const main = readFileSync(join(__dirname, '..', 'electron', 'app_protocol.cjs'), 'utf8');
   const handlerStart = main.indexOf("protocol.handle('app'");
   // the first close at the registration's own indent ends THE handler body
   const handlerEnd = main.indexOf('\n  });', handlerStart);

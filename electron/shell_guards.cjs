@@ -282,7 +282,25 @@ function isSoftwareRenderer(status) {
   return /software|disabled/i.test(gl);
 }
 
+// Deny-by-default: only the two permissions the game legitimately uses are granted
+// (pointerLock for mouselook, fullscreen for the game view); everything else is
+// refused. Both gates are set because they answer different call paths: the check
+// handler is synchronous and returns a boolean, the request handler is asynchronous
+// and answers via callback exactly once. Neither inspects webContents (it can be
+// null in the check handler). Device access (WebHID / Web Serial / WebUSB) is denied
+// outright via a third handler.
+function lockDownPermissions(defaultSession) {
+  defaultSession.setPermissionCheckHandler((_webContents, permission) =>
+    ALLOWED_PERMISSIONS.has(permission),
+  );
+  defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(ALLOWED_PERMISSIONS.has(permission));
+  });
+  defaultSession.setDevicePermissionHandler(() => false);
+}
+
 module.exports = {
+  lockDownPermissions,
   deriveOrigin,
   originAllowed,
   appNavigationOrigins,

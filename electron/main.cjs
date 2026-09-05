@@ -5,7 +5,6 @@ const {
   dialog,
   ipcMain,
   Menu,
-  net,
   Notification,
   powerSaveBlocker,
   protocol,
@@ -14,12 +13,11 @@ const {
   shell,
 } = require('electron');
 const fs = require('node:fs');
-// Node's net, not Electron's: the presence socket is a local unix socket (a
-// named pipe on Windows), and the electron `net` destructured above is the
-// Chromium HTTP stack, which cannot open one.
+// Node's net: the presence socket is a local unix socket (a named pipe on
+// Windows); Electron's own `net` (the Chromium HTTP stack) lives with the
+// app:// handler in electron/app_protocol.cjs.
 const nodeNet = require('node:net');
 const path = require('node:path');
-const { pathToFileURL } = require('node:url');
 const {
   appNavigationOrigins,
   navigationAllowed,
@@ -27,12 +25,9 @@ const {
   isDevToolsToggleShortcut,
   isSoftwareRenderer,
   deriveOrigin,
-  buildContentSecurityPolicy,
-  extractInlineScriptHashes,
-  withCspHeader,
-  ALLOWED_PERMISSIONS,
+  lockDownPermissions,
 } = require('./shell_guards.cjs');
-const { rangeContentType, rangedFileResponse } = require('./media_range.cjs');
+const { registerAppProtocol } = require('./app_protocol.cjs');
 const { resolveDesktopConfig, walletConnectionSupported } = require('./desktop_config.cjs');
 const {
   DESKTOP_PREFS_FILENAME,
@@ -353,85 +348,6 @@ protocol.registerSchemesAsPrivileged([
 // which a Mac app must keep.
 if (process.platform === 'win32' || process.platform === 'linux') {
   Menu.setApplicationMenu(null);
-}
-
-function fileInside(root, target) {
-  const rel = path.relative(root, target);
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-}
-
-function registerAppProtocol() {
-  const distDir = path.join(__dirname, '..', 'dist');
-  // Build the CSP once from the shipped index.html: hash its inline bootstrap scripts
-  // (their content is build-dependent) so a strict script-src allows them without
-  // 'unsafe-inline'. In dev the window loads the Vite server and this app:// handler
-  // is never hit, so a missing dist here is harmless.
-  let scriptHashes = [];
-  try {
-    const html = fs.readFileSync(path.join(distDir, 'index.html'), 'utf8');
-    scriptHashes = extractInlineScriptHashes(html);
-  } catch {
-    scriptHashes = [];
-  }
-  const csp = buildContentSecurityPolicy({ apiOrigin, scriptHashes });
-  const notFound = () =>
-    new Response('not found', { status: 404, headers: { 'Content-Security-Policy': csp } });
-  protocol.handle('app', async (request) => {
-    const url = new URL(request.url);
-    const requestedPath = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
-    const candidate = path.normalize(path.join(distDir, requestedPath));
-    if (!fileInside(distDir, candidate)) {
-      return notFound();
-    }
-    const hasExtension = path.extname(candidate) !== '';
-    const filePath = fs.existsSync(candidate)
-      ? candidate
-      : hasExtension
-        ? candidate
-        : path.join(distDir, 'index.html');
-    if (!fs.existsSync(filePath) || !fileInside(distDir, filePath)) {
-      return notFound();
-    }
-    // Chromium's media stack requests <audio>/<video> sources with a Range header
-    // and rejects a plain 200 re-wrap as a format error, which left every streamed
-    // music cue silent in the shipped shell. Serve those as proper 206 slices (or
-    // a 416 for a past-EOF range) via electron/media_range.cjs; a null (non-media
-    // file, malformed range, unreadable file) falls through to the full response.
-    const rangeValue = request.headers.get('range');
-    if (rangeValue) {
-      const ranged = await rangedFileResponse(filePath, rangeValue, {
-        'Content-Security-Policy': csp,
-      });
-      if (ranged) return ranged;
-    }
-    // Every served path (asset or the SPA index.html fallback) gets the CSP header;
-    // net.fetch's own Response has immutable headers, so withCspHeader builds a fresh
-    // one that preserves the body, status, statusText, and Content-Type. Media files
-    // also advertise Accept-Ranges here, so range support is visible to a client
-    // that probes the full response before sending its first ranged request.
-    const response = await net.fetch(pathToFileURL(filePath).toString());
-    const full = withCspHeader(response, csp);
-    if (rangeContentType(filePath)) full.headers.set('Accept-Ranges', 'bytes');
-    return full;
-  });
-}
-
-// Deny-by-default: only the two permissions the game legitimately uses are granted
-// (pointerLock for mouselook, fullscreen for the game view); everything else is
-// refused. Both gates are set because they answer different call paths: the check
-// handler is synchronous and returns a boolean, the request handler is asynchronous
-// and answers via callback exactly once. Neither inspects webContents (it can be
-// null in the check handler). Device access (WebHID / Web Serial / WebUSB) is denied
-// outright via a third handler.
-function lockDownPermissions() {
-  const { defaultSession } = session;
-  defaultSession.setPermissionCheckHandler((_webContents, permission) =>
-    ALLOWED_PERMISSIONS.has(permission),
-  );
-  defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(ALLOWED_PERMISSIONS.has(permission));
-  });
-  defaultSession.setDevicePermissionHandler(() => false);
 }
 
 // How long the shell waits for the renderer's first paint before showing the
@@ -1840,8 +1756,8 @@ app.whenReady().then(() => {
     crashDumpDir: app.getPath('crashDumps'),
     logFile: logFilePath,
   });
-  registerAppProtocol();
-  lockDownPermissions();
+  registerAppProtocol({ apiOrigin });
+  lockDownPermissions(session.defaultSession);
   createMainWindow();
 
   // A monitor being added, removed, or re-scaled (a DPI change mid-session)

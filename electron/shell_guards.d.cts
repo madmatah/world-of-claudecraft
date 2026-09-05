@@ -51,3 +51,16 @@ export function buildContentSecurityPolicy(options?: {
   scriptHashes?: string[];
 }): string;
 export function withCspHeader(response: Response, csp: string): Response;
+
+/** Deny-by-default permissions on a session: only the game's two are granted. */
+export function lockDownPermissions(defaultSession: {
+  setPermissionCheckHandler(handler: (webContents: unknown, permission: string) => boolean): void;
+  setPermissionRequestHandler(
+    handler: (
+      webContents: unknown,
+      permission: string,
+      callback: (granted: boolean) => void,
+    ) => void,
+  ): void;
+  setDevicePermissionHandler(handler: () => boolean): void;
+}): void;
