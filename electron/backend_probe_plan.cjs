@@ -98,7 +98,12 @@ function hasTestBackendsFlag(argv) {
  *  probe) and minus Epic's `-AUTH_*` family (an exchange code must not ride
  *  into six processes). */
 function childArgvFor(argv) {
-  return (argv ?? []).filter((arg) => arg !== TEST_BACKENDS_FLAG && !/^-AUTH_/.test(arg));
+  // Also minus a deep link (`worldofclaudecraft://...` carries a single-use
+  // login code; no game runs in a child to take it).
+  return (argv ?? []).filter(
+    (arg) =>
+      arg !== TEST_BACKENDS_FLAG && !/^-AUTH_/.test(arg) && !/^worldofclaudecraft:\/\//.test(arg),
+  );
 }
 
 /** The names a rescue or PRIME relaunch may have planted, which a child must

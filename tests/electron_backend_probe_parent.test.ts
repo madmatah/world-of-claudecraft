@@ -29,6 +29,14 @@ describe('probeIneligibility', () => {
         env: { WOC_BACKEND_PROBE_FORCE: '1' },
       }),
     ).toBeNull();
+    // Never on a shipped build, whatever the env says.
+    expect(
+      probeIneligibility({
+        platform: 'linux',
+        isPackaged: true,
+        env: { WOC_BACKEND_PROBE_FORCE: '1' },
+      }),
+    ).toMatch(/Windows/);
   });
 });
 

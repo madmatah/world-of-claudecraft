@@ -40,7 +40,10 @@ const CHILD_LOG_TAIL_BYTES = 4096;
 
 /** Whether this process may run the probe at all, or the reason it may not. */
 function probeIneligibility({ platform, isPackaged, devServerUrl, env }) {
-  if (env?.WOC_BACKEND_PROBE_FORCE === '1') return null;
+  // The developer bypass exists for an UNPACKAGED checkout only (the Linux dry
+  // run); a shipped build never honours it, like the other env hatches
+  // electron/desktop_config.cjs closes on isPackaged.
+  if (env?.WOC_BACKEND_PROBE_FORCE === '1' && isPackaged !== true) return null;
   if (platform !== 'win32') return 'the backend probe measures Windows backends only';
   if (typeof devServerUrl === 'string' && devServerUrl !== '') {
     return 'the backend probe does not run under the dev server';
@@ -86,8 +89,14 @@ function probePageUrl(base, view, params = {}) {
   return `${base}/backend-probe.html?${query.toString()}`;
 }
 
+/** A child's result file lives in a user-writable directory: refuse an
+ *  oversized one BEFORE parsing it (the envelope's own cap applies after). */
+const MAX_RESULT_FILE_BYTES = 4 * 1024 * 1024;
+
 function readJsonFile(filePath) {
   try {
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size > MAX_RESULT_FILE_BYTES) return null;
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch {
     return null;
@@ -176,6 +185,7 @@ function createBackendProbeParent(deps) {
     // Development only (behind the same force as the eligibility bypass): a
     // dry run on a machine nobody clicks on starts without the consent.
     if (
+      app.isPackaged !== true &&
       deps.env?.WOC_BACKEND_PROBE_FORCE === '1' &&
       deps.env?.WOC_BACKEND_PROBE_AUTOSTART === '1'
     ) {

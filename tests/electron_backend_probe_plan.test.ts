@@ -123,7 +123,14 @@ describe('the child environment and argv', () => {
 
   it('strips the flag and the Epic auth family from the child argv', () => {
     expect(
-      childArgvFor(['app', TEST_BACKENDS_FLAG, '-AUTH_PASSWORD=x', '-AUTH_TYPE=y', '--foo']),
+      childArgvFor([
+        'app',
+        TEST_BACKENDS_FLAG,
+        '-AUTH_PASSWORD=x',
+        '-AUTH_TYPE=y',
+        'worldofclaudecraft://desktop-login?code=abc',
+        '--foo',
+      ]),
     ).toEqual(['app', '--foo']);
     expect(hasTestBackendsFlag(['a', TEST_BACKENDS_FLAG])).toBe(true);
     expect(hasTestBackendsFlag(['a'])).toBe(false);
