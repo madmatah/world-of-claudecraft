@@ -227,6 +227,10 @@ export interface OptionsEnv {
    *  capability plus a platform gate: Windows and macOS shells expose the
    *  methods but have no choice to make, so they show no row. */
   desktopGpuBackend?: boolean;
+  /** desktopGpuBackendChoices(): the settings this platform's shell offers, in
+   *  row order; the row lists exactly these (Windows adds Direct3D 11, Linux
+   *  never shows it). Absent means the Linux three. */
+  desktopGpuBackendChoices?: readonly string[];
   /** What the shell answered about THIS launch: the rung it actually bound and
    *  whether that fell short of the setting. Absent until the shell has judged
    *  it (and on every non-desktop caller), which is why the status line is
@@ -332,9 +336,9 @@ const note = (
  *  "Vulkan": the parallel-compile feature is an internal distinction, and a
  *  picker that offered "Vulkan" must not answer with a name it never offered. */
 function gpuBackendActiveNameKey(active: string): TranslationKey {
-  return active.startsWith('vulkan')
-    ? 'hudChrome.options.gpuBackendActiveNameVulkan'
-    : 'hudChrome.options.gpuBackendActiveNameOpenGL';
+  if (active.startsWith('vulkan')) return 'hudChrome.options.gpuBackendActiveNameVulkan';
+  if (active === 'd3d11') return 'hudChrome.options.gpuBackendActiveNameD3D11';
+  return 'hudChrome.options.gpuBackendActiveNameOpenGL';
 }
 
 // The shader warm-up worker: auto follows the GPU backend (on where the
@@ -352,6 +356,7 @@ const gpuBackendOptions: ChoiceOption[] = [
   { value: 0, labelKey: 'hudChrome.options.gpuBackendAuto' },
   { value: 1, labelKey: 'hudChrome.options.gpuBackendVulkan' },
   { value: 2, labelKey: 'hudChrome.options.gpuBackendOpenGL' },
+  { value: 3, labelKey: 'hudChrome.options.gpuBackendD3D11' },
 ];
 
 // What the player calls the choice the shell has STORED, for the sentence that
@@ -363,7 +368,16 @@ const gpuBackendStoredNameKeys: Record<number, TranslationKey> = {
   0: 'hudChrome.options.gpuBackendAuto',
   1: 'hudChrome.options.gpuBackendActiveNameVulkan',
   2: 'hudChrome.options.gpuBackendActiveNameOpenGL',
+  3: 'hudChrome.options.gpuBackendActiveNameD3D11',
 };
+
+/** The row's options on this platform: the shell's choice list, by setting
+ *  name (src/game/desktop_gpu_backend_sync.ts owns the name-to-value map). */
+export function gpuBackendOptionsFor(choices: readonly string[] | undefined): ChoiceOption[] {
+  const valueBySetting: Record<string, number> = { auto: 0, vulkan: 1, opengl: 2, d3d11: 3 };
+  const values = new Set((choices ?? ['auto', 'vulkan', 'opengl']).map((s) => valueBySetting[s]));
+  return gpuBackendOptions.filter((option) => values.has(option.value));
+}
 
 function gpuBackendStoredNameKey(value: number): TranslationKey {
   return gpuBackendStoredNameKeys[value] ?? 'hudChrome.options.gpuBackendAuto';
@@ -633,7 +647,7 @@ export function buildGraphicsSections(
       s,
       'gpuBackend',
       'hudChrome.options.gpuBackend',
-      gpuBackendOptions,
+      gpuBackendOptionsFor(env.desktopGpuBackendChoices),
       true,
     );
     if (env.desktopGpuBackendWriteFailed) {

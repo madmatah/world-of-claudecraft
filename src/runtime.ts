@@ -124,7 +124,9 @@ export interface DesktopDiscordActivity {
   timestamps?: { start: number };
 }
 
-export type DesktopGpuBackendSetting = 'auto' | 'vulkan' | 'opengl';
+/** The stored backend setting. 'd3d11' exists on Windows only: the Linux
+ *  shell reports it as 'auto' and never offers it (gpuBackendChoices). */
+export type DesktopGpuBackendSetting = 'auto' | 'vulkan' | 'opengl' | 'd3d11';
 /** The shell answers more (the last trial's verdict, the platform answer);
  *  the renderer reads only what a surface consumes: the platform gate is the
  *  synchronous hasGpuBackendChoice below, never an awaited field. */
@@ -225,6 +227,10 @@ export interface DesktopBridge {
    *  the options row would otherwise show the pre-judgement reading all session. */
   onGpuBackendState?(callback: (state: DesktopGpuBackendState) => void): () => void;
   hasGpuBackendChoice?: boolean;
+  /** The settings THIS platform offers, in the order the options row lists
+   *  them (Linux: auto, vulkan, opengl; Windows adds d3d11), a plain value
+   *  like the flag. Absent on older shells: the Linux three then. */
+  gpuBackendChoices?: readonly string[];
   // The next-launch settings this process started with, and the restart that
   // applies a changed one (src/game/desktop_next_launch_settings.ts). The
   // restart answers false when the new process never started; on success this

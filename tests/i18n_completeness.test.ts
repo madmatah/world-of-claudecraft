@@ -176,6 +176,8 @@ describe('i18n whole-catalog completeness', () => {
       'hudChrome.options.gpuBackendVulkan', // "Vulkan" - the graphics API's name
       'hudChrome.options.gpuBackendActiveNameVulkan', // "Vulkan" - the same API name, in the status line
       'hudChrome.options.gpuBackendActiveNameOpenGL', // "OpenGL" - the graphics API's name
+      'hudChrome.options.gpuBackendD3D11', // "Direct3D 11" - the graphics API's name
+      'hudChrome.options.gpuBackendActiveNameD3D11', // "Direct3D 11" - the same, in the status line
       'hudChrome.claudium.storeCost', // "{amount} Claudium" - currency brand
       'guide.controls.discord', // "Discord" - brand (Guide controls-page action label)
       'guide.glossary.claudiumTerm', // "Claudium" - the same currency brand as hudChrome.claudium.*

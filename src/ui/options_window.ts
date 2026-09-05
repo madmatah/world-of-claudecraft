@@ -25,6 +25,7 @@ import { isCrossHotbarModifier } from '../game/cross_hotbar';
 import { desktopDisplayModeSupported } from '../game/desktop_display_mode_sync';
 import {
   desktopGpuBackendActive,
+  desktopGpuBackendChoices,
   desktopGpuBackendSupported,
   desktopGpuBackendWriteFailed,
   onDesktopGpuBackendActiveChange,
@@ -1342,6 +1343,7 @@ export class OptionsWindow {
               // The Linux graphics backend row in the System card: the bridge
               // methods AND the shell's platform answer, folded into one flag.
               desktopGpuBackend: desktopGpuBackendSupported(desktopBridge()),
+              desktopGpuBackendChoices: desktopGpuBackendChoices(desktopBridge()),
               desktopGpuBackendActive: desktopGpuBackendActive(),
               // The shell refused the last write: the row says what the next
               // start will really use, over the rung this one is on.

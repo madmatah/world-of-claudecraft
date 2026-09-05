@@ -9,7 +9,16 @@
 import type { DesktopBridge, DesktopGpuBackendSetting } from '../runtime';
 
 /** The stored values, in the order the options row lists them. */
-export const GPU_BACKEND_SETTING_VALUES = { auto: 0, vulkan: 1, opengl: 2 } as const;
+export const GPU_BACKEND_SETTING_VALUES = { auto: 0, vulkan: 1, opengl: 2, d3d11: 3 } as const;
+
+/** The settings an older shell (no `gpuBackendChoices`) offers: the Linux three. */
+export const DEFAULT_GPU_BACKEND_CHOICES: readonly DesktopGpuBackendSetting[] = [
+  'auto',
+  'vulkan',
+  'opengl',
+];
+
+const KNOWN_SETTINGS = new Set<string>(Object.keys(GPU_BACKEND_SETTING_VALUES));
 
 export interface DesktopGpuBackendSettings {
   set(key: 'gpuBackend', value: number): number;
@@ -19,13 +28,27 @@ export function gpuBackendSettingFromValue(value: number): DesktopGpuBackendSett
   const rounded = Math.round(value);
   if (rounded === GPU_BACKEND_SETTING_VALUES.vulkan) return 'vulkan';
   if (rounded === GPU_BACKEND_SETTING_VALUES.opengl) return 'opengl';
+  if (rounded === GPU_BACKEND_SETTING_VALUES.d3d11) return 'd3d11';
   return 'auto';
 }
 
 export function gpuBackendValueFromSetting(setting: string): number {
   if (setting === 'vulkan') return GPU_BACKEND_SETTING_VALUES.vulkan;
   if (setting === 'opengl') return GPU_BACKEND_SETTING_VALUES.opengl;
+  if (setting === 'd3d11') return GPU_BACKEND_SETTING_VALUES.d3d11;
   return GPU_BACKEND_SETTING_VALUES.auto;
+}
+
+/** The settings the installed shell offers on this platform, in row order:
+ *  the shell's own list filtered to the settings this build knows, or the
+ *  Linux three on a shell without the list. Never empty when the row shows. */
+export function desktopGpuBackendChoices(
+  bridge: DesktopBridge | null | undefined,
+): readonly DesktopGpuBackendSetting[] {
+  const listed = bridge?.gpuBackendChoices;
+  if (!Array.isArray(listed)) return DEFAULT_GPU_BACKEND_CHOICES;
+  const known = listed.filter((s): s is DesktopGpuBackendSetting => KNOWN_SETTINGS.has(s));
+  return known.length > 0 ? known : DEFAULT_GPU_BACKEND_CHOICES;
 }
 
 /** True when the installed shell exposes BOTH halves of the choice AND says
@@ -94,7 +117,7 @@ export async function syncDesktopGpuBackendSetting(
   // reader are at the foot of this module.
   latchActive(state);
   const { setting } = state as { setting?: unknown };
-  if (setting !== 'auto' && setting !== 'vulkan' && setting !== 'opengl') return;
+  if (typeof setting !== 'string' || !KNOWN_SETTINGS.has(setting)) return;
   createSettings().set('gpuBackend', gpuBackendValueFromSetting(setting));
 }
 

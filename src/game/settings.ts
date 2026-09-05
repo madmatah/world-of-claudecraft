@@ -50,7 +50,7 @@ export const SETTING_RANGES = {
   // The desktop shell's graphics backend on Linux
   // (src/game/desktop_gpu_backend_sync.ts): 0 auto (one Vulkan trial),
   // 1 Vulkan, 2 OpenGL. Mirrors the shell prefs store; next launch.
-  gpuBackend: { min: 0, max: 2, def: 0 },
+  gpuBackend: { min: 0, max: 3, def: 0 },
   effectsQuality: { min: 0, max: 1, def: 1 },
   // Capped at High (the 4096 map): the retired Insane rung's 8192x8192 shadow
   // target was a ~256 MB-class GPU allocation redrawn every frame. A stored

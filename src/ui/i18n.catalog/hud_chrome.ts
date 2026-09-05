@@ -1897,6 +1897,7 @@ export const hudChromeStrings = {
     gpuBackendAuto: 'Auto',
     gpuBackendVulkan: 'Vulkan',
     gpuBackendOpenGL: 'OpenGL (slow)',
+    gpuBackendD3D11: 'Direct3D 11',
     gpuBackendNote:
       "Auto picks the best option for you. Vulkan is faster and recommended for most players. OpenGL is slower, but can help if Vulkan doesn't work properly. Takes effect the next time the game starts.",
     // The status line under the buttons: what this launch is ACTUALLY running.
@@ -1919,6 +1920,7 @@ export const hudChromeStrings = {
     // "Currently using OpenGL (slow) (unable to enable Vulkan)" would not do.
     gpuBackendActiveNameVulkan: 'Vulkan',
     gpuBackendActiveNameOpenGL: 'OpenGL',
+    gpuBackendActiveNameD3D11: 'Direct3D 11',
     // The restart strip (src/ui/restart_strip_painter.ts): a setting that only applies at
     // the next launch of the desktop shell changed, so the panel offers the restart
     // Apply cannot stand in for. Wordy values, M16: the five non-Latin fills land in

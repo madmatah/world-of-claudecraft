@@ -38,7 +38,7 @@ export interface NextLaunchSetting<K extends NextLaunchSettingKey = NextLaunchSe
   readonly launchValue: (snapshot: DesktopLaunchSettings) => GameSettings[K] | undefined;
 }
 
-const BACKEND_SETTINGS = new Set(['auto', 'vulkan', 'opengl']);
+const BACKEND_SETTINGS = new Set(['auto', 'vulkan', 'opengl', 'd3d11']);
 
 export const NEXT_LAUNCH_SETTINGS: readonly NextLaunchSetting[] = [
   {

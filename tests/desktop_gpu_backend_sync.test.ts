@@ -4,7 +4,9 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  DEFAULT_GPU_BACKEND_CHOICES,
   desktopGpuBackendActive,
+  desktopGpuBackendChoices,
   desktopGpuBackendSupported,
   desktopGpuBackendWriteFailed,
   GPU_BACKEND_SETTING_VALUES,
@@ -54,13 +56,33 @@ function bridgeAnswering(
 }
 
 describe('the value mapping', () => {
-  it('round-trips the three settings and treats anything else as auto', () => {
-    for (const setting of ['auto', 'vulkan', 'opengl'] as const) {
+  it('round-trips the four settings and treats anything else as auto', () => {
+    for (const setting of ['auto', 'vulkan', 'opengl', 'd3d11'] as const) {
       expect(gpuBackendSettingFromValue(gpuBackendValueFromSetting(setting))).toBe(setting);
     }
     expect(gpuBackendSettingFromValue(1.4)).toBe('vulkan');
     expect(gpuBackendSettingFromValue(9)).toBe('auto');
     expect(gpuBackendValueFromSetting('bogus')).toBe(GPU_BACKEND_SETTING_VALUES.auto);
+  });
+});
+
+describe('desktopGpuBackendChoices', () => {
+  it('lists what the shell offers, filtered to known settings, the Linux three otherwise', () => {
+    const shell = (gpuBackendChoices: unknown) =>
+      ({ gpuBackendChoices }) as unknown as DesktopBridge;
+    expect(desktopGpuBackendChoices(shell(['auto', 'vulkan', 'd3d11', 'opengl']))).toEqual([
+      'auto',
+      'vulkan',
+      'd3d11',
+      'opengl',
+    ]);
+    expect(desktopGpuBackendChoices(shell(['auto', 'metal', 'opengl']))).toEqual([
+      'auto',
+      'opengl',
+    ]);
+    expect(desktopGpuBackendChoices(shell(['metal']))).toEqual(DEFAULT_GPU_BACKEND_CHOICES);
+    expect(desktopGpuBackendChoices(shell(undefined))).toEqual(DEFAULT_GPU_BACKEND_CHOICES);
+    expect(desktopGpuBackendChoices(null)).toEqual(['auto', 'vulkan', 'opengl']);
   });
 });
 

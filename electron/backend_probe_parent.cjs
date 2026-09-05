@@ -173,6 +173,16 @@ function createBackendProbeParent(deps) {
       },
     });
     win.once('ready-to-show', () => show());
+    // Development only (behind the same force as the eligibility bypass): a
+    // dry run on a machine nobody clicks on starts without the consent.
+    if (
+      deps.env?.WOC_BACKEND_PROBE_FORCE === '1' &&
+      deps.env?.WOC_BACKEND_PROBE_AUTOSTART === '1'
+    ) {
+      win.webContents.once('did-finish-load', () => {
+        if (phase === 'consent') void runProbe('en', 'ultra');
+      });
+    }
     win.on('closed', () => {
       win = null;
       // Closing the window mid-run abandons it: the child in flight loses its
@@ -301,12 +311,19 @@ function createBackendProbeParent(deps) {
       const winnerOutcome = run.rounds
         .flatMap((round) => round.outcomes)
         .find((outcome) => outcome.arm === decision.backend && outcome.result);
+      // The corpus the winning arm MEASURED on, off its own result: that is
+      // the hash the next launch compares the shipped stamp against (an
+      // unstamped build compares nothing, backend_probe_verdict.cjs).
+      const measuredCorpus = winnerOutcome?.result?.corpusHash;
       const verdict = verdictFromDecision(decision, {
         adapter: winner?.adapter ?? '',
         driverVersion: winnerOutcome?.driverVersion ?? '',
         chromeVersion: process.versions.chrome,
         probeVersion: PROBE_VERSION,
-        corpusHash: deps.corpusHash,
+        corpusHash:
+          typeof measuredCorpus === 'string' && measuredCorpus !== ''
+            ? measuredCorpus
+            : deps.corpusHash,
         appVersion: app.getVersion(),
         recordedAt: new Date().toISOString(),
         distribution: deps.distribution ?? '',
@@ -315,6 +332,11 @@ function createBackendProbeParent(deps) {
         written = deps.savePrefs({ ...deps.desktopPrefs, backendProbeVerdict: verdict });
         if (written) deps.desktopPrefs.backendProbeVerdict = verdict;
         else log.warn('[probe] could not persist the verdict');
+      } else {
+        log.warn('[probe] the decision did not make a storable verdict', {
+          backendClass: decision.backendClass,
+          corpusHash: measuredCorpus ?? deps.corpusHash,
+        });
       }
     }
     run.final = {
@@ -330,6 +352,8 @@ function createBackendProbeParent(deps) {
       written,
     });
     cleanupRun(orchestratorContext(run.id, run.dir, run.locale, run.tier), run.rounds);
+    // A fresh load of the verdict view: it reads the final answer above.
+    navigate('verdict', { run: run.id, round: String(run.rounds.length) });
     show();
   }
 

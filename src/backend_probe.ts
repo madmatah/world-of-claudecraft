@@ -5,6 +5,7 @@
 // measuring child runs on its own profile with no access to the game's storage;
 // the non-English tables load lazily, so the first paint waits for them.
 
+import './probe/probe_page.css';
 import { mountBackendProbe } from './probe';
 import { ensureLocaleLoaded, getLanguage, t } from './ui/i18n';
 

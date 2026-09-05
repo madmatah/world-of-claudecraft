@@ -62,6 +62,7 @@ describe('the registry', () => {
     expect(backend.launchValue({ gpuForceOptOut: false, gpuBackend: 'auto' })).toBe(0);
     expect(backend.launchValue({ gpuForceOptOut: false, gpuBackend: 'vulkan' })).toBe(1);
     expect(backend.launchValue({ gpuForceOptOut: false, gpuBackend: 'opengl' })).toBe(2);
+    expect(backend.launchValue({ gpuForceOptOut: false, gpuBackend: 'd3d11' })).toBe(3);
   });
 });
 
