@@ -1,0 +1,172 @@
+// The GPU backend probe's plan (electron/backend_probe_plan.cjs): the arms per
+// round, each arm's switches against the shell's shipped Vulkan sets, the
+// child's environment and argv, the run's paths, the exit-code taxonomy.
+import { describe, expect, it } from 'vitest';
+import {
+  armsForRound,
+  childArgvFor,
+  childEnvFor,
+  classifyChildExit,
+  hasTestBackendsFlag,
+  isProbeChild,
+  keepsDirectory,
+  newRunId,
+  PROBE_EXIT,
+  probeChildConfig,
+  profileDirFor,
+  resultPathFor,
+  runDirectoryFor,
+  switchesForArm,
+  TEST_BACKENDS_FLAG,
+} from '../electron/backend_probe_plan.cjs';
+import {
+  GPU_BACKEND_RESCUE_ENV,
+  VULKAN_BACKEND_SWITCHES,
+  VULKAN_PARALLEL_COMPILE_SWITCH,
+} from '../electron/gpu_backend.cjs';
+import { PRIME_RELAUNCH_MARKER } from '../electron/gpu_preference.cjs';
+
+describe('armsForRound', () => {
+  it('runs D3D11, Vulkan parallel and OpenGL in round one, reversed in round two', () => {
+    expect(armsForRound(1)).toEqual(['d3d11', 'vulkan-parallel-compile', 'opengl']);
+    expect(armsForRound(2)).toEqual(['opengl', 'vulkan-parallel-compile', 'd3d11']);
+  });
+
+  it('slots the adaptive plain-Vulkan arm right after the parallel one', () => {
+    expect(armsForRound(1, { plainVulkan: true })).toEqual([
+      'd3d11',
+      'vulkan-parallel-compile',
+      'vulkan-plain',
+      'opengl',
+    ]);
+    expect(armsForRound(2, { plainVulkan: true })).toEqual([
+      'opengl',
+      'vulkan-plain',
+      'vulkan-parallel-compile',
+      'd3d11',
+    ]);
+  });
+
+  it('drops OpenGL on ARM64, where no desktop ICD exists', () => {
+    expect(armsForRound(1, { arm64: true })).toEqual(['d3d11', 'vulkan-parallel-compile']);
+  });
+});
+
+describe('switchesForArm', () => {
+  it('pins D3D11 and GL explicitly and ships the exact Vulkan sets', () => {
+    expect(switchesForArm('d3d11')).toEqual([
+      ['use-gl', 'angle'],
+      ['use-angle', 'd3d11'],
+    ]);
+    expect(switchesForArm('opengl')).toEqual([
+      ['use-gl', 'angle'],
+      ['use-angle', 'gl'],
+    ]);
+    expect(switchesForArm('vulkan-plain')).toEqual([...VULKAN_BACKEND_SWITCHES]);
+    expect(switchesForArm('vulkan-parallel-compile')).toEqual([
+      ...VULKAN_BACKEND_SWITCHES,
+      VULKAN_PARALLEL_COMPILE_SWITCH,
+    ]);
+  });
+});
+
+describe('the child environment and argv', () => {
+  const input = {
+    baseEnv: {
+      PATH: '/bin',
+      [GPU_BACKEND_RESCUE_ENV]: 'opengl',
+      WOC_GPU_BACKEND: 'vulkan',
+      [PRIME_RELAUNCH_MARKER]: '1',
+    },
+    arm: 'vulkan-plain' as const,
+    run: 'abc-12',
+    round: 2,
+    resultPath: '/tmp/run/vulkan-plain-r2.json',
+    profileDir: '/tmp/run/vulkan-plain-r2',
+    locale: 'fr_FR',
+    tier: 'ultra',
+    gpuForceOptOut: true,
+    parentPid: 4242,
+  };
+
+  it('plants the child fields and strips the rescue and PRIME markers', () => {
+    const env = childEnvFor(input);
+    expect(env.PATH).toBe('/bin');
+    expect(env[GPU_BACKEND_RESCUE_ENV]).toBeUndefined();
+    expect(env.WOC_GPU_BACKEND).toBeUndefined();
+    expect(env[PRIME_RELAUNCH_MARKER]).toBeUndefined();
+    expect(isProbeChild(env)).toBe(true);
+    expect(probeChildConfig(env)).toEqual({
+      arm: 'vulkan-plain',
+      run: 'abc-12',
+      round: 2,
+      parentPid: 4242,
+      resultPath: '/tmp/run/vulkan-plain-r2.json',
+      profileDir: '/tmp/run/vulkan-plain-r2',
+      locale: 'fr_FR',
+      tier: 'ultra',
+      gpuForceOptOut: true,
+    });
+  });
+
+  it('refuses a child plan with a missing or malformed field', () => {
+    const env = childEnvFor(input);
+    expect(isProbeChild({})).toBe(false);
+    expect(probeChildConfig({})).toBeNull();
+    expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_ARM: 'metal' })).toBeNull();
+    expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_ROUND: '0' })).toBeNull();
+    expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_PARENT_PID: 'x' })).toBeNull();
+    expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_RESULT: 'relative.json' })).toBeNull();
+    expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_RUN: 'has spaces' })).toBeNull();
+  });
+
+  it('strips the flag and the Epic auth family from the child argv', () => {
+    expect(
+      childArgvFor(['app', TEST_BACKENDS_FLAG, '-AUTH_PASSWORD=x', '-AUTH_TYPE=y', '--foo']),
+    ).toEqual(['app', '--foo']);
+    expect(hasTestBackendsFlag(['a', TEST_BACKENDS_FLAG])).toBe(true);
+    expect(hasTestBackendsFlag(['a'])).toBe(false);
+    expect(hasTestBackendsFlag(undefined)).toBe(false);
+  });
+});
+
+describe('the run paths and id', () => {
+  it('nest the run under userData with one profile and one result per arm and round', () => {
+    const runDir = runDirectoryFor('/home/p/.config/woc', 'r1');
+    expect(runDir).toBe('/home/p/.config/woc/backend-probe/r1');
+    expect(profileDirFor(runDir, 'd3d11', 1)).toBe('/home/p/.config/woc/backend-probe/r1/d3d11-r1');
+    expect(resultPathFor(runDir, 'opengl', 2)).toBe(
+      '/home/p/.config/woc/backend-probe/r1/opengl-r2.json',
+    );
+  });
+
+  it('mints a run id of directory-safe characters', () => {
+    const id = newRunId(1_700_000_000_000, () => 0.5);
+    expect(id).toMatch(/^[a-z0-9]+-[a-z0-9]+$/);
+    expect(newRunId(1, () => 0.1)).not.toBe(newRunId(1, () => 0.9));
+  });
+});
+
+describe('classifyChildExit', () => {
+  it('maps each code, a parent kill, a signal and a stranger to their outcomes', () => {
+    expect(classifyChildExit({ code: PROBE_EXIT.completed, signal: null })).toBe('completed');
+    expect(classifyChildExit({ code: PROBE_EXIT.died, signal: null })).toBe('died');
+    expect(classifyChildExit({ code: PROBE_EXIT.didNotBind, signal: null })).toBe('did-not-bind');
+    expect(classifyChildExit({ code: PROBE_EXIT.capped, signal: null })).toBe('capped');
+    expect(classifyChildExit({ code: PROBE_EXIT.orphaned, signal: null })).toBe('orphaned');
+    expect(classifyChildExit({ code: PROBE_EXIT.rendererGone, signal: null })).toBe(
+      'renderer-gone',
+    );
+    expect(classifyChildExit({ code: PROBE_EXIT.probeError, signal: null })).toBe('probe-error');
+    expect(classifyChildExit({ code: PROBE_EXIT.busy, signal: null })).toBe('busy');
+    expect(classifyChildExit({ code: 1, signal: null })).toBe('unknown');
+    expect(classifyChildExit({ code: null, signal: 'SIGSEGV' })).toBe('unknown');
+    expect(classifyChildExit({ code: null, signal: 'SIGKILL', killedByParent: true })).toBe('hung');
+  });
+
+  it('keeps every directory but a completed child', () => {
+    expect(keepsDirectory('completed')).toBe(false);
+    expect(keepsDirectory('died')).toBe(true);
+    expect(keepsDirectory('unknown')).toBe(true);
+  });
+});
