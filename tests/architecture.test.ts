@@ -2335,6 +2335,7 @@ const UI_DOM_MODULES = [
   'src/ui/daily_rewards_spin_controller.ts',
   'src/ui/daily_rewards_window.ts',
   'src/ui/deeds_window.ts',
+  'src/ui/desktop_probe_prompt.ts',
   'src/ui/desktop_update_toast.ts',
   'src/ui/dev_command_window.ts',
   'src/ui/dialog_key_activation.ts',

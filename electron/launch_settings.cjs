@@ -27,6 +27,10 @@
 // tests/electron_launch_settings.test.ts; main.cjs wires the prefs, process and app.
 
 const { GPU_BACKEND_RESCUE_ENV, GPU_BACKEND_SETTINGS } = require('./gpu_backend.cjs');
+
+/** The probe's flag (electron/backend_probe_plan.cjs TEST_BACKENDS_FLAG), spelled here
+ *  too: that module requires this one's neighbours, and a restart must strip it. */
+const TEST_BACKENDS_FLAG = '--test-backends';
 const {
   LINUX_OZONE_X11_ARG,
   LINUX_PRIME_ENV,
@@ -97,8 +101,12 @@ function restartEnv(env) {
  * is not in that record and stays.
  */
 function restartArgv(argv, env) {
-  if (!primeRelaunchAdditions(env).has(LINUX_OZONE_X11_ARG)) return [...argv];
-  return argv.filter((arg) => arg !== LINUX_OZONE_X11_ARG);
+  // A restart never re-enters the GPU backend probe by inheritance: the flag
+  // is stripped here, and only main's own `extraArgv` (the no-payload
+  // desktop-start-backend-probe channel) puts it back.
+  const stripped = argv.filter((arg) => arg !== TEST_BACKENDS_FLAG);
+  if (!primeRelaunchAdditions(env).has(LINUX_OZONE_X11_ARG)) return stripped;
+  return stripped.filter((arg) => arg !== LINUX_OZONE_X11_ARG);
 }
 
 /**
@@ -127,7 +135,10 @@ function restartApp(deps = {}) {
     log?.info?.('[shell] no restart under the dev server; restart npm run electron:dev instead');
     return Promise.resolve(false);
   }
-  const argv = restartArgv(deps.argv ?? process.argv.slice(1), env);
+  // `extraArgv` is main's, never the renderer's: the bridge channel that
+  // starts the probe carries no payload, and main appends the literal flag.
+  const extra = Array.isArray(deps.extraArgv) ? deps.extraArgv : [];
+  const argv = [...restartArgv(deps.argv ?? process.argv.slice(1), env), ...extra];
   return new Promise((resolve) => {
     try {
       const spawnTarget = spawnDetachedSelf({

@@ -28,6 +28,8 @@ export function restartArgv(
 ): string[];
 
 export interface RestartAppDeps {
+  /** Appended after the strip; main's own, never the renderer's. */
+  extraArgv?: string[];
   env?: Record<string, string | undefined>;
   argv?: string[];
   execPath?: string;

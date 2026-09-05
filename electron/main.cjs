@@ -28,7 +28,12 @@ const {
   lockDownPermissions,
 } = require('./shell_guards.cjs');
 const { registerAppProtocol } = require('./app_protocol.cjs');
-const { childArgvFor, hasTestBackendsFlag, machineIsArm64 } = require('./backend_probe_plan.cjs');
+const {
+  TEST_BACKENDS_FLAG,
+  childArgvFor,
+  hasTestBackendsFlag,
+  machineIsArm64,
+} = require('./backend_probe_plan.cjs');
 const { createBackendProbeParent, probeIneligibility } = require('./backend_probe_parent.cjs');
 const { resolveDesktopConfig, walletConnectionSupported } = require('./desktop_config.cjs');
 const {
@@ -1190,7 +1195,17 @@ function gpuBackendState() {
     // tells the player so, and that Vulkan is still theirs to pick.
     autoCapped: gpuBackendLaunch.capped === true,
     supported: process.platform === 'linux' || process.platform === 'win32',
+    // The probe's verdict, Windows only: what the row reports as the last test
+    // and whether it went stale (a re-run is then offered).
+    verdict: probeVerdictState(),
   };
+}
+
+function probeVerdictState() {
+  if (!onWindows) return null;
+  const verdict = desktopPrefs.backendProbeVerdict;
+  if (!verdict) return null;
+  return { rung: verdict.rung, worker: verdict.worker === true, stale: verdict.stale === true };
 }
 
 // The next-launch settings as THIS process read them (see launchSettings above): what
@@ -1218,6 +1233,28 @@ ipcMain.handle('desktop-restart-app', (event) => {
   restartInFlight = restartApp({
     log,
     devServerUrl,
+    onSpawned: () => {
+      app.releaseSingleInstanceLock();
+      app.quit();
+    },
+  }).then((started) => {
+    if (!started) restartInFlight = null;
+    return started;
+  });
+  return restartInFlight;
+});
+
+// Restart INTO the GPU backend probe at the player's request (the options
+// button, or the in-game prompt a second `--test-backends` launch raised).
+// No payload: argv never comes from the renderer; main appends the literal
+// flag here, on the same single-flight lock handover as the plain restart.
+ipcMain.handle('desktop-start-backend-probe', (event) => {
+  if (!trustedSender(event)) return false;
+  if (restartInFlight) return restartInFlight;
+  restartInFlight = restartApp({
+    log,
+    devServerUrl,
+    extraArgv: [TEST_BACKENDS_FLAG],
     onSpawned: () => {
       app.releaseSingleInstanceLock();
       app.quit();
@@ -1490,6 +1527,13 @@ if (!singleInstance) {
     focusMainWindow();
     const url = argv.find((arg) => arg.startsWith(`${deepLinkProtocol}://`));
     if (url) handleDeepLink(url);
+    // The Start-menu shortcut (or the flag by hand) while the game runs: the
+    // game asks the player whether to restart into the probe; nothing here
+    // restarts a live session.
+    if (hasTestBackendsFlag(argv) && mainWindow && !mainWindow.isDestroyed()) {
+      log.info('[probe] --test-backends requested while the game runs; asking the player');
+      mainWindow.webContents.send('desktop-probe-requested');
+    }
   });
   app.on('open-url', (event, url) => {
     event.preventDefault();

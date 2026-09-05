@@ -373,6 +373,18 @@ contextBridge.exposeInMainWorld('wocDesktop', {
   // core is TypeScript, src/probe/decision_core.ts) and posts the decision
   // back; its buttons are one action word each; the parent pushes progress
   // between arms. The parent validates every payload again.
+  // Start the GPU backend probe from the game (Options > Graphics > System):
+  // NO payload, main appends the literal flag and restarts on the same lock
+  // handover as restartApp. And the request the shell pushes when a second
+  // launch carried the flag while the game was running: the game asks the
+  // player (never restarts a live session by itself).
+  startBackendProbe: () => ipcRenderer.invoke('desktop-start-backend-probe'),
+  onProbeRequested: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('desktop-probe-requested', listener);
+    return () => ipcRenderer.removeListener('desktop-probe-requested', listener);
+  },
   probeStart: (payload) => {
     if (!payload || typeof payload !== 'object') return Promise.resolve(false);
     return ipcRenderer.invoke('desktop-probe-start', {

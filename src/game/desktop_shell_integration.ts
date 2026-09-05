@@ -5,6 +5,7 @@
 // bridge or a bridge method is absent (older installed shell, plain browser).
 
 import { desktopBridge } from '../runtime';
+import { initDesktopProbePrompt } from '../ui/desktop_probe_prompt';
 import { initDesktopUpdateToast } from '../ui/desktop_update_toast';
 import { initDesktopDisplayChange } from './desktop_display_change';
 import { initDesktopErrorRelay } from './desktop_error_relay';
@@ -40,6 +41,9 @@ export function initDesktopShellIntegration(): void {
     initDesktopDisplayChange(bridge),
     initDesktopLoginExit(bridge),
     initDesktopPresentation(bridge),
+    // The shell's "run the backend probe?" request (a second launch with the
+    // flag while the game runs); no replay either, so it subscribes here.
+    initDesktopProbePrompt(bridge),
   ];
   // Last, so the reading order mirrors the data flow: its away-gate reads the
   // presentation latch initDesktopPresentation subscribes above. The position

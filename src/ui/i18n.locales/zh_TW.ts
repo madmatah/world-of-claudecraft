@@ -14382,4 +14382,12 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'probe.status.noWebgl2': '此後端無法在這台電腦上啟動。',
   'probe.status.software': '此後端在這裡只能進行軟體算繪，無法執行遊戲。',
   'probe.status.noCorpus': '此版本缺少測試資料。',
+  'hudChrome.options.gpuBackendVerdict': '上次後端測試：{backend}。',
+  'hudChrome.options.gpuBackendVerdictStale': '上次後端測試的結果已不再適用於這台電腦。請重新執行測試以選擇後端。',
+  'hudChrome.options.testBackends': '測試圖形後端',
+  'hudChrome.options.testBackendsNote': '重新啟動遊戲並進行一項測試（需要幾分鐘），測量這台電腦上每個圖形後端的表現，為「自動」選出最佳後端。',
+  'hudChrome.options.probeRequestedTitle': '要執行圖形後端測試嗎？',
+  'hudChrome.options.probeRequestedBody': '測試需要關閉遊戲。現在重新啟動進入測試嗎？目前的工作階段將結束。',
+  'hudChrome.options.probeRequestedConfirm': '重新啟動進入測試',
+  'hudChrome.options.probeRequestedCancel': '暫不',
 };

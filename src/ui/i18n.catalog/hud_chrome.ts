@@ -1921,6 +1921,17 @@ export const hudChromeStrings = {
     gpuBackendActiveNameVulkan: 'Vulkan',
     gpuBackendActiveNameOpenGL: 'OpenGL',
     gpuBackendActiveNameD3D11: 'Direct3D 11',
+    gpuBackendVerdict: 'Last backend test: {backend}.',
+    gpuBackendVerdictStale:
+      'The last backend test no longer matches this PC. Run it again to pick the backend.',
+    testBackends: 'Test graphics backends',
+    testBackendsNote:
+      'Restarts the game into a test that measures each graphics backend on this PC (a few minutes) and picks the best one for Auto.',
+    probeRequestedTitle: 'Run the graphics backend test?',
+    probeRequestedBody:
+      'The test needs the game closed. Restart into the test now? Your session will end.',
+    probeRequestedConfirm: 'Restart into the test',
+    probeRequestedCancel: 'Not now',
     // The restart strip (src/ui/restart_strip_painter.ts): a setting that only applies at
     // the next launch of the desktop shell changed, so the panel offers the restart
     // Apply cannot stand in for. Wordy values, M16: the five non-Latin fills land in

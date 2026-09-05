@@ -14685,4 +14685,12 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'probe.status.noWebgl2': 'このバックエンドはこのコンピューターで起動できませんでした。',
   'probe.status.software': 'このバックエンドはここではソフトウェア描画しかできず、ゲームを実行できません。',
   'probe.status.noCorpus': 'このビルドにはテストデータがありません。',
+  'hudChrome.options.gpuBackendVerdict': '前回のバックエンドテスト: {backend}。',
+  'hudChrome.options.gpuBackendVerdictStale': '前回のバックエンドテストの結果はこのPCと一致しなくなりました。もう一度実行してバックエンドを選び直してください。',
+  'hudChrome.options.testBackends': 'グラフィックバックエンドをテスト',
+  'hudChrome.options.testBackendsNote': 'ゲームを再起動し、このPCで各グラフィックバックエンドを計測するテスト（数分）を行って、自動設定に最適なものを選びます。',
+  'hudChrome.options.probeRequestedTitle': 'グラフィックバックエンドのテストを実行しますか？',
+  'hudChrome.options.probeRequestedBody': 'テストにはゲームを閉じる必要があります。今すぐテストに再起動しますか？現在のセッションは終了します。',
+  'hudChrome.options.probeRequestedConfirm': 'テストに再起動',
+  'hudChrome.options.probeRequestedCancel': '今はしない',
 };

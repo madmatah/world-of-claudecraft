@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_GPU_BACKEND_CHOICES,
+  desktopBackendProbeSupported,
   desktopGpuBackendActive,
   desktopGpuBackendChoices,
   desktopGpuBackendSupported,
@@ -18,6 +19,7 @@ import {
   onDesktopGpuBackendWriteFailed,
   pushDesktopGpuBackend,
   resetDesktopGpuBackendActiveForTest,
+  startDesktopBackendProbe,
   syncDesktopGpuBackendSetting,
 } from '../src/game/desktop_gpu_backend_sync';
 import type { DesktopBridge, DesktopGpuBackendState } from '../src/runtime';
@@ -83,6 +85,45 @@ describe('desktopGpuBackendChoices', () => {
     expect(desktopGpuBackendChoices(shell(['metal']))).toEqual(DEFAULT_GPU_BACKEND_CHOICES);
     expect(desktopGpuBackendChoices(shell(undefined))).toEqual(DEFAULT_GPU_BACKEND_CHOICES);
     expect(desktopGpuBackendChoices(null)).toEqual(['auto', 'vulkan', 'opengl']);
+  });
+});
+
+describe('the probe entry point', () => {
+  it('is offered only by a shell with the channel on a platform that lists d3d11', () => {
+    const shell = (over: Record<string, unknown>) =>
+      ({ startBackendProbe: () => Promise.resolve(true), ...over }) as unknown as DesktopBridge;
+    expect(
+      desktopBackendProbeSupported(
+        shell({ gpuBackendChoices: ['auto', 'vulkan', 'd3d11', 'opengl'] }),
+      ),
+    ).toBe(true);
+    expect(
+      desktopBackendProbeSupported(shell({ gpuBackendChoices: ['auto', 'vulkan', 'opengl'] })),
+    ).toBe(false);
+    expect(desktopBackendProbeSupported(shell({}))).toBe(false);
+    expect(
+      desktopBackendProbeSupported({
+        gpuBackendChoices: ['auto', 'd3d11'],
+      } as unknown as DesktopBridge),
+    ).toBe(false);
+    expect(desktopBackendProbeSupported(null)).toBe(false);
+  });
+
+  it('starts the probe through the shell and answers what it did, never throwing', async () => {
+    let calls = 0;
+    const started = {
+      startBackendProbe: () => {
+        calls += 1;
+        return Promise.resolve(true);
+      },
+    };
+    expect(await startDesktopBackendProbe(started as unknown as DesktopBridge)).toBe(true);
+    expect(calls).toBe(1);
+    const refused = { startBackendProbe: () => Promise.resolve(false) };
+    expect(await startDesktopBackendProbe(refused as unknown as DesktopBridge)).toBe(false);
+    const broken = { startBackendProbe: () => Promise.reject(new Error('gone')) };
+    expect(await startDesktopBackendProbe(broken as unknown as DesktopBridge)).toBe(false);
+    expect(await startDesktopBackendProbe(null)).toBe(false);
   });
 });
 
@@ -289,6 +330,7 @@ describe('the latched reading and its subscribers', () => {
       active: 'vulkan-parallel-compile',
       requestedUnavailable: false,
       autoCapped: false,
+      verdict: null,
     });
 
     // The shell resends its state on its own schedule; a rebuild per resend
@@ -313,6 +355,7 @@ describe('the latched reading and its subscribers', () => {
       active: 'opengl',
       requestedUnavailable: true,
       autoCapped: false,
+      verdict: null,
     });
 
     // A payload with nothing to say keeps the reading AND stays silent: an
@@ -323,6 +366,7 @@ describe('the latched reading and its subscribers', () => {
       active: 'opengl',
       requestedUnavailable: true,
       autoCapped: false,
+      verdict: null,
     });
 
     unsubscribe();
@@ -332,6 +376,7 @@ describe('the latched reading and its subscribers', () => {
       active: 'vulkan-plain',
       requestedUnavailable: false,
       autoCapped: false,
+      verdict: null,
     });
     off();
     expect(shell.liveSubscriptions()).toBe(0);
@@ -353,7 +398,54 @@ describe('the latched reading and its subscribers', () => {
       active: 'vulkan-plain',
       requestedUnavailable: true,
       autoCapped: false,
+      verdict: null,
     });
+  });
+
+  it('carries the probe verdict as its own field, null when the shell stores none', () => {
+    const shell = pushingBridge();
+    const off = initDesktopGpuBackendActive(shell.bridge);
+    let wakes = 0;
+    onDesktopGpuBackendActiveChange(() => {
+      wakes += 1;
+    });
+    shell.send({
+      setting: 'auto',
+      active: 'd3d11',
+      requestedUnavailable: false,
+      verdict: { rung: 'vulkan-parallel-compile', worker: true, stale: false },
+    });
+    expect(desktopGpuBackendActive()?.verdict).toEqual({
+      rung: 'vulkan-parallel-compile',
+      worker: true,
+      stale: false,
+    });
+    expect(wakes).toBe(1);
+    // The verdict going stale alone is a new reading; an identical re-push is not.
+    shell.send({
+      setting: 'auto',
+      active: 'd3d11',
+      requestedUnavailable: false,
+      verdict: { rung: 'vulkan-parallel-compile', worker: true, stale: true },
+    });
+    expect(desktopGpuBackendActive()?.verdict?.stale).toBe(true);
+    expect(wakes).toBe(2);
+    shell.send({
+      setting: 'auto',
+      active: 'd3d11',
+      requestedUnavailable: false,
+      verdict: { rung: 'vulkan-parallel-compile', worker: true, stale: true },
+    });
+    expect(wakes).toBe(2);
+    // A junk verdict is none.
+    shell.send({
+      setting: 'auto',
+      active: 'd3d11',
+      requestedUnavailable: false,
+      verdict: { rung: 7 } as never,
+    });
+    expect(desktopGpuBackendActive()?.verdict).toBeNull();
+    off();
   });
 
   it('carries the policy cap as its own field, absent on an older shell meaning not capped', () => {
@@ -373,6 +465,7 @@ describe('the latched reading and its subscribers', () => {
       active: 'opengl',
       requestedUnavailable: false,
       autoCapped: true,
+      verdict: null,
     });
     expect(wakes).toBe(1);
     // The cap moving alone is a different reading (the row's sentence changes).

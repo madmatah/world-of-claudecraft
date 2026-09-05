@@ -14893,4 +14893,12 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'probe.status.noWebgl2': 'Этот бэкенд не смог запуститься на этом компьютере.',
   'probe.status.software': 'Этот бэкенд здесь работает только в программном режиме и не может запустить игру.',
   'probe.status.noCorpus': 'В этой сборке нет данных для теста.',
+  'hudChrome.options.gpuBackendVerdict': 'Последний тест бэкенда: {backend}.',
+  'hudChrome.options.gpuBackendVerdictStale': 'Результат последнего теста бэкенда больше не соответствует этому ПК. Запустите тест снова, чтобы выбрать бэкенд.',
+  'hudChrome.options.testBackends': 'Проверить графические бэкенды',
+  'hudChrome.options.testBackendsNote': 'Перезапускает игру в тест (несколько минут), который измеряет каждый графический бэкенд на этом ПК и выбирает лучший для режима «Авто».',
+  'hudChrome.options.probeRequestedTitle': 'Запустить тест графических бэкендов?',
+  'hudChrome.options.probeRequestedBody': 'Для теста игру нужно закрыть. Перезапустить в тест сейчас? Текущий сеанс завершится.',
+  'hudChrome.options.probeRequestedConfirm': 'Перезапустить в тест',
+  'hudChrome.options.probeRequestedCancel': 'Не сейчас',
 };

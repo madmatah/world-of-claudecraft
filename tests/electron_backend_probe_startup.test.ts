@@ -185,3 +185,39 @@ describe('the Windows verdict in main.cjs', () => {
     expect(after).toContain('mergeDesktopPrefs({ backendProbeVerdict: stale })');
   });
 });
+
+describe('the game-side entry points in main.cjs', () => {
+  it('restarts into the probe on a NO-payload channel, main appending the literal flag', () => {
+    const start = at(main, "ipcMain.handle('desktop-start-backend-probe'");
+    const body = main.slice(start, main.indexOf('\n});', start)).replace(/\s+/g, ' ');
+    expect(body).toContain("ipcMain.handle('desktop-start-backend-probe', (event) => {");
+    expect(body).toContain('if (restartInFlight) return restartInFlight;');
+    expect(body).toContain('extraArgv: [TEST_BACKENDS_FLAG],');
+    expect(body).toContain('onSpawned: () => { app.releaseSingleInstanceLock(); app.quit(); }');
+    expect(body).not.toContain('argv:');
+  });
+
+  it('asks the running game on a second launch with the flag, after the focus and the deep link', () => {
+    const handler = at(main, "app.on('second-instance'");
+    const body = main.slice(handler, main.indexOf('\n  });', handler));
+    const ask = body.indexOf("mainWindow.webContents.send('desktop-probe-requested');");
+    expect(ask).toBeGreaterThan(body.indexOf('focusMainWindow();'));
+    expect(ask).toBeGreaterThan(body.indexOf('if (url) handleDeepLink(url);'));
+    expect(body.slice(0, ask)).toContain(
+      'if (hasTestBackendsFlag(argv) && mainWindow && !mainWindow.isDestroyed()) {',
+    );
+  });
+
+  it('reports the stored verdict on the backend state, Windows only', () => {
+    const state = at(main, 'function gpuBackendState() {');
+    expect(main.slice(state, main.indexOf('\n}', state))).toContain(
+      'verdict: probeVerdictState(),',
+    );
+    const reader = at(main, 'function probeVerdictState() {');
+    const body = main.slice(reader, main.indexOf('\n}', reader)).replace(/\s+/g, ' ');
+    expect(body).toContain('if (!onWindows) return null;');
+    expect(body).toContain(
+      'return { rung: verdict.rung, worker: verdict.worker === true, stale: verdict.stale === true };',
+    );
+  });
+});

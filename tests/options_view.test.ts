@@ -330,6 +330,43 @@ describe('options_view: graphics dispatch matrix (cluster 3)', () => {
     }
   });
 
+  it('adds the backend test button, its note and the last verdict only with the probe capability', () => {
+    const system = (env: OptionsEnv) =>
+      buildGraphicsSections(makeSource({ graphicsPreset: 4 }), env).find(
+        (section) => section.titleKey === 'hudChrome.options.gfxSectionSystem',
+      );
+    const withProbe = system({ ...WEB_ENV, desktopGpuBackend: true, desktopBackendProbe: true });
+    const keys = keysOf(withProbe?.controls ?? []);
+    expect(keys.slice(keys.indexOf('gpuBackend'), keys.indexOf('gpuBackend') + 4)).toEqual([
+      'gpuBackend',
+      'note:hudChrome.options.gpuBackendNote',
+      'backendProbe',
+      'note:hudChrome.options.testBackendsNote',
+    ]);
+    const button = find(withProbe?.controls ?? [], 'backendProbe');
+    expect(button?.control).toBe('button');
+    expect(button && button.control === 'button' ? button.action : null).toBe('backendProbe');
+    // A stored verdict reads before the button; a stale one asks for the re-run.
+    const verdict = (stale: boolean) =>
+      keysOf(
+        system({
+          ...WEB_ENV,
+          desktopGpuBackend: true,
+          desktopBackendProbe: true,
+          desktopGpuBackendActive: {
+            active: 'd3d11',
+            requestedUnavailable: false,
+            verdict: { rung: 'vulkan-parallel-compile', worker: true, stale },
+          },
+        })?.controls ?? [],
+      );
+    expect(verdict(false)).toContain('note:hudChrome.options.gpuBackendVerdict');
+    expect(verdict(true)).toContain('note:hudChrome.options.gpuBackendVerdictStale');
+    // Without the capability: no button, whatever the row says.
+    const without = system({ ...WEB_ENV, desktopGpuBackend: true });
+    expect(find(without?.controls ?? [], 'backendProbe')).toBeUndefined();
+  });
+
   it('shows the rung the launch is really on, under the buttons, once the shell has judged', () => {
     // The point of the row on a machine where the choice did not take: a player
     // who picked Vulkan must not read "Vulkan" while playing on OpenGL.

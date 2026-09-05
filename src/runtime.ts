@@ -142,6 +142,10 @@ export interface DesktopGpuBackendState {
   /** Auto wanted Vulkan and the shell's policy held this launch at OpenGL (an
    *  excluded GPU); Vulkan stays the player's to pick. */
   autoCapped?: boolean;
+  /** The GPU backend probe's verdict (Windows): the rung it chose, the worker
+   *  decision, and whether it went stale (the row then offers a re-run). Null
+   *  when none is stored; absent on older shells. */
+  verdict?: { rung: string; worker: boolean; stale: boolean } | null;
 }
 
 /** The next-launch settings as the running shell process read them at startup
@@ -277,6 +281,11 @@ export interface DesktopBridge {
   // The probe PARENT's window: the consent view's start (locale and graphics
   // tier), the verdict view's results read and decision post, its buttons,
   // and the progress push between arms. Absent on the game's window.
+  // The game's two ends of the probe: restart INTO it (no payload; the shell
+  // appends the flag), and the shell's request when a second launch carried
+  // the flag while the game was running. Absent on older shells.
+  startBackendProbe?(): Promise<boolean>;
+  onProbeRequested?(callback: () => void): () => void;
   probeStart?(payload: { locale: string; tier: string }): Promise<boolean>;
   probeResults?(): Promise<DesktopProbeResults | null>;
   probeVerdict?(decision: unknown): Promise<boolean>;

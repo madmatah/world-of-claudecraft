@@ -24,12 +24,14 @@ import { audio } from '../game/audio';
 import { isCrossHotbarModifier } from '../game/cross_hotbar';
 import { desktopDisplayModeSupported } from '../game/desktop_display_mode_sync';
 import {
+  desktopBackendProbeSupported,
   desktopGpuBackendActive,
   desktopGpuBackendChoices,
   desktopGpuBackendSupported,
   desktopGpuBackendWriteFailed,
   onDesktopGpuBackendActiveChange,
   onDesktopGpuBackendWriteFailed,
+  startDesktopBackendProbe,
 } from '../game/desktop_gpu_backend_sync';
 import { desktopGpuPrefSupported } from '../game/desktop_gpu_pref_sync';
 import {
@@ -97,6 +99,7 @@ import type { TranslationKey } from './i18n.catalog';
 import { interfaceUnlockLabelKey } from './interface_unlock_core';
 import {
   type BoolToggleControl,
+  type ButtonControl,
   boolToggleNextValue,
   buildAudioControls,
   buildBugReportInfo,
@@ -730,6 +733,9 @@ export class OptionsWindow {
         case 'note':
           this.noteRow(parent, c.textKey, c.valueKeys);
           break;
+        case 'button':
+          this.buttonRow(parent, c);
+          break;
         case 'musicToggle':
           this.musicToggle(parent, c.labelKey);
           break;
@@ -983,6 +989,30 @@ export class OptionsWindow {
     for (const [name, key] of Object.entries(valueKeys ?? {})) values[name] = t(key);
     note.textContent = valueKeys ? t(textKey, values) : t(textKey);
     parent.appendChild(note);
+  }
+
+  // A one-shot action row: the GPU backend probe's restart (the shell answers
+  // false when it never started, and the row leaves the button enabled so the
+  // player can try again; a started restart quits this process).
+  private buttonRow(parent: HTMLElement, c: ButtonControl): void {
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn';
+    button.textContent = t(c.labelKey);
+    button.dataset.focusKey = c.key;
+    button.addEventListener('click', () => {
+      audio.click();
+      if (c.action === 'backendProbe') {
+        button.disabled = true;
+        void startDesktopBackendProbe(desktopBridge()).then((started) => {
+          if (!started) button.disabled = false;
+        });
+      }
+    });
+    row.appendChild(button);
+    parent.appendChild(row);
   }
 
   // The bespoke music on/off toggle (reads the live MusicDirector, not a setting).
@@ -1344,6 +1374,7 @@ export class OptionsWindow {
               // methods AND the shell's platform answer, folded into one flag.
               desktopGpuBackend: desktopGpuBackendSupported(desktopBridge()),
               desktopGpuBackendChoices: desktopGpuBackendChoices(desktopBridge()),
+              desktopBackendProbe: desktopBackendProbeSupported(desktopBridge()),
               desktopGpuBackendActive: desktopGpuBackendActive(),
               // The shell refused the last write: the row says what the next
               // start will really use, over the rung this one is on.

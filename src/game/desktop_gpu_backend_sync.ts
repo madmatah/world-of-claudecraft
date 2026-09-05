@@ -130,6 +130,38 @@ export interface DesktopGpuBackendActive {
   requestedUnavailable: boolean;
   /** Auto was held at OpenGL by the shell's GPU policy (an excluded card). */
   autoCapped: boolean;
+  /** The GPU backend probe's stored verdict (Windows), or null. */
+  verdict: DesktopGpuBackendVerdict | null;
+}
+
+export interface DesktopGpuBackendVerdict {
+  rung: string;
+  worker: boolean;
+  stale: boolean;
+}
+
+/** Whether the installed shell can restart into the GPU backend probe from the
+ *  options row: the bridge method AND a platform that lists the probe's
+ *  reference backend (Windows). A Linux shell has the method and no probe. */
+export function desktopBackendProbeSupported(bridge: DesktopBridge | null | undefined): boolean {
+  return (
+    typeof bridge?.startBackendProbe === 'function' &&
+    desktopGpuBackendChoices(bridge).includes('d3d11')
+  );
+}
+
+/** Restart into the probe; false when the shell refused or has no such
+ *  channel. Never throws. */
+export async function startDesktopBackendProbe(
+  bridge: DesktopBridge | null | undefined,
+): Promise<boolean> {
+  const start = bridge?.startBackendProbe;
+  if (typeof start !== 'function') return false;
+  try {
+    return (await start.call(bridge)) === true;
+  } catch {
+    return false;
+  }
 }
 
 /** The latched reading, refreshed by the shell's push. Latched rather than
@@ -162,7 +194,8 @@ function latchActive(state: unknown): void {
     previous &&
     previous.active === next.active &&
     previous.requestedUnavailable === next.requestedUnavailable &&
-    previous.autoCapped === next.autoCapped
+    previous.autoCapped === next.autoCapped &&
+    sameVerdict(previous.verdict, next.verdict)
   )
     return;
   for (const listener of activeListeners) listener();
@@ -182,7 +215,27 @@ function readActive(state: unknown): DesktopGpuBackendActive | null {
   if (typeof requestedUnavailable !== 'boolean') return null;
   // The cap flag is newer than the verdict: an older shell omits it, which reads
   // as "not capped" rather than as no verdict at all.
-  return { active, requestedUnavailable, autoCapped: autoCapped === true };
+  return {
+    active,
+    requestedUnavailable,
+    autoCapped: autoCapped === true,
+    verdict: readVerdict((state as { verdict?: unknown }).verdict),
+  };
+}
+
+function readVerdict(value: unknown): DesktopGpuBackendVerdict | null {
+  if (!value || typeof value !== 'object') return null;
+  const { rung, worker, stale } = value as { rung?: unknown; worker?: unknown; stale?: unknown };
+  if (typeof rung !== 'string' || rung === '') return null;
+  return { rung, worker: worker === true, stale: stale === true };
+}
+
+function sameVerdict(
+  a: DesktopGpuBackendVerdict | null,
+  b: DesktopGpuBackendVerdict | null,
+): boolean {
+  if (a === null || b === null) return a === b;
+  return a.rung === b.rung && a.worker === b.worker && a.stale === b.stale;
 }
 
 /** Subscribe to the shell's push. The FIRST reading comes from the boot sync

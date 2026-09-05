@@ -610,11 +610,12 @@ describe('shell startup polish pins (electron/main.cjs)', () => {
     // return to act on it.
     expect(count(code, 'app.exit(0)')).toBe(1);
     expect(flat).not.toMatch(/=\s*relaunchOnLowerBackend\(/);
-    // Three handovers of the single-instance lock in the whole shell: this
-    // rescue, the player-requested restart (pinned by its own case above), and
-    // the probe verdict's Play (tests/electron_backend_probe_startup.test.ts),
-    // each on its child's 'spawn' event.
-    expect(count(code, 'releaseSingleInstanceLock()')).toBe(3);
+    // Four handovers of the single-instance lock in the whole shell: this
+    // rescue, the player-requested restart (pinned by its own case above), the
+    // restart INTO the probe and the probe verdict's Play (both pinned in
+    // tests/electron_backend_probe_startup.test.ts), each on its child's
+    // 'spawn' event.
+    expect(count(code, 'releaseSingleInstanceLock()')).toBe(4);
     // The spawn lives there and nowhere else, so no trigger can bypass the latch.
     expect(count(code, 'relaunchOnLowerBackend(')).toBe(1);
     expect(count(code, 'rescueOntoLowerBackend(')).toBe(4);

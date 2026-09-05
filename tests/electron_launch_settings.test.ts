@@ -96,6 +96,10 @@ describe('restartEnv', () => {
 });
 
 describe('restartArgv', () => {
+  it('always drops the probe flag: a restart never re-enters the probe by inheritance', () => {
+    expect(restartArgv(['--test-backends', '--keep'], {})).toEqual(['--keep']);
+  });
+
   it('drops the X11 ozone argument only when the PRIME relaunch recorded appending it', () => {
     const argv = ['.', '--foo', LINUX_OZONE_X11_ARG];
     const appended = {
@@ -209,6 +213,24 @@ describe('restartApp', () => {
       "[shell] restarting at the player's request",
       expect.objectContaining({ spawnTarget: '/opt/woc/woc' }),
     );
+  });
+
+  it('appends only what main hands over as extraArgv, after the strip', async () => {
+    const child = fakeChild();
+    const { spawn, log, onSpawned } = deps(child);
+    const settled = restartApp({
+      env: {},
+      argv: ['--test-backends', '--keep'],
+      execPath: '/x',
+      spawn,
+      log,
+      onSpawned,
+      extraArgv: ['--test-backends'],
+    });
+    const [, argv] = spawn.mock.calls[0] as unknown as [string, string[]];
+    expect(argv).toEqual(['--keep', '--test-backends']);
+    child.emit('spawn');
+    await expect(settled).resolves.toBe(true);
   });
 
   it('resolves false when the child never starts, this process still running', async () => {

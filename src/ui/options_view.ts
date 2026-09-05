@@ -168,12 +168,24 @@ export interface MusicToggleControl {
   category?: InterfaceTab;
 }
 
+/** A one-shot action inside a settings card (the only one today: restart
+ *  into the GPU backend probe). The painter dispatches on `action`. */
+export interface ButtonControl {
+  control: 'button';
+  key: string;
+  labelKey: TranslationKey;
+  action: 'backendProbe';
+  /** Interface-panel tab this control lives in (unset on other panels). */
+  category?: InterfaceTab;
+}
+
 export type OptionsControl =
   | SliderControl
   | ToggleControl
   | BoolToggleControl
   | ChoiceControl
   | NoteControl
+  | ButtonControl
   | MusicToggleControl;
 
 // ---------------------------------------------------------------------------
@@ -240,7 +252,13 @@ export interface OptionsEnv {
     requestedUnavailable: boolean;
     /** Auto held at OpenGL by the shell's GPU policy (an excluded card). */
     autoCapped?: boolean;
+    /** The GPU backend probe's stored verdict (Windows), or none. */
+    verdict?: { rung: string; worker: boolean; stale: boolean } | null;
   } | null;
+  /** desktopBackendProbeSupported(): the shell can restart into the GPU backend
+   *  probe ("WoC config detector", Windows): reveals the test button and its
+   *  note under the backend row. */
+  desktopBackendProbe?: boolean;
   /** desktopGpuBackendWriteFailed(): the shell refused the last write of the
    *  backend choice, so its STORED value is still the old one and the next
    *  launch keeps it. Outranks the reading above: a player must not leave the
@@ -672,6 +690,31 @@ export function buildGraphicsSections(
       if (active.requestedUnavailable) backendRow.statusAlert = true;
     }
     system.push(backendRow, note('hudChrome.options.gpuBackendNote'));
+    if (env.desktopBackendProbe) {
+      // The probe's last verdict, when one is stored, then the button that
+      // restarts into the probe; a stale verdict (the machine moved under it,
+      // or its backend kept dying) says so and asks for the re-run.
+      const verdict = active?.verdict ?? null;
+      if (verdict) {
+        system.push(
+          note(
+            verdict.stale
+              ? 'hudChrome.options.gpuBackendVerdictStale'
+              : 'hudChrome.options.gpuBackendVerdict',
+            { backend: gpuBackendActiveNameKey(verdict.rung) },
+          ),
+        );
+      }
+      system.push(
+        {
+          control: 'button',
+          key: 'backendProbe',
+          labelKey: 'hudChrome.options.testBackends',
+          action: 'backendProbe',
+        },
+        note('hudChrome.options.testBackendsNote'),
+      );
+    }
   }
   // Desktop vs on-screen touch controls. Hidden in the native shell (forces touch).
   if (!env.nativeShell) {

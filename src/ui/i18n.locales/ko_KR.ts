@@ -14690,4 +14690,12 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'probe.status.noWebgl2': '이 백엔드는 이 컴퓨터에서 시작하지 못했습니다.',
   'probe.status.software': '이 백엔드는 여기서 소프트웨어 렌더링만 가능하여 게임을 실행할 수 없습니다.',
   'probe.status.noCorpus': '이 빌드에 테스트 데이터가 없습니다.',
+  'hudChrome.options.gpuBackendVerdict': '마지막 백엔드 테스트: {backend}.',
+  'hudChrome.options.gpuBackendVerdictStale': '마지막 백엔드 테스트 결과가 더 이상 이 PC와 일치하지 않습니다. 다시 실행하여 백엔드를 선택하세요.',
+  'hudChrome.options.testBackends': '그래픽 백엔드 테스트',
+  'hudChrome.options.testBackendsNote': '게임을 다시 시작하여 이 PC에서 각 그래픽 백엔드를 측정하는 테스트(몇 분 소요)를 실행하고 자동 설정에 가장 적합한 것을 선택합니다.',
+  'hudChrome.options.probeRequestedTitle': '그래픽 백엔드 테스트를 실행할까요?',
+  'hudChrome.options.probeRequestedBody': '테스트를 하려면 게임을 닫아야 합니다. 지금 테스트로 다시 시작할까요? 현재 세션이 종료됩니다.',
+  'hudChrome.options.probeRequestedConfirm': '테스트로 다시 시작',
+  'hudChrome.options.probeRequestedCancel': '나중에',
 };
