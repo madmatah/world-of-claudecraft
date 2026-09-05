@@ -26,8 +26,14 @@ export interface BackendProbeParentDeps {
     getVersion(): string;
   };
   BrowserWindow: new (options: unknown) => unknown;
-  ipcMain: { handle(channel: string, handler: (event: unknown, ...args: unknown[]) => unknown): void };
-  log: { info(...args: unknown[]): void; warn(...args: unknown[]): void; error(...args: unknown[]): void };
+  ipcMain: {
+    handle(channel: string, handler: (event: unknown, ...args: unknown[]) => unknown): void;
+  };
+  log: {
+    info(...args: unknown[]): void;
+    warn(...args: unknown[]): void;
+    error(...args: unknown[]): void;
+  };
   trustedSender(event: unknown): boolean;
   appOrigin: string;
   devServerUrl?: string;
@@ -35,7 +41,10 @@ export interface BackendProbeParentDeps {
   iconPath: string;
   argv: string[];
   env: Record<string, string | undefined>;
-  desktopPrefs: Record<string, unknown> & { gpuBackend?: string; backendProbeVerdict?: { rung: string } };
+  desktopPrefs: Record<string, unknown> & {
+    gpuBackend?: string;
+    backendProbeVerdict?: { rung: string };
+  };
   savePrefs(next: unknown): boolean;
   corpusHash: string;
   distribution?: string;
