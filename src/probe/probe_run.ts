@@ -27,6 +27,7 @@ import { type ParallelPassResult, runParallelPass } from './parallel_section';
 import { createProbeContext, type ProbeContext } from './probe_context';
 import { passNonce, saltPrograms } from './salt_core';
 import { runUploadPass, type UploadPassResult } from './upload_section';
+import { runWorkerPass, type WorkerPassResult } from './worker_section';
 
 export const PROBE_VERSION = 1;
 
@@ -68,6 +69,7 @@ export interface ProbeResult {
   sections: {
     links?: ProbeSectionRecord<LinkPassResult>;
     parallel?: ProbeSectionRecord<ParallelPassResult>;
+    worker?: ProbeSectionRecord<WorkerPassResult>;
     uploads?: ProbeSectionRecord<UploadPassResult>;
     frame?: ProbeSectionRecord<FramePassResult>;
     pacing?: ProbeSectionRecord<PacingPassResult>;
@@ -213,6 +215,34 @@ async function parallelSection(
   return { passes, replays: 0, floor };
 }
 
+async function workerSection(
+  rig: Rig,
+  corpus: ProbeCorpus,
+  options: ProbeRunOptions,
+  floor: FrameStats,
+  coldMedianMs: number,
+): Promise<ProbeSectionRecord<WorkerPassResult>> {
+  const programs = heavyPrograms(corpus).slice(0, 6);
+  const passes: WorkerPassResult[] = [];
+  for (let pass = 0; pass < 2; pass++) {
+    const nonce = passNonce(options.run, options.round, 'worker', pass);
+    const salted = saltPrograms(programs, nonce);
+    passes.push(
+      await runWorkerPass(salted, {
+        gl: rig.context.gl,
+        contextAttributes: rig.context.gl.getContextAttributes() as Record<string, unknown> | null,
+        extensions: rig.context.extensions,
+        scene: rig.scene,
+        loadPasses: rig.loadPasses,
+        refreshMs: rig.refreshMs,
+        coldMedianMs,
+        now: rig.now,
+      }),
+    );
+  }
+  return { passes, replays: 0, floor };
+}
+
 async function uploadSection(
   rig: Rig,
   floor: FrameStats,
@@ -347,11 +377,21 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     post();
 
     const sections: Array<{
-      name: 'links' | 'parallel' | 'uploads' | 'frame' | 'pacing';
+      name: 'links' | 'parallel' | 'worker' | 'uploads' | 'frame' | 'pacing';
       run: (floor: FrameStats) => Promise<unknown>;
     }> = [
       { name: 'links', run: (floor) => linkSection(rig, loaded.corpus, options, floor) },
       { name: 'parallel', run: (floor) => parallelSection(rig, loaded.corpus, options, floor) },
+      {
+        name: 'worker',
+        run: (floor) => {
+          const links = result.sections.links;
+          const cold = links
+            ? links.passes.reduce((sum, pass) => sum + pass.cold.medianMs, 0) / links.passes.length
+            : Number.NaN;
+          return workerSection(rig, loaded.corpus, options, floor, cold);
+        },
+      },
       { name: 'uploads', run: (floor) => uploadSection(rig, floor) },
       { name: 'frame', run: (floor) => frameSection(rig, loaded.corpus, floor) },
       { name: 'pacing', run: (floor) => pacingSection(rig, floor) },

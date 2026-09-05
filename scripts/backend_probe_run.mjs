@@ -103,6 +103,19 @@ try {
       `[probe] floors: links p95=${links?.floor.p95Ms.toFixed(1)} parallel p95=${parallelSection.floor.p95Ms.toFixed(1)}`,
     );
   }
+  const workerSection = result.sections?.worker;
+  if (workerSection) {
+    workerSection.passes.forEach((pass, i) => {
+      const s = pass.summary;
+      console.log(
+        `[probe] worker pass ${i}: ready=${s.readyMs === null ? 'never' : s.readyMs.toFixed(0) + 'ms'}` +
+          `${s.refusal ? ` refused=${s.refusal}` : ''} warmed=${s.warmed} failed=${s.failed} ` +
+          `workerLink=${s.medianWorkerLinkMs.toFixed(0)}ms | frames ${s.framesDuringWarm.frames} ` +
+          `max=${s.framesDuringWarm.maxMs.toFixed(0)} long=${s.framesDuringWarm.longFrames} lost=${s.framesDuringWarm.lostMs.toFixed(0)}ms | ` +
+          `hit=${s.medianHitMs.toFixed(1)}ms cold=${s.coldMedianMs.toFixed(0)} ratio=${s.hitOverCold.toFixed(2)}${s.capped ? ' CAPPED' : ''}`,
+      );
+    });
+  }
   const uploads = result.sections?.uploads;
   if (uploads) {
     uploads.passes.forEach((pass, i) => {
