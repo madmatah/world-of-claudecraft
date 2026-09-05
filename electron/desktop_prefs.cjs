@@ -35,6 +35,7 @@ const {
   MIN_WINDOW_WIDTH,
 } = require('./window_memory.cjs');
 const { GPU_BACKEND_RUNGS, GPU_BACKEND_SETTINGS } = require('./gpu_backend.cjs');
+const { readBackendProbeVerdict } = require('./backend_probe_verdict.cjs');
 
 /** How much of a proof's version and driver string is kept: enough to compare
  *  two readings, far short of anything a prefs file should be storing. */
@@ -185,6 +186,11 @@ function sanitizeDesktopPrefs(input) {
   if (proof) prefs.gpuBackendProof = proof;
   prefs.consecutiveGpuLaunchCrashes = readCount(input.consecutiveGpuLaunchCrashes);
   prefs.launchesSinceBackendReprobe = readCount(input.launchesSinceBackendReprobe);
+  // Additive as well: the Windows memory, the GPU backend probe's verdict
+  // (electron/backend_probe_verdict.cjs owns its readers). Absent or
+  // unusable, there is no verdict, and the launch pins D3D11.
+  const verdict = readBackendProbeVerdict(input.backendProbeVerdict);
+  if (verdict) prefs.backendProbeVerdict = verdict;
   return prefs;
 }
 

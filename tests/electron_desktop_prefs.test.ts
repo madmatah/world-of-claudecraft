@@ -77,6 +77,23 @@ describe('desktop prefs schema', () => {
       },
       consecutiveGpuLaunchCrashes: 2,
       launchesSinceBackendReprobe: 7,
+      backendProbeVerdict: {
+        rung: 'd3d11',
+        backend: 'd3d11',
+        worker: true,
+        adapter: '0x10de:0x2504',
+        driverVersion: '560.94',
+        chromeVersion: '151.0.7443.0',
+        probeVersion: 1,
+        corpusHash: 'abc123',
+        appVersion: '0.42.0',
+        recordedAt: '2026-09-05T10:00:00.000Z',
+        distribution: 'steam',
+        stale: false,
+        deathStreak: 0,
+        workerRetireStreak: 0,
+        junk: 'nope',
+      },
       // Junk a hand-edited file could carry; none of it may survive.
       apiOrigin: 'https://evil.example',
       extra: 'nope',
@@ -98,8 +115,25 @@ describe('desktop prefs schema', () => {
       },
       consecutiveGpuLaunchCrashes: 2,
       launchesSinceBackendReprobe: 7,
+      backendProbeVerdict: {
+        rung: 'd3d11',
+        backend: 'd3d11',
+        worker: true,
+        adapter: '0x10de:0x2504',
+        driverVersion: '560.94',
+        chromeVersion: '151.0.7443.0',
+        probeVersion: 1,
+        corpusHash: 'abc123',
+        appVersion: '0.42.0',
+        recordedAt: '2026-09-05T10:00:00.000Z',
+        distribution: 'steam',
+        stale: false,
+        deathStreak: 0,
+        workerRetireStreak: 0,
+      },
     });
     expect(Object.keys(prefs).sort()).toEqual([
+      'backendProbeVerdict',
       'consecutiveGpuLaunchCrashes',
       'discordPresenceEnabled',
       'displayId',
@@ -286,6 +320,28 @@ describe('desktop prefs schema', () => {
         JSON.stringify(partial),
       ).not.toHaveProperty('gpuBackendProof');
     }
+  });
+
+  it('keeps a probe verdict only when its readers accept it', () => {
+    // The field's own readers (tests/electron_backend_probe_verdict.test.ts)
+    // carry the per-field negatives; here the prefs boundary: an unusable
+    // verdict is absent, never defaulted.
+    expect(sanitizeDesktopPrefs({ backendProbeVerdict: { rung: 'd3d11' } })).not.toHaveProperty(
+      'backendProbeVerdict',
+    );
+    expect(sanitizeDesktopPrefs({ backendProbeVerdict: 'd3d11' })).not.toHaveProperty(
+      'backendProbeVerdict',
+    );
+    const kept = sanitizeDesktopPrefs({
+      backendProbeVerdict: {
+        rung: 'opengl',
+        backend: 'opengl',
+        chromeVersion: '151.0.7443.0',
+        probeVersion: 1,
+        corpusHash: 'abc123',
+      },
+    });
+    expect(kept.backendProbeVerdict).toMatchObject({ rung: 'opengl', worker: false, stale: false });
   });
 
   it('reads the two counters as non-negative integers, defaulting to none', () => {

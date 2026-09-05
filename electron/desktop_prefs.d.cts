@@ -1,3 +1,4 @@
+import type { BackendProbeVerdict } from './backend_probe_verdict.cjs';
 // Hand-written declarations for electron/desktop_prefs.cjs so the Vitest suite
 // (tests/electron_desktop_prefs.test.ts) type-checks its imports. Keep in sync
 // with the .cjs exports (same convention as shell_guards.d.cts).
@@ -20,6 +21,8 @@ export interface DesktopPrefs {
   gpuBackendProof?: GpuBackendProof;
   consecutiveGpuLaunchCrashes: number;
   launchesSinceBackendReprobe: number;
+  /** The Windows memory: the GPU backend probe's verdict; absent means none. */
+  backendProbeVerdict?: BackendProbeVerdict;
   windowBounds?: WindowRect;
   displayId?: number;
 }
