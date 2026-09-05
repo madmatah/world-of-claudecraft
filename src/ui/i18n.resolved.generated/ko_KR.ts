@@ -21,7 +21,42 @@ export const ko_KR: EnTranslations = {
     "rpPvp": "롤플레잉 PvP"
   },
   "probe": {
-    "title": "WoC config detector"
+    "title": "WoC config detector",
+    "backend": {
+      "d3d11": "Direct3D 11",
+      "vulkanParallel": "Vulkan (병렬 셰이더 컴파일)",
+      "vulkanPlain": "Vulkan",
+      "opengl": "OpenGL",
+      "metal": "Metal",
+      "software": "소프트웨어 렌더링",
+      "unknown": "알 수 없는 백엔드"
+    },
+    "consent": {
+      "heading": "이 PC에 가장 알맞은 그래픽 백엔드 찾기",
+      "body": "테스트는 창을 몇 개 열었다 닫으며 약 {minutes}분이 걸립니다. 게임은 닫아 두고, 노트북은 전원에 연결하고, 실행 중에는 컴퓨터를 건드리지 마세요.",
+      "start": "테스트 시작",
+      "cancel": "나중에"
+    },
+    "progress": {
+      "waiting": "테스트를 준비하는 중",
+      "arm": "{backend} 테스트 중, {total}단계 중 {step}단계",
+      "busy": "컴퓨터가 다른 작업으로 바쁩니다. 다른 프로그램을 닫고 테스트를 다시 실행하세요."
+    },
+    "verdict": {
+      "heading": "이 PC에 권장: {backend}",
+      "workerOn": "셰이더 예열 워커: 켬",
+      "workerOff": "셰이더 예열 워커: 끔",
+      "inconclusive": "테스트가 결정을 내리지 못했습니다. 다른 프로그램을 모두 닫고 다시 실행하세요.",
+      "explicitSetting": "그래픽 백엔드가 수동으로 설정되어 있어, 그 설정을 자동으로 바꾸기 전까지 이 결과는 적용되지 않습니다.",
+      "play": "플레이",
+      "rerun": "테스트 다시 실행",
+      "switchToAuto": "백엔드 설정을 자동으로 전환"
+    },
+    "status": {
+      "noWebgl2": "이 백엔드는 이 컴퓨터에서 시작하지 못했습니다.",
+      "software": "이 백엔드는 여기서 소프트웨어 렌더링만 가능하여 게임을 실행할 수 없습니다.",
+      "noCorpus": "이 빌드에 테스트 데이터가 없습니다."
+    }
   },
   "devCommand": {
     "dialogLabel": "개발자 명령 센터",

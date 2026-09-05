@@ -21,7 +21,42 @@ export const ja_JP: EnTranslations = {
     "rpPvp": "RP-PvP"
   },
   "probe": {
-    "title": "WoC config detector"
+    "title": "WoC config detector",
+    "backend": {
+      "d3d11": "Direct3D 11",
+      "vulkanParallel": "Vulkan（並列シェーダーコンパイル）",
+      "vulkanPlain": "Vulkan",
+      "opengl": "OpenGL",
+      "metal": "Metal",
+      "software": "ソフトウェアレンダリング",
+      "unknown": "不明なバックエンド"
+    },
+    "consent": {
+      "heading": "このPCに最適なグラフィックスバックエンドを探す",
+      "body": "テストはいくつかのウィンドウを開いたり閉じたりし、約{minutes}分かかります。ゲームは閉じたまま、ノートPCは電源につなぎ、実行中はコンピューターに触れないでください。",
+      "start": "テストを開始",
+      "cancel": "今はしない"
+    },
+    "progress": {
+      "waiting": "テストを準備しています",
+      "arm": "{backend}をテスト中、ステップ{step}/{total}",
+      "busy": "コンピューターが他の処理で忙しい状態です。他のプログラムを閉じてテストをもう一度実行してください。"
+    },
+    "verdict": {
+      "heading": "このPCへのおすすめ：{backend}",
+      "workerOn": "シェーダーウォームアップワーカー：オン",
+      "workerOff": "シェーダーウォームアップワーカー：オフ",
+      "inconclusive": "テストでは判断できませんでした。他に何も開かずにもう一度実行してください。",
+      "explicitSetting": "グラフィックスバックエンドが手動で設定されているため、その設定を「自動」に切り替えるまでこの結果は適用されません。",
+      "play": "プレイ",
+      "rerun": "テストをもう一度実行",
+      "switchToAuto": "バックエンド設定を「自動」に切り替える"
+    },
+    "status": {
+      "noWebgl2": "このバックエンドはこのコンピューターで起動できませんでした。",
+      "software": "このバックエンドはここではソフトウェア描画しかできず、ゲームを実行できません。",
+      "noCorpus": "このビルドにはテストデータがありません。"
+    }
   },
   "devCommand": {
     "dialogLabel": "開発者コマンドセンター",

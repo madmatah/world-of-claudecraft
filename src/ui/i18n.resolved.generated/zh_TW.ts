@@ -21,7 +21,42 @@ export const zh_TW: EnTranslations = {
     "rpPvp": "RP-PvP"
   },
   "probe": {
-    "title": "WoC config detector"
+    "title": "WoC config detector",
+    "backend": {
+      "d3d11": "Direct3D 11",
+      "vulkanParallel": "Vulkan（平行著色器編譯）",
+      "vulkanPlain": "Vulkan",
+      "opengl": "OpenGL",
+      "metal": "Metal",
+      "software": "軟體算繪",
+      "unknown": "未知後端"
+    },
+    "consent": {
+      "heading": "為這台電腦找出最合適的圖形後端",
+      "body": "測試會開啟並關閉幾個視窗，大約需要 {minutes} 分鐘。請保持遊戲關閉，筆電請接上電源，執行期間不要操作電腦。",
+      "start": "開始測試",
+      "cancel": "暫時不要"
+    },
+    "progress": {
+      "waiting": "正在準備測試",
+      "arm": "正在測試 {backend}，第 {step} 步，共 {total} 步",
+      "busy": "電腦正忙於其他工作。請關閉其他程式後重新執行測試。"
+    },
+    "verdict": {
+      "heading": "推薦這台電腦使用：{backend}",
+      "workerOn": "著色器預熱工作執行緒：開啟",
+      "workerOff": "著色器預熱工作執行緒：關閉",
+      "inconclusive": "測試無法做出判斷。請在不開啟其他程式的情況下重新執行。",
+      "explicitSetting": "圖形後端已手動設定，在把該設定改為「自動」之前，此結果不會生效。",
+      "play": "開始遊戲",
+      "rerun": "重新執行測試",
+      "switchToAuto": "將後端設定改為「自動」"
+    },
+    "status": {
+      "noWebgl2": "此後端無法在這台電腦上啟動。",
+      "software": "此後端在這裡只能進行軟體算繪，無法執行遊戲。",
+      "noCorpus": "此版本缺少測試資料。"
+    }
   },
   "devCommand": {
     "dialogLabel": "開發者指令中心",

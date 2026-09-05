@@ -181,6 +181,10 @@ describe('i18n whole-catalog completeness', () => {
       'guide.glossary.claudiumTerm', // "Claudium" - the same currency brand as hudChrome.claudium.*
       'desktop.crash.title', // "World of ClaudeCraft" - brand (desktop crash dialog title)
       'probe.title', // "WoC config detector" - the backend probe's product name, kept verbatim
+      'probe.backend.d3d11', // "Direct3D 11" - the graphics API's name
+      'probe.backend.vulkanPlain', // "Vulkan" - the graphics API's name
+      'probe.backend.opengl', // "OpenGL" - the graphics API's name
+      'probe.backend.metal', // "Metal" - the graphics API's name
       'auth.emailPlaceholder', // "you@example.com" - RFC 2606 example address, kept verbatim
       // Rift boss mechanic names: authored fantasy proper nouns that do not translate.
       'abilityUi.cast.rift_frost_execution',
