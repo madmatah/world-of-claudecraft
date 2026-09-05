@@ -67,6 +67,22 @@ export interface ProbeRunOptions {
 
 const PROBE_CANVAS_SIZE = 256;
 
+/** Two painted frames before the context exists: a WebGL context created
+ *  before the page's first composite is lost at once on a surface-less
+ *  Vulkan (measured on Mesa ANV in a headless Chrome), and the shell's
+ *  window is painted before it measures anyway. */
+function paintedFrames(count: number): Promise<void> {
+  return new Promise((resolve) => {
+    let left = count;
+    const tick = (): void => {
+      left -= 1;
+      if (left <= 0) resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
 function identityOf(context: ProbeContext): ProbeIdentity {
   const readout = readGpuBackend(context.gl);
   return {
@@ -118,6 +134,7 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     sections: {},
     ended: 'completed',
   };
+  await paintedFrames(2);
   const context = createProbeContext(PROBE_CANVAS_SIZE, PROBE_CANVAS_SIZE, options.document);
   if (!context) {
     result.ended = 'no-webgl2';

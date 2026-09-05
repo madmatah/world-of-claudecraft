@@ -78,8 +78,8 @@ try {
   if (links) {
     links.passes.forEach((pass, i) => {
       const fmt = (s) =>
-        `n=${s.count} med=${s.medianMs.toFixed(1)} max=${s.maxMs.toFixed(1)} ` +
-        `trim=${s.trimmedMeanMs.toFixed(1)}${s.capped ? ' CAPPED' : ''}${s.failed ? ` failed=${s.failed}` : ''}`;
+        `n=${s.count} med=${s.medianMs.toFixed(1)} (link ${s.medianLinkMs.toFixed(1)} draw ${s.medianDrawMs.toFixed(1)}) ` +
+        `max=${s.maxMs.toFixed(1)} trim=${s.trimmedMeanMs.toFixed(1)}${s.capped ? ' CAPPED' : ''}${s.failed ? ` failed=${s.failed}` : ''}`;
       console.log(`[probe] links pass ${i}: cold ${fmt(pass.cold)} | hit ${fmt(pass.hit)}`);
     });
   }

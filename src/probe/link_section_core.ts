@@ -12,8 +12,15 @@ import { max, median, minimumSampleReached, trimmedMean } from './stats_core';
 
 export interface LinkSample {
   cacheKey: string;
-  /** Submission to resolution, main thread, milliseconds. */
+  /** Submission to a program READY TO DRAW: the resolve plus an immediate
+   *  first draw, main thread, milliseconds. On ANGLE's OpenGL backends the
+   *  whole cost sits in the resolve; on ANGLE Vulkan the resolve answers in
+   *  a few milliseconds and the driver compiles the pipeline in the
+   *  background, so a draw that comes too soon waits for it: the game pays
+   *  whichever of the two its own timing lands on, so both are kept. */
   ms: number;
+  linkMs: number;
+  drawMs: number;
   linked: boolean;
 }
 
@@ -22,6 +29,9 @@ export interface LinkPassSummary {
   medianMs: number;
   maxMs: number;
   trimmedMeanMs: number;
+  /** The resolve alone and the immediate first draw alone, medians. */
+  medianLinkMs: number;
+  medianDrawMs: number;
   /** The pass stopped at a link past the cap: the figures are a lower bound. */
   capped: boolean;
   /** Links that failed to link at all (a driver refusing the program). */
@@ -44,12 +54,15 @@ export function summarizeLinkPass(
   samples: readonly LinkSample[],
   options: { minimum?: number; capped?: boolean } = {},
 ): LinkPassSummary {
-  const linked = samples.filter((sample) => sample.linked).map((sample) => sample.ms);
+  const kept = samples.filter((sample) => sample.linked);
+  const linked = kept.map((sample) => sample.ms);
   return {
     count: linked.length,
     medianMs: median(linked),
     maxMs: max(linked),
     trimmedMeanMs: trimmedMean(linked),
+    medianLinkMs: median(kept.map((sample) => sample.linkMs)),
+    medianDrawMs: median(kept.map((sample) => sample.drawMs)),
     capped: options.capped === true,
     failed: samples.length - linked.length,
     reachedMinimum: minimumSampleReached(linked.length, options.minimum ?? 12),

@@ -13,7 +13,6 @@ import {
   releaseWarmShaders,
   resolveWarmProgram,
   submitWarmProgram,
-  type WarmupGl,
 } from '../render/shader_warmup_gl_core';
 import {
   type LinkPassSummary,
@@ -37,6 +36,43 @@ export interface LinkPassOptions {
   now?: () => number;
 }
 
+/** A full-screen triangle on attribute 0 (three binds `position` there on
+ *  every corpus program) and a one-pixel readback: the immediate first draw
+ *  that makes a linked program READY, executed for real. */
+export interface FirstDrawRig {
+  draw(program: WebGLProgram): void;
+  dispose(): void;
+}
+
+const PIXEL = new Uint8Array(4);
+
+export function createFirstDrawRig(gl: WebGL2RenderingContext): FirstDrawRig {
+  const vao = gl.createVertexArray();
+  const vbo = gl.createBuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.bindVertexArray(null);
+  return {
+    draw(program) {
+      gl.useProgram(program);
+      gl.bindVertexArray(vao);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // The readback is what forces the draw to execute (and the pipeline to
+      // exist) before the clock stops.
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, PIXEL);
+      gl.bindVertexArray(null);
+      gl.useProgram(null);
+    },
+    dispose() {
+      gl.deleteBuffer(vbo);
+      gl.deleteVertexArray(vao);
+    },
+  };
+}
+
 const defaultYield = (): Promise<boolean> =>
   new Promise((resolve) => {
     const raf = (globalThis as { requestAnimationFrame?: (cb: () => void) => number })
@@ -46,7 +82,8 @@ const defaultYield = (): Promise<boolean> =>
   });
 
 async function linkAll(
-  gl: WarmupGl,
+  gl: WebGL2RenderingContext,
+  rig: FirstDrawRig,
   programs: readonly SaltedProgram[],
   options: Required<Pick<LinkPassOptions, 'yieldFrame' | 'now'>> & { minimum: number },
 ): Promise<{ samples: LinkSample[]; capped: boolean; aborted: boolean }> {
@@ -58,16 +95,27 @@ async function linkAll(
     const started = options.now();
     const handle = submitWarmProgram(gl, program);
     if (!handle) {
-      samples.push({ cacheKey: program.cacheKey, ms: 0, linked: false });
+      samples.push({ cacheKey: program.cacheKey, ms: 0, linkMs: 0, drawMs: 0, linked: false });
       continue;
     }
-    // The resolve is the measured cost: on a backend that links off-thread
-    // the submit returns at once and the LINK_STATUS read waits for it.
+    // The resolve, then the immediate first draw: on a backend that links
+    // off-thread the submit returns at once and the LINK_STATUS read waits
+    // for it; on ANGLE Vulkan the resolve is cheap and the draw waits for the
+    // driver's background pipeline compile.
     const linked = resolveWarmProgram(gl, handle) === 'linked';
-    const ms = options.now() - started;
+    const resolved = options.now();
+    if (linked) rig.draw(handle.program);
+    const drawn = options.now();
+    const ms = drawn - started;
     releaseWarmShaders(gl, handle);
     deleteWarmProgram(gl, handle);
-    samples.push({ cacheKey: program.cacheKey, ms, linked });
+    samples.push({
+      cacheKey: program.cacheKey,
+      ms,
+      linkMs: resolved - started,
+      drawMs: drawn - resolved,
+      linked,
+    });
     if (linked) {
       const cap = linkCapMs(timings);
       timings.push(ms);
@@ -86,7 +134,7 @@ async function linkAll(
 
 /** One pass: the cold links, then the hit repeat over the same salted set. */
 export async function runLinkPass(
-  gl: WarmupGl,
+  gl: WebGL2RenderingContext,
   programs: readonly SaltedProgram[],
   options: LinkPassOptions = {},
 ): Promise<LinkPassResult & { aborted: boolean }> {
@@ -95,10 +143,12 @@ export async function runLinkPass(
     yieldFrame: options.yieldFrame ?? defaultYield,
     now: options.now ?? (() => performance.now()),
   };
-  const cold = await linkAll(gl, programs, settings);
+  const rig = createFirstDrawRig(gl);
+  const cold = await linkAll(gl, rig, programs, settings);
   const hitRun = cold.aborted
     ? { samples: [], capped: false, aborted: true }
-    : await linkAll(gl, programs, settings);
+    : await linkAll(gl, rig, programs, settings);
+  rig.dispose();
   return {
     cold: summarizeLinkPass(cold.samples, { minimum: settings.minimum, capped: cold.capped }),
     hit: summarizeLinkPass(hitRun.samples, { minimum: settings.minimum, capped: hitRun.capped }),
