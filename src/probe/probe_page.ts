@@ -42,6 +42,7 @@ function startMeasuring(root: HTMLElement, search: string): void {
     round: Number(params.get('round') ?? '1') || 1,
     tier: params.get('tier') ?? 'ultra',
     sink,
+    host: root,
   }).then((result) => {
     root.dataset.probeEnded = result.ended;
   });

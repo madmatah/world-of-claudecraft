@@ -21,6 +21,7 @@ import {
   summarizeLinkPass,
 } from './link_section_core';
 import type { SaltedProgram } from './salt_core';
+import { createSamplerRig } from './sampler_rig';
 
 export interface LinkPassResult {
   cold: LinkPassSummary;
@@ -47,6 +48,7 @@ export interface FirstDrawRig {
 const PIXEL = new Uint8Array(4);
 
 export function createFirstDrawRig(gl: WebGL2RenderingContext): FirstDrawRig {
+  const samplers = createSamplerRig(gl);
   const vao = gl.createVertexArray();
   const vbo = gl.createBuffer();
   gl.bindVertexArray(vao);
@@ -58,6 +60,9 @@ export function createFirstDrawRig(gl: WebGL2RenderingContext): FirstDrawRig {
   return {
     draw(program) {
       gl.useProgram(program);
+      // Every sampler on its own unit with a texture of its kind, or WebGL
+      // refuses the draw and the first-draw cost is never paid.
+      samplers.bind(program);
       gl.bindVertexArray(vao);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // The readback is what forces the draw to execute (and the pipeline to
@@ -67,6 +72,7 @@ export function createFirstDrawRig(gl: WebGL2RenderingContext): FirstDrawRig {
       gl.useProgram(null);
     },
     dispose() {
+      samplers.dispose();
       gl.deleteBuffer(vbo);
       gl.deleteVertexArray(vao);
     },

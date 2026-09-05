@@ -83,6 +83,36 @@ try {
       console.log(`[probe] links pass ${i}: cold ${fmt(pass.cold)} | hit ${fmt(pass.hit)}`);
     });
   }
+  const parallelSection = result.sections?.parallel;
+  console.log(
+    `[probe] refresh ${result.refreshMs?.toFixed(2)} ms, load ${result.load?.passes} passes ` +
+      `(target ${result.load?.targetMs?.toFixed(1)} ms)`,
+  );
+  if (parallelSection) {
+    parallelSection.passes.forEach((pass, i) => {
+      const s = pass.summary;
+      console.log(
+        `[probe] parallel pass ${i}: ${s.blocking ? 'BLOCKING' : 'async'} n=${s.count} ` +
+          `asyncFrac=${s.asyncFraction.toFixed(2)} pendFrames=${s.medianFramesPending} ` +
+          `med=${s.medianMs.toFixed(0)}ms | frames ${s.frames.frames} p95=${s.frames.p95Ms.toFixed(1)} ` +
+          `max=${s.frames.maxMs.toFixed(1)} long=${s.frames.longFrames} lost=${s.frames.lostMs.toFixed(0)}ms` +
+          `${pass.capped ? ' CAPPED' : ''}`,
+      );
+    });
+    console.log(
+      `[probe] floors: links p95=${links?.floor.p95Ms.toFixed(1)} parallel p95=${parallelSection.floor.p95Ms.toFixed(1)}`,
+    );
+  }
+  const pacing = result.sections?.pacing;
+  if (pacing) {
+    pacing.passes.forEach((pass, i) => {
+      const w = pass.windowed;
+      console.log(
+        `[probe] pacing pass ${i}: frames ${w.frames} med=${w.medianMs.toFixed(2)} p99=${w.p99Ms.toFixed(1)} ` +
+          `max=${w.maxMs.toFixed(1)} onCadence=${(w.onCadence * 100).toFixed(0)}% long=${w.longFrames}`,
+      );
+    });
+  }
   console.log(`[probe] wrote ${path.relative(repoRoot, file)}`);
 } finally {
   await browser.close();
