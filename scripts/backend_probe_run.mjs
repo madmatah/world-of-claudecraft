@@ -1,0 +1,89 @@
+// Drive the GPU backend probe page in a plain browser, one ANGLE backend per
+// run, and print what it measured: the step-1 harness of the probe
+// (tmp/DESIGN_backend-probe.md, "Build order"), where the sections and
+// their margins are calibrated before any shell work.
+//
+//   npx vite --port 5177 --strictPort --force        (a fresh server: see scripts/CLAUDE.md)
+//   node scripts/backend_probe_run.mjs --angle vulkan [--tier ultra] [--url http://localhost:5177]
+//
+// `--angle` is the ANGLE backend Chrome runs (`gl-egl`, `vulkan` on Linux;
+// `d3d11`, `vulkan`, `gl` on Windows; `metal` on macOS); `--parallel` adds
+// the ANGLE parallel-compile feature the shell's top Vulkan rung ships.
+// Deliberately NOT SwiftShader: a backend probe measures the real GPU.
+
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import puppeteer from 'puppeteer-core';
+import { BROWSER_PATH } from './browser_path.mjs';
+
+const arg = (name, fallback) => {
+  const at = process.argv.indexOf(name);
+  return at > 0 && process.argv[at + 1] ? process.argv[at + 1] : fallback;
+};
+const flag = (name) => process.argv.includes(name);
+
+const angle = arg('--angle', 'gl-egl');
+const tier = arg('--tier', 'ultra');
+const baseUrl = arg('--url', 'http://localhost:5177');
+const timeoutMs = Number(arg('--timeout', '240000'));
+const parallel = flag('--parallel');
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const outDir = arg('--out', path.join(repoRoot, 'tmp', 'backend-probe'));
+
+const args = [
+  '--window-size=1280,720',
+  '--ignore-gpu-blocklist',
+  '--enable-gpu',
+  '--use-gl=angle',
+  `--use-angle=${angle}`,
+];
+if (angle === 'vulkan') {
+  args.push('--enable-features=Vulkan,DefaultANGLEVulkan,VulkanFromANGLE');
+  if (process.env.PROBE_HEADLESS !== '0') args.push('--disable-vulkan-surface');
+}
+if (parallel) args.push('--enable-angle-features=enableParallelCompileAndLink');
+
+const browser = await puppeteer.launch({
+  executablePath: BROWSER_PATH,
+  headless: process.env.PROBE_HEADLESS === '0' ? false : 'new',
+  args,
+});
+
+try {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 720 });
+  page.on('pageerror', (error) => console.error('[probe] page error:', error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warn') {
+      console.error(`[probe] console ${message.type()}:`, message.text());
+    }
+  });
+  const run = `${angle}${parallel ? '-par' : ''}-${Date.now().toString(36)}`;
+  const url = `${baseUrl}/backend-probe.html?view=probe&tier=${tier}&run=${run}&lang=en`;
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => document.querySelector('[data-probe-ended]') !== null, {
+    timeout: timeoutMs,
+  });
+  const result = await page.evaluate(() => window.__probeResult);
+  mkdirSync(outDir, { recursive: true });
+  const file = path.join(outDir, `${run}.json`);
+  writeFileSync(file, JSON.stringify(result, null, 2));
+  console.log(`[probe] ${result.ended}: ${result.identity?.renderer ?? 'no renderer'}`);
+  console.log(
+    `[probe] backend ${result.identity?.backend}, parallel compile ${result.identity?.parallelCompile}, ` +
+      `corpus ${result.corpusTier} (${result.corpusHash?.slice(0, 12)})`,
+  );
+  const links = result.sections?.links;
+  if (links) {
+    links.passes.forEach((pass, i) => {
+      const fmt = (s) =>
+        `n=${s.count} med=${s.medianMs.toFixed(1)} max=${s.maxMs.toFixed(1)} ` +
+        `trim=${s.trimmedMeanMs.toFixed(1)}${s.capped ? ' CAPPED' : ''}${s.failed ? ` failed=${s.failed}` : ''}`;
+      console.log(`[probe] links pass ${i}: cold ${fmt(pass.cold)} | hit ${fmt(pass.hit)}`);
+    });
+  }
+  console.log(`[probe] wrote ${path.relative(repoRoot, file)}`);
+} finally {
+  await browser.close();
+}
