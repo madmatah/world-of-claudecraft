@@ -55,7 +55,11 @@ describe('GPU backend constants (load-bearing literals)', () => {
     // reorder would silently invert every demotion and every climb.
     expect(GPU_BACKEND_RUNGS).toEqual(['vulkan-parallel-compile', 'vulkan-plain', 'opengl']);
     expect(TOP_GPU_BACKEND_RUNG).toBe('vulkan-parallel-compile');
-    expect(GPU_BACKEND_SETTINGS).toEqual(['auto', 'vulkan', 'opengl']);
+    expect(GPU_BACKEND_SETTINGS).toEqual(['auto', 'vulkan', 'opengl', 'd3d11']);
+    // The Windows-only value launches as Auto on Linux, never as a rung.
+    expect(
+      decideGpuBackendLaunch({ platform: 'linux', env: {}, prefs: { gpuBackend: 'd3d11' } }).auto,
+    ).toBe(true);
     expect(GPU_BACKEND_ENV).toBe('WOC_GPU_BACKEND');
     expect(GPU_BACKEND_RESCUE_ENV).toBe('WOC_GPU_BACKEND_RESCUED_TO');
   });

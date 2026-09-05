@@ -57,12 +57,22 @@ function primeRelaunchAdditions(env) {
  * values the setters accept, so a hand-edited prefs file compares the same way the
  * launch read it (an unknown backend value launches as 'auto', so it is 'auto' here).
  */
-function launchSettingsSnapshot(prefs) {
-  const backend = prefs?.gpuBackend;
+function launchSettingsSnapshot(prefs, platform = process.platform) {
   return Object.freeze({
     gpuForceOptOut: prefs?.gpuForceOptOut === true,
-    gpuBackend: GPU_BACKEND_SETTINGS.includes(backend) ? backend : 'auto',
+    gpuBackend: gpuBackendSettingForPlatform(prefs?.gpuBackend, platform),
   });
+}
+
+/**
+ * The stored backend setting as THIS platform reads it: an unknown value is
+ * 'auto', and 'd3d11' exists on Windows only (a profile that followed the player
+ * onto Linux launches as Auto there, and must report so).
+ */
+function gpuBackendSettingForPlatform(setting, platform = process.platform) {
+  if (!GPU_BACKEND_SETTINGS.includes(setting)) return 'auto';
+  if (setting === 'd3d11' && platform !== 'win32') return 'auto';
+  return setting;
 }
 
 /**
@@ -150,6 +160,7 @@ function restartApp(deps = {}) {
 }
 
 module.exports = {
+  gpuBackendSettingForPlatform,
   launchSettingsSnapshot,
   restartApp,
   restartArgv,

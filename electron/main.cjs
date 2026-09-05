@@ -90,7 +90,11 @@ const {
   shouldRescueMissingGpu,
 } = require('./gpu_backend.cjs');
 const { gpuBackendPolicy } = require('./gpu_backend_policy.cjs');
-const { launchSettingsSnapshot, restartApp } = require('./launch_settings.cjs');
+const {
+  gpuBackendSettingForPlatform,
+  launchSettingsSnapshot,
+  restartApp,
+} = require('./launch_settings.cjs');
 const { gpuStatusPayload } = require('./gpu_status_events.cjs');
 const { presentationStatePayload } = require('./presentation_events.cjs');
 const {
@@ -1144,7 +1148,8 @@ ipcMain.handle('desktop-set-gpu-backend', (event, value) => {
 // cannot run it would otherwise read "Vulkan" and be playing on OpenGL.
 function gpuBackendState() {
   return {
-    setting: desktopPrefs.gpuBackend,
+    // Platform-aware: the Windows-only d3d11 value reports as auto elsewhere.
+    setting: gpuBackendSettingForPlatform(desktopPrefs.gpuBackend),
     // Empty until the launch is judged: `boundRung` starts as the rung we ASKED
     // for, and reporting that as the active one is exactly the lie the status
     // line exists to stop (the page reads an empty rung as "nothing to say").
@@ -1160,7 +1165,7 @@ function gpuBackendState() {
     // Auto asked for more and the policy held it at OpenGL (an excluded GPU): the row
     // tells the player so, and that Vulkan is still theirs to pick.
     autoCapped: gpuBackendLaunch.capped === true,
-    supported: process.platform === 'linux',
+    supported: process.platform === 'linux' || process.platform === 'win32',
   };
 }
 

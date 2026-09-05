@@ -245,7 +245,8 @@ describe('electron IPC channel contract (preload <-> main)', () => {
     // The stored setting is what the NEXT launch does; `active` is what THIS one
     // is really running, which is the whole point of the row: a player who
     // picked Vulkan on a machine that cannot run it must not read "Vulkan".
-    expect(state).toContain('setting: desktopPrefs.gpuBackend,');
+    // Platform-aware: the Windows-only d3d11 value reports as auto elsewhere.
+    expect(state).toContain('setting: gpuBackendSettingForPlatform(desktopPrefs.gpuBackend),');
     // Empty until the launch is judged: `boundRung` starts as the rung that was
     // ASKED for, and reporting that as active is the lie the row exists to stop.
     expect(state).toContain("active: gpuBackendJudged ? boundRung : '',");
@@ -258,7 +259,9 @@ describe('electron IPC channel contract (preload <-> main)', () => {
     expect(state, 'the reading must not be derived from this launch').not.toContain(
       'gpuBackendLaunch.rung',
     );
-    expect(state).toContain("supported: process.platform === 'linux',");
+    expect(state).toContain(
+      "supported: process.platform === 'linux' || process.platform === 'win32',",
+    );
   });
 
   it('the display-mode setter takes only the two literals, persists, then applies live', () => {
@@ -764,7 +767,14 @@ describe('electron IPC channel contract (preload <-> main)', () => {
     );
     // The platform answer is a synchronous VALUE, not a round trip: the
     // options row is gated on it when the window opens.
-    expect(preload).toContain("hasGpuBackendChoice: process.platform === 'linux',");
+    expect(preload).toContain(
+      "hasGpuBackendChoice: process.platform === 'linux' || process.platform === 'win32',",
+    );
+    // And WHICH settings the platform offers, as a plain list the row filters
+    // its options by: Linux never lists d3d11.
+    expect(preload.replace(/\s+/g, ' ')).toContain(
+      "gpuBackendChoices: process.platform === 'win32' ? ['auto', 'vulkan', 'd3d11', 'opengl'] : process.platform === 'linux' ? ['auto', 'vulkan', 'opengl'] : [],",
+    );
   });
 
   it('exposes app quit as an argument-free capability', () => {

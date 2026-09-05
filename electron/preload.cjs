@@ -213,9 +213,17 @@ contextBridge.exposeInMainWorld('wocDesktop', {
     const flag = parallelCompile === true ? true : parallelCompile === false ? false : undefined;
     ipcRenderer.send('desktop-report-gpu-renderer', String(renderer).slice(0, 256), flag);
   },
-  // Whether this platform has a backend choice at all (Linux only), answered
-  // synchronously so the options row can be gated the moment the window opens.
-  hasGpuBackendChoice: process.platform === 'linux',
+  // Whether this platform has a backend choice at all (Linux and Windows),
+  // answered synchronously so the options row can be gated the moment the
+  // window opens, and WHICH settings it offers, in row order: Windows adds
+  // Direct3D 11 (the probe's reference backend); Linux never lists it.
+  hasGpuBackendChoice: process.platform === 'linux' || process.platform === 'win32',
+  gpuBackendChoices:
+    process.platform === 'win32'
+      ? ['auto', 'vulkan', 'd3d11', 'opengl']
+      : process.platform === 'linux'
+        ? ['auto', 'vulkan', 'opengl']
+        : [],
   // The next-launch settings (the GPU force opt-out, the backend) as THIS process read
   // them at startup, frozen: the getters above serve the STORED values, which a setter
   // moves live, so this is how the game tells "changed, restart to apply" from "already

@@ -13,6 +13,7 @@ export interface LaunchSettings {
 
 export function launchSettingsSnapshot(
   prefs: { gpuForceOptOut?: unknown; gpuBackend?: unknown } | null | undefined,
+  platform?: string,
 ): LaunchSettings;
 
 /** This process's environment minus what the shell's own relaunch levers planted. */
@@ -42,3 +43,4 @@ export interface RestartAppDeps {
 }
 /** Resolves true on the child's 'spawn' event, false when it never started or spawn threw. */
 export function restartApp(deps?: RestartAppDeps): Promise<boolean>;
+export function gpuBackendSettingForPlatform(setting: unknown, platform?: string): string;

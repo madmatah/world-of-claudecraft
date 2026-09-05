@@ -42,8 +42,10 @@
 
 const { spawnDetachedSelf } = require('./gpu_preference.cjs');
 
-/** What the player can ask for (Graphics > System); 'auto' is the shipped default. */
-const GPU_BACKEND_SETTINGS = ['auto', 'vulkan', 'opengl'];
+/** What the player can ask for (Graphics > System); 'auto' is the shipped default.
+ *  'd3d11' is Windows-only (electron/gpu_backend_windows.cjs): the Linux decision
+ *  below reads it as Auto, and the platform-aware readers report it as 'auto'. */
+const GPU_BACKEND_SETTINGS = ['auto', 'vulkan', 'opengl', 'd3d11'];
 
 /**
  * The ladder, BEST FIRST. Index 0 is the top rung; a rung "below" another is later in
@@ -315,6 +317,8 @@ function explicitGpuBackendLaunch(environment, prefs) {
   const setting = prefs?.gpuBackend;
   if (setting === 'opengl') return launchForRung('opengl', 'setting opengl');
   if (setting === 'vulkan') return launchForRung(TOP_GPU_BACKEND_RUNG, 'setting vulkan');
+  // 'd3d11' has no rung here: a Windows setting that followed a profile onto
+  // Linux is Auto's to decide.
   return null;
 }
 

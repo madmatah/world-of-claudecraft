@@ -14,6 +14,7 @@ import {
   relaunchForLinuxPrime,
 } from '../electron/gpu_preference.cjs';
 import {
+  gpuBackendSettingForPlatform,
   launchSettingsSnapshot,
   restartApp,
   restartArgv,
@@ -42,6 +43,11 @@ describe('launchSettingsSnapshot', () => {
       gpuForceOptOut: false,
       gpuBackend: 'auto',
     });
+    // d3d11 is a Windows setting: Linux reads (and reports) it as auto.
+    expect(launchSettingsSnapshot({ gpuBackend: 'd3d11' }, 'win32').gpuBackend).toBe('d3d11');
+    expect(launchSettingsSnapshot({ gpuBackend: 'd3d11' }, 'linux').gpuBackend).toBe('auto');
+    expect(gpuBackendSettingForPlatform('vulkan', 'linux')).toBe('vulkan');
+    expect(gpuBackendSettingForPlatform('metal', 'win32')).toBe('auto');
   });
 
   it('is frozen: a setter that moves the prefs later cannot move it', () => {
