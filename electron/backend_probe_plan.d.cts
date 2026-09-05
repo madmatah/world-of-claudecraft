@@ -85,3 +85,7 @@ export function profileDirFor(runDir: string, arm: ProbeArm, round: number): str
 export function resultPathFor(runDir: string, arm: ProbeArm, round: number): string;
 export function runDirectoryFor(userData: string, run: string): string;
 export function switchesForArm(arm: ProbeArm): Array<readonly [string, string]>;
+export function machineIsArm64(input: {
+  arch: string;
+  env?: Record<string, string | undefined>;
+}): boolean;

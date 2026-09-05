@@ -10,6 +10,7 @@ import {
   hasTestBackendsFlag,
   isProbeChild,
   keepsDirectory,
+  machineIsArm64,
   newRunId,
   PROBE_EXIT,
   probeChildConfig,
@@ -168,5 +169,21 @@ describe('classifyChildExit', () => {
     expect(keepsDirectory('completed')).toBe(false);
     expect(keepsDirectory('died')).toBe(true);
     expect(keepsDirectory('unknown')).toBe(true);
+  });
+});
+
+describe('machineIsArm64', () => {
+  it('reads the process arch, then the WOW64 environment of an emulated x64 build', () => {
+    expect(machineIsArm64({ arch: 'arm64', env: {} })).toBe(true);
+    expect(machineIsArm64({ arch: 'x64', env: { PROCESSOR_ARCHITEW6432: 'ARM64' } })).toBe(true);
+    expect(machineIsArm64({ arch: 'x64', env: { PROCESSOR_ARCHITECTURE: 'ARM64' } })).toBe(true);
+    expect(machineIsArm64({ arch: 'x64', env: { PROCESSOR_ARCHITECTURE: 'AMD64' } })).toBe(false);
+    expect(
+      machineIsArm64({
+        arch: 'x64',
+        env: { PROCESSOR_ARCHITEW6432: 'AMD64', PROCESSOR_ARCHITECTURE: 'ARM64' },
+      }),
+    ).toBe(false);
+    expect(machineIsArm64({ arch: 'x64' })).toBe(false);
   });
 });

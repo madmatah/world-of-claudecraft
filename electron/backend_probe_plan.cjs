@@ -215,6 +215,20 @@ function classifyChildExit({ code, signal, killedByParent }) {
 /** Outcomes that speak about the backend (the arm may be disqualified on them). */
 const BACKEND_OUTCOMES = Object.freeze(['died', 'did-not-bind', 'capped']);
 
+/**
+ * Whether this machine is ARM64: the process's own architecture, or, for an
+ * x64 build running under emulation (the Steam and Epic depots are x64 and
+ * `process.arch` then reads x64), the WOW64 environment Windows sets. On
+ * ARM64 the OpenGL arm has no desktop ICD and the decision runs on the
+ * relative rules alone.
+ */
+function machineIsArm64({ arch, env }) {
+  if (arch === 'arm64') return true;
+  const wow = env?.PROCESSOR_ARCHITEW6432;
+  const native = env?.PROCESSOR_ARCHITECTURE;
+  return wow === 'ARM64' || (wow === undefined && native === 'ARM64');
+}
+
 /** Outcomes that keep the child's directory as support evidence. */
 function keepsDirectory(outcome) {
   return outcome !== 'completed';
@@ -242,6 +256,7 @@ module.exports = {
   hasTestBackendsFlag,
   isProbeChild,
   keepsDirectory,
+  machineIsArm64,
   newRunId,
   probeChildConfig,
   profileDirFor,

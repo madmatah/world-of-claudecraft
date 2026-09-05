@@ -315,6 +315,33 @@ const defaultOrigins = {
 };
 
 describe('resolveDesktopConfig', () => {
+  it('reads the probe corpus hash off the stamp on packaged builds, and off the env only unpackaged', () => {
+    const stamp = { wocDesktop: { distribution: 'website', probeCorpusHash: 'abc' } };
+    expect(
+      resolveDesktopConfig({ packagedMetadata: stamp, isPackaged: true }).probeCorpusHash,
+    ).toBe('abc');
+    expect(
+      resolveDesktopConfig({
+        packagedMetadata: stamp,
+        env: { WOC_PROBE_CORPUS_HASH: 'env' },
+        isPackaged: true,
+      }).probeCorpusHash,
+    ).toBe('abc');
+    expect(
+      resolveDesktopConfig({
+        packagedMetadata: stamp,
+        env: { WOC_PROBE_CORPUS_HASH: 'env' },
+        isPackaged: false,
+      }).probeCorpusHash,
+    ).toBe('env');
+    expect(
+      resolveDesktopConfig({
+        packagedMetadata: { wocDesktop: { distribution: 'website', probeCorpusHash: 7 } },
+        isPackaged: true,
+      }).probeCorpusHash,
+    ).toBe('');
+  });
+
   it('summarizes the packaged website build', () => {
     const config = resolveDesktopConfig({ packagedMetadata: websiteStamp, isPackaged: true });
     expect(config).toEqual({
@@ -323,6 +350,7 @@ describe('resolveDesktopConfig', () => {
       wocExchangeEnabled: true,
       crashSubmitUrl: '',
       updateChannel: 'latest',
+      probeCorpusHash: '',
       ...defaultOrigins,
     });
   });
@@ -335,6 +363,7 @@ describe('resolveDesktopConfig', () => {
       wocExchangeEnabled: false,
       crashSubmitUrl: '',
       updateChannel: 'latest',
+      probeCorpusHash: '',
       ...defaultOrigins,
     });
   });
@@ -347,6 +376,7 @@ describe('resolveDesktopConfig', () => {
       wocExchangeEnabled: false,
       crashSubmitUrl: '',
       updateChannel: 'latest',
+      probeCorpusHash: '',
       ...defaultOrigins,
     });
   });
@@ -361,6 +391,7 @@ describe('resolveDesktopConfig', () => {
       wocExchangeEnabled: false,
       crashSubmitUrl: '',
       updateChannel: 'latest',
+      probeCorpusHash: '',
       ...defaultOrigins,
     });
   });
@@ -375,6 +406,7 @@ describe('resolveDesktopConfig', () => {
       wocExchangeEnabled: false,
       crashSubmitUrl: '',
       updateChannel: 'latest',
+      probeCorpusHash: '',
       ...defaultOrigins,
     });
     expect(

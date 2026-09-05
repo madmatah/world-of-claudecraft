@@ -132,8 +132,21 @@ function resolveDesktopConfig({ packagedMetadata, env, isPackaged } = {}) {
     wocExchangeEnabled: wocExchangeSupported({ packagedMetadata, env, isPackaged }),
     crashSubmitUrl: resolveCrashSubmitUrl({ packagedMetadata, env, isPackaged }),
     updateChannel: updateChannelForOrigin(origins.apiOrigin),
+    probeCorpusHash: resolveProbeCorpusHash({ packagedMetadata, env, isPackaged }),
     ...origins,
   };
+}
+
+// The shipped probe corpus's hash, stamped at build time (scripts/electron-build.mjs);
+// the backend verdict's launch check reads it. An unpackaged checkout may name one
+// through WOC_PROBE_CORPUS_HASH (development on the probe); empty means unknown,
+// and the check then skips the corpus arm rather than refusing every verdict.
+function resolveProbeCorpusHash({ packagedMetadata, env, isPackaged } = {}) {
+  const stamped = packagedMetadata?.wocDesktop?.probeCorpusHash;
+  if (isPackaged === true) return typeof stamped === 'string' ? stamped : '';
+  const fromEnv = env?.WOC_PROBE_CORPUS_HASH;
+  if (typeof fromEnv === 'string' && fromEnv !== '') return fromEnv;
+  return typeof stamped === 'string' ? stamped : '';
 }
 
 module.exports = {
@@ -144,4 +157,5 @@ module.exports = {
   walletConnectionSupported,
   wocExchangeSupported,
   resolveDesktopConfig,
+  resolveProbeCorpusHash,
 };

@@ -16,6 +16,7 @@ export interface DesktopConfigInput {
       epicProductId?: unknown;
       epicDeploymentId?: unknown;
       epicClientId?: unknown;
+      probeCorpusHash?: unknown;
     };
   } | null;
   env?: Record<string, string | undefined>;
@@ -28,6 +29,8 @@ export interface DesktopConfig {
   wocExchangeEnabled: boolean;
   crashSubmitUrl: string;
   updateChannel: UpdateChannel;
+  /** The shipped probe corpus's hash, '' when unknown (unstamped or unpackaged). */
+  probeCorpusHash: string;
   apiOrigin: string;
   loginOrigin: string;
 }
@@ -45,3 +48,4 @@ export function updaterAllowed(input: {
 export function walletConnectionSupported(input: { distribution: string }): boolean;
 export function wocExchangeSupported(input?: DesktopConfigInput): boolean;
 export function resolveDesktopConfig(input?: DesktopConfigInput): DesktopConfig;
+export function resolveProbeCorpusHash(input?: DesktopConfigInput): string;

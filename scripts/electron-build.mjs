@@ -11,6 +11,7 @@ import {
   stampChannelFeedFiles,
 } from './electron-builder-config.mjs';
 import { buildElectronVendor } from './electron-vendor.mjs';
+import { readProbeCorpusHash } from './lib/probe_corpus_hash.mjs';
 
 // Usage: node scripts/electron-build.mjs [pack|build] [website|steam|epic]
 //  - pack: --dir only (fast local verification); build: full installers.
@@ -139,6 +140,8 @@ const config = desktopBuilderConfig({
   // without a numeric id, so a depot can never silently ship on the Spacewar
   // dev id (480); website builds ignore it.
   steamAppId: process.env.WOC_STEAM_APP_ID || '',
+  // The shipped probe corpus's hash, for the backend verdict's launch check.
+  probeCorpusHash: readProbeCorpusHash(),
   // steamworks.js is an optionalDependency, so guard the steam channel against a
   // tree where its native install silently failed: the depot would otherwise
   // ship without Steam. desktopBuilderConfig invokes this only for the steam

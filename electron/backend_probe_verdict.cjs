@@ -86,7 +86,11 @@ function verdictValidAtLaunch(verdict, { chromeVersion, probeVersion, corpusHash
   if (!verdict || verdict.stale === true) return false;
   if (typeof chromeVersion !== 'string' || verdict.chromeVersion !== chromeVersion) return false;
   if (!Number.isInteger(probeVersion) || verdict.probeVersion !== probeVersion) return false;
-  return typeof corpusHash === 'string' && verdict.corpusHash === corpusHash;
+  if (typeof corpusHash !== 'string') return false;
+  // An unknown shipped hash (an unstamped build) reads as "the same corpus":
+  // the Chromium and probe versions still gate, and a stale corpus only
+  // ages the measurement, it cannot launch a backend the machine lacks.
+  return corpusHash === '' || verdict.corpusHash === corpusHash;
 }
 
 /**

@@ -28,6 +28,8 @@ const {
   lockDownPermissions,
 } = require('./shell_guards.cjs');
 const { registerAppProtocol } = require('./app_protocol.cjs');
+const { childArgvFor, hasTestBackendsFlag, machineIsArm64 } = require('./backend_probe_plan.cjs');
+const { createBackendProbeParent, probeIneligibility } = require('./backend_probe_parent.cjs');
 const { resolveDesktopConfig, walletConnectionSupported } = require('./desktop_config.cjs');
 const {
   DESKTOP_PREFS_FILENAME,
@@ -101,6 +103,18 @@ const {
   parseWalletHandoffDeepLink,
 } = require('./wallet_handoff.cjs');
 
+// The GPU backend probe ("WoC config detector", src/probe/). A probe CHILD
+// never reaches this module: electron/entry.cjs (the package.json main) hands
+// it to electron/backend_probe_child.cjs before any of this file's side
+// effects (the prefs read, the lock, the crash dialog, the rescue) can touch
+// a profile that is not the child's. The probe PARENT (`--test-backends`)
+// runs this module: the prefs read, logging, the crash guard, the scheme
+// privileges, the app protocol, the permission lockdown and the lock, with
+// hardware acceleration off (below), and at ready opens the probe window
+// instead of the game's (electron/backend_probe_parent.cjs). Off Windows,
+// unpackaged or under the dev server the flag logs one line and quits.
+const backendProbeRequested = hasTestBackendsFlag(process.argv);
+
 // The shell's persisted preferences (electron/desktop_prefs.cjs), read synchronously and
 // FIRST because the very next decision depends on them: both discrete-GPU levers have to
 // run before Electron's own startup, so a preference fetched any later than this could not
@@ -162,6 +176,19 @@ const APP_ORIGIN = 'app://worldofclaudecraft';
 const devServerUrl = app.isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL;
 // Origins the main frame may navigate to (app origin, plus the dev server in dev).
 const appOrigins = appNavigationOrigins(APP_ORIGIN, devServerUrl);
+// The probe parent is not a GPU load: with acceleration off its window cannot
+// disturb the arms' measurements. Before ready, like every Chromium switch.
+const backendProbeIneligible = backendProbeRequested
+  ? probeIneligibility({
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      devServerUrl,
+      env: process.env,
+    })
+  : null;
+const backendProbeParentRuns = backendProbeRequested && backendProbeIneligible === null;
+if (backendProbeParentRuns) app.disableHardwareAcceleration();
+let backendProbeParent = null;
 const deepLinkProtocol = 'worldofclaudecraft';
 let mainWindow = null;
 // The live window's reveal closure (showMainWindow inside createMainWindow),
@@ -1420,6 +1447,14 @@ if (!singleInstance) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
+    // While the probe runs there is no game to show: the parent queues the
+    // request mid-arm (a window revealed then would blur the child) and shows
+    // its own window between arms; a deep link is dropped (a login code is
+    // single-use, and the game is not running to take it).
+    if (backendProbeParent) {
+      backendProbeParent.onSecondInstance();
+      return;
+    }
     // Launching the game again is a request to see it, deep link or not: the
     // second process quits, so without this the click would look like nothing
     // happened when the first window sits minimized or behind another app.
@@ -1758,6 +1793,48 @@ app.whenReady().then(() => {
   });
   registerAppProtocol({ apiOrigin });
   lockDownPermissions(session.defaultSession);
+  if (backendProbeRequested) {
+    // The probe parent: its own window on the probe page, and none of the
+    // game's session machinery (updater, presence, activate, main window).
+    if (backendProbeIneligible !== null) {
+      log.warn(`[probe] --test-backends ignored: ${backendProbeIneligible}`);
+      app.quit();
+      return;
+    }
+    backendProbeParent = createBackendProbeParent({
+      app,
+      BrowserWindow,
+      ipcMain,
+      log,
+      trustedSender,
+      appOrigin: APP_ORIGIN,
+      devServerUrl,
+      preloadPath: path.join(__dirname, 'preload.cjs'),
+      iconPath: path.join(__dirname, '..', 'build', 'icon.png'),
+      argv: process.argv.slice(1),
+      env: process.env,
+      desktopPrefs,
+      savePrefs: (next) => saveDesktopPrefs(desktopPrefsPath, next),
+      corpusHash: desktopConfig.probeCorpusHash,
+      distribution: desktopConfig.distribution,
+      gpuForceOptOut: gpuForceDisabledByEnv || desktopPrefs.gpuForceOptOut === true,
+      arm64: machineIsArm64({ arch: process.arch, env: process.env }),
+      // The verdict window's Play: this program again, without the flag, on
+      // the same lock handover as the player-requested restart.
+      restartIntoGame: () =>
+        restartApp({
+          log,
+          devServerUrl,
+          argv: childArgvFor(process.argv.slice(1)),
+          onSpawned: () => {
+            app.releaseSingleInstanceLock();
+            app.quit();
+          },
+        }),
+    });
+    backendProbeParent.start();
+    return;
+  }
   createMainWindow();
 
   // A monitor being added, removed, or re-scaled (a DPI change mid-session)

@@ -35,6 +35,7 @@ export interface DesktopBuilderConfig {
       epicProductId?: string;
       epicDeploymentId?: string;
       epicClientId?: string;
+      probeCorpusHash?: string;
     };
   };
   publish: { channel?: UpdateChannel; [key: string]: unknown } | null;
@@ -67,6 +68,7 @@ export function desktopBuilderConfig(input: {
   epicProductId?: string;
   epicDeploymentId?: string;
   epicClientId?: string;
+  probeCorpusHash?: string;
 }): DesktopBuilderConfig;
 
 export function isChannelFeedFile(fileName: unknown, channel: unknown): boolean;

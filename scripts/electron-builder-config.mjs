@@ -117,6 +117,7 @@ export function desktopBuilderConfig({
   epicProductId = '',
   epicDeploymentId = '',
   epicClientId = '',
+  probeCorpusHash = '',
 }) {
   if (distribution !== 'website' && distribution !== 'steam' && distribution !== 'epic') {
     throw new Error(`unknown desktop distribution: ${distribution}`);
@@ -138,6 +139,9 @@ export function desktopBuilderConfig({
       // (electron/epic.cjs, Phase 4). Stamped for the epic channel only; the
       // epic branch below refuses without all three, so stamps are unconditional.
       ...(distribution === 'epic' ? { epicProductId, epicDeploymentId, epicClientId } : {}),
+      // The shipped probe corpus's hash (scripts/lib/probe_corpus_hash.mjs):
+      // the shell checks a stored backend verdict against it at launch.
+      ...(probeCorpusHash ? { probeCorpusHash } : {}),
     },
   };
   if (distribution === 'website' && config.publish) {

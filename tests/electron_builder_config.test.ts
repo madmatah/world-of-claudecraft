@@ -263,6 +263,13 @@ describe('desktopBuilderConfig', () => {
     expect('loginOrigin' in bare.extraMetadata.wocDesktop).toBe(false);
   });
 
+  it('stamps the probe corpus hash only when one is given', () => {
+    const stamped = desktopBuilderConfig({ base, distribution: 'website', probeCorpusHash: 'abc' });
+    expect(stamped.extraMetadata.wocDesktop.probeCorpusHash).toBe('abc');
+    const bare = desktopBuilderConfig({ base, distribution: 'website' });
+    expect('probeCorpusHash' in bare.extraMetadata.wocDesktop).toBe(false);
+  });
+
   it('carries the crash submit URL only when one is set', () => {
     const withUrl = desktopBuilderConfig({
       base,

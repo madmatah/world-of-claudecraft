@@ -99,6 +99,8 @@ describe('validity and machine match', () => {
     expect(verdictValidAtLaunch(verdict, { ...facts, chromeVersion: '152.0.0.0' })).toBe(false);
     expect(verdictValidAtLaunch(verdict, { ...facts, probeVersion: 2 })).toBe(false);
     expect(verdictValidAtLaunch(verdict, { ...facts, corpusHash: 'other' })).toBe(false);
+    // An unstamped build knows no corpus hash: the other two arms decide.
+    expect(verdictValidAtLaunch(verdict, { ...facts, corpusHash: '' })).toBe(true);
     expect(verdictValidAtLaunch(readBackendProbeVerdict(stored({ stale: true })), facts)).toBe(
       false,
     );
