@@ -7,6 +7,8 @@
 
 import { readGpuBackend } from '../render/gpu_backend_class_core';
 import { isSoftwareRendererName } from '../render/software_renderer';
+import type { CapabilityReport } from './capability_core';
+import { runCapabilitySection } from './capability_section';
 import { heavyPrograms, type ProbeCorpus } from './corpus_core';
 import { loadProbeCorpus } from './corpus_loader';
 import { runFrameLoop } from './frame_runner';
@@ -23,6 +25,7 @@ import { type PacingPassResult, runPacingPass } from './pacing_section';
 import { type ParallelPassResult, runParallelPass } from './parallel_section';
 import { createProbeContext, type ProbeContext } from './probe_context';
 import { passNonce, saltPrograms } from './salt_core';
+import { runUploadPass, type UploadPassResult } from './upload_section';
 
 export const PROBE_VERSION = 1;
 
@@ -56,6 +59,7 @@ export interface ProbeResult {
   corpusHash: string | null;
   startedAt: number;
   identity: ProbeIdentity | null;
+  capability: CapabilityReport | null;
   /** The refresh interval the frame figures are relative to. */
   refreshMs: number | null;
   /** The calibrated load: passes per frame and what they cost. */
@@ -63,6 +67,7 @@ export interface ProbeResult {
   sections: {
     links?: ProbeSectionRecord<LinkPassResult>;
     parallel?: ProbeSectionRecord<ParallelPassResult>;
+    uploads?: ProbeSectionRecord<UploadPassResult>;
     pacing?: ProbeSectionRecord<PacingPassResult>;
   };
   /** Why the run ended early, when it did. */
@@ -138,6 +143,7 @@ interface Rig {
   loadPasses: number;
   refreshMs: number;
   now: () => number;
+  document: Document | undefined;
 }
 
 async function trivialFrames(rig: Rig, frames: number): Promise<number[]> {
@@ -205,6 +211,26 @@ async function parallelSection(
   return { passes, replays: 0, floor };
 }
 
+async function uploadSection(
+  rig: Rig,
+  floor: FrameStats,
+): Promise<ProbeSectionRecord<UploadPassResult>> {
+  const passes: UploadPassResult[] = [];
+  for (let pass = 0; pass < 2; pass++) {
+    passes.push(
+      await runUploadPass({
+        gl: rig.context.gl,
+        scene: rig.scene,
+        loadPasses: rig.loadPasses,
+        refreshMs: rig.refreshMs,
+        now: rig.now,
+        document: rig.document,
+      }),
+    );
+  }
+  return { passes, replays: 0, floor };
+}
+
 async function pacingSection(
   rig: Rig,
   floor: FrameStats,
@@ -228,6 +254,7 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     corpusHash: null,
     startedAt: Date.now(),
     identity: null,
+    capability: null,
     refreshMs: null,
     load: null,
     sections: {},
@@ -249,6 +276,7 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
   context.gl.viewport(0, 0, width, height);
   try {
     result.identity = identityOf(context);
+    result.capability = runCapabilitySection(context);
     post();
     if (result.identity.software) {
       result.ended = 'software';
@@ -264,7 +292,14 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     result.corpusTier = loaded.tier;
     result.corpusHash = loaded.corpus.inputsHash;
 
-    const rig: Rig = { context, scene: null, loadPasses: 0, refreshMs: Number.NaN, now };
+    const rig: Rig = {
+      context,
+      scene: null,
+      loadPasses: 0,
+      refreshMs: Number.NaN,
+      now,
+      document: options.document,
+    };
     rig.refreshMs =
       options.refreshMs ?? estimateRefreshMs(await trivialFrames(rig, REFRESH_FRAMES));
     result.refreshMs = rig.refreshMs;
@@ -277,11 +312,12 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     post();
 
     const sections: Array<{
-      name: 'links' | 'parallel' | 'pacing';
+      name: 'links' | 'parallel' | 'uploads' | 'pacing';
       run: (floor: FrameStats) => Promise<unknown>;
     }> = [
       { name: 'links', run: (floor) => linkSection(rig, loaded.corpus, options, floor) },
       { name: 'parallel', run: (floor) => parallelSection(rig, loaded.corpus, options, floor) },
+      { name: 'uploads', run: (floor) => uploadSection(rig, floor) },
       { name: 'pacing', run: (floor) => pacingSection(rig, floor) },
     ];
     for (const section of sections) {

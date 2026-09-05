@@ -103,6 +103,28 @@ try {
       `[probe] floors: links p95=${links?.floor.p95Ms.toFixed(1)} parallel p95=${parallelSection.floor.p95Ms.toFixed(1)}`,
     );
   }
+  const uploads = result.sections?.uploads;
+  if (uploads) {
+    uploads.passes.forEach((pass, i) => {
+      const line = pass.summary.paths
+        .map((p) =>
+          p.skipped
+            ? `${p.path}:skipped`
+            : `${p.path}:${(p.bytesPerUpload / 1024).toFixed(0)}K call=${p.medianCallMs.toFixed(1)}/${p.maxCallMs.toFixed(1)} frame=${p.medianFrameMs.toFixed(1)}/${p.maxFrameMs.toFixed(1)}`,
+        )
+        .join(' | ');
+      console.log(
+        `[probe] uploads pass ${i}: ${line} || lost=${pass.summary.frames.lostMs.toFixed(0)}ms`,
+      );
+    });
+  }
+  const capability = result.capability;
+  if (capability) {
+    console.log(
+      `[probe] capability: critical=[${capability.critical.join('; ')}] degraded=[${capability.degraded.join('; ')}] ` +
+        `missing=[${capability.missingExtensions.join(',')}] maxTex=${capability.limits.maxTextureSize} aniso=${capability.limits.maxAnisotropy}`,
+    );
+  }
   const pacing = result.sections?.pacing;
   if (pacing) {
     pacing.passes.forEach((pass, i) => {
