@@ -276,6 +276,7 @@ describe('armInputs, secondRoundTriggers, inconclusiveOutcomes, cleanupRun', () 
     result: o === 'completed' ? { round } : null,
     adapter: '',
     driverVersion: '',
+    onBattery: null,
     profileDir: `/p/${arm}-r${round}`,
     resultPath: `/p/${arm}-r${round}.json`,
     keepDirectory: o !== 'completed',
@@ -315,6 +316,22 @@ describe('armInputs, secondRoundTriggers, inconclusiveOutcomes, cleanupRun', () 
     // The first adapter reported is the one latched.
     expect(inputs[0].adapter).toBe('a');
     expect(inputs[0].results).toEqual([{ round: 1 }, { round: 2 }]);
+    // Power states: one reading per round that reported one.
+    const powered = armInputs([
+      {
+        round: 1,
+        arms: ['d3d11'],
+        outcomes: [outcome('d3d11', 1, 'completed', { onBattery: true })],
+        plainVulkan: false,
+      },
+      {
+        round: 2,
+        arms: ['d3d11'],
+        outcomes: [outcome('d3d11', 2, 'completed')],
+        plainVulkan: false,
+      },
+    ]);
+    expect(powered[0].onBattery).toEqual([true]);
   });
 
   it('names every second-round trigger once and the inconclusive outcomes', () => {
@@ -338,7 +355,32 @@ describe('armInputs, secondRoundTriggers, inconclusiveOutcomes, cleanupRun', () 
       secondRoundTriggers(round1, { secondRoundTriggers: ['vulkan-parallel-compile died once'] }),
     ).toEqual(['vulkan-parallel-compile died once', 'reference capped']);
     expect(secondRoundTriggers(round1, null)).toContain('vulkan-parallel-compile died');
+    // The capped trigger follows the decision's reference, not D3D11 literally.
+    expect(secondRoundTriggers(round1, { secondRoundTriggers: [], reference: 'opengl' })).toEqual([
+      'vulkan-parallel-compile died',
+    ]);
     expect(inconclusiveOutcomes([round1])).toEqual(['opengl round 1: hung']);
+  });
+
+  it('names every inconclusive outcome', () => {
+    for (const o of ['hung', 'renderer-gone', 'probe-error', 'busy', 'orphaned', 'unknown']) {
+      const round = {
+        round: 1,
+        arms: ['d3d11'],
+        outcomes: [outcome('d3d11', 1, o)],
+        plainVulkan: false,
+      };
+      expect(inconclusiveOutcomes([round])).toEqual([`d3d11 round 1: ${o}`]);
+    }
+    for (const o of ['completed', 'died', 'did-not-bind', 'capped']) {
+      const round = {
+        round: 1,
+        arms: ['d3d11'],
+        outcomes: [outcome('d3d11', 1, o)],
+        plainVulkan: false,
+      };
+      expect(inconclusiveOutcomes([round])).toEqual([]);
+    }
   });
 
   it('removes only the directories of completed children', () => {

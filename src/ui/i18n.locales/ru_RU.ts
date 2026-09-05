@@ -14901,4 +14901,5 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.options.probeRequestedBody': 'Для теста игру нужно закрыть. Перезапустить в тест сейчас? Текущий сеанс завершится.',
   'hudChrome.options.probeRequestedConfirm': 'Перезапустить в тест',
   'hudChrome.options.probeRequestedCancel': 'Не сейчас',
+  'probe.status.capped': 'Этот бэкенд не смог вовремя скомпоновать тестовые шейдеры.',
 };

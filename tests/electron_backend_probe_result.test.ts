@@ -6,7 +6,7 @@ import {
   PROBE_VERSION,
 } from '../electron/backend_probe_result.cjs';
 
-const codes = { completed: 0, didNotBind: 11, busy: 16, probeError: 15 };
+const codes = { completed: 0, didNotBind: 11, busy: 16, capped: 12, probeError: 15 };
 
 const result = (over: Record<string, unknown> = {}) => ({
   probeVersion: PROBE_VERSION,
@@ -43,6 +43,8 @@ describe('exitCodeForEnded', () => {
     expect(exitCodeForEnded('no-webgl2', codes)).toBe(11);
     expect(exitCodeForEnded('software', codes)).toBe(11);
     expect(exitCodeForEnded('busy', codes)).toBe(16);
+    expect(exitCodeForEnded('capped', codes)).toBe(12);
+    expect(isTerminalEnded('capped')).toBe(true);
     expect(exitCodeForEnded('no-corpus', codes)).toBe(15);
     expect(exitCodeForEnded('aborted', codes)).toBe(15);
     expect(isTerminalEnded('completed')).toBe(true);

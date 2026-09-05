@@ -14390,4 +14390,5 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.options.probeRequestedBody': '測試需要關閉遊戲。現在重新啟動進入測試嗎？目前的工作階段將結束。',
   'hudChrome.options.probeRequestedConfirm': '重新啟動進入測試',
   'hudChrome.options.probeRequestedCancel': '暫不',
+  'probe.status.capped': '此後端未能及時連結測試著色器。',
 };

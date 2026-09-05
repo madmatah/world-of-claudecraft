@@ -10,7 +10,7 @@
 
 const PROBE_VERSION = 1;
 const MAX_RESULT_BYTES = 2 * 1024 * 1024;
-const ENDED = ['completed', 'no-webgl2', 'software', 'no-corpus', 'aborted', 'busy'];
+const ENDED = ['completed', 'no-webgl2', 'software', 'no-corpus', 'aborted', 'busy', 'capped'];
 
 /**
  * The page's result, accepted when it is an object of the probe's version
@@ -48,6 +48,9 @@ function exitCodeForEnded(ended, codes) {
       return codes.didNotBind;
     case 'busy':
       return codes.busy;
+    case 'capped':
+      // The link section's no-progress cap ended the arm: a bound, not an error.
+      return codes.capped;
     default:
       return codes.probeError;
   }

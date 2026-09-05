@@ -1,6 +1,6 @@
 // Drive the GPU backend probe page in a plain browser, one ANGLE backend per
 // run, and print what it measured: the step-1 harness of the probe
-// (tmp/DESIGN_backend-probe.md, "Build order"), where the sections and
+// (docs/desktop-release.md ("GPU backend on Windows: the probe"), "Build order"), where the sections and
 // their margins are calibrated before any shell work.
 //
 //   npx vite --port 5177 --strictPort --force        (a fresh server: see scripts/CLAUDE.md)

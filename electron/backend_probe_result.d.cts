@@ -7,6 +7,12 @@ export function acceptProbeResult<T>(
 ): T | null;
 export function exitCodeForEnded(
   ended: string,
-  codes: { completed: number; didNotBind: number; busy: number; probeError: number },
+  codes: {
+    completed: number;
+    didNotBind: number;
+    busy: number;
+    capped: number;
+    probeError: number;
+  },
 ): number;
 export function isTerminalEnded(ended: unknown): boolean;

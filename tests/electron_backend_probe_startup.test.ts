@@ -203,9 +203,14 @@ describe('the game-side entry points in main.cjs', () => {
     const ask = body.indexOf("mainWindow.webContents.send('desktop-probe-requested');");
     expect(ask).toBeGreaterThan(body.indexOf('focusMainWindow();'));
     expect(ask).toBeGreaterThan(body.indexOf('if (url) handleDeepLink(url);'));
-    expect(body.slice(0, ask)).toContain(
-      'if (hasTestBackendsFlag(argv) && mainWindow && !mainWindow.isDestroyed()) {',
+    const guard = body.slice(0, ask).replace(/\s+/g, ' ');
+    expect(guard).toContain('if ( hasTestBackendsFlag(argv) &&');
+    // Only where the probe can run: elsewhere the restart would quit the game
+    // and leave nothing behind.
+    expect(guard).toContain(
+      'probeIneligibility({ platform: process.platform, isPackaged: app.isPackaged, devServerUrl, env: process.env, }) === null &&',
     );
+    expect(guard).toContain('mainWindow && !mainWindow.isDestroyed() ) {');
   });
 
   it('reports the stored verdict on the backend state, Windows only', () => {

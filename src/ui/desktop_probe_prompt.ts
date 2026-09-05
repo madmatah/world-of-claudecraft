@@ -47,9 +47,22 @@ export function initDesktopProbePrompt(bridge: DesktopBridge): () => void {
   root.append(title, body, actions);
   document.body.appendChild(root);
 
+  // The card takes focus when it appears (a request the player must answer)
+  // and hands it back to whatever had it on every way out, Escape included.
+  let opener: HTMLElement | null = null;
   const hide = (): void => {
+    if (root.hidden) return;
     root.hidden = true;
+    const target = opener;
+    opener = null;
+    if (target && target.isConnected && typeof target.focus === 'function') target.focus();
   };
+  root.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      hide();
+    }
+  });
   confirm.addEventListener('click', () => {
     confirm.disabled = true;
     void startDesktopBackendProbe(bridge).then((started) => {
@@ -62,6 +75,7 @@ export function initDesktopProbePrompt(bridge: DesktopBridge): () => void {
   cancel.addEventListener('click', hide);
 
   const unsubscribe = bridge.onProbeRequested(() => {
+    if (root.hidden) opener = document.activeElement as HTMLElement | null;
     root.hidden = false;
     confirm.focus();
   });

@@ -212,6 +212,10 @@ describe('verdictFromDecision', () => {
 });
 
 describe('shaderWorkerVerdictArguments', () => {
+  it('pins the wire prefix the preload parses to its literal', () => {
+    expect(SHADER_WORKER_VERDICT_ARG).toBe('--woc-shader-worker-verdict=');
+  });
+
   it('hands the worker decision to the window only when the launch runs the verdict backend', () => {
     const verdict = readBackendProbeVerdict(stored());
     expect(

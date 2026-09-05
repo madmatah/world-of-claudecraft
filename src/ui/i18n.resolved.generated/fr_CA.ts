@@ -55,7 +55,8 @@ export const fr_CA: EnTranslations = {
     "status": {
       "noWebgl2": "This backend could not start on this computer.",
       "software": "This backend only renders in software here and cannot run the game.",
-      "noCorpus": "The test data is missing from this build."
+      "noCorpus": "The test data is missing from this build.",
+      "capped": "This backend could not link the test shaders in time."
     }
   },
   "devCommand": {

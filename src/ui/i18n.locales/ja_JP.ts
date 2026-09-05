@@ -14693,4 +14693,5 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.options.probeRequestedBody': 'テストにはゲームを閉じる必要があります。今すぐテストに再起動しますか？現在のセッションは終了します。',
   'hudChrome.options.probeRequestedConfirm': 'テストに再起動',
   'hudChrome.options.probeRequestedCancel': '今はしない',
+  'probe.status.capped': 'このバックエンドはテスト用シェーダーを時間内にリンクできませんでした。',
 };

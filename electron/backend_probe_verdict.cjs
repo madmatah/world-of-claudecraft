@@ -10,7 +10,7 @@
 // (worker half only), or when the machine no longer matches; a healthy
 // session on its backend clears the death streak. Validity at launch is the
 // Chromium version, the probe version and the corpus hash, never the app
-// version. Design: tmp/DESIGN_backend-probe.md, "What changes on the shell
+// version. Design: docs/desktop-release.md ("GPU backend on Windows: the probe"), "What changes on the shell
 // side". Pure; tests/electron_backend_probe_verdict.test.ts.
 
 const { MAX_CONSECUTIVE_GPU_LAUNCH_CRASHES } = require('./gpu_backend.cjs');

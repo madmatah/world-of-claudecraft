@@ -11935,6 +11935,7 @@ export type TranslationKeyFlat =
   | 'probe.progress.arm'
   | 'probe.progress.busy'
   | 'probe.progress.waiting'
+  | 'probe.status.capped'
   | 'probe.status.noCorpus'
   | 'probe.status.noWebgl2'
   | 'probe.status.software'

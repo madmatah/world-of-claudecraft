@@ -16,11 +16,20 @@
 // atomically each time, pushes the window's state (minimized, hidden, blur)
 // to the page for the disturbance taxonomy, ends the arm on a GPU-process
 // death, and exits with the code its outcome owes (electron/backend_probe_plan.cjs).
-// Design: tmp/DESIGN_backend-probe.md, "Child process lifecycle".
+// Design: docs/desktop-release.md ("GPU backend on Windows: the probe"), "Child process lifecycle".
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { app, BrowserWindow, crashReporter, ipcMain, Menu, protocol, session } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  crashReporter,
+  ipcMain,
+  Menu,
+  powerMonitor,
+  protocol,
+  session,
+} = require('electron');
 const { registerAppProtocol } = require('./app_protocol.cjs');
 const { PROBE_EXIT, probeChildConfig, switchesForArm } = require('./backend_probe_plan.cjs');
 const { acceptProbeResult, exitCodeForEnded } = require('./backend_probe_result.cjs');
@@ -101,7 +110,17 @@ function runBackendProbeChild(deps = {}) {
   // compares arms on it, the verdict fingerprints it).
   let adapter = '';
   let driverVersion = '';
-  const envelope = (outcome, code) => ({ outcome, code, adapter, driverVersion, result: latest });
+  // The power state at the first frame: arms measured on battery compare
+  // only with arms measured on battery (the decision's power-state rule).
+  let onBattery = null;
+  const envelope = (outcome, code) => ({
+    outcome,
+    code,
+    adapter,
+    driverVersion,
+    onBattery,
+    result: latest,
+  });
   const exitWith = (code, outcome) => {
     if (exiting) return;
     exiting = true;
@@ -201,7 +220,9 @@ function runBackendProbeChild(deps = {}) {
           ? 'did-not-bind'
           : code === PROBE_EXIT.busy
             ? 'busy'
-            : 'probe-error';
+            : code === PROBE_EXIT.capped
+              ? 'capped'
+              : 'probe-error';
     // Let the invoke answer before the process leaves.
     setTimeout(() => exitWith(code, outcome), 50);
     return true;
@@ -255,6 +276,11 @@ function runBackendProbeChild(deps = {}) {
     }
     win.webContents.on('did-finish-load', () => {
       pushWindowState();
+      try {
+        onBattery = powerMonitor.isOnBatteryPower() === true;
+      } catch (err) {
+        log.warn('[probe-child] could not read the power state', err?.message ?? err);
+      }
       app.getGPUInfo('complete').then(
         (info) => {
           const { devices } = summarizeGpuDevices(info?.gpuDevice);

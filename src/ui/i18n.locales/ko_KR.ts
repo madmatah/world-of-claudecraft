@@ -14698,4 +14698,5 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.options.probeRequestedBody': '테스트를 하려면 게임을 닫아야 합니다. 지금 테스트로 다시 시작할까요? 현재 세션이 종료됩니다.',
   'hudChrome.options.probeRequestedConfirm': '테스트로 다시 시작',
   'hudChrome.options.probeRequestedCancel': '나중에',
+  'probe.status.capped': '이 백엔드는 테스트 셰이더를 제시간에 링크하지 못했습니다.',
 };

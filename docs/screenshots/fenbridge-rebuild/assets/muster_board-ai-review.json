@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "assetId": "muster_board",
-  "sourceFingerprint": "e20e45901142b71744a8c28f158123f27b121b2eb7ccdadea2a8db66d5c38fb4",
+  "sourceFingerprint": "4f12526cf130130da03e0b1d223df0ac02b1d281afdb7a61c39084ff84327a4f",
   "reference": "docs/design/fenbridge-rebuild/references/muster-board-turnaround.png",
   "minimumOverallScore": 0.7,
   "requiredViews": [

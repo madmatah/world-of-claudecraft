@@ -55,7 +55,8 @@ export const zh_CN: EnTranslations = {
     "status": {
       "noWebgl2": "此后端无法在这台电脑上启动。",
       "software": "此后端在这里只能进行软件渲染，无法运行游戏。",
-      "noCorpus": "此版本缺少测试数据。"
+      "noCorpus": "此版本缺少测试数据。",
+      "capped": "此后端未能及时链接测试着色器。"
     }
   },
   "devCommand": {

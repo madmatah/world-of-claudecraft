@@ -40,10 +40,15 @@ describe('the probe views core', () => {
   it('the progress line: waiting, then the arm and step, busy overrides', () => {
     const base = { backend: null, parallelCompile: false, done: 0, total: 6, busy: false };
     expect(progressLine(t, base)).toBe('probe.progress.waiting');
+    // The step and the total cross as FORMATTED strings (the page injects
+    // formatNumber; the default formatter is String).
     expect(progressLine(t, { ...base, backend: 'opengl', done: 2 })).toBe(
-      'probe.progress.arm{"backend":"probe.backend.opengl","step":3,"total":6}',
+      'probe.progress.arm{"backend":"probe.backend.opengl","step":"3","total":"6"}',
     );
-    expect(progressLine(t, { ...base, backend: 'opengl', done: 6 })).toContain('"step":6');
+    expect(progressLine(t, { ...base, backend: 'opengl', done: 6 })).toContain('"step":"6"');
+    expect(progressLine(t, { ...base, backend: 'opengl', done: 2 }, (n) => `<${n}>`)).toContain(
+      '"step":"<3>","total":"<6>"',
+    );
     expect(progressLine(t, { ...base, backend: 'opengl', busy: true })).toBe('probe.progress.busy');
   });
 

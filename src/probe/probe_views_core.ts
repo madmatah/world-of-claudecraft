@@ -58,13 +58,20 @@ export interface ProgressInput {
   busy: boolean;
 }
 
-export function progressLine(t: Translate, input: ProgressInput): string {
+/** A number formatter the page injects (formatNumber); the core stays i18n-free. */
+export type FormatNumber = (value: number) => string;
+
+export function progressLine(
+  t: Translate,
+  input: ProgressInput,
+  format: FormatNumber = String,
+): string {
   if (input.busy) return t('probe.progress.busy');
   if (input.backend === null) return t('probe.progress.waiting');
   return t('probe.progress.arm', {
     backend: backendLabel(t, input.backend, input.parallelCompile),
-    step: Math.min(input.total, input.done + 1),
-    total: input.total,
+    step: format(Math.min(input.total, input.done + 1)),
+    total: format(input.total),
   });
 }
 

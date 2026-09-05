@@ -10,7 +10,7 @@
 // (electron/backend_probe_verdict.cjs), and answers the verdict view's
 // buttons. main.cjs constructs it with the shell's own facts and calls
 // `start()` at ready; everything Electron-specific is injected so the
-// startup test can dry-run it. Design: tmp/DESIGN_backend-probe.md, "Form",
+// startup test can dry-run it. Design: docs/desktop-release.md ("GPU backend on Windows: the probe"), "Form",
 // "Child process lifecycle", "IPC surface".
 
 const fs = require('node:fs');
@@ -434,6 +434,11 @@ function createBackendProbeParent(deps) {
         case 'play':
           if (phase !== 'verdict') return false;
           return deps.restartIntoGame();
+        case 'rerun': {
+          if (phase !== 'verdict' || !run) return false;
+          runProbe(run.locale, run.tier).catch((err) => log.error('[probe] re-run failed', err));
+          return true;
+        }
         case 'auto': {
           if (phase !== 'verdict') return false;
           if (deps.desktopPrefs.gpuBackend === 'auto') return true;

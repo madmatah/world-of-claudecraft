@@ -6,8 +6,8 @@
 The desktop-only page the Electron shell opens with `--test-backends`: it measures the
 Windows graphics backends (ANGLE D3D11, Vulkan, OpenGL) on the player's machine and the
 shell records which one to launch and whether the shader warm worker is worth running.
-Design and rules: `tmp/DESIGN_backend-probe.md` in the maintainer's checkout (the
-measurement rules are frozen there; the shader corpus tracks the game by regeneration).
+Design and rules: `docs/desktop-release.md`, "GPU backend on Windows: the probe" (the
+measurement rules the sections encode; the shader corpus tracks the game by regeneration).
 
 ## Layout
 - `index.ts` is the barrel and the ONLY import path from outside (`src/backend_probe.ts`,

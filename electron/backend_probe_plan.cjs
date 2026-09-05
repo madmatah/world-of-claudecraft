@@ -6,7 +6,7 @@
 // exit-code taxonomy a child reports and how the parent reads an exit. The
 // orchestrator (electron/backend_probe_parent.cjs) and the child mode
 // (electron/backend_probe_child.cjs) are thin over this; main.cjs only asks
-// whether this process is a child. Design: tmp/DESIGN_backend-probe.md in the
+// whether this process is a child. Design: docs/desktop-release.md ("GPU backend on Windows: the probe") in the
 // maintainer's checkout ("Form", "Child process lifecycle").
 //
 // Pure functions with injected inputs, exercised by

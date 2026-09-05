@@ -1258,6 +1258,17 @@ ipcMain.handle('desktop-restart-app', (event) => {
 // flag here, on the same single-flight lock handover as the plain restart.
 ipcMain.handle('desktop-start-backend-probe', (event) => {
   if (!trustedSender(event)) return false;
+  // Where the probe cannot run, a restart into it would quit the game and
+  // leave nothing behind: refused here, like the row that never shows there.
+  if (
+    probeIneligibility({
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      devServerUrl,
+      env: process.env,
+    }) !== null
+  )
+    return false;
   if (restartInFlight) return restartInFlight;
   restartInFlight = restartApp({
     log,
@@ -1555,7 +1566,17 @@ if (!singleInstance) {
     // The Start-menu shortcut (or the flag by hand) while the game runs: the
     // game asks the player whether to restart into the probe; nothing here
     // restarts a live session.
-    if (hasTestBackendsFlag(argv) && mainWindow && !mainWindow.isDestroyed()) {
+    if (
+      hasTestBackendsFlag(argv) &&
+      probeIneligibility({
+        platform: process.platform,
+        isPackaged: app.isPackaged,
+        devServerUrl,
+        env: process.env,
+      }) === null &&
+      mainWindow &&
+      !mainWindow.isDestroyed()
+    ) {
       log.info('[probe] --test-backends requested while the game runs; asking the player');
       mainWindow.webContents.send('desktop-probe-requested');
     }
@@ -1795,6 +1816,8 @@ app.on('child-process-gone', (_event, details) => {
   // rescued child, which lands ON the attempt, is then the one that counts.
   // Windows: the probe's verdict is the memory, and it goes stale on the same
   // streak (three consecutive launch-time deaths on its backend), never on one.
+  // Windows has no Linux memory to demote (the launch is never `auto` there):
+  // counting the death here is what keeps the arm below quiet on purpose.
   if (onWindows && !gpuLaunchDeathCounted) {
     gpuLaunchDeathCounted = true;
     const next = verdictAfterLaunchDeath(desktopPrefs.backendProbeVerdict, gpuBackendLaunch.rung);

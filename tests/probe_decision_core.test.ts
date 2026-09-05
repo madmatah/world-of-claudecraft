@@ -8,6 +8,8 @@ import {
   armFigures,
   decide,
   PROVISIONAL_FLOORS,
+  RELATIVE_MINIMUM,
+  WORKER_SECTION_PROGRAMS,
 } from '../src/probe/decision_core';
 import type { ProbeResult } from '../src/probe/probe_run';
 
@@ -243,7 +245,101 @@ describe('armFigures', () => {
   });
 });
 
+describe('the floors', () => {
+  it('pins the provisional floors and the relative minimum to their literals', () => {
+    expect(PROVISIONAL_FLOORS).toEqual({
+      hitch: 0.15,
+      frame: 0.1,
+      pacing: 0.05,
+      workerLostPerProgramMs: 40,
+    });
+    expect(RELATIVE_MINIMUM).toBe(0.1);
+    expect(WORKER_SECTION_PROGRAMS).toBe(6);
+  });
+
+  it('applies the fixed floor with floors, the relative minimum without', () => {
+    // A 12 percent hitch gap: outside the relative minimum, inside the floor.
+    const arms = [
+      arm('d3d11', { worst: 500, lost: 1000, cold: 170 }),
+      arm('vulkan-parallel-compile', { worst: 440, lost: 880, cold: 150 }),
+    ];
+    expect(decide(arms, { round: 1, floors: PROVISIONAL_FLOORS }).backend).toBe('d3d11');
+    expect(decide(arms, { round: 1, floors: null }).backend).toBe('vulkan-parallel-compile');
+  });
+});
+
 describe('decide', () => {
+  it('disqualifies an arm that did not bind or left no result', () => {
+    const decision = decide([
+      arm('d3d11', {}),
+      arm('vulkan-parallel-compile', { ended: 'no-webgl2' }),
+      arm('opengl', {}, { results: [], roundsLaunched: 1, roundsDied: 0 }),
+    ]);
+    expect(decision.arms.find((a) => a.rung === 'vulkan-parallel-compile')?.disqualified).toBe(
+      'did-not-bind',
+    );
+    expect(decision.arms.find((a) => a.rung === 'opengl')?.disqualified).toBe('no-result');
+    expect(decision.backend).toBe('d3d11');
+  });
+
+  it('reports the WINNER worker decision, not the reference one', () => {
+    // Both workers off (the link profile is then the cold link on both
+    // arms), so the winner is decided on the hitch metrics alone.
+    const decision = decide([
+      arm('d3d11', { worst: 500, lost: 1100, cold: 170, workerLost: 600 }),
+      arm('vulkan-parallel-compile', { worst: 230, lost: 380, cold: 175, workerLost: 600 }),
+    ]);
+    expect(decision.backend).toBe('vulkan-parallel-compile');
+    expect(decision.worker).toBe(false);
+    const referenceWins = decide([
+      arm('d3d11', { workerLost: 600 }),
+      arm('vulkan-parallel-compile', { workerLost: 600 }),
+    ]);
+    expect(referenceWins.backend).toBe('d3d11');
+    expect(referenceWins.worker).toBe(false);
+  });
+
+  it('holds a stored backend unless the new winner beats its own arm by the margin', () => {
+    // Vulkan beats D3D11 clearly; plain Vulkan (the stored one) only just.
+    const arms = [
+      arm('d3d11', { worst: 500, lost: 1100, cold: 170 }),
+      arm('vulkan-parallel-compile', { worst: 230, lost: 380, cold: 175 }),
+      arm('vulkan-plain', { worst: 245, lost: 400, cold: 176 }),
+    ];
+    expect(decide(arms, { round: 1 }).backend).toBe('vulkan-parallel-compile');
+    const held = decide(arms, { round: 1, storedRung: 'vulkan-plain' });
+    expect(held.backend).toBe('vulkan-plain');
+    expect(held.secondRoundTriggers).toContain(
+      'vulkan-parallel-compile does not beat the stored vulkan-plain by the margin',
+    );
+    // A stored backend disqualified in this run is replaced regardless.
+    const replaced = decide([arms[0], arms[1], arm('vulkan-plain', { software: true })], {
+      round: 1,
+      storedRung: 'vulkan-plain',
+    });
+    expect(replaced.backend).toBe('vulkan-parallel-compile');
+    // A stored backend the new winner beats by the margin is replaced too.
+    const beaten = decide(
+      [arms[0], arms[1], arm('vulkan-plain', { worst: 400, lost: 900, cold: 176 })],
+      { round: 1, storedRung: 'vulkan-plain' },
+    );
+    expect(beaten.backend).toBe('vulkan-parallel-compile');
+  });
+
+  it('is inconclusive on a mixed power state', () => {
+    const decision = decide([
+      arm('d3d11', {}, { onBattery: [false] }),
+      arm('vulkan-parallel-compile', {}, { onBattery: [true] }),
+    ]);
+    expect(decision.inconclusive).toBe('mixed power state');
+    expect(decision.backend).toBeNull();
+    const same = decide([
+      arm('d3d11', {}, { onBattery: [true] }),
+      arm('vulkan-parallel-compile', {}, { onBattery: [true] }),
+    ]);
+    expect(same.inconclusive).toBeNull();
+  });
+
   it('keeps D3D11 on a tie, with the tie as a second-round trigger', () => {
     const decision = decide([arm('d3d11', {}), arm('vulkan-parallel-compile', {})]);
     expect(decision.backend).toBe('d3d11');

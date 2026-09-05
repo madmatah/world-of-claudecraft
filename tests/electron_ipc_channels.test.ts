@@ -773,6 +773,10 @@ describe('electron IPC channel contract (preload <-> main)', () => {
     expect(preload).toContain(
       "hasGpuBackendChoice: process.platform === 'linux' || process.platform === 'win32',",
     );
+    // The worker verdict plain value parses the same additionalArguments
+    // prefix electron/backend_probe_verdict.cjs builds (its test pins the
+    // literal): a rename on either side would silently drop the verdict.
+    expect(preload).toContain("const prefix = '--woc-shader-worker-verdict=';");
     // And WHICH settings the platform offers, as a plain list the row filters
     // its options by: Linux never lists d3d11.
     expect(preload.replace(/\s+/g, ' ')).toContain(

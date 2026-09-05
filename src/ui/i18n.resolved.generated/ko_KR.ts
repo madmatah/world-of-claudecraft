@@ -55,7 +55,8 @@ export const ko_KR: EnTranslations = {
     "status": {
       "noWebgl2": "이 백엔드는 이 컴퓨터에서 시작하지 못했습니다.",
       "software": "이 백엔드는 여기서 소프트웨어 렌더링만 가능하여 게임을 실행할 수 없습니다.",
-      "noCorpus": "이 빌드에 테스트 데이터가 없습니다."
+      "noCorpus": "이 빌드에 테스트 데이터가 없습니다.",
+      "capped": "이 백엔드는 테스트 셰이더를 제시간에 링크하지 못했습니다."
     }
   },
   "devCommand": {

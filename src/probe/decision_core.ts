@@ -1,6 +1,6 @@
 // The decision: which backend to launch and whether the warm worker is worth
 // it, from the arms' results. Host-agnostic, the rule of
-// tmp/DESIGN_backend-probe.md ("Decision rule") made code:
+// docs/desktop-release.md ("GPU backend on Windows: the probe") ("Decision rule") made code:
 //
 //   1. disqualify: did not bind, software rasterizer, died in both rounds,
 //      adapter differs from the reference arm, checksum grossly wrong, a
@@ -43,6 +43,9 @@ export interface ArmInput {
   roundsDied: number;
   /** The adapter key the shell latched for this arm ('' when unknown). */
   adapter: string;
+  /** The power state the child read at its first frame, one per round that
+   *  reported one (the shell's envelope); absent in a plain browser. */
+  onBattery?: boolean[];
 }
 
 /** One arm's figures, each the mean over its valid passes, lower is better
@@ -104,6 +107,11 @@ export const PROVISIONAL_FLOORS: DecisionFloors = Object.freeze({
 
 /** The relative minimum where no fixed floor exists. */
 export const RELATIVE_MINIMUM = 0.1;
+
+/** How many heavy programs the worker section warms per pass
+ *  (src/probe/worker_section.ts): the worker's frames lost are spread over
+ *  them to make a per-program link profile. */
+export const WORKER_SECTION_PROGRAMS = 6;
 
 export interface Decision {
   backend: ArmRung | null;
@@ -206,7 +214,7 @@ export function armFigures(results: readonly ProbeResult[], floors: DecisionFloo
   const workerLostMs = mean(workerLost);
   // What ships: a warmed program costs its hit plus its share of the frames
   // the warm lost; an unwarmed one costs the cold link.
-  const linkProfileMs = worker ? hitMs + workerLostMs / 6 : coldMs;
+  const linkProfileMs = worker ? hitMs + workerLostMs / WORKER_SECTION_PROGRAMS : coldMs;
   return {
     worstFrameUnderLinksMs: mean(worst),
     lostUnderLinksMs: mean(lost),
@@ -271,11 +279,33 @@ const HITCH_METRICS: Array<keyof ArmFigures> = [
   'uploadMaxFrameMs',
 ];
 
-export function decide(
-  arms: readonly ArmInput[],
-  options: { floors?: DecisionFloors | null; round: number } = { round: 1 },
-): Decision {
+export interface DecideOptions {
+  floors?: DecisionFloors | null;
+  round: number;
+  /** The stored verdict's rung, for the within-run hysteresis: the new winner
+   *  must beat the stored backend's OWN arm of this run by the margin, else
+   *  the stored backend stands; a stored backend disqualified in this run is
+   *  replaced regardless. */
+  storedRung?: ArmRung | null;
+}
+
+export function decide(arms: readonly ArmInput[], options: DecideOptions = { round: 1 }): Decision {
   const floors = options.floors ?? null;
+  // Arms measured on battery compare only with arms measured on battery: a
+  // run whose power state differed between arms (or moved between rounds)
+  // is inconclusive, never a verdict about a clock state.
+  const powerStates = new Set(arms.flatMap((arm) => arm.onBattery ?? []));
+  if (powerStates.size > 1) {
+    return {
+      backend: null,
+      worker: false,
+      reference: null,
+      margin: 0,
+      arms: [],
+      secondRoundTriggers: [],
+      inconclusive: 'mixed power state',
+    };
+  }
   const verdicts: ArmVerdict[] = [];
   const triggers: string[] = [];
   // The reference's adapter anchors the adapter rule; D3D11 when present.
@@ -331,27 +361,56 @@ export function decide(
   if (reference.figures?.capped) triggers.push(`${reference.rung} capped`);
   const ref = reference.figures as ArmFigures;
 
+  // The decision rule between a candidate and a reference: not worse beyond
+  // the margin on any hitch metric AND better by it on at least one, and not
+  // worse beyond tolerance on the frame and on pacing (higher is better there).
+  const compare = (c: ArmFigures, against: ArmFigures) => {
+    const anyWorse = HITCH_METRICS.some((m) =>
+      worseBeyond(c[m] as number, against[m] as number, margin),
+    );
+    const anyBetter = HITCH_METRICS.some((m) =>
+      betterBy(c[m] as number, against[m] as number, margin),
+    );
+    const frameOk = !worseBeyond(c.frameP95Ms, against.frameP95Ms, frameTolerance);
+    const pacingOk = !worseBeyond(
+      1 - c.pacingOnCadence,
+      1 - against.pacingOnCadence,
+      pacingTolerance,
+    );
+    return {
+      anyWorse,
+      anyBetter,
+      frameOk,
+      pacingOk,
+      beats: !anyWorse && anyBetter && frameOk && pacingOk,
+    };
+  };
+
   let winner: ArmVerdict = reference;
   for (const candidate of survivors) {
     if (candidate === reference) continue;
     const c = candidate.figures as ArmFigures;
-    const anyWorse = HITCH_METRICS.some((m) =>
-      worseBeyond(c[m] as number, ref[m] as number, margin),
-    );
-    const anyBetter = HITCH_METRICS.some((m) => betterBy(c[m] as number, ref[m] as number, margin));
-    const frameOk = !worseBeyond(c.frameP95Ms, ref.frameP95Ms, frameTolerance);
-    // Pacing: higher is better, so the comparison flips.
-    const pacingOk = !worseBeyond(1 - c.pacingOnCadence, 1 - ref.pacingOnCadence, pacingTolerance);
+    const { anyWorse, anyBetter, frameOk, pacingOk } = compare(c, ref);
     if (!anyWorse && anyBetter && frameOk && pacingOk) {
       // Between two qualifying candidates the better link profile wins.
-      if (
-        winner === reference ||
-        betterBy(c.linkProfileMs, (winner.figures as ArmFigures).linkProfileMs, 0)
-      ) {
+      // Strictly better: an equal profile keeps the earlier qualifying arm
+      // (the arm order, D3D11 then the Vulkan rungs then OpenGL).
+      if (winner === reference || c.linkProfileMs < (winner.figures as ArmFigures).linkProfileMs) {
         winner = candidate;
       }
     } else if (!anyWorse && !anyBetter && frameOk && pacingOk) {
       triggers.push(`${candidate.rung} inside the margin`);
+    }
+  }
+  // Hysteresis, within this run: a stored backend that survived keeps the
+  // verdict unless the new winner beats ITS arm by the margin (stored figures
+  // are never compared across runs).
+  const stored = options.storedRung ? byRung.get(options.storedRung) : undefined;
+  if (stored && stored !== winner) {
+    const held = !compare(winner.figures as ArmFigures, stored.figures as ArmFigures).beats;
+    if (held) {
+      triggers.push(`${winner.rung} does not beat the stored ${stored.rung} by the margin`);
+      winner = stored;
     }
   }
   const secondRound = options.round < 2 ? triggers : [];

@@ -7,7 +7,7 @@
 // arm, and shapes the rounds' outcomes into the decision's inputs. Every
 // clock, timer, filesystem and spawn is injected; the parent
 // (electron/backend_probe_parent.cjs) wires the real ones. Design:
-// tmp/DESIGN_backend-probe.md, "Child process lifecycle" and "Reliability
+// docs/desktop-release.md ("GPU backend on Windows: the probe"), "Child process lifecycle" and "Reliability
 // rules". Tests: tests/electron_backend_probe_orchestrator.test.ts.
 
 const {
@@ -65,6 +65,7 @@ function readEnvelope(ctx, resultPath, round) {
     result,
     adapter: typeof file.adapter === 'string' ? file.adapter : '',
     driverVersion: typeof file.driverVersion === 'string' ? file.driverVersion : '',
+    onBattery: typeof file.onBattery === 'boolean' ? file.onBattery : null,
   };
 }
 
@@ -117,6 +118,7 @@ function launchArm(ctx, arm, round) {
         result: envelope?.result ?? null,
         adapter: envelope?.adapter ?? '',
         driverVersion: envelope?.driverVersion ?? '',
+        onBattery: envelope?.onBattery ?? null,
         profileDir,
         resultPath,
         keepDirectory: keepsDirectory(outcome),
@@ -196,12 +198,14 @@ function armInputs(rounds) {
         roundsLaunched: 0,
         roundsDied: 0,
         adapter: '',
+        onBattery: [],
         outcomes: [],
       };
       entry.roundsLaunched += 1;
       if (outcome.outcome === DIED) entry.roundsDied += 1;
       if (outcome.result) entry.results.push(outcome.result);
       if (entry.adapter === '' && outcome.adapter !== '') entry.adapter = outcome.adapter;
+      if (typeof outcome.onBattery === 'boolean') entry.onBattery.push(outcome.onBattery);
       entry.outcomes.push(outcome.outcome);
       byRung.set(outcome.arm, entry);
     }
@@ -217,11 +221,13 @@ function armInputs(rounds) {
  */
 function secondRoundTriggers(round1, decision) {
   const triggers = [...(decision?.secondRoundTriggers ?? [])];
+  // The reference is D3D11 when it survived, else whatever the decision ranked first.
+  const reference = decision?.reference ?? 'd3d11';
   for (const outcome of round1.outcomes) {
     if (outcome.outcome === DIED && !triggers.some((t) => t.startsWith(`${outcome.arm} died`))) {
       triggers.push(`${outcome.arm} died`);
     }
-    if (outcome.outcome === 'capped' && outcome.arm === 'd3d11') {
+    if (outcome.outcome === 'capped' && outcome.arm === reference) {
       triggers.push('reference capped');
     }
   }

@@ -14384,4 +14384,5 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'hudChrome.options.probeRequestedBody': '测试需要关闭游戏。现在重新启动进入测试吗？当前会话将结束。',
   'hudChrome.options.probeRequestedConfirm': '重新启动进入测试',
   'hudChrome.options.probeRequestedCancel': '暂不',
+  'probe.status.capped': '此后端未能及时链接测试着色器。',
 };

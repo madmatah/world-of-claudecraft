@@ -84,7 +84,7 @@ export interface ProbeResult {
     pacing?: ProbeSectionRecord<PacingPassResult>;
   };
   /** Why the run ended early, when it did. */
-  ended: 'completed' | 'no-webgl2' | 'software' | 'no-corpus' | 'aborted' | 'busy';
+  ended: 'completed' | 'no-webgl2' | 'software' | 'no-corpus' | 'aborted' | 'busy' | 'capped';
   busy?: NoiseFloorVerdict;
 }
 
@@ -335,6 +335,14 @@ function pacingSection(
   );
 }
 
+type LinkSectionRecord = ProbeSectionRecord<LinkPassResult>;
+
+/** Capped when every VALID pass hit the cap (a disturbed pass says nothing). */
+function linkSectionCapped(record: LinkSectionRecord): boolean {
+  const valid = record.passes.filter((_, i) => record.validity[i]);
+  return valid.length > 0 && valid.every((pass) => pass.cold.capped);
+}
+
 /** Run every section on this page's context; the sink hears every section. */
 export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
   const now = options.now ?? (() => performance.now());
@@ -444,6 +452,14 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
       }
       (result.sections as Record<string, unknown>)[section.name] = record;
       post();
+      // The link section's no-progress cap ends the arm: its linked set feeds
+      // every later section, and a backend that cannot link the corpus in
+      // time is measured as that bound, never as the sections it never ran.
+      if (section.name === 'links' && linkSectionCapped(record as LinkSectionRecord)) {
+        result.ended = 'capped';
+        post();
+        return result;
+      }
     }
     return result;
   } finally {

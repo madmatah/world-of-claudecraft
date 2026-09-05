@@ -113,14 +113,20 @@ function statusOf(result: ProbeResult): string {
       return t('probe.status.noCorpus');
     case 'busy':
       return t('probe.progress.busy');
+    case 'capped':
+      return t('probe.status.capped');
     default:
-      return progressLine(t, {
-        backend: (result.identity?.backend as BackendClass | undefined) ?? null,
-        parallelCompile: result.identity?.parallelCompile === true,
-        done: Object.keys(result.sections).length,
-        total: SECTION_TOTAL,
-        busy: false,
-      });
+      return progressLine(
+        t,
+        {
+          backend: (result.identity?.backend as BackendClass | undefined) ?? null,
+          parallelCompile: result.identity?.parallelCompile === true,
+          done: Object.keys(result.sections).length,
+          total: SECTION_TOTAL,
+          busy: false,
+        },
+        formatNumber,
+      );
   }
 }
 
@@ -171,13 +177,17 @@ function renderProbe(root: HTMLElement, search: string): void {
 
 function renderProgress(root: HTMLElement, search: string): void {
   const params = new URLSearchParams(search);
-  const line = progressLine(t, {
-    backend: (params.get('backend') as BackendClass | null) ?? null,
-    parallelCompile: params.get('parallel') === '1',
-    done: Number(params.get('done') ?? '0') || 0,
-    total: SECTION_TOTAL,
-    busy: params.get('busy') === '1',
-  });
+  const line = progressLine(
+    t,
+    {
+      backend: (params.get('backend') as BackendClass | null) ?? null,
+      parallelCompile: params.get('parallel') === '1',
+      done: Number(params.get('done') ?? '0') || 0,
+      total: SECTION_TOTAL,
+      busy: params.get('busy') === '1',
+    },
+    formatNumber,
+  );
   root.innerHTML = card(`<p data-probe-status>${escapeHtml(line)}</p>`, 'progress');
   const status = root.querySelector<HTMLElement>('[data-probe-status]') as HTMLElement;
   // In the parent's window the line follows the shell's pushes: the arm in
@@ -188,13 +198,17 @@ function renderProgress(root: HTMLElement, search: string): void {
       return;
     }
     const view = rungView(progress.arm ?? null);
-    status.textContent = progressLine(t, {
-      backend: view.backend,
-      parallelCompile: view.parallelCompile,
-      done: (progress.index ?? 0) + 1,
-      total: progress.total ?? 0,
-      busy: false,
-    });
+    status.textContent = progressLine(
+      t,
+      {
+        backend: view.backend,
+        parallelCompile: view.parallelCompile,
+        done: (progress.index ?? 0) + 1,
+        total: progress.total ?? 0,
+        busy: false,
+      },
+      formatNumber,
+    );
   });
 }
 
@@ -282,6 +296,7 @@ function renderVerdict(root: HTMLElement): void {
         round: results.round,
         // Fixed floors exist for x64 only; ARM64 decides on the relative rules.
         floors: results.arm64 ? null : PROVISIONAL_FLOORS,
+        storedRung: (results.storedVerdictRung as ArmRung | null) ?? null,
       });
       const winner = decision.arms.find((arm) => arm.rung === decision.backend);
       const winnerResult = arms.find((arm) => arm.rung === decision.backend)?.results.at(-1);

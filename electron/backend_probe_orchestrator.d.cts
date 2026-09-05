@@ -39,6 +39,8 @@ export interface ArmOutcome {
   result: unknown;
   adapter: string;
   driverVersion: string;
+  /** The child's power state at its first frame; null when unknown. */
+  onBattery: boolean | null;
   profileDir: string;
   resultPath: string;
   keepDirectory: boolean;
@@ -77,6 +79,8 @@ export interface ArmInputRecord {
   roundsLaunched: number;
   roundsDied: number;
   adapter: string;
+  /** One reading per round that reported one. */
+  onBattery: boolean[];
   outcomes: string[];
 }
 export function launchArm(
@@ -92,7 +96,7 @@ export function runRound(
 export function armInputs(rounds: readonly RoundOutcome[]): ArmInputRecord[];
 export function secondRoundTriggers(
   round1: RoundOutcome,
-  decision: { secondRoundTriggers?: string[] } | null | undefined,
+  decision: { secondRoundTriggers?: string[]; reference?: string | null } | null | undefined,
 ): string[];
 export function inconclusiveOutcomes(rounds: readonly RoundOutcome[]): string[];
 export function cleanupRun(ctx: OrchestratorContext, rounds: readonly RoundOutcome[]): void;
