@@ -260,6 +260,20 @@ export interface DesktopBridge {
   // feature-check before use.
   setDiscordActivity?(activity: DesktopDiscordActivity | null): void;
   setDiscordPresenceEnabled?(enabled: boolean): void;
+  // The GPU backend probe (src/probe/), present on a probe child's window:
+  // the page posts its result after every section and how the run ended;
+  // the child pushes its window's state (the page's own visibility stays
+  // "visible" while minimized once background throttling is off). Absent on
+  // the game's window and on older shells: feature-check before use.
+  probePost?(result: unknown): Promise<boolean>;
+  probeEnded?(ended: string): Promise<boolean>;
+  onProbeWindowState?(callback: (state: DesktopProbeWindowState) => void): () => void;
+}
+
+export interface DesktopProbeWindowState {
+  minimized: boolean;
+  visible: boolean;
+  focused: boolean;
 }
 
 export function desktopBridge(): DesktopBridge | null {

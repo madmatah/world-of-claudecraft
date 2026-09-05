@@ -20,7 +20,13 @@ const read = (rel: string) => readFileSync(join(repoRoot, rel), 'utf8');
 // Stripped at the shared constants too, so EVERY substring pin in this suite
 // (not just the discord slices) refuses a commented-out line.
 const preload = stripComments(read('electron/preload.cjs'));
-const mainSide = stripComments(read('electron/main.cjs') + read('electron/updater.cjs'));
+// The probe child (electron/backend_probe_child.cjs) registers its own
+// handlers on its own window: it is main-side for the contract too.
+const mainSide = stripComments(
+  read('electron/main.cjs') +
+    read('electron/updater.cjs') +
+    read('electron/backend_probe_child.cjs'),
+);
 
 const matches = (source: string, re: RegExp): Set<string> => {
   const found = new Set<string>();
@@ -47,6 +53,8 @@ describe('electron IPC channel contract (preload <-> main)', () => {
         'desktop-login-open-browser',
         'desktop-restart-app',
         'desktop-login-take-code',
+        'desktop-probe-ended',
+        'desktop-probe-post',
         'desktop-set-discord-activity',
         'desktop-set-discord-presence-enabled',
         'desktop-set-display-mode',
@@ -87,6 +95,7 @@ describe('electron IPC channel contract (preload <-> main)', () => {
       'desktop-gpu-status',
       'desktop-login-code',
       'desktop-presentation-changed',
+      'desktop-probe-window-state',
       'desktop-update-event',
       'desktop-wallet-handoff-code',
     ]);

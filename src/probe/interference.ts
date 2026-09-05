@@ -1,8 +1,9 @@
 // What disturbs a pass on the page's own evidence: the document hidden or
 // blurred, an input event (the player touched the machine), or a throttled
 // frame loop (a wall-clock watchdog whose gap against the animation frames
-// says the page was starved). The shell adds its window-state push in
-// step 2; this monitor is what a plain browser has. A disturbed pass is
+// says the page was starved). The shell's window-state push (minimized,
+// hidden, unfocused: with background throttling off the document's own
+// visibility never changes) arrives through `note`. A disturbed pass is
 // replayed once by the run; still disturbed, it is invalid.
 
 export interface InterferenceMonitor {
@@ -11,6 +12,8 @@ export interface InterferenceMonitor {
   /** Whether anything disturbed the pass since the mark. */
   disturbed(): boolean;
   reasons(): string[];
+  /** A disturbance seen outside the page (the shell's window state). */
+  note(reason: string): void;
   dispose(): void;
 }
 
@@ -50,6 +53,9 @@ export function createInterferenceMonitor(
     },
     reasons() {
       return [...reasons];
+    },
+    note(reason: string) {
+      reasons.add(reason);
     },
     dispose() {
       target.removeEventListener('visibilitychange', onVisibility);

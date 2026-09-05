@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
+import { SITE_ENTRIES } from '../scripts/lib/vite_entries.mjs';
 import { assertFamiliesKnown } from '../scripts/wiki/family_guard.mjs';
 // The English the /c/ public sheet resolves a mark id to. Imported here so the
 // generator's own hand table cannot drift away from what the sheet says.
@@ -231,7 +232,10 @@ describe('Guide entry wiring', () => {
   });
 
   it('ships the guide as its own Vite build entry', () => {
-    expect(viteConfig).toContain("guide: fileURLToPath(new URL('guide.html', import.meta.url))");
+    // The entry list lives in scripts/lib/vite_entries.mjs (the site entries
+    // plus the desktop-only ones); vite.config.ts builds its input off it.
+    expect(SITE_ENTRIES.guide).toBe('guide.html');
+    expect(viteConfig).toContain('viteEntryFiles({ desktop: isDesktopDevBuild })');
   });
 
   it('lists the guide in the sitemap', () => {

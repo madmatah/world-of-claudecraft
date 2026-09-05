@@ -8,7 +8,9 @@
 // verdict view reads a decision the driver injected; the shell replaces
 // those three seams with its bridge in step 2.
 
+import { desktopBridge } from '../runtime';
 import { formatNumber, t as translate } from '../ui/i18n';
+import { createInterferenceMonitor } from './interference';
 import { type ProbeResult, type ProbeSink, runProbe } from './probe_run';
 import { type ProbeView, probeViewFromSearch } from './probe_view_core';
 import {
@@ -19,6 +21,7 @@ import {
   type Translate,
   verdictModel,
 } from './probe_views_core';
+import { bindWindowState, reportEnded, shellSink } from './shell_bridge';
 
 /** The runtime's `t` behind the cores' string-keyed seam: every key the
  *  cores ask for is a `probe.*` leaf, which the catalog's key union pins. */
@@ -110,15 +113,23 @@ function renderProbe(root: HTMLElement, search: string): void {
     'probe',
   );
   const status = root.querySelector<HTMLElement>('[data-probe-status]') as HTMLElement;
-  const sink = pageSink(root, status);
+  // Inside a probe child the shell hears every post and the window's state
+  // feeds the monitor; in a plain browser both are no-ops over a null bridge.
+  const bridge = desktopBridge();
+  const monitor = createInterferenceMonitor();
+  const unbindWindowState = bindWindowState(bridge, monitor);
   void runProbe({
     run: params.get('run') ?? `page-${Date.now().toString(36)}`,
     round: Number(params.get('round') ?? '1') || 1,
     tier: params.get('tier') ?? 'ultra',
-    sink,
+    sink: shellSink(bridge, pageSink(root, status)),
+    monitor,
     host: root,
   }).then((result) => {
+    unbindWindowState();
+    monitor.dispose();
     root.dataset.probeEnded = result.ended;
+    reportEnded(bridge, result.ended);
   });
 }
 

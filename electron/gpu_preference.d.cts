@@ -101,3 +101,17 @@ export interface ForceHighPerformanceGpuDeps {
 }
 
 export function forceHighPerformanceGpu(deps?: ForceHighPerformanceGpuDeps): void;
+
+export interface WaitingSelfChild {
+  spawnTarget: string;
+  pid: number | null;
+  kill(): void;
+}
+export interface SpawnWaitingSelfDeps {
+  env: Record<string, string | undefined>;
+  argv: string[];
+  execPath?: string;
+  spawn?: (command: string, args: string[], options?: unknown) => unknown;
+  onExit?: (outcome: { code: number | null; signal: string | null; error: unknown }) => void;
+}
+export function spawnWaitingSelf(deps: SpawnWaitingSelfDeps): WaitingSelfChild;

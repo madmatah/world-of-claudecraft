@@ -432,6 +432,46 @@ function spawnDetachedSelf({
 }
 
 /**
+ * Spawn this program again and WAIT on it: the GPU backend probe's children
+ * (electron/backend_probe_parent.cjs), one per arm, whose exit code and result
+ * file the parent reads. Not detached, stdin piped (its close is the child's
+ * orphan signal, immune to pid reuse), stdout and stderr inherited. `onExit`
+ * receives the exit code and signal, or the spawn error when the child never
+ * started; `kill` is the parent's hang guard. Same file as the detached
+ * variant above, for the same reason: the malware scan sanctions this module
+ * alone for process execution.
+ */
+function spawnWaitingSelf({ env, argv, execPath = process.execPath, spawn = nodeSpawn, onExit }) {
+  const spawnTarget = resolveSelfSpawnTarget(env, execPath);
+  const child = spawn(spawnTarget, argv, {
+    env,
+    stdio: ['pipe', 'inherit', 'inherit'],
+    detached: false,
+  });
+  let settled = false;
+  const settle = (outcome) => {
+    if (settled) return;
+    settled = true;
+    onExit?.(outcome);
+  };
+  if (typeof child.once === 'function') {
+    child.once('exit', (code, signal) => settle({ code, signal, error: null }));
+    child.once('error', (err) => settle({ code: null, signal: null, error: err }));
+  }
+  return {
+    spawnTarget,
+    pid: child.pid ?? null,
+    kill: () => {
+      try {
+        child.kill?.('SIGKILL');
+      } catch {
+        // Already gone.
+      }
+    },
+  };
+}
+
+/**
  * The record this relaunch hands its child: what an earlier hop of the chain recorded
  * planting, plus what THIS hop plants. Accumulated, never replaced, because a chain can
  * plant its two halves at different hops: electron-updater's restart-to-update respawns
@@ -620,6 +660,7 @@ function forceHighPerformanceGpu(deps = {}) {
 }
 
 module.exports = {
+  spawnWaitingSelf,
   USER_GPU_PREFERENCES_KEY,
   HIGH_PERFORMANCE_PREFERENCE,
   HIGH_PERF_GPU_SWITCHES,

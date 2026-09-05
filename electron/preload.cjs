@@ -328,4 +328,35 @@ contextBridge.exposeInMainWorld('wocDesktop', {
     ipcRenderer.on('desktop-display-changed', listener);
     return () => ipcRenderer.removeListener('desktop-display-changed', listener);
   },
+  // The GPU backend probe ("WoC config detector", src/probe/): a probe CHILD's
+  // page posts its result after every section (the child writes it to disk)
+  // and reports how the run ended; the child pushes its window's state back
+  // (minimized, hidden, unfocused) because with background throttling off the
+  // page's own visibility reads "visible" the whole time it is minimized. Only
+  // an object crosses; the child validates the envelope, the page the payload.
+  probePost: (result) => {
+    if (!result || typeof result !== 'object') return Promise.resolve(false);
+    return ipcRenderer.invoke('desktop-probe-post', result);
+  },
+  probeEnded: (ended) => ipcRenderer.invoke('desktop-probe-ended', String(ended).slice(0, 32)),
+  onProbeWindowState: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => {
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        typeof payload.minimized === 'boolean' &&
+        typeof payload.visible === 'boolean' &&
+        typeof payload.focused === 'boolean'
+      ) {
+        callback({
+          minimized: payload.minimized,
+          visible: payload.visible,
+          focused: payload.focused,
+        });
+      }
+    };
+    ipcRenderer.on('desktop-probe-window-state', listener);
+    return () => ipcRenderer.removeListener('desktop-probe-window-state', listener);
+  },
 });
