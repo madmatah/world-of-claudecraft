@@ -38,6 +38,11 @@ const PROBE_TIER_ENV = 'WOC_BACKEND_PROBE_TIER';
 const PROBE_GPU_FORCE_OPT_OUT_ENV = 'WOC_BACKEND_PROBE_GPU_FORCE_OPT_OUT';
 const PROBE_PARENT_PID_ENV = 'WOC_BACKEND_PROBE_PARENT_PID';
 
+/** The graphics tiers a child may be asked to measure on (the `?gfx=` grammar). */
+const PROBE_TIERS = Object.freeze(['low', 'medium', 'high', 'ultra', 'insane']);
+/** A locale tag as the game spells them (`fr`, `zh_CN`, `en-CA`). */
+const LOCALE_PATTERN = /^[a-z]{2,3}(?:[_-][A-Za-z]{2,4})?$/;
+
 /** Exit codes a child reports; anything else is "unknown" to the parent. */
 const PROBE_EXIT = Object.freeze({
   completed: 0,
@@ -160,8 +165,9 @@ function probeChildConfig(env) {
     parentPid,
     resultPath,
     profileDir,
-    locale: typeof env[PROBE_LOCALE_ENV] === 'string' ? env[PROBE_LOCALE_ENV] : 'en',
-    tier: typeof env[PROBE_TIER_ENV] === 'string' ? env[PROBE_TIER_ENV] : 'ultra',
+    // Allowlisted here too, independent of the page's own re-validation.
+    locale: LOCALE_PATTERN.test(env[PROBE_LOCALE_ENV] ?? '') ? env[PROBE_LOCALE_ENV] : 'en',
+    tier: PROBE_TIERS.includes(env[PROBE_TIER_ENV]) ? env[PROBE_TIER_ENV] : 'ultra',
     gpuForceOptOut: env[PROBE_GPU_FORCE_OPT_OUT_ENV] === '1',
   };
 }
@@ -252,7 +258,9 @@ module.exports = {
   PROBE_RESULT_ENV,
   PROBE_ROUND_ENV,
   PROBE_RUN_ENV,
+  PROBE_TIERS,
   PROBE_TIER_ENV,
+  LOCALE_PATTERN,
   TEST_BACKENDS_FLAG,
   armsForRound,
   childArgvFor,

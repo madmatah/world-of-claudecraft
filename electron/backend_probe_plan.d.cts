@@ -89,3 +89,5 @@ export function machineIsArm64(input: {
   arch: string;
   env?: Record<string, string | undefined>;
 }): boolean;
+export const PROBE_TIERS: readonly string[];
+export const LOCALE_PATTERN: RegExp;

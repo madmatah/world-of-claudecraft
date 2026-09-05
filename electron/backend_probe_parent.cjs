@@ -22,7 +22,14 @@ const {
   runRound,
   secondRoundTriggers,
 } = require('./backend_probe_orchestrator.cjs');
-const { PROBE_ARMS, childArgvFor, newRunId, runDirectoryFor } = require('./backend_probe_plan.cjs');
+const {
+  LOCALE_PATTERN,
+  PROBE_ARMS,
+  PROBE_TIERS,
+  childArgvFor,
+  newRunId,
+  runDirectoryFor,
+} = require('./backend_probe_plan.cjs');
 const { PROBE_VERSION } = require('./backend_probe_result.cjs');
 const { verdictFromDecision } = require('./backend_probe_verdict.cjs');
 const { spawnWaitingSelf } = require('./gpu_preference.cjs');
@@ -30,9 +37,6 @@ const { restartEnv } = require('./launch_settings.cjs');
 
 const PARENT_WINDOW_WIDTH = 720;
 const PARENT_WINDOW_HEIGHT = 480;
-/** The tiers the consent view may hand over (the `?gfx=` grammar). */
-const PROBE_TIERS = ['low', 'medium', 'high', 'ultra', 'insane'];
-const LOCALE_PATTERN = /^[a-z]{2,3}(?:[_-][A-Za-z]{2,4})?$/;
 /** How long the decide view may take to post: a page that never answers is
  *  a defect of the build, not a slow machine (the decision is arithmetic). */
 const DECISION_DEADLINE_MS = 60_000;

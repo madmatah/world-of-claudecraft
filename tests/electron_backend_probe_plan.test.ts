@@ -116,6 +116,21 @@ describe('the child environment and argv', () => {
     expect(probeChildConfig({})).toBeNull();
     expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_ARM: 'metal' })).toBeNull();
     expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_ROUND: '0' })).toBeNull();
+    // The locale and the tier are allowlisted here too, defaulting rather than refusing.
+    expect(
+      probeChildConfig({
+        ...env,
+        WOC_BACKEND_PROBE_LOCALE: '../x',
+        WOC_BACKEND_PROBE_TIER: 'turbo',
+      }),
+    ).toMatchObject({ locale: 'en', tier: 'ultra' });
+    expect(
+      probeChildConfig({
+        ...env,
+        WOC_BACKEND_PROBE_LOCALE: 'zh_CN',
+        WOC_BACKEND_PROBE_TIER: 'low',
+      }),
+    ).toMatchObject({ locale: 'zh_CN', tier: 'low' });
     expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_PARENT_PID: 'x' })).toBeNull();
     expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_RESULT: 'relative.json' })).toBeNull();
     expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_RUN: 'has spaces' })).toBeNull();
