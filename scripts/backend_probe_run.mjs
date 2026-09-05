@@ -125,6 +125,18 @@ try {
         `missing=[${capability.missingExtensions.join(',')}] maxTex=${capability.limits.maxTextureSize} aniso=${capability.limits.maxAnisotropy}`,
     );
   }
+  const frame = result.sections?.frame;
+  if (frame) {
+    frame.passes.forEach((pass, i) => {
+      const s = pass.summary;
+      console.log(
+        `[probe] frame pass ${i}: ${s.drawsPerFrame} draws, submit med=${s.medianSubmitMs.toFixed(1)} p95=${s.p95SubmitMs.toFixed(1)} ` +
+          `(share ${(s.submitShare * 100).toFixed(0)}%) | frames med=${s.frames.medianMs.toFixed(1)} p95=${s.frames.p95Ms.toFixed(1)} ` +
+          `max=${s.frames.maxMs.toFixed(1)} long=${s.frames.longFrames} | checksum ${s.checksum.ok ? 'ok' : 'WRONG'} (d${s.checksum.worstDelta}) ` +
+          `texture ${s.textureChecksum.ok ? 'ok' : 'WRONG'} (d${s.textureChecksum.worstDelta})`,
+      );
+    });
+  }
   const pacing = result.sections?.pacing;
   if (pacing) {
     pacing.passes.forEach((pass, i) => {

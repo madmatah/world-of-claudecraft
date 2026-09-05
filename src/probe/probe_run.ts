@@ -9,9 +9,10 @@ import { readGpuBackend } from '../render/gpu_backend_class_core';
 import { isSoftwareRendererName } from '../render/software_renderer';
 import type { CapabilityReport } from './capability_core';
 import { runCapabilitySection } from './capability_section';
-import { heavyPrograms, type ProbeCorpus } from './corpus_core';
+import { heavyPrograms, type ProbeCorpus, programRole } from './corpus_core';
 import { loadProbeCorpus } from './corpus_loader';
 import { runFrameLoop } from './frame_runner';
+import { type FramePassResult, linkCorpusProgram, runFramePass } from './frame_section';
 import {
   estimateRefreshMs,
   type FrameStats,
@@ -68,6 +69,7 @@ export interface ProbeResult {
     links?: ProbeSectionRecord<LinkPassResult>;
     parallel?: ProbeSectionRecord<ParallelPassResult>;
     uploads?: ProbeSectionRecord<UploadPassResult>;
+    frame?: ProbeSectionRecord<FramePassResult>;
     pacing?: ProbeSectionRecord<PacingPassResult>;
   };
   /** Why the run ended early, when it did. */
@@ -231,6 +233,39 @@ async function uploadSection(
   return { passes, replays: 0, floor };
 }
 
+async function frameSection(
+  rig: Rig,
+  corpus: ProbeCorpus,
+  floor: FrameStats,
+): Promise<ProbeSectionRecord<FramePassResult>> {
+  const gl = rig.context.gl;
+  // Four heavy programs and a depth twin, linked unsalted once for the
+  // section (the salted sets of the link sections are untouched by them).
+  const colourPrograms = heavyPrograms(corpus)
+    .slice(0, 4)
+    .map((program) => linkCorpusProgram(gl, program))
+    .filter((program): program is WebGLProgram => program !== null);
+  const twin = corpus.programs.find((program) => programRole(program) === 'twin');
+  const shadowProgram = twin ? linkCorpusProgram(gl, twin) : null;
+  const passes: FramePassResult[] = [];
+  for (let pass = 0; pass < 2; pass++) {
+    passes.push(
+      await runFramePass({
+        gl,
+        refreshMs: rig.refreshMs,
+        colourPrograms,
+        shadowProgram,
+        width: rig.context.canvas.width,
+        height: rig.context.canvas.height,
+        now: rig.now,
+      }),
+    );
+  }
+  for (const program of colourPrograms) gl.deleteProgram(program);
+  if (shadowProgram) gl.deleteProgram(shadowProgram);
+  return { passes, replays: 0, floor };
+}
+
 async function pacingSection(
   rig: Rig,
   floor: FrameStats,
@@ -312,12 +347,13 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
     post();
 
     const sections: Array<{
-      name: 'links' | 'parallel' | 'uploads' | 'pacing';
+      name: 'links' | 'parallel' | 'uploads' | 'frame' | 'pacing';
       run: (floor: FrameStats) => Promise<unknown>;
     }> = [
       { name: 'links', run: (floor) => linkSection(rig, loaded.corpus, options, floor) },
       { name: 'parallel', run: (floor) => parallelSection(rig, loaded.corpus, options, floor) },
       { name: 'uploads', run: (floor) => uploadSection(rig, floor) },
+      { name: 'frame', run: (floor) => frameSection(rig, loaded.corpus, floor) },
       { name: 'pacing', run: (floor) => pacingSection(rig, floor) },
     ];
     for (const section of sections) {
