@@ -20,6 +20,9 @@ export const ko_KR: EnTranslations = {
     "rp": "롤플레잉",
     "rpPvp": "롤플레잉 PvP"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "개발자 명령 센터",
     "kicker": "개발 도구",

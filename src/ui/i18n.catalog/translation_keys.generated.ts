@@ -11911,6 +11911,7 @@ export type TranslationKeyFlat =
   | 'playerCard.statusStillRendering'
   | 'playerCard.title'
   | 'playerCard.topPercent'
+  | 'probe.title'
   | 'questUi.detail.itemReward'
   | 'questUi.detail.objectiveProgress'
   | 'questUi.detail.objectives'

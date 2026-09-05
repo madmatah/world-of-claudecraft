@@ -180,6 +180,7 @@ describe('i18n whole-catalog completeness', () => {
       'guide.controls.discord', // "Discord" - brand (Guide controls-page action label)
       'guide.glossary.claudiumTerm', // "Claudium" - the same currency brand as hudChrome.claudium.*
       'desktop.crash.title', // "World of ClaudeCraft" - brand (desktop crash dialog title)
+      'probe.title', // "WoC config detector" - the backend probe's product name, kept verbatim
       'auth.emailPlaceholder', // "you@example.com" - RFC 2606 example address, kept verbatim
       // Rift boss mechanic names: authored fantasy proper nouns that do not translate.
       'abilityUi.cast.rift_frost_execution',

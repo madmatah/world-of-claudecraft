@@ -200,6 +200,7 @@ const CODE_PATH_SAMPLES = [
   ['editor.html', 'editor.html'],
   ['wallet-handoff.html', 'wallet-handoff.html'],
   ['music_editor.html', 'music_editor.html'],
+  ['backend-probe.html', 'backend-probe.html'],
   ['svelte.config.js', 'svelte.config.js'],
   ['capacitor.config.ts', 'capacitor.config.ts'],
   ['tsconfig.bot.json', 'tsconfig.bot.json'],

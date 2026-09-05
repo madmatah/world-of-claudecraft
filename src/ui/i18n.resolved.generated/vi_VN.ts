@@ -20,6 +20,9 @@ export const vi_VN: EnTranslations = {
     "rp": "RP",
     "rpPvp": "RP-PvP"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "Trung Tâm Lệnh Nhà Phát Triển",
     "kicker": "Công cụ phát triển",

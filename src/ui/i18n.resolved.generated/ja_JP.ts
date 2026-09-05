@@ -20,6 +20,9 @@ export const ja_JP: EnTranslations = {
     "rp": "RP",
     "rpPvp": "RP-PvP"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "開発者コマンドセンター",
     "kicker": "開発ツール",

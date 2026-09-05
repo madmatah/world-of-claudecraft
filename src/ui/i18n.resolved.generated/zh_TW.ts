@@ -20,6 +20,9 @@ export const zh_TW: EnTranslations = {
     "rp": "RP",
     "rpPvp": "RP-PvP"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "開發者指令中心",
     "kicker": "開發工具",

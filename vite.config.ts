@@ -15,6 +15,7 @@ import {
   diagnosticsCaptureAllowed,
   diagnosticsReadAllowed,
 } from './scripts/lib/diagnostics_capture_guard.mjs';
+import { viteEntryFiles } from './scripts/lib/vite_entries.mjs';
 import { shouldDisableVitestFsModuleCache } from './scripts/lib/vitest_fs_module_cache.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -476,14 +477,14 @@ export default defineConfig({
     // bundle or move the resolved-table SHA.
     manifest: true,
     rollupOptions: {
-      input: {
-        main: fileURLToPath(new URL('index.html', import.meta.url)),
-        admin: fileURLToPath(new URL('admin.html', import.meta.url)),
-        play: fileURLToPath(new URL('play.html', import.meta.url)),
-        guide: fileURLToPath(new URL('guide.html', import.meta.url)),
-        editor: fileURLToPath(new URL('editor.html', import.meta.url)),
-        walletHandoff: fileURLToPath(new URL('wallet-handoff.html', import.meta.url)),
-      },
+      // The entry list is a function of the build flavour (scripts/lib/vite_entries.mjs):
+      // the desktop bundle carries the GPU backend probe page, the site never does.
+      input: Object.fromEntries(
+        Object.entries(viteEntryFiles({ desktop: isDesktopDevBuild })).map(([name, file]) => [
+          name,
+          fileURLToPath(new URL(file, import.meta.url)),
+        ]),
+      ),
       output: {
         // three.js almost never changes between our releases and is the single
         // heaviest dependency in the game/editor bundles; splitting it into its

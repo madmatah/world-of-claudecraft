@@ -20,6 +20,9 @@ export const en_XA: EnTranslations = {
     "rp": "[ŔÞ]",
     "rpPvp": "[ŔÞ-ÞʋÞ]"
   },
+  "probe": {
+    "title": "[ŴóÇ çóñƒíĝ ðéţéçţóŕ]"
+  },
   "devCommand": {
     "dialogLabel": "[Ðéʋéļóþéŕ Çóɱɱáñð Çéñţéŕ]",
     "kicker": "[Ðéʋéļóþɱéñţ ţóóļš]",

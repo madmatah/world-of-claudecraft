@@ -20,6 +20,9 @@ export const cs_CZ: EnTranslations = {
     "rp": "RP",
     "rpPvp": "RP-PvP"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "Centrum vývojářských příkazů",
     "kicker": "Vývojářské nástroje",

@@ -41,7 +41,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "es_ES": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -75,7 +76,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "fr_FR": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -109,7 +111,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "fr_CA": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -143,7 +146,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "en_CA": [],
   "it_IT": [
@@ -178,7 +182,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "de_DE": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -212,23 +217,28 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "zh_CN": [
     "hudChrome.options.gpuBackendActiveNameOpenGL",
-    "hudChrome.options.gpuBackendActiveNameVulkan"
+    "hudChrome.options.gpuBackendActiveNameVulkan",
+    "probe.title"
   ],
   "zh_TW": [
     "hudChrome.options.gpuBackendActiveNameOpenGL",
-    "hudChrome.options.gpuBackendActiveNameVulkan"
+    "hudChrome.options.gpuBackendActiveNameVulkan",
+    "probe.title"
   ],
   "ko_KR": [
     "hudChrome.options.gpuBackendActiveNameOpenGL",
-    "hudChrome.options.gpuBackendActiveNameVulkan"
+    "hudChrome.options.gpuBackendActiveNameVulkan",
+    "probe.title"
   ],
   "ja_JP": [
     "hudChrome.options.gpuBackendActiveNameOpenGL",
-    "hudChrome.options.gpuBackendActiveNameVulkan"
+    "hudChrome.options.gpuBackendActiveNameVulkan",
+    "probe.title"
   ],
   "pt_BR": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -262,11 +272,13 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "ru_RU": [
     "hudChrome.options.gpuBackendActiveNameOpenGL",
-    "hudChrome.options.gpuBackendActiveNameVulkan"
+    "hudChrome.options.gpuBackendActiveNameVulkan",
+    "probe.title"
   ],
   "cs_CZ": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -300,7 +312,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "nl_NL": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -334,7 +347,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "pl_PL": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -368,7 +382,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "id_ID": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -402,7 +417,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "tr_TR": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -436,7 +452,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "sv_SE": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -470,7 +487,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "vi_VN": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -504,7 +522,8 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ],
   "da_DK": [
     "entities.items.reins_chimeglass_tortoise.name",
@@ -538,6 +557,7 @@ export const pending: Record<string, readonly string[]> = {
     "hudChrome.options.shaderWarmOn",
     "hudChrome.wocStore.mountBuyAria",
     "hudChrome.wocStore.mountsEyebrow",
-    "hudChrome.wocStore.mountsTitle"
+    "hudChrome.wocStore.mountsTitle",
+    "probe.title"
   ]
 };

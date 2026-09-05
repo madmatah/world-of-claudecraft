@@ -20,6 +20,9 @@ export const id_ID: EnTranslations = {
     "rp": "RP",
     "rpPvp": "RP-PvP"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "Pusat Perintah Pengembang",
     "kicker": "Alat pengembangan",

@@ -20,6 +20,9 @@ export const tr_TR: EnTranslations = {
     "rp": "RP",
     "rpPvp": "RP-PvP"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "Geliştirici Komuta Merkezi",
     "kicker": "Geliştirme araçları",

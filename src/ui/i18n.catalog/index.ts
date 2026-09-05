@@ -14,6 +14,7 @@ import { hudStrings } from './hud';
 import { hudChromeStrings } from './hud_chrome';
 import { itemNames, itemStrings } from './items';
 import { mergeEntities, mergeExtra, mergeStrings } from './merge';
+import { probeStrings } from './probe';
 import { questStrings } from './quests';
 import { shellStrings } from './shell';
 
@@ -41,6 +42,7 @@ export { hudStrings } from './hud';
 export { hudChromeStrings } from './hud_chrome';
 export { itemNames, itemStrings } from './items';
 export { mergeEntities, mergeExtra, mergeStrings } from './merge';
+export { probeStrings } from './probe';
 export { questStrings } from './quests';
 // Re-export the catalog public surface (every name the old i18n.en.ts exported).
 export { shellStrings } from './shell';
@@ -83,6 +85,7 @@ export type Leaves<T, D extends number = 5> = [D] extends [never]
 export const en = {
   meta: { builtOn: 'Built {date}' },
   realmTypes: { normal: 'Normal', pvp: 'PvP', rp: 'RP', rpPvp: 'RP-PvP' },
+  probe: probeStrings,
   devCommand: {
     dialogLabel: 'Developer Command Center',
     kicker: 'Development tools',

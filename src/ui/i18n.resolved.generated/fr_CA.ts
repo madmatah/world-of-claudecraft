@@ -20,6 +20,9 @@ export const fr_CA: EnTranslations = {
     "rp": "JdR",
     "rpPvp": "JdR-JcJ"
   },
+  "probe": {
+    "title": "WoC config detector"
+  },
   "devCommand": {
     "dialogLabel": "Centre de commandes de développement",
     "kicker": "Outils de développement",
