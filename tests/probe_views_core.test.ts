@@ -4,6 +4,7 @@ import {
   consentModel,
   estimateMinutes,
   progressLine,
+  rungView,
   verdictModel,
 } from '../src/probe/probe_views_core';
 
@@ -77,5 +78,19 @@ describe('the probe views core', () => {
     });
     expect(none.heading).toBe('probe.verdict.inconclusive');
     expect(none.worker).toBe('');
+  });
+});
+
+describe('rungView', () => {
+  it('maps every decision rung to its label class and the parallel flag', () => {
+    expect(rungView('d3d11')).toEqual({ backend: 'd3d11', parallelCompile: false });
+    expect(rungView('vulkan-parallel-compile')).toEqual({
+      backend: 'vulkan',
+      parallelCompile: true,
+    });
+    expect(rungView('vulkan-plain')).toEqual({ backend: 'vulkan', parallelCompile: false });
+    expect(rungView('opengl')).toEqual({ backend: 'opengl', parallelCompile: false });
+    expect(rungView(null)).toEqual({ backend: null, parallelCompile: false });
+    expect(rungView('metal')).toEqual({ backend: null, parallelCompile: false });
   });
 });

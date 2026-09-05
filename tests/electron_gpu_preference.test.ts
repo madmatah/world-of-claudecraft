@@ -236,9 +236,18 @@ describe('summarizeGpuDevices', () => {
     ]);
     expect(discreteInactive).toBe(true);
     expect(devices).toEqual([
-      { vendorId: '0x8086', deviceId: '0x9a49', active: true },
-      { vendorId: '0x10de', deviceId: '0x24dd', active: false },
+      { vendorId: '0x8086', deviceId: '0x9a49', active: true, driverVersion: '' },
+      { vendorId: '0x10de', deviceId: '0x24dd', active: false, driverVersion: '' },
     ]);
+  });
+
+  it('keeps the driver version Chromium reports, capped, and reads an absent one as empty', () => {
+    const { devices } = summarizeGpuDevices([
+      { vendorId: 0x10de, deviceId: 0x2504, active: true, driverVersion: '32.0.15.6094' },
+      { vendorId: 0x8086, deviceId: 0x7d55, active: false, driverVersion: 'x'.repeat(100) },
+      { vendorId: 0x1414, deviceId: 0x008c, active: false, driverVersion: 7 },
+    ]);
+    expect(devices.map((d) => d.driverVersion)).toEqual(['32.0.15.6094', 'x'.repeat(64), '']);
   });
 
   it('flags an inactive AMD discrete adapter behind the WARP software device too', () => {
@@ -281,7 +290,7 @@ describe('summarizeGpuDevices', () => {
     expect(summarizeGpuDevices(undefined)).toEqual({ devices: [], discreteInactive: false });
     expect(summarizeGpuDevices('nope')).toEqual({ devices: [], discreteInactive: false });
     expect(summarizeGpuDevices([{}]).devices).toEqual([
-      { vendorId: '0x0000', deviceId: '0x0000', active: false },
+      { vendorId: '0x0000', deviceId: '0x0000', active: false, driverVersion: '' },
     ]);
   });
 });

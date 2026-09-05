@@ -8,20 +8,32 @@
 // verdict view reads a decision the driver injected; the shell replaces
 // those three seams with its bridge in step 2.
 
-import { desktopBridge } from '../runtime';
-import { formatNumber, t as translate } from '../ui/i18n';
+import { type DesktopProbeProgress, desktopBridge } from '../runtime';
+import { formatNumber, getLanguage, t as translate } from '../ui/i18n';
+import { type ArmInput, type ArmRung, decide, PROVISIONAL_FLOORS } from './decision_core';
 import { createInterferenceMonitor } from './interference';
 import { type ProbeResult, type ProbeSink, runProbe } from './probe_run';
+import { presetFromSettingsJson, tierFromPreset } from './probe_tier_core';
 import { type ProbeView, probeViewFromSearch } from './probe_view_core';
 import {
   type BackendClass,
   consentModel,
   estimateMinutes,
   progressLine,
+  rungView,
   type Translate,
   verdictModel,
 } from './probe_views_core';
-import { bindWindowState, reportEnded, shellSink } from './shell_bridge';
+import {
+  actInShell,
+  bindWindowState,
+  createShellSink,
+  postVerdictInShell,
+  readResultsInShell,
+  reportEnded,
+  startInShell,
+  subscribeProgress,
+} from './shell_bridge';
 
 /** The runtime's `t` behind the cores' string-keyed seam: every key the
  *  cores ask for is a `probe.*` leaf, which the catalog's key union pins. */
@@ -59,14 +71,36 @@ function renderConsent(root: HTMLElement, search: string): void {
       `<button type="button" data-probe-cancel>${escapeHtml(model.cancel)}</button></p>`,
     'consent',
   );
+  const bridge = desktopBridge();
   root.querySelector('[data-probe-start]')?.addEventListener('click', () => {
+    if (bridge?.probeStart) {
+      // The parent main has no access to renderer storage: the locale and
+      // the graphics preset travel with the start.
+      void startInShell(bridge, {
+        locale: getLanguage(),
+        tier: tierFromPreset(presetFromSettingsJson(storedSettingsJson())),
+      });
+      return;
+    }
     const params = new URLSearchParams(search);
     params.set('view', 'probe');
     location.search = `?${params.toString()}`;
   });
   root.querySelector('[data-probe-cancel]')?.addEventListener('click', () => {
+    if (bridge?.probeAction) {
+      void actInShell(bridge, 'cancel');
+      return;
+    }
     window.close();
   });
+}
+
+function storedSettingsJson(): string | null {
+  try {
+    return localStorage.getItem('woc_settings');
+  } catch {
+    return null;
+  }
 }
 
 function statusOf(result: ProbeResult): string {
@@ -118,14 +152,16 @@ function renderProbe(root: HTMLElement, search: string): void {
   const bridge = desktopBridge();
   const monitor = createInterferenceMonitor();
   const unbindWindowState = bindWindowState(bridge, monitor);
+  const shell = createShellSink(bridge, pageSink(root, status));
   void runProbe({
     run: params.get('run') ?? `page-${Date.now().toString(36)}`,
     round: Number(params.get('round') ?? '1') || 1,
     tier: params.get('tier') ?? 'ultra',
-    sink: shellSink(bridge, pageSink(root, status)),
+    sink: shell.sink,
     monitor,
     host: root,
   }).then((result) => {
+    shell.dispose();
     unbindWindowState();
     monitor.dispose();
     root.dataset.probeEnded = result.ended;
@@ -143,6 +179,23 @@ function renderProgress(root: HTMLElement, search: string): void {
     busy: params.get('busy') === '1',
   });
   root.innerHTML = card(`<p data-probe-status>${escapeHtml(line)}</p>`, 'progress');
+  const status = root.querySelector<HTMLElement>('[data-probe-status]') as HTMLElement;
+  // In the parent's window the line follows the shell's pushes: the arm in
+  // flight (the parent counts arms, the child counts its own sections).
+  subscribeProgress(desktopBridge(), (progress: DesktopProbeProgress) => {
+    if (progress.phase === 'deciding') {
+      status.textContent = t('probe.progress.waiting');
+      return;
+    }
+    const view = rungView(progress.arm ?? null);
+    status.textContent = progressLine(t, {
+      backend: view.backend,
+      parallelCompile: view.parallelCompile,
+      done: (progress.index ?? 0) + 1,
+      total: progress.total ?? 0,
+      busy: false,
+    });
+  });
 }
 
 /** What the verdict view reads: injected by the driver or the shell. */
@@ -154,18 +207,8 @@ export interface ProbeDecisionView {
   explicitSetting: boolean;
 }
 
-function renderVerdict(root: HTMLElement): void {
-  const injected = (globalThis as { __probeDecision?: ProbeDecisionView }).__probeDecision;
-  const model = verdictModel(
-    t,
-    injected ?? {
-      backend: null,
-      parallelCompile: false,
-      worker: false,
-      inconclusive: true,
-      explicitSetting: false,
-    },
-  );
+function paintVerdict(root: HTMLElement, input: ProbeDecisionView): void {
+  const model = verdictModel(t, input);
   root.innerHTML = card(
     `<h2>${escapeHtml(model.heading)}</h2>` +
       (model.worker ? `<p>${escapeHtml(model.worker)}</p>` : '') +
@@ -178,6 +221,87 @@ function renderVerdict(root: HTMLElement): void {
       `</p>`,
     'verdict',
   );
+  const bridge = desktopBridge();
+  const wire = (selector: string, action: 'play' | 'rerun' | 'auto') => {
+    root.querySelector(selector)?.addEventListener('click', () => {
+      if (action === 'rerun' && bridge?.probeStart) {
+        void startInShell(bridge, {
+          locale: getLanguage(),
+          tier: tierFromPreset(presetFromSettingsJson(storedSettingsJson())),
+        });
+        return;
+      }
+      if (action === 'auto') {
+        void actInShell(bridge, 'auto').then((done) => {
+          if (done) paintVerdict(root, { ...input, explicitSetting: false });
+        });
+        return;
+      }
+      void actInShell(bridge, action);
+    });
+  };
+  wire('[data-probe-play]', 'play');
+  wire('[data-probe-rerun]', 'rerun');
+  wire('[data-probe-auto]', 'auto');
+}
+
+const INCONCLUSIVE_VIEW: ProbeDecisionView = {
+  backend: null,
+  parallelCompile: false,
+  worker: false,
+  inconclusive: true,
+  explicitSetting: false,
+};
+
+/**
+ * The verdict view. In the parent's window it reads what the parent has:
+ * the rounds to DECIDE over (the decision core is the page's; the decision
+ * goes back over the bridge and the parent runs a second round or shows the
+ * result), or the parent's FINAL answer to paint. Outside the shell it
+ * paints a decision the driver injected.
+ */
+function renderVerdict(root: HTMLElement): void {
+  const bridge = desktopBridge();
+  if (!bridge?.probeResults) {
+    const injected = (globalThis as { __probeDecision?: ProbeDecisionView }).__probeDecision;
+    paintVerdict(root, injected ?? INCONCLUSIVE_VIEW);
+    return;
+  }
+  root.innerHTML = card(
+    `<p data-probe-status>${escapeHtml(t('probe.progress.waiting'))}</p>`,
+    'verdict',
+  );
+  void readResultsInShell(bridge).then((results) => {
+    if (!results) {
+      paintVerdict(root, INCONCLUSIVE_VIEW);
+      return;
+    }
+    if (results.phase === 'decide') {
+      const arms = results.arms as ArmInput[];
+      const decision = decide(arms, {
+        round: results.round,
+        // Fixed floors exist for x64 only; ARM64 decides on the relative rules.
+        floors: results.arm64 ? null : PROVISIONAL_FLOORS,
+      });
+      const winner = decision.arms.find((arm) => arm.rung === decision.backend);
+      const winnerResult = arms.find((arm) => arm.rung === decision.backend)?.results.at(-1);
+      void postVerdictInShell(bridge, {
+        ...decision,
+        backendClass: winnerResult?.identity?.backend ?? 'unknown',
+        figures: winner?.figures ?? undefined,
+      });
+      return;
+    }
+    const decision = results.decision as { backend: ArmRung | null; worker: boolean } | null;
+    const view = rungView(decision?.backend ?? null);
+    paintVerdict(root, {
+      backend: results.inconclusive === null ? view.backend : null,
+      parallelCompile: view.parallelCompile,
+      worker: decision?.worker === true,
+      inconclusive: results.inconclusive !== null || decision?.backend == null,
+      explicitSetting: results.explicitSetting,
+    });
+  });
 }
 
 /** Mount the view for `search` into `root`; returns the view it mounted. */

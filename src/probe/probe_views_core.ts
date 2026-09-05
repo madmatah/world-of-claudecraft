@@ -104,3 +104,23 @@ export function verdictModel(t: Translate, input: VerdictInput): VerdictModel {
     switchToAuto: decided && input.explicitSetting ? t('probe.verdict.switchToAuto') : null,
   };
 }
+
+/** The verdict view's backend reading of a decision rung: the class the
+ *  labels know and whether it is the parallel-compile Vulkan rung. */
+export function rungView(rung: string | null): {
+  backend: BackendClass | null;
+  parallelCompile: boolean;
+} {
+  switch (rung) {
+    case 'd3d11':
+      return { backend: 'd3d11', parallelCompile: false };
+    case 'vulkan-parallel-compile':
+      return { backend: 'vulkan', parallelCompile: true };
+    case 'vulkan-plain':
+      return { backend: 'vulkan', parallelCompile: false };
+    case 'opengl':
+      return { backend: 'opengl', parallelCompile: false };
+    default:
+      return { backend: null, parallelCompile: false };
+  }
+}

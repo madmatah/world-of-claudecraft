@@ -359,4 +359,33 @@ contextBridge.exposeInMainWorld('wocDesktop', {
     ipcRenderer.on('desktop-probe-window-state', listener);
     return () => ipcRenderer.removeListener('desktop-probe-window-state', listener);
   },
+  // The probe PARENT's window (consent, progress, verdict views): the consent
+  // view starts the run with the locale and graphics tier only the renderer
+  // knows; the verdict view reads the rounds' results, decides (the decision
+  // core is TypeScript, src/probe/decision_core.ts) and posts the decision
+  // back; its buttons are one action word each; the parent pushes progress
+  // between arms. The parent validates every payload again.
+  probeStart: (payload) => {
+    if (!payload || typeof payload !== 'object') return Promise.resolve(false);
+    return ipcRenderer.invoke('desktop-probe-start', {
+      locale: String(payload.locale ?? 'en').slice(0, 16),
+      tier: String(payload.tier ?? 'ultra').slice(0, 16),
+    });
+  },
+  probeResults: () => ipcRenderer.invoke('desktop-probe-results'),
+  probeVerdict: (decision) => {
+    if (!decision || typeof decision !== 'object') return Promise.resolve(false);
+    return ipcRenderer.invoke('desktop-probe-verdict', decision);
+  },
+  probeAction: (action) => ipcRenderer.invoke('desktop-probe-action', String(action).slice(0, 16)),
+  onProbeProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => {
+      if (payload && typeof payload === 'object' && typeof payload.phase === 'string') {
+        callback(payload);
+      }
+    };
+    ipcRenderer.on('desktop-probe-progress', listener);
+    return () => ipcRenderer.removeListener('desktop-probe-progress', listener);
+  },
 });

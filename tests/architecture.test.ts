@@ -801,6 +801,7 @@ const PROBE_PURE_CORES = [
   'src/probe/parallel_section_core.ts',
   'src/probe/probe_view_core.ts',
   'src/probe/probe_views_core.ts',
+  'src/probe/probe_tier_core.ts',
   'src/probe/salt_core.ts',
   'src/probe/stats_core.ts',
   'src/probe/upload_section_core.ts',

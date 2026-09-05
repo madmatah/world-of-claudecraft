@@ -78,6 +78,8 @@ export interface GpuDeviceSummary {
   vendorId: string;
   deviceId: string;
   active: boolean;
+  /** Chromium's driver version for the device, '' when not reported. */
+  driverVersion: string;
 }
 export function summarizeGpuDevices(gpuDevices: unknown): {
   devices: GpuDeviceSummary[];

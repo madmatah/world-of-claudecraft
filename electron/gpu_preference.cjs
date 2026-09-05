@@ -569,6 +569,9 @@ function summarizeGpuDevices(gpuDevices) {
     vendorId: `0x${(d?.vendorId ?? 0).toString(16).padStart(4, '0')}`,
     deviceId: `0x${(d?.deviceId ?? 0).toString(16).padStart(4, '0')}`,
     active: d?.active === true,
+    // Chromium reports the driver on Windows (the probe's verdict fingerprints
+    // it); elsewhere it is usually absent, and an absent one reads as ''.
+    driverVersion: typeof d?.driverVersion === 'string' ? d.driverVersion.slice(0, 64) : '',
   }));
   const raw = Array.isArray(gpuDevices) ? gpuDevices : [];
   const discreteInactive =

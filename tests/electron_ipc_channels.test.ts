@@ -25,7 +25,8 @@ const preload = stripComments(read('electron/preload.cjs'));
 const mainSide = stripComments(
   read('electron/main.cjs') +
     read('electron/updater.cjs') +
-    read('electron/backend_probe_child.cjs'),
+    read('electron/backend_probe_child.cjs') +
+    read('electron/backend_probe_parent.cjs'),
 );
 
 const matches = (source: string, re: RegExp): Set<string> => {
@@ -53,8 +54,12 @@ describe('electron IPC channel contract (preload <-> main)', () => {
         'desktop-login-open-browser',
         'desktop-restart-app',
         'desktop-login-take-code',
+        'desktop-probe-action',
         'desktop-probe-ended',
         'desktop-probe-post',
+        'desktop-probe-results',
+        'desktop-probe-start',
+        'desktop-probe-verdict',
         'desktop-set-discord-activity',
         'desktop-set-discord-presence-enabled',
         'desktop-set-display-mode',
@@ -95,6 +100,7 @@ describe('electron IPC channel contract (preload <-> main)', () => {
       'desktop-gpu-status',
       'desktop-login-code',
       'desktop-presentation-changed',
+      'desktop-probe-progress',
       'desktop-probe-window-state',
       'desktop-update-event',
       'desktop-wallet-handoff-code',

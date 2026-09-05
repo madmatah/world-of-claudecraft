@@ -268,6 +268,14 @@ export interface DesktopBridge {
   probePost?(result: unknown): Promise<boolean>;
   probeEnded?(ended: string): Promise<boolean>;
   onProbeWindowState?(callback: (state: DesktopProbeWindowState) => void): () => void;
+  // The probe PARENT's window: the consent view's start (locale and graphics
+  // tier), the verdict view's results read and decision post, its buttons,
+  // and the progress push between arms. Absent on the game's window.
+  probeStart?(payload: { locale: string; tier: string }): Promise<boolean>;
+  probeResults?(): Promise<DesktopProbeResults | null>;
+  probeVerdict?(decision: unknown): Promise<boolean>;
+  probeAction?(action: DesktopProbeAction): Promise<boolean>;
+  onProbeProgress?(callback: (progress: DesktopProbeProgress) => void): () => void;
 }
 
 export interface DesktopProbeWindowState {
@@ -275,6 +283,36 @@ export interface DesktopProbeWindowState {
   visible: boolean;
   focused: boolean;
 }
+
+export type DesktopProbeAction = 'play' | 'rerun' | 'auto' | 'cancel';
+
+export interface DesktopProbeProgress {
+  phase: 'arm' | 'between' | 'deciding';
+  arm?: string;
+  round?: number;
+  index?: number;
+  total?: number;
+  outcome?: string;
+}
+
+/** What the verdict view reads: the rounds so far to decide over, or the
+ *  parent's final answer to render. */
+export type DesktopProbeResults =
+  | {
+      phase: 'decide';
+      round: number;
+      arms: unknown[];
+      storedVerdictRung: string | null;
+      arm64: boolean;
+    }
+  | {
+      phase: 'final';
+      round: number;
+      decision: unknown;
+      written: boolean;
+      inconclusive: string | null;
+      explicitSetting: boolean;
+    };
 
 export function desktopBridge(): DesktopBridge | null {
   const candidate = (globalThis as unknown as { wocDesktop?: unknown }).wocDesktop;

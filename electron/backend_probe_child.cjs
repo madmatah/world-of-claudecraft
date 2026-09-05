@@ -26,7 +26,8 @@ const { PROBE_EXIT, probeChildConfig, switchesForArm } = require('./backend_prob
 const { acceptProbeResult, exitCodeForEnded } = require('./backend_probe_result.cjs');
 const { resolveDesktopConfig } = require('./desktop_config.cjs');
 const { classifyRendererExit, rendererErrorLogEntry } = require('./diagnostics.cjs');
-const { forceHighPerformanceGpu } = require('./gpu_preference.cjs');
+const { forceHighPerformanceGpu, summarizeGpuDevices } = require('./gpu_preference.cjs');
+const { activeGpuAdapterKey } = require('./gpu_backend.cjs');
 const { initLogging } = require('./logging.cjs');
 const {
   appNavigationOrigins,
@@ -95,11 +96,17 @@ function runBackendProbeChild(deps = {}) {
 
   let latest = null;
   let exiting = false;
+  // The machine key and driver this arm ran on, latched from the first
+  // getGPUInfo reading that names an active adapter (the parent's decision
+  // compares arms on it, the verdict fingerprints it).
+  let adapter = '';
+  let driverVersion = '';
+  const envelope = (outcome, code) => ({ outcome, code, adapter, driverVersion, result: latest });
   const exitWith = (code, outcome) => {
     if (exiting) return;
     exiting = true;
     try {
-      writeResultFile(config.resultPath, { outcome, code, result: latest });
+      writeResultFile(config.resultPath, envelope(outcome, code));
     } catch (err) {
       log.warn('[probe-child] could not write the result file', err?.message ?? err);
     }
@@ -177,7 +184,7 @@ function runBackendProbeChild(deps = {}) {
     if (!accepted) return false;
     latest = accepted;
     try {
-      writeResultFile(config.resultPath, { outcome: 'running', code: null, result: latest });
+      writeResultFile(config.resultPath, envelope('running', null));
     } catch (err) {
       log.warn('[probe-child] could not write the result file', err?.message ?? err);
       return false;
@@ -246,7 +253,19 @@ function runBackendProbeChild(deps = {}) {
     for (const event of ['minimize', 'restore', 'blur', 'focus', 'hide', 'show']) {
       win.on(event, pushWindowState);
     }
-    win.webContents.on('did-finish-load', pushWindowState);
+    win.webContents.on('did-finish-load', () => {
+      pushWindowState();
+      app.getGPUInfo('complete').then(
+        (info) => {
+          const { devices } = summarizeGpuDevices(info?.gpuDevice);
+          if (adapter !== '') return;
+          adapter = activeGpuAdapterKey(devices);
+          driverVersion = devices.find((d) => d.active)?.driverVersion ?? '';
+          log.info('[probe-child] adapter', { adapter, driverVersion, devices });
+        },
+        (err) => log.warn('[probe-child] could not read gpu info', err?.message ?? err),
+      );
+    });
     win.webContents.on('render-process-gone', (_event, details) => {
       log.error('[probe-child] renderer gone', details);
       exitWith(PROBE_EXIT.rendererGone, 'renderer-gone');
