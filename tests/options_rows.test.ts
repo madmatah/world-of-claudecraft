@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const click = vi.fn();
-const startProbe = vi.fn<[unknown], Promise<boolean>>();
+const startProbe = vi.fn<(bridge: unknown) => Promise<boolean>>();
 const musicState = { enabled: true, setEnabled: vi.fn() };
 
 vi.mock('../src/game/audio', () => ({ audio: { click: () => click() } }));
@@ -47,7 +47,7 @@ describe('paintNoteRow', () => {
 
 describe('paintActionRow', () => {
   const control = {
-    kind: 'button',
+    control: 'button',
     key: 'backendProbe',
     labelKey: 'hudChrome.options.testBackends',
     action: 'backendProbe',
