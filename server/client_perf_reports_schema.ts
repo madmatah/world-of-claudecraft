@@ -75,6 +75,35 @@ ALTER TABLE client_perf_reports ADD COLUMN IF NOT EXISTS worst_10s_frame_p95_ms 
 -- against the server allowlist in perf_report.ts before storage (filter,
 -- dedupe, cap 3). Pre-column and healthy rows both read as the empty array.
 ALTER TABLE client_perf_reports ADD COLUMN IF NOT EXISTS suggestion_ids TEXT[] NOT NULL DEFAULT '{}';
+-- Which graphics API the client's WebGL context talks to (d3d11, vulkan,
+-- opengl-es, ...), derived server-side from the adapter name the report already
+-- carries (server/gl_backend.ts). Orthogonal to gl_renderer_bucket, which says
+-- whose hardware it is and discards the API token for every recognised vendor.
+-- Same GROUPING-bits contract as the other grouped columns (TEXT NOT NULL
+-- DEFAULT ''); pre-column rows fold to 'unknown' in the read-time mapper.
+ALTER TABLE client_perf_reports ADD COLUMN IF NOT EXISTS gl_backend TEXT NOT NULL DEFAULT '';
+-- GPU model dimensions. gl_renderer_bucket is VENDOR level by design and its
+-- coarseness is pinned, so it stays exactly as it is and these sit beside it:
+-- gl_renderer_raw is the full UNMASKED_RENDERER_WEBGL string the client already
+-- sends and the ingest used to drop (clamped to 160 chars, the same bound that
+-- wire field always had), gl_model and gl_laptop are its parsed family key and
+-- form-factor verdict (server/gpu_model_bucket.ts), and gpu_hp_adapter is the
+-- SAME family key parsed from the client's WebGPU high-performance adapter
+-- description, so a row whose VENDOR segment disagrees with gl_model's is a
+-- laptop rendering on its iGPU while a discrete part sits idle. Vendor and not
+-- the whole key because the adapter text a normal Chrome page can read is
+-- {vendor, architecture} only, so gpu_hp_adapter is usually vendor-level even
+-- when gl_model is not. gl_model and gpu_hp_adapter are
+-- TEXT NOT NULL DEFAULT '' because they are GROUPED columns in the admin
+-- summary, which reads '' as "no data" for pre-column and no-evidence rows
+-- alike; gl_laptop is nullable because "cannot tell" is its common answer.
+-- NO new index: the summary aggregates over a created_at window, so an index
+-- led by os_family or gl_model cannot serve it, and a big live table's indexes
+-- go through server/client_perf_indexes.ts (CONCURRENTLY), never boot DDL.
+ALTER TABLE client_perf_reports ADD COLUMN IF NOT EXISTS gl_renderer_raw TEXT NOT NULL DEFAULT '';
+ALTER TABLE client_perf_reports ADD COLUMN IF NOT EXISTS gl_model TEXT NOT NULL DEFAULT '';
+ALTER TABLE client_perf_reports ADD COLUMN IF NOT EXISTS gl_laptop BOOLEAN;
+ALTER TABLE client_perf_reports ADD COLUMN IF NOT EXISTS gpu_hp_adapter TEXT NOT NULL DEFAULT '';
 -- The shader warm-up worker's end state on the reporting client: the one
 -- fleet-visible readout of whether that worker is alive and, when it is not,
 -- why. Typed columns rather than raw_summary keys so perf reports can be

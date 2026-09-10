@@ -61,7 +61,7 @@ describe('PBR point-light fragment pruning', () => {
     // The context is created through the power-preference fallback
     // (src/render/webgl_context_fallback.ts); the renderer still owns the site.
     const rendererCreated = renderer.indexOf(
-      'const created = createRendererWebGL(canvas, options.context);',
+      'const created = createRendererWebGL(canvas, createdContext);',
     );
     const rendererInit = renderer.indexOf('initGfxTier(this.webgl)', rendererCreated);
     const firstCompile = renderer.indexOf('this.webgl.compile', rendererCreated);

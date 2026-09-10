@@ -36,7 +36,7 @@ export const PRIEST_ABILITIES: Record<string, AbilityDef> = {
       { type: 'heal', min: 130, max: 155 },
     ],
     description:
-      'Deal 72 to 84 Holy damage to an enemy or heal a friendly target for 130 to 155. Both amounts increase with Spell Power. Damage also heals each Doctrine-linked ally for 30%, or the lowest-health party member for 15% if no ally is linked. (Doctrine signature)',
+      'Deal $d Holy damage to an enemy or heal a friendly target for $h. Damage increases with Spell Power; healing increases with Healing Power. Doctrine converts this damage into healing through your links. If no injured linked group member is within 30 yards, heal the lowest-health injured group member within 30 yards for 15% of the damage. Healing a group member also heals up to 2 other injured group members within 10 yards of that target and in your line of sight, each for 50% of the health restored. These extra heals cannot critically heal or create Doctrine links. (Doctrine signature)',
   },
   seraphic_vigil: {
     id: 'seraphic_vigil',
@@ -113,5 +113,24 @@ export const PRIEST_ABILITIES: Record<string, AbilityDef> = {
     effects: [{ type: 'aoeHeal', min: 90, max: 110, radius: 30 }],
     description:
       'Channel for 6 sec, healing party members within 30 yards for $d every 2 sec. Healing increases with Spell Power.',
+  },
+  // Both healer specs share the out-of-combat group resurrection.
+  prayer_of_returning: {
+    id: 'prayer_of_returning',
+    name: 'Prayer of Returning',
+    class: 'priest',
+    specs: ['holy', 'discipline'],
+    learnLevel: 20,
+    cost: 250,
+    castTime: 7,
+    cooldown: 300,
+    range: 0,
+    school: 'holy',
+    requiresTarget: false,
+    requiresOutOfCombat: true,
+    projectile: false,
+    effects: [{ type: 'massResurrectGroup', hpFrac: 0.3 }],
+    description:
+      'Call every fallen member of your group or raid within 40 yards and in your line of sight back to your side with 30% health and mana. Cannot be cast in combat. (Benison and Doctrine)',
   },
 };

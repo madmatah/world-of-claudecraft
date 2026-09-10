@@ -18,7 +18,7 @@
 //
 // CARDINALITY IS BOUNDED BY DESIGN, same contract as server/http/metrics.ts: the
 // only label values here are the ws-message direction (a fixed two), the
-// inbound drop cause (the fixed nine-value WS_DROP_CAUSES set), the guild-bank
+// inbound drop cause (the closed WS_DROP_CAUSES set), the guild-bank
 // incident kind (the fixed nine-value GUILD_BANK_INCIDENTS set), the vault-ledger
 // incident kind (the fixed VAULT_LEDGER_INCIDENTS set), the copper-flow
 // source, the harvest band and node tier (the fixed sets in
@@ -57,7 +57,7 @@ export const GENERAL_CHAT_QUOTA_DB_OUTCOMES = [
 export type GeneralChatQuotaDbOutcome = (typeof GENERAL_CHAT_QUOTA_DB_OUTCOMES)[number];
 
 /**
- * The fixed nine causes an inbound ws frame can be dropped for: the two
+ * The closed set of causes an inbound ws frame can be dropped for: the two
  * pre-parse gate causes (server/msg_rate_limit.ts), the three post-parse
  * lanes (server/msg_lanes.ts), the list-read guard on the ignore/block
  * readouts (server/list_read_guard.ts), the personal-bank/materials-vault
@@ -65,8 +65,11 @@ export type GeneralChatQuotaDbOutcome = (typeof GENERAL_CHAT_QUOTA_DB_OUTCOMES)[
  * (server/guild_bank_op_guard.ts, each allowed op is a keep-forever ledger
  * write), and the cosmetic-set guard on the two Book of Deeds pickers
  * (server/cosmetic_op_guard.ts, each allowed set re-wires a full identity
- * record to every in-range viewer). This closed set IS the cause label's
- * whole vocabulary; it never grows per-player or per-message.
+ * record to every in-range viewer), and the guild bank HISTORY read guard
+ * (server/guild_bank_log_read_guard.ts, the paged, filtered history reads,
+ * metered apart from the ops so a click storm through the chips can never
+ * drain a member's deposits). This closed set IS the cause label's whole
+ * vocabulary; it never grows per-player or per-message.
  */
 export const WS_DROP_CAUSES = [
   'rate',
@@ -78,9 +81,11 @@ export const WS_DROP_CAUSES = [
   'bank_vault',
   'guild_bank',
   'cosmetic',
+  'lane_name_screen',
+  'guild_bank_log',
 ] as const;
 
-/** One of the fixed nine inbound drop causes. */
+/** One of the fixed inbound drop causes (the closed set above). */
 export type WsDropCause = (typeof WS_DROP_CAUSES)[number];
 
 /**
@@ -163,9 +168,15 @@ export const GUILD_BANK_INCIDENTS = [
   // creation commits the guild and fee in one transaction, so a new sample is
   // a single-sample mixed-release or invariant defect and remains page-worthy.
   'create_fee_unpaid',
+  // The dispatch-time unsettled gate (server/guild_bank_settle_gate.ts)
+  // refused a withdraw, gold withdraw, or rung purchase that would have
+  // consumed another session's not-yet-durable work, and flushed that
+  // session instead. Ordinary two-officer concurrency, like
+  // escrow_refused_retry before it: watch its RATE, never its presence.
+  'unsettled_refused',
 ] as const;
 
-/** One of the fixed eleven guild-bank incident kinds. */
+/** One of the fixed twelve guild-bank incident kinds. */
 export type GuildBankIncident = (typeof GUILD_BANK_INCIDENTS)[number];
 
 /** The marketplace escrow-queue outcomes (the per-character save FIFO's

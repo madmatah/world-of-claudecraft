@@ -1,5 +1,5 @@
 diff --git a/build/three.module.js b/build/three.module.js
-index ad13abf..12be46d 100644
+index ad13abf7d1..24eae6a19f 100644
 --- a/build/three.module.js
 +++ b/build/three.module.js
 @@ -438,7 +438,7 @@ var morphtarget_pars_vertex = "#ifdef USE_MORPHTARGETS\n\t#ifndef USE_INSTANCING
@@ -49,10 +49,10 @@ index ad13abf..12be46d 100644
  	let prefixVertex, prefixFragment;
  	let versionString = parameters.glslVersion ? '#version ' + parameters.glslVersion + '\n' : '';
  
-@@ -7066,6 +7065,21 @@ function WebGLProgram( renderer, cacheKey, parameters, bindingStates ) {
+@@ -7065,6 +7064,21 @@ function WebGLProgram( renderer, cacheKey, parameters, bindingStates ) {
+ 
  	const vertexGlsl = versionString + prefixVertex + vertexShader;
  	const fragmentGlsl = versionString + prefixFragment + fragmentShader;
- 
 +	return { vertexGlsl: vertexGlsl, fragmentGlsl: fragmentGlsl };
 +
 +}
@@ -68,13 +68,13 @@ index ad13abf..12be46d 100644
 +
 +	const { vertexGlsl, fragmentGlsl } = assembleProgramGlsl( parameters );
 +
+ 
  	// log( '*VERTEX*', vertexGlsl );
  	// log( '*FRAGMENT*', fragmentGlsl );
- 
-@@ -7990,12 +8004,30 @@ function WebGLPrograms( renderer, environments, extensions, capabilities, bindin
+@@ -7989,12 +8003,30 @@ function WebGLPrograms( renderer, environments, extensions, capabilities, bindin
+ 		return uniforms;
  
  	}
- 
 +	// World of ClaudeCraft: released program retention. Upstream destroys a
 +	// program the moment its last material lets go, so a material disposed and
 +	// re-minted under the same cache key (a streamed prop cell unloading and
@@ -86,12 +86,12 @@ index ad13abf..12be46d 100644
 +	const RETAINED_PROGRAM_LIMIT = 64;
 +	const retainedPrograms = [];
 +
+ 
  	function acquireProgram( parameters, cacheKey ) {
  
  		let program = programsMap.get( cacheKey );
  
  		if ( program !== undefined ) {
- 
 +			if ( program.usedTimes === 0 ) {
 +
 +				const r = retainedPrograms.indexOf( program );
@@ -99,13 +99,13 @@ index ad13abf..12be46d 100644
 +
 +			}
 +
+ 
  			++ program.usedTimes;
  
- 		} else {
-@@ -8011,20 +8043,36 @@ function WebGLPrograms( renderer, environments, extensions, capabilities, bindin
+@@ -8010,21 +8042,37 @@ function WebGLPrograms( renderer, environments, extensions, capabilities, bindin
+ 		return program;
  
  	}
- 
 +	// World of ClaudeCraft: cache-key probe. The off-thread shader warm-up must
 +	// skip a program this cache has already linked; there is nothing left to warm.
 +	function hasProgram( cacheKey ) {
@@ -129,6 +129,7 @@ index ad13abf..12be46d 100644
 +
 +	}
 +
+ 
  	function releaseProgram( program ) {
  
  		if ( -- program.usedTimes === 0 ) {
@@ -148,32 +149,112 @@ index ad13abf..12be46d 100644
  
  		}
  
-@@ -8047,10 +8095,13 @@ function WebGLPrograms( renderer, environments, extensions, capabilities, bindin
+@@ -8046,10 +8094,13 @@ function WebGLPrograms( renderer, environments, extensions, capabilities, bindin
+ 		getParameters: getParameters,
  		getProgramCacheKey: getProgramCacheKey,
  		getUniforms: getUniforms,
- 		acquireProgram: acquireProgram,
 +		hasProgram: hasProgram,
+ 		acquireProgram: acquireProgram,
  		releaseProgram: releaseProgram,
  		releaseShaderCache: releaseShaderCache,
  		// Exposed for resource monitoring & error feedback via renderer.info:
- 		programs: programs,
 +		// Exposed for resource monitoring (World of ClaudeCraft retention):
 +		retainedPrograms: retainedPrograms,
+ 		programs: programs,
  		dispose: dispose
  	};
+@@ -9173,6 +9224,38 @@ function WebGLShadowMap( renderer, objects, capabilities ) {
  
-@@ -16462,6 +16513,7 @@ class WebGLRenderer {
+ 		_state.buffers.depth.setTest( true );
+ 		_state.setScissorTest( false );
++		// World of ClaudeCraft: colour-write-free shadow depth pass. A RenderTarget
++		// must carry at least one colour attachment, so a non-VSM shadow map
++		// allocates an RGBA8 texture beside its DepthTexture that NOTHING ever
++		// samples: WebGLLights binds shadow.map.depthTexture and
++		// shadowmap_pars_fragment reads it through sampler2DShadow. Upstream let
++		// the depth material write that texture for every rasterized fragment,
++		// so the pass paid full-coverage colour traffic (blending off, but the
++		// ROP write and its bandwidth are real, and they scale with shadow-caster
++		// overdraw) for a buffer with no reader. Closing the colour mask on the
++		// depth and distance materials (getDepthMaterial below) removes it.
++		//
++		// The CLEAR is deliberately left whole. Skipping the colour bit would
++		// look like a further saving, but a clear is the cheap load action
++		// everywhere: a fast clear on an immediate-mode GPU, and loadAction=clear
++		// on a tile-based one, where dropping it turns the attachment into
++		// loadAction=load and makes the pass strictly more expensive. This
++		// renderer's own reference measurements come from a Metal tiler, so the
++		// clear stays.
++		//
++		// Which is exactly why the mask is re-opened BEFORE each clear below and
++		// not only once at the end of the pass. glClear honours the colour write
++		// mask and WebGLRenderer.clear never re-opens it, so once the first
++		// shadow map's depth material has closed the mask, the clear of a SECOND
++		// shadow map in the same frame would be a silent no-op and that map would
++		// keep the previous frame's colour. Only the sun casts here today, so it
++		// is latent; it is still wrong, and it costs one cached state write.
++		//
++		// VSM is untouched: its blur passes write that colour attachment for
++		// real. colorWrite is not a program-cache-key input (WebGLPrograms never
++		// reads it), so no program key moves and no material relinks.
++		const colorWriteFreePass = this.type !== VSMShadowMap;
++
+ 
+ 		// check for shadow map type changes
+ 
+@@ -9336,6 +9419,7 @@ function WebGLShadowMap( renderer, objects, capabilities ) {
+ 				if ( shadow.map.isWebGLCubeRenderTarget ) {
+ 
+ 					renderer.setRenderTarget( shadow.map, face );
++					if ( colorWriteFreePass ) _state.buffers.color.setMask( true );
+ 					renderer.clear();
+ 
+ 				} else {
+@@ -9344,6 +9428,7 @@ function WebGLShadowMap( renderer, objects, capabilities ) {
+ 					if ( face === 0 ) {
+ 
+ 						renderer.setRenderTarget( shadow.map );
++						if ( colorWriteFreePass ) _state.buffers.color.setMask( true );
+ 						renderer.clear();
+ 
+ 					}
+@@ -9416,6 +9501,12 @@ function WebGLShadowMap( renderer, objects, capabilities ) {
+ 		_previousType = this.type;
+ 
+ 		scope.needsUpdate = false;
++		// World of ClaudeCraft: the depth materials leave the colour mask closed,
++		// and a masked glClear is silently a no-op. three's own frame clear
++		// re-opens the mask first (WebGLBackground), but the pass restores what
++		// it changed rather than leaving that to every caller.
++		if ( colorWriteFreePass ) _state.buffers.color.setMask( true );
++
+ 
+ 		renderer.setRenderTarget( currentRenderTarget, activeCubeFace, activeMipmapLevel );
+ 
+@@ -9516,6 +9607,11 @@ function WebGLShadowMap( renderer, objects, capabilities ) {
+ 
+ 		result.visible = material.visible;
+ 		result.wireframe = material.wireframe;
++		// World of ClaudeCraft: depth-only shadow pass (see this.render). Set
++		// here rather than on the two shared materials so the alpha-test clones
++		// in _materialCache and any customDepthMaterial follow the pass too,
++		// alongside the other fields the pass already owns on them.
++		result.colorWrite = type === VSMShadowMap;
+ 
+ 		if ( type === VSMShadowMap ) {
+ 
+@@ -16461,6 +16557,7 @@ class WebGLRenderer {
+ 			bufferRenderer = new WebGLBufferRenderer( _gl, extensions, info );
  			indexedBufferRenderer = new WebGLIndexedBufferRenderer( _gl, extensions, info );
  
- 			info.programs = programCache.programs;
 +			info.retainedPrograms = programCache.retainedPrograms;
+ 			info.programs = programCache.programs;
  
  			/**
- 			 * Holds details about the capabilities of the current rendering context.
-@@ -17464,6 +17516,188 @@ class WebGLRenderer {
+@@ -17463,6 +17560,188 @@ class WebGLRenderer {
+ 			return materials;
  
  		};
- 
 +		// World of ClaudeCraft: the exact GLSL compile() would link, collected
 +		// without linking anything. The browser keys its program cache on the
 +		// final source bytes, so an off-thread warm-up has to know them first.
@@ -356,13 +437,13 @@ index ad13abf..12be46d 100644
 +
 +		};
 +
+ 
  		// compileAsync
  
- 		/**
-@@ -17487,21 +17721,81 @@ class WebGLRenderer {
+@@ -17486,22 +17765,82 @@ class WebGLRenderer {
+ 			// ready to be used before resolving the promise.
  
  			return new Promise( ( resolve ) => {
- 
 +				// World of ClaudeCraft: bounded isReady poll pass. Each
 +				// COMPLETION_STATUS_KHR query is a synchronous GPU-process
 +				// round-trip; with hundreds of pending programs and a
@@ -384,6 +465,7 @@ index ad13abf..12be46d 100644
 +				let pollCursor = 0;
 +				let pollIntervalMs = POLL_INTERVAL_MIN_MS;
 +
+ 
  				function checkMaterialsReady() {
  
 -					materials.forEach( function ( material ) {
@@ -400,10 +482,10 @@ index ad13abf..12be46d 100644
 +					// isReady()'s own positive cache), so a budgeted pass spends its
 +					// 2 ms on DISTINCT pending programs instead of repeat queries.
 +					const notReadyThisPass = new Set();
- 
 +					for ( let i = 0; i < pending.length; i ++ ) {
 +
 +						const material = pending[ ( pollCursor + i ) % pending.length ];
+ 
  						const materialProperties = properties.get( material );
  						const program = materialProperties.currentProgram;
  
@@ -417,7 +499,6 @@ index ad13abf..12be46d 100644
  
 -							// remove any programs that report they're ready to use from the list
  							materials.delete( material );
- 
 +						} else if ( notReadyThisPass.has( program ) === false ) {
 +
 +							if ( program.isReady() ) {
@@ -431,6 +512,7 @@ index ad13abf..12be46d 100644
 +
 +							}
 +
+ 
  						}
  
 -					} );
@@ -445,7 +527,7 @@ index ad13abf..12be46d 100644
  
  					// once the list of compiling materials is empty, call the callback
  
-@@ -17512,9 +17806,19 @@ class WebGLRenderer {
+@@ -17512,9 +17851,19 @@ class WebGLRenderer {
  
  					}
  
@@ -467,7 +549,7 @@ index ad13abf..12be46d 100644
  
  				}
  
-@@ -17876,7 +18180,11 @@ class WebGLRenderer {
+@@ -17876,7 +18225,11 @@ class WebGLRenderer {
  
  				} else if ( object.isMesh || object.isLine || object.isPoints ) {
  

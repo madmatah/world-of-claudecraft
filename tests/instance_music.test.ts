@@ -19,6 +19,7 @@ function input(overrides: Partial<InstanceMusicInput> = {}): InstanceMusicInput 
     now: 20000,
     lastCombatEventAt: 0,
     lastBossCombatEventAt: 0,
+    inCombat: false,
     playerId: 7,
     playerPos: { x: eastbrook.hub.x, z: eastbrook.hub.z },
     zone: eastbrook,
@@ -126,7 +127,7 @@ describe('the Proving Shore cue, resolved from the shipped zone record', () => {
     }
   });
 
-  it('keeps the room cue selected while ordinary raid combat uses the global combat layer', () => {
+  it('keeps the final room soundtrack active instead of the global combat layer', () => {
     const room = 'ignivar_inner_crucible';
     const origin = instanceOrigin(DUNGEONS[room].index, 0);
     const decision = instanceMusicDecision(
@@ -145,6 +146,30 @@ describe('the Proving Shore cue, resolved from the shipped zone record', () => {
     );
 
     expect(decision.zone).toBe(room);
+    expect(decision.inCombat).toBe(true);
+    expect(decision.musicCombat).toBe(false);
+    expect(decision.crucibleFloor).toBe(4);
+  });
+});
+
+describe('instance music policy: the authoritative in-combat flag', () => {
+  it('the world flag alone puts the player in combat, with no aggro target and no recent event', () => {
+    const decision = instanceMusicDecision(input({ inCombat: true }));
+    expect(decision.inCombat).toBe(true);
     expect(decision.musicCombat).toBe(true);
+  });
+
+  it('a false world flag never suppresses the aggro or recent-event arms', () => {
+    const aggro = instanceMusicDecision(
+      input({
+        inCombat: false,
+        entities: [{ kind: 'mob', dead: false, templateId: 'wolf', aggroTargetId: 7 }],
+      }),
+    );
+    expect(aggro.inCombat).toBe(true);
+    const recent = instanceMusicDecision(input({ inCombat: false, lastCombatEventAt: 19000 }));
+    expect(recent.inCombat).toBe(true);
+    const calm = instanceMusicDecision(input({ inCombat: false }));
+    expect(calm.inCombat).toBe(false);
   });
 });

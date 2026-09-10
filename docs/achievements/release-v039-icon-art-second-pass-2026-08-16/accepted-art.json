@@ -125,12 +125,12 @@
   ],
   "runtimeClosure": {
     "abilities": {
-      "live": 402,
-      "painted": 402
+      "live": 405,
+      "painted": 405
     },
     "hotbarItems": {
-      "live": 76,
-      "painted": 76
+      "live": 81,
+      "painted": 81
     },
     "fixedActions": {
       "attack": 1,

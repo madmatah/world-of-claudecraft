@@ -8,18 +8,18 @@
 // stale store surface.
 
 import { describe, expect, it, vi } from 'vitest';
-import { STORE_MOUNT_ITEM_IDS } from '../src/sim/content/store_mounts';
+import { MOUNT_SKIN_IDS } from '../src/sim/content/mount_skins';
 import type { StoreSpendResult } from '../src/ui/claudium_purchase_bridge';
 import { t } from '../src/ui/i18n';
 import { storeMountName } from '../src/ui/store_mount_card_view';
 import { StoreMountPurchase, type StoreMountPurchaseDeps } from '../src/ui/store_mount_purchase';
 import type { WocStoreItemInput } from '../src/ui/woc_store_view';
 
-const REINS = STORE_MOUNT_ITEM_IDS[0];
+const REINS = MOUNT_SKIN_IDS[0];
 const NAME = storeMountName(REINS);
 
 function service(over: Partial<WocStoreItemInput> = {}): WocStoreItemInput {
-  return { itemId: REINS, name: 'x', kind: 'item', costClaudium: 1200, owned: false, ...over };
+  return { itemId: REINS, name: 'x', kind: 'skin', costClaudium: 1200, owned: false, ...over };
 }
 
 function result(over: Partial<StoreSpendResult> = {}): StoreSpendResult {
@@ -60,12 +60,12 @@ function harness(
     setPriceChanged: vi.fn(),
     setError: vi.fn(),
     refreshStore: vi.fn(async () => {
-      controller.rebuild(next.balance, next.items, next.owned);
+      controller.rebuild(next.balance, next.items, { mountSkinIds: next.owned });
     }),
     rebuildAndPaint: vi.fn(),
   };
   const controller = new StoreMountPurchase(deps as unknown as StoreMountPurchaseDeps);
-  controller.rebuild(balance, items, owned);
+  controller.rebuild(balance, items, { mountSkinIds: owned });
   return { controller, deps: deps as unknown as Harness['deps'], next, surface };
 }
 
@@ -147,6 +147,46 @@ describe('StoreMountPurchase.purchase outcomes on a current surface', () => {
     h.next.items = [service({ owned: true })];
     h.controller.request(REINS);
     await confirm(h);
+    expect(h.deps.setError).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['grant', result({ granted: true }), 'success'],
+    ['idempotent replay', result({ reason: 'already_granted' }), 'success'],
+    ['refusal', result({ reason: 'unavailable' }), 'failure'],
+  ] as const)(
+    'reports a %s after the surface closes during the outcome refresh',
+    async (_label, spendResult, outcome) => {
+      const h = harness(5000, [service()], [], async () => spendResult);
+      h.deps.refreshStore.mockImplementationOnce(async () => {
+        h.surface.current = false;
+        h.controller.rebuild(h.next.balance, h.next.items, { mountSkinIds: h.next.owned });
+      });
+      h.controller.request(REINS);
+
+      await confirm(h);
+
+      expect(h.deps.showResult).toHaveBeenCalledWith(
+        outcome,
+        outcome === 'success' ? t('hudChrome.wocStore.owned') : t('hudChrome.wocStore.error'),
+      );
+      expect(h.deps.setError).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reports price_changed when the surface closes during its refresh', async () => {
+    const h = harness(5000, [service()], [], async () => result({ reason: 'price_changed' }));
+    h.next.items = [service({ costClaudium: 1500 })];
+    h.deps.refreshStore.mockImplementationOnce(async () => {
+      h.surface.current = false;
+      h.controller.rebuild(h.next.balance, h.next.items, { mountSkinIds: h.next.owned });
+    });
+    h.controller.request(REINS);
+
+    await confirm(h);
+
+    expect(h.deps.showResult).toHaveBeenCalledWith('failure', t('hudChrome.wocStore.priceChanged'));
+    expect(h.deps.showDecision).toHaveBeenCalledTimes(1);
     expect(h.deps.setError).not.toHaveBeenCalled();
   });
 
@@ -235,8 +275,11 @@ describe('StoreMountPurchase.purchase outcomes on a stale surface', () => {
     return h;
   }
 
-  it('reports a grant as a success result rather than painting a body nobody sees', async () => {
-    const h = await stale(async () => result({ granted: true }));
+  it.each([
+    ['new grant', result({ granted: true })],
+    ['idempotent replay', result({ granted: false, reason: 'already_granted' })],
+  ])('reports a %s as success rather than painting a body nobody sees', async (_label, answer) => {
+    const h = await stale(async () => answer);
     expect(h.deps.showResult).toHaveBeenCalledWith('success', t('hudChrome.wocStore.owned'));
     expect(h.deps.refreshStore).not.toHaveBeenCalled();
     expect(h.deps.setError).not.toHaveBeenCalled();

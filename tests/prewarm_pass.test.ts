@@ -417,9 +417,14 @@ describe('runBackgroundPrewarm', () => {
     const zoneStart = source.indexOf('private async prepareZoneSky(');
     const zoneEnd = source.indexOf('\n  /** Blocking-path neighborhood prepare', zoneStart);
     const zoneSlice = source.slice(zoneStart, zoneEnd);
-    const shadowStart = source.indexOf('private async compileShadowPrograms(');
+    const shadowStart = source.indexOf('private compileShadowPrograms(');
+    expect(shadowStart).toBeGreaterThan(-1);
     const shadowEnd = source.indexOf('\n  // A tiny throwaway target', shadowStart);
-    const shadowSlice = source.slice(shadowStart, shadowEnd);
+    expect(shadowEnd).toBeGreaterThan(shadowStart);
+    // The wrapper's body lives in the extracted arm; scan both halves.
+    const shadowSlice =
+      source.slice(shadowStart, shadowEnd) +
+      readFileSync(new URL('../src/render/compile_arms.ts', import.meta.url), 'utf8');
     const bootStart = source.indexOf("id: 'programs.compile'");
     const bootEnd = source.indexOf("id: 'sky.current-zone'", bootStart);
     const bootSlice = source.slice(bootStart, bootEnd);

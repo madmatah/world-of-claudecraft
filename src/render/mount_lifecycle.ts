@@ -64,6 +64,7 @@ export interface MountViewHost {
 
 function teardown(v: MountViewState, host: MountViewHost): void {
   v.mountSeatBone = null;
+  v.mountCompilePending = false;
   // The puller is parented under the cart's root and the wheel cache points
   // into it, so both go before the visual they hang off (no-op for every
   // other mount).
@@ -83,6 +84,19 @@ function teardown(v: MountViewState, host: MountViewHost): void {
     v.mountVisual = null;
   }
   v.mountVisualKey = '';
+}
+
+/** Hold one mount root behind its compile gate without allowing an older,
+ *  non-cancellable gate callback to reveal a replacement root. */
+export function gateMountSwapOnCompile(
+  v: Pick<MountViewState, 'mountVisual' | 'mountCompilePending'>,
+  root: THREE.Object3D,
+  gate: MountViewHost['gateSwapFlagOnCompile'],
+): void {
+  v.mountCompilePending = true;
+  gate(root, () => {
+    if (v.mountVisual?.root === root) v.mountCompilePending = false;
+  });
 }
 
 /**
@@ -125,10 +139,7 @@ export function syncMountVisual(
   v.mountLamps = attachMountLamps(v.mountVisual.root, spec);
   if (v.mountLamps) host.reconcileViewLights(v);
   v.mountGlows = attachMountGlows(v.mountVisual.root, spec);
-  v.mountCompilePending = true;
-  host.gateSwapFlagOnCompile(v.mountVisual.root, () => {
-    v.mountCompilePending = false;
-  });
+  gateMountSwapOnCompile(v, v.mountVisual.root, host.gateSwapFlagOnCompile);
 }
 
 const seatMatrix = /* @__PURE__ */ new THREE.Matrix4();
@@ -242,6 +253,11 @@ export interface MountTransitionInputs {
   mountCastKey: string;
   mountCastRemaining: number;
   mountKey: string;
+  /** What the mount PRESENTS as (mountPresentationKey, src/sim/content/mount_skins.ts):
+   *  the worn skin's id or the mount key. Every sound keys off this while the
+   *  summon EDGE stays on mountKey, so a live skin swap rebuilds the visual
+   *  without replaying the call. */
+  mountLook: string;
   /** The rider is in a state that can play the call pose at all. */
   poseAllowed: boolean;
   /** This entity is being presented this frame (not shed by the LOD/budget). */
@@ -252,6 +268,8 @@ export interface MountTransitionInputs {
    *  no authored take. */
   summonCall(): void;
   engineReset(): void;
+  /** Warm the mount's own summon take on the channel start edge. */
+  preloadSummon(mountKey: string): void;
   preloadEngine(mountKey: string): void;
 }
 
@@ -264,19 +282,26 @@ export interface MountTransitionInputs {
  * Returns the next `wasMountCasting` latch for the caller to store.
  */
 export function syncMountTransitionFx(
-  v: { lastMountKey: string; wasMountCasting: boolean },
+  v: { lastMountKey: string; lastMountLook?: string; wasMountCasting: boolean },
   x: MountTransitionInputs,
 ): boolean {
   // idle -> summoning edge (mountCastKey set): play the arm-raise call pose for
   // ~the transition window. A dismount (mountCastKey === '') gets no pose; its
   // effect is the completion glow below.
-  if (x.mountCasting && !v.wasMountCasting && x.mountCastKey !== '' && x.poseAllowed) {
-    x.playCallPose(x.mountCastRemaining);
+  if (x.mountCasting && !v.wasMountCasting && x.mountCastKey !== '') {
+    // Start decoding the authored movement set and the mount's own summon
+    // take at the CAST edge, not after the mount appears. Presentation
+    // shedding may suppress the cosmetic call pose, but it must not also
+    // throw away the only useful preload window.
+    x.preloadEngine(x.mountLook);
+    x.preloadSummon(x.mountLook);
+    if (x.poseAllowed) x.playCallPose(x.mountCastRemaining);
   }
   // mountKey change = summon completed, dismount completed, or a live swap: fire
   // the shimmer at the rider. Tracked separately from mountVisualKey, which lags
   // async asset loading.
-  if (x.mountKey !== v.lastMountKey) {
+  const mountChanged = x.mountKey !== v.lastMountKey;
+  if (mountChanged) {
     v.lastMountKey = x.mountKey;
     if (x.present) x.summonGlow();
     // The mount's own call, on the same edge as the glow but only when a mount
@@ -285,7 +310,6 @@ export function syncMountTransitionFx(
     // mount's call. lastMountKey is seeded from the entity's current state at
     // view creation, so a rider already mounted when they enter interest range
     // (or at login) never reaches this edge and stays silent.
-    if (x.mountKey !== '') x.summonCall();
     // A mountKey change (dismount, a live mount swap, or a fresh summon reusing
     // this entity id) must drop any engine mount's windup/loop state; otherwise
     // the old loop node stays connected forever once logicallyMounted goes false
@@ -293,12 +317,26 @@ export function syncMountTransitionFx(
     // or dismount), and a swap would carry the old moving state into the new
     // mount, skipping its windup.
     x.engineReset();
-    // Warm the new mount's engine clips right away (not e.g. lazily on the first
-    // movement frame): a cold first ride otherwise plays the windup through
+    if (x.mountKey !== '') x.summonCall();
+    // Warm the new mount's movement clips right away too (the cast-edge call
+    // above may not have run for a live swap): a cold first ride otherwise
+    // plays the windup through
     // playAt's cold path (silently dropped past a 0.12s fetch/decode window) and
     // the loop's cold path (a fallback fade-in instead of the immediate splice),
     // reading as ~0.9s of silence then a swell. A no-op for an ordinary mount.
-    if (x.mountKey !== '') x.preloadEngine(x.mountKey);
+    if (x.mountKey !== '') x.preloadEngine(x.mountLook);
   }
+  // A worn skin can change without a new summon. Retire the previous sound
+  // set without replaying the summon call or pose.
+  if (
+    !mountChanged &&
+    x.mountKey &&
+    v.lastMountLook !== undefined &&
+    x.mountLook !== v.lastMountLook
+  ) {
+    x.engineReset();
+    x.preloadEngine(x.mountLook);
+  }
+  v.lastMountLook = x.mountLook;
   return x.mountCasting;
 }

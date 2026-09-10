@@ -238,19 +238,21 @@ describe('the castle stone slabs stay program-cache-safe', () => {
     // GEOMETRY (tileCastleUv), so no per-mass clone exists to drop a hook.
     // Pin both halves: the factories route through surfaceMat and never
     // clone, and the feature module builds its masses from castle_stone
-    // rather than minting patched surfaceMat clones of its own.
+    // rather than minting patched surfaceMat clones of its own. (The Last
+    // Keep's assembly retired with its castle and the Ashen Bulwark with
+    // its barracks; Dawnhold is the standing raw-mass consumer.)
     const stone = readFileSync(new URL('../src/render/castle_stone.ts', import.meta.url), 'utf8');
     expect(stone).toContain("import { surfaceMat } from './gfx'");
     expect(stone).toContain('return surfaceMat({');
     expect(stone).not.toContain('.clone()');
-    const castle = readFileSync(
-      new URL('../src/render/castle_features.ts', import.meta.url),
+    const dawnhold = readFileSync(
+      new URL('../src/render/dawnhold_features.ts', import.meta.url),
       'utf8',
     );
-    expect(castle).toContain("from './castle_stone'");
-    expect(castle).toContain('castleStoneMat(');
-    expect(castle).toContain('castleStoneBox(');
-    expect(castle).not.toContain('cloneMaterialWithHooks(surfaceMat(');
+    expect(dawnhold).toContain("from './castle_stone'");
+    expect(dawnhold).toContain('castleStoneMat(');
+    expect(dawnhold).toContain('castleStoneBox(');
+    expect(dawnhold).not.toContain('cloneMaterialWithHooks(surfaceMat(');
   });
 });
 

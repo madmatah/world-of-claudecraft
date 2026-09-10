@@ -10,6 +10,23 @@ import {
 } from '../scripts/lib/ci_shard_weight_harvest_guard.mjs';
 import { stripComments } from './helpers/strip_comments';
 
+const FULL_HARVEST_ENTRY = 'const runId = process.argv[2];';
+
+function expectFullHarvestOrdering(harvest: string): void {
+  // Local carry and prune modes write independently before this branch.
+  const flowAt = harvest.indexOf(FULL_HARVEST_ENTRY);
+  expect(flowAt).toBeGreaterThan(-1);
+  const flow = harvest.slice(flowAt);
+  const verdictAt = flow.indexOf('shardHarvestVerdict(job.name, Object.keys(own).length)');
+  const mergeAt = flow.indexOf('weights[file] = Math.max(weights[file] ?? 0, ms);');
+  const writeAt = flow.indexOf('writeFileSync(target,');
+  expect(verdictAt).toBeGreaterThan(-1);
+  expect(mergeAt).toBeGreaterThan(verdictAt);
+  expect(writeAt).toBeGreaterThan(mergeAt);
+  // The refusal exits before any write in the full harvest branch.
+  expect(flow.slice(verdictAt, mergeAt)).toContain('process.exit(1)');
+}
+
 describe('shardHarvestVerdict', () => {
   it('refuses a PR tests shard under the floor, accepts one at or above it', () => {
     expect(shardHarvestVerdict('PR tests (3)', 0).ok).toBe(false);
@@ -45,16 +62,19 @@ describe('shardHarvestVerdict', () => {
       readFileSync(new URL('../scripts/ci_shard_weights_harvest.mjs', import.meta.url), 'utf8'),
     );
     expect(harvest).toContain("from './lib/ci_shard_weight_harvest_guard.mjs'");
-    const verdictAt = harvest.indexOf('shardHarvestVerdict(job.name, Object.keys(own).length)');
-    const mergeAt = harvest.indexOf('weights[file] = Math.max(weights[file] ?? 0, ms);');
-    const writeAt = harvest.indexOf('writeFileSync(target,');
-    expect(verdictAt).toBeGreaterThan(-1);
-    expect(mergeAt).toBeGreaterThan(verdictAt);
-    expect(writeAt).toBeGreaterThan(mergeAt);
-    // The refusal exits before any write.
-    const refuse = harvest.slice(verdictAt, mergeAt);
-    expect(refuse).toContain('process.exit(1)');
+    expectFullHarvestOrdering(harvest);
     // The raw job-log fallback exists for the empty `gh run view --log` case.
     expect(harvest).toContain("['api', `repos/{owner}/{repo}/actions/jobs/${job.id}/logs`]");
+  });
+
+  it('would still fail the ordering check on a flow that writes before its own refusal', () => {
+    const harvest = stripComments(
+      readFileSync(new URL('../scripts/ci_shard_weights_harvest.mjs', import.meta.url), 'utf8'),
+    );
+    const brokenFlow = harvest.replace(
+      FULL_HARVEST_ENTRY,
+      `${FULL_HARVEST_ENTRY}\nwriteFileSync(target, 'premature');`,
+    );
+    expect(() => expectFullHarvestOrdering(brokenFlow)).toThrow();
   });
 });
