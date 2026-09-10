@@ -64,12 +64,30 @@ export interface ArmFigures {
   workerLostMs: number;
   /** The largest relative spread between passes over the figures above. */
   spread: number;
+  /** The spread PER metric, which is what the margins are built from: one
+   *  noisy metric on one arm must not widen the margin of every other. */
+  spreads: MetricSpreads;
+  /** The display's frame interval, the quantum below which a difference in a
+   *  frame-time metric is nothing a player can see. */
+  refreshMs: number;
   /** Sections with a single valid pass. */
   singlePassSections: string[];
   /** Sections with no valid pass. */
   neutralSections: string[];
   capped: boolean;
 }
+
+/** Relative spread per comparable metric. */
+export type MetricSpreads = Record<ComparedMetric, number>;
+
+/** The metrics a candidate is compared on, hitch first. */
+export type ComparedMetric =
+  | 'worstFrameUnderLinksMs'
+  | 'lostUnderLinksMs'
+  | 'linkProfileMs'
+  | 'uploadMaxFrameMs'
+  | 'frameP95Ms'
+  | 'pacingOnCadence';
 
 export type Disqualification =
   | 'did-not-bind'
@@ -97,7 +115,11 @@ export interface DecisionFloors {
 
 /** PROVISIONAL, until the calibration runs: on a comparison of medians a
  *  15 percent hitch gap and a 10 percent frame or pacing gap are outside
- *  what two passes seconds apart disagree by on the Intel iGPU. */
+ *  what two passes seconds apart disagree by on the Intel iGPU.
+ *
+ *  These are the FLOOR under each metric's own margin, never a shared one: the
+ *  margin in force for a metric is the larger of its floor and twice the worst
+ *  spread that metric showed on any surviving arm (marginFor). */
 export const PROVISIONAL_FLOORS: DecisionFloors = Object.freeze({
   hitch: 0.15,
   frame: 0.1,
@@ -215,6 +237,16 @@ export function armFigures(results: readonly ProbeResult[], floors: DecisionFloo
   // What ships: a warmed program costs its hit plus its share of the frames
   // the warm lost; an unwarmed one costs the cold link.
   const linkProfileMs = worker ? hitMs + workerLostMs / WORKER_SECTION_PROGRAMS : coldMs;
+  // The link profile is built from cold and hit, so its own spread is the
+  // worse of theirs; pacing is a ratio, and its spread is read as such.
+  const spreads: MetricSpreads = {
+    worstFrameUnderLinksMs: spreadOf(worst),
+    lostUnderLinksMs: spreadOf(lost),
+    linkProfileMs: Math.max(spreadOf(cold), spreadOf(hit)),
+    uploadMaxFrameMs: spreadOf(upload),
+    frameP95Ms: spreadOf(frame),
+    pacingOnCadence: spreadOf(pacing),
+  };
   return {
     worstFrameUnderLinksMs: mean(worst),
     lostUnderLinksMs: mean(lost),
@@ -226,18 +258,24 @@ export function armFigures(results: readonly ProbeResult[], floors: DecisionFloo
     pacingOnCadence: mean(pacing),
     workerWorthIt: worker,
     workerLostMs,
-    spread: Math.max(
-      spreadOf(worst),
-      spreadOf(lost),
-      spreadOf(cold),
-      spreadOf(hit),
-      spreadOf(upload),
-      spreadOf(frame),
-    ),
+    // Kept for the report and the support line; the margins read `spreads`.
+    spread: Math.max(...Object.values(spreads)),
+    spreads,
+    refreshMs: refreshOf(results),
     singlePassSections: singlePass,
     neutralSections: neutral,
     capped,
   };
+}
+
+/** The arm's display interval: the largest its passes reported, so the floor
+ *  it feeds is never smaller than a frame on the slowest of them. Zero when no
+ *  pass reported one, which turns the absolute floor off rather than guessing. */
+function refreshOf(results: readonly ProbeResult[]): number {
+  const seen = results
+    .map((r) => r.refreshMs)
+    .filter((ms): ms is number => typeof ms === 'number' && Number.isFinite(ms) && ms > 0);
+  return seen.length === 0 ? 0 : Math.max(...seen);
 }
 
 function disqualificationOf(
@@ -272,12 +310,58 @@ function worseBeyond(candidate: number, reference: number, tolerance: number): b
   return (candidate - reference) / reference > tolerance;
 }
 
-const HITCH_METRICS: Array<keyof ArmFigures> = [
+/**
+ * A gap no player could see, whatever the relative arithmetic says. This holds
+ * for a WORST-FRAME statistic and nothing else (FRAME_FLOOR_METRICS): those sit
+ * on a floor of one display interval, so a worst frame of 16.9 ms is not a
+ * hitch at all and 20.4 ms is 3.5 ms of one, and reading that pair as a 19
+ * percent difference takes noise for signal. It must NOT be extended to a
+ * running frame time: a p95 of 25 against 33 ms is eight milliseconds too, and
+ * there it is the difference between 40 and 30 frames a second. `floorMs` of
+ * zero (no arm reported a refresh) turns the rule off rather than inventing a
+ * quantum.
+ */
+function withinOneFrame(a: number, b: number, floorMs: number): boolean {
+  if (floorMs <= 0) return false;
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(a - b) < floorMs;
+}
+
+/** The metrics whose floor is one display frame: both are a maximum over the
+ *  frames of a pass, so their quiet value IS the refresh interval. */
+const FRAME_FLOOR_METRICS = new Set<ComparedMetric>(['worstFrameUnderLinksMs', 'uploadMaxFrameMs']);
+
+const HITCH_METRICS: ComparedMetric[] = [
   'worstFrameUnderLinksMs',
   'lostUnderLinksMs',
   'linkProfileMs',
   'uploadMaxFrameMs',
 ];
+
+/**
+ * One metric's margin: its own noise, never the run's worst. Built from the
+ * largest spread THAT metric showed on any surviving arm, doubled, with the
+ * fixed floor underneath. Read from the run of 2026-09-10: the upload figure
+ * moved 37.7 to 17.4 ms between two passes of one arm (a single hiccup on a
+ * max-of-frames statistic, 74 percent in relative terms), and under one shared
+ * margin that widened EVERY comparison to about 147 percent, so nothing could
+ * ever have beaten the reference. Per metric, a noisy upload only makes the
+ * upload comparison unreadable, which is the honest consequence.
+ */
+function marginFor(
+  metric: ComparedMetric,
+  survivors: readonly ArmVerdict[],
+  floor: number,
+): number {
+  const worst = Math.max(0, ...survivors.map((v) => v.figures?.spreads?.[metric] ?? 0));
+  return Math.max(floor, 2 * worst);
+}
+
+/** The frame quantum the absolute floor uses: the slowest display any
+ *  surviving arm reported. */
+function frameFloorMs(survivors: readonly ArmVerdict[]): number {
+  return Math.max(0, ...survivors.map((v) => v.figures?.refreshMs ?? 0));
+}
 
 export interface DecideOptions {
   floors?: DecisionFloors | null;
@@ -322,10 +406,25 @@ export function decide(arms: readonly ArmInput[], options: DecideOptions = { rou
     }
   }
   const survivors = verdicts.filter((v) => v.disqualified === null && v.figures !== null);
-  const largestSpread = Math.max(0, ...survivors.map((v) => v.figures?.spread ?? 0));
-  const margin = Math.max(floors ? floors.hitch : RELATIVE_MINIMUM, 2 * largestSpread);
-  const frameTolerance = Math.max(floors ? floors.frame : RELATIVE_MINIMUM, 2 * largestSpread);
-  const pacingTolerance = Math.max(floors ? floors.pacing : RELATIVE_MINIMUM, 2 * largestSpread);
+  // One margin PER metric, from that metric's own noise (see marginFor), plus a
+  // floor of one display frame under every frame-time comparison.
+  const hitchFloor = floors ? floors.hitch : RELATIVE_MINIMUM;
+  const hitchMargins = new Map<ComparedMetric, number>(
+    HITCH_METRICS.map((metric) => [metric, marginFor(metric, survivors, hitchFloor)]),
+  );
+  const frameTolerance = marginFor(
+    'frameP95Ms',
+    survivors,
+    floors ? floors.frame : RELATIVE_MINIMUM,
+  );
+  const pacingTolerance = marginFor(
+    'pacingOnCadence',
+    survivors,
+    floors ? floors.pacing : RELATIVE_MINIMUM,
+  );
+  const floorMs = frameFloorMs(survivors);
+  // The reported margin stays one number: the widest hitch margin in force.
+  const margin = Math.max(...hitchMargins.values());
 
   const neutral = survivors.find((v) => v.figures?.neutralSections.length);
   if (neutral) {
@@ -365,11 +464,17 @@ export function decide(arms: readonly ArmInput[], options: DecideOptions = { rou
   // the margin on any hitch metric AND better by it on at least one, and not
   // worse beyond tolerance on the frame and on pacing (higher is better there).
   const compare = (c: ArmFigures, against: ArmFigures) => {
-    const anyWorse = HITCH_METRICS.some((m) =>
-      worseBeyond(c[m] as number, against[m] as number, margin),
+    const separable = (m: ComparedMetric) =>
+      !FRAME_FLOOR_METRICS.has(m) || !withinOneFrame(c[m] as number, against[m] as number, floorMs);
+    const anyWorse = HITCH_METRICS.some(
+      (m) =>
+        separable(m) &&
+        worseBeyond(c[m] as number, against[m] as number, hitchMargins.get(m) ?? margin),
     );
-    const anyBetter = HITCH_METRICS.some((m) =>
-      betterBy(c[m] as number, against[m] as number, margin),
+    const anyBetter = HITCH_METRICS.some(
+      (m) =>
+        separable(m) &&
+        betterBy(c[m] as number, against[m] as number, hitchMargins.get(m) ?? margin),
     );
     const frameOk = !worseBeyond(c.frameP95Ms, against.frameP95Ms, frameTolerance);
     const pacingOk = !worseBeyond(

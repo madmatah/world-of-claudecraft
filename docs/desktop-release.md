@@ -368,9 +368,13 @@ each on its own profile under `<userData>/backend-probe/<run>/`, the arm's Chrom
 switches, the probe page `backend-probe.html` from `src/probe/`), reads each child's
 result file and exit code (the taxonomy in `electron/backend_probe_plan.cjs`), has the
 page decide (`src/probe/decision_core.ts`: D3D11 is the reference, another backend must
-be better on the hitch metrics by a margin and not worse on the frame and pacing ones; a
-second round runs on the canonical triggers, a dead Vulkan child adds the plain-Vulkan
-arm), and writes the verdict into `desktop-prefs.json` (`backendProbeVerdict`,
+be better on the hitch metrics by a margin and not worse on the frame and pacing ones; the
+margin is PER METRIC, the larger of that metric's fixed floor and twice the worst spread IT
+showed on any surviving arm, so one noisy figure on one arm cannot widen every comparison;
+a worst-frame statistic carries a floor of one display interval under that, because its
+quiet value IS the refresh and a gap smaller than a frame is not a gap, while a running
+frame time carries no such floor; a second round runs on the canonical triggers, a dead
+Vulkan child adds the plain-Vulkan arm), and writes the verdict into `desktop-prefs.json` (`backendProbeVerdict`,
 `electron/backend_probe_verdict.cjs`). The verdict window offers Play (the game on the
 verdict), Re-run, and, for a player with an explicit backend setting, "switch to Auto".
 

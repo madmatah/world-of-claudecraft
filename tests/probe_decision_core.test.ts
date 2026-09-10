@@ -429,15 +429,23 @@ describe('decide', () => {
     expect(decide([arm('d3d11', { software: true })]).inconclusive).toBe('no surviving backend');
   });
 
-  it('widens the margin to twice the largest spread and lists single passes as triggers', () => {
+  it('widens the margin of the noisy metric ALONE and lists single passes as triggers', () => {
     const noisy: ArmInput = {
       ...arm('d3d11', {}),
       results: [result({ cold: 100 }, { cold: 160 })],
     };
+    // A cold link that moved 100 to 160 ms between passes widens the LINK
+    // PROFILE margin to about 0.92, and nothing else: the candidate below is
+    // twenty percent better on the worst frame, a metric neither arm moved on,
+    // so it is judged against that metric's own margin and wins. Under one
+    // shared margin the noise decided instead, which is the defect the run of
+    // 2026-09-10 showed in the wild.
     const decision = decide([noisy, arm('vulkan-parallel-compile', { worst: 80 })]);
     expect(decision.margin).toBeCloseTo(2 * (60 / 130), 5);
-    // Twenty percent better on one metric is inside a margin near 0.92.
-    expect(decision.backend).toBe('d3d11');
+    expect(decision.backend).toBe('vulkan-parallel-compile');
+    // The same noise still swallows a claim made on the link profile itself.
+    const onProfile = decide([noisy, arm('vulkan-parallel-compile', { cold: 104 })]);
+    expect(onProfile.backend).toBe('d3d11');
     const single = decide([arm('d3d11', { validity: { links: [true, false] } })]);
     expect(single.secondRoundTriggers).toEqual(['d3d11 single pass: links']);
   });
@@ -446,5 +454,81 @@ describe('decide', () => {
     const decision = decide([arm('d3d11', {}), arm('vulkan-parallel-compile', {})], { round: 2 });
     expect(decision.secondRoundTriggers).toEqual([]);
     expect(decision.backend).toBe('d3d11');
+  });
+});
+
+// The run of 2026-09-10 on an RTX 3060, which is what these two rules come from.
+describe('decide: the margin is per metric, over a floor of one frame', () => {
+  const twoPasses = (rung: ArmRung, first: Figures, second: Figures): ArmInput => ({
+    rung,
+    results: [result(first, second)],
+    roundsLaunched: 1,
+    roundsDied: 0,
+    adapter: 'gpu-1',
+  });
+
+  it('lets a noisy metric on one arm ruin only its own comparison', () => {
+    // OpenGL's upload figure moved 37.7 to 17.4 ms between two passes: one
+    // hiccup on a max-of-frames statistic, 74 percent in relative terms. Under
+    // one shared margin that widened EVERY comparison to about 147 percent and
+    // nothing could beat the reference; the candidate below beats it by a clear
+    // margin on the hitch metrics and must win.
+    const decision = decide(
+      [
+        twoPasses('d3d11', { worst: 500, lost: 1100 }, { worst: 500, lost: 1100 }),
+        twoPasses('vulkan-parallel-compile', { worst: 120, lost: 200 }, { worst: 120, lost: 200 }),
+        twoPasses('opengl', { upload: 37.7 }, { upload: 17.4 }),
+      ],
+      { round: 1, floors: PROVISIONAL_FLOORS },
+    );
+    expect(decision.backend).toBe('vulkan-parallel-compile');
+  });
+
+  it('still refuses a candidate the noisy metric itself cannot separate', () => {
+    // The upload comparison is unreadable on this run, which is the honest
+    // consequence: a candidate whose ONLY claim is a better upload figure
+    // does not win.
+    const decision = decide(
+      [
+        twoPasses('d3d11', { upload: 40 }, { upload: 40 }),
+        twoPasses('vulkan-parallel-compile', { upload: 30 }, { upload: 30 }),
+        twoPasses('opengl', { upload: 37.7 }, { upload: 17.4 }),
+      ],
+      { round: 1, floors: PROVISIONAL_FLOORS },
+    );
+    expect(decision.backend).toBe('d3d11');
+  });
+
+  it('reads a gap under one display frame as no gap at all', () => {
+    // The measured pair: a worst frame of 16.9 ms is no hitch, and 20.4 ms is
+    // 3.5 ms of one. Calling that a 19 percent difference reads noise as
+    // signal, and it is the whole claim this candidate would have.
+    const decision = decide(
+      [
+        twoPasses('d3d11', { worst: 20.4, lost: 0 }, { worst: 20.4, lost: 0 }),
+        twoPasses('vulkan-parallel-compile', { worst: 16.9, lost: 0 }, { worst: 16.9, lost: 0 }),
+      ],
+      { round: 1, floors: PROVISIONAL_FLOORS },
+    );
+    expect(decision.backend).toBe('d3d11');
+  });
+
+  it('keeps a gap of more than a frame, so the floor does not blind the rule', () => {
+    const decision = decide(
+      [
+        twoPasses('d3d11', { worst: 200, lost: 400 }, { worst: 200, lost: 400 }),
+        twoPasses('vulkan-parallel-compile', { worst: 40, lost: 0 }, { worst: 40, lost: 0 }),
+      ],
+      { round: 1, floors: PROVISIONAL_FLOORS },
+    );
+    expect(decision.backend).toBe('vulkan-parallel-compile');
+  });
+
+  it('reports the spread per metric beside the largest, which the report keeps', () => {
+    const figures = armFigures([result({ upload: 37.7 }, { upload: 17.4 })], PROVISIONAL_FLOORS);
+    expect(figures.spreads.uploadMaxFrameMs).toBeCloseTo(20.3 / 27.55, 3);
+    expect(figures.spreads.lostUnderLinksMs).toBe(0);
+    expect(figures.spread).toBe(figures.spreads.uploadMaxFrameMs);
+    expect(figures.refreshMs).toBe(16.7);
   });
 });
