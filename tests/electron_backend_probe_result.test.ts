@@ -24,7 +24,13 @@ describe('acceptProbeResult', () => {
   });
 
   it('refuses another version, run, round, an unknown ended state, or an oversized result', () => {
-    expect(acceptProbeResult(result({ probeVersion: 2 }), { run: 'r1', round: 1 })).toBeNull();
+    // Any version but this build's, whichever number that is.
+    expect(
+      acceptProbeResult(result({ probeVersion: PROBE_VERSION + 1 }), { run: 'r1', round: 1 }),
+    ).toBeNull();
+    expect(
+      acceptProbeResult(result({ probeVersion: PROBE_VERSION - 1 }), { run: 'r1', round: 1 }),
+    ).toBeNull();
     expect(acceptProbeResult(result({ run: 'r2' }), { run: 'r1', round: 1 })).toBeNull();
     expect(acceptProbeResult(result({ round: 2 }), { run: 'r1', round: 1 })).toBeNull();
     expect(acceptProbeResult(result({ ended: 'weird' }), { run: 'r1', round: 1 })).toBeNull();

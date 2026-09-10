@@ -8,7 +8,11 @@
 // reads); this guard pins the envelope: version, run, round, arm, the ended
 // state, and the size. Pure; tests/electron_backend_probe_result.test.ts.
 
-const PROBE_VERSION = 1;
+// 2: the decision compares the upload section's COLD pass rather than the mean
+// of a cold and a warm one, and the margin sets aside a spread too large to be
+// two readings of one quantity. A verdict recorded under 1 measured a different
+// thing, so it is re-probed rather than trusted.
+const PROBE_VERSION = 2;
 const MAX_RESULT_BYTES = 2 * 1024 * 1024;
 const ENDED = ['completed', 'no-webgl2', 'software', 'no-corpus', 'aborted', 'busy', 'capped'];
 

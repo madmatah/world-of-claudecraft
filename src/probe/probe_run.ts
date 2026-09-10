@@ -31,7 +31,9 @@ import { runUploadPass, type UploadPassResult } from './upload_section';
 import { SETTLE_MAX_MS, type ViewportSize, viewportSettled } from './viewport_settle_core';
 import { runWorkerPass, type WorkerPassResult } from './worker_section';
 
-export const PROBE_VERSION = 1;
+/** Bumped to 2 with the upload cold/warm split and the exchangeability gate on
+ *  the decision margin: a verdict recorded under 1 measured a different thing. */
+export const PROBE_VERSION = 2;
 
 export interface ProbeIdentity {
   renderer: string;

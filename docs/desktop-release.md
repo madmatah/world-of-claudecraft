@@ -370,10 +370,15 @@ result file and exit code (the taxonomy in `electron/backend_probe_plan.cjs`), h
 page decide (`src/probe/decision_core.ts`: D3D11 is the reference, another backend must
 be better on the hitch metrics by a margin and not worse on the frame and pacing ones; the
 margin is PER METRIC, the larger of that metric's fixed floor and twice the worst spread IT
-showed on any surviving arm, so one noisy figure on one arm cannot widen every comparison;
-a worst-frame statistic carries a floor of one display interval under that, because its
-quiet value IS the refresh and a gap smaller than a frame is not a gap, while a running
-frame time carries no such floor; a second round runs on the canonical triggers, a dead
+showed on any surviving arm, so one noisy figure on one arm cannot widen every comparison,
+and a spread past half its own mean is set aside rather than doubled, because at that point
+the two passes are two OUTCOMES and not two readings (a machine that barely hitches lands
+one in a pass and not the next, which is a coin flip, not noise); a frame-time hitch metric
+carries a floor of one display interval under that, because its quiet value IS the refresh
+and a gap smaller than a frame is not a gap, while a running frame time carries no such
+floor; the upload section reports its cold pass and its warm one separately and the decision
+compares the COLD one, a warm-up cost repeatable to two percent across runs being what a
+fresh game process pays rather than something to average away; a second round runs on the canonical triggers, a dead
 Vulkan child adds the plain-Vulkan arm), and writes the verdict into `desktop-prefs.json` (`backendProbeVerdict`,
 `electron/backend_probe_verdict.cjs`). The verdict window offers Play (the game on the
 verdict), Re-run, and, for a player with an explicit backend setting, "switch to Auto".

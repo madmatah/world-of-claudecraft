@@ -56,7 +56,12 @@ export interface ArmFigures {
   coldLinkMs: number;
   hitLinkMs: number;
   linkProfileMs: number;
-  uploadMaxFrameMs: number;
+  /** The FIRST valid pass of the upload section: the cost a fresh process
+   *  pays, which is what the probe exists to rank. */
+  uploadColdMaxFrameMs: number;
+  /** The pass after it, reported and never compared: the same work once the
+   *  driver is warm. */
+  uploadWarmMaxFrameMs: number;
   frameP95Ms: number;
   /** Higher is better. */
   pacingOnCadence: number;
@@ -85,7 +90,7 @@ export type ComparedMetric =
   | 'worstFrameUnderLinksMs'
   | 'lostUnderLinksMs'
   | 'linkProfileMs'
-  | 'uploadMaxFrameMs'
+  | 'uploadColdMaxFrameMs'
   | 'frameP95Ms'
   | 'pacingOnCadence';
 
@@ -243,7 +248,10 @@ export function armFigures(results: readonly ProbeResult[], floors: DecisionFloo
     worstFrameUnderLinksMs: spreadOf(worst),
     lostUnderLinksMs: spreadOf(lost),
     linkProfileMs: Math.max(spreadOf(cold), spreadOf(hit)),
-    uploadMaxFrameMs: spreadOf(upload),
+    // Zero by construction, never measured: the upload passes are NOT
+    // exchangeable (the first is cold, the second warm), so their difference
+    // is a warm-up cost and reading it as noise is what the split fixes.
+    uploadColdMaxFrameMs: 0,
     frameP95Ms: spreadOf(frame),
     pacingOnCadence: spreadOf(pacing),
   };
@@ -253,7 +261,8 @@ export function armFigures(results: readonly ProbeResult[], floors: DecisionFloo
     coldLinkMs: coldMs,
     hitLinkMs: hitMs,
     linkProfileMs,
-    uploadMaxFrameMs: mean(upload),
+    uploadColdMaxFrameMs: upload[0] ?? Number.NaN,
+    uploadWarmMaxFrameMs: upload[1] ?? Number.NaN,
     frameP95Ms: mean(frame),
     pacingOnCadence: mean(pacing),
     workerWorthIt: worker,
@@ -329,33 +338,72 @@ function withinOneFrame(a: number, b: number, floorMs: number): boolean {
 
 /** The metrics whose floor is one display frame: both are a maximum over the
  *  frames of a pass, so their quiet value IS the refresh interval. */
-const FRAME_FLOOR_METRICS = new Set<ComparedMetric>(['worstFrameUnderLinksMs', 'uploadMaxFrameMs']);
+const FRAME_FLOOR_METRICS = new Set<ComparedMetric>([
+  'worstFrameUnderLinksMs',
+  'lostUnderLinksMs',
+  'uploadColdMaxFrameMs',
+]);
 
 const HITCH_METRICS: ComparedMetric[] = [
   'worstFrameUnderLinksMs',
   'lostUnderLinksMs',
   'linkProfileMs',
-  'uploadMaxFrameMs',
+  'uploadColdMaxFrameMs',
 ];
 
 /**
- * One metric's margin: its own noise, never the run's worst. Built from the
- * largest spread THAT metric showed on any surviving arm, doubled, with the
- * fixed floor underneath. Read from the run of 2026-09-10: the upload figure
- * moved 37.7 to 17.4 ms between two passes of one arm (a single hiccup on a
- * max-of-frames statistic, 74 percent in relative terms), and under one shared
- * margin that widened EVERY comparison to about 147 percent, so nothing could
- * ever have beaten the reference. Per metric, a noisy upload only makes the
- * upload comparison unreadable, which is the honest consequence.
+ * One metric's margin: its own noise, never the run's worst, and only from the
+ * arms where that spread IS noise.
+ *
+ * The whole `2 x spread` term rests on one assumption, that a section's two
+ * passes are exchangeable, so their difference is measurement noise. Two things
+ * break it, and both were measured on an RTX 3060 across three runs.
+ *
+ * By chance: a metric whose value sits at its floor. D3D11 barely hitches at
+ * all, so whether a hitch lands in a given pass is close to a coin flip, and
+ * its lost-frame figure went 0 ms then 8.9 ms, a spread of 200 percent that
+ * measures the coin, not the instrument. On the arms where the same metric is
+ * large (350 ms lost on Vulkan) it is stable to 2 percent, which IS noise and
+ * worth keeping. So the term pools only over the arms whose figure clears the
+ * absolute floor; when none do, the fixed relative floor stands alone.
+ *
+ * By construction: the upload section, whose first pass is cold and second
+ * warm. That is handled where the figures are built, by comparing the cold pass
+ * alone rather than averaging two passes that measure different things.
  */
 function marginFor(
   metric: ComparedMetric,
   survivors: readonly ArmVerdict[],
   floor: number,
 ): number {
-  const worst = Math.max(0, ...survivors.map((v) => v.figures?.spreads?.[metric] ?? 0));
+  const worst = Math.max(
+    0,
+    ...survivors.map((v) => v.figures?.spreads?.[metric] ?? 0).filter(readsAsNoise),
+  );
   return Math.max(floor, 2 * worst);
 }
+
+/**
+ * Whether a two-pass spread can be read as measurement noise at all.
+ *
+ * At EXCHANGEABLE_SPREAD_MAX the two passes differ by half their own mean, and
+ * past it the disagreement is the size of the thing being measured: they are
+ * not two readings of one quantity, they are two different outcomes. Measured:
+ * D3D11 barely hitches, so whether a hitch lands in a pass is close to a coin
+ * flip, and its lost-frame figure went 0 ms then 8.9 ms (a spread of 200
+ * percent) while its worst frame went 16.9 to 34.5 ms (68 percent). Doubling
+ * either would have set a margin larger than the value it came from. On the
+ * arms where the same metrics are large the spreads are 2 to 6 percent, which
+ * is real noise on a real value, and the margin still wants it: doubled, those
+ * come to 15 to 60 ms against an absolute floor of one 16.7 ms frame, so the
+ * floor alone would be the weaker guard.
+ */
+function readsAsNoise(spread: number): boolean {
+  return Number.isFinite(spread) && spread < EXCHANGEABLE_SPREAD_MAX;
+}
+
+/** Past this, a spread is two outcomes rather than two readings. */
+const EXCHANGEABLE_SPREAD_MAX = 0.5;
 
 /** The frame quantum the absolute floor uses: the slowest display any
  *  surviving arm reported. */
@@ -409,6 +457,7 @@ export function decide(arms: readonly ArmInput[], options: DecideOptions = { rou
   // One margin PER metric, from that metric's own noise (see marginFor), plus a
   // floor of one display frame under every frame-time comparison.
   const hitchFloor = floors ? floors.hitch : RELATIVE_MINIMUM;
+  const floorMs = frameFloorMs(survivors);
   const hitchMargins = new Map<ComparedMetric, number>(
     HITCH_METRICS.map((metric) => [metric, marginFor(metric, survivors, hitchFloor)]),
   );
@@ -422,7 +471,6 @@ export function decide(arms: readonly ArmInput[], options: DecideOptions = { rou
     survivors,
     floors ? floors.pacing : RELATIVE_MINIMUM,
   );
-  const floorMs = frameFloorMs(survivors);
   // The reported margin stays one number: the widest hitch margin in force.
   const margin = Math.max(...hitchMargins.values());
 

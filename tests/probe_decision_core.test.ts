@@ -524,11 +524,84 @@ describe('decide: the margin is per metric, over a floor of one frame', () => {
     expect(decision.backend).toBe('vulkan-parallel-compile');
   });
 
-  it('reports the spread per metric beside the largest, which the report keeps', () => {
+  it('reads the upload passes apart rather than averaging a cold one with a warm one', () => {
+    // Measured three runs out of three on one machine: the opengl canvas path
+    // costs 38 ms on the first pass and 17 on the second. That is a warm-up
+    // cost, not noise, and the first pass is the one a fresh game process pays.
     const figures = armFigures([result({ upload: 37.7 }, { upload: 17.4 })], PROVISIONAL_FLOORS);
-    expect(figures.spreads.uploadMaxFrameMs).toBeCloseTo(20.3 / 27.55, 3);
+    expect(figures.uploadColdMaxFrameMs).toBe(37.7);
+    expect(figures.uploadWarmMaxFrameMs).toBe(17.4);
+    // And the difference never reaches the margin as if it were noise.
+    expect(figures.spreads.uploadColdMaxFrameMs).toBe(0);
     expect(figures.spreads.lostUnderLinksMs).toBe(0);
-    expect(figures.spread).toBe(figures.spreads.uploadMaxFrameMs);
     expect(figures.refreshMs).toBe(16.7);
+  });
+
+  it('keeps the noise term of an arm whose figure is large, and drops the coin flip', () => {
+    // D3D11 barely hitches, so whether one lands in a pass is a coin flip: 0 ms
+    // then 17.8 ms, a spread of 200 percent that is the coin, not the
+    // instrument. Vulkan loses 350 ms every time, stable to 2 percent, which is
+    // noise worth keeping. The margin must come from the second, not the first.
+    const decision = decide(
+      [
+        {
+          rung: 'd3d11',
+          results: [result({ worst: 34.5, lost: 17.8 }, { worst: 16.9, lost: 0 })],
+          roundsLaunched: 1,
+          roundsDied: 0,
+          adapter: 'gpu-1',
+        },
+        {
+          rung: 'vulkan-parallel-compile',
+          results: [result({ worst: 193, lost: 348 }, { worst: 196, lost: 353 })],
+          roundsLaunched: 1,
+          roundsDied: 0,
+          adapter: 'gpu-1',
+        },
+      ],
+      { round: 1, floors: PROVISIONAL_FLOORS },
+    );
+    // The candidate is far WORSE here, and the coin-flip spread must not be
+    // allowed to excuse it by inflating the margin to 400 percent.
+    expect(decision.backend).toBe('d3d11');
+    expect(decision.arms.find((a) => a.rung === 'd3d11')?.figures?.spreads.lostUnderLinksMs).toBe(
+      2,
+    );
+    // The margin comes from Vulkan's 2 percent, not from the coin flip.
+    expect(decision.margin).toBeLessThan(0.2);
+  });
+
+  it('reads a spread past half the value as two outcomes, not two readings', () => {
+    // The boundary itself: at half the mean the two passes disagree by the size
+    // of the thing measured, and doubling that would set a margin larger than
+    // the value it came from.
+    const noise = decide(
+      [
+        {
+          rung: 'd3d11',
+          // 100 and 160: a spread of 0.46, still read as noise.
+          results: [result({ cold: 100 }, { cold: 160 })],
+          roundsLaunched: 1,
+          roundsDied: 0,
+          adapter: 'gpu-1',
+        },
+      ],
+      { round: 1, floors: PROVISIONAL_FLOORS },
+    );
+    expect(noise.margin).toBeCloseTo(2 * (60 / 130), 5);
+    const outcomes = decide(
+      [
+        {
+          rung: 'd3d11',
+          // 40 and 160: a spread of 1.2, set aside.
+          results: [result({ cold: 40 }, { cold: 160 })],
+          roundsLaunched: 1,
+          roundsDied: 0,
+          adapter: 'gpu-1',
+        },
+      ],
+      { round: 1, floors: PROVISIONAL_FLOORS },
+    );
+    expect(outcomes.margin).toBe(PROVISIONAL_FLOORS.hitch);
   });
 });
