@@ -16487,29 +16487,37 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'probe.backend.software': '소프트웨어 렌더링',
   'probe.backend.unknown': '알 수 없는 백엔드',
   'probe.consent.heading': '이 PC에 가장 알맞은 그래픽 백엔드 찾기',
-  'probe.consent.body': '테스트는 창을 몇 개 열었다 닫으며 약 {minutes}분이 걸립니다. 게임은 닫아 두고, 노트북은 전원에 연결하고, 실행 중에는 컴퓨터를 건드리지 마세요.',
+  'probe.consent.body':
+    '테스트는 창을 몇 개 열었다 닫으며 약 {minutes}분이 걸립니다. 게임은 닫아 두고, 노트북은 전원에 연결하고, 실행 중에는 컴퓨터를 건드리지 마세요.',
   'probe.consent.start': '테스트 시작',
   'probe.consent.cancel': '나중에',
   'probe.progress.waiting': '테스트를 준비하는 중',
   'probe.progress.arm': '{backend} 테스트 중, {total}단계 중 {step}단계',
-  'probe.progress.busy': '컴퓨터가 다른 작업으로 바쁩니다. 다른 프로그램을 닫고 테스트를 다시 실행하세요.',
+  'probe.progress.busy':
+    '컴퓨터가 다른 작업으로 바쁩니다. 다른 프로그램을 닫고 테스트를 다시 실행하세요.',
   'probe.verdict.heading': '이 PC에 권장: {backend}',
   'probe.verdict.workerOn': '셰이더 예열 워커: 켬',
   'probe.verdict.workerOff': '셰이더 예열 워커: 끔',
-  'probe.verdict.inconclusive': '테스트가 결정을 내리지 못했습니다. 다른 프로그램을 모두 닫고 다시 실행하세요.',
-  'probe.verdict.explicitSetting': '그래픽 백엔드가 수동으로 설정되어 있어, 그 설정을 자동으로 바꾸기 전까지 이 결과는 적용되지 않습니다.',
+  'probe.verdict.inconclusive':
+    '테스트가 결정을 내리지 못했습니다. 다른 프로그램을 모두 닫고 다시 실행하세요.',
+  'probe.verdict.explicitSetting':
+    '그래픽 백엔드가 수동으로 설정되어 있어, 그 설정을 자동으로 바꾸기 전까지 이 결과는 적용되지 않습니다.',
   'probe.verdict.play': '플레이',
   'probe.verdict.rerun': '테스트 다시 실행',
   'probe.verdict.switchToAuto': '백엔드 설정을 자동으로 전환',
   'probe.status.noWebgl2': '이 백엔드는 이 컴퓨터에서 시작하지 못했습니다.',
-  'probe.status.software': '이 백엔드는 여기서 소프트웨어 렌더링만 가능하여 게임을 실행할 수 없습니다.',
+  'probe.status.software':
+    '이 백엔드는 여기서 소프트웨어 렌더링만 가능하여 게임을 실행할 수 없습니다.',
   'probe.status.noCorpus': '이 빌드에 테스트 데이터가 없습니다.',
   'hudChrome.options.gpuBackendVerdict': '마지막 백엔드 테스트: {backend}.',
-  'hudChrome.options.gpuBackendVerdictStale': '마지막 백엔드 테스트 결과가 더 이상 이 PC와 일치하지 않습니다. 다시 실행하여 백엔드를 선택하세요.',
+  'hudChrome.options.gpuBackendVerdictStale':
+    '마지막 백엔드 테스트 결과가 더 이상 이 PC와 일치하지 않습니다. 다시 실행하여 백엔드를 선택하세요.',
   'hudChrome.options.testBackends': '그래픽 백엔드 테스트',
-  'hudChrome.options.testBackendsNote': '게임을 다시 시작하여 이 PC에서 각 그래픽 백엔드를 측정하는 테스트(몇 분 소요)를 실행하고 자동 설정에 가장 적합한 것을 선택합니다.',
+  'hudChrome.options.testBackendsNote':
+    '게임을 다시 시작하여 이 PC에서 각 그래픽 백엔드를 측정하는 테스트(몇 분 소요)를 실행하고 자동 설정에 가장 적합한 것을 선택합니다.',
   'hudChrome.options.probeRequestedTitle': '그래픽 백엔드 테스트를 실행할까요?',
-  'hudChrome.options.probeRequestedBody': '테스트를 하려면 게임을 닫아야 합니다. 지금 테스트로 다시 시작할까요? 현재 세션이 종료됩니다.',
+  'hudChrome.options.probeRequestedBody':
+    '테스트를 하려면 게임을 닫아야 합니다. 지금 테스트로 다시 시작할까요? 현재 세션이 종료됩니다.',
   'hudChrome.options.probeRequestedConfirm': '테스트로 다시 시작',
   'hudChrome.options.probeRequestedCancel': '나중에',
   'probe.status.capped': '이 백엔드는 테스트 셰이더를 제시간에 링크하지 못했습니다.',

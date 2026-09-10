@@ -15706,7 +15706,8 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'probe.backend.software': '軟體算繪',
   'probe.backend.unknown': '未知後端',
   'probe.consent.heading': '為這台電腦找出最合適的圖形後端',
-  'probe.consent.body': '測試會開啟並關閉幾個視窗，大約需要 {minutes} 分鐘。請保持遊戲關閉，筆電請接上電源，執行期間不要操作電腦。',
+  'probe.consent.body':
+    '測試會開啟並關閉幾個視窗，大約需要 {minutes} 分鐘。請保持遊戲關閉，筆電請接上電源，執行期間不要操作電腦。',
   'probe.consent.start': '開始測試',
   'probe.consent.cancel': '暫時不要',
   'probe.progress.waiting': '正在準備測試',
@@ -15716,7 +15717,8 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'probe.verdict.workerOn': '著色器預熱工作執行緒：開啟',
   'probe.verdict.workerOff': '著色器預熱工作執行緒：關閉',
   'probe.verdict.inconclusive': '測試無法做出判斷。請在不開啟其他程式的情況下重新執行。',
-  'probe.verdict.explicitSetting': '圖形後端已手動設定，在把該設定改為「自動」之前，此結果不會生效。',
+  'probe.verdict.explicitSetting':
+    '圖形後端已手動設定，在把該設定改為「自動」之前，此結果不會生效。',
   'probe.verdict.play': '開始遊戲',
   'probe.verdict.rerun': '重新執行測試',
   'probe.verdict.switchToAuto': '將後端設定改為「自動」',
@@ -15724,11 +15726,14 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'probe.status.software': '此後端在這裡只能進行軟體算繪，無法執行遊戲。',
   'probe.status.noCorpus': '此版本缺少測試資料。',
   'hudChrome.options.gpuBackendVerdict': '上次後端測試：{backend}。',
-  'hudChrome.options.gpuBackendVerdictStale': '上次後端測試的結果已不再適用於這台電腦。請重新執行測試以選擇後端。',
+  'hudChrome.options.gpuBackendVerdictStale':
+    '上次後端測試的結果已不再適用於這台電腦。請重新執行測試以選擇後端。',
   'hudChrome.options.testBackends': '測試圖形後端',
-  'hudChrome.options.testBackendsNote': '重新啟動遊戲並進行一項測試（需要幾分鐘），測量這台電腦上每個圖形後端的表現，為「自動」選出最佳後端。',
+  'hudChrome.options.testBackendsNote':
+    '重新啟動遊戲並進行一項測試（需要幾分鐘），測量這台電腦上每個圖形後端的表現，為「自動」選出最佳後端。',
   'hudChrome.options.probeRequestedTitle': '要執行圖形後端測試嗎？',
-  'hudChrome.options.probeRequestedBody': '測試需要關閉遊戲。現在重新啟動進入測試嗎？目前的工作階段將結束。',
+  'hudChrome.options.probeRequestedBody':
+    '測試需要關閉遊戲。現在重新啟動進入測試嗎？目前的工作階段將結束。',
   'hudChrome.options.probeRequestedConfirm': '重新啟動進入測試',
   'hudChrome.options.probeRequestedCancel': '暫不',
   'probe.status.capped': '此後端未能及時連結測試著色器。',

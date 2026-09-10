@@ -16522,29 +16522,37 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'probe.backend.software': 'ソフトウェアレンダリング',
   'probe.backend.unknown': '不明なバックエンド',
   'probe.consent.heading': 'このPCに最適なグラフィックスバックエンドを探す',
-  'probe.consent.body': 'テストはいくつかのウィンドウを開いたり閉じたりし、約{minutes}分かかります。ゲームは閉じたまま、ノートPCは電源につなぎ、実行中はコンピューターに触れないでください。',
+  'probe.consent.body':
+    'テストはいくつかのウィンドウを開いたり閉じたりし、約{minutes}分かかります。ゲームは閉じたまま、ノートPCは電源につなぎ、実行中はコンピューターに触れないでください。',
   'probe.consent.start': 'テストを開始',
   'probe.consent.cancel': '今はしない',
   'probe.progress.waiting': 'テストを準備しています',
   'probe.progress.arm': '{backend}をテスト中、ステップ{step}/{total}',
-  'probe.progress.busy': 'コンピューターが他の処理で忙しい状態です。他のプログラムを閉じてテストをもう一度実行してください。',
+  'probe.progress.busy':
+    'コンピューターが他の処理で忙しい状態です。他のプログラムを閉じてテストをもう一度実行してください。',
   'probe.verdict.heading': 'このPCへのおすすめ：{backend}',
   'probe.verdict.workerOn': 'シェーダーウォームアップワーカー：オン',
   'probe.verdict.workerOff': 'シェーダーウォームアップワーカー：オフ',
-  'probe.verdict.inconclusive': 'テストでは判断できませんでした。他に何も開かずにもう一度実行してください。',
-  'probe.verdict.explicitSetting': 'グラフィックスバックエンドが手動で設定されているため、その設定を「自動」に切り替えるまでこの結果は適用されません。',
+  'probe.verdict.inconclusive':
+    'テストでは判断できませんでした。他に何も開かずにもう一度実行してください。',
+  'probe.verdict.explicitSetting':
+    'グラフィックスバックエンドが手動で設定されているため、その設定を「自動」に切り替えるまでこの結果は適用されません。',
   'probe.verdict.play': 'プレイ',
   'probe.verdict.rerun': 'テストをもう一度実行',
   'probe.verdict.switchToAuto': 'バックエンド設定を「自動」に切り替える',
   'probe.status.noWebgl2': 'このバックエンドはこのコンピューターで起動できませんでした。',
-  'probe.status.software': 'このバックエンドはここではソフトウェア描画しかできず、ゲームを実行できません。',
+  'probe.status.software':
+    'このバックエンドはここではソフトウェア描画しかできず、ゲームを実行できません。',
   'probe.status.noCorpus': 'このビルドにはテストデータがありません。',
   'hudChrome.options.gpuBackendVerdict': '前回のバックエンドテスト: {backend}。',
-  'hudChrome.options.gpuBackendVerdictStale': '前回のバックエンドテストの結果はこのPCと一致しなくなりました。もう一度実行してバックエンドを選び直してください。',
+  'hudChrome.options.gpuBackendVerdictStale':
+    '前回のバックエンドテストの結果はこのPCと一致しなくなりました。もう一度実行してバックエンドを選び直してください。',
   'hudChrome.options.testBackends': 'グラフィックバックエンドをテスト',
-  'hudChrome.options.testBackendsNote': 'ゲームを再起動し、このPCで各グラフィックバックエンドを計測するテスト（数分）を行って、自動設定に最適なものを選びます。',
+  'hudChrome.options.testBackendsNote':
+    'ゲームを再起動し、このPCで各グラフィックバックエンドを計測するテスト（数分）を行って、自動設定に最適なものを選びます。',
   'hudChrome.options.probeRequestedTitle': 'グラフィックバックエンドのテストを実行しますか？',
-  'hudChrome.options.probeRequestedBody': 'テストにはゲームを閉じる必要があります。今すぐテストに再起動しますか？現在のセッションは終了します。',
+  'hudChrome.options.probeRequestedBody':
+    'テストにはゲームを閉じる必要があります。今すぐテストに再起動しますか？現在のセッションは終了します。',
   'hudChrome.options.probeRequestedConfirm': 'テストに再起動',
   'hudChrome.options.probeRequestedCancel': '今はしない',
   'probe.status.capped': 'このバックエンドはテスト用シェーダーを時間内にリンクできませんでした。',
