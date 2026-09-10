@@ -17,8 +17,10 @@ import { presetFromSettingsJson, tierFromPreset } from './probe_tier_core';
 import { type ProbeView, probeViewFromSearch } from './probe_view_core';
 import {
   type BackendClass,
+  betweenLine,
   consentModel,
   estimateMinutes,
+  overallLine,
   progressLine,
   rungView,
   type Translate,
@@ -103,6 +105,14 @@ function storedSettingsJson(): string | null {
   }
 }
 
+/** A query number the shell put there, or null when it is absent or silly. */
+function numberParam(params: URLSearchParams, name: string): number | null {
+  const raw = params.get(name);
+  if (raw === null) return null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
 function statusOf(result: ProbeResult): string {
   switch (result.ended) {
     case 'no-webgl2':
@@ -148,8 +158,15 @@ function pageSink(root: HTMLElement, status: HTMLElement): ProbeSink {
 
 function renderProbe(root: HTMLElement, search: string): void {
   const params = new URLSearchParams(search);
+  // The parent's window is hidden while an arm measures, so this line is the
+  // player's only bearing on the whole run.
+  const overall = overallLine(
+    t,
+    { index: numberParam(params, 'arm'), total: numberParam(params, 'arms') },
+    formatNumber,
+  );
   root.innerHTML = card(
-    `<p data-probe-status>${escapeHtml(t('probe.progress.waiting'))}</p>`,
+    `${overall === null ? '' : `<p data-probe-overall>${escapeHtml(overall)}</p>`}<p data-probe-status>${escapeHtml(t('probe.progress.waiting'))}</p>`,
     'probe',
   );
   const status = root.querySelector<HTMLElement>('[data-probe-status]') as HTMLElement;
@@ -195,6 +212,16 @@ function renderProgress(root: HTMLElement, search: string): void {
   subscribeProgress(desktopBridge(), (progress: DesktopProbeProgress) => {
     if (progress.phase === 'deciding') {
       status.textContent = t('probe.progress.waiting');
+      return;
+    }
+    if (progress.phase === 'between') {
+      // Nothing is measuring: this window is back on screen, and it says where
+      // the run is rather than leaving the player on an empty desktop.
+      status.textContent = betweenLine(
+        t,
+        { done: (progress.index ?? 0) + 1, total: progress.total ?? 0 },
+        formatNumber,
+      );
       return;
     }
     const view = rungView(progress.arm ?? null);

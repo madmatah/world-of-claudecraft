@@ -33,13 +33,15 @@ export const zh_TW: EnTranslations = {
     },
     "consent": {
       "heading": "為這台電腦找出最合適的圖形後端",
-      "body": "測試會開啟並關閉幾個視窗，大約需要 {minutes} 分鐘。請保持遊戲關閉，筆電請接上電源，執行期間不要操作電腦。",
+      "body": "測試會自動開啟和關閉數個視窗，大約需要 {minutes} 分鐘。兩次測試之間，畫面可能會空白幾秒鐘，這是正常現象，並非發生錯誤。請保持遊戲關閉，筆記型電腦接上電源，在結果出現之前請勿操作電腦。",
       "start": "開始測試",
       "cancel": "暫時不要"
     },
     "progress": {
       "waiting": "正在準備測試",
       "arm": "正在測試 {backend}，第 {step} 步，共 {total} 步",
+      "overall": "測試 {index}/{total}",
+      "between": "測試 {done}/{total} 已完成，正在開始下一項。",
       "busy": "電腦正忙於其他工作。請關閉其他程式後重新執行測試。"
     },
     "verdict": {

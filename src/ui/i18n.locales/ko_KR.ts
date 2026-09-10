@@ -16488,11 +16488,13 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'probe.backend.unknown': '알 수 없는 백엔드',
   'probe.consent.heading': '이 PC에 가장 알맞은 그래픽 백엔드 찾기',
   'probe.consent.body':
-    '테스트는 창을 몇 개 열었다 닫으며 약 {minutes}분이 걸립니다. 게임은 닫아 두고, 노트북은 전원에 연결하고, 실행 중에는 컴퓨터를 건드리지 마세요.',
+    '테스트는 창을 몇 개 스스로 열었다 닫으며 약 {minutes}분이 걸립니다. 테스트와 테스트 사이에 화면이 몇 초 동안 비어 보일 수 있지만 정상이며, 문제가 생긴 것이 아닙니다. 게임은 닫아 두고, 노트북은 전원에 연결하고, 결과가 나올 때까지 컴퓨터를 건드리지 마세요.',
   'probe.consent.start': '테스트 시작',
   'probe.consent.cancel': '나중에',
   'probe.progress.waiting': '테스트를 준비하는 중',
   'probe.progress.arm': '{backend} 테스트 중, {total}단계 중 {step}단계',
+  'probe.progress.overall': '테스트 {index}/{total}',
+  'probe.progress.between': '테스트 {done}/{total}을(를) 마쳤습니다. 다음 테스트를 시작합니다.',
   'probe.progress.busy':
     '컴퓨터가 다른 작업으로 바쁩니다. 다른 프로그램을 닫고 테스트를 다시 실행하세요.',
   'probe.verdict.heading': '이 PC에 권장: {backend}',

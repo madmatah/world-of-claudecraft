@@ -65,6 +65,11 @@ function probePageUrl(base, config) {
     // but D3D11; the worker section must measure it on EVERY arm.
     shaderwarm: 'all',
   });
+  // The page's only global bearing while the parent's window is hidden.
+  if (config.armIndex !== null && config.armTotal !== null) {
+    params.set('arm', String(config.armIndex + 1));
+    params.set('arms', String(config.armTotal));
+  }
   return `${base}/backend-probe.html?${params.toString()}`;
 }
 
@@ -250,6 +255,15 @@ function runBackendProbeChild(deps = {}) {
       height: PROBE_WINDOW_HEIGHT,
       resizable: false,
       alwaysOnTop: true,
+      // Full screen from the FIRST PAINT, never at construction: a Vulkan
+      // swapchain has been seen dying (VK_ERROR_OUT_OF_DATE_KHR) on a window
+      // that changed mode before its first frame. Measuring full screen is
+      // both what a player sees (the machine is visibly busy, and there is no
+      // desktop to wander off into) and what the game does, so the pacing
+      // section reads the presentation path the game will really take. The
+      // drawn surface does not change with it: the canvas is capped at
+      // MAX_CANVAS_WIDTH x MAX_CANVAS_HEIGHT, so every machine still measures
+      // the same pixel count.
       title: 'World of ClaudeCraft',
       backgroundColor: '#05070a',
       show: true,
@@ -306,6 +320,10 @@ function runBackendProbeChild(deps = {}) {
       exitWith(PROBE_EXIT.rendererGone, 'renderer-gone');
     });
     win.on('closed', () => exitWith(PROBE_EXIT.probeError, 'probe-error'));
+    // The mode change waits for the first paint (see the window options).
+    win.webContents.once('did-finish-load', () => {
+      if (!win.isDestroyed() && !win.isFullScreen()) win.setFullScreen(true);
+    });
     void win.loadURL(probePageUrl(devServerUrl ?? APP_ORIGIN, config));
   });
 }

@@ -75,6 +75,30 @@ export function progressLine(
   });
 }
 
+/** The player's global bearing: which test of how many. Null when the shell
+ *  did not say, which is any run outside a probe child. */
+export function overallLine(
+  t: Translate,
+  position: { index: number | null; total: number | null },
+  format: FormatNumber = String,
+): string | null {
+  const { index, total } = position;
+  if (index === null || total === null) return null;
+  if (!Number.isInteger(index) || !Number.isInteger(total)) return null;
+  if (index < 1 || total < 1 || index > total) return null;
+  return t('probe.progress.overall', { index: format(index), total: format(total) });
+}
+
+/** What the parent's window says while nothing is measuring, between two arms. */
+export function betweenLine(
+  t: Translate,
+  position: { done: number; total: number },
+  format: FormatNumber = String,
+): string {
+  const done = Math.max(0, Math.min(position.total, position.done));
+  return t('probe.progress.between', { done: format(done), total: format(position.total) });
+}
+
 export interface VerdictInput {
   backend: BackendClass | null;
   parallelCompile: boolean;

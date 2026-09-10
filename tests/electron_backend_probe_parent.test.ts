@@ -93,6 +93,7 @@ describe('createBackendProbeParent', () => {
     const windows: FakeWindow[] = [];
     class FakeWindow {
       visible = false;
+      fullScreen = false;
       focused = 0;
       urls: string[] = [];
       sent: { channel: string; payload: unknown }[] = [];
@@ -124,6 +125,12 @@ describe('createBackendProbeParent', () => {
       }
       hide() {
         this.visible = false;
+      }
+      isFullScreen() {
+        return this.fullScreen;
+      }
+      setFullScreen(on: boolean) {
+        this.fullScreen = on;
       }
       focus() {
         this.focused += 1;
@@ -224,9 +231,11 @@ describe('createBackendProbeParent, a scripted run', () => {
     const handles = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
     const files = new Map<string, unknown>();
     const spawned: { arm: string; round: number }[] = [];
+    const visibility: string[] = [];
     const windows: FakeWindow[] = [];
     class FakeWindow {
       visible = false;
+      fullScreen = false;
       urls: string[] = [];
       sent: { channel: string; payload: unknown }[] = [];
       webContents = {
@@ -255,9 +264,17 @@ describe('createBackendProbeParent, a scripted run', () => {
       }
       show() {
         this.visible = true;
+        visibility.push('show');
       }
       hide() {
         this.visible = false;
+        visibility.push('hide');
+      }
+      isFullScreen() {
+        return this.fullScreen;
+      }
+      setFullScreen(on: boolean) {
+        this.fullScreen = on;
       }
       focus() {}
     }
@@ -337,6 +354,7 @@ describe('createBackendProbeParent, a scripted run', () => {
       parent,
       windows,
       spawned,
+      visibility,
       saved,
       desktopPrefs,
       start,
@@ -471,5 +489,29 @@ describe('createBackendProbeParent, a scripted run', () => {
     await r.settled();
     // Drained between arms: the window came up.
     expect(r.windows[0].visible).toBe(true);
+  });
+
+  // The player report behind this: between two arms nothing was on screen at
+  // all (the parent hides while a child measures, and the child is gone), so a
+  // run in progress looked exactly like a crashed one.
+  it('comes back on screen between two arms and steps aside for each one', async () => {
+    const r = scripted({
+      arms: {
+        d3d11: { code: PROBE_EXIT.completed },
+        'vulkan-parallel-compile': { code: 0 },
+        opengl: { code: 0 },
+      },
+      decision: () => decided('vulkan-parallel-compile'),
+    });
+    expect(r.start()).toBe(true);
+    await r.settled();
+    const { visibility } = r;
+    // One hide per arm, and a show between them: never two hides in a row.
+    expect(visibility.filter((call) => call === 'hide').length).toBeGreaterThan(1);
+    for (let i = 1; i < visibility.length; i += 1) {
+      expect(`${visibility[i - 1]}->${visibility[i]}`).not.toBe('hide->hide');
+    }
+    // And the run ends with the verdict on screen.
+    expect(visibility.at(-1)).toBe('show');
   });
 });

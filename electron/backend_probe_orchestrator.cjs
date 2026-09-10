@@ -74,7 +74,7 @@ function readEnvelope(ctx, resultPath, round) {
  * classification, the validated result (or null), the adapter the child
  * reported, and whether its directory is kept as evidence.
  */
-function launchArm(ctx, arm, round) {
+function launchArm(ctx, arm, round, position = { index: 0, total: 1 }) {
   const profileDir = profileDirFor(ctx.runDir, arm, round);
   const resultPath = resultPathFor(ctx.runDir, arm, round);
   ctx.fs.mkdir(profileDir);
@@ -89,6 +89,8 @@ function launchArm(ctx, arm, round) {
     tier: ctx.tier,
     gpuForceOptOut: ctx.gpuForceOptOut,
     parentPid: ctx.parentPid,
+    armIndex: position.index,
+    armTotal: position.total,
   });
   const argv = childArgvFor(ctx.argv);
   return new Promise((resolve) => {
@@ -164,7 +166,7 @@ async function runRound(ctx, round, options = {}) {
   for (let index = 0; index < arms.length; index += 1) {
     const arm = arms[index];
     ctx.onArmStart?.({ arm, round, index, total: arms.length });
-    const outcome = await launchArm(ctx, arm, round);
+    const outcome = await launchArm(ctx, arm, round, { index, total: arms.length });
     outcomes.push(outcome);
     ctx.onArmEnd?.(outcome);
     if (

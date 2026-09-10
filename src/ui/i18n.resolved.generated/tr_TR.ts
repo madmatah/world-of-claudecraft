@@ -33,13 +33,15 @@ export const tr_TR: EnTranslations = {
     },
     "consent": {
       "heading": "Find the best graphics backend for this PC",
-      "body": "The test opens and closes a few windows and takes about {minutes} minutes. Keep the game closed, plug in a laptop, and do not touch the computer while it runs.",
+      "body": "The test opens and closes several windows on its own and takes about {minutes} minutes. Between two tests the screen can look empty for a few seconds: that is normal, nothing has crashed. Keep the game closed, plug a laptop in, and leave the computer alone until the result appears.",
       "start": "Start the test",
       "cancel": "Not now"
     },
     "progress": {
       "waiting": "Preparing the test",
       "arm": "Testing {backend}, step {step} of {total}",
+      "overall": "Test {index} of {total}",
+      "between": "Test {done} of {total} finished. Starting the next one.",
       "busy": "The computer is busy with something else. Close other programs and run the test again."
     },
     "verdict": {

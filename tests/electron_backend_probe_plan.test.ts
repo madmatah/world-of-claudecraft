@@ -107,6 +107,24 @@ describe('the child environment and argv', () => {
       locale: 'fr_FR',
       tier: 'ultra',
       gpuForceOptOut: true,
+      armIndex: null,
+      armTotal: null,
+    });
+  });
+
+  it('carries the arm position, the child window said nothing global without it', () => {
+    const env = childEnvFor({ ...input, armIndex: 1, armTotal: 3 });
+    expect(probeChildConfig(env)).toMatchObject({ armIndex: 1, armTotal: 3 });
+  });
+
+  it('degrades a nonsense arm position to no position rather than refusing the child', () => {
+    // Display only: the measurement must not hinge on it, and an unnamed
+    // position must never read as "test 1 of 1".
+    const env = childEnvFor({ ...input, armIndex: 5, armTotal: 3 });
+    expect(probeChildConfig(env)).toMatchObject({ armIndex: null, armTotal: null });
+    expect(probeChildConfig({ ...env, WOC_BACKEND_PROBE_ARM_TOTAL: 'x' })).toMatchObject({
+      armIndex: null,
+      armTotal: null,
     });
   });
 

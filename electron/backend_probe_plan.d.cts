@@ -26,11 +26,16 @@ export interface ProbeChildConfig {
   locale: string;
   tier: string;
   gpuForceOptOut: boolean;
+  /** Display only: the child's place in the run, or null when unnamed. */
+  armIndex: number | null;
+  armTotal: number | null;
 }
 
 export const BACKEND_OUTCOMES: readonly ProbeChildOutcome[];
 export const PROBE_ARMS: readonly ProbeArm[];
 export const PROBE_ARM_ENV: string;
+export const PROBE_ARM_INDEX_ENV: string;
+export const PROBE_ARM_TOTAL_ENV: string;
 export const PROBE_CHILD_ENV: string;
 export const PROBE_EXIT: Readonly<{
   completed: number;
@@ -68,6 +73,10 @@ export function childEnvFor(input: {
   tier: string;
   gpuForceOptOut: boolean;
   parentPid: number;
+  /** Where this child sits in the run, for the line its window shows. Omitted
+   *  means no global bearing, never "test 1 of 1". */
+  armIndex?: number;
+  armTotal?: number;
 }): Record<string, string | undefined>;
 export function classifyChildExit(input: {
   code: number | null;

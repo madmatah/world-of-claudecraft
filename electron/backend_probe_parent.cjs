@@ -149,10 +149,18 @@ function createBackendProbeParent(deps) {
   let secondInstanceQueued = false;
   let run = null;
   let pendingDecision = null;
+  // Where the run is, for the line the between-arms window shows.
+  let armIndex = 0;
+  let armTotal = 0;
 
   const show = () => {
     if (!win || win.isDestroyed()) return;
     if (!win.isVisible()) win.show();
+    // Full screen like the children, so the run never cuts between a full
+    // screen measurement and a small window on the desktop. The mode change
+    // waits for a shown window, never a construction-time flag (a Vulkan
+    // swapchain has died on a window that changed mode before its first frame).
+    if (!win.isFullScreen()) win.setFullScreen(true);
     win.focus();
   };
   const hide = () => {
@@ -240,6 +248,8 @@ function createBackendProbeParent(deps) {
       log,
       onArmStart: ({ arm, round, index, total }) => {
         armInFlight = true;
+        armIndex = index;
+        armTotal = total;
         hide();
         progress({ phase: 'arm', arm, round, index, total });
       },
@@ -253,11 +263,14 @@ function createBackendProbeParent(deps) {
           arm: outcome.arm,
           round: outcome.round,
           outcome: outcome.outcome,
+          index: armIndex,
+          total: armTotal,
         });
-        if (secondInstanceQueued) {
-          secondInstanceQueued = false;
-          show();
-        }
+        // Nothing is measuring between two arms, so the window that says where
+        // the run is comes back rather than leaving the player on an empty
+        // screen wondering whether it crashed. It hides again at the next arm.
+        show();
+        secondInstanceQueued = false;
       },
     };
   }

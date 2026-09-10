@@ -16523,11 +16523,13 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'probe.backend.unknown': '不明なバックエンド',
   'probe.consent.heading': 'このPCに最適なグラフィックスバックエンドを探す',
   'probe.consent.body':
-    'テストはいくつかのウィンドウを開いたり閉じたりし、約{minutes}分かかります。ゲームは閉じたまま、ノートPCは電源につなぎ、実行中はコンピューターに触れないでください。',
+    'テストはいくつかのウィンドウを自動で開いたり閉じたりし、約{minutes}分かかります。テストとテストの間、画面が数秒間何も表示されないことがありますが、異常ではなく、故障でもありません。ゲームは閉じたまま、ノートPCは電源につなぎ、結果が表示されるまでコンピューターに触れないでください。',
   'probe.consent.start': 'テストを開始',
   'probe.consent.cancel': '今はしない',
   'probe.progress.waiting': 'テストを準備しています',
   'probe.progress.arm': '{backend}をテスト中、ステップ{step}/{total}',
+  'probe.progress.overall': 'テスト {index}/{total}',
+  'probe.progress.between': 'テスト {done}/{total} が完了しました。次のテストを開始します。',
   'probe.progress.busy':
     'コンピューターが他の処理で忙しい状態です。他のプログラムを閉じてテストをもう一度実行してください。',
   'probe.verdict.heading': 'このPCへのおすすめ：{backend}',

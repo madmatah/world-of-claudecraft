@@ -415,6 +415,19 @@ pid. The child env carries `ELECTRON_NO_ATTACH_CONSOLE=1` and the spawn passes
 `['pipe', 'ignore', 'ignore']` so the pipe survives on Windows in the first place. The
 child logs which mechanism armed.
 
+What the player sees: the parent's window is FULL SCREEN and so is every child,
+so the run holds the screen from consent to verdict with no desktop to wander off
+into and no moment that looks like a crash. The parent hides while a child measures
+(a second window compositing then is exactly what the interference monitor exists to
+catch) and comes back between two arms to say which test just finished; the child's
+own window carries the global bearing, "Test 2 of 3", beside its section step, since
+the parent is hidden while it runs. Full screen is a MEASUREMENT choice too: it is
+the presentation path the game itself takes, and the drawn surface does not change
+with it (the probe canvas is capped at 1280x720, so every machine measures the same
+pixel count). The mode change always waits for the first paint, never a
+construction-time flag: a Vulkan swapchain has died on a window that changed mode
+before its first frame.
+
 A section runs two passes under an interference monitor (the document hidden or
 blurred, an input, or a watchdog gap the page cannot explain); a disturbed pass is
 replayed once, then kept but marked invalid, and a section with no valid pass leaves

@@ -37,6 +37,11 @@ const PROBE_LOCALE_ENV = 'WOC_BACKEND_PROBE_LOCALE';
 const PROBE_TIER_ENV = 'WOC_BACKEND_PROBE_TIER';
 const PROBE_GPU_FORCE_OPT_OUT_ENV = 'WOC_BACKEND_PROBE_GPU_FORCE_OPT_OUT';
 const PROBE_PARENT_PID_ENV = 'WOC_BACKEND_PROBE_PARENT_PID';
+// Where this child sits in the run, so its own window can say "Test 2 of 3":
+// the player's only global bearing while an arm measures, since the parent's
+// window is hidden then.
+const PROBE_ARM_INDEX_ENV = 'WOC_BACKEND_PROBE_ARM_INDEX';
+const PROBE_ARM_TOTAL_ENV = 'WOC_BACKEND_PROBE_ARM_TOTAL';
 
 /** The graphics tiers a child may be asked to measure on (the `?gfx=` grammar). */
 const PROBE_TIERS = Object.freeze(['low', 'medium', 'high', 'ultra', 'insane']);
@@ -134,6 +139,12 @@ function childEnvFor(input) {
   env[PROBE_TIER_ENV] = input.tier;
   env[PROBE_GPU_FORCE_OPT_OUT_ENV] = input.gpuForceOptOut ? '1' : '0';
   env[PROBE_PARENT_PID_ENV] = String(input.parentPid);
+  // Absent rather than defaulted: a caller that names no position means "no
+  // global bearing", never "test 1 of 1", which would be a lie on screen.
+  if (Number.isInteger(input.armIndex) && Number.isInteger(input.armTotal)) {
+    env[PROBE_ARM_INDEX_ENV] = String(input.armIndex);
+    env[PROBE_ARM_TOTAL_ENV] = String(input.armTotal);
+  }
   // Windows only, ignored elsewhere: Electron attaches to the parent's console
   // and reopens the standard streams, which replaces the pipe the parent put on
   // fd 0 with the console input and blinds the orphan watch. The child logs to
@@ -174,7 +185,19 @@ function probeChildConfig(env) {
     locale: LOCALE_PATTERN.test(env[PROBE_LOCALE_ENV] ?? '') ? env[PROBE_LOCALE_ENV] : 'en',
     tier: PROBE_TIERS.includes(env[PROBE_TIER_ENV]) ? env[PROBE_TIER_ENV] : 'ultra',
     gpuForceOptOut: env[PROBE_GPU_FORCE_OPT_OUT_ENV] === '1',
+    // Display only, so a missing or silly pair degrades to "no global bearing"
+    // rather than refusing the child: the measurement does not depend on it.
+    ...armPosition(env),
   };
+}
+
+/** The child's place in the run, when the pair makes sense together. */
+function armPosition(env) {
+  const index = Number(env[PROBE_ARM_INDEX_ENV]);
+  const total = Number(env[PROBE_ARM_TOTAL_ENV]);
+  const usable =
+    Number.isInteger(index) && Number.isInteger(total) && index >= 0 && total > 0 && index < total;
+  return usable ? { armIndex: index, armTotal: total } : { armIndex: null, armTotal: null };
 }
 
 /** A run's directory under the parent's userData, and a child's profile and
@@ -258,6 +281,8 @@ module.exports = {
   PROBE_EXIT,
   PROBE_GPU_FORCE_OPT_OUT_ENV,
   PROBE_LOCALE_ENV,
+  PROBE_ARM_INDEX_ENV,
+  PROBE_ARM_TOTAL_ENV,
   PROBE_PARENT_PID_ENV,
   PROBE_PROFILE_ENV,
   PROBE_RESULT_ENV,
