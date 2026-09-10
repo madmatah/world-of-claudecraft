@@ -52,7 +52,8 @@ export const en_CA: EnTranslations = {
       "explicitSetting": "Your graphics backend is set by hand, so this result is not applied until you switch that setting to Auto.",
       "play": "Play",
       "rerun": "Run the test again",
-      "switchToAuto": "Switch the backend setting to Auto"
+      "switchToAuto": "Switch the backend setting to Auto",
+      "close": "Close"
     },
     "status": {
       "noWebgl2": "This backend could not start on this computer.",

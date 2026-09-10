@@ -48,6 +48,9 @@ export const probeStrings = {
     play: 'Play',
     rerun: 'Run the test again',
     switchToAuto: 'Switch the backend setting to Auto',
+    // The way out of a full screen window: without it the verdict offers only
+    // to play or to test again, and there is no third answer.
+    close: 'Close',
   },
   status: {
     noWebgl2: 'This backend could not start on this computer.',

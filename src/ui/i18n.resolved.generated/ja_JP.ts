@@ -52,7 +52,8 @@ export const ja_JP: EnTranslations = {
       "explicitSetting": "グラフィックスバックエンドが手動で設定されているため、その設定を「自動」に切り替えるまでこの結果は適用されません。",
       "play": "プレイ",
       "rerun": "テストをもう一度実行",
-      "switchToAuto": "バックエンド設定を「自動」に切り替える"
+      "switchToAuto": "バックエンド設定を「自動」に切り替える",
+      "close": "閉じる"
     },
     "status": {
       "noWebgl2": "このバックエンドはこのコンピューターで起動できませんでした。",

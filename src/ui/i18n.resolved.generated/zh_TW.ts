@@ -52,7 +52,8 @@ export const zh_TW: EnTranslations = {
       "explicitSetting": "圖形後端已手動設定，在把該設定改為「自動」之前，此結果不會生效。",
       "play": "開始遊戲",
       "rerun": "重新執行測試",
-      "switchToAuto": "將後端設定改為「自動」"
+      "switchToAuto": "將後端設定改為「自動」",
+      "close": "關閉"
     },
     "status": {
       "noWebgl2": "此後端無法在這台電腦上啟動。",

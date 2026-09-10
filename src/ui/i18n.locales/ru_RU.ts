@@ -16820,6 +16820,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'probe.verdict.play': 'Играть',
   'probe.verdict.rerun': 'Запустить тест снова',
   'probe.verdict.switchToAuto': 'Переключить настройку бэкенда на «Авто»',
+  'probe.verdict.close': 'Закрыть',
   'probe.status.noWebgl2': 'Этот бэкенд не смог запуститься на этом компьютере.',
   'probe.status.software': 'Этот бэкенд здесь работает только в программном режиме и не может запустить игру.',
   'probe.status.noCorpus': 'В этой сборке нет данных для теста.',

@@ -16542,6 +16542,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'probe.verdict.play': 'プレイ',
   'probe.verdict.rerun': 'テストをもう一度実行',
   'probe.verdict.switchToAuto': 'バックエンド設定を「自動」に切り替える',
+  'probe.verdict.close': '閉じる',
   'probe.status.noWebgl2': 'このバックエンドはこのコンピューターで起動できませんでした。',
   'probe.status.software':
     'このバックエンドはここではソフトウェア描画しかできず、ゲームを実行できません。',

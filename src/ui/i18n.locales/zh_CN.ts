@@ -15715,6 +15715,7 @@ export const zh_CN: Partial<Record<TranslationKey, string>> = {
   'probe.verdict.play': '开始游戏',
   'probe.verdict.rerun': '重新运行测试',
   'probe.verdict.switchToAuto': '将后端设置改为“自动”',
+  'probe.verdict.close': '关闭',
   'probe.status.noWebgl2': '此后端无法在这台电脑上启动。',
   'probe.status.software': '此后端在这里只能进行软件渲染，无法运行游戏。',
   'probe.status.noCorpus': '此版本缺少测试数据。',

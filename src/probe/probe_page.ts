@@ -259,11 +259,12 @@ function paintVerdict(root: HTMLElement, input: ProbeDecisionView): void {
       (model.switchToAuto
         ? ` <button type="button" data-probe-auto>${escapeHtml(model.switchToAuto)}</button>`
         : '') +
+      ` <button type="button" data-probe-close>${escapeHtml(model.close)}</button>` +
       `</p>`,
     'verdict',
   );
   const bridge = desktopBridge();
-  const wire = (selector: string, action: 'play' | 'rerun' | 'auto') => {
+  const wire = (selector: string, action: 'play' | 'rerun' | 'auto' | 'cancel') => {
     root.querySelector(selector)?.addEventListener('click', () => {
       if (action === 'rerun' && bridge?.probeStart) {
         void startInShell(bridge, {
@@ -284,6 +285,7 @@ function paintVerdict(root: HTMLElement, input: ProbeDecisionView): void {
   wire('[data-probe-play]', 'play');
   wire('[data-probe-rerun]', 'rerun');
   wire('[data-probe-auto]', 'auto');
+  wire('[data-probe-close]', 'cancel');
 }
 
 const INCONCLUSIVE_VIEW: ProbeDecisionView = {

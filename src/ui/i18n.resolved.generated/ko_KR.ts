@@ -52,7 +52,8 @@ export const ko_KR: EnTranslations = {
       "explicitSetting": "그래픽 백엔드가 수동으로 설정되어 있어, 그 설정을 자동으로 바꾸기 전까지 이 결과는 적용되지 않습니다.",
       "play": "플레이",
       "rerun": "테스트 다시 실행",
-      "switchToAuto": "백엔드 설정을 자동으로 전환"
+      "switchToAuto": "백엔드 설정을 자동으로 전환",
+      "close": "닫기"
     },
     "status": {
       "noWebgl2": "이 백엔드는 이 컴퓨터에서 시작하지 못했습니다.",

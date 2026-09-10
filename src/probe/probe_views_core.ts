@@ -114,6 +114,7 @@ export interface VerdictModel {
   play: string;
   rerun: string;
   switchToAuto: string | null;
+  close: string;
 }
 
 export function verdictModel(t: Translate, input: VerdictInput): VerdictModel {
@@ -133,6 +134,9 @@ export function verdictModel(t: Translate, input: VerdictInput): VerdictModel {
     play: t('probe.verdict.play'),
     rerun: t('probe.verdict.rerun'),
     switchToAuto: decided && input.explicitSetting ? t('probe.verdict.switchToAuto') : null,
+    // Always offered, decided or not: the window is full screen and this is
+    // the only answer that is neither playing nor testing again.
+    close: t('probe.verdict.close'),
   };
 }
 

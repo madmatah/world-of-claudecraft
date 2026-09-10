@@ -99,3 +99,32 @@ describe('rungView', () => {
     expect(rungView('metal')).toEqual({ backend: null, parallelCompile: false });
   });
 });
+
+// The full-screen window has no other way out: reported from Windows, where the
+// verdict offered only "play" and "test again" and the run held the whole screen.
+describe('verdictModel: the way out', () => {
+  const t = ((key: string) => key) as unknown as Parameters<typeof verdictModel>[0];
+
+  it('offers a close on a decided verdict', () => {
+    const model = verdictModel(t, {
+      backend: 'vulkan',
+      parallelCompile: true,
+      worker: true,
+      inconclusive: false,
+      explicitSetting: false,
+    });
+    expect(model.close).toBe('probe.verdict.close');
+  });
+
+  it('offers it on an inconclusive one too, which is when it is needed most', () => {
+    const model = verdictModel(t, {
+      backend: null,
+      parallelCompile: false,
+      worker: false,
+      inconclusive: true,
+      explicitSetting: false,
+    });
+    expect(model.close).toBe('probe.verdict.close');
+    expect(model.switchToAuto).toBe(null);
+  });
+});

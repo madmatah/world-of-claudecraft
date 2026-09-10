@@ -24,7 +24,11 @@ body {
   min-height: 100vh;
   padding: 32px;
   display: grid;
-  align-content: start;
+  /* Centred both ways: every probe window runs full screen, and a card pinned
+     to the top left corner of a large display reads as a mistake. The text
+     inside the card stays left aligned, which is what it is for. */
+  align-content: center;
+  justify-items: center;
   gap: 16px;
 }
 

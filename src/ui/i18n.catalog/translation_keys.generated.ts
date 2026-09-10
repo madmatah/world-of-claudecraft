@@ -13086,6 +13086,7 @@ export type TranslationKeyFlat =
   | 'probe.status.noWebgl2'
   | 'probe.status.software'
   | 'probe.title'
+  | 'probe.verdict.close'
   | 'probe.verdict.explicitSetting'
   | 'probe.verdict.heading'
   | 'probe.verdict.inconclusive'

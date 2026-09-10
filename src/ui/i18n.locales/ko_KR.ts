@@ -16507,6 +16507,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'probe.verdict.play': '플레이',
   'probe.verdict.rerun': '테스트 다시 실행',
   'probe.verdict.switchToAuto': '백엔드 설정을 자동으로 전환',
+  'probe.verdict.close': '닫기',
   'probe.status.noWebgl2': '이 백엔드는 이 컴퓨터에서 시작하지 못했습니다.',
   'probe.status.software':
     '이 백엔드는 여기서 소프트웨어 렌더링만 가능하여 게임을 실행할 수 없습니다.',
