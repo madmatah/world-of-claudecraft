@@ -7,6 +7,7 @@ import { audio } from '../game/audio';
 import { startDesktopBackendProbe } from '../game/desktop_gpu_backend_sync';
 import { music } from '../game/music';
 import { desktopBridge } from '../runtime';
+import { FOCUS_KEY_ATTR } from './focus_restore';
 import { t } from './i18n';
 import type { TranslationKey } from './i18n.catalog';
 import type { ButtonControl } from './options_view';
@@ -36,7 +37,9 @@ export function paintActionRow(parent: HTMLElement, c: ButtonControl): void {
   button.type = 'button';
   button.className = 'btn';
   button.textContent = t(c.labelKey);
-  button.dataset.focusKey = c.key;
+  // Focus identity for a rebuild-crossing restore, through the shared namespace
+  // rather than a hand-rolled attribute (focus_restore.ts).
+  button.setAttribute(FOCUS_KEY_ATTR, c.key);
   button.addEventListener('click', () => {
     audio.click();
     if (c.action === 'backendProbe') {
