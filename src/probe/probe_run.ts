@@ -225,7 +225,11 @@ function linkSection(
   const programs = heavyPrograms(corpus).slice(0, options.heavyCount ?? 12);
   return runPasses(rig, floor, async (slot) => {
     const salted = saltPrograms(programs, passNonce(options.run, options.round, 'links', slot));
-    const result = await runLinkPass(rig.context.gl, salted, { now: rig.now });
+    const result = await runLinkPass(rig.context.gl, salted, {
+      now: rig.now,
+      // Its own stalls are the measurement, not interference.
+      charge: (ms) => rig.monitor.charge(ms),
+    });
     if (result.aborted) return null;
     return {
       cold: result.cold,

@@ -32,6 +32,7 @@ const {
 } = require('electron');
 const { registerAppProtocol } = require('./app_protocol.cjs');
 const { armOrphanWatch } = require('./backend_probe_orphan_watch.cjs');
+const { disturbanceLines } = require('./backend_probe_disturbances.cjs');
 const { PROBE_EXIT, probeChildConfig, switchesForArm } = require('./backend_probe_plan.cjs');
 const { acceptProbeResult, exitCodeForEnded } = require('./backend_probe_result.cjs');
 const { resolveDesktopConfig } = require('./desktop_config.cjs');
@@ -130,6 +131,9 @@ function runBackendProbeChild(deps = {}) {
     } catch (err) {
       log.warn('[probe-child] could not write the result file', err?.message ?? err);
     }
+    // Why a pass was thrown away, in the log the parent copies: the result file
+    // this reads from is deleted by the next run.
+    for (const line of disturbanceLines(latest)) log.info(`[probe-child] ${line}`);
     log.info(`[probe-child] exit ${code} (${outcome})`);
     app.exit(code);
   };

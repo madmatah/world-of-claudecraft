@@ -911,6 +911,7 @@ const PROBE_PURE_CORES = [
   'src/probe/decision_core.ts',
   'src/probe/frame_section_core.ts',
   'src/probe/frame_stats_core.ts',
+  'src/probe/interference_gap_core.ts',
   'src/probe/link_section_core.ts',
   'src/probe/parallel_section_core.ts',
   'src/probe/probe_view_core.ts',

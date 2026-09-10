@@ -26,6 +26,7 @@ const fakeMonitor = () => {
   const noted: string[] = [];
   const monitor: InterferenceMonitor = {
     mark() {},
+    charge() {},
     disturbed: () => noted.length > 0,
     reasons: () => [...noted],
     note: (reason) => {

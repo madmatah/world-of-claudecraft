@@ -415,6 +415,17 @@ pid. The child env carries `ELECTRON_NO_ATTACH_CONSOLE=1` and the spawn passes
 `['pipe', 'ignore', 'ignore']` so the pipe survives on Windows in the first place. The
 child logs which mechanism armed.
 
+A section runs two passes under an interference monitor (the document hidden or
+blurred, an input, or a watchdog gap the page cannot explain); a disturbed pass is
+replayed once, then kept but marked invalid, and a section with no valid pass leaves
+its arm without that figure. The probe CHARGES the monitor the stalls it measures on
+purpose (`src/probe/interference_gap_core.ts`), because the link section blocks the
+main thread by design: without that, a backend whose cold links take most of a second
+reads its own measurement as interference, and the worse the backend the more likely
+its evidence is discarded. A child names every section that lost a pass, and why, in
+its own log before exiting, so an inconclusive run leaves a trace that outlives the
+result file the next run deletes.
+
 Reading the log: `[probe] run <id> starting`, `[probe] arm <rung> round <n> started` /
 `: <outcome>`, each child's log tail, `[probe] second round { triggers }`, `[probe]
 verdict { backend, worker, inconclusive, written }`; at launch `[gpu] backend launch:

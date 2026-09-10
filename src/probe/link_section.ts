@@ -34,6 +34,10 @@ export interface LinkPassOptions {
   minimum?: number;
   /** Called between links; a returning false aborts the pass (disturbed). */
   yieldFrame?: () => Promise<boolean>;
+  /** Told how long each program held the main thread, the moment it lets go:
+   *  the interference monitor charges that delay to the measurement instead of
+   *  reading its own stall as the page being starved. */
+  charge?: (ms: number) => void;
   now?: () => number;
 }
 
@@ -120,7 +124,9 @@ async function linkAll(
   gl: WebGL2RenderingContext,
   rig: FirstDrawRig,
   programs: readonly SaltedProgram[],
-  options: Required<Pick<LinkPassOptions, 'yieldFrame' | 'now'>> & { minimum: number },
+  options: Required<Pick<LinkPassOptions, 'yieldFrame' | 'now' | 'charge'>> & {
+    minimum: number;
+  },
 ): Promise<{ samples: LinkSample[]; capped: boolean; aborted: boolean }> {
   const samples: LinkSample[] = [];
   const timings: number[] = [];
@@ -161,6 +167,10 @@ async function linkAll(
       draw2Ms: drawn2 - drawn,
       linked,
     });
+    // Everything above held the main thread, the timed part and the release
+    // alike; the monitor is charged the whole of it before the yield lets the
+    // watchdog tick.
+    options.charge(options.now() - started);
     if (linked) {
       const cap = linkCapMs(timings);
       timings.push(ms);
@@ -187,6 +197,7 @@ export async function runLinkPass(
     minimum: options.minimum ?? 12,
     yieldFrame: options.yieldFrame ?? defaultYield,
     now: options.now ?? (() => performance.now()),
+    charge: options.charge ?? (() => {}),
   };
   const rig = createFirstDrawRig(gl);
   const cold = await linkAll(gl, rig, programs, settings);
