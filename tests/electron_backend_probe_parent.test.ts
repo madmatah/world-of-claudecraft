@@ -94,6 +94,7 @@ describe('createBackendProbeParent', () => {
     class FakeWindow {
       visible = false;
       fullScreen = false;
+      resizable = false;
       focused = 0;
       urls: string[] = [];
       sent: { channel: string; payload: unknown }[] = [];
@@ -130,7 +131,12 @@ describe('createBackendProbeParent', () => {
         return this.fullScreen;
       }
       setFullScreen(on: boolean) {
-        this.fullScreen = on;
+        // Windows only resizes a resizable window into full screen; a locked
+        // one just loses its frame and stays 1280x720 in the corner.
+        this.fullScreen = on && this.resizable;
+      }
+      setResizable(on: boolean) {
+        this.resizable = on;
       }
       focus() {
         this.focused += 1;
@@ -236,6 +242,7 @@ describe('createBackendProbeParent, a scripted run', () => {
     class FakeWindow {
       visible = false;
       fullScreen = false;
+      resizable = false;
       urls: string[] = [];
       sent: { channel: string; payload: unknown }[] = [];
       webContents = {
@@ -274,7 +281,12 @@ describe('createBackendProbeParent, a scripted run', () => {
         return this.fullScreen;
       }
       setFullScreen(on: boolean) {
-        this.fullScreen = on;
+        // Windows only resizes a resizable window into full screen; a locked
+        // one just loses its frame and stays 1280x720 in the corner.
+        this.fullScreen = on && this.resizable;
+      }
+      setResizable(on: boolean) {
+        this.resizable = on;
       }
       focus() {}
     }
@@ -513,5 +525,23 @@ describe('createBackendProbeParent, a scripted run', () => {
     }
     // And the run ends with the verdict on screen.
     expect(visibility.at(-1)).toBe('show');
+  });
+
+  // The report behind this: the window lost its frame but kept its size in the
+  // corner of a larger screen, desktop showing all around it.
+  it('really reaches full screen, which needs the resize lock lifted for it', async () => {
+    const r = scripted({
+      arms: {
+        d3d11: { code: PROBE_EXIT.completed },
+        'vulkan-parallel-compile': { code: 0 },
+        opengl: { code: 0 },
+      },
+      decision: () => decided('vulkan-parallel-compile'),
+    });
+    expect(r.start()).toBe(true);
+    await r.settled();
+    expect(r.windows[0]?.isFullScreen()).toBe(true);
+    // And the lock goes straight back on, so nothing can drag it mid-run.
+    expect(r.windows[0]?.resizable).toBe(false);
   });
 });

@@ -159,8 +159,14 @@ function createBackendProbeParent(deps) {
     // Full screen like the children, so the run never cuts between a full
     // screen measurement and a small window on the desktop. The mode change
     // waits for a shown window, never a construction-time flag (a Vulkan
-    // swapchain has died on a window that changed mode before its first frame).
-    if (!win.isFullScreen()) win.setFullScreen(true);
+    // swapchain has died on a window that changed mode before its first frame),
+    // and the resize lock lifts across it: Windows will not resize a
+    // non-resizable window into full screen, it only drops the frame.
+    if (!win.isFullScreen()) {
+      win.setResizable(true);
+      win.setFullScreen(true);
+      win.setResizable(false);
+    }
     win.focus();
   };
   const hide = () => {

@@ -28,6 +28,7 @@ import { type ParallelPassResult, runParallelPass } from './parallel_section';
 import { createProbeContext, type ProbeContext } from './probe_context';
 import { passNonce, saltPrograms } from './salt_core';
 import { runUploadPass, type UploadPassResult } from './upload_section';
+import { SETTLE_MAX_MS, type ViewportSize, viewportSettled } from './viewport_settle_core';
 import { runWorkerPass, type WorkerPassResult } from './worker_section';
 
 export const PROBE_VERSION = 1;
@@ -134,6 +135,21 @@ function paintedFrames(count: number): Promise<void> {
     };
     requestAnimationFrame(tick);
   });
+}
+
+/** Hold until the viewport stops changing, or until the bound runs out: the
+ *  shell puts its window full screen after the page loads, and a resize under a
+ *  running measurement moves the compositor path mid-pass (see
+ *  ./viewport_settle_core.ts). */
+async function settledViewport(): Promise<ViewportSize> {
+  const samples: ViewportSize[] = [];
+  const deadline = performance.now() + SETTLE_MAX_MS;
+  while (performance.now() < deadline) {
+    samples.push({ width: window.innerWidth, height: window.innerHeight });
+    if (viewportSettled(samples)) break;
+    await paintedFrames(1);
+  }
+  return samples.at(-1) ?? { width: window.innerWidth, height: window.innerHeight };
 }
 
 function identityOf(context: ProbeContext): ProbeIdentity {
@@ -369,8 +385,9 @@ export async function runProbe(options: ProbeRunOptions): Promise<ProbeResult> {
   const post = (): void => options.sink.post(result);
   await paintedFrames(2);
   result.bootMs = performance.now();
-  const width = Math.min(MAX_CANVAS_WIDTH, Math.max(320, window.innerWidth));
-  const height = Math.min(MAX_CANVAS_HEIGHT, Math.max(240, window.innerHeight));
+  const viewport = await settledViewport();
+  const width = Math.min(MAX_CANVAS_WIDTH, Math.max(320, viewport.width));
+  const height = Math.min(MAX_CANVAS_HEIGHT, Math.max(240, viewport.height));
   const context = createProbeContext(width, height, options.document);
   if (!context) {
     result.ended = 'no-webgl2';

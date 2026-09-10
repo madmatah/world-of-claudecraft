@@ -320,9 +320,16 @@ function runBackendProbeChild(deps = {}) {
       exitWith(PROBE_EXIT.rendererGone, 'renderer-gone');
     });
     win.on('closed', () => exitWith(PROBE_EXIT.probeError, 'probe-error'));
-    // The mode change waits for the first paint (see the window options).
+    // The mode change waits for the first paint (see the window options). The
+    // window is built non-resizable so nothing can drag it while it measures,
+    // and Windows refuses to resize such a window into full screen at all: it
+    // drops the frame and leaves it 1280x720 in the corner, desktop showing.
+    // So the lock lifts for the transition and goes straight back on.
     win.webContents.once('did-finish-load', () => {
-      if (!win.isDestroyed() && !win.isFullScreen()) win.setFullScreen(true);
+      if (win.isDestroyed() || win.isFullScreen()) return;
+      win.setResizable(true);
+      win.setFullScreen(true);
+      win.setResizable(false);
     });
     void win.loadURL(probePageUrl(devServerUrl ?? APP_ORIGIN, config));
   });

@@ -81,6 +81,12 @@ describe('the probe child branch in main.cjs', () => {
     expect(child).toContain('backgroundThrottling: false');
     expect(child).toContain('alwaysOnTop: true');
     expect(child).toContain("app.commandLine.appendSwitch('force-device-scale-factor', '1')");
+    // Full screen at the first paint, never at construction (a Vulkan swapchain
+    // has died on a window that changed mode before its first frame), and the
+    // resize lock lifted across it or Windows only drops the frame.
+    expect(child).toContain("win.webContents.once('did-finish-load'");
+    expect(child).toContain('win.setResizable(true);\n      win.setFullScreen(true);');
+    expect(child).toContain('win.setResizable(false);');
   });
 
   it('carries the same app scheme privileges as main.cjs', () => {

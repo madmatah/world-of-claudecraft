@@ -920,6 +920,7 @@ const PROBE_PURE_CORES = [
   'src/probe/salt_core.ts',
   'src/probe/stats_core.ts',
   'src/probe/upload_section_core.ts',
+  'src/probe/viewport_settle_core.ts',
   'src/probe/worker_section_core.ts',
 ].map((rel) => join(repoRoot, rel));
 

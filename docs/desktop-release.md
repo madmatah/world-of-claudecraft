@@ -426,7 +426,13 @@ the presentation path the game itself takes, and the drawn surface does not chan
 with it (the probe canvas is capped at 1280x720, so every machine measures the same
 pixel count). The mode change always waits for the first paint, never a
 construction-time flag: a Vulkan swapchain has died on a window that changed mode
-before its first frame.
+before its first frame. The windows are built non-resizable so nothing can drag one
+mid-measurement, and the lock lifts across the transition alone: Windows refuses to
+resize a locked window into full screen and merely drops its frame, leaving it
+1280x720 in the corner of the display. Because the switch lands after the page has
+loaded, the run waits for the viewport to hold still before it reads its canvas size
+(`src/probe/viewport_settle_core.ts`): otherwise the window resizes under a running
+pass, and one arm can be measured windowed while the next is full screen.
 
 A section runs two passes under an interference monitor (the document hidden or
 blurred, an input, or a watchdog gap the page cannot explain); a disturbed pass is
