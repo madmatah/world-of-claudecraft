@@ -459,8 +459,11 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned at the second v0.42.0 release-base reconcile after the
     // release-side import/export panel composed with the batch settings rows.
     // Measured with wc -l on the merged tree. Exact count, zero headroom.
+    // Lowered again at the v0.43.0 reconcile: the note line, the one-shot
+    // action button and the music toggle moved to src/ui/options_rows.ts, the
+    // three row painters that read none of the window's own state.
     file: 'src/ui/options_window.ts',
-    ceiling: 2843,
+    ceiling: 2810,
     seam: 'a pure view model (src/ui/options_view.ts) painted with the shared settings_controls.ts builders; sub-panels as sibling modules',
   },
   {
