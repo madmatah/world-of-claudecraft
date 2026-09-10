@@ -403,6 +403,18 @@ launch runs the verdict's backend), which `shaderWarmModeFor` consults for the `
 setting only: `off` and `on` win over it, and a verdict measured on another backend is
 ignored.
 
+Each child watches for its parent dying so it never measures nobody's machine
+(`electron/backend_probe_orphan_watch.cjs`). The channel is the stdin pipe the parent
+holds and never writes to, whose close is the parent's death and is immune to pid reuse.
+That pipe is not always there: Electron on Windows attaches to the parent's console and
+reopens the standard streams over it, and node answers an unrecognised fd 0 with an
+already-ended stream, which a watch that trusts stdin reads as the parent's death at
+once. So the child asks `fstat(0)` first and trusts stdin only when it stats as a pipe
+(a FIFO, or a socket where the stdio slot is a socketpair); otherwise it polls the parent
+pid. The child env carries `ELECTRON_NO_ATTACH_CONSOLE=1` and the spawn passes
+`['pipe', 'ignore', 'ignore']` so the pipe survives on Windows in the first place. The
+child logs which mechanism armed.
+
 Reading the log: `[probe] run <id> starting`, `[probe] arm <rung> round <n> started` /
 `: <outcome>`, each child's log tail, `[probe] second round { triggers }`, `[probe]
 verdict { backend, worker, inconclusive, written }`; at launch `[gpu] backend launch:

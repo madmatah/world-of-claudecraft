@@ -19,6 +19,7 @@ import {
   parseRegQueryData,
   relaunchForLinuxPrime,
   shouldRelaunchForLinuxPrime,
+  spawnWaitingSelf,
   summarizeGpuDevices,
   USER_GPU_PREFERENCES_KEY,
 } from '../electron/gpu_preference.cjs';
@@ -1070,5 +1071,22 @@ describe('electron-dev.mjs PRIME pre-apply pin', () => {
   it('feeds the pre-applied config into the electron spawn (env and argv both)', () => {
     expect(source).toContain("spawn(electronCommand, ['.', ...prime.args]");
     expect(source).toContain('...prime.env,');
+  });
+});
+
+describe('spawnWaitingSelf stdio', () => {
+  it("gives the child a pipe on stdin and neither of the caller's output streams", () => {
+    // The pipe is the orphan channel the child watches. Inheriting the caller's
+    // output is what attaches a Windows child to the caller's console, and
+    // Electron then reopens the standard streams over that pipe: the first real
+    // Windows run had every arm exit orphaned 25 ms in.
+    const spawn = vi.fn((_target: string, _argv: string[], _options?: unknown) => ({
+      pid: 7,
+      once: () => {},
+    }));
+    spawnWaitingSelf({ env: {}, argv: ['--test-backends'], execPath: '/app/woc', spawn });
+    const options = spawn.mock.calls[0]?.[2] as { stdio: unknown; detached: boolean };
+    expect(options.stdio).toEqual(['pipe', 'ignore', 'ignore']);
+    expect(options.detached).toBe(false);
   });
 });

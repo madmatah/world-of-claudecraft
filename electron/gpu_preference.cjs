@@ -445,7 +445,11 @@ function spawnWaitingSelf({ env, argv, execPath = process.execPath, spawn = node
   const spawnTarget = resolveSelfSpawnTarget(env, execPath);
   const child = spawn(spawnTarget, argv, {
     env,
-    stdio: ['pipe', 'inherit', 'inherit'],
+    // The child writes to its own log file and the caller copies the tail, so it
+    // needs neither of the caller's output streams. Inheriting them is also what
+    // makes a Windows child attach to the caller's console, which reopens the
+    // standard streams over the pipe this spawn puts on fd 0.
+    stdio: ['pipe', 'ignore', 'ignore'],
     detached: false,
   });
   let settled = false;

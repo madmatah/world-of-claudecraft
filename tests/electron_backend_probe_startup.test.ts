@@ -64,10 +64,16 @@ describe('the probe child branch in main.cjs', () => {
     expect(child).toContain('uploadToServer: false');
   });
 
-  it('the child resumes stdin for the orphan watch and logs its page errors', () => {
-    expect(child).toContain('process.stdin.resume();');
-    expect(child).toContain("process.stdin.on('end'");
-    expect(child).toContain("process.stdin.on('close'");
+  it('the child arms the orphan watch through its module and logs its page errors', () => {
+    // The watch itself (pipe when fd 0 carries one, parent pid when it does not)
+    // is tests/electron_backend_probe_orphan_watch.test.ts; here we pin that the
+    // child hands it the three things only the child has, and rolls none of it
+    // by hand.
+    expect(child).toContain('armOrphanWatch({');
+    expect(child).toContain('stdin: process.stdin,');
+    expect(child).toContain('parentPid: config.parentPid,');
+    expect(child).toContain('fs.fstatSync(fd)');
+    expect(child).not.toContain('process.stdin.resume();');
     expect(child).toContain("ipcMain.on('desktop-renderer-error'");
     expect(child).toContain("app.on('child-process-gone'");
     expect(child).toContain("classifyRendererExit(details.reason) === 'benign'");

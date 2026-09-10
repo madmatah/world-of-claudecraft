@@ -31,6 +31,7 @@ const {
   session,
 } = require('electron');
 const { registerAppProtocol } = require('./app_protocol.cjs');
+const { armOrphanWatch } = require('./backend_probe_orphan_watch.cjs');
 const { PROBE_EXIT, probeChildConfig, switchesForArm } = require('./backend_probe_plan.cjs');
 const { acceptProbeResult, exitCodeForEnded } = require('./backend_probe_result.cjs');
 const { resolveDesktopConfig } = require('./desktop_config.cjs');
@@ -143,13 +144,17 @@ function runBackendProbeChild(deps = {}) {
     log.error('[probe-child] unhandled rejection', reason);
     exitWith(PROBE_EXIT.probeError, 'probe-error');
   });
-  // The orphan watch: the parent holds the other end of stdin; its death
-  // closes the pipe (immune to pid reuse), and an unread pipe never reports.
-  if (process.stdin && typeof process.stdin.resume === 'function') {
-    process.stdin.resume();
-    process.stdin.on('end', () => exitWith(PROBE_EXIT.orphaned, 'orphaned'));
-    process.stdin.on('close', () => exitWith(PROBE_EXIT.orphaned, 'orphaned'));
-  }
+  // The orphan watch: the parent pipe when fd 0 really carries one, the parent's
+  // pid when it does not (electron/backend_probe_orphan_watch.cjs says why).
+  armOrphanWatch({
+    stdin: process.stdin,
+    fstat: (fd) => fs.fstatSync(fd),
+    parentPid: config.parentPid,
+    kill: (pid, signal) => process.kill(pid, signal),
+    setInterval: (fn, ms) => setInterval(fn, ms),
+    log,
+    onOrphan: () => exitWith(PROBE_EXIT.orphaned, 'orphaned'),
+  });
 
   // The arm's switches, before ready, and the same pixel count on every machine.
   for (const [name, value] of switchesForArm(config.arm)) app.commandLine.appendSwitch(name, value);

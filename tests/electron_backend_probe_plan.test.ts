@@ -110,6 +110,13 @@ describe('the child environment and argv', () => {
     });
   });
 
+  it('keeps the Windows child off the parent console, so the orphan pipe survives', () => {
+    // Electron attaches to the parent's console on Windows and reopens the
+    // standard streams, which replaces the pipe the parent put on fd 0 and made
+    // every arm of the first Windows run exit orphaned 25 ms in.
+    expect(childEnvFor(input).ELECTRON_NO_ATTACH_CONSOLE).toBe('1');
+  });
+
   it('refuses a child plan with a missing or malformed field', () => {
     const env = childEnvFor(input);
     expect(isProbeChild({})).toBe(false);

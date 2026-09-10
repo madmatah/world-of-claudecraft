@@ -134,6 +134,11 @@ function childEnvFor(input) {
   env[PROBE_TIER_ENV] = input.tier;
   env[PROBE_GPU_FORCE_OPT_OUT_ENV] = input.gpuForceOptOut ? '1' : '0';
   env[PROBE_PARENT_PID_ENV] = String(input.parentPid);
+  // Windows only, ignored elsewhere: Electron attaches to the parent's console
+  // and reopens the standard streams, which replaces the pipe the parent put on
+  // fd 0 with the console input and blinds the orphan watch. The child logs to
+  // its own file and the parent copies the tail, so it needs no console.
+  env.ELECTRON_NO_ATTACH_CONSOLE = '1';
   return env;
 }
 
