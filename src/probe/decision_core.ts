@@ -118,13 +118,30 @@ export interface DecisionFloors {
   workerLostPerProgramMs: number;
 }
 
-/** PROVISIONAL, until the calibration runs: on a comparison of medians a
- *  15 percent hitch gap and a 10 percent frame or pacing gap are outside
- *  what two passes seconds apart disagree by on the Intel iGPU.
+/**
+ * The FLOOR under each metric's own margin, never a shared one: the margin in
+ * force for a metric is the larger of its floor and twice the worst spread that
+ * metric showed on any surviving arm (marginFor).
  *
- *  These are the FLOOR under each metric's own margin, never a shared one: the
- *  margin in force for a metric is the larger of its floor and twice the worst
- *  spread that metric showed on any surviving arm (marginFor). */
+ * Calibration of 2026-09-11, three complete runs on an RTX 3060 under Windows
+ * (report: docs/desktop-release.md, "GPU backend on Windows: the probe"). Only
+ * ONE of these four is calibrated by it; the rest are named provisional on
+ * purpose, because on that machine no comparison came anywhere near them and
+ * data that never exercises a threshold cannot set it.
+ *
+ * - `frame` 0.10 is CALIBRATED: frame p95 moved at most 3.7 percent from one
+ *   complete run to the next, and this metric carries no absolute floor, so the
+ *   relative one is its only guard. Three times the observed drift.
+ * - `hitch` 0.15 is UNEXERCISED on that machine: the backends were 4 to 6 times
+ *   apart on every hitch metric (D3D11 lost 51 to 117 ms against 311 to 338 on
+ *   Vulkan and 497 to 500 on OpenGL), so anything from 0.10 to 0.30 decides the
+ *   same way. The reference arm's own 50 to 78 percent run-to-run movement is a
+ *   first-pass trend (see readsAsNoise), not variance to widen a floor with.
+ * - `pacing` 0.05 is UNEXERCISED: onCadence read 1.0 on every pass but one.
+ * - `workerLostPerProgramMs` 40 is UNEXERCISED: the outcomes were 0 ms per
+ *   program on D3D11 and 60 to 99 on the other two, so any threshold between
+ *   them gives the same worker verdict.
+ */
 export const PROVISIONAL_FLOORS: DecisionFloors = Object.freeze({
   hitch: 0.15,
   frame: 0.1,
@@ -388,15 +405,23 @@ function marginFor(
  *
  * At EXCHANGEABLE_SPREAD_MAX the two passes differ by half their own mean, and
  * past it the disagreement is the size of the thing being measured: they are
- * not two readings of one quantity, they are two different outcomes. Measured:
- * D3D11 barely hitches, so whether a hitch lands in a pass is close to a coin
- * flip, and its lost-frame figure went 0 ms then 8.9 ms (a spread of 200
- * percent) while its worst frame went 16.9 to 34.5 ms (68 percent). Doubling
- * either would have set a margin larger than the value it came from. On the
- * arms where the same metrics are large the spreads are 2 to 6 percent, which
- * is real noise on a real value, and the margin still wants it: doubled, those
- * come to 15 to 60 ms against an absolute floor of one 16.7 ms frame, so the
- * floor alone would be the weaker guard.
+ * not two readings of one quantity, they are two different outcomes.
+ *
+ * Measured on an RTX 3060, three calibration runs of 2026-09-11: on D3D11 the
+ * SECOND pass of the hitch section loses exactly 0 ms with a worst frame of
+ * 16.9 ms (the refresh) in every one of the three, while the first loses 51,
+ * then 84, then 117 ms. So the cost there is a deterministic first-pass one,
+ * the same shape as the upload section's, and NOT a rare event landing by
+ * chance (which is what an earlier reading of two runs suggested). Either way
+ * the spread is not noise and doubling it would set a margin larger than the
+ * value it came from. On the arms where the same metrics are large the spreads
+ * are 2 to 6 percent, which IS noise on a real value, and the margin still
+ * wants it: doubled, those come to 15 to 60 ms against an absolute floor of one
+ * 16.7 ms frame, so the floor alone would be the weaker guard.
+ *
+ * The proper fix for the hitch section is the upload section's: compare the
+ * cold pass and report the warm one beside it. Until then this gate keeps the
+ * first-pass cost from setting the margin.
  */
 function readsAsNoise(spread: number): boolean {
   return Number.isFinite(spread) && spread < EXCHANGEABLE_SPREAD_MAX;

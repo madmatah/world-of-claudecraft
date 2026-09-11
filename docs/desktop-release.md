@@ -443,6 +443,15 @@ loaded, the run waits for the viewport to hold still before it reads its canvas 
 (`src/probe/viewport_settle_core.ts`): otherwise the window resizes under a running
 pass, and one arm can be measured windowed while the next is full screen.
 
+The decision floors (`PROVISIONAL_FLOORS`) were exercised on 2026-09-11 by three
+complete runs on one RTX 3060 under Windows. Only `frame` came out CALIBRATED (frame
+p95 moved at most 3.7 percent from one run to the next, and it is the metric with no
+absolute floor under it); `hitch`, `pacing` and the worker's tolerance stay provisional
+because on that machine no comparison came near them, and data that never exercises a
+threshold cannot set it: the backends were 4 to 6 times apart on every hitch metric. The
+class still owed is a machine whose backends are close, an Intel integrated GPU being
+both the likeliest and the one where the probe matters most to a player.
+
 A section runs two passes under an interference monitor (the document hidden or
 blurred, an input, or a watchdog gap the page cannot explain); a disturbed pass is
 replayed once, then kept but marked invalid, and a section with no valid pass leaves
