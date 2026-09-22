@@ -1,0 +1,26 @@
+{
+ "attributes": {
+  "alpha": false,
+  "antialias": false,
+  "depth": true,
+  "desynchronized": false,
+  "failIfMajorPerformanceCaveat": false,
+  "powerPreference": "high-performance",
+  "premultipliedAlpha": true,
+  "preserveDrawingBuffer": false,
+  "stencil": false,
+  "xrCompatible": false
+ },
+ "extensions": [
+  "EXT_color_buffer_float",
+  "WEBGL_clip_cull_distance",
+  "OES_texture_float_linear",
+  "EXT_color_buffer_half_float",
+  "WEBGL_debug_renderer_info",
+  "EXT_texture_filter_anisotropic",
+  "KHR_parallel_shader_compile",
+  "EXT_texture_compression_bptc",
+  "WEBGL_compressed_texture_s3tc",
+  "WEBGL_compressed_texture_s3tc_srgb"
+ ]
+}

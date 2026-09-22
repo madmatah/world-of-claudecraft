@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Worn stone lab</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #202428; color: #ddd; font: 13px/1.4 system-ui, sans-serif; }
+    #c { display: block; width: 100vw; height: 100vh; }
+    #panel { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,.65); padding: 10px 12px; border-radius: 6px; min-width: 240px; }
+    #panel label { display: block; margin: 4px 0; }
+    #panel select, #panel input[type=range] { width: 100%; }
+    #panel button { margin-top: 6px; margin-right: 4px; }
+    #info { margin-top: 8px; white-space: pre; font-family: monospace; font-size: 11px; color: #9fd; }
+    kbd { background: #333; padding: 0 4px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="panel">
+    <label><input type="checkbox" id="layer" checked /> Surface-detail layer (<kbd>Space</kbd> toggles)</label>
+    <label>Family <select id="family" autocomplete="off"></select></label>
+    <label>Tier (reload) <select id="tier" autocomplete="off">
+      <option value="high">high (no parallax)</option>
+      <option value="ultra">ultra (3 taps)</option>
+      <option value="insane">insane (4 taps)</option>
+    </select></label>
+    <label>Camera distance <span id="distv"></span><input type="range" id="dist" min="2" max="80" step="0.5" value="14" /></label>
+    <label>Sun elevation <span id="sunv"></span><input type="range" id="sun" min="5" max="85" step="1" value="31" /></label>
+    <label><input type="checkbox" id="spin" /> Spin the props</label>
+    <button id="dump">Download fragment GLSL</button>
+    <button id="shot">Screenshot</button>
+    <div id="info"></div>
+  </div>
+  <script type="module" src="./worn_stone_lab.ts"></script>
+</body>
+</html>
