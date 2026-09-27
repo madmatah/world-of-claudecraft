@@ -45,6 +45,11 @@
 // reads it (`consumeSelfPositionDiscontinuity`, which covers a completed
 // unstuck AND a Realm Racers recovery), after the event drain.
 //
+// More clients can join the same server (`addPeer`), each over its own link
+// with its own frame pipeline on the shared clock: the rig for measuring what
+// one player's screen shows of another. A frame hook (`onClientFrame`, or a
+// peer's `onFrame`) sees each frame at the point renderer.sync would run.
+//
 // A suite using this helper must mock Postgres itself, hoisted above its own
 // import of this module (it pulls in server/game); copy the superset factory at
 // the top of tests/unstuck_online.test.ts.
@@ -79,6 +84,7 @@ import { MovementPredictionPipeline } from '../../src/render/self_prediction';
 import {
   createSelfRenderPositionState,
   noteSelfIdentity,
+  type SelfRenderPrediction,
 } from '../../src/render/self_render_position_core';
 import { delveMotionState } from '../../src/sim/delves/geometry';
 import { parseMoveInputFrame } from '../../src/sim/move_input';
@@ -96,6 +102,8 @@ import type { LatencyLinkConfig } from './latency_link';
 import { LatencyLink } from './latency_link';
 import {
   COLLIDER_FREE_LANE,
+  type JoinedGroundTruth,
+  joinCharacterOn,
   joinGroundTruthCharacter,
   type MoveScript,
   type MoveScriptEntry,
@@ -251,6 +259,54 @@ export interface ReconcileOutcomeCounts {
   suspends: number;
 }
 
+/** What one client frame drew, handed to a frame hook after the drawn pose is
+ *  computed (the point in main.ts's frame where renderer.sync runs). */
+export interface ClientFrameInfo {
+  /** Virtual wall time of the frame, ms: what the renderer's
+   *  `performance.now()` reads (the clock is installed). */
+  nowMs: number;
+  frameDtSec: number;
+  alpha: number;
+  /** The display frame main.ts hands renderer.sync (null while a v2 driver
+   *  is stood down). */
+  selfMotion: SelfRenderPrediction | null;
+  /** The drawn self pose. */
+  drawn: Readonly<{ x: number; y: number; z: number }>;
+  predictorActive: boolean;
+  /** The events this frame drained off the client. */
+  events: readonly SimEvent[];
+}
+
+export type ClientFrameHook = (frame: ClientFrameInfo) => void;
+
+/** One client on the shared server and clock, over its own link. */
+export interface HarnessClient {
+  link: LatencyLink;
+  session: ClientSession;
+  client: ClientWorld;
+  pid: number;
+  serverEntity: Entity;
+  /** Merge into the held intent, carried by every frame from the next on. */
+  holdIntent(mi: Partial<MoveInput>): void;
+  /** Register a hook run at the end of every client frame; returns its remover. */
+  onFrame(hook: ClientFrameHook): () => void;
+  reconcileOutcomes(): ReconcileOutcomeCounts;
+}
+
+/** A second (third...) client joined onto the harness's server. */
+export interface PeerClientOptions {
+  latency: LatencyLinkConfig;
+  /** Unique per client; the primary client is character 1. */
+  characterId: number;
+  playerClass?: PlayerClass;
+  keyTimeline?: boolean;
+  start?: { x: number; z: number };
+  facing?: number;
+  /** Virtual ms advanced after the join, so the peer's mirror is synced
+   *  before the call returns. Must be a whole tick. */
+  warmupMs?: number;
+}
+
 export interface OnlineHarness {
   clock: VirtualClock;
   link: LatencyLink;
@@ -265,6 +321,15 @@ export interface OnlineHarness {
   onServerTick(hook: ServerTickHook): () => void;
   /** The client's reconcile outcomes so far, suspends included. */
   reconcileOutcomes(): ReconcileOutcomeCounts;
+  /** Merge into the primary client's held intent (outside a scripted run). */
+  holdIntent(mi: Partial<MoveInput>): void;
+  /** Register a hook run at the end of every primary client frame. */
+  onClientFrame(hook: ClientFrameHook): () => void;
+  /** Join another character onto this server behind its own client and link,
+   *  its frame pipeline driven on the shared clock. Its movement frames are
+   *  consumed and its override epochs updated with the primary's, in join
+   *  order, exactly as the server loop walks its sessions. */
+  addPeer(options: PeerClientOptions): HarnessClient;
   dispose(): void;
 }
 
@@ -342,23 +407,45 @@ function isWorldAuthFrame(payload: string): boolean {
   }
 }
 
-export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
-  const frameMs = opts.frameMs ?? DEFAULT_FRAME_MS;
-  const warmupMs = opts.warmupMs ?? 1000;
-  if (warmupMs % SERVER_TICK_MS !== 0) {
-    throw new Error('warmupMs must be a whole server tick so the tick phase stays aligned');
-  }
-  const startFacing = opts.facing ?? 0;
-  const lane = opts.start ?? COLLIDER_FREE_LANE;
+/** The per-client recording a scenario run opens and closes. */
+interface RigRecording {
+  fromMs: number | null;
+  frames: FrameRecord[];
+  commands: CommandSample[];
+}
 
-  const clock = new VirtualClock(0);
-  clock.install();
-  const link = new LatencyLink(clock, opts.latency);
+interface ClientRigParams {
+  clock: VirtualClock;
+  link: LatencyLink;
+  server: GameServer;
+  session: ClientSession;
+  pid: number;
+  serverEntity: Entity;
+  characterId: number;
+  playerClass: PlayerClass;
+  keyTimeline: boolean;
+  startFacing: number;
+  movementWireVersion: 1 | 2;
+  /** Keep this rig's WebSocket stub installed after its client is built (the
+   *  primary client), or put the previous one back (a peer). */
+  keepSocketClass: boolean;
+}
 
-  let recordingFromMs: number | null = null;
-  let frames: FrameRecord[] = [];
-  let ticks: TickRecord[] = [];
-  let commands: CommandSample[] = [];
+/** One client, its socket over its own link, and its frame pipeline. */
+interface ClientRig extends HarnessClient {
+  recording: RigRecording;
+  heldInput: MoveInput;
+  setHeldFacing(facing: number | null): void;
+  /** The intent and heading the wire last carried (a run's seed). */
+  wireIntent(): MoveInput;
+  wireFacing(): number;
+  stepFrame(): void;
+}
+
+function createClientRig(params: ClientRigParams): ClientRig {
+  const { clock, link, server, session, serverEntity, startFacing, movementWireVersion } = params;
+  const keyTimeline = params.keyTimeline;
+  const recording: RigRecording = { fromMs: null, frames: [], commands: [] };
   // The last intent the WIRE carried, kept across the whole harness lifetime so
   // a run can be seeded with what the server was already acting on when
   // recording opened. Only the `commands` timeline is gated on recording.
@@ -366,7 +453,6 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
   // A frame may omit `facing` (mouselookFacing null), which means UNCHANGED on
   // the server, so the wire heading is carried forward rather than defaulted.
   let wireFacing = startFacing;
-  const movementWireVersion = opts.movementWire ?? 2;
 
   /** Record one outgoing frame as the server's own parser would read it. */
   function noteClientFrame(payload: string): void {
@@ -382,9 +468,9 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     const frame = parseMoveInputFrame(parsed);
     if (frame.facing !== null) wireFacing = frame.facing;
     wireIntent = frame.moveInput;
-    if (recordingFromMs === null) return;
-    commands.push({
-      tMs: clock.now() - recordingFromMs,
+    if (recording.fromMs === null) return;
+    recording.commands.push({
+      tMs: clock.now() - recording.fromMs,
       mi: frame.moveInput,
       facing: wireFacing,
       ct: (parsed as { ct: number }).ct,
@@ -392,28 +478,8 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     });
   }
 
-  const joined = joinGroundTruthCharacter(1, opts.playerClass ?? 'warrior', movementWireVersion);
-  const { server, session, pid } = joined;
-  // The frames join() already wrote (hello, the entry notice, the social
-  // snapshot) were captured raw by rawFakeWs. Virtual time has not moved since,
-  // so pushing them through the link now schedules them exactly as an
-  // intercepted send would have.
-  const joinFrames = [...joined.client.sent];
-  joined.client.sent.length = 0;
-  joined.client.ws.send = (payload: string) => {
-    joined.client.sent.push(payload);
-    link.serverSend(payload);
-  };
-  for (const payload of joinFrames) joined.client.ws.send(payload);
-
-  const joinedEntity = server.sim.entities.get(pid);
-  if (!joinedEntity) throw new Error('joined character is missing from the server sim');
-  const serverEntity: Entity = joinedEntity;
-  teleportEntity(serverEntity, lane.x, lane.z, server.sim.cfg.seed);
-  serverEntity.facing = startFacing;
-
   const globals = globalThis as Record<string, unknown>;
-  const previousWebSocket = globals.WebSocket;
+  const socketClassBefore = globals.WebSocket;
   let socket: HarnessSocket | null = null;
   class HarnessWebSocket extends HarnessSocket {
     constructor(url: string) {
@@ -429,12 +495,17 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     }
   }
   globals.WebSocket = HarnessWebSocket;
-  const client = new ClientWorld(
-    'harness-token',
-    1,
-    opts.playerClass ?? 'warrior',
-    'http://localhost',
-  );
+  let client: ClientWorld;
+  try {
+    client = new ClientWorld(
+      'harness-token',
+      params.characterId,
+      params.playerClass,
+      'http://localhost',
+    );
+  } finally {
+    if (!params.keepSocketClass) globals.WebSocket = socketClassBefore;
+  }
   if (!socket) throw new Error('ClientWorld did not open a socket');
   const clientSocket: HarnessSocket = socket;
 
@@ -449,7 +520,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
   });
   clientSocket.onopen?.();
 
-  // Client frame state, one instance per harness exactly as main.ts holds one
+  // Client frame state, one instance per client exactly as main.ts holds one
   // per session.
   const inputEcho = new InputEchoTracker();
   const selfMotionFrameBuffer = new SelfMotionFrameBuffer();
@@ -468,7 +539,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     driveControlsLocked: false,
   };
   const heldInput = emptyMoveInput();
-  let heldFacing: number | null = opts.keyTimeline ? null : startFacing;
+  let heldFacing: number | null = keyTimeline ? null : startFacing;
   let lastFrameAtMs = 0;
   const kbTurn = newKeyboardTurnState();
   const kbTurnArgs: KeyboardTurnArgs = {
@@ -488,35 +559,12 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
   let cameraYaw = startFacing;
   let selfFacingOverride: number | null = null;
   let selfFacingLastTarget: number | null = null;
-  const serverTickHooks: ServerTickHook[] = [];
+  const frameHooks: ClientFrameHook[] = [];
 
   function reconcileOutcomes(): ReconcileOutcomeCounts {
     const counts = client.netPipeline().summary().reconcile;
     if (!counts) throw new Error('the client net pipeline reports no reconcile outcomes');
     return counts;
-  }
-
-  function stepServer(): void {
-    // biome-ignore lint/suspicious/noExplicitAny: the server-loop internals a manual step drives
-    const internals = server as any;
-    internals.clearStaleInputs();
-    consumeMovementFramesV2(server.sim, [session]);
-    const events = server.sim.tick();
-    for (const hook of [...serverTickHooks]) hook(events);
-    updateMovementOverrideEpochs(server.sim, [session]);
-    internals.routeEvents(events);
-    internals.broadcastSnapshots();
-    if (recordingFromMs === null) return;
-    const tMs = clock.now() - recordingFromMs;
-    ticks.push({
-      tick: Math.round(tMs / SERVER_TICK_MS) - 1,
-      tMs,
-      x: serverEntity.pos.x,
-      y: serverEntity.pos.y,
-      z: serverEntity.pos.z,
-      facing: serverEntity.facing,
-      consumedCt: session.lastConsumedCt,
-    });
   }
 
   function stepFrame(): void {
@@ -546,7 +594,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     let turnInputActive = false;
     let keyboardFacing: number | null = null;
     const wireMi: MoveInput = { ...mi };
-    if (opts.keyTimeline) {
+    if (keyTimeline) {
       const cameraDrivenFacing = heldFacing !== null;
       turnInputActive = mi.turnLeft || mi.turnRight || cameraDrivenFacing;
       if (heldFacing !== null) cameraYaw = heldFacing;
@@ -622,6 +670,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     Object.assign(client.moveInput, wireMi);
     client.setMouselookFacing(netFacing);
     let movementFrameEmitted = client.movementWireVersion !== 2 ? client.flushInput(now) : false;
+    const commands = recording.commands;
     const firstSampledCommand = commands.length;
     movementFrameEmitted =
       movementPrediction.advance(
@@ -632,7 +681,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         now,
         turnEngageEdge,
       ) || movementFrameEmitted;
-    if (opts.keyTimeline && movementFrameEmitted) pendingReleaseFacing = null;
+    if (keyTimeline && movementFrameEmitted) pendingReleaseFacing = null;
     const samplerInterpolationAlpha = movementPrediction.interpolationAlpha;
     for (let i = firstSampledCommand; i < commands.length; i++) {
       commands[i].samplerInterpolationAlpha = samplerInterpolationAlpha;
@@ -641,7 +690,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     // 4) fold the echo samples, drain the events, then read the discontinuity
     // edge the client holds until its authoritative snapshot has landed.
     inputEcho.fold(client.consumeInputEchoSamples());
-    client.drainEvents();
+    const events = client.drainEvents();
     const discontinuity = client.consumeSelfPositionDiscontinuity();
 
     // 5) the display frame selected by the negotiated movement wire.
@@ -711,9 +760,22 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         }
       : null;
 
-    if (recordingFromMs === null) return;
-    const tMs = now - recordingFromMs;
-    frames.push({
+    if (frameHooks.length > 0) {
+      const info: ClientFrameInfo = {
+        nowMs: now,
+        frameDtSec: frameDt,
+        alpha,
+        selfMotion,
+        drawn: { x: drawn.x, y: drawn.y, z: drawn.z },
+        predictorActive: selfRender.active,
+        events,
+      };
+      for (const hook of [...frameHooks]) hook(info);
+    }
+
+    if (recording.fromMs === null) return;
+    const tMs = now - recording.fromMs;
+    recording.frames.push({
       tMs,
       frameDtSec: frameDt,
       x: drawn.x,
@@ -752,6 +814,124 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     });
   }
 
+  return {
+    link,
+    session,
+    client,
+    pid: params.pid,
+    serverEntity,
+    recording,
+    heldInput,
+    setHeldFacing(facing: number | null): void {
+      heldFacing = facing;
+    },
+    wireIntent: () => wireIntent,
+    wireFacing: () => wireFacing,
+    stepFrame,
+    holdIntent(mi: Partial<MoveInput>): void {
+      Object.assign(heldInput, mi);
+    },
+    onFrame(hook: ClientFrameHook): () => void {
+      frameHooks.push(hook);
+      return () => {
+        const index = frameHooks.indexOf(hook);
+        if (index >= 0) frameHooks.splice(index, 1);
+      };
+    },
+    reconcileOutcomes,
+  };
+}
+
+/** Reroute the frames a raw join already captured, and every later server
+ *  send, through the link's server end. */
+function routeJoinThroughLink(joined: JoinedGroundTruth, link: LatencyLink): void {
+  // The frames join() already wrote (hello, the entry notice, the social
+  // snapshot) were captured raw by rawFakeWs. Virtual time has not moved since,
+  // so pushing them through the link now schedules them exactly as an
+  // intercepted send would have.
+  const joinFrames = [...joined.client.sent];
+  joined.client.sent.length = 0;
+  joined.client.ws.send = (payload: string) => {
+    joined.client.sent.push(payload);
+    link.serverSend(payload);
+  };
+  for (const payload of joinFrames) joined.client.ws.send(payload);
+}
+
+export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
+  const frameMs = opts.frameMs ?? DEFAULT_FRAME_MS;
+  const warmupMs = opts.warmupMs ?? 1000;
+  if (warmupMs % SERVER_TICK_MS !== 0) {
+    throw new Error('warmupMs must be a whole server tick so the tick phase stays aligned');
+  }
+  const startFacing = opts.facing ?? 0;
+  const lane = opts.start ?? COLLIDER_FREE_LANE;
+
+  const clock = new VirtualClock(0);
+  clock.install();
+  const link = new LatencyLink(clock, opts.latency);
+
+  let ticks: TickRecord[] = [];
+  const movementWireVersion = opts.movementWire ?? 2;
+
+  const joined = joinGroundTruthCharacter(1, opts.playerClass ?? 'warrior', movementWireVersion);
+  const { server, session, pid } = joined;
+  routeJoinThroughLink(joined, link);
+
+  const joinedEntity = server.sim.entities.get(pid);
+  if (!joinedEntity) throw new Error('joined character is missing from the server sim');
+  const serverEntity: Entity = joinedEntity;
+  teleportEntity(serverEntity, lane.x, lane.z, server.sim.cfg.seed);
+  serverEntity.facing = startFacing;
+
+  const globals = globalThis as Record<string, unknown>;
+  const previousWebSocket = globals.WebSocket;
+  const primary = createClientRig({
+    clock,
+    link,
+    server,
+    session,
+    pid,
+    serverEntity,
+    characterId: 1,
+    playerClass: opts.playerClass ?? 'warrior',
+    keyTimeline: opts.keyTimeline === true,
+    startFacing,
+    movementWireVersion,
+    keepSocketClass: true,
+  });
+  const { client } = primary;
+  const recording = primary.recording;
+  const peers: ClientRig[] = [];
+  // Every client's session, in join order: the v2 frame consumer and the
+  // override epochs walk them exactly as the server loop walks its sessions.
+  const sessions: ClientSession[] = [session];
+  const joinedCharacters = new Set<number>([1]);
+  const serverTickHooks: ServerTickHook[] = [];
+
+  function stepServer(): void {
+    // biome-ignore lint/suspicious/noExplicitAny: the server-loop internals a manual step drives
+    const internals = server as any;
+    internals.clearStaleInputs();
+    consumeMovementFramesV2(server.sim, sessions);
+    const events = server.sim.tick();
+    for (const hook of [...serverTickHooks]) hook(events);
+    updateMovementOverrideEpochs(server.sim, sessions);
+    internals.routeEvents(events);
+    internals.broadcastSnapshots();
+    if (recording.fromMs === null) return;
+    const tMs = clock.now() - recording.fromMs;
+    ticks.push({
+      tick: Math.round(tMs / SERVER_TICK_MS) - 1,
+      tMs,
+      x: serverEntity.pos.x,
+      y: serverEntity.pos.y,
+      z: serverEntity.pos.z,
+      facing: serverEntity.facing,
+      consumedCt: session.lastConsumedCt,
+    });
+  }
+
   let disposed = false;
   // The clock owns process-wide globals (Date.now, window, document) and so
   // does the WebSocket stub, so a harness that fails to come up must put them
@@ -762,12 +942,16 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     disposed = true;
     link.disconnect();
     client.close();
+    for (const peer of peers) {
+      peer.link.disconnect();
+      peer.client.close();
+    }
     globals.WebSocket = previousWebSocket;
     clock.uninstall();
   }
 
   clock.setInterval(stepServer, SERVER_TICK_MS);
-  clock.setInterval(stepFrame, frameMs);
+  clock.setInterval(primary.stepFrame, frameMs);
   clock.advanceTo(warmupMs);
   // A scenario that started before the mirror had the self would measure the
   // world-entry transient instead of movement, so refuse rather than run.
@@ -788,8 +972,8 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
       const { durationMs } = options;
       const script = [...(options.script ?? [])].sort((a, b) => a.atMs - b.atMs);
       const origin = clock.now();
-      recordingFromMs = origin;
-      frames = [];
+      recording.fromMs = origin;
+      recording.frames = [];
       ticks = [];
       const outboxBefore =
         (client as unknown as { movementFrameOutbox?: { droppedOldest: number } })
@@ -799,13 +983,15 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
       // frame looks like the start of the timeline rather than what it is, a
       // held-input CHANGE, and every start transition would be scored as
       // steady state.
-      commands = [{ tMs: 0, mi: { ...wireIntent }, facing: wireFacing }];
+      recording.commands = [
+        { tMs: 0, mi: { ...primary.wireIntent() }, facing: primary.wireFacing() },
+      ];
       // The intent timeline is applied on the clock, so a script entry lands at
       // its exact scripted instant and the frame that follows carries it.
       for (const entry of script) {
         clock.schedule(origin + entry.atMs, () => {
-          if (entry.mi) Object.assign(heldInput, entry.mi);
-          if (entry.facing !== undefined) heldFacing = entry.facing;
+          if (entry.mi) Object.assign(primary.heldInput, entry.mi);
+          if (entry.facing !== undefined) primary.setHeldFacing(entry.facing);
         });
       }
       if (options.facingAt) {
@@ -814,7 +1000,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         // mouselook heading is produced.
         const sweep = clock.setInterval(() => {
           const tMs = clock.now() - origin;
-          if (tMs >= 0 && tMs <= durationMs) heldFacing = facingAt(tMs);
+          if (tMs >= 0 && tMs <= durationMs) primary.setHeldFacing(facingAt(tMs));
         }, frameMs);
         clock.schedule(origin + durationMs, () => clock.cancel(sweep));
       }
@@ -822,10 +1008,11 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         clock.schedule(origin + action.atMs, action.run);
       }
       clock.advanceTo(origin + durationMs);
-      recordingFromMs = null;
+      recording.fromMs = null;
       const tickCount = Math.floor(durationMs / SERVER_TICK_MS);
+      const commands = recording.commands;
       return {
-        frames,
+        frames: recording.frames,
         ticks,
         commands,
         tickScript: frameCommandsToTickScript(commands, tickCount),
@@ -851,7 +1038,57 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         if (index >= 0) serverTickHooks.splice(index, 1);
       };
     },
-    reconcileOutcomes,
+    reconcileOutcomes: primary.reconcileOutcomes,
+    holdIntent: primary.holdIntent,
+    onClientFrame: primary.onFrame,
+    addPeer(peerOpts: PeerClientOptions): HarnessClient {
+      if (disposed) throw new Error('the harness is disposed');
+      const peerWarmupMs = peerOpts.warmupMs ?? 1000;
+      if (peerWarmupMs % SERVER_TICK_MS !== 0) {
+        throw new Error('warmupMs must be a whole server tick so the tick phase stays aligned');
+      }
+      if (joinedCharacters.has(peerOpts.characterId)) {
+        throw new Error(`character ${peerOpts.characterId} is already joined`);
+      }
+      joinedCharacters.add(peerOpts.characterId);
+      const peerLink = new LatencyLink(clock, peerOpts.latency);
+      const peerClass = peerOpts.playerClass ?? 'warrior';
+      const peerJoined = joinCharacterOn(
+        server,
+        peerOpts.characterId,
+        peerClass,
+        movementWireVersion,
+      );
+      routeJoinThroughLink(peerJoined, peerLink);
+      const peerEntity = server.sim.entities.get(peerJoined.pid);
+      if (!peerEntity) throw new Error('joined peer is missing from the server sim');
+      const peerFacing = peerOpts.facing ?? 0;
+      const peerLane = peerOpts.start ?? { x: lane.x + 6, z: lane.z };
+      teleportEntity(peerEntity, peerLane.x, peerLane.z, server.sim.cfg.seed);
+      peerEntity.facing = peerFacing;
+      const peer = createClientRig({
+        clock,
+        link: peerLink,
+        server,
+        session: peerJoined.session,
+        pid: peerJoined.pid,
+        serverEntity: peerEntity,
+        characterId: peerOpts.characterId,
+        playerClass: peerClass,
+        keyTimeline: peerOpts.keyTimeline === true,
+        startFacing: peerFacing,
+        movementWireVersion,
+        keepSocketClass: false,
+      });
+      peers.push(peer);
+      sessions.push(peerJoined.session);
+      clock.setInterval(peer.stepFrame, frameMs);
+      clock.advanceTo(clock.now() + peerWarmupMs);
+      if (!peer.client.connected || !peer.client.entities.has(peer.client.playerId)) {
+        throw new Error('the peer mirror never synced during warmup: raise warmupMs');
+      }
+      return peer;
+    },
     dispose: teardown,
   };
 }

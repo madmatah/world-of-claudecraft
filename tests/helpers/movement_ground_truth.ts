@@ -92,7 +92,16 @@ export function joinGroundTruthCharacter(
   playerClass: PlayerClass = 'warrior',
   movementWireVersion: 1 | 2 = 1,
 ): JoinedGroundTruth {
-  const server = new GameServer();
+  return joinCharacterOn(new GameServer(), characterId, playerClass, movementWireVersion);
+}
+
+/** One more character joined onto an existing GameServer, the same way. */
+export function joinCharacterOn(
+  server: GameServer,
+  characterId: number,
+  playerClass: PlayerClass = 'warrior',
+  movementWireVersion: 1 | 2 = 1,
+): JoinedGroundTruth {
   const client = rawFakeWs();
   const session = server.join(
     client.ws,
