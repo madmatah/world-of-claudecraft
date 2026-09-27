@@ -668,12 +668,14 @@ import {
   playRealmRacersScrapeAudio,
   syncRealmRacersVehicleAudio,
 } from './realm_racers_audio';
+import { prepareRealmRacersCircuits } from './realm_racers_circuit_prepare';
 import { realmRacersDaylight } from './realm_racers_daylight_core';
 import { RealmRacersGroundBlastVisuals } from './realm_racers_ground_blast';
 import { updateRealmRacersLampGlow } from './realm_racers_lamps';
 import { RealmRacersPrepare } from './realm_racers_prepare';
+import { RealmRacersSky } from './realm_racers_sky';
 import { REALM_RACERS_SLICK_SHEEN_COLOR } from './realm_racers_slicks_core';
-import { type RallySkyKey, rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
+import { rallySkyDayNightBiome, realmRacersThemeAt } from './realm_racers_themes';
 import { buildRealmRacersTracks, type RealmRacersTracksView } from './realm_racers_track';
 import {
   isOutsideRealmRacersDrawRange,
@@ -2049,8 +2051,13 @@ export class Renderer {
   // plenty of feedback; the FCT numbers are unaffected.
   private healGlowAt = new Map<number, number>();
 
-  /** Which circuit sky has already been fetched this session, if any. */
-  private realmRacersSkyReady: RallySkyKey | null = null;
+  private readonly realmRacersSky = new RealmRacersSky({
+    sky: () => this.skyView,
+    run: (work, priority, label) => this.backgroundGpuWork.run(work, priority, label),
+    upload: (texture) => this.prewarmTextureInIdle(texture),
+    environment: (biome) => this.ensureEnvironmentBiome(biome),
+    needsEnvironment: () => !this.lowGfx && !(GFX.constrainedMemory && this.envRTs.size > 0),
+  });
   private realmRacersTrack: RealmRacersTracksView;
   private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
   private readonly realmRacersPrepareSeam = new RealmRacersPrepare([this.realmRacersGroundBlasts]);
@@ -2663,6 +2670,11 @@ export class Renderer {
       () => this.lightPulses?.lights ?? NO_POINT_LIGHTS,
     ]);
     this.realmRacersTrack = buildRealmRacersTracks();
+    prepareRealmRacersCircuits(
+      this.realmRacersPrepareSeam,
+      this.realmRacersTrack,
+      this.realmRacersSky,
+    );
     setRenderCategory(this.realmRacersTrack.group, 'props');
     this.scene.add(this.realmRacersTrack.group);
     this.scene.add(this.realmRacersGroundBlasts.group);
@@ -9300,34 +9312,6 @@ export class Renderer {
     this.buildAllDelveModules(delve.id, slot, origin, modules);
   }
 
-  /**
-   * The HDRI and prefiltered environment a Realm Racers circuit's sky needs,
-   * fetched on first arrival in the band.
-   *
-   * The world's own lane cannot cover it: `prepareZoneSky` runs off zone
-   * residency, and the instance band belongs to no zone, so nothing would ever
-   * ask for the Nightbloom's dome out there and the circuit would keep flying
-   * whichever sky the player teleported in from. Idempotent per key on both
-   * halves (`ensureSkyBiomeAssets` memoizes its fetch, `ensureEnvironmentBiome`
-   * its PMREM), and remembered here as well so a per-frame call is one map
-   * lookup once the sky is up.
-   */
-  private ensureRealmRacersSky(biome: RallySkyKey): void {
-    if (this.realmRacersSkyReady === biome) return;
-    this.realmRacersSkyReady = biome;
-    void ensureSkyBiomeAssets([biome])
-      .then(() => {
-        this.ensureEnvironmentBiome(biome);
-      })
-      .catch(() => {
-        // Left MARKED rather than cleared. `ensureSkyBiomeAssets` memoizes its
-        // rejected promise, so clearing here would re-enter that same dead memo
-        // on the next frame and every frame after it, allocating a fresh
-        // then/catch pair for a fetch that can never succeed. A circuit under
-        // the shipped sky is a worse look, not a broken frame.
-      });
-  }
-
   /** The dome, once per frame, from EITHER sync path (one body rather than the
    *  copy each kept: a fix to one of two identical blocks fixes one code path).
    *  It rides the camera, so it serves every open-air state: the overworld,
@@ -9404,7 +9388,7 @@ export class Renderer {
     const biome = rallyTheme
       ? rallySkyDayNightBiome(rallyTheme.sky.biome)
       : zoneBiomeAt(this.sim.player.pos.x, pz);
-    if (rallyTheme) this.ensureRealmRacersSky(rallyTheme.sky.biome);
+    if (rallyTheme) void this.realmRacersSky.ensure(rallyTheme.sky.biome);
     // Per-biome god-ray strength, eased over about half a second so a border
     // crossing fades the shafts with the rest of the ambience.
     const shaftTarget = Renderer.BIOME_GOD_RAYS[biome] ?? 1;
@@ -12283,6 +12267,7 @@ export class Renderer {
     this.galeFeatures?.update(this.time);
     this.birds.update(p.pos.x, p.pos.z, dt);
     this.impactSite.update(p.pos.x, p.pos.z, dt);
+    this.realmRacersPrepareSeam.frame(this, realmRacersInfo, p.pos.x, p.pos.z);
     // A seated pilot reads their own match; a bystander at the fence reads the
     // lane's trackside view, so the lights, the boxes and the oil stay honest
     // for anyone looking at the circuit (same shape as the Vale Cup spectate).
@@ -12292,7 +12277,6 @@ export class Renderer {
       this.time,
       realmRacersInfo.match ?? this.sim.realmRacersTrackside ?? null,
     );
-    this.realmRacersPrepareSeam.frame(this, realmRacersInfo, p.pos.x, p.pos.z);
     this.realmRacersGroundBlasts.update(dt);
     worldStart = this.markRendererWorldPhase(worldPhaseMs, 'zoneFeatures', worldStart);
     this.updateAmbience(p.pos.x, this.camera.position.y, dt);

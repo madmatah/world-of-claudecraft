@@ -5632,7 +5632,7 @@ export class Hud {
     // The race UI owns the match-end edge; the splash it clears is this class's.
     clearPickupSplash: () => this.realmRacersSplash.clear(),
     writers: this.writerFacet,
-    prepareProgress: (out) => this.renderer.realmRacersPrepare.progress(out),
+    prepareProgress: (out, circuitId) => this.renderer.realmRacersPrepare.progress(out, circuitId),
     ...this.windowFocus('#realm-racers-window'),
   });
   readonly lobbyHold = this.realmRacersUi.lobbyHold;

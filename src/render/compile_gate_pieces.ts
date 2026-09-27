@@ -37,7 +37,8 @@ type MaterialCarrier = THREE.Object3D & {
  *  programs and share one piece. Every carrier has a geometry, so the
  *  attribute set is always part of the string (the plain static mesh is
  *  `Anup`). */
-function programVariantOf(carrier: MaterialCarrier): string {
+export function programVariantOf(node: THREE.Object3D): string {
+  const carrier = node as MaterialCarrier;
   let variant = '';
   if (carrier.isSkinnedMesh) variant += 's';
   if (carrier.isInstancedMesh) {

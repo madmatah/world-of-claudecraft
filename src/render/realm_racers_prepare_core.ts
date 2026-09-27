@@ -122,3 +122,55 @@ export function addRealmRacersPrepareTally(
   out.settled = false;
   out.done += Math.min(total, wholeUnits(units?.done ?? 0));
 }
+
+/** The client that links the procedural programs every circuit draws, at the
+ *  commitment trigger, before any circuit is drawn. */
+export const REALM_RACERS_COMMON_PREPARE_ID = 'rallyCommon';
+
+const CIRCUIT_PREPARE_PREFIX = 'rallyCircuit:';
+
+/** The client of one drawn circuit: its dressing models, its view, its sky. */
+export function realmRacersCircuitPrepareId(circuitId: string): string {
+  return `${CIRCUIT_PREPARE_PREFIX}${circuitId}`;
+}
+
+/** The circuit this viewer needs prepared now: their own match's once it is
+ *  known (from the lobby on), else the lane they stand on in the band (a
+ *  bystander, or a login at the fence). */
+export function realmRacersPrepareCircuit(
+  matchCircuitId: string | null,
+  laneCircuitId: string | null,
+): string | null {
+  return matchCircuitId ?? laneCircuitId;
+}
+
+/**
+ * Whether a circuit's view stays hidden on the viewer's own lane: only while
+ * its preparation has no verdict AND something covers the world (an arrival
+ * cover, or the viewer's own race still in its loading lobby). Hiding the road
+ * in the open would hide what a pilot reacts to, so an uncovered circuit draws
+ * cold rather than late.
+ */
+export function realmRacersRevealHeld(state: RealmRacersPrepareState, covered: boolean): boolean {
+  return covered && !realmRacersPrepareSettledState(state);
+}
+
+/** A circuit client's steps: each dressing fill, the gate, the first draw of
+ *  the linked view (its buffer uploads), the sky. */
+export function realmRacersCircuitUnits(
+  out: RealmRacersPrepareUnits,
+  fillsDone: number,
+  fillsTotal: number,
+  gated: boolean,
+  drawn: boolean,
+  skyReady: boolean,
+): RealmRacersPrepareUnits {
+  const total = Math.max(0, fillsTotal);
+  out.total = total + 3;
+  out.done =
+    Math.min(total, Math.max(0, fillsDone)) +
+    (gated ? 1 : 0) +
+    (drawn ? 1 : 0) +
+    (skyReady ? 1 : 0);
+  return out;
+}

@@ -113,7 +113,10 @@ let sharedSparkleMaterial: THREE.SpriteMaterial | null = null;
 function pickupSparkleMaterial(): THREE.SpriteMaterial {
   // Always boosted: the glint is how a box announces itself down the road, so
   // no preset gets a say in how brightly it does it.
-  sharedSparkleMaterial ??= sparkleSpriteMaterial(true);
+  if (!sharedSparkleMaterial) {
+    sharedSparkleMaterial = sparkleSpriteMaterial(true);
+    sharedSparkleMaterial.name = 'realmRacersPickups:sparkle';
+  }
   return sharedSparkleMaterial;
 }
 
@@ -199,6 +202,7 @@ export function buildRealmRacersPickups(circuit: RealmRacersCircuit): RealmRacer
           metalness: 0.1,
           flatShading: true,
         });
+    if (fallbackMaterial) fallbackMaterial.name = 'realmRacersPickups:fallback';
     const sparkleMaterial = pickupSparkleMaterial();
     for (const box of boxes) {
       const body = new THREE.Group();

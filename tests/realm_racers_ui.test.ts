@@ -130,7 +130,7 @@ function harness() {
   // Hud's production wiring reads `this.renderer.realmRacersPrepare.progress`;
   // a test swaps the source the way replaceRenderer swaps the renderer.
   const source = {
-    progress: (out: { done: number; total: number; settled: boolean }) =>
+    progress: (out: { done: number; total: number; settled: boolean }, _circuitId?: string) =>
       Object.assign(out, prepared),
   };
   const clock = { now: 0 };
@@ -159,7 +159,7 @@ function harness() {
     showBanner,
     clearPickupSplash,
     writers: makeWriterFacet(new Map(), new Map(), new Map(), new Map(), noop, noop),
-    prepareProgress: (out) => source.progress(out),
+    prepareProgress: (out, circuitId) => source.progress(out, circuitId),
     connectionDropped: () => link.dropped,
     now: () => clock.now,
   });
@@ -1840,5 +1840,124 @@ describe('Realm Racers circuit announcement', () => {
     expect(
       (h.layer.querySelector('#realm-racers-podium') as HTMLElement).classList.contains('shown'),
     ).toBe(true);
+  });
+});
+
+describe('Realm Racers lobby ready waits for the drawn circuit', () => {
+  it('stays unready until the circuit client settles, whichever of the HUD and the renderer reads first', async () => {
+    const h = harness();
+    const gates: (() => void)[] = [];
+    const host = {
+      worldCompileGate: () => () =>
+        new Promise<void>((resolve) => {
+          gates.push(resolve);
+        }),
+      webgl: { properties: { get: () => undefined } },
+    };
+    const common: RealmRacersPrepareClient = {
+      prepareId: 'rallyCommon',
+      built: false,
+      prepare: () => new THREE.Group(),
+    };
+    let finishCircuit: () => void = () => undefined;
+    const circuitDone = new Promise<void>((resolve) => {
+      finishCircuit = resolve;
+    });
+    const circuit: RealmRacersPrepareClient = {
+      prepareId: `rallyCircuit:${REALM_RACERS_PRACTICE_CIRCUIT_ID}`,
+      built: false,
+      prepare: () => new THREE.Group(),
+      run: () => circuitDone.then(() => true),
+    };
+    const seam = new RealmRacersPrepare([common]);
+    seam.useCircuits({
+      circuitClient: (id) => (id === REALM_RACERS_PRACTICE_CIRCUIT_ID ? circuit : null),
+      circuitIds: () => [REALM_RACERS_PRACTICE_CIRCUIT_ID],
+    });
+    h.source.progress = (out, circuitId) => seam.progress(out, circuitId);
+    const flush = () => new Promise((done) => setTimeout(done, 0));
+    // The queue join prepares the common programs, which settle in the queue.
+    seam.frame(host, { queued: true, match: null }, 0, 0);
+    for (const resolve of gates.splice(0)) resolve();
+    await flush();
+    h.info.queued = false;
+    h.info.match = match({
+      circuitId: REALM_RACERS_PRACTICE_CIRCUIT_ID,
+      phase: 'loading',
+      countdown: 0,
+      countdownTicks: 0,
+      loading: { secondsLeft: 15, readyIds: [2, 3, 4] },
+    });
+    // The HUD reads the lobby before the renderer has seen it.
+    h.frame();
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+    for (let i = 0; i < 10; i++) {
+      seam.frame(host, h.info, 0, 0);
+      h.frame();
+    }
+    expect(seam.stateOf(circuit.prepareId)).toBe('preparing');
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+    finishCircuit();
+    await flush();
+    h.frame();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays unready through a graphics rebuild mid-lobby until the new seam settles its circuit', async () => {
+    const h = harness();
+    const flush = () => new Promise((done) => setTimeout(done, 0));
+    const host = {
+      worldCompileGate: () => () => Promise.resolve(),
+      webgl: { properties: { get: () => undefined } },
+    };
+    /** A renderer's seam whose circuit client settles when the test says so. */
+    const rendererSeam = () => {
+      let finish: () => void = () => undefined;
+      const done = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      const circuit: RealmRacersPrepareClient = {
+        prepareId: `rallyCircuit:${REALM_RACERS_PRACTICE_CIRCUIT_ID}`,
+        built: false,
+        prepare: () => new THREE.Group(),
+        run: () => done.then(() => true),
+      };
+      const seam = new RealmRacersPrepare();
+      seam.useCircuits({
+        circuitClient: (id) => (id === REALM_RACERS_PRACTICE_CIRCUIT_ID ? circuit : null),
+        circuitIds: () => [REALM_RACERS_PRACTICE_CIRCUIT_ID],
+      });
+      return { seam, finish };
+    };
+    h.info.match = match({
+      circuitId: REALM_RACERS_PRACTICE_CIRCUIT_ID,
+      phase: 'loading',
+      countdown: 0,
+      countdownTicks: 0,
+      loading: { secondsLeft: 15, readyIds: [2, 3, 4] },
+    });
+    const first = rendererSeam();
+    h.source.progress = (out, circuitId) => first.seam.progress(out, circuitId);
+    first.seam.frame(host, h.info, 0, 0);
+    h.frame();
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+    // The rebuild: the HUD now reads the new renderer's seam, which has not
+    // run a frame yet, while the old one settles behind it.
+    const rebuilt = rendererSeam();
+    h.source.progress = (out, circuitId) => rebuilt.seam.progress(out, circuitId);
+    first.finish();
+    await flush();
+    h.frame();
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+    for (let i = 0; i < 5; i++) {
+      rebuilt.seam.frame(host, h.info, 0, 0);
+      h.frame();
+    }
+    await flush();
+    expect(h.readyRealmRacers).not.toHaveBeenCalled();
+    rebuilt.finish();
+    await flush();
+    h.frame();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
   });
 });

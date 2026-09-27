@@ -36,6 +36,7 @@ import type { RealmRacersLaneView } from '../world_api/realm_racers';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import { createStaticBladeCluster } from './blade_grass';
+import { attachSceneGroupGated } from './gated_scene_attach';
 import { configureMaskedDoubleSidedVegetationMaterial, GFX, surfaceMat } from './gfx';
 import {
   biomeGroundTint,
@@ -49,6 +50,7 @@ import {
   realmRacersBarrierVisual,
 } from './realm_racers_barrier_visuals';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
+import { recordRealmRacersFill } from './realm_racers_fills';
 import {
   REALM_RACERS_GRASS_TILE_RADIUS,
   REALM_RACERS_GRASS_Y,
@@ -65,6 +67,7 @@ import { REALM_RACERS_PROP_VISUALS } from './realm_racers_prop_visuals';
 import { buildRealmRacersSlicks } from './realm_racers_slicks';
 import {
   type RallyCircuitTheme,
+  type RallySkyKey,
   REALM_RACERS_THEME_BOOT_URLS,
   realmRacersTheme,
 } from './realm_racers_themes';
@@ -101,7 +104,41 @@ export interface RealmRacersTrackView {
  *  in the editor into the band beside the authored ones. */
 export interface RealmRacersTracksView extends RealmRacersTrackView {
   registerDraft(circuit: RealmRacersCircuit): void;
+  /** One view per authored circuit, never a draft: what the race preparation
+   *  compiles. */
+  readonly circuits: readonly RealmRacersCircuitView[];
+  /** Hold an authored circuit hidden on its own lane while `held` says so
+   *  (realm_racers_prepare.ts decides: only under a cover). */
+  holdReveal(held: (circuitId: string) => boolean): void;
+  /** The compile gate a model fill landing on an authored circuit attaches
+   *  through (hidden until linked), or undefined to add it plainly. */
+  gateFills(gate: () => FillGate | undefined): void;
 }
+
+type FillGate = (target: THREE.Object3D) => Promise<unknown>;
+
+/** An authored circuit's view, as the race preparation reads it. */
+export interface RealmRacersCircuitView {
+  readonly circuitId: string;
+  readonly group: THREE.Group;
+  /** The theme sky it flies. */
+  readonly skyBiome: RallySkyKey;
+  /** Resolves once the view has been drawn visible for a frame (one-shot). */
+  drawnOnce(): Promise<void>;
+  /** Whether the view stood on the viewer's lane at its last update. */
+  onViewerLane(): boolean;
+}
+
+/** The authored view plus what the race preparation reads of it. */
+type AuthoredTrackView = RealmRacersTrackView &
+  Pick<RealmRacersCircuitView, 'drawnOnce' | 'onViewerLane'>;
+
+/** The reveal hold a view consults when it is on the viewer's lane. */
+interface RevealHold {
+  held(circuitId: string): boolean;
+}
+
+const NEVER_HELD: RevealHold = { held: () => false };
 
 // Surface heights, all relative to the instance band's flat floor (y = 0, the
 // height groundHeight returns inside the region), stacked so nothing z-fights.
@@ -122,6 +159,9 @@ const FLOWER_WIDTH = 0.95;
 const FLOWER_HEIGHT = 0.7;
 
 const loaded = new Map<string, THREE.Group>();
+
+/** The gate source of each authored circuit's group, read when a fill lands. */
+const fillGates = new WeakMap<THREE.Object3D, () => FillGate | undefined>();
 
 function preload(url: string): void {
   registerDeferredPreload(() =>
@@ -193,6 +233,12 @@ interface ModelSpot {
  * the group, so the meshes added afterwards hang off an orphan nothing draws,
  * upload no GPU buffer and are collected with it.
  *
+ * Every fetch is recorded on the group's fill ledger (realm_racers_fills.ts):
+ * the race preparation gates the group only once its fills have landed, since
+ * a gate covers only what exists when it runs. Once the race preparation has
+ * started, a fill landing on an authored circuit attaches through the world
+ * gate (hidden until linked) whenever it lands, even after the reveal.
+ *
  * A headless host (a Vitest importing the render stack) never fetches: the
  * dressing simply draws nothing, exactly as it did when the lane was empty.
  */
@@ -201,10 +247,18 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
   const scene = loaded.get(url);
   if (!scene) {
     if (typeof window === 'undefined') return;
-    void loadGltf(url)
+    const fill = loadGltf(url)
       .then((gltf) => {
         loaded.set(url, gltf.scene);
-        drawInstances(group, gltf.scene, spots);
+        const gate = fillGates.get(group)?.();
+        if (!gate) {
+          drawInstances(group, gltf.scene, spots);
+          return;
+        }
+        const piece = new THREE.Group();
+        piece.name = 'realm-racers-dressing-fill';
+        drawInstances(piece, gltf.scene, spots);
+        void attachSceneGroupGated(group, piece, gate);
       })
       .catch((err) => {
         // Named rather than swallowed, and that changed with the boot lane's
@@ -217,12 +271,17 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
         // Dev-channel English, per the render i18n carve-out.
         console.warn('Realm Racers: circuit model failed to load', url, err);
       });
+    recordRealmRacersFill(group, fill);
     return;
   }
   drawInstances(group, scene, spots);
 }
 
-function drawInstances(group: THREE.Group, scene: THREE.Group, spots: readonly ModelSpot[]): void {
+function drawInstances(
+  group: THREE.Object3D,
+  scene: THREE.Group,
+  spots: readonly ModelSpot[],
+): void {
   scene.updateMatrixWorld(true);
   scene.traverse((obj) => {
     const src = obj as THREE.Mesh;
@@ -243,6 +302,7 @@ function drawInstances(group: THREE.Group, scene: THREE.Group, spots: readonly M
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.computeBoundingSphere();
+    mesh.userData.realmRacersDressing = true;
     group.add(mesh);
   });
 }
@@ -387,7 +447,9 @@ function buildStartLights(circuit: RealmRacersCircuit, group: THREE.Group): THRE
   const housingGeo = new THREE.BoxGeometry(0.72, 0.68, 0.48);
   const lensGeo = new THREE.CircleGeometry(0.24, 16);
   const housingMat = surfaceMat({ color: 0x171816, roughness: 0.72 });
+  housingMat.name = 'realmRacersTrack:startLightHousing';
   const offMat = new THREE.MeshBasicMaterial({ color: 0x241c12 });
+  offMat.name = 'realmRacersTrack:startLightOff';
   const lenses: THREE.Mesh[] = [];
   for (const [index, place] of rallyStartLightPlacements(circuit).entries()) {
     const housing = new THREE.Mesh(housingGeo, housingMat);
@@ -437,6 +499,7 @@ function buildFlowers(
       ? new THREE.MeshStandardMaterial({ map, alphaTest: 0.3, roughness: 0.85 })
       : new THREE.MeshLambertMaterial({ map, alphaTest: 0.35 }),
   );
+  mat.name = 'realmRacersTrack:flower';
   const mesh = new THREE.InstancedMesh(geo, mat, spots.length);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -613,6 +676,7 @@ function buildBasin(
         }
       : {}),
   });
+  material.name = 'realmRacersTrack:water';
   if (basin) {
     for (const mesh of meshes) {
       group.add(waterSheet(mesh, basin.waterY, basin.bankSlope, material));
@@ -888,11 +952,15 @@ function rallyGrassCluster(tint: number): {
   // The same lift the world gives its blades over the raw ground tint: they
   // catch more sky than the soil they stand on.
   (built.material as THREE.MeshStandardMaterial).color.setHex(tint).multiplyScalar(1.18);
+  built.material.name = 'realmRacersTrack:grass';
   grassMaterials.set(tint, built.material);
   return { geometry: grassGeometry, material: built.material };
 }
 
-export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersTrackView {
+export function buildRealmRacersTrack(
+  circuit: RealmRacersCircuit,
+  reveal: RevealHold = NEVER_HELD,
+): AuthoredTrackView {
   const group = new THREE.Group();
   group.name = 'realm-racers-track';
   const track = realmRacersTrack(circuit);
@@ -912,6 +980,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   // surface here, because which layer a surface is made of is a per-vertex
   // weight, not a material (see instance_surface.ts).
   const ground = buildInstanceGroundMaterial(REALM_RACERS_ORIGIN);
+  ground.name = 'realmRacersTrack:ground';
   const tint = biomeGroundTint(theme.ground);
   // The ponds are punched out of it as holes, so a pool sits in a hole in the
   // ground instead of floating over it: an island is the same mechanism with a
@@ -974,6 +1043,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   );
 
   const kerbMat = surfaceMat({ map: rallyKerbTexture(theme.kerb), roughness: 0.7 });
+  kerbMat.name = 'realmRacersTrack:kerb';
   for (const run of rallyKerbRuns(circuit)) {
     for (const side of [1, -1]) {
       group.add(
@@ -996,6 +1066,8 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
 
   // --- the start/finish band, straddling s = 0 ---
   const gridTexture = rallyStartGridTexture(theme.startGrid);
+  const gridMat = new THREE.MeshBasicMaterial({ map: gridTexture });
+  gridMat.name = 'realmRacersTrack:startGrid';
   group.add(
     surface(
       ribbon(
@@ -1008,7 +1080,7 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
         START_LINE_Y,
         1 / 6,
       ),
-      new THREE.MeshBasicMaterial({ map: gridTexture }),
+      gridMat,
     ),
   );
 
@@ -1017,7 +1089,9 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   const startLightLenses = buildStartLights(circuit, group);
   const startLightOff = startLightLenses[0]?.material as THREE.Material;
   const startLightRed = new THREE.MeshBasicMaterial({ color: 0xff3b1f });
+  startLightRed.name = 'realmRacersTrack:startLightRed';
   const startLightGreen = new THREE.MeshBasicMaterial({ color: 0x45e06f });
+  startLightGreen.name = 'realmRacersTrack:startLightGreen';
   let lastStartLightSignal = '';
   buildFlowers(circuit, theme, group);
   buildGrass(circuit, group);
@@ -1050,8 +1124,16 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
   group.visible = false;
 
   const provisionalTmp = new THREE.Vector3();
+  let onLane = false;
+  let shownLastUpdate = false;
+  let markDrawn: (() => void) | null = null;
+  const drawn = new Promise<void>((resolve) => {
+    markDrawn = resolve;
+  });
   return {
     group,
+    drawnOnce: () => drawn,
+    onViewerLane: () => onLane,
     dropProvisionalSlick(circuitId, worldX, worldZ, time) {
       if (circuitId !== circuit.id) return;
       // The slick layer lives in the lane frame this group was moved onto;
@@ -1076,7 +1158,14 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
       // and an identity test would silently hide every circuit.
       const lane = realmRacersLaneAt(px, pz);
       const mine = lane?.circuit.id === circuit.id;
-      group.visible = mine;
+      onLane = mine;
+      // Visible at the last update means drawn by the frame between the two.
+      if (markDrawn && shownLastUpdate) {
+        markDrawn();
+        markDrawn = null;
+      }
+      group.visible = mine && !reveal.held(circuit.id);
+      shownLastUpdate = group.visible;
       if (!lane || !mine) {
         // The lights are WORLD positions, so a copy that is not being drawn has
         // to give its slots back: left registered, this circuit's lamps would go
@@ -1183,7 +1272,19 @@ export function buildRealmRacersTrack(circuit: RealmRacersCircuit): RealmRacersT
  */
 export function buildRealmRacersTracks(): RealmRacersTracksView {
   const group = new THREE.Group();
-  const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) => buildRealmRacersTrack(circuit));
+  const reveal: RevealHold = { held: NEVER_HELD.held };
+  let fillGate: () => FillGate | undefined = () => undefined;
+  const views = REALM_RACERS_CIRCUIT_LIST.map((circuit) => buildRealmRacersTrack(circuit, reveal));
+  const circuits = REALM_RACERS_CIRCUIT_LIST.map(
+    (circuit, i): RealmRacersCircuitView => ({
+      circuitId: circuit.id,
+      group: views[i].group,
+      skyBiome: realmRacersTheme(circuit).sky.biome,
+      drawnOnce: views[i].drawnOnce,
+      onViewerLane: views[i].onViewerLane,
+    }),
+  );
+  for (const view of views) fillGates.set(view.group, () => fillGate());
   for (const view of views) group.add(view.group);
   // Dev drafts get their own lifecycle beside the authored ones (built on
   // registration, replaced on re-registration); the map stays empty in every
@@ -1191,6 +1292,13 @@ export function buildRealmRacersTracks(): RealmRacersTracksView {
   const drafts = buildRealmRacersDraftTracks(group, buildRealmRacersTrack);
   return {
     group,
+    circuits,
+    holdReveal(held) {
+      reveal.held = held;
+    },
+    gateFills(gate) {
+      fillGate = gate;
+    },
     registerDraft: (circuit) => drafts.register(circuit),
     dropProvisionalSlick(circuitId, worldX, worldZ, time) {
       for (const view of views) view.dropProvisionalSlick(circuitId, worldX, worldZ, time);

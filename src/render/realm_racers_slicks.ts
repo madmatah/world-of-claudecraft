@@ -121,6 +121,8 @@ export function buildRealmRacersSlicks(): RealmRacersSlicksView {
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
   });
+  oilMaterial.name = 'realmRacersSlicks:oil';
+  sheenMaterial.name = 'realmRacersSlicks:sheen';
 
   const slots: SlickSlot[] = [];
   for (let i = 0; i < RALLY_SLICK_POOL; i++) {

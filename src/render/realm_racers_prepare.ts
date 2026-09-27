@@ -19,15 +19,33 @@
 // first-spawn establishing shot); the online race lobby brings its own.
 //
 // Clients root only what they build at `prepare()`: an object added under a
-// root after its gate ran is not covered by that gate.
+// root after its gate ran is not covered by that gate. A client whose root
+// fills in later (a circuit's dressing models) runs its own steps instead
+// (`run`): it waits for the fill, then gates.
+//
+// Two kinds of client join the ones built with the seam: the procedural
+// programs every circuit draws (`rallyCommon`, added by the renderer once its
+// tracks exist, so it starts at the commitment trigger), and one client per
+// circuit (`rallyCircuit:<id>`), asked of `RealmRacersCircuitClients` on the
+// first frame that circuit is known: the viewer's own match from its loading
+// lobby on, or the lane they stand on in the band. A mid-race reconnect or a
+// login at the fence asks on its first frame, so the arrival hold below covers
+// it. While a circuit's client has no verdict and a curtain covers the world
+// (the arrival cover, or the viewer's own race still loading), its view stays
+// hidden on the viewer's lane (`revealHeld`), so its first hidden-to-visible
+// flip draws linked programs; uncovered it draws cold, never late. A walker in
+// the band with no race asks every authored circuit, the lane underfoot first.
 //
 // The race lobby reads `progress()` through the HUD's current renderer (so a
 // graphics rebuild hands it the new seam): its progress bar is the unit tally,
-// and its ready is sent once every client has a verdict, never on a clock.
+// and its ready is sent once every client has a verdict, never on a clock. It
+// names the drawn circuit, so a circuit client this seam has not asked for yet
+// still counts as an unsettled unit whatever order the HUD and the renderer
+// run in.
 
 import type * as THREE from 'three';
-import { isAtRealmRacersXZ } from '../sim/realm_racers_layout';
-import { registerRevealGateForArrival } from './arrival_cover';
+import { isAtRealmRacersXZ, realmRacersLaneAt } from '../sim/realm_racers_layout';
+import { arrivalCoverActive, registerRevealGateForArrival } from './arrival_cover';
 import { compileTargetPrepared } from './compile_target_readiness';
 import { gpuPrepNow, recordGpuPrepEvent } from './gpu_prep_events';
 import {
@@ -39,7 +57,9 @@ import {
   type RealmRacersPrepareReason,
   type RealmRacersPrepareState,
   type RealmRacersPrepareUnits,
+  realmRacersPrepareCircuit,
   realmRacersPrepareHolds,
+  realmRacersRevealHeld,
   takeRealmRacersPrepare,
 } from './realm_racers_prepare_core';
 import type { TexturePropertiesLike } from './texture_prep_core';
@@ -56,6 +76,30 @@ export interface RealmRacersPrepareClient {
   /** A client that prepares in several steps reports them; one without
    *  counts as a single unit, done at its verdict. */
   units?(): RealmRacersPrepareUnits;
+  /** A client whose preparation is more than one gate over `prepare()`'s
+   *  root runs its own steps with the gate and resolves whether the work
+   *  beside the gate proved itself; the root's settle record is still read.
+   *  `uncovered` resolves when the cover it races against ends (the lobby
+   *  curtain falls, the arrival cover lifts): it then gates what exists and
+   *  settles rather than wait on a fetch that may never land. Without a
+   *  parallel compile it still runs, with a gate that resolves at once. */
+  run?(
+    gate: (target: THREE.Object3D) => Promise<unknown>,
+    uncovered: Promise<void>,
+  ): Promise<boolean>;
+  /** True once the client's own view may be drawn (its programs linked), even
+   *  before its verdict: a reveal hold lets go then. */
+  revealReady?(): boolean;
+  /** Builds only for the gate (stand-ins), so without one it builds nothing. */
+  readonly gateOnly?: boolean;
+}
+
+/** Where the seam gets the client of a circuit once that circuit is known;
+ *  null for a circuit with no view to prepare (a dev draft). */
+export interface RealmRacersCircuitClients {
+  circuitClient(circuitId: string): RealmRacersPrepareClient | null;
+  /** Every circuit with a view to prepare, in authoring order. */
+  circuitIds(): readonly string[];
 }
 
 /** What the seam needs of the renderer: its world gate (undefined without a
@@ -69,12 +113,17 @@ export interface RealmRacersPrepareHost {
 /** The slice of `IWorld.realmRacersInfo` the trigger reads. */
 export interface RealmRacersPrepareViewer {
   queued: boolean;
-  match: { practice: boolean } | null;
+  match: { practice: boolean; circuitId?: string; phase?: string } | null;
 }
 
 export type { RealmRacersPrepareProgress, RealmRacersPrepareState, RealmRacersPrepareUnits };
 
 export const REALM_RACERS_PREPARE_EVENT_PREFIX = 'realm-racers-prepare';
+
+const TRUE = (): boolean => true;
+const IMMEDIATE_GATE = (): Promise<void> => Promise.resolve();
+
+type Gate = (target: THREE.Object3D) => Promise<unknown>;
 
 export class RealmRacersPrepare {
   private readonly latch = createRealmRacersPrepareLatch();
@@ -89,6 +138,17 @@ export class RealmRacersPrepare {
   private host: RealmRacersPrepareHost | null = null;
   private inFlight = 0;
   private holding = false;
+  private circuits: RealmRacersCircuitClients | null = null;
+  private readonly askedCircuits = new Set<string>();
+  private everyCircuitAsked = false;
+  /** Circuit id to its client's id, and back. */
+  private readonly circuitClientIds = new Map<string, string>();
+  private readonly clientCircuits = new Map<string, string>();
+  /** The in-flight clients racing a cover, released when it ends. */
+  private readonly uncoverWaits = new Map<string, () => void>();
+  private loadingCircuit: string | null = null;
+  private lobbyCircuit: string | null = null;
+  private lobbyCoverSeen = false;
 
   constructor(clients: readonly RealmRacersPrepareClient[] = []) {
     for (const client of clients) this.addClient(client);
@@ -105,6 +165,26 @@ export class RealmRacersPrepare {
     if (this.latch.reason !== null && this.host) this.start(this.host, client);
   }
 
+  /** Hand the seam its circuit clients; asked per circuit as each is known. */
+  useCircuits(circuits: RealmRacersCircuitClients): void {
+    this.circuits = circuits;
+  }
+
+  /** The world gate once the seam has started (a fill that lands later rides
+   *  it), undefined before or without a parallel compile. */
+  worldGate(): Gate | undefined {
+    return this.host?.worldCompileGate();
+  }
+
+  /** Whether the circuit's view stays hidden on the viewer's lane: its client
+   *  has not linked it yet and a curtain covers the world. */
+  revealHeld(circuitId: string): boolean {
+    const id = this.circuitClientIds.get(circuitId);
+    if (id === undefined) return false;
+    if (this.clients.get(id)?.revealReady?.()) return false;
+    return realmRacersRevealHeld(this.stateOf(id), this.coveredFor(circuitId));
+  }
+
   /** Why the preparation started, or null while it has not. */
   get reason(): RealmRacersPrepareReason | null {
     return this.latch.reason;
@@ -115,11 +195,18 @@ export class RealmRacersPrepare {
   }
 
   /** Units prepared over units to prepare, across every client, and whether
-   *  every client has its verdict. */
-  progress(out: RealmRacersPrepareProgress): RealmRacersPrepareProgress {
+   *  every client has its verdict. A named circuit not asked for yet counts as
+   *  one unsettled unit when it has a view to prepare. */
+  progress(
+    out: RealmRacersPrepareProgress,
+    circuitId: string | null = null,
+  ): RealmRacersPrepareProgress {
     beginRealmRacersPrepareTally(out, this.latch.reason !== null);
     for (const client of this.clients.values()) {
       addRealmRacersPrepareTally(out, this.stateOf(client.prepareId), client.units?.() ?? null);
+    }
+    if (circuitId !== null && !this.askedCircuits.has(circuitId)) {
+      if (this.circuits?.circuitClient(circuitId)) addRealmRacersPrepareTally(out, 'idle', null);
     }
     return out;
   }
@@ -128,19 +215,72 @@ export class RealmRacersPrepare {
     return this.holding ? this.inFlight : 0;
   }
 
-  /** Per frame: a no-op once started with nothing in flight; one band test
-   *  otherwise. */
+  /** Per frame: one band test, plus a lane lookup in the band; a no-op past
+   *  that once started with nothing in flight and every due circuit asked. */
   frame(host: RealmRacersPrepareHost, viewer: RealmRacersPrepareViewer, x: number, z: number) {
-    if (this.latch.reason !== null && this.inFlight === 0) return;
+    const match = viewer.match;
+    this.noteLobby(match?.phase === 'loading' ? (match.circuitId ?? null) : null);
+    const inBand = isAtRealmRacersXZ(x, z);
+    const matchCircuit = match?.circuitId ?? null;
+    const circuitId = realmRacersPrepareCircuit(
+      matchCircuit,
+      inBand ? (realmRacersLaneAt(x, z)?.circuit.id ?? null) : null,
+    );
+    const everyDue = matchCircuit === null && inBand && !this.everyCircuitAsked;
+    const circuitDue = everyDue || (circuitId !== null && !this.askedCircuits.has(circuitId));
+    if (this.latch.reason !== null && this.inFlight === 0 && !circuitDue) return;
     const commitment = this.commitment;
     commitment.queued = viewer.queued;
-    commitment.match = viewer.match;
-    commitment.inBand = isAtRealmRacersXZ(x, z);
+    commitment.match = match;
+    commitment.inBand = inBand;
     commitment.shot = this.anyClientBuilt();
     this.holding = realmRacersPrepareHolds(commitment);
-    if (takeRealmRacersPrepare(this.latch, commitment) === null) return;
-    this.host = host;
-    for (const client of this.clients.values()) this.start(host, client);
+    for (const [id, release] of this.uncoverWaits) {
+      if (this.coveredFor(this.clientCircuits.get(id) ?? null)) continue;
+      this.uncoverWaits.delete(id);
+      release();
+    }
+    if (takeRealmRacersPrepare(this.latch, commitment) !== null) {
+      this.host = host;
+      for (const client of this.clients.values()) this.start(host, client);
+    }
+    if (!circuitDue || this.latch.reason === null) return;
+    if (circuitId !== null) this.askCircuit(circuitId);
+    // A walker in the band can step onto any lane: every authored circuit is
+    // prepared, the one underfoot first.
+    if (everyDue) {
+      this.everyCircuitAsked = true;
+      for (const id of this.circuits?.circuitIds() ?? []) this.askCircuit(id);
+    }
+  }
+
+  /** The lobby arm of the cover: from the frame the viewer's race is loading
+   *  until the lobby curtain raises its arrival-cover depth, since the renderer
+   *  draws before the HUD paints the curtain. Once the curtain's depth has been
+   *  seen, the depth alone speaks for it, so a curtain that falls (a lost
+   *  connection) uncovers the circuit even while the phase still reads loading. */
+  private noteLobby(loadingCircuit: string | null): void {
+    this.loadingCircuit = loadingCircuit;
+    if (loadingCircuit !== this.lobbyCircuit) {
+      this.lobbyCircuit = loadingCircuit;
+      this.lobbyCoverSeen = false;
+    }
+    if (loadingCircuit !== null && arrivalCoverActive()) this.lobbyCoverSeen = true;
+  }
+
+  private coveredFor(circuitId: string | null): boolean {
+    if (arrivalCoverActive()) return true;
+    return circuitId !== null && this.loadingCircuit === circuitId && !this.lobbyCoverSeen;
+  }
+
+  private askCircuit(circuitId: string): void {
+    if (this.askedCircuits.has(circuitId)) return;
+    this.askedCircuits.add(circuitId);
+    const client = this.circuits?.circuitClient(circuitId) ?? null;
+    if (!client) return;
+    this.circuitClientIds.set(circuitId, client.prepareId);
+    this.clientCircuits.set(client.prepareId, circuitId);
+    if (!this.clients.has(client.prepareId)) this.addClient(client);
   }
 
   private anyClientBuilt(): boolean {
@@ -150,19 +290,24 @@ export class RealmRacersPrepare {
 
   private start(host: RealmRacersPrepareHost, client: RealmRacersPrepareClient): void {
     const id = client.prepareId;
-    const root = client.prepare();
-    const gate = host.worldCompileGate();
-    if (!gate) {
+    const compile = host.worldCompileGate();
+    if (!compile && !client.run) {
+      // Without a parallel compile every first draw links anyway: a client
+      // that builds only for the gate has nothing to build.
+      if (!client.gateOnly) client.prepare();
       this.states.set(id, 'unproven');
       return;
     }
+    const root = client.prepare();
+    const gate: Gate = compile ?? IMMEDIATE_GATE;
     this.states.set(id, 'preparing');
     this.inFlight++;
     const startedAt = gpuPrepNow();
     const key = `${REALM_RACERS_PREPARE_EVENT_PREFIX}:${this.latch.reason}:${id}`;
-    const settle = (): void => {
+    const settle = (beside: boolean): void => {
       this.inFlight--;
-      const proven = compileTargetPrepared(host.webgl.properties, root);
+      this.uncoverWaits.delete(id);
+      const proven = beside && compileTargetPrepared(host.webgl.properties, root);
       this.states.set(id, proven ? 'proven' : 'unproven');
       recordGpuPrepEvent({
         kind: 'prepare',
@@ -172,6 +317,18 @@ export class RealmRacersPrepare {
         totalRoots: 1,
       });
     };
-    gate(root).then(settle, settle);
+    let work: Promise<boolean>;
+    if (client.run) {
+      const uncovered = new Promise<void>((release) => {
+        this.uncoverWaits.set(id, release);
+      });
+      work = client.run(gate, uncovered);
+    } else {
+      work = gate(root).then(TRUE, TRUE);
+    }
+    work.then(
+      (beside) => settle(beside === true),
+      () => settle(false),
+    );
   }
 }

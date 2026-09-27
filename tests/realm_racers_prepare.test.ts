@@ -415,10 +415,24 @@ describe('race preparation seam (renderer wiring)', () => {
         "readonly realmRacersPrepare: Pick<RealmRacersPrepare, 'progress'> = this.realmRacersPrepareSeam;",
       ),
     ).toBe(1);
+    // The circuits join the seam once the tracks exist, and the seam runs
+    // before the tracks so a reveal hold reads this frame's viewer.
+    expect(
+      renderer.match(
+        /this\.realmRacersTrack = buildRealmRacersTracks\(\);\s*prepareRealmRacersCircuits\(\s*this\.realmRacersPrepareSeam,\s*this\.realmRacersTrack,\s*this\.realmRacersSky,\s*\);/g,
+      ),
+    ).toHaveLength(1);
+    const frameAt = renderer.indexOf('this.realmRacersPrepareSeam.frame(');
+    const tracksAt = renderer.indexOf('this.realmRacersTrack.update(');
+    expect(frameAt).toBeGreaterThan(0);
+    expect(tracksAt).toBeGreaterThan(frameAt);
+    expect(occurrences('this.realmRacersTrack.update(')).toBe(1);
+    // It names the drawn circuit, so a circuit client not asked yet still counts.
     const hud = stripComments(readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8'));
     expect(
-      hud.split('prepareProgress: (out) => this.renderer.realmRacersPrepare.progress(out),')
-        .length - 1,
+      hud.split(
+        'prepareProgress: (out, circuitId) => this.renderer.realmRacersPrepare.progress(out, circuitId),',
+      ).length - 1,
     ).toBe(1);
   });
 });

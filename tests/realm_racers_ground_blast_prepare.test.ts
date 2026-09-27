@@ -26,12 +26,23 @@ const ROLES = ['column', 'core', 'flash', 'glow', 'marker', 'projectile', 'trail
 );
 
 /** Every program a draw of these objects links: a transparent DoubleSide
- *  material is two single-sided programs, back then front. */
+ *  material is two single-sided programs, back then front. Split in half, never
+ *  on every newline: a hooked material's key carries its hook source. */
 function programKeys(root: THREE.Object3D, visibleOnly: boolean): Set<string> {
   const keys = new Set<string>();
   for (const { object, material } of drawsUnder(root)) {
     if (visibleOnly && !object.visible) continue;
-    for (const key of threeProgramKeys(material, object).split('\n')) keys.add(key);
+    const joined = threeProgramKeys(material, object);
+    const twoPass =
+      material.transparent && material.side === THREE.DoubleSide && !material.forceSinglePass;
+    if (!twoPass) {
+      keys.add(joined);
+      continue;
+    }
+    const lines = joined.split('\n');
+    const half = lines.length / 2;
+    keys.add(lines.slice(0, half).join('\n'));
+    keys.add(lines.slice(half).join('\n'));
   }
   return keys;
 }

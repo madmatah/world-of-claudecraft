@@ -704,7 +704,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
   // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
   // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
-  '8bb758edeeb3100aa24546060134c804add4519c062aa0d4e60c10e68aabfe8d';
+  // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
+  '9b81af9a52c27831cc0a995c0706fcb998e5d17883fff7613520727f3a918302';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

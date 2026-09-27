@@ -995,7 +995,10 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 13270 -> 13265: the Ground Blast's Fired call now hands the
     // event to the pool (fire(shot, groundY)), which paid for the race
     // preparation seam's wiring (realm_racers_prepare.ts). Exact count.
-    ceiling: 13265,
+    // LOWERED 13265 -> 13249: the circuit sky moved to realm_racers_sky.ts
+    // (its PMREM now rides the GPU queue) and the circuit preparation wiring
+    // to realm_racers_circuit_prepare.ts. Exact count.
+    ceiling: 13249,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {

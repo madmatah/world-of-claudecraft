@@ -231,6 +231,7 @@ export function buildRealmRacersLamps(
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
+    poolMaterial.name = 'realmRacersLamps:pool';
     const pools = new THREE.Mesh(
       buildDrapedGlowGeometry(patches, () => groundY),
       poolMaterial,
