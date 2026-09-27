@@ -12,15 +12,20 @@ The curtain a race opens under while every pilot's machine prepares the circuit
     grid in `participantIds` order, named from `standings` (a pid with no standings row is
     dropped rather than shown unnamed); a house pilot is Ready from the seat. The bar is
     this machine's preparation (`RealmRacersPrepare.progress`, read by Hud from its
-    CURRENT renderer, so a graphics rebuild hands over the new seam): prepared units over
+    CURRENT renderer through the read-only `Renderer.realmRacersPrepare` slice, so a
+    graphics rebuild hands over the new seam; one read per frame is shared by the ready
+    send and the paint): prepared units over
     units, never 100 before every producer has its verdict. The `sig` is the match, the
     circuit and the grid shape; the container and its pilot slots are reused across frames.
-  - `stepRealmRacersLobbyFailsafe` is the client bound: each received `secondsLeft` becomes
-    a client-clock deadline, and past it plus a small grace the curtain stays down for that
-    match. Presentation only: it never sends ready and never touches readiness.
+  - `stepRealmRacersLobbyFailsafe` is the client bound: each newly received, changed
+    `secondsLeft` becomes a client-clock deadline, so a frozen readout drops the curtain
+    past it plus a small grace, while a lobby that is still counting (after a stalled or
+    backgrounded client) raises it again. Presentation only: it never sends ready and never
+    touches readiness.
 - `realm_racers_lobby_painter.ts`: the thin painter (`RealmRacersLobby`), a self-mounted
-  `#realm-racers-lobby` curtain (`role="dialog"`, named by the circuit heading), mounted
-  FIRST in the HUD layer.
+  `#realm-racers-lobby` curtain (`role="dialog"`, named by the circuit heading, NOT modal:
+  the chat frame outside it stays reachable), mounted FIRST in the HUD layer. It marks body
+  with `RALLY_LOBBY_SHOWN_CLASS` while shown.
   - It holds one arrival-cover depth (`src/render/arrival_cover.ts`) only while this
     machine is still preparing: the GPU-prep admission then runs on the cover rule, as
     under the loading screen. Once settled the depth drops while the curtain stays up, so
@@ -31,16 +36,26 @@ The curtain a race opens under while every pilot's machine prepares the circuit
     values and the dialog's name ride the `PainterHost` elided writers, and a localized
     string is resolved again only when the value it spells changes. `dispose()` drops the
     depth and the hold.
-- `realm_racers_lobby_hold.ts`: the key hold the painter owns. `rallyLobbyHoldsAction` is
-  asked by `dispatchCollectionAction` (`src/ui/collection_actions_core.ts`, the keyboard
-  path's early call before any window toggle) and at the head of the pad dispatcher in
-  `main.ts`; every action but `chat` is swallowed while the curtain is shown.
+- `realm_racers_lobby_hold.ts`: `RealmRacersLobbyHold`, one instance per `RealmRacersUi`
+  (Hud exposes it as `lobbyHold`), set by the painter. `holds(action)` covers a CLOSED set
+  of window and menu actions (`RALLY_LOBBY_HELD_ACTIONS`), the same on the keyboard and the
+  pad: both paths pass Hud as the host of `dispatchCollectionAction`, which asks the hold
+  before any window toggle. Chat, Hide Interface and Escape stay live, so a hidden interface
+  is always recoverable; `main.ts` gates only Escape's game-menu arm on `shown`. Targeting,
+  slots, camera and pet commands are never held. On touch, the Quick Actions strip ignores
+  a swipe onto an item the curtain hides (`menu_control_controller.ts` reads the body class).
 - `RealmRacersUi` lifts the curtain early on a lost connection (`connectionDropActive` in
-  `src/ui/reconnect_overlay.ts`) and on the failsafe. Its ready send (`sendReady`, with
+  `src/ui/reconnect_overlay.ts`: the reconnect overlay actually mounted, so a blip inside
+  its show grace never flashes the world, or the session ended, with or without the fatal
+  overlay) and on the failsafe. Its ready send (`sendReady`, with
   `src/ui/realm_racers_ready_core.ts`) runs above Hud's paint cut, so a hidden window still
   readies.
 - Chat stays usable: `#chatlog-wrap` is a later sibling of the curtain and is lifted above
-  it (the desktop composer is a body-level layer over `#ui` already). Nothing else is.
+  it (the desktop composer is a body-level layer over `#ui` already); on touch the Quick
+  Actions anchor and its Chat item are the only controls shown over it. Nothing else is.
+- Known and accepted: an action-bar slot that opens a window (a tradeskill spell, a
+  container) and a client-side chat command that opens one (`/who`) are not key actions, so
+  the hold does not see them; the window opens under the curtain and appears when it lifts.
 - Copy: `hudChrome.rally.lobby*` in `src/ui/i18n.catalog/hud_chrome.ts`, plus the rally's
   own `title`, `standingsYou`, `standingsBot` and circuit-name keys. Styles: the
   `realm racers lobby` section in `src/styles/components.css`, touch rules in

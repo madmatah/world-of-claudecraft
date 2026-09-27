@@ -17,8 +17,8 @@ import {
   type MobileMenuControl,
 } from '../src/ui/hud/menu/menu_control_controller';
 import { MENU_STRIP_ITEMS } from '../src/ui/hud/menu/menu_strip_core';
-import { setRealmRacersLobbyHold } from '../src/ui/hud/realm_racers';
 import { t } from '../src/ui/i18n';
+import { RALLY_LOBBY_SHOWN_CLASS } from '../src/ui/root_state_classes';
 import { bindTouchTap } from '../src/ui/touch_tap';
 
 const GESTURE_NAME = t('hudChrome.mobile.quickActionsAria');
@@ -241,9 +241,9 @@ describe('buildMobileMenuControl: a pick runs the seated action exactly once', (
   it('picks nothing but Chat under the race lobby curtain, whose other items are hidden', () => {
     // A swipe picks by geometry, so a release over an item the curtain hides
     // must not open it; Chat, the one item left visible, keeps its id.
-    setRealmRacersLobbyHold(true);
+    const rig = pickRig(0, 'after');
+    document.body.classList.add(RALLY_LOBBY_SHOWN_CLASS);
     try {
-      const rig = pickRig(0, 'after');
       rig.anchor.dispatchEvent(touchPointer('pointerdown', 1, 100));
       rig.anchor.dispatchEvent(touchPointer('pointermove', 1, 130));
       rig.anchor.dispatchEvent(touchPointer('pointerup', 1, 130));
@@ -252,7 +252,7 @@ describe('buildMobileMenuControl: a pick runs the seated action exactly once', (
         'chat',
       );
     } finally {
-      setRealmRacersLobbyHold(false);
+      document.body.classList.remove(RALLY_LOBBY_SHOWN_CLASS);
     }
   });
 });

@@ -4,6 +4,7 @@
 // centered over the viewport through the whole countdown and race, and the only
 // forfeit control lived inside it, so closing it left no way out of a race.
 
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The PODIUM portrait is the party frames' class crest, whose procedural path
@@ -30,23 +31,23 @@ import {
 import { REALM_RACERS_PRACTICE_CIRCUIT_ID } from '../src/sim/content/realm_racers_circuits';
 import { dispatchCollectionAction } from '../src/ui/collection_actions_core';
 import { durationText } from '../src/ui/duration_text';
-import {
-  REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS,
-  rallyLobbyHoldsAction,
-  setRealmRacersLobbyHold,
-} from '../src/ui/hud/realm_racers';
+import { REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS } from '../src/ui/hud/realm_racers';
 import { ensureLocaleLoaded, setLanguage, type TranslationKey, t } from '../src/ui/i18n';
+import {
+  dispatchInterfaceVisibilityAction,
+  InterfaceVisibility,
+} from '../src/ui/interface_visibility_core';
 import { makeWriterFacet } from '../src/ui/painter_host';
 import { RealmRacersUi } from '../src/ui/realm_racers';
 import { realmRacersCircuitName } from '../src/ui/realm_racers_circuit_i18n';
 import type { IWorld, RealmRacersInfo } from '../src/world_api';
+import { stripComments } from './helpers/strip_comments';
 
 type RallyMatch = NonNullable<RealmRacersInfo['match']>;
 type RallyRacer = RallyMatch['standings'][number];
 
 beforeEach(() => {
   resetArrivalCoverForTest();
-  setRealmRacersLobbyHold(false);
 });
 
 function racer(over: Partial<RallyRacer> = {}): RallyRacer {
@@ -1276,7 +1277,8 @@ describe('Realm Racers loading lobby curtain', () => {
     expect(shown(h)).toBe(true);
     expect(el).toBe(h.layer.firstElementChild);
     expect(el?.getAttribute('role')).toBe('dialog');
-    expect(el?.getAttribute('aria-modal')).toBe('true');
+    // Not modal: the chat frame sits outside it and must stay reachable.
+    expect(el?.hasAttribute('aria-modal')).toBe(false);
     expect(el?.getAttribute('aria-labelledby')).toBe('rally-lobby-circuit');
     expect(el?.querySelector('.rally-lobby-circuit')?.textContent).toBe('Evergarden Express Tour');
     expect(statuses(h)).toEqual([
@@ -1387,7 +1389,7 @@ describe('Realm Racers loading lobby curtain', () => {
       h.frame();
       expect(shown(h), phase).toBe(false);
       expect(arrivalCoverActive(), phase).toBe(false);
-      expect(rallyLobbyHoldsAction('bags'), phase).toBe(false);
+      expect(h.ui.lobbyHold.holds('bags'), phase).toBe(false);
     }
   });
 
@@ -1395,19 +1397,26 @@ describe('Realm Racers loading lobby curtain', () => {
     const h = harness();
     h.info.match = lobby([2, 3, 4]);
     h.frame();
-    for (const key of ['bags', 'char', 'spellbook', 'map', 'social', 'escape', 'interact']) {
-      expect(rallyLobbyHoldsAction(key), key).toBe(true);
+    const host = { ...collections, lobbyHold: h.ui.lobbyHold };
+    for (const key of ['bags', 'char', 'spellbook', 'map', 'social', 'interact', 'deeds']) {
+      expect(h.ui.lobbyHold.holds(key), key).toBe(true);
     }
-    expect(rallyLobbyHoldsAction('chat')).toBe(false);
-    expect(dispatchCollectionAction('deeds', collections)).toBe(true);
-    expect(dispatchCollectionAction('bags', collections)).toBe(true);
-    expect(dispatchCollectionAction('chat', collections)).toBe(false);
+    // Chat, Hide Interface and Escape stay live (Escape's game-menu arm reads
+    // `shown` in main.ts), and so does everything that is not a window.
+    for (const key of ['chat', 'hideInterface', 'escape', 'targetNpcNext', 'slot1', 'petAttack']) {
+      expect(h.ui.lobbyHold.holds(key), key).toBe(false);
+    }
+    expect(h.ui.lobbyHold.shown).toBe(true);
+    expect(dispatchCollectionAction('deeds', host)).toBe(true);
+    expect(dispatchCollectionAction('bags', host)).toBe(true);
+    expect(dispatchCollectionAction('chat', host)).toBe(false);
     expect(toggleDeeds).not.toHaveBeenCalled();
     h.info.match = match({ phase: 'countdown' });
     h.frame();
-    expect(rallyLobbyHoldsAction('bags')).toBe(false);
-    expect(dispatchCollectionAction('bags', collections)).toBe(false);
-    expect(dispatchCollectionAction('deeds', collections)).toBe(true);
+    expect(h.ui.lobbyHold.shown).toBe(false);
+    expect(h.ui.lobbyHold.holds('bags')).toBe(false);
+    expect(dispatchCollectionAction('bags', host)).toBe(false);
+    expect(dispatchCollectionAction('deeds', host)).toBe(true);
     expect(toggleDeeds).toHaveBeenCalledTimes(1);
   });
 
@@ -1417,11 +1426,11 @@ describe('Realm Racers loading lobby curtain', () => {
     h.prepared.settled = false;
     h.info.match = lobby([2, 3, 4]);
     h.frame();
-    expect(rallyLobbyHoldsAction('bags')).toBe(true);
+    expect(h.ui.lobbyHold.holds('bags')).toBe(true);
     h.link.dropped = true;
     h.frame();
     expect(shown(h)).toBe(false);
-    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(h.ui.lobbyHold.holds('bags')).toBe(false);
     expect(arrivalCoverDepthForTest()).toBe(0);
     // A resume inside the lobby brings the curtain back for the time left.
     h.link.dropped = false;
@@ -1442,12 +1451,49 @@ describe('Realm Racers loading lobby curtain', () => {
     h.clock.now += 1;
     h.frame();
     expect(shown(h)).toBe(false);
-    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(h.ui.lobbyHold.holds('bags')).toBe(false);
     expect(arrivalCoverDepthForTest()).toBe(0);
     for (let i = 0; i < 5; i++) h.frame();
     expect(shown(h)).toBe(false);
     // Presentation only: the failsafe never readies anyone.
     expect(h.readyRealmRacers).not.toHaveBeenCalled();
+  });
+
+  it('raises the curtain again when a lobby that was frozen starts counting again', () => {
+    const h = harness();
+    h.info.match = lobby([2, 3, 4], 12);
+    h.frame();
+    // A stalled client (a background tab): the readout froze past its deadline.
+    h.clock.now += 20_000;
+    h.frame();
+    expect(shown(h)).toBe(false);
+    // The lobby is alive: a new, changed second re-arms it.
+    h.info.match = lobby([2, 3, 4], 4);
+    h.frame();
+    expect(shown(h)).toBe(true);
+    // And a value that then freezes still expires it.
+    h.clock.now += 4_000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS + 1;
+    h.frame();
+    expect(shown(h)).toBe(false);
+  });
+
+  it('leaves a hidden interface recoverable: Escape and Hide Interface stay live, chat too', () => {
+    const h = harness();
+    const visibility = new InterfaceVisibility(() => {});
+    visibility.toggle();
+    expect(visibility.hidden).toBe(true);
+    h.info.match = lobby([2, 3, 4]);
+    h.frame();
+    expect(h.ui.lobbyHold.shown).toBe(true);
+    const host = { ...collections, lobbyHold: h.ui.lobbyHold };
+    // The keyboard path: dispatchCollectionAction first, then the escape arm,
+    // which restores the interface before anything else.
+    expect(dispatchCollectionAction('escape', host)).toBe(false);
+    expect(visibility.show()).toBe(true);
+    expect(visibility.hidden).toBe(false);
+    expect(dispatchInterfaceVisibilityAction('hideInterface', visibility)).toBe(true);
+    expect(dispatchCollectionAction('hideInterface', host)).toBe(false);
+    expect(dispatchCollectionAction('chat', host)).toBe(false);
   });
 
   it('drops its cover and hold when the match goes away under it', () => {
@@ -1459,7 +1505,7 @@ describe('Realm Racers loading lobby curtain', () => {
     h.info.match = null;
     h.frame();
     expect(arrivalCoverActive()).toBe(false);
-    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(h.ui.lobbyHold.holds('bags')).toBe(false);
   });
 
   it('releases everything on dispose', () => {
@@ -1469,7 +1515,7 @@ describe('Realm Racers loading lobby curtain', () => {
     h.frame();
     h.ui.dispose();
     expect(arrivalCoverDepthForTest()).toBe(0);
-    expect(rallyLobbyHoldsAction('bags')).toBe(false);
+    expect(h.ui.lobbyHold.holds('bags')).toBe(false);
     expect(curtain(h)).toBeNull();
   });
 
@@ -1497,6 +1543,20 @@ describe('Realm Racers loading lobby curtain', () => {
     h.frame();
     expect(h.showBanner).not.toHaveBeenCalled();
     expect(arrivalCoverActive()).toBe(false);
+  });
+});
+
+describe('Realm Racers lobby hold wiring', () => {
+  it('gates only the game-menu arm of Escape on the lobby, on both input paths', () => {
+    const main = stripComments(readFileSync('src/main.ts', 'utf8'));
+    const count = (needle: string) => main.split(needle).length - 1;
+    expect(count('if (!hud.closeAll() && !hud.lobbyHold.shown) hud.toggleOptionsMenu();')).toBe(2);
+    expect(count('if (!hud.closeAll()) hud.toggleOptionsMenu();')).toBe(0);
+    // Both escape arms still restore a hidden interface before anything else.
+    expect(count('if (interfaceVisibility.show()) break;')).toBe(1);
+    expect(count('if (interfaceVisibility.show()) return;')).toBe(1);
+    const hud = stripComments(readFileSync('src/ui/hud.ts', 'utf8'));
+    expect(hud.split('readonly lobbyHold = this.realmRacersUi.lobbyHold;').length - 1).toBe(1);
   });
 });
 

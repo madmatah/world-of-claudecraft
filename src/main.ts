@@ -1,7 +1,7 @@
 import { applyFrameGeometrySetting } from './game/frame_geometry_settings';
 import { formatAbilityImbueDamage } from './ui/ability_imbue_text';
 import { bindChatComposerFocusState, resetChatComposer } from './ui/chat_composer_focus_controller';
-import { dispatchCollectionAction, rallyLobbyHoldsAction } from './ui/collection_actions_core';
+import { dispatchCollectionAction } from './ui/collection_actions_core';
 import { createInterfaceVisibility } from './ui/interface_visibility';
 import { dispatchInterfaceVisibilityAction } from './ui/interface_visibility_core';
 import { MOBILE_CHAT_REPLY_CLASS, START_SCREEN_OPEN_CLASS } from './ui/root_state_classes';
@@ -1908,7 +1908,7 @@ async function startGame(
             if (interfaceVisibility.show()) break;
             if (hud.cancelGroundAim()) break;
             // close the topmost panel; if nothing was open, open the game menu
-            if (!hud.closeAll()) hud.toggleOptionsMenu();
+            if (!hud.closeAll() && !hud.lobbyHold.shown) hud.toggleOptionsMenu();
             break;
         }
       },
@@ -2103,9 +2103,9 @@ async function startGame(
   const crossHotbar = createCrossHotbar(() => hud, keybindScope, gamepadBindings);
   const canUseGameKeysNow = () => !gameplayInputBlocked();
   function dispatchGamepadAction(id: string): void {
-    if (rallyLobbyHoldsAction(id)) return;
-    // Cancel backs out one step (the top window, then the target) and only then
-    // opens the game menu, which keeps it distinct from the menu button.
+    // Cancel backs out one step at a time: the top window, then the target. Only
+    // once there is nothing left to leave does the game menu come up, which is
+    // what keeps this distinct from the menu button rather than a second copy.
     if (id === GAMEPAD_CANCEL) {
       if (dismissCameraPrompt() || hud.cancelGroundAim() || hud.closeAll()) return;
       world.targetEntity(null);
@@ -2118,7 +2118,7 @@ async function startGame(
     if (id === 'escape') {
       if (interfaceVisibility.show()) return;
       if (hud.cancelGroundAim()) return;
-      if (!hud.closeAll()) hud.toggleOptionsMenu();
+      if (!hud.closeAll() && !hud.lobbyHold.shown) hud.toggleOptionsMenu();
       return;
     }
     if (!canUseGameKeysNow()) return; // suppress play actions while a modal/chat is up
@@ -6851,7 +6851,7 @@ async function enterWorld(c: CharacterSummary, button?: HTMLButtonElement): Prom
     () => {
       world.close();
       clearCardProviders();
-      hideReconnectOverlay();
+      hideReconnectOverlay(true);
       // Entry never completed: fatalOverlay drops the resume marker so the next
       // boot does not loop straight back into a session that will not start.
       fatalOverlay(t('loading.enterTimeout'));
@@ -6862,7 +6862,7 @@ async function enterWorld(c: CharacterSummary, button?: HTMLButtonElement): Prom
   world.onDisconnect = (reason) => {
     entryWatch.cancel();
     clearCardProviders();
-    hideReconnectOverlay();
+    hideReconnectOverlay(true);
     checkpointActiveEntryDiagnostics('connection-lost', { fatal: true });
     stopActiveEntryDiagnostics();
     clearEntryProbe();

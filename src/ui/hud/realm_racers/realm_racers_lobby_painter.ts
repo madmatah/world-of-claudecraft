@@ -12,7 +12,8 @@
 //
 // What lifts it is decided outside: the view hides on the server's countdown,
 // and the rally UI hides it on a lost connection or its client failsafe. While
-// shown it holds the window and menu keys (realm_racers_lobby_hold.ts), and it
+// shown it holds the window and menu keys (its owner's RealmRacersLobbyHold,
+// realm_racers_lobby_hold.ts), and it
 // is mounted FIRST in the layer so the chat frame, a later sibling, can be
 // stacked above it (the `realm racers lobby` CSS section). It also marks body
 // (RALLY_LOBBY_SHOWN_CLASS), which lifts the touch chat control over it.
@@ -29,7 +30,7 @@ import { formatNumber, t } from '../../i18n';
 import type { PainterHostWriters } from '../../painter_host';
 import { realmRacersCircuitName } from '../../realm_racers_circuit_i18n';
 import { RALLY_LOBBY_SHOWN_CLASS } from '../../root_state_classes';
-import { setRealmRacersLobbyHold } from './realm_racers_lobby_hold';
+import type { RealmRacersLobbyHold } from './realm_racers_lobby_hold';
 import type {
   RealmRacersLobbyLive,
   RealmRacersLobbyStatus,
@@ -44,8 +45,8 @@ export interface RealmRacersLobbyDeps {
   writers: PainterHostWriters;
   /** Raise or drop one arrival-cover depth; the real cover by default. */
   setCover?: (active: boolean) => void;
-  /** Hold or release the window and menu keys; the real hold by default. */
-  setHold?: (active: boolean) => void;
+  /** The window and menu key hold this curtain drives while it is shown. */
+  hold?: Pick<RealmRacersLobbyHold, 'set'>;
   /** The element carrying the shown state class; body by default. */
   stateRoot?: () => HTMLElement | null;
 }
@@ -134,7 +135,7 @@ export class RealmRacersLobby {
   private hold(active: boolean): void {
     if (active === this.holding) return;
     this.holding = active;
-    (this.deps.setHold ?? setRealmRacersLobbyHold)(active);
+    this.deps.hold?.set(active);
     const stateRoot = this.deps.stateRoot ? this.deps.stateRoot() : document.body;
     if (stateRoot) this.deps.writers.toggleClass(stateRoot, RALLY_LOBBY_SHOWN_CLASS, active);
   }
@@ -146,7 +147,6 @@ export class RealmRacersLobby {
     const el = document.createElement('div');
     el.id = 'realm-racers-lobby';
     el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-modal', 'true');
     layer.prepend(el);
     this.root = el;
     return el;

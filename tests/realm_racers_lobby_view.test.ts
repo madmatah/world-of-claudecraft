@@ -192,7 +192,7 @@ describe('the lobby view over both hosts', () => {
 });
 
 describe('stepRealmRacersLobbyFailsafe', () => {
-  it('turns each received secondsLeft into a client deadline and stays down once it passes', () => {
+  it('turns each received secondsLeft into a client deadline, expiring on a frozen value', () => {
     const state = createRealmRacersLobbyFailsafe();
     const at = (secondsLeft: number) => lobby({ loading: { secondsLeft, readyIds: [] } });
     expect(stepRealmRacersLobbyFailsafe(state, at(12), 1_000)).toBe(true);
@@ -200,8 +200,12 @@ describe('stepRealmRacersLobbyFailsafe', () => {
     const deadline = 1_000 + 12_000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS;
     expect(stepRealmRacersLobbyFailsafe(state, at(12), deadline)).toBe(true);
     expect(stepRealmRacersLobbyFailsafe(state, at(12), deadline + 1)).toBe(false);
-    // A late snapshot of the same lobby cannot raise it again.
-    expect(stepRealmRacersLobbyFailsafe(state, at(3), deadline + 2)).toBe(false);
+    expect(stepRealmRacersLobbyFailsafe(state, at(12), deadline + 5_000)).toBe(false);
+    // A newly received, CHANGED value means the lobby is alive: it re-arms.
+    expect(stepRealmRacersLobbyFailsafe(state, at(3), deadline + 6_000)).toBe(true);
+    const next = deadline + 6_000 + 3_000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS;
+    expect(stepRealmRacersLobbyFailsafe(state, at(3), next)).toBe(true);
+    expect(stepRealmRacersLobbyFailsafe(state, at(3), next + 1)).toBe(false);
   });
 
   it('moves the deadline with each new second, and re-arms for the next match', () => {

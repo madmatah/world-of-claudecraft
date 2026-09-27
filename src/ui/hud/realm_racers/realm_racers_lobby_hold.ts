@@ -1,22 +1,56 @@
 // While the race lobby curtain is shown, the keys and pad buttons that open a
 // window or a menu do nothing: the curtain would hide whatever they opened.
-// Chat is the one exception, since the grid talks while it waits. The curtain
-// painter owns the flag (realm_racers_lobby_painter.ts), so the hold ends on
-// the frame the curtain drops, and the curtain's own bounds (the server's
-// countdown, a lost connection, the client failsafe) bound it too.
+// The set is closed and matches on both input paths (the keyboard's onUiKey
+// actions and the pad's twins of them). Left live on purpose: chat (the grid
+// talks while it waits), Hide Interface and Escape (Escape brings a hidden
+// interface back first; main.ts gates only its game-menu arm on `shown`),
+// and everything that is not a window (targeting, slots, camera, pets).
+//
+// One instance per rally UI (RealmRacersUi owns it, Hud exposes it as
+// `lobbyHold`), written only by the curtain painter on its show and hide edges,
+// so the hold ends on the frame the curtain drops and dies with its owner.
 
-let held = false;
+export const RALLY_LOBBY_HELD_ACTIONS: ReadonlySet<string> = new Set([
+  'interact',
+  'bags',
+  'char',
+  'spellbook',
+  'talents',
+  'questlog',
+  'map',
+  'meters',
+  'targetAuras',
+  'social',
+  'arena',
+  'rally',
+  'dungeonFinder',
+  'leaderboard',
+  'calendar',
+  'discord',
+  'crafting',
+  'deeds',
+  'professions',
+  'reliquary',
+  'harvestJournal',
+  'perfecting',
+  'lootExplorer',
+  'cosmetics',
+]);
 
-/** Written only by the lobby painter, on the curtain's show and hide edges. */
-export function setRealmRacersLobbyHold(active: boolean): void {
-  held = active;
-}
+export class RealmRacersLobbyHold {
+  private active = false;
 
-export function realmRacersLobbyHoldActive(): boolean {
-  return held;
-}
+  /** Whether the lobby curtain is shown right now. */
+  get shown(): boolean {
+    return this.active;
+  }
 
-/** True when this key or pad action must be swallowed while the curtain is up. */
-export function rallyLobbyHoldsAction(action: string): boolean {
-  return held && action !== 'chat';
+  set(active: boolean): void {
+    this.active = active;
+  }
+
+  /** True when this window or menu action must be swallowed. */
+  holds(action: string): boolean {
+    return this.active && RALLY_LOBBY_HELD_ACTIONS.has(action);
+  }
 }

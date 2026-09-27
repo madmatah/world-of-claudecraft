@@ -2053,9 +2053,9 @@ export class Renderer {
   private realmRacersSkyReady: RallySkyKey | null = null;
   private realmRacersTrack: RealmRacersTracksView;
   private realmRacersGroundBlasts = new RealmRacersGroundBlastVisuals();
-  readonly realmRacersPrepare = new RealmRacersPrepare([this.realmRacersGroundBlasts]);
-  // seed-bound ground sampler, built once so per-frame drape updates
-  // allocate no closure.
+  private readonly realmRacersPrepareSeam = new RealmRacersPrepare([this.realmRacersGroundBlasts]);
+  readonly realmRacersPrepare: Pick<RealmRacersPrepare, 'progress'> = this.realmRacersPrepareSeam;
+  // seed-bound ground sampler, built once so per-frame drape updates allocate no closure.
   private groundSample = (x: number, z: number): number => groundHeight(x, z, this.sim.cfg.seed);
   /** Bound once: the puff runs per landing and must not allocate a closure. */
   private surfaceAtForPuff = (x: number, z: number, y: number) => this.surfaceAt(x, z, y);
@@ -12292,7 +12292,7 @@ export class Renderer {
       this.time,
       realmRacersInfo.match ?? this.sim.realmRacersTrackside ?? null,
     );
-    this.realmRacersPrepare.frame(this, realmRacersInfo, p.pos.x, p.pos.z);
+    this.realmRacersPrepareSeam.frame(this, realmRacersInfo, p.pos.x, p.pos.z);
     this.realmRacersGroundBlasts.update(dt);
     worldStart = this.markRendererWorldPhase(worldPhaseMs, 'zoneFeatures', worldStart);
     this.updateAmbience(p.pos.x, this.camera.position.y, dt);

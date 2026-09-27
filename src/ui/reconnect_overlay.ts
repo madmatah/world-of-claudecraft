@@ -38,15 +38,18 @@ export const RECONNECT_OVERLAY_SHOW_GRACE_MS = 2500;
 let tickTimer: number | null = null;
 let graceTimer: number | null = null;
 let pendingShow: { attempt: number; maxAttempts: number; nextRetryAtMs: number } | null = null;
-let dropped = false;
+let mounted = false;
+let ended = false;
 
 /**
- * True from the first report of a dropped socket (before the show grace) until
- * the world resumes, and for good once the fatal disconnect overlay is up. The
- * race lobby curtain reads it to step aside for whichever overlay takes over.
+ * True while the reconnect overlay is actually up (its show grace has run out,
+ * so a quick blip never counts), and for good once the session has ended: the
+ * fatal disconnect overlay is up, or a hide reported the end rather than a
+ * resume (the OTA gate path takes the screen without that overlay). The race
+ * lobby curtain reads it to step aside for whatever takes over.
  */
 export function connectionDropActive(): boolean {
-  return dropped || document.getElementById('disconnect-overlay') !== null;
+  return mounted || ended || document.getElementById('disconnect-overlay') !== null;
 }
 
 export function showReconnectOverlay(
@@ -54,7 +57,6 @@ export function showReconnectOverlay(
   maxAttempts: number,
   nextRetryAtMs: number,
 ): void {
-  dropped = true;
   // Already mounted (the drop outlived the grace): update in place, no re-grace.
   if (document.getElementById(OVERLAY_ID)) {
     mountOrUpdateOverlay(attempt, maxAttempts, nextRetryAtMs);
@@ -72,6 +74,7 @@ export function showReconnectOverlay(
 }
 
 function mountOrUpdateOverlay(attempt: number, maxAttempts: number, nextRetryAtMs: number): void {
+  mounted = true;
   let el = document.getElementById(OVERLAY_ID);
   let messageEl: HTMLElement;
   if (el) {
@@ -103,8 +106,16 @@ function mountOrUpdateOverlay(attempt: number, maxAttempts: number, nextRetryAtM
   tickTimer = window.setInterval(render, TICK_MS);
 }
 
-export function hideReconnectOverlay(): void {
-  dropped = false;
+/** Forget a session end, for tests that run several sessions in one module. */
+export function resetConnectionDropForTest(): void {
+  mounted = false;
+  ended = false;
+}
+
+/** `sessionEnded` marks a hide that ends the session rather than resuming it. */
+export function hideReconnectOverlay(sessionEnded = false): void {
+  mounted = false;
+  if (sessionEnded) ended = true;
   if (graceTimer !== null) {
     window.clearTimeout(graceTimer);
     graceTimer = null;

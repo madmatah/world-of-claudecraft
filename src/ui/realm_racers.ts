@@ -10,6 +10,7 @@ import {
   buildRealmRacersLobbyView,
   createRealmRacersLobbyFailsafe,
   RealmRacersLobby,
+  RealmRacersLobbyHold,
   stepRealmRacersLobbyFailsafe,
 } from './hud/realm_racers';
 import { formatNumber, type TranslationKey, t } from './i18n';
@@ -130,6 +131,11 @@ export class RealmRacersUi {
   /** The circuit banner waits for the lobby curtain to lift. */
   private bannerPending = false;
   private readonly prepared: RealmRacersPrepareProgress = { done: 0, total: 0, settled: false };
+  /** What sendReady read this frame, reused by the paint half of the same frame. */
+  private preparedThisFrame: RealmRacersPrepareProgress | null = null;
+  /** The window and menu key hold the lobby curtain drives; Hud exposes it to
+   *  the input paths as `lobbyHold`. */
+  readonly lobbyHold = new RealmRacersLobbyHold();
   private readonly lobbyFailsafe = createRealmRacersLobbyFailsafe();
   /** The off-screen live region that SPEAKS the drawn circuit. Kept outside the
    *  strip's rebuilt subtree so a rebuild cannot re-announce. */
@@ -171,7 +177,11 @@ export class RealmRacersUi {
       layer: () => deps.layer(),
       writers: deps.writers,
     });
-    this.lobby = new RealmRacersLobby({ layer: () => deps.layer(), writers: deps.writers });
+    this.lobby = new RealmRacersLobby({
+      layer: () => deps.layer(),
+      writers: deps.writers,
+      hold: this.lobbyHold,
+    });
   }
 
   get isOpen(): boolean {
@@ -220,9 +230,9 @@ export class RealmRacersUi {
   sendReady(): void {
     const world = this.deps.world();
     const info = world.realmRacersInfo;
-    stepRealmRacersReady(this.readySender, info, this.preparedFor(info.match), () =>
-      world.readyRealmRacers(),
-    );
+    const prepared = this.preparedFor(info.match);
+    this.preparedThisFrame = prepared;
+    stepRealmRacersReady(this.readySender, info, prepared, () => world.readyRealmRacers());
   }
 
   /** Drop the lobby curtain's cover depth and key hold, and unmount it. */
@@ -245,7 +255,8 @@ export class RealmRacersUi {
   update(): void {
     const world = this.deps.world();
     const info = world.realmRacersInfo;
-    const prepared = this.preparedFor(info.match);
+    const prepared = this.preparedThisFrame ?? this.preparedFor(info.match);
+    this.preparedThisFrame = null;
     const curtain = this.lobbyCurtainStands(info.match);
     this.lobby.update(buildRealmRacersLobbyView(curtain ? info.match : null, prepared));
     // Auto-close on the false -> true match edge only. The window is centered

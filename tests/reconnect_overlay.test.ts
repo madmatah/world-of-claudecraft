@@ -7,6 +7,7 @@ import {
   connectionDropActive,
   hideReconnectOverlay,
   RECONNECT_OVERLAY_SHOW_GRACE_MS,
+  resetConnectionDropForTest,
   showReconnectOverlay,
 } from '../src/ui/reconnect_overlay';
 
@@ -29,14 +30,29 @@ describe('reconnect overlay stateful half (show/show/hide)', () => {
     document.body.replaceChildren();
   });
 
-  it('reports the drop from its first report, before the grace, until the resume', () => {
+  it('reports a drop only once the overlay is up, never a blip inside the grace', () => {
+    resetConnectionDropForTest();
+    showReconnectOverlay(1, 40, Date.now() + 1_000);
+    expect(connectionDropActive()).toBe(false);
+    hideReconnectOverlay();
     expect(connectionDropActive()).toBe(false);
     showReconnectOverlay(1, 40, Date.now() + 1_000);
-    expect(document.getElementById(OVERLAY_ID)).toBeNull();
+    pastGrace();
+    expect(document.getElementById(OVERLAY_ID)).not.toBeNull();
     expect(connectionDropActive()).toBe(true);
     hideReconnectOverlay();
     expect(connectionDropActive()).toBe(false);
-    // The fatal disconnect overlay is terminal: it reads as dropped for good.
+  });
+
+  it('reads a session end as dropped for good, with or without the fatal overlay', () => {
+    resetConnectionDropForTest();
+    // The OTA gate path: the session ends and no fatal overlay is mounted.
+    showReconnectOverlay(1, 40, Date.now() + 1_000);
+    hideReconnectOverlay(true);
+    expect(document.getElementById(OVERLAY_ID)).toBeNull();
+    expect(connectionDropActive()).toBe(true);
+    resetConnectionDropForTest();
+    expect(connectionDropActive()).toBe(false);
     const fatal = document.createElement('div');
     fatal.id = 'disconnect-overlay';
     document.body.appendChild(fatal);

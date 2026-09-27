@@ -27,7 +27,7 @@
 import { SETTINGS_CHANGE_EVENT } from '../../../game/settings';
 import { type TranslationKey, t } from '../../i18n';
 import { makeWriterFacet, type PainterHostWriters } from '../../painter_host';
-import { rallyLobbyHoldsAction } from '../realm_racers/realm_racers_lobby_hold';
+import { RALLY_LOBBY_SHOWN_CLASS } from '../../root_state_classes';
 import { tapMenusEnabled } from '../tap_menu';
 import { MENU_STRIP_ITEMS } from './menu_strip_core';
 import { MenuStripGesture } from './menu_strip_gesture_controller';
@@ -119,7 +119,9 @@ export function buildMobileMenuControl(deps: MobileMenuControlDeps = {}): Mobile
       // closed it).
       // Under the race lobby curtain only Chat is live: the other items sit
       // hidden there, and a swipe picks by geometry, not by what it can see.
-      const held = rallyLobbyHoldsAction(MENU_STRIP_ITEMS[index]?.id ?? '');
+      const held =
+        document.body.classList.contains(RALLY_LOBBY_SHOWN_CLASS) &&
+        MENU_STRIP_ITEMS[index]?.id !== 'chat';
       if (source === 'gesture' && !held) itemEls[index]?.click();
       anchor.blur();
     },

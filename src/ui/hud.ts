@@ -5629,13 +5629,13 @@ export class Hud {
     isTouchHud: () => document.body.classList.contains('mobile-touch'),
     countdownTick: () => audio.realmRacersCountdownTick(),
     showBanner: (text) => this.showBanner(text),
-    // The race UI owns the match-end edge; the splash it takes down is this
-    // class's, so the teardown is injected like the banner and the audio cues.
+    // The race UI owns the match-end edge; the splash it clears is this class's.
     clearPickupSplash: () => this.realmRacersSplash.clear(),
     writers: this.writerFacet,
     prepareProgress: (out) => this.renderer.realmRacersPrepare.progress(out),
     ...this.windowFocus('#realm-racers-window'),
   });
+  readonly lobbyHold = this.realmRacersUi.lobbyHold;
   // Card Duel window painter (card_duel_view.ts model + card_duel_window.ts
   // painter, the ValeCupWindow shape scaled down). The Card Master NPC's gossip
   // menu AND the persistent #mm-cardduel micromenu button both toggle it (a card

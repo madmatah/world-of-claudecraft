@@ -1,10 +1,7 @@
-// Shared collection-window routing for keyboard and controller input. The
-// keyboard path calls it before any window toggle, so the race lobby's key
-// hold sits here (a held action reads as handled); the pad dispatcher asks the
-// same hold at its head, through the re-export below.
-import { rallyLobbyHoldsAction } from './hud/realm_racers/realm_racers_lobby_hold';
-
-export { rallyLobbyHoldsAction };
+// Shared collection-window routing for keyboard and controller input. Both
+// paths call it before any window toggle, so a host-supplied hold (the race
+// lobby's, which swallows window and menu actions while its curtain is up) sits
+// here too: a held action reads as handled.
 
 export interface CollectionActionsHost {
   toggleDeeds(): void;
@@ -14,6 +11,8 @@ export interface CollectionActionsHost {
   toggleHarvestJournal(): void;
   togglePerfecting(): void;
   toggleLootExplorer(): void;
+  /** A curtain that holds window and menu actions (the Realm Racers lobby). */
+  lobbyHold?: { holds(action: string): boolean };
 }
 const COLLECTION_ACTIONS = {
   deeds: 'toggleDeeds',
@@ -25,7 +24,7 @@ const COLLECTION_ACTIONS = {
   lootExplorer: 'toggleLootExplorer',
 } as const;
 export function dispatchCollectionAction(action: string, host: CollectionActionsHost): boolean {
-  if (rallyLobbyHoldsAction(action)) return true;
+  if (host.lobbyHold?.holds(action)) return true;
   if (!Object.hasOwn(COLLECTION_ACTIONS, action)) return false;
   host[COLLECTION_ACTIONS[action as keyof typeof COLLECTION_ACTIONS]]();
   return true;

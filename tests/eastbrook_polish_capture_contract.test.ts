@@ -703,8 +703,8 @@ const PINNED_POLISH_COMPOSITE_FINGERPRINT =
   // (remint_polish_provenance.mjs on the merged tree; no capture was retaken).
   // Re-minted for the Realm Racers mount-skin presentation fix (renderer leaf).
   // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
-  // Re-minted for the Realm Racers lobby seam readout (renderer leaf).
-  'b0f9bd5c29d4f3de2014530ed94e107df37c5f7e8313f2ece2b53ac05128d3a6';
+  // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
+  '8bb758edeeb3100aa24546060134c804add4519c062aa0d4e60c10e68aabfe8d';
 
 function validPolishAttributionTargets(): AttributionTargetFixture[] {
   return [

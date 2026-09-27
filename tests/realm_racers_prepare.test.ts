@@ -403,11 +403,22 @@ describe('race preparation seam (renderer wiring)', () => {
     const occurrences = (needle: string) => renderer.split(needle).length - 1;
     expect(
       occurrences(
-        'readonly realmRacersPrepare = new RealmRacersPrepare([this.realmRacersGroundBlasts]);',
+        'private readonly realmRacersPrepareSeam = new RealmRacersPrepare([this.realmRacersGroundBlasts]);',
       ),
     ).toBe(1);
     expect(
-      occurrences('this.realmRacersPrepare.frame(this, realmRacersInfo, p.pos.x, p.pos.z);'),
+      occurrences('this.realmRacersPrepareSeam.frame(this, realmRacersInfo, p.pos.x, p.pos.z);'),
+    ).toBe(1);
+    // The HUD reads the lobby progress through a read-only slice, never the seam.
+    expect(
+      occurrences(
+        "readonly realmRacersPrepare: Pick<RealmRacersPrepare, 'progress'> = this.realmRacersPrepareSeam;",
+      ),
+    ).toBe(1);
+    const hud = stripComments(readFileSync(new URL('../src/ui/hud.ts', import.meta.url), 'utf8'));
+    expect(
+      hud.split('prepareProgress: (out) => this.renderer.realmRacersPrepare.progress(out),')
+        .length - 1,
     ).toBe(1);
   });
 });

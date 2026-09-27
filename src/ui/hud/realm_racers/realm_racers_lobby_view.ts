@@ -133,9 +133,11 @@ export function createRealmRacersLobbyFailsafe(): RealmRacersLobbyFailsafe {
 }
 
 /**
- * Whether the curtain may still stand on this client clock. Each newly received
- * `secondsLeft` becomes a client deadline when it arrives; once that deadline
- * plus the grace has passed, the curtain stays down for the rest of this match.
+ * Whether the curtain may still stand on this client clock. Each newly received,
+ * changed `secondsLeft` becomes a client deadline when it arrives, so a frozen
+ * readout (a dead socket, a stalled server) expires the curtain once that
+ * deadline plus the grace has passed, while a lobby that is still counting
+ * (after a background tab or a long stall of this client) raises it again.
  * A presentation failsafe only: it never sends ready and never touches readiness.
  */
 export function stepRealmRacersLobbyFailsafe(
@@ -150,14 +152,12 @@ export function stepRealmRacersLobbyFailsafe(
   if (match.id !== state.matchId) {
     state.matchId = match.id;
     state.secondsLeft = -1;
-    state.expired = false;
   }
-  if (state.expired) return false;
   const secondsLeft = Math.max(0, match.loading?.secondsLeft ?? 0);
   if (secondsLeft !== state.secondsLeft) {
     state.secondsLeft = secondsLeft;
     state.deadlineMs = nowMs + secondsLeft * 1000 + REALM_RACERS_LOBBY_FAILSAFE_GRACE_MS;
   }
-  if (nowMs > state.deadlineMs) state.expired = true;
+  state.expired = nowMs > state.deadlineMs;
   return !state.expired;
 }

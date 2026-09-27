@@ -181,7 +181,8 @@ describe('gamepad dispatch covers every action the controller panel offers', () 
     // never checks it; pin the offer and the dispatch arm directly.
     expect(panel).toContain("{ value: 'escape', label: t('hudChrome.controller.menuAction') }");
     expect(body).toContain("if (id === 'escape') {");
-    expect(body).toContain('if (!hud.closeAll()) hud.toggleOptionsMenu();');
+    // The game-menu arm also waits out the Realm Racers lobby curtain.
+    expect(body).toContain('if (!hud.closeAll() && !hud.lobbyHold.shown) hud.toggleOptionsMenu();');
   });
 
   it('the rewired actions dispatch to their exact keyboard handlers', () => {

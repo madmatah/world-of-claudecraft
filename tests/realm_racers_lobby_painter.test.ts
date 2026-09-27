@@ -153,7 +153,8 @@ describe('RealmRacersLobby painter', () => {
   it('drops the cover once this machine settles, and holds the keys for as long as it is shown', () => {
     const r = rig();
     r.innerHtml.mockRestore();
-    const setHold = vi.fn();
+    const hold = { set: vi.fn() };
+    const setHold = hold.set;
     const painter = new RealmRacersLobby({
       layer: () => r.layer,
       writers: makeWriterFacet(
@@ -165,7 +166,7 @@ describe('RealmRacersLobby painter', () => {
         () => {},
       ),
       setCover: r.setCover,
-      setHold,
+      hold,
     });
     painter.update(buildRealmRacersLobbyView(lobby(), PREPARING));
     painter.update(buildRealmRacersLobbyView(lobby(), { done: 2, total: 2, settled: true }));
