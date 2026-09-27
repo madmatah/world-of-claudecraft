@@ -51,6 +51,7 @@ import {
   realmRacersBarrierVisual,
 } from './realm_racers_barrier_visuals';
 import { buildRealmRacersDraftTracks } from './realm_racers_draft_track';
+import { realmRacersDressingPart } from './realm_racers_dressing_material';
 import { recordRealmRacersFill } from './realm_racers_fills';
 import {
   REALM_RACERS_GRASS_TILE_RADIUS,
@@ -255,12 +256,12 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
         loaded.set(url, gltf.scene);
         const gate = fillGates.get(group)?.();
         if (!gate) {
-          drawInstances(group, gltf.scene, spots);
+          drawInstances(group, url, gltf.scene, spots);
           return;
         }
         const piece = new THREE.Group();
         piece.name = 'realm-racers-dressing-fill';
-        drawInstances(piece, gltf.scene, spots);
+        drawInstances(piece, url, gltf.scene, spots);
         void attachSceneGroupGated(group, piece, gate);
       })
       .catch((err) => {
@@ -277,11 +278,12 @@ function instanceModel(group: THREE.Group, url: string, spots: readonly ModelSpo
     recordRealmRacersFill(group, fill);
     return;
   }
-  drawInstances(group, scene, spots);
+  drawInstances(group, url, scene, spots);
 }
 
 function drawInstances(
   group: THREE.Object3D,
+  url: string,
   scene: THREE.Group,
   spots: readonly ModelSpot[],
 ): void {
@@ -289,7 +291,10 @@ function drawInstances(
   scene.traverse((obj) => {
     const src = obj as THREE.Mesh;
     if (!src.isMesh) return;
-    const mesh = new THREE.InstancedMesh(src.geometry, src.material, spots.length);
+    const part = realmRacersDressingPart(url, src.geometry, src.material as THREE.Material);
+    if (!part) return;
+    const mesh = new THREE.InstancedMesh(part.geometry, part.material, spots.length);
+    mesh.name = `realm-racers-dressing:${url}`;
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);

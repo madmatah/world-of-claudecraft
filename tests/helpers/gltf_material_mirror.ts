@@ -1,6 +1,6 @@
 // A headless stand-in for GLTFLoader's scene of a shipped GLB: one mesh per
 // primitive, with the material KIND and SLOTS GLTFLoader would build from the
-// file's own JSON (texture presence per slot and its uv channel, alpha mode,
+// file's own JSON (its name, texture presence per slot and its uv channel, alpha mode,
 // double-sidedness, vertex colours, unlit and physical extensions, flat
 // shading without normals; a KHR_texture_transform texCoord override is not
 // mirrored), and one-triangle geometries carrying the primitive's attribute
@@ -18,6 +18,7 @@ interface GltfTextureRef {
 }
 
 interface GltfMaterial {
+  name?: string;
   pbrMetallicRoughness?: {
     baseColorTexture?: GltfTextureRef;
     metallicRoughnessTexture?: GltfTextureRef;
@@ -95,6 +96,7 @@ function mirrorMaterial(def: GltfMaterial | undefined, vertexColors: boolean, fl
   }
   if (def?.doubleSided) material.side = THREE.DoubleSide;
   material.vertexColors = vertexColors;
+  material.name = def?.name ?? '';
   return material;
 }
 

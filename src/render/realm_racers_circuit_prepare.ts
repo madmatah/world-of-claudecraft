@@ -10,7 +10,8 @@
 // node's material and geometry, of the same program variant (instancing and
 // its colour buffer, the geometry attributes), grouped by the material's
 // program signature plus that variant. Theme dressing models are not in it:
-// their materials come from each model's own file.
+// their materials depend on the model (the world's converted prop material,
+// or the file's own; realm_racers_dressing_material.ts).
 //
 // `rallyCircuit:<id>` prepares the drawn circuit once it is known: it waits
 // for the circuit's fetch-and-fill models to land (realm_racers_fills.ts),

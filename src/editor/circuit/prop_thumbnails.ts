@@ -13,9 +13,11 @@
 // used to.
 //
 // Two things it must not do, both about the SHARED caches it draws from:
-//  - a GLB-backed piece is a clone of the loader's parsed scene, so its geometry
-//    and materials belong to that cache and are never disposed here; freeing one
-//    would take every authored circuit's props down with it;
+//  - a GLB-backed piece is a clone of the loader's parsed scene wearing what a
+//    circuit draws it with (the world's converted prop materials, through
+//    `realm_racers_dressing_material.ts`), so its geometry and materials belong
+//    to those caches and are never disposed here; freeing one would take every
+//    authored circuit's props, and the world's, down with it;
 //  - an `instanced` piece draws a cached geometry and material for the same
 //    reason (`gardenStatueGeo`), so the mesh wrapping them is dropped and they
 //    are left alone.
@@ -27,6 +29,7 @@
 import * as THREE from 'three';
 import { loadGltf } from '../../render/assets/loader';
 import { REALM_RACERS_BARRIER_VISUALS } from '../../render/realm_racers_barrier_visuals';
+import { realmRacersDressingPart } from '../../render/realm_racers_dressing_material';
 import { REALM_RACERS_PROP_VISUALS } from '../../render/realm_racers_prop_visuals';
 import { disposeRealmRacersTrackGroup } from '../../render/realm_racers_track_dispose_core';
 import {
@@ -46,6 +49,23 @@ const FOV = 32;
  *  shot, and tinting every one of them the same green would hide exactly the
  *  differences the operator is scanning for. */
 const BACKDROP = 0x232733;
+
+/** A clone of a model, each part wearing what a circuit draws it with. The
+ *  swapped geometry and material are shared caches, never ours to dispose. */
+function dressed(object: THREE.Object3D, url: string): THREE.Object3D {
+  object.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const part = realmRacersDressingPart(url, mesh.geometry, mesh.material as THREE.Material);
+    if (!part) {
+      mesh.visible = false;
+      return;
+    }
+    mesh.geometry = part.geometry;
+    mesh.material = part.material;
+  });
+  return object;
+}
 
 export class PropThumbnailRig {
   private renderer: THREE.WebGLRenderer | null = null;
@@ -115,7 +135,7 @@ export class PropThumbnailRig {
       const row = new THREE.Group();
       const step = visual.panelYards / visual.scale;
       for (let i = -1; i <= 1; i++) {
-        const panel = gltf.scene.clone(true);
+        const panel = dressed(gltf.scene.clone(true), visual.panelUrl);
         // Along the module's OWN length axis, so a kit authored on +z lays the
         // same row as one authored on +x rather than three pieces stacked
         // through each other.
@@ -157,7 +177,11 @@ export class PropThumbnailRig {
       // so it is photographed as the GLB it is (its authored emissive is dark by
       // day, which is how a lamp looks on a shelf anyway).
       const gltf = await loadGltf(visual.url);
-      return { object: gltf.scene.clone(true), owned: thumbnailOwnsGeometry(visual.kind) };
+      const clone = gltf.scene.clone(true);
+      return {
+        object: visual.kind === 'gltf' ? dressed(clone, visual.url) : clone,
+        owned: thumbnailOwnsGeometry(visual.kind),
+      };
     } catch {
       return null;
     }

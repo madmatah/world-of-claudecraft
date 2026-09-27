@@ -64,11 +64,12 @@
 // kit in the registry uses, so the Galecrest takes the harbour parapet instead.
 
 import { REALM_RACERS_CIRCUIT_LIST } from '../sim/content/realm_racers_circuits';
+import { GARDEN_MAZE_WALL_URL } from './garden_maze_core';
 
 const IRON_FENCE_URL = '/models/props/garden_iron_fence.glb';
 const IRON_PILLAR_URL = '/models/props/garden_iron_pillar.glb';
 const ORNAMENT_URL = '/models/biome/city_fence_ornament.glb';
-const MAZE_HEDGE_URL = '/models/props/maze_hedge_wall.glb';
+const MAZE_HEDGE_URL = GARDEN_MAZE_WALL_URL;
 const CITY_FENCE_WOOD_URL = '/models/biome/city_fence_wood.glb';
 const VILLAGE_RAIL_URL = '/models/props/fence.glb';
 const HEX_WALL_URL = '/models/biome/hex_wall.glb';

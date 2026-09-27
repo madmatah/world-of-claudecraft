@@ -12,6 +12,8 @@ import { terrainHeight, WATER_LEVEL } from '../sim/world';
 import { loadGltf } from './assets/loader';
 import { registerDeferredPreload } from './assets/preload';
 import {
+  GARDEN_MAZE_ARCH_URL,
+  GARDEN_MAZE_WALL_URL,
   MAZE_ARCH_SCALE,
   MAZE_WALL_SCALE,
   MAZE_Z1,
@@ -44,8 +46,8 @@ registerDeferredPreload(() =>
 // The Great Maze's modeled hedge walls and entry arches (user-authored
 // models). The wall grid, cell geometry, and the movement-blocking bands
 // all live in sim/world.ts; this module only DRAWS that same data.
-const MAZE_WALL_URL = '/models/props/maze_hedge_wall.glb';
-const MAZE_ARCH_URL = '/models/props/maze_hedge_arch.glb';
+const MAZE_WALL_URL = GARDEN_MAZE_WALL_URL;
+const MAZE_ARCH_URL = GARDEN_MAZE_ARCH_URL;
 let mazeWallScene: THREE.Group | null = null;
 let mazeArchScene: THREE.Group | null = null;
 registerDeferredPreload(() =>

@@ -821,6 +821,33 @@ function convertMaterial(
   return mat;
 }
 
+let propDefsByUrl: Map<string, PropAssetDef> | null = null;
+
+/**
+ * The world's converted material for one part of the prop model at `url`, out
+ * of the same cache the world's props draw from, for a caller drawing that
+ * model's own geometry (a Realm Racers circuit). `null` for a part the world
+ * strips, `undefined` for a url `PROP_ASSET_DEFS` does not list. The per-UV
+ * family split of `UV_SURFACE_SPLIT_KEYS` needs the extracted geometry, so
+ * those models take their material's normal routing here.
+ */
+export function worldPropMaterial(
+  url: string,
+  src: THREE.Material,
+  hasVertexColors: boolean,
+): THREE.Material | null | undefined {
+  if (!propDefsByUrl) {
+    propDefsByUrl = new Map();
+    for (const def of Object.values(PROP_ASSET_DEFS)) {
+      if (!propDefsByUrl.has(def.url)) propDefsByUrl.set(def.url, def);
+    }
+  }
+  const def = propDefsByUrl.get(url);
+  if (!def) return undefined;
+  if (def.strip?.test(src.name)) return null;
+  return convertMaterial(src, def.kit, hasVertexColors);
+}
+
 /** parts of a loaded asset, world-baked (incl. yaw), origin centered at the
  *  footprint center with min-y at 0, materials converted + deduped */
 // Props whose ONE atlas material covers genuinely different surfaces, so the
@@ -3079,7 +3106,7 @@ function buildFarPropCells(group: THREE.Group, hideables: Hideable[]): FarPropCe
 
 export const propStaticMergeInternalsForTest = { mergeStaticMeshes };
 
-export const propMaterialInternalsForTest = { convertMaterial };
+export const propMaterialInternalsForTest = { convertMaterial, propAsset };
 
 // ---------------------------------------------------------------------------
 // Far-field building impostors
