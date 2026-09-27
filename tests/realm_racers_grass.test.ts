@@ -452,6 +452,9 @@ describe('Realm Racers grass', () => {
           sparkleTexture: vi.fn(texture),
           groundDetailTexture: vi.fn(texture),
           macroNoiseTexture: vi.fn(texture),
+          // The low-tier water is the world's own Phong plane material.
+          waterNormalish: vi.fn(texture),
+          waterNormalMaps: vi.fn(() => [texture(), texture()]),
           groundSplatMaps: vi.fn(() => ({
             grass: { map: texture(), normalMap: texture() },
             dirt: { map: texture(), normalMap: texture() },

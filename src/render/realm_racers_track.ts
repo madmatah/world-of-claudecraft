@@ -91,6 +91,7 @@ import {
 } from './realm_racers_track_core';
 import { renderLayerDisabled } from './render_dev_flags';
 import { flowerTuftTexture, rallyKerbTexture, rallyStartGridTexture } from './textures';
+import { layLowTierWaterUv, lowTierWaterMaterial, usesShaderWater } from './water';
 import { buildWaterSurfaceMaterial, zeroWaveUniforms } from './water_surface_material';
 
 export interface RealmRacersTrackView {
@@ -643,7 +644,8 @@ function waterSheet(
  * The world's OWN water shader, not a flat translucent plane. It carries the
  * same scrolling ripple normals, fresnel sky tint, sun glints and shoreline foam
  * as the Evergarden's ponds, because it is the same material
- * (`water_surface_material.ts`).
+ * (`water_surface_material.ts`), on the tiers where the world draws it; the
+ * others wear the world's own low-tier plane material (`lowTierWaterMaterial`).
  *
  * The wave field is left off: `water_simulation.ts` anchors ONE camera-local
  * window in the world, and the band is nowhere near it. The shader's
@@ -668,24 +670,33 @@ function buildBasin(
   // The colour ramp is the theme's, and it is the ONLY thing about the water a
   // theme moves: the ripples, the fresnel sky tint, the sun glints and the foam
   // are the world's own water everywhere, deliberately.
-  const material = buildWaterSurfaceMaterial({
-    wave: zeroWaveUniforms(),
-    surfaceOrigin: REALM_RACERS_ORIGIN,
-    ...(theme.water
-      ? {
-          shallow: new THREE.Color(theme.water.shallow),
-          deep: new THREE.Color(theme.water.deep),
-        }
-      : {}),
-  });
-  material.name = 'realmRacersTrack:water';
+  // The tier gate is the world's own (`usesShaderWater`): where the world lays
+  // its Phong plane, the band wears that very material, theme ramp and all left
+  // behind, rather than linking a shader program only a racer would ever draw.
+  const shader = usesShaderWater();
+  const material = shader
+    ? buildWaterSurfaceMaterial({
+        wave: zeroWaveUniforms(),
+        surfaceOrigin: REALM_RACERS_ORIGIN,
+        ...(theme.water
+          ? {
+              shallow: new THREE.Color(theme.water.shallow),
+              deep: new THREE.Color(theme.water.deep),
+            }
+          : {}),
+      })
+    : lowTierWaterMaterial();
+  if (shader) material.name = 'realmRacersTrack:water';
+  const sheet = (mesh: RallyBasinMesh, waterY: number, bankSlope: number): THREE.Mesh => {
+    const water = waterSheet(mesh, waterY, bankSlope, material);
+    if (!shader) layLowTierWaterUv(water.geometry, REALM_RACERS_ORIGIN.x, REALM_RACERS_ORIGIN.z);
+    return water;
+  };
   if (basin) {
-    for (const mesh of meshes) {
-      group.add(waterSheet(mesh, basin.waterY, basin.bankSlope, material));
-    }
+    for (const mesh of meshes) group.add(sheet(mesh, basin.waterY, basin.bankSlope));
   }
   const seaBasin = rallySeaBasin(circuit);
-  if (sea) group.add(waterSheet(sea, seaBasin.waterY, seaBasin.bankSlope, material));
+  if (sea) group.add(sheet(sea, seaBasin.waterY, seaBasin.bankSlope));
 
   // Reeds around the rim, so the water's edge is planted rather than kerbed,
   // and the same clumps scattered along an authored shore. One instanced draw

@@ -22,6 +22,7 @@ import {
 import { activeFarFieldPolicy } from './foliage_impostor';
 import { GFX, type GfxSettings, SUN_DIR } from './gfx';
 import { idleSlot, runIdleQueue } from './idle_queue';
+import { isSharedMaterial, markSharedMaterial } from './shared_resource';
 import { applyTextureAnisotropy } from './texture_anisotropy';
 import { waterNormalish, waterNormalMaps } from './textures';
 import {
@@ -890,7 +891,7 @@ function disposeOwned(meshes: THREE.Mesh[]): void {
     if (Array.isArray(material)) for (const entry of material) materials.add(entry);
     else materials.add(material);
   }
-  for (const material of materials) material.dispose();
+  for (const material of materials) if (!isSharedMaterial(material)) material.dispose();
 }
 
 /** Inert wave uniforms for surfaces with no interactive height field (no
@@ -1692,25 +1693,66 @@ function buildShaderWater(seed: number, renderer?: THREE.WebGLRenderer): WaterVi
   };
 }
 
-function buildPhongWater(): WaterView {
+// low tier gets the same to-the-horizon apron by simply oversizing the
+// one plane (the tiled texture keeps its density via the repeat bump)
+const LOW_TIER_WATER_WIDTH = 3000;
+const LOW_TIER_WATER_DEPTH = WORLD_MAX_Z - WORLD_MIN_Z + 2400;
+
+let lowTierWater: THREE.MeshPhongMaterial | null = null;
+
+/**
+ * The water surface of the tier that skips the shader (see `usesShaderWater`):
+ * ONE shared material, the world's plane and an instanced band's water alike
+ * (realm_racers_track.ts), so the band links the program the world links and
+ * scrolls with the world's `update`. A surface other than the world plane lays
+ * its uv with `layLowTierWaterUv` to read the plane's texel density.
+ */
+export function lowTierWaterMaterial(): THREE.MeshPhongMaterial {
+  if (lowTierWater) return lowTierWater;
   const tex = waterNormalish();
   const [norm] = waterNormalMaps();
-  const mat = new THREE.MeshPhongMaterial({
-    color: 0x2a6a96,
-    transparent: true,
-    opacity: 0.8,
-    shininess: 140,
-    specular: 0xd8ecff,
-    map: tex,
-    normalMap: norm,
-    normalScale: new THREE.Vector2(0.8, 0.8),
-  });
-  // low tier gets the same to-the-horizon apron by simply oversizing the
-  // one plane (the tiled texture keeps its density via the repeat bump)
-  const worldDepth = WORLD_MAX_Z - WORLD_MIN_Z + 2400;
   tex.repeat.set(240, 240);
   norm.repeat.set(210, 620);
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(3000, worldDepth).rotateX(-Math.PI / 2), mat);
+  lowTierWater = markSharedMaterial(
+    new THREE.MeshPhongMaterial({
+      color: 0x2a6a96,
+      transparent: true,
+      opacity: 0.8,
+      shininess: 140,
+      specular: 0xd8ecff,
+      map: tex,
+      normalMap: norm,
+      normalScale: new THREE.Vector2(0.8, 0.8),
+    }),
+  );
+  lowTierWater.name = 'water:lowTier';
+  return lowTierWater;
+}
+
+/** The uv the world's low-tier plane would give each vertex, taken relative to
+ *  (originX, originZ) so a band far out keeps its float precision. */
+export function layLowTierWaterUv(
+  geometry: THREE.BufferGeometry,
+  originX: number,
+  originZ: number,
+): void {
+  const pos = geometry.getAttribute('position');
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    uv[i * 2] = (pos.getX(i) - originX) / LOW_TIER_WATER_WIDTH;
+    uv[i * 2 + 1] = -(pos.getZ(i) - originZ) / LOW_TIER_WATER_DEPTH;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+}
+
+function buildPhongWater(): WaterView {
+  const mat = lowTierWaterMaterial();
+  const tex = mat.map as THREE.Texture;
+  const norm = mat.normalMap as THREE.Texture;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(LOW_TIER_WATER_WIDTH, LOW_TIER_WATER_DEPTH).rotateX(-Math.PI / 2),
+    mat,
+  );
   mesh.position.set(0, waterLevel(), (WORLD_MIN_Z + WORLD_MAX_Z) / 2);
   const meshes = [mesh];
   const group = new THREE.Group();
@@ -1752,8 +1794,11 @@ function buildPhongWater(): WaterView {
   };
 }
 
+/** Whether water draws the surface shader on this tier, or `lowTierWaterMaterial`. */
+export function usesShaderWater(): boolean {
+  return GFX.standardMaterials && hasWaterShaderAssets();
+}
+
 export function buildWater(seed: number, renderer?: THREE.WebGLRenderer): WaterView {
-  return GFX.standardMaterials && hasWaterShaderAssets()
-    ? buildShaderWater(seed, renderer)
-    : buildPhongWater();
+  return usesShaderWater() ? buildShaderWater(seed, renderer) : buildPhongWater();
 }

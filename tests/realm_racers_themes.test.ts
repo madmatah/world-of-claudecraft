@@ -62,6 +62,9 @@ function mockTextures(): void {
     sparkleTexture: vi.fn(texture),
     groundDetailTexture: vi.fn(texture),
     macroNoiseTexture: vi.fn(texture),
+    // The low-tier water is the world's own Phong plane material.
+    waterNormalish: vi.fn(texture),
+    waterNormalMaps: vi.fn(() => [texture(), texture()]),
     groundSplatMaps: vi.fn(() => ({
       grass: { map: texture(), normalMap: texture() },
       dirt: { map: texture(), normalMap: texture() },
@@ -443,7 +446,17 @@ describe('Realm Racers circuit themes', () => {
       });
       afterEach(() => {
         vi.doUnmock('../src/render/textures');
+        vi.doUnmock('../src/render/water');
       });
+
+      /** A tier where the world draws the water shader: headless is the low one,
+       *  where the band wears the world's Phong plane instead. */
+      const onShaderWaterTier = (): void => {
+        vi.doMock('../src/render/water', async (importOriginal) => ({
+          ...(await importOriginal<typeof import('../src/render/water')>()),
+          usesShaderWater: () => true,
+        }));
+      };
 
       it('asks for an unworn wall at build time, since the lane no longer holds it', async () => {
         // THE assumption the whole boot-lane scoping rests on, and the one
@@ -511,6 +524,7 @@ describe('Realm Racers circuit themes', () => {
       });
 
       it('paints the ground and the water in the theme colours', async () => {
+        onShaderWaterTier();
         const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
         const groundColour = (circuit: RealmRacersCircuit): THREE.Color => {
           const lawn = buildRealmRacersTrack(circuit).group.children.find(
@@ -557,6 +571,7 @@ describe('Realm Racers circuit themes', () => {
       });
 
       it('anchors the rally water on the band origin, not on the world one', async () => {
+        onShaderWaterTier();
         const { buildRealmRacersTrack } = await import('../src/render/realm_racers_track');
         // The band sits around x = 113_700, where a highp float resolves about
         // 7mm: a ripple lookup taken straight off the world position quantizes

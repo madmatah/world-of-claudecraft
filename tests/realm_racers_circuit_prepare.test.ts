@@ -37,6 +37,9 @@ vi.mock('../src/render/textures', () => {
     sparkleTexture: vi.fn(texture),
     groundDetailTexture: vi.fn(texture),
     macroNoiseTexture: vi.fn(texture),
+    // The low-tier water is the world's own Phong plane material.
+    waterNormalish: vi.fn(texture),
+    waterNormalMaps: vi.fn(() => [texture(), texture()]),
     groundSplatMaps: vi.fn(() => ({
       grass: { map: texture(), normalMap: texture() },
       dirt: { map: texture(), normalMap: texture() },
@@ -46,24 +49,33 @@ vi.mock('../src/render/textures', () => {
   };
 });
 
-vi.mock('../src/render/assets/loader', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../src/render/assets/loader')>()),
-  loadGltf: vi.fn((url: string) => {
-    // Only a circuit build's own fetches are mirrored: the render stack also
-    // loads character models at import, which no circuit draws.
-    if (!url.startsWith('/models/')) return new Promise(() => undefined);
-    loaderControl.calls.push(url);
-    const gltf = () => ({ scene: mirrorGltfScene(url, 'public') });
-    if (!loaderControl.deferred) return Promise.resolve(gltf());
-    return new Promise((resolve, reject) => {
-      loaderControl.pending.push({
-        url,
-        resolve: () => resolve(gltf()),
-        reject: () => reject(new Error('fetch failed')),
+vi.mock('../src/render/assets/loader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/render/assets/loader')>();
+  return {
+    ...actual,
+    // The water normal maps resolve, so the tiers that draw the water shader do.
+    loadTexture: vi.fn((url: string, opts?: Parameters<typeof actual.loadTexture>[1]) =>
+      url.startsWith('/textures/water/')
+        ? Promise.resolve(new THREE.Texture())
+        : actual.loadTexture(url, opts),
+    ),
+    loadGltf: vi.fn((url: string) => {
+      // Only a circuit build's own fetches are mirrored: the render stack also
+      // loads character models at import, which no circuit draws.
+      if (!url.startsWith('/models/')) return new Promise(() => undefined);
+      loaderControl.calls.push(url);
+      const gltf = () => ({ scene: mirrorGltfScene(url, 'public') });
+      if (!loaderControl.deferred) return Promise.resolve(gltf());
+      return new Promise((resolve, reject) => {
+        loaderControl.pending.push({
+          url,
+          resolve: () => resolve(gltf()),
+          reject: () => reject(new Error('fetch failed')),
+        });
       });
-    });
-  }),
-}));
+    }),
+  };
+});
 
 import { arrivalRevealSettleMaxMs } from '../src/game/arrival_warmup';
 import {
@@ -74,7 +86,7 @@ import {
   setArrivalCover,
 } from '../src/render/arrival_cover';
 import { GPU_WORK_PRIORITY } from '../src/render/background_gpu_queue';
-import { GFX_TIER_RANK, type GfxTier } from '../src/render/gfx';
+import { GFX_TIER_RANK, type GfxSettings, type GfxTier } from '../src/render/gfx';
 import { markProgramReady } from '../src/render/linked_program_readiness';
 import {
   buildRealmRacersCommonRoot,
@@ -99,6 +111,7 @@ import type {
   RealmRacersCircuitView,
   RealmRacersTracksView,
 } from '../src/render/realm_racers_track';
+import { prepareWaterProfileAssets } from '../src/render/water';
 import {
   REALM_RACERS_CIRCUIT_LIST,
   type RealmRacersCircuit,
@@ -123,6 +136,7 @@ let track: TrackModule;
 
 beforeAll(async () => {
   track = await import('../src/render/realm_racers_track');
+  await prepareWaterProfileAssets({ standardMaterials: true } as GfxSettings);
 });
 
 afterAll(gfxProfileRestorer());
@@ -251,10 +265,15 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
       // Exactly what some circuit draws: no program is linked for nothing.
       expect(prepared).toEqual(union);
       // Blade grass grows on the Nightbloom alone and water sits on every
-      // circuit: both are in the common set whatever circuit is drawn.
+      // circuit: both are in the common set whatever circuit is drawn. The
+      // water is the world's own low-tier plane material where the world
+      // draws no water shader.
       const names = new Set(drawsUnder(common).map((draw) => draw.material.name));
       const bladeTier = desktopTierProfile(tier).settings.bladeCarpetRadius > 0;
       expect(names.has('realmRacersTrack:grass')).toBe(bladeTier);
+      const shaderWater = desktopTierProfile(tier).settings.standardMaterials;
+      expect(names.has('realmRacersTrack:water')).toBe(shaderWater);
+      expect(names.has('water:lowTier')).toBe(!shaderWater);
       for (const name of [
         'realmRacersTrack:ground',
         'realmRacersTrack:kerb',
@@ -262,7 +281,6 @@ describe.each(Object.keys(GFX_TIER_RANK) as GfxTier[])(
         'realmRacersTrack:startLightHousing',
         'realmRacersTrack:startLightOff',
         'realmRacersTrack:flower',
-        'realmRacersTrack:water',
         'realmRacersSlicks:oil',
         'realmRacersPickups:sparkle',
       ]) {
