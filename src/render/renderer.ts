@@ -685,7 +685,7 @@ import {
   createRemoteVehicleDisplay,
   type RemoteVehicleDisplayState,
   resetRemoteVehicleDisplay,
-  stepRemoteVehicleDisplay,
+  stepRemoteRacerView,
 } from './remote_vehicle_display_core';
 import {
   RenderBudgetGovernor,
@@ -10453,7 +10453,7 @@ export class Renderer {
       const { y, deck } = rp; // a passenger rides the drawn deck (deck_frame.ts)
       let { x, z } = rp;
       let facing = rp.facing;
-      if (!isSelf && e.drive && e.netUpdatedAt !== undefined) {
+      if (!isSelf && stepRemoteRacerView(v.remoteVehicle, e, selfMotion, now, dt)) {
         // A remote racing machine is projected to the PRESENT off its newest
         // wire pose, by integrating the real vehicle kernel over the pose's
         // age, instead of interpolating the past two snapshots: the interp
@@ -10464,20 +10464,6 @@ export class Renderer {
         // decisions keep using authoritative positions. The vertical stays on
         // the interpolated wire segment (no vy on the wire; a blast arc
         // interpolates acceptably at snapshot rate).
-        stepRemoteVehicleDisplay(
-          v.remoteVehicle,
-          e.pos.x,
-          e.pos.z,
-          e.facing,
-          e.drive,
-          // Half the uplink echo, when the display frame carries one: the v2
-          // reconciled prediction has no echo channel of its own, so a v2
-          // session projects the rival off the pose age alone.
-          now -
-            e.netUpdatedAt +
-            (selfMotion && 'echoMs' in selfMotion ? selfMotion.echoMs * 0.5 : 0),
-          dt,
-        );
         x = v.remoteVehicle.x;
         z = v.remoteVehicle.z;
         facing = v.remoteVehicle.facing;

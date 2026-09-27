@@ -47,6 +47,7 @@ import {
   vehicleVelocityX,
   vehicleVelocityZ,
 } from '../sim/vehicle_motion';
+import type { SelfRenderPrediction } from './self_render_position_core';
 
 export interface RemoteVehiclePose {
   x: number;
@@ -213,4 +214,59 @@ export function stepRemoteVehicleDisplay(
   s.z = tz + offZ * decay;
   s.facing = wrapAngle(tf + offF * decay);
   return s;
+}
+
+/** What the remote racing projection reads off a mirrored entity. */
+export interface RemoteRacerMirror {
+  pos: { x: number; z: number };
+  facing: number;
+  drive: VehicleDrive | null;
+  /** Arrival time of its newest wire pose (performance.now() ms). */
+  netUpdatedAt?: number;
+}
+
+/**
+ * The projection horizon of a remote racer, ms: the age of its newest wire
+ * pose since ARRIVAL, plus half the uplink echo when the display frame carries
+ * one (a v1 SelfMotionFrame). The v2 reconciled prediction has no echo
+ * channel of its own, so a v2 session projects the rival off the arrival age
+ * alone, which leaves it about one downlink in the past.
+ */
+export function remoteRacerProjectionAgeMs(
+  nowMs: number,
+  netUpdatedAt: number,
+  selfMotion: SelfRenderPrediction | null,
+): number {
+  return (
+    nowMs - netUpdatedAt + (selfMotion && 'echoMs' in selfMotion ? selfMotion.echoMs * 0.5 : 0)
+  );
+}
+
+/**
+ * One frame of renderer.sync's remote racing branch for one view: a remote
+ * entity with a drive state and a wire arrival is projected (true: draw the
+ * state's pose); anything else resets a live projection (false). The one
+ * place both the renderer and the latency harness step a drawn rival.
+ */
+export function stepRemoteRacerView<E extends RemoteRacerMirror>(
+  s: RemoteVehicleDisplayState,
+  e: E,
+  selfMotion: SelfRenderPrediction | null,
+  nowMs: number,
+  dt: number,
+): e is E & { drive: VehicleDrive; netUpdatedAt: number } {
+  if (e.drive && e.netUpdatedAt !== undefined) {
+    stepRemoteVehicleDisplay(
+      s,
+      e.pos.x,
+      e.pos.z,
+      e.facing,
+      e.drive,
+      remoteRacerProjectionAgeMs(nowMs, e.netUpdatedAt, selfMotion),
+      dt,
+    );
+    return true;
+  }
+  if (s.active) resetRemoteVehicleDisplay(s);
+  return false;
 }

@@ -31,9 +31,8 @@
 //     pilot brain (src/sim/realm_racers_driver.ts) reading only what that
 //     client knows: its own mirrored pose and drive, on every new snapshot.
 //   - Each pilot's screen can be recorded frame by frame: its drawn self and
-//     the rival drawn through the renderer's own remote racing projection
-//     (stepRemoteVehicleDisplay, called with the arguments renderer.sync
-//     passes it).
+//     the rival drawn through the renderer's own remote racing step
+//     (stepRemoteRacerView, the call renderer.sync makes).
 //
 // A suite using this helper must mock Postgres itself, hoisted above its own
 // import of this module (copy the factory at the top of
@@ -42,8 +41,9 @@
 import type { ClientWorld } from '../../src/net/online';
 import {
   createRemoteVehicleDisplay,
+  remoteRacerProjectionAgeMs,
   resetRemoteVehicleDisplay,
-  stepRemoteVehicleDisplay,
+  stepRemoteRacerView,
 } from '../../src/render/remote_vehicle_display_core';
 import { REALM_RACERS_PRACTICE_CIRCUIT } from '../../src/sim/content/realm_racers_circuits';
 import { vehicleProfile } from '../../src/sim/content/vehicles';
@@ -372,6 +372,12 @@ export interface RacerDuelHarness {
   /** Both send the lobby ready; advance until the race runs on both mirrors. */
   advanceToGo(): void;
   advanceFor(ms: number): void;
+  /** The wall instant of the server tick that dropped the flag, ms (throws
+   *  before it has). Scenario scripts are timed from here, so the same step
+   *  lands at the same SERVER race time whatever the links. */
+  goWallMs(): number;
+  /** Advance to `raceMs` after the server's GO (never backwards). */
+  advanceToRaceMs(raceMs: number): void;
   advanceUntil(done: () => boolean, maxMs: number, what: string): void;
   /** Start recording both screens and the server; returns the live record. */
   record(): DuelRecording;
@@ -432,6 +438,8 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
   let seatSeen: { match: RealmRacersMatch; tick: number } | null = null;
   let goPulledFor: RealmRacersMatch | null = null;
   let recording: DuelRecording | null = null;
+  // The wall instant of the server tick that dropped the flag.
+  let goWallMs: number | null = null;
 
   function currentMatch(): RealmRacersMatch | null {
     const heat = server.sim.realmRacers.match;
@@ -469,6 +477,7 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
         heat.goTick -= pulledBy;
         heat.deadlineTick -= pulledBy;
       }
+      if (goWallMs === null && heat.phase === 'racing') goWallMs = clock.now();
       if ((opts.housePilots ?? 'parked') === 'parked') {
         const lap = realmRacersTrack(realmRacersCircuitOf(heat));
         let parkedIndex = 0;
@@ -566,29 +575,24 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
     }
 
     self.onFrame((frame: ClientFrameInfo) => {
-      // Exactly renderer.sync's remote racing branch: the same condition, the
-      // same wire pose, drive and age, the same frame dt.
+      // renderer.sync's remote racing branch, through the same step it calls
+      // (stepRemoteRacerView) with the same entity, display frame, clock and
+      // frame dt. A rival gone from the mirror has no view to project.
       const e = client.entities.get(rivalPid);
       let projected = false;
-      let ageMs: number | null = null;
-      if (e?.drive && e.netUpdatedAt !== undefined) {
-        ageMs =
-          frame.nowMs -
-          e.netUpdatedAt +
-          (frame.selfMotion && 'echoMs' in frame.selfMotion ? frame.selfMotion.echoMs * 0.5 : 0);
-        stepRemoteVehicleDisplay(
+      if (e)
+        projected = stepRemoteRacerView(
           rivalDisplay,
-          e.pos.x,
-          e.pos.z,
-          e.facing,
-          e.drive,
-          ageMs,
+          e,
+          frame.selfMotion,
+          frame.nowMs,
           frame.frameDtSec,
         );
-        projected = true;
-      } else if (rivalDisplay.active) {
-        resetRemoteVehicleDisplay(rivalDisplay);
-      }
+      else if (rivalDisplay.active) resetRemoteVehicleDisplay(rivalDisplay);
+      const ageMs =
+        projected && e?.netUpdatedAt !== undefined
+          ? remoteRacerProjectionAgeMs(frame.nowMs, e.netUpdatedAt, frame.selfMotion)
+          : null;
       if (recording) {
         recording.screens[self.pid]?.push({
           tMs: frame.nowMs,
@@ -698,6 +702,14 @@ export function createRacerDuelHarness(opts: RacerDuelOptions): RacerDuelHarness
     },
     advanceFor(ms: number): void {
       clock.advanceTo(clock.now() + ms);
+    },
+    goWallMs(): number {
+      if (goWallMs === null) throw new Error('the server has not dropped the flag yet');
+      return goWallMs;
+    },
+    advanceToRaceMs(raceMs: number): void {
+      if (goWallMs === null) throw new Error('the server has not dropped the flag yet');
+      clock.advanceTo(Math.max(clock.now(), goWallMs + raceMs));
     },
     advanceUntil,
     record(): DuelRecording {

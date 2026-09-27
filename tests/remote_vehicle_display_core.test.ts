@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   createRemoteVehicleDisplay,
   REMOTE_VEHICLE_AGE_CAP_MS,
+  remoteRacerProjectionAgeMs,
   resetRemoteVehicleDisplay,
+  stepRemoteRacerView,
   stepRemoteVehicleDisplay,
 } from '../src/render/remote_vehicle_display_core';
+import type { SelfMotionFrame } from '../src/render/self_motion';
+import type { ReconciledSelfPrediction } from '../src/render/self_render_position_core';
 import { vehicleProfile } from '../src/sim/content/vehicles';
 import { DT, type VehicleDrive } from '../src/sim/types';
 import {
@@ -257,5 +261,69 @@ describe('remote vehicle display projection', () => {
     const frozen = Object.freeze({ ...drive });
     stepRemoteVehicleDisplay(s, 0, 0, 0, frozen, 200, 1 / 60);
     expect(frozen.speed).toBe(40);
+  });
+});
+
+describe('the remote racer view step renderer.sync runs', () => {
+  // Only the echo channel matters to the horizon, so the v1 frame carries just
+  // that field; the v2 frame is the reconciled shape, which has none.
+  const v1Frame = { echoMs: 120 } as unknown as SelfMotionFrame;
+  const v2Frame: ReconciledSelfPrediction = {
+    kind: 'reconciled',
+    position: { x: 0, y: 0, z: 0 },
+    residual: null,
+  };
+  const straightDrive = (speed: number): VehicleDrive => {
+    const drive = createVehicleDrive(PROFILE_KEY);
+    drive.speed = speed;
+    return drive;
+  };
+
+  it('ages a wire pose from its arrival, plus half the echo only on a v1 frame', () => {
+    expect(remoteRacerProjectionAgeMs(1000, 940, null)).toBe(60);
+    expect(remoteRacerProjectionAgeMs(1000, 940, v2Frame)).toBe(60);
+    expect(remoteRacerProjectionAgeMs(1000, 940, v1Frame)).toBe(120);
+  });
+
+  it('projects a remote machine exactly as the direct step does, at that age', () => {
+    const drive = straightDrive(40);
+    const mirror = { pos: { x: 3, z: -7 }, facing: 0.3, drive, netUpdatedAt: 900 };
+    for (const frame of [null, v1Frame]) {
+      const viaView = createRemoteVehicleDisplay();
+      const direct = createRemoteVehicleDisplay();
+      for (let i = 0; i < 6; i++) {
+        const now = 950 + i * FRAME_MS;
+        expect(stepRemoteRacerView(viaView, mirror, frame, now, FRAME_MS / 1000)).toBe(true);
+        stepRemoteVehicleDisplay(
+          direct,
+          3,
+          -7,
+          0.3,
+          drive,
+          remoteRacerProjectionAgeMs(now, 900, frame),
+          FRAME_MS / 1000,
+        );
+        expect({ x: viaView.x, z: viaView.z, facing: viaView.facing }).toEqual({
+          x: direct.x,
+          z: direct.z,
+          facing: direct.facing,
+        });
+      }
+    }
+  });
+
+  it('resets a live projection when the machine has no drive or no arrival', () => {
+    const s = createRemoteVehicleDisplay();
+    const drive = straightDrive(40);
+    const mirror = { pos: { x: 0, z: 0 }, facing: 0, drive, netUpdatedAt: 0 };
+    expect(stepRemoteRacerView(s, mirror, null, 50, 1 / 60)).toBe(true);
+    expect(s.active).toBe(true);
+    expect(stepRemoteRacerView(s, { ...mirror, drive: null }, null, 60, 1 / 60)).toBe(false);
+    expect(s.active).toBe(false);
+    stepRemoteRacerView(s, mirror, null, 70, 1 / 60);
+    expect(stepRemoteRacerView(s, { ...mirror, netUpdatedAt: undefined }, null, 80, 1 / 60)).toBe(
+      false,
+    );
+    expect(s.active).toBe(false);
   });
 });

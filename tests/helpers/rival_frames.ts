@@ -499,6 +499,28 @@ export interface DuelResult {
   predictedFrames: number;
   contact: ContactOutcome | null;
   blast: (BlastOutcome & { hudClamped: boolean }) | null;
+  /** The server bump (contact scenarios) or the tick that processed the shot
+   *  (blast): when in the race and where on the lap A was. */
+  event: RaceEventAt | null;
+}
+
+export interface RaceEventAt {
+  /** Server race time, ms after the tick that dropped the flag. */
+  raceMs: number;
+  /** Pilot A's arc length along the lap, yd. */
+  arcS: number;
+}
+
+/** The wall instant of the tick whose events carry the shooter's Fired. */
+function firedRowTMs(rec: DuelRecording, shooterPid: number): number | null {
+  const row = rec.ticks.find((r) =>
+    r.events.some(
+      (ev) =>
+        ev.type === 'realmRacersGroundBlastFired' &&
+        (ev as SimEvent & { sourceId: number }).sourceId === shooterPid,
+    ),
+  );
+  return row ? row.tMs : null;
 }
 
 /** Ms after GO the display scores open: the standing start is excluded. */
@@ -509,7 +531,10 @@ const SWIPE_AT_MS = 2000;
 /**
  * One scripted duel on the drawn competition circuit, both pilots on the
  * closed-loop brain (reading the server's machine, so the lines are the same
- * whatever the link; their keys still ride their own wires):
+ * whatever the link; their keys still ride their own wires). Every step is
+ * timed from the SERVER tick that dropped the flag, so a step lands at the same
+ * server race time at every RTT (the pilots' keys still reach the server one
+ * uplink later, which is the latency under test):
  *   sideBySide  both at race pace, a lane apart (A on the right, from slot 0).
  *   tailgate    one line; A leaves the grid 0.4 s after B and follows it.
  *   rearRam     the tailgate, then B lifts to 40 pct pace at 3 s: A runs into it.
@@ -523,43 +548,47 @@ export function runDuel(scenario: DuelScenario, rttA: number, rttB = rttA): Duel
   });
   try {
     d.seat();
-    d.advanceToGo();
-    const rec = d.record();
-    const go = d.harness.clock.now();
     const { a, b } = d;
     const lane = 2.5;
-    let contact: ContactOutcome | null = null;
-    let blast: DuelResult['blast'] = null;
-    let scoreToMs = go + 6000;
+    // Armed before the flag: the brain reads the server's machine, so it
+    // starts deciding on the tick the controls unlock.
     if (scenario === 'sideBySide' || scenario === 'sideSwipe') {
       a.autopilot({ lineOffsetYd: -lane, observe: 'server' });
       b.autopilot({ lineOffsetYd: lane, observe: 'server' });
-      if (scenario === 'sideBySide') d.advanceFor(6000);
-      else {
-        // Early on the opening stretch, where the two lanes are still level at
-        // every link (from the first corner on, the inside lane pulls ahead).
-        d.advanceFor(SWIPE_AT_MS);
-        a.autopilot({ lineOffsetYd: lane, observe: 'server' });
-        d.advanceFor(6000 - SWIPE_AT_MS);
-      }
     } else {
-      const lagMs = scenario === 'blast' ? 1000 : 400;
       b.autopilot({ observe: 'server' });
       a.keys({});
-      d.advanceFor(lagMs);
+    }
+    const rec = d.record();
+    d.advanceToGo();
+    const go = d.goWallMs();
+    let contact: ContactOutcome | null = null;
+    let blast: DuelResult['blast'] = null;
+    let blastFiredTMs: number | null = null;
+    let scoreToMs = go + 6000;
+    if (scenario === 'sideBySide') d.advanceToRaceMs(6000);
+    else if (scenario === 'sideSwipe') {
+      // Early on the opening stretch, where the two lanes are still level at
+      // every link (from the first corner on, the inside lane pulls ahead).
+      d.advanceToRaceMs(SWIPE_AT_MS);
+      a.autopilot({ lineOffsetYd: lane, observe: 'server' });
+      d.advanceToRaceMs(6000);
+    } else {
+      d.advanceToRaceMs(scenario === 'blast' ? 1000 : 400);
       a.autopilot({ observe: 'server' });
       if (scenario === 'rearRam') {
-        d.advanceFor(3000 - lagMs);
+        d.advanceToRaceMs(3000);
         b.autopilot({ observe: 'server', speedScale: 0.4 });
-        d.advanceFor(3000);
+        d.advanceToRaceMs(6000);
       } else if (scenario === 'blast') {
-        d.advanceFor(4000 - lagMs);
+        d.advanceToRaceMs(4000);
         const shot = fireAtDrawnRival(a, b.pid, rec);
-        d.advanceFor(2000);
+        d.advanceToRaceMs(6000);
         blast = { ...blastOutcome(rec, a.pid, b.pid, shot.sent), hudClamped: shot.hudClamped };
+        blastFiredTMs = firedRowTMs(rec, a.pid);
         scoreToMs = go + 4000;
       } else {
-        d.advanceFor(6000 - lagMs);
+        d.advanceToRaceMs(6000);
       }
     }
     if (scenario === 'rearRam' || scenario === 'sideSwipe') {
@@ -572,6 +601,15 @@ export function runDuel(scenario: DuelScenario, rttA: number, rttB = rttA): Duel
       (n, pid) => n + (rec.screens[pid] ?? []).filter((f) => f.selfPredicted).length,
       0,
     );
+    // Where on the lap, and when in the race, the scored event happened.
+    const eventAt = (tMs: number | null): RaceEventAt | null => {
+      if (tMs === null || Number.isNaN(tMs)) return null;
+      const row = rec.ticks.find((r) => r.tMs === tMs);
+      const pose = row?.poses[a.pid];
+      if (!pose) return null;
+      const at = d.toCanonical(pose.x, pose.z);
+      return { raceMs: tMs - go, arcS: d.track().project(at.x, at.z).s };
+    };
     return {
       scenario,
       rttA,
@@ -582,6 +620,7 @@ export function runDuel(scenario: DuelScenario, rttA: number, rttB = rttA): Duel
       predictedFrames,
       contact,
       blast,
+      event: eventAt(contact ? contact.serverBumpTMs : blastFiredTMs),
     };
   } finally {
     d.dispose();

@@ -1399,7 +1399,8 @@ const ACCEPTED_POLISH_V2_METADATA_SHA256 =
   // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
   // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
   // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
-  '9fd55e62f2f19844493c193b8bf2e2a3dbb285a3fea0163374d3abf5f3e0febf';
+  // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
+  '7ca25b16c646edfba07e37b55549aa14f15ce5f3a2cc26a1d8b582e4e51ce411';
 const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Eastbrook handoff merge with release/v0.43.0: the merged renderer leaf and the moved NPC layout match neither parent. No capture was retaken.
   // Re-minted for the v0.43.0 batch base merge (ossbrain-release/v0.43.0 taking
@@ -1427,7 +1428,8 @@ const ACCEPTED_POLISH_V2_COMPOSITE_PROVENANCE =
   // Re-minted for the Realm Racers Ground Blast preparation seam (renderer leaf).
   // Re-minted for the Realm Racers lobby seam readout, narrowed (renderer leaf).
   // Re-minted for the Realm Racers circuit preparation lot (renderer leaf).
-  '9b81af9a52c27831cc0a995c0706fcb998e5d17883fff7613520727f3a918302';
+  // Re-minted for the Realm Racers shared remote racer step (renderer leaf).
+  '07146ce081f159cbe67ccd743bf871d195120b82f6a0d769a0c000787a4a0f76';
 const ACCEPTED_POLISH_V2_METADATA = readJsonFile<CaptureMetadata>(ACCEPTED_POLISH_V2_METADATA_PATH);
 const ACCEPTED_POLISH_V2_PROVENANCE = ACCEPTED_POLISH_V2_METADATA.polishProvenance;
 const ACCEPTED_POLISH_V2_TOWN_CONTRACT = ACCEPTED_POLISH_V2_METADATA.records[0]?.townContract;
@@ -2814,7 +2816,8 @@ describe('Eastbrook polish performance and contact evidence', () => {
       // Re-minted for the Realm Racers Ground Blast preparation seam.
       // Re-minted for the Realm Racers lobby seam readout, narrowed.
       // Re-minted for the Realm Racers circuit preparation lot.
-    ).toBe('c85ffca3626f5cfa6804847b91a316452a9143be38d32a0351d59ab0a702c6f8');
+      // Re-minted for the Realm Racers shared remote racer step.
+    ).toBe('d747e6817fce91d364cb9664bbec2fd3683a3dbf900484cc247a73c079e6d928');
   });
 
   it('binds every historical after record to its accepted source and asset provenance', () => {

@@ -998,7 +998,10 @@ const MONOLITHS: MonolithRow[] = [
     // LOWERED 13265 -> 13249: the circuit sky moved to realm_racers_sky.ts
     // (its PMREM now rides the GPU queue) and the circuit preparation wiring
     // to realm_racers_circuit_prepare.ts. Exact count.
-    ceiling: 13249,
+    // LOWERED 13249 -> 13235: a remote racer's projection step (the age
+    // formula, the gate and the reset) moved to stepRemoteRacerView in
+    // remote_vehicle_display_core.ts, shared with the latency harness.
+    ceiling: 13235,
     seam: 'a new src/render/<thing>.ts module the renderer calls (src/render/CLAUDE.md)',
   },
   {
