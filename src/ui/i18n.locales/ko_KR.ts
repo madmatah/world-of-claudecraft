@@ -15088,6 +15088,7 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.wonReturn': '승리! {seconds}초 뒤 돌아갑니다',
   'hudChrome.rally.lostReturn': '완주. {seconds}초 뒤 돌아갑니다',
   'hudChrome.rally.drawReturn': '무승부. {seconds}초 뒤 돌아갑니다',
+  'hudChrome.rally.voidReturn': '경기 무효. {seconds}초 뒤 돌아갑니다',
   'hudChrome.rally.logQueued': '렐름 레이서즈 대기 순번: {position}.',
   'hudChrome.rally.logUnqueued': '렐름 레이서즈 대기열에서 나왔습니다.',
   'hudChrome.rally.bannerGo': '출발!',
@@ -15098,6 +15099,8 @@ export const ko_KR: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logWin': '승리했습니다. 가장 먼저 결승선을 넘었습니다.',
   'hudChrome.rally.logLoss': '{name}님이 결승선을 먼저 넘었습니다.',
   'hudChrome.rally.logForfeit': '경기를 포기했습니다. {name}님이 승리합니다.',
+  'hudChrome.rally.bannerForfeit': '경기를 포기했습니다.',
+  'hudChrome.rally.logForfeitRaceOn': '경기를 포기했습니다. 경기는 당신 없이 계속됩니다.',
   'hudChrome.rally.mobileLabel': '레이서즈',
   'entities.abilities.rally_ground_blast.name': '그라운드 블래스트',
   'entities.abilities.rally_ground_blast.description':

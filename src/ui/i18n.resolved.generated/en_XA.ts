@@ -2199,6 +2199,8 @@ export const en_XA: EnTranslations = {
       "wonReturn": "[ƲÍÇŢÓŔÝ. Ŕéţúŕñíñĝ íñ {seconds}]",
       "lostReturn": "[ƑÍÑÍŠĤ. Ŕéţúŕñíñĝ íñ {seconds}]",
       "drawReturn": "[ÐŔÁŴ. Ŕéţúŕñíñĝ íñ {seconds}]",
+      "raceVoid": "[ŔÁÇÉ ƲÓÍÐ]",
+      "voidReturn": "[ŔÁÇÉ ƲÓÍÐ. Ŕéţúŕñíñĝ íñ {seconds}]",
       "logQueued": "[Ŕéáļɱ Ŕáçéŕš ɋúéúé þóšíţíóñ: {position}.]",
       "logUnqueued": "[Ýóú ļéƒţ ţĥé Ŕéáļɱ Ŕáçéŕš ɋúéúé.]",
       "bannerGo": "[ĜÓ!]",
@@ -2209,6 +2211,8 @@ export const en_XA: EnTranslations = {
       "logWin": "[Ʋíçţóŕý. Ýóú çŕóššéð ţĥé ļíñé ƒíŕšţ.]",
       "logLoss": "[{name} çŕóššéð ţĥé ƒíñíšĥ ļíñé ƒíŕšţ.]",
       "logForfeit": "[Ýóú ƒóŕƒéíţéð ţĥé ŕáçé. {name} ŵíñš.]",
+      "bannerForfeit": "[Ýóú ƒóŕƒéíţéð ţĥé ŕáçé.]",
+      "logForfeitRaceOn": "[Ýóú ƒóŕƒéíţéð ţĥé ŕáçé. Ţĥé ƒíéļð ŕáçéš óñ ŵíţĥóúţ ýóú.]",
       "mobileLabel": "[Ŕáçéŕš]"
     },
     "options": {

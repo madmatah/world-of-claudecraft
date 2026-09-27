@@ -1261,26 +1261,39 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
   });
 
   it('never credits a practice heat, even for the human who saw it out', () => {
-    const sim = makeWorld();
-    const human = addAt(sim, 'warrior', 'Practicer');
-    sim.realmRacersPracticeStart('ace', human);
-    expect(sim.realmRacers.practices).toHaveLength(1);
-    const practiceMatch = required(sim.realmRacers.practices[0], 'practice match');
-    // Break the tie among the three untouched house pilots first, so the
-    // classification below genuinely produces a winner: a null winnerPid
-    // (a dead heat) would let a deferred, never-run endMatch pass this test
-    // by accident.
-    const bots = practiceMatch.pids.filter((pid) => pid !== human);
-    const leadBotProgress = required(practiceMatch.progress.get(bots[0]), 'lead bot progress');
-    leadBotProgress.travelled += 50;
-    // The human quitting leaves only house pilots driving, which decides the
-    // race at once (raceIsDecided's house-pilot-only arm).
-    sim.realmRacersForfeit(human);
-    expect(practiceMatch.phase).toBe('finished');
-    expect(practiceMatch.winnerPid).toBe(bots[0]); // proves endMatch really ran
-    const meta = required(sim.players.get(human), 'player meta');
-    expect(meta.deedsEarned.has('pvp_rr_first_race')).toBe(false);
-    expect(meta.rrWins).toBe(0);
+    // The human is still driving when the clock closes the heat, which is the
+    // exact case pvp_rr_first_race rewards on a rated heat (the control arm
+    // below), so only the practice gate can be what withholds it here.
+    const seeOut = (practice: boolean) => {
+      const sim = makeWorld();
+      const human = addAt(sim, 'warrior', 'Practicer');
+      if (practice) {
+        sim.realmRacersPracticeStart('ace', human);
+      } else {
+        const bots = GRID.slice(1).map((row) => {
+          const pid = addAt(sim, row.cls, row.name, row.x, row.z);
+          sim.realmRacers.bots.set(pid, 'rookie');
+          return pid;
+        });
+        expect(realmRacersStartMatch(sim.ctx, [human, ...bots])).toBe(true);
+      }
+      const heat = required(
+        practice ? sim.realmRacers.practices[0] : sim.realmRacers.match,
+        'heat',
+      );
+      expect(heat.practice !== null).toBe(practice);
+      heat.phase = 'racing';
+      heat.deadlineTick = sim.tickCount + 1;
+      sim.tick();
+      expect(heat.phase).toBe('finished');
+      expect(heat.voided).toBe(false);
+      expect(heat.progress.get(human)?.retiredTick).toBeNull();
+      return required(sim.players.get(human), 'player meta');
+    };
+    const practiced = seeOut(true);
+    expect(practiced.deedsEarned.has('pvp_rr_first_race')).toBe(false);
+    expect(practiced.rrWins).toBe(0);
+    expect(seeOut(false).deedsEarned.has('pvp_rr_first_race')).toBe(true);
   });
 
   it('never credits a practice WIN either: no rrWins and no first_win even though the human crosses first', () => {

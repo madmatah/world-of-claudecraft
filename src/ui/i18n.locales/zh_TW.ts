@@ -14400,6 +14400,7 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.wonReturn': '勝利！{seconds} 秒後返回',
   'hudChrome.rally.lostReturn': '完賽。{seconds} 秒後返回',
   'hudChrome.rally.drawReturn': '平手。{seconds} 秒後返回',
+  'hudChrome.rally.voidReturn': '比賽作廢。{seconds} 秒後返回',
   'hudChrome.rally.logQueued': '王國競速賽佇列位置：{position}。',
   'hudChrome.rally.logUnqueued': '你已離開王國競速賽佇列。',
   'hudChrome.rally.bannerGo': '出發！',
@@ -14410,6 +14411,8 @@ export const zh_TW: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logWin': '勝利。你率先衝過終點線。',
   'hudChrome.rally.logLoss': '{name} 率先衝過終點線。',
   'hudChrome.rally.logForfeit': '你退出了比賽。{name} 獲勝。',
+  'hudChrome.rally.bannerForfeit': '你退出了比賽。',
+  'hudChrome.rally.logForfeitRaceOn': '你退出了比賽。其他車手繼續比賽。',
   'hudChrome.rally.mobileLabel': '競速賽',
   'entities.abilities.rally_ground_blast.name': '震地爆破',
   'entities.abilities.rally_ground_blast.description':

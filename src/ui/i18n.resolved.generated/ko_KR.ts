@@ -2199,6 +2199,8 @@ export const ko_KR: EnTranslations = {
       "wonReturn": "승리! {seconds}초 뒤 돌아갑니다",
       "lostReturn": "완주. {seconds}초 뒤 돌아갑니다",
       "drawReturn": "무승부. {seconds}초 뒤 돌아갑니다",
+      "raceVoid": "RACE VOID",
+      "voidReturn": "경기 무효. {seconds}초 뒤 돌아갑니다",
       "logQueued": "렐름 레이서즈 대기 순번: {position}.",
       "logUnqueued": "렐름 레이서즈 대기열에서 나왔습니다.",
       "bannerGo": "출발!",
@@ -2209,6 +2211,8 @@ export const ko_KR: EnTranslations = {
       "logWin": "승리했습니다. 가장 먼저 결승선을 넘었습니다.",
       "logLoss": "{name}님이 결승선을 먼저 넘었습니다.",
       "logForfeit": "경기를 포기했습니다. {name}님이 승리합니다.",
+      "bannerForfeit": "경기를 포기했습니다.",
+      "logForfeitRaceOn": "경기를 포기했습니다. 경기는 당신 없이 계속됩니다.",
       "mobileLabel": "레이서즈"
     },
     "options": {

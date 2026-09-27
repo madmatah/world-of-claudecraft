@@ -2199,6 +2199,8 @@ export const ru_RU: EnTranslations = {
       "wonReturn": "Победа! Возвращение через {seconds}",
       "lostReturn": "Финиш. Возвращение через {seconds}",
       "drawReturn": "Ничья. Возвращение через {seconds}",
+      "raceVoid": "RACE VOID",
+      "voidReturn": "Гонка аннулирована. Возвращение через {seconds}",
       "logQueued": "Позиция в очереди Гонок Королевства: {position}.",
       "logUnqueued": "Вы покинули очередь Гонок Королевства.",
       "bannerGo": "Старт!",
@@ -2209,6 +2211,8 @@ export const ru_RU: EnTranslations = {
       "logWin": "Победа. Вы первым пересекли финишную черту.",
       "logLoss": "{name} первым пересекает финишную черту.",
       "logForfeit": "Вы сошли с гонки. Побеждает {name}.",
+      "bannerForfeit": "Вы сошли с гонки.",
+      "logForfeitRaceOn": "Вы сошли с гонки. Гонка продолжается без вас.",
       "mobileLabel": "Гонки"
     },
     "options": {

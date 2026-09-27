@@ -2199,6 +2199,8 @@ export const cs_CZ: EnTranslations = {
       "wonReturn": "VICTORY. Returning in {seconds}",
       "lostReturn": "FINISH. Returning in {seconds}",
       "drawReturn": "DRAW. Returning in {seconds}",
+      "raceVoid": "RACE VOID",
+      "voidReturn": "RACE VOID. Returning in {seconds}",
       "logQueued": "Realm Racers queue position: {position}.",
       "logUnqueued": "You left the Realm Racers queue.",
       "bannerGo": "GO!",
@@ -2209,6 +2211,8 @@ export const cs_CZ: EnTranslations = {
       "logWin": "Victory. You crossed the line first.",
       "logLoss": "{name} crossed the finish line first.",
       "logForfeit": "You forfeited the race. {name} wins.",
+      "bannerForfeit": "You forfeited the race.",
+      "logForfeitRaceOn": "You forfeited the race. The field races on without you.",
       "mobileLabel": "Racers"
     },
     "options": {

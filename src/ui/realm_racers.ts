@@ -424,11 +424,13 @@ export class RealmRacersUi {
         : t('hudChrome.rally.racingAgainst', placing);
       const status =
         view.phase === 'finished'
-          ? view.result === 'won'
-            ? t('hudChrome.rally.won')
-            : view.result === 'draw'
-              ? t('hudChrome.rally.draw')
-              : t('hudChrome.rally.lost', placing)
+          ? view.result === 'void'
+            ? t('hudChrome.rally.raceVoid')
+            : view.result === 'won'
+              ? t('hudChrome.rally.won')
+              : view.result === 'draw'
+                ? t('hudChrome.rally.draw')
+                : t('hudChrome.rally.lost', placing)
           : live;
       action =
         `<div class="rally-status live">${esc(status)}</div>` +
@@ -574,14 +576,17 @@ export class RealmRacersUi {
             ? // The podium carries the result headline and the return
               // countdown once the RACE is over, so this line stands down
               // rather than saying the same thing twice. A pilot who merely
-              // quit still gets it here: there is no ceremony for them.
-              view.decided
-              ? ''
-              : view.result === 'won'
-                ? t('hudChrome.rally.wonReturn', { seconds: num(view.returnIn) })
-                : view.result === 'draw'
-                  ? t('hudChrome.rally.drawReturn', { seconds: num(view.returnIn) })
-                  : t('hudChrome.rally.lostReturn', { seconds: num(view.returnIn) })
+              // quit still gets it here: there is no ceremony for them, and
+              // neither is there for a void race.
+              view.voided
+              ? t('hudChrome.rally.voidReturn', { seconds: num(view.returnIn) })
+              : view.decided
+                ? ''
+                : view.result === 'won'
+                  ? t('hudChrome.rally.wonReturn', { seconds: num(view.returnIn) })
+                  : view.result === 'draw'
+                    ? t('hudChrome.rally.drawReturn', { seconds: num(view.returnIn) })
+                    : t('hudChrome.rally.lostReturn', { seconds: num(view.returnIn) })
             : // The winner is home and this pilot is not: they are racing a
               // clock now, and it says so rather than cutting them off unwarned.
               view.chaseIn > 0

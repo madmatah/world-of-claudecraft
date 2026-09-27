@@ -2,7 +2,12 @@
 // screen, and the in-race HUD.
 
 import { REALM_RACERS_PRACTICE_CIRCUIT_ID } from '../sim/content/realm_racers_circuits';
-import type { RallyDriverTier, RealmRacersInfo, RealmRacersPhase } from '../world_api';
+import type {
+  RallyDriverTier,
+  RealmRacersInfo,
+  RealmRacersPhase,
+  RealmRacersResult,
+} from '../world_api';
 
 /**
  * The difficulty tiers the practice setup offers, hardest last. Spelled here
@@ -113,7 +118,7 @@ export type RealmRacersWindowView =
       /** Live placing and the frozen grid size: "3 of 4", never "second". */
       position: number;
       gridSize: number;
-      result: 'won' | 'lost' | 'draw' | 'forfeit' | null;
+      result: RealmRacersResult;
       sig: string;
     };
 
@@ -156,7 +161,8 @@ export interface RealmRacersHudView {
   chaseIn: number;
   /** Whether the RACE is over, which is when the podium takes the headline. */
   decided: boolean;
-  result: 'won' | 'lost' | 'draw' | 'forfeit' | null;
+  voided: boolean;
+  result: RealmRacersResult;
   returnIn: number;
   /**
    * Whether the strip offers its own forfeit control. The queue window closes
@@ -188,6 +194,7 @@ const HUD_OFF: RealmRacersHudView = {
   warded: false,
   chaseIn: 0,
   decided: false,
+  voided: false,
   result: null,
   returnIn: 0,
   canForfeit: false,
@@ -215,7 +222,7 @@ export function buildRealmRacersWindowView(info: RealmRacersInfo): RealmRacersWi
       phase: match.phase,
       position: match.me.position,
       gridSize: match.gridSize,
-      result: match.result,
+      result: match.voided ? 'void' : match.result,
       // The lap is deliberately absent, from the view AND from the signature:
       // the window never displays it (the strip does), so carrying it here only
       // rebuilt the whole queue window once per lap for a number nobody saw.
@@ -298,6 +305,7 @@ export function buildRealmRacersHudView(info: RealmRacersInfo): RealmRacersHudVi
   view.warded = match.warded;
   view.chaseIn = match.chaseIn;
   view.decided = match.decided;
+  view.voided = match.voided === true;
   view.result = match.result;
   view.returnIn = match.returnIn;
   view.canForfeit = canForfeit;

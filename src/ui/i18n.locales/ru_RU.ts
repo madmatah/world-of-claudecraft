@@ -15383,6 +15383,7 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.wonReturn': 'Победа! Возвращение через {seconds}',
   'hudChrome.rally.lostReturn': 'Финиш. Возвращение через {seconds}',
   'hudChrome.rally.drawReturn': 'Ничья. Возвращение через {seconds}',
+  'hudChrome.rally.voidReturn': 'Гонка аннулирована. Возвращение через {seconds}',
   'hudChrome.rally.logQueued': 'Позиция в очереди Гонок Королевства: {position}.',
   'hudChrome.rally.logUnqueued': 'Вы покинули очередь Гонок Королевства.',
   'hudChrome.rally.bannerGo': 'Старт!',
@@ -15393,6 +15394,8 @@ export const ru_RU: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logWin': 'Победа. Вы первым пересекли финишную черту.',
   'hudChrome.rally.logLoss': '{name} первым пересекает финишную черту.',
   'hudChrome.rally.logForfeit': 'Вы сошли с гонки. Побеждает {name}.',
+  'hudChrome.rally.bannerForfeit': 'Вы сошли с гонки.',
+  'hudChrome.rally.logForfeitRaceOn': 'Вы сошли с гонки. Гонка продолжается без вас.',
   'hudChrome.rally.mobileLabel': 'Гонки',
   'entities.abilities.rally_ground_blast.name': 'Наземный взрыв',
   'entities.abilities.rally_ground_blast.description':

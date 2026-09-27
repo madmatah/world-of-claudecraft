@@ -2561,6 +2561,10 @@ export const hudChromeStrings = {
     wonReturn: 'VICTORY. Returning in {seconds}',
     lostReturn: 'FINISH. Returning in {seconds}',
     drawReturn: 'DRAW. Returning in {seconds}',
+    // A race the field emptied before GO: nobody won it and it counts for
+    // nothing.
+    raceVoid: 'RACE VOID',
+    voidReturn: 'RACE VOID. Returning in {seconds}',
     logQueued: 'Realm Racers queue position: {position}.',
     logUnqueued: 'You left the Realm Racers queue.',
     bannerGo: 'GO!',
@@ -2571,6 +2575,9 @@ export const hudChromeStrings = {
     logWin: 'Victory. You crossed the line first.',
     logLoss: '{name} crossed the finish line first.',
     logForfeit: 'You forfeited the race. {name} wins.',
+    // A forfeit the race outlives: nobody has won yet, so there is no name to give.
+    bannerForfeit: 'You forfeited the race.',
+    logForfeitRaceOn: 'You forfeited the race. The field races on without you.',
     mobileLabel: 'Racers',
   },
   // Click-to-move mouse-button toggle labels (Key Bindings panel). The button id

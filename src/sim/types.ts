@@ -7483,6 +7483,8 @@ export type SimEvent = { pid?: number } & (
       placing: number;
       gridSize: number;
       returnTicks: number;
+      /** The race was decided before GO: no winner, no credit. */
+      voided: boolean;
     }
   // An Ground Blast left the barrel. It carries the IMPACT POINT, which is decided
   // at fire time and never revised, so one event buys the client the muzzle

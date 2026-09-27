@@ -131,6 +131,7 @@ describe('sampled GameAudio facade', () => {
           placing: 1,
           gridSize: 4,
           returnTicks: 80,
+          voided: false,
           pid,
         },
         7,
@@ -151,6 +152,7 @@ describe('sampled GameAudio facade', () => {
         placing: 1,
         gridSize: 4,
         returnTicks: 80,
+        voided: false,
         pid: 7,
       },
       {
@@ -161,6 +163,7 @@ describe('sampled GameAudio facade', () => {
         placing: 4,
         gridSize: 4,
         returnTicks: 80,
+        voided: false,
         pid: 7,
       },
       {
@@ -171,6 +174,7 @@ describe('sampled GameAudio facade', () => {
         placing: 2,
         gridSize: 4,
         returnTicks: 80,
+        voided: false,
         pid: 7,
       },
     ]) {

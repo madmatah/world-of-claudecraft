@@ -814,6 +814,7 @@ import { presentRealmBuilder, RealmBuilderPopup } from './realm_builder_popup';
 import { RealmRacersUi } from './realm_racers';
 import { realmRacersPickupEffectText } from './realm_racers_pickup_i18n';
 import { RealmRacersPickupSplash } from './realm_racers_pickup_splash_controller';
+import { realmRacersResultNotice } from './realm_racers_result_notice_view';
 import { rallyControlKeys } from './realm_racers_view';
 import { RecipePinStore } from './recipe_pins_store';
 import { RecipeTrackerPainter } from './recipe_tracker_painter';
@@ -13122,12 +13123,9 @@ export class Hud {
             this.log(t('hudChrome.rally.logUnqueued'), HUD_LOG.RACE_NOTICE);
           break;
         case 'realmRacersFound':
-          // The CUE only. The banner that used to live here is now driven from
-          // STATE, by `RealmRacersUi` on the edge where the match first appears:
-          // the circuit's name is what the banner says, and this event reaches
-          // the client one frame BEFORE the snapshot that carries the circuit
-          // (the server routes events, then broadcasts). The event owns only
-          // the sound here; the lights and the lobby read the snapshot too.
+          // The CUE only: the circuit banner is driven from STATE by
+          // `RealmRacersUi`, since this event reaches the client one frame
+          // before the snapshot that carries the circuit.
           if (ev.pid === sim.playerId) audio.realmRacersFound();
           break;
         case 'realmRacersGo':
@@ -13177,22 +13175,9 @@ export class Hud {
           break;
         case 'realmRacersResult': {
           if (ev.pid !== sim.playerId) break;
-          if (!ev.winnerName) {
-            this.showBanner(t('hudChrome.rally.bannerDraw'));
-            this.combatLog(t('hudChrome.rally.bannerDraw'), HUD_LOG.RACE_NOTICE);
-          } else if (ev.won) {
-            this.showBanner(t('hudChrome.rally.bannerWin'));
-            this.combatLog(t('hudChrome.rally.logWin'), HUD_LOG.GOOD);
-          } else if (ev.forfeited) {
-            this.showBanner(t('hudChrome.rally.bannerLoss', { name: ev.winnerName }));
-            this.combatLog(
-              t('hudChrome.rally.logForfeit', { name: ev.winnerName }),
-              HUD_LOG.RACE_FORFEIT,
-            );
-          } else {
-            this.showBanner(t('hudChrome.rally.bannerLoss', { name: ev.winnerName }));
-            this.combatLog(t('hudChrome.rally.logLoss', { name: ev.winnerName }), HUD_LOG.BAD);
-          }
+          const notice = realmRacersResultNotice(ev);
+          this.showBanner(notice.banner);
+          this.combatLog(notice.log, notice.logColor);
           playRealmRacersResultAudio(ev, sim.playerId, audio);
           break;
         }

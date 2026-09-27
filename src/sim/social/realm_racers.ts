@@ -491,6 +491,9 @@ export interface RealmRacersMatch {
   loadingUntilTick: number;
   /** Pilots ready in the loading lobby: house pilots from the seat. */
   ready: Set<number>;
+  /** Decided before GO (the field emptied in the lobby or the countdown): no
+   *  winner, no rrWins, no deed credit. */
+  voided: boolean;
   finishTick: number | null;
   winnerPid: number | null;
   /**
@@ -1026,6 +1029,7 @@ function startMatch(
       loadingUntilTick + REALM_RACERS_COUNTDOWN_TICKS + circuit.timeLimitSeconds * TICK_RATE,
     loadingUntilTick,
     ready: new Set(pids.filter((pid) => ctx.realmRacers.bots.has(pid))),
+    voided: false,
     finishTick: null,
     winnerPid: null,
     chaseUntilTick: null,
@@ -1180,12 +1184,16 @@ function emitResult(
     placing,
     gridSize: match.gridSize,
     returnTicks: REALM_RACERS_RETURN_TICKS,
+    voided: match.voided,
     pid,
   });
 }
 
 function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   if (match.phase === 'finished') return;
+  // Only a retirement can decide a race before GO, and a race nobody started
+  // has no winner to credit.
+  match.voided = preRace(match);
   match.phase = 'finished';
   match.finishTick = ctx.tickCount;
   match.groundBlasts.length = 0;
@@ -1239,9 +1247,10 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // A dead heat is only ever for the LEAD, and only between two machines that
   // never crossed the line: the race ran out of time with them level. A tie for
   // third is a placing, not a draw.
-  match.winnerPid = rallyLeadIsDeadHeat(ranked, REALM_RACERS_DEAD_HEAT_YARDS)
-    ? null
-    : (ranked[0]?.pid ?? null);
+  match.winnerPid =
+    match.voided || rallyLeadIsDeadHeat(ranked, REALM_RACERS_DEAD_HEAT_YARDS)
+      ? null
+      : (ranked[0]?.pid ?? null);
   for (const pid of match.pids) {
     const progress = match.progress.get(pid);
     // A pilot already back in the Evergarden (they quit and their tableau ran
@@ -1271,6 +1280,7 @@ function endMatch(ctx: SimContext, match: RealmRacersMatch): void {
   // deed credit, unlike the Vale Cup's bot-backfilled-bout exclusion, because
   // house pilots ARE the ordinary field here (every queued heat seats three
   // of them until the grid fills with humans), not a friendly-only mode.
+  if (match.voided) return;
   if (
     match.practice === null &&
     match.winnerPid !== null &&
@@ -2836,17 +2846,20 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
         ? 'forfeit'
         : match.phase !== 'finished'
           ? null
-          : match.winnerPid === pid
-            ? 'won'
-            : // A null winner is a dead heat for the LEAD, so it is a draw for
-              // the two machines that tied and a loss for everyone behind them.
-              // Reading it as a draw for the whole field would tell a pilot who
-              // came fourth that the stewards could not separate them.
-              match.winnerPid === null && mine.position <= 2
-              ? 'draw'
-              : 'lost',
+          : match.voided
+            ? 'void'
+            : match.winnerPid === pid
+              ? 'won'
+              : // A null winner is a dead heat for the LEAD, so it is a draw for
+                // the two machines that tied and a loss for everyone behind them.
+                // Reading it as a draw for the whole field would tell a pilot who
+                // came fourth that the stewards could not separate them.
+                match.winnerPid === null && mine.position <= 2
+                ? 'draw'
+                : 'lost',
   };
   if (shared.loading && myEndTick === null) info.loading = shared.loading;
+  if (match.voided) info.voided = true;
   return info;
 }
 

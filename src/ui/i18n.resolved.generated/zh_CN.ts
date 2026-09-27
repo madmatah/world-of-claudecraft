@@ -2199,6 +2199,8 @@ export const zh_CN: EnTranslations = {
       "wonReturn": "胜利！{seconds} 秒后返回",
       "lostReturn": "完赛。{seconds} 秒后返回",
       "drawReturn": "平局。{seconds} 秒后返回",
+      "raceVoid": "RACE VOID",
+      "voidReturn": "比赛作废。{seconds} 秒后返回",
       "logQueued": "王国竞速赛队列位置：{position}。",
       "logUnqueued": "你已离开王国竞速赛队列。",
       "bannerGo": "出发！",
@@ -2209,6 +2211,8 @@ export const zh_CN: EnTranslations = {
       "logWin": "胜利。你率先冲过终点线。",
       "logLoss": "{name} 率先冲过终点线。",
       "logForfeit": "你退出了比赛。{name} 获胜。",
+      "bannerForfeit": "你退出了比赛。",
+      "logForfeitRaceOn": "你退出了比赛。其他车手继续比赛。",
       "mobileLabel": "竞速赛"
     },
     "options": {

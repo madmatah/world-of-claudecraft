@@ -6,7 +6,9 @@ import type { RallyDriverTier } from '../sim/realm_racers_driver';
 import type { PlayerClass } from '../sim/types';
 
 export type RealmRacersPhase = 'loading' | 'countdown' | 'racing' | 'finished';
-export type RealmRacersResult = 'won' | 'lost' | 'draw' | 'forfeit' | null;
+/** `void`: the race was decided before GO (the field emptied in the lobby or
+ *  the countdown), so nobody won it and it counts for nothing. */
+export type RealmRacersResult = 'won' | 'lost' | 'draw' | 'forfeit' | 'void' | null;
 
 export type { RallyDriverTier };
 
@@ -131,6 +133,10 @@ export interface RealmRacersMatchInfo {
    * thing the podium may key on.
    */
   decided: boolean;
+  /** The race was decided before GO, so it is void for every pilot of the
+   *  heat, a pilot who quit included: no podium, no winner, no credit. Present
+   *  only when true, so an ordinary race's per-tick readout pays nothing. */
+  voided?: true;
   /** Absolute forward speed, yd/s, for the compact rally readout. */
   speed: number;
   wrongWay: boolean;

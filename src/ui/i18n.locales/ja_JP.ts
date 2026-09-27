@@ -15131,6 +15131,7 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.wonReturn': '勝利！{seconds}秒後に戻ります',
   'hudChrome.rally.lostReturn': 'フィニッシュ。{seconds}秒後に戻ります',
   'hudChrome.rally.drawReturn': '引き分け。{seconds}秒後に戻ります',
+  'hudChrome.rally.voidReturn': 'レース無効。{seconds}秒後に戻ります',
   'hudChrome.rally.logQueued': 'レルムレーサーズの待機位置：{position}。',
   'hudChrome.rally.logUnqueued': 'レルムレーサーズの待機列から離れました。',
   'hudChrome.rally.bannerGo': 'スタート！',
@@ -15141,6 +15142,8 @@ export const ja_JP: Partial<Record<TranslationKey, string>> = {
   'hudChrome.rally.logWin': '勝利。最初にゴールラインを越えました。',
   'hudChrome.rally.logLoss': '{name}が先にゴールラインを越えました。',
   'hudChrome.rally.logForfeit': 'レースを棄権しました。{name}の勝利です。',
+  'hudChrome.rally.bannerForfeit': 'レースを棄権しました。',
+  'hudChrome.rally.logForfeitRaceOn': 'レースを棄権しました。レースはあなた抜きで続きます。',
   'hudChrome.rally.mobileLabel': 'レーサーズ',
   'entities.abilities.rally_ground_blast.name': 'グラウンドブラスト',
   'entities.abilities.rally_ground_blast.description':

@@ -77,6 +77,15 @@ describe('Realm Racers podium core', () => {
     expect(quitter.active).toBe(false);
   });
 
+  it('holds no ceremony for a race voided before GO, for the survivor or a quitter', () => {
+    expect(
+      buildRealmRacersPodiumView(match({ decided: true, voided: true, result: 'void' })).active,
+    ).toBe(false);
+    expect(
+      buildRealmRacersPodiumView(match({ decided: true, voided: true, result: 'forfeit' })).active,
+    ).toBe(false);
+  });
+
   it('puts second to the LEFT of first, which is what a podium looks like', () => {
     const view = buildRealmRacersPodiumView(match());
     expect(view.steps.map((step) => step.placing)).toEqual([2, 1, 3]);

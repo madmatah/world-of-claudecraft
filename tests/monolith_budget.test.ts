@@ -536,7 +536,9 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 18081). Exact count, zero slack.
-    ceiling: 18310,
+    // LOWERED 18310 -> 18295: the Realm Racers result banner and log choice
+    // moved to src/ui/realm_racers_result_notice_view.ts.
+    ceiling: 18295,
     seam: 'pure view core + thin painter on PainterHost (src/ui/CLAUDE.md)',
   },
   {

@@ -2199,6 +2199,8 @@ export const ja_JP: EnTranslations = {
       "wonReturn": "勝利！{seconds}秒後に戻ります",
       "lostReturn": "フィニッシュ。{seconds}秒後に戻ります",
       "drawReturn": "引き分け。{seconds}秒後に戻ります",
+      "raceVoid": "RACE VOID",
+      "voidReturn": "レース無効。{seconds}秒後に戻ります",
       "logQueued": "レルムレーサーズの待機位置：{position}。",
       "logUnqueued": "レルムレーサーズの待機列から離れました。",
       "bannerGo": "スタート！",
@@ -2209,6 +2211,8 @@ export const ja_JP: EnTranslations = {
       "logWin": "勝利。最初にゴールラインを越えました。",
       "logLoss": "{name}が先にゴールラインを越えました。",
       "logForfeit": "レースを棄権しました。{name}の勝利です。",
+      "bannerForfeit": "レースを棄権しました。",
+      "logForfeitRaceOn": "レースを棄権しました。レースはあなた抜きで続きます。",
       "mobileLabel": "レーサーズ"
     },
     "options": {

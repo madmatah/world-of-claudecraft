@@ -708,6 +708,46 @@ describe('Realm Racers podium', () => {
     );
   });
 
+  it('says a voided race is void to a quitter too, with no podium and no winner', () => {
+    const quitter = harness();
+    quitter.info.match = match({
+      phase: 'finished',
+      decided: true,
+      voided: true,
+      result: 'forfeit',
+      returnIn: 5,
+    });
+    quitter.ui.update();
+    const quitterPodium = quitter.layer.querySelector('#realm-racers-podium') as HTMLElement;
+    expect(quitterPodium.classList.contains('shown')).toBe(false);
+    expect(quitter.layer.querySelector('.rallyhud-phase')?.textContent).toBe(
+      t('hudChrome.rally.voidReturn', { seconds: '5' }),
+    );
+    quitter.ui.toggle();
+    expect(quitter.root.querySelector('.rally-status')?.textContent).toBe(
+      t('hudChrome.rally.raceVoid'),
+    );
+  });
+
+  it('says a voided race is void, with no podium and no winner', () => {
+    const h = harness();
+    h.info.match = match({
+      phase: 'finished',
+      decided: true,
+      voided: true,
+      result: 'void',
+      returnIn: 5,
+    });
+    h.ui.update();
+    const podium = h.layer.querySelector('#realm-racers-podium') as HTMLElement;
+    expect(podium.classList.contains('shown')).toBe(false);
+    expect(h.layer.querySelector('.rallyhud-phase')?.textContent).toBe(
+      t('hudChrome.rally.voidReturn', { seconds: '5' }),
+    );
+    h.ui.toggle();
+    expect(h.root.querySelector('.rally-status')?.textContent).toBe(t('hudChrome.rally.raceVoid'));
+  });
+
   it('builds three steps with second to the left of first, and lists the rest', () => {
     const h = harness();
     h.info.match = finished();

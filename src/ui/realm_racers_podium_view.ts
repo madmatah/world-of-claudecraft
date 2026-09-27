@@ -69,7 +69,8 @@ const STEP_ORDER = [1, 0, 2] as const;
 export function buildRealmRacersPodiumView(
   match: RealmRacersMatchInfo | null,
 ): RealmRacersPodiumView {
-  if (!match || !match.decided) return EMPTY;
+  // A void race has no classification to celebrate.
+  if (!match || !match.decided || match.voided) return EMPTY;
   const viewerPid = match.me.pid;
   const entries = match.standings.map((racer) => ({
     pid: racer.pid,

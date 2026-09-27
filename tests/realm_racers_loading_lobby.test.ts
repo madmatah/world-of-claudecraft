@@ -6,17 +6,21 @@ import {
   realmRacersStartCameraInput,
   stepRealmRacersStartCamera,
 } from '../src/game/realm_racers_start_camera';
+import { updateDeeds } from '../src/sim/deeds';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import type { Sim } from '../src/sim/sim';
 import {
   REALM_RACERS_COUNTDOWN_TICKS,
+  REALM_RACERS_MOUNT_KEY,
+  REALM_RACERS_RETURN_TICKS,
   type RealmRacersMatch,
   realmRacersCircuitOf,
   realmRacersMatchOf,
   realmRacersReady,
+  realmRacersStartMatch,
 } from '../src/sim/social/realm_racers';
 import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
-import { TICK_RATE } from '../src/sim/types';
+import { type SimEvent, TICK_RATE } from '../src/sim/types';
 import { addAt, makeWorld, readyAllRacers } from './realm_racers_util';
 
 const GRID = [
@@ -175,9 +179,6 @@ describe('Realm Racers loading lobby', () => {
     expect(early.goTick).toBe(clock + 1 + REALM_RACERS_COUNTDOWN_TICKS);
   });
 
-  // The forfeit-in-the-lobby rule is pending a design decision; this is its slot.
-  it.todo('decides what a forfeit in the loading lobby does to the race and its credit');
-
   it('ignores a duplicate, a stranger, a pilot of another race, a quitter and a late ready', () => {
     const { sim, pids, match } = seatedGrid();
     const [a, b, c, d] = pids;
@@ -282,5 +283,160 @@ describe('Realm Racers loading lobby', () => {
     expect(released).toMatchObject({ pitch: 0.32, dist: 12 });
     sim.tick();
     expect(step()).toBeNull();
+  });
+});
+
+/** Every personal result event a tick batch carries, keyed by pilot. */
+function resultsOf(
+  events: SimEvent[],
+): Map<number, Extract<SimEvent, { type: 'realmRacersResult' }>> {
+  const out = new Map<number, Extract<SimEvent, { type: 'realmRacersResult' }>>();
+  for (const event of events) {
+    if (event.type === 'realmRacersResult') out.set(event.pid as number, event);
+  }
+  return out;
+}
+
+/** Nobody on the grid banked anything from this heat. */
+function expectNoCredit(sim: Sim, pids: readonly number[]): void {
+  updateDeeds(sim.ctx);
+  for (const pid of pids) {
+    const meta = required(sim.players.get(pid), `meta ${pid}`);
+    expect(meta.rrWins, `rrWins ${pid}`).toBe(0);
+    expect(meta.deedsEarned.has('pvp_rr_first_race'), `first race ${pid}`).toBe(false);
+    expect(meta.deedsEarned.has('pvp_rr_first_win'), `first win ${pid}`).toBe(false);
+  }
+}
+
+/** A voided heat still sends everyone home on the ordinary tableau clock. */
+function expectHomeAfterTableau(sim: Sim, pids: readonly number[]): void {
+  for (let i = 0; i < REALM_RACERS_RETURN_TICKS; i++) sim.tick();
+  expect(sim.realmRacers.match).toBeNull();
+  for (const pid of pids) expect(realmRacersMatchOf(sim.ctx, pid)).toBeNull();
+}
+
+describe('Realm Racers race decided before GO is void', () => {
+  for (const phase of ['loading', 'countdown'] as const) {
+    it(`voids a heat whose field empties in ${phase}, down to two humans then one`, () => {
+      const { sim, pids, match } = seatedGrid();
+      if (phase === 'countdown') {
+        readyAllRacers(sim);
+        sim.tick();
+      }
+      expect(match.phase).toBe(phase);
+      const [a, b, c, d] = pids;
+      sim.realmRacersForfeit(c);
+      sim.realmRacersForfeit(d);
+      // Two still running: the race stands.
+      expect(match.phase).toBe(phase);
+      sim.realmRacersForfeit(b);
+      const results = resultsOf(sim.tick());
+      expect(match.phase).toBe('finished');
+      expect(match.voided).toBe(true);
+      expect(match.winnerPid).toBeNull();
+      expect(results.get(a)).toMatchObject({ won: false, winnerName: '', voided: true });
+      expect(results.get(b)).toMatchObject({ won: false, forfeited: true, voided: true });
+      const survivor = lobbyOf(sim, a);
+      expect(survivor).toMatchObject({ phase: 'finished', decided: true, result: 'void' });
+      expect(lobbyOf(sim, b).result).toBe('forfeit');
+      expectNoCredit(sim, pids);
+      expectHomeAfterTableau(sim, pids);
+    });
+  }
+
+  it('counts house pilots as running, but a field of house pilots alone ends the heat void', () => {
+    const sim = makeWorld();
+    const [a, b] = GRID.slice(0, 2).map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
+    const bots = GRID.slice(2).map((row) => {
+      const pid = addAt(sim, row.cls, row.name, row.x, row.z);
+      sim.realmRacers.bots.set(pid, 'rookie');
+      return pid;
+    });
+    expect(realmRacersStartMatch(sim.ctx, [a, b, ...bots])).toBe(true);
+    sim.tick();
+    const match = required(sim.realmRacers.match, 'match');
+    expect(match.phase).toBe('loading');
+    sim.realmRacersForfeit(a);
+    sim.tick();
+    // One human and two house pilots still running: not decided.
+    expect(match.phase).toBe('loading');
+    sim.realmRacersForfeit(b);
+    const results = resultsOf(sim.tick());
+    expect(match.phase).toBe('finished');
+    expect(match.voided).toBe(true);
+    expect(match.winnerPid).toBeNull();
+    expect(results.get(b)).toMatchObject({ won: false, voided: true });
+    expectNoCredit(sim, [a, b]);
+  });
+
+  it('voids a heat whose last rival is found gone on the exact GO tick, before GO fires', () => {
+    const { sim, pids, match } = seatedGrid();
+    readyAllRacers(sim);
+    sim.tick();
+    const [a, b, c, d] = pids;
+    sim.realmRacersForfeit(c);
+    sim.realmRacersForfeit(d);
+    while (sim.tickCount + 1 < match.goTick) sim.tick();
+    expect(match.phase).toBe('countdown');
+    // Found gone by the roster pass of the GO tick itself, which runs before
+    // the countdown arm could turn the phase.
+    required(sim.players.get(b), 'meta').leaving = true;
+    const events = sim.tick();
+    expect(sim.tickCount).toBe(match.goTick);
+    expect(events.some((event) => event.type === 'realmRacersGo')).toBe(false);
+    expect(match.phase).toBe('finished');
+    expect(match.voided).toBe(true);
+    expect(match.winnerPid).toBeNull();
+    expect(resultsOf(events).get(a)).toMatchObject({ won: false, voided: true });
+    expect(lobbyOf(sim, a)).toMatchObject({ voided: true, result: 'void' });
+    required(sim.players.get(b), 'meta').leaving = false;
+    expectNoCredit(sim, [a, c, d]);
+  });
+
+  it('voids a heat when the last human rival disconnects before GO, and sends the survivor home', () => {
+    const { sim, pids, match } = seatedGrid();
+    const [a, b, c, d] = pids;
+    sim.realmRacersForfeit(c);
+    sim.realmRacersForfeit(d);
+    sim.tick();
+    expect(match.phase).toBe('loading');
+    sim.removePlayer(b);
+    const results = resultsOf(sim.tick());
+    expect(match.phase).toBe('finished');
+    expect(match.voided).toBe(true);
+    expect(match.winnerPid).toBeNull();
+    expect(results.get(a)).toMatchObject({ won: false, winnerName: '', voided: true });
+    expect(lobbyOf(sim, a)).toMatchObject({ voided: true, result: 'void', decided: true });
+    expectNoCredit(sim, [a, c, d]);
+    expectHomeAfterTableau(sim, [a, c, d]);
+    const survivor = required(sim.entities.get(a), 'survivor');
+    expect(survivor.drive).toBeFalsy();
+    expect(survivor.mountKey).not.toBe(REALM_RACERS_MOUNT_KEY);
+    expect(required(sim.players.get(a), 'meta').realmRacersMatchId).toBeNull();
+  });
+
+  it('still credits the survivor of a walkover once the race has started', () => {
+    const { sim, pids, match } = seatedGrid();
+    readyAllRacers(sim);
+    sim.tick();
+    for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
+    expect(match.phase).toBe('racing');
+    const [a, b, c, d] = pids;
+    sim.realmRacersForfeit(b);
+    sim.realmRacersForfeit(c);
+    sim.realmRacersForfeit(d);
+    const results = resultsOf(sim.tick());
+    expect(match.phase).toBe('finished');
+    expect(match.voided).toBe(false);
+    expect(match.winnerPid).toBe(a);
+    expect(results.get(a)).toMatchObject({ won: true, voided: false });
+    expect(lobbyOf(sim, a)).toMatchObject({ decided: true, result: 'won' });
+    // Absent, not false, on a race that ran: an ordinary readout pays no bytes.
+    expect('voided' in lobbyOf(sim, a)).toBe(false);
+    const meta = required(sim.players.get(a), 'winner');
+    expect(meta.rrWins).toBe(1);
+    expect(meta.deedsEarned.has('pvp_rr_first_race')).toBe(true);
+    updateDeeds(sim.ctx);
+    expect(meta.deedsEarned.has('pvp_rr_first_win')).toBe(true);
   });
 });
