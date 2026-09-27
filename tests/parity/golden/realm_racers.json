@@ -1364,7 +1364,7 @@
       "tick": 240,
       "time": 12,
       "nextId": 1014,
-      "state": "d91abd0a",
+      "state": "17894347",
       "events": "a2f35f7b",
       "rng": {
         "draws": 1992,
@@ -1375,7 +1375,7 @@
       "tick": 260,
       "time": 13,
       "nextId": 1014,
-      "state": "31cf031f",
+      "state": "d57e3e4a",
       "events": "741638a5",
       "rng": {
         "draws": 2149,
@@ -1386,7 +1386,7 @@
       "tick": 280,
       "time": 14,
       "nextId": 1014,
-      "state": "45c93b0c",
+      "state": "7e3cbec9",
       "events": "741638a5",
       "rng": {
         "draws": 2324,
@@ -1397,7 +1397,7 @@
       "tick": 300,
       "time": 15,
       "nextId": 1014,
-      "state": "fd2e5211",
+      "state": "bf353b14",
       "events": "741638a5",
       "rng": {
         "draws": 2504,
@@ -1408,7 +1408,7 @@
       "tick": 320,
       "time": 16,
       "nextId": 1014,
-      "state": "aece8f6e",
+      "state": "e65c5f73",
       "events": "741638a5",
       "rng": {
         "draws": 2689,
@@ -1419,7 +1419,7 @@
       "tick": 340,
       "time": 17,
       "nextId": 1014,
-      "state": "447417db",
+      "state": "1c04896e",
       "events": "741638a5",
       "rng": {
         "draws": 2881,
@@ -1430,7 +1430,7 @@
       "tick": 345,
       "time": 17.25,
       "nextId": 1014,
-      "state": "c7444bb9",
+      "state": "f487f6e5",
       "events": "7645dd97",
       "rng": {
         "draws": 2918,
@@ -1525,7 +1525,7 @@
             "counts": {},
             "firstFind": {}
           },
-          "renown": 25,
+          "renown": 10,
           "rrWins": 1,
           "talents": {
             "rows": {}
@@ -1987,7 +1987,7 @@
       "tick": 345,
       "time": 17.25,
       "nextId": 1014,
-      "state": "c7444bb9",
+      "state": "f487f6e5",
       "events": "741638a5",
       "rng": {
         "draws": 2918,
@@ -2082,7 +2082,7 @@
             "counts": {},
             "firstFind": {}
           },
-          "renown": 25,
+          "renown": 10,
           "rrWins": 1,
           "talents": {
             "rows": {}

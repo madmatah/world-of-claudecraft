@@ -93,7 +93,7 @@ const PREFIX_CATEGORY: Record<string, DeedCategory> = {
 };
 
 describe('audited launch totals (literals: update deliberately with the catalog)', () => {
-  it('ships exactly 325 deeds worth 3630 total Renown', () => {
+  it('ships exactly 325 deeds worth 3535 total Renown', () => {
     // Release base (262 / 3145 after the WARFARE lifetime-honor ladder) plus
     // four Reliquary Curator rank bridges and the five Phase 18 completion
     // ladder deeds (all nine renown 0: catalog prestige never scores the
@@ -148,9 +148,10 @@ describe('audited launch totals (literals: update deliberately with the catalog)
     // (exp_harbor_to_harbor at renown 5) at the fourth release/v0.44.0 base merge.
     // 325 / 3630 with the seven Realm Racers placing deeds (95 Renown),
     // appended after exp_harbor_to_harbor at the release/v0.44.0 merge into
-    // feature/realm-racers.
+    // feature/realm-racers. Then 325 / 3535 once those seven drop to zero
+    // Renown (casual unranked heats never score the board).
     expect(DEED_ORDER.length).toBe(325);
-    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(3630);
+    expect(ALL.reduce((sum, d) => sum + d.renown, 0)).toBe(3535);
   });
 
   it('ships the audited per-category counts', () => {
@@ -497,21 +498,22 @@ describe('audited launch totals (literals: update deliberately with the catalog)
       questId: 'q_dk_matriarch_of_the_maw',
     });
     // Realm Racers (13c, docs/design/deeds.md): placing-based rather than a
-    // win/lose pair, mirroring the Vale Cup precedent (pvp_vcup_*).
-    expect(DEEDS.pvp_rr_first_race.renown).toBe(5);
+    // win/lose pair, mirroring the Vale Cup precedent (pvp_vcup_*). Zero
+    // Renown: casual unranked heats never score the board.
+    expect(DEEDS.pvp_rr_first_race.renown).toBe(0);
     expect(DEEDS.pvp_rr_first_race.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_first_win.renown).toBe(10);
+    expect(DEEDS.pvp_rr_first_win.renown).toBe(0);
     expect(DEEDS.pvp_rr_first_win.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 1 });
-    expect(DEEDS.pvp_rr_wins_10.renown).toBe(10);
+    expect(DEEDS.pvp_rr_wins_10.renown).toBe(0);
     expect(DEEDS.pvp_rr_wins_10.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 10 });
-    expect(DEEDS.pvp_rr_wins_25.renown).toBe(25);
+    expect(DEEDS.pvp_rr_wins_25.renown).toBe(0);
     expect(DEEDS.pvp_rr_wins_25.trigger).toEqual({ kind: 'meter', meter: 'rrWins', amount: 25 });
     expect(DEEDS.pvp_rr_wins_25.reward).toEqual({ kind: 'title', text: 'Circuit Legend' });
-    expect(DEEDS.pvp_rr_fast_lap.renown).toBe(10);
+    expect(DEEDS.pvp_rr_fast_lap.renown).toBe(0);
     expect(DEEDS.pvp_rr_fast_lap.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_clean_race.renown).toBe(10);
+    expect(DEEDS.pvp_rr_clean_race.renown).toBe(0);
     expect(DEEDS.pvp_rr_clean_race.trigger).toEqual({ kind: 'manual' });
-    expect(DEEDS.pvp_rr_comeback.renown).toBe(25);
+    expect(DEEDS.pvp_rr_comeback.renown).toBe(0);
     expect(DEEDS.pvp_rr_comeback.trigger).toEqual({ kind: 'manual' });
   });
 
@@ -1071,8 +1073,9 @@ describe('frozen trigger + renown catalog (design rule 9: never retro-edit a tri
   // merge into feature/realm-racers, re-minted THE AUDITABLE WAY: the
   // 8749b988... literal rotated down into PRE_APPEND_CATALOG_SHA256 and the
   // proof below reproduces it exactly. No shipped trigger or renown value was
-  // touched.
-  const FROZEN_CATALOG_SHA256 = '566596c67006991d604d6f444036d1fa91ffd3e1b43516a61d0563f87e28a08c';
+  // touched. Re-minted again when those seven (branch-only, never shipped)
+  // dropped to zero Renown.
+  const FROZEN_CATALOG_SHA256 = '634e426c7641850226d84904144369179455dcf565f439fce0b323de0681ee58';
 
   it('every shipped deed keeps its trigger and renown unchanged', () => {
     const canonical = JSON.stringify(

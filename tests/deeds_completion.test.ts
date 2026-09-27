@@ -159,6 +159,15 @@ describe('the real catalog', () => {
       'hid_bountiful_coffer',
       'hid_forgebreaker',
       'hid_roll_hundred',
+      // Deliberate growth (Realm Racers): casual unranked heats backfilled
+      // with house pilots never score the board, the Vale Cup and Fiesta rule.
+      'pvp_rr_clean_race',
+      'pvp_rr_comeback',
+      'pvp_rr_fast_lap',
+      'pvp_rr_first_race',
+      'pvp_rr_first_win',
+      'pvp_rr_wins_10',
+      'pvp_rr_wins_25',
     ]);
   });
 });
