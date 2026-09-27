@@ -30,7 +30,7 @@ import {
   REALM_RACERS_BACKFILL_TICKS,
   REALM_RACERS_BACKFILL_TIER,
 } from '../src/sim/social/realm_racers_bots';
-import { addAt, makeWorld } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers } from './realm_racers_util';
 
 /** Ticks a full race may take: the countdown plus the 180 s limit, and a beat
  *  for the result tableau to tear down. */
@@ -64,6 +64,8 @@ function practiceWorld(tier: RallyDriverTier = 'driver', cfg = {}) {
   const sim = makeWorld(cfg);
   const human = addAt(sim, 'warrior', 'Aster', -5, -40);
   sim.realmRacersPracticeStart(tier, human);
+  // The pilot's client has prepared the circuit: the lobby closes on the next tick.
+  readyAllRacers(sim);
   return { sim, human };
 }
 
@@ -508,6 +510,7 @@ describe('Realm Racers house pilots: they can actually drive', () => {
       const human = addAt(sim, 'warrior', 'Aster', -5, -40);
       sim.tick();
       sim.realmRacersPracticeStart(REALM_RACERS_BACKFILL_TIER, human);
+      readyAllRacers(sim);
       const match = matchOf(sim, human);
       if (lane !== match.practice?.slot) {
         // Move the whole race onto another lane, before it has driven a yard:

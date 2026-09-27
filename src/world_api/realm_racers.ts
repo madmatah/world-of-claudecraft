@@ -5,7 +5,7 @@
 import type { RallyDriverTier } from '../sim/realm_racers_driver';
 import type { PlayerClass } from '../sim/types';
 
-export type RealmRacersPhase = 'countdown' | 'racing' | 'finished';
+export type RealmRacersPhase = 'loading' | 'countdown' | 'racing' | 'finished';
 export type RealmRacersResult = 'won' | 'lost' | 'draw' | 'forfeit' | null;
 
 export type { RallyDriverTier };
@@ -65,6 +65,24 @@ export interface RealmRacersLaneView {
   elapsed: number;
   pickupsTaken: readonly number[];
   slicks: readonly RealmRacersSlickInfo[];
+}
+
+/**
+ * The loading lobby a race opens in: every pilot is seated and held while each
+ * client prepares the circuit. The countdown starts for the whole field on the
+ * same tick, when every pilot still in the race is ready or `secondsLeft` runs out.
+ */
+export interface RealmRacersLoadingInfo {
+  /** Whole seconds (rounded up) until the lobby closes regardless of who is
+   *  ready. Seconds rather than ticks keep the per-tick readout unchanged
+   *  between whole seconds, so the lobby re-sends it about once a second. */
+  secondsLeft: number;
+  /**
+   * The pilots already ready, in grid order (a subset of `participantIds`).
+   * House pilots are ready from the seat; a human once their client sends
+   * `readyRealmRacers()`, and again after a reconnect.
+   */
+  readyIds: number[];
 }
 
 export interface RealmRacersMatchInfo {
@@ -160,6 +178,9 @@ export interface RealmRacersMatchInfo {
   /** True for a private practice race on its own copy of the circuit. */
   practice: boolean;
   result: RealmRacersResult;
+  /** Present only while this viewer's `phase` is `loading`; absent keeps the
+   *  per-tick readout the same size for the rest of the race. */
+  loading?: RealmRacersLoadingInfo;
 }
 
 export interface RealmRacersInfo {
@@ -202,4 +223,7 @@ export interface IWorldRealmRacers {
    *  no wait. Refuses silently (like the queue join) when no practice copy of
    *  the circuit is free or the player is not in a state to race. */
   startRealmRacersPractice(tier: RallyDriverTier): void;
+  /** Tell the loading lobby this client has prepared the circuit. Ignored
+   *  outside the lobby and for anyone not seated in it. */
+  readyRealmRacers(): void;
 }

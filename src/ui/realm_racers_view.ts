@@ -2,7 +2,7 @@
 // screen, and the in-race HUD.
 
 import { REALM_RACERS_PRACTICE_CIRCUIT_ID } from '../sim/content/realm_racers_circuits';
-import type { RallyDriverTier, RealmRacersInfo } from '../world_api';
+import type { RallyDriverTier, RealmRacersInfo, RealmRacersPhase } from '../world_api';
 
 /**
  * The difficulty tiers the practice setup offers, hardest last. Spelled here
@@ -109,7 +109,7 @@ export type RealmRacersWindowView =
       /** True when the whole field is house pilots: a practice lap is not a win
        *  over players, and the window says so rather than implying one. */
       practice: boolean;
-      phase: 'countdown' | 'racing' | 'finished';
+      phase: RealmRacersPhase;
       /** Live placing and the frozen grid size: "3 of 4", never "second". */
       position: number;
       gridSize: number;
@@ -126,7 +126,7 @@ export interface RealmRacersHudView {
    * name, because this view is i18n-free.
    */
   circuitId: string;
-  phase: 'countdown' | 'racing' | 'finished';
+  phase: RealmRacersPhase;
   countdown: number;
   lap: number;
   totalLaps: number;

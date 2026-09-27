@@ -1689,7 +1689,9 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 9827). Exact count, zero slack.
-    ceiling: 9920,
+    // LOWERED 9920 -> 9910: the Realm Racers command bodies moved to
+    // server/realm_racers_commands.ts behind one case group.
+    ceiling: 9910,
     seam: 'a sibling server module; see the hot-path seams in server/CLAUDE.md',
   },
   {
@@ -1867,7 +1869,9 @@ const MONOLITHS: MonolithRow[] = [
     // Re-pinned at the release/v0.44.0 sync into feature/realm-racers: the
     // release's ceiling plus this branch's Realm Racers hooks, measured with
     // wc -l on the merged tree (release 5354). Exact count, zero slack.
-    ceiling: 5491,
+    // LOWERED 5491 -> 5487: the Realm Racers mirror's idle initializer reuses
+    // idleRealmRacersInfo() from src/net/realm_racers_self_wire.ts.
+    ceiling: 5487,
     seam: 'a src/net sibling module (the refactor/net-online split is the template)',
   },
   {

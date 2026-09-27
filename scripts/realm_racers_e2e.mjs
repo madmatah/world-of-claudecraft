@@ -210,9 +210,12 @@ async function main() {
   const match = await waitFor(() => c.self.rr?.match ?? null, 4000);
   check('practice seats a match', !!match);
   check(
-    'match opens in countdown',
-    !!match && match.phase === 'countdown' && match.countdownTicks > 0,
-    JSON.stringify(match && { phase: match.phase, countdownTicks: match.countdownTicks }),
+    'match opens in the loading lobby, house pilots ready',
+    !!match &&
+      match.phase === 'loading' &&
+      match.loading?.readyIds?.length === GRID_SIZE - 1 &&
+      !match.loading.readyIds.includes(c.pid),
+    JSON.stringify(match && { phase: match.phase, loading: match.loading }),
   );
   check('match is flagged practice', !!match && match.practice === true);
   check(
@@ -246,6 +249,11 @@ async function main() {
     !!kit && kit.active === true && kit.w === 'rally_ground_blast' && kit.c === 3,
     JSON.stringify(kit),
   );
+
+  // --- the lobby closes on this client's ready, then the countdown runs
+  c.cmd({ cmd: 'realm_racers_ready' });
+  const countdown = await waitFor(() => c.self.rr?.match?.phase === 'countdown', 2000, 50);
+  check('ready closes the lobby into the countdown', !!countdown);
 
   // --- the flag: countdown runs 9 seconds, then the phase flips to racing
   const racing = await waitFor(() => c.self.rr?.match?.phase === 'racing', 12000, 50);

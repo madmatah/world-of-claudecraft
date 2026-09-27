@@ -16,7 +16,7 @@ export interface RealmRacersSelfRecord {
   rrt?: unknown;
 }
 
-/** The mirror's "no queue, no heat" value; mirrors the ClientWorld initializer. */
+/** The mirror's "no queue, no heat" value, and the ClientWorld initializer. */
 export function idleRealmRacersInfo(): RealmRacersInfo {
   return {
     queued: false,

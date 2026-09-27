@@ -89,6 +89,7 @@ import {
   REALM_RACERS_COUNTDOWN_TICKS,
   REALM_RACERS_RETURN_TICKS,
   realmRacersCircuitOf,
+  realmRacersReady,
   realmRacersToWorld,
 } from '../../src/sim/social/realm_racers';
 import { addThreat } from '../../src/sim/threat';
@@ -6551,6 +6552,7 @@ function realmRacersRace(): Scenario {
     name: 'realm_racers',
     coverage: [
       'realm racers grid seat (startMatch competition-circuit draw)',
+      'loading lobby: every pilot ready closes it on one tick',
       'countdown lock + vehicle kernel drive on the circuit copy',
       'pickup take (the one weighted effect draw per box that changes hands)',
       'forfeit cascade -> endMatch classification -> tableau return -> teardown',
@@ -6565,6 +6567,8 @@ function realmRacersRace(): Scenario {
       for (const pid of pids) sim.realmRacersQueueJoin(pid);
       rec.tick(1); // seats the grid: the circuit draw enters the digest here
       rec.snapshot('seated');
+      for (const pid of pids) realmRacersReady(sim.ctx, pid);
+      rec.tick(1); // the lobby closes and the countdown starts
       rec.tick(REALM_RACERS_COUNTDOWN_TICKS); // the start lock, then GO
       for (const pid of pids) {
         const meta = sim.players.get(pid);

@@ -192,8 +192,9 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 // pass's recovery command realm_racers_reset. RE-PINNED from a suite run at
 // the release/v0.44.0 merge into feature/realm-racers (ours 212/225/13, the
 // release 247/261/14): 252/266/14.
-const EXPECTED_SEND_COUNT = 252;
-const EXPECTED_DISPATCH_COUNT = 266;
+// The loading lobby's realm_racers_ready adds one on both sides: 253/267/14.
+const EXPECTED_SEND_COUNT = 253;
+const EXPECTED_DISPATCH_COUNT = 267;
 const EXPECTED_DISPATCH_ONLY_COUNT = 14;
 
 // The chat sub-channel routing switch (server/game.ts `switch

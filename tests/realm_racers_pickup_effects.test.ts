@@ -52,7 +52,7 @@ import { type SimEvent, TICK_RATE } from '../src/sim/types';
 import { advanceVehicleDrive, vehicleMaxSpeed } from '../src/sim/vehicle_motion';
 import { createAurasView, isAuraDebuff } from '../src/ui/auras_view';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
-import { addAt, makeWorld, teleport } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers, teleport } from './realm_racers_util';
 
 /** The circuit a QUEUED race runs on, which is what every live case here seats. */
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
@@ -81,6 +81,7 @@ function racingGrid(): { sim: Sim; pids: number[] } {
   // holds more than one competition circuit, and the geometry below is this
   // one's road.
   expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
+  readyAllRacers(sim);
   sim.tick();
   for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
   expect(match(sim).phase).toBe('racing');
@@ -840,6 +841,7 @@ describe('the pickups stay deterministic', () => {
       const sim = makeWorld();
       const pids = GRID.map((row) => addAt(sim, row.cls, row.name, row.x, row.z));
       realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id);
+      readyAllRacers(sim);
       sim.tick();
       for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
       const drawn: string[] = [];

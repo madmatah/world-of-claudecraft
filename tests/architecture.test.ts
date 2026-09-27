@@ -630,6 +630,7 @@ const UI_PURE_CORES = [
   'src/ui/realm_racers_view.ts',
   'src/ui/realm_racers_standings_view.ts',
   'src/ui/realm_racers_podium_view.ts',
+  'src/ui/realm_racers_ready_core.ts',
   'src/ui/leaderboard_view.ts',
   'src/ui/guild_leaderboard_view.ts',
   // The signpost guild board's roster drill-in core (the board itself reuses

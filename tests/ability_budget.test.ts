@@ -21,7 +21,7 @@ import { REALM_RACERS_COUNTDOWN_TICKS, realmRacersMatchOf } from '../src/sim/soc
 import type { Entity } from '../src/sim/types';
 import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import type { ActionBarPlayerInput } from '../src/ui/hud/action_bar/action_bar_view';
-import { addAt, makeWorld } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers } from './realm_racers_util';
 
 const WEAPON = REALM_RACERS_ABILITY_ID;
 
@@ -132,7 +132,12 @@ describe('ability budget: the two shapes that really call it agree', () => {
       return { locked, spent, controls };
     };
 
-    // LOCKED: held on the grid through the countdown, budget untouched.
+    // LOCKED: held on the grid through the loading lobby and the countdown,
+    // budget untouched.
+    expect(race.phase).toBe('loading');
+    expect(agreed('loading')).toEqual({ locked: true, spent: false, controls: true });
+    readyAllRacers(sim);
+    sim.tick();
     expect(race.phase).toBe('countdown');
     expect(agreed('countdown')).toEqual({ locked: true, spent: false, controls: true });
 

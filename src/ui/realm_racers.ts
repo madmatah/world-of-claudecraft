@@ -10,6 +10,7 @@ import type { PainterHostWriters } from './painter_host';
 import { realmRacersCircuitName } from './realm_racers_circuit_i18n';
 import { RealmRacersPodium } from './realm_racers_podium_painter';
 import { buildRealmRacersPodiumView } from './realm_racers_podium_view';
+import { createRealmRacersReadySender, stepRealmRacersReady } from './realm_racers_ready_core';
 import { RealmRacersStandingsPanel } from './realm_racers_standings_painter';
 import {
   buildRealmRacersStandingsView,
@@ -128,6 +129,7 @@ export class RealmRacersUi {
   private forfeitArmedUntil = 0;
   private wasInMatch = false;
   private lastCountdown = 0;
+  private readonly readySender = createRealmRacersReadySender();
   /**
    * The practice setup screen's own state, presentation-only: whether the
    * player has stepped into it, and which rival they have picked. Neither ever
@@ -187,7 +189,9 @@ export class RealmRacersUi {
   }
 
   update(): void {
-    const info = this.deps.world().realmRacersInfo;
+    const world = this.deps.world();
+    const info = world.realmRacersInfo;
+    stepRealmRacersReady(this.readySender, info, () => world.readyRealmRacers());
     // Auto-close on the false -> true match edge only. The window is centered
     // over the viewport, so leaving it up would hide the circuit for the whole
     // countdown and race. An edge rather than a level check, so a player who
@@ -211,7 +215,7 @@ export class RealmRacersUi {
       // restores a HUD without announcing a circuit the pilot has been driving
       // for a minute.
       const match = info.match;
-      if (match && match.phase === 'countdown') {
+      if (match && (match.phase === 'loading' || match.phase === 'countdown')) {
         // A circuit nothing names can only be a DRAFT registered by a dev
         // command (`tests/realm_racers_circuit_i18n.test.ts` pins that every
         // authored circuit has a name), so the raw id here is a developer
@@ -562,7 +566,7 @@ export class RealmRacersUi {
     }
     if (this.phaseEl) {
       const phase =
-        view.phase === 'countdown'
+        view.phase === 'loading' || view.phase === 'countdown'
           ? view.countdown > 0
             ? t('hudChrome.rally.countdown', { seconds: num(view.countdown) })
             : ''

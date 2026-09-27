@@ -11,6 +11,8 @@
 //     tick, well clear of the local machine: a rival contact is a real server
 //     outcome, and a proof about the local pilot's own motion must not depend
 //     on where a bot happened to steer.
+//   - The loading lobby is closed the way a live client closes it: the
+//     ClientWorld sends its ready command over the link.
 //   - GO is pulled in (the shipped countdown is REALM_RACERS_COUNTDOWN_TICKS),
 //     through the match's own `goTick`, the one field the countdown reads.
 //   - A server-side shove, applied after a tick the way a contact applies its
@@ -74,7 +76,8 @@ export interface RacerHarness {
   /** Ask for a Practice race through the client and advance until the mirror
    *  has the local pilot seated. */
   seat(): void;
-  /** Advance until the race is running and the mirror has the controls. */
+  /** Send the client's lobby ready, then advance until the race is running and
+   *  the mirror has the controls. */
   advanceToGo(): void;
   /** Apply an impulse to the local machine after the next server tick. */
   shove(impulse: RacerShove): void;
@@ -103,6 +106,7 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
   const track = realmRacersTrack(REALM_RACERS_PRACTICE_CIRCUIT);
   const goAfterTicks = opts.goAfterTicks ?? 20;
   let goPulledFor: RealmRacersMatch | null = null;
+  let seatSeen: { match: RealmRacersMatch; tick: number } | null = null;
 
   function currentMatch(): RealmRacersMatch | null {
     return server.sim.realmRacers.practices.find((m) => m.pids.includes(pid)) ?? null;
@@ -128,10 +132,13 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
   harness.onServerTick(() => {
     const seated = currentMatch();
     if (!seated) return;
+    if (seatSeen?.match !== seated) seatSeen = { match: seated, tick: server.sim.tickCount };
     if (goPulledFor !== seated && seated.phase === 'countdown') {
       goPulledFor = seated;
+      // Counted from the SEAT, so the lobby's ready round trip does not move GO.
       // The race clock runs from GO, so its deadline moves with it.
-      const pulledBy = Math.max(0, seated.goTick - (server.sim.tickCount + goAfterTicks));
+      const goAt = Math.max(server.sim.tickCount + 1, seatSeen.tick + goAfterTicks);
+      const pulledBy = Math.max(0, seated.goTick - goAt);
       seated.goTick -= pulledBy;
       seated.deadlineTick -= pulledBy;
     }
@@ -171,6 +178,7 @@ export function createRacerHarness(opts: RacerHarnessOptions): RacerHarness {
       );
     },
     advanceToGo(): void {
+      if (match().phase === 'loading') client.readyRealmRacers();
       advanceUntil(
         () => match().phase === 'racing' && mirrorDrive()?.controlsLocked === false,
         (goAfterTicks + 40) * SERVER_TICK_MS,

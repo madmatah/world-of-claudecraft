@@ -53,6 +53,7 @@ import {
   realmRacersMatchOf,
   realmRacersOffTrackBand,
   realmRacersOnTrack,
+  realmRacersReady,
   realmRacersToCanonical,
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
@@ -124,6 +125,7 @@ function measureHonestExcursions(
   }
   const match = realmRacersMatchOf(sim.ctx, sim.primaryId);
   if (!match) throw new Error('no match after seating');
+  realmRacersReady(sim.ctx, sim.primaryId);
   const track = realmRacersTrack(circuit);
 
   const open = new Map<number, Excursion & { lastS: number }>();

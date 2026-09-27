@@ -18,6 +18,7 @@
 import type {
   RealmRacersInfo,
   RealmRacersLaneView,
+  RealmRacersLoadingInfo,
   RealmRacersMatchInfo,
   RealmRacersPhase,
   RealmRacersRacerInfo,
@@ -133,6 +134,14 @@ import {
 } from '../vehicle_motion';
 import { isArenaQueued, restoreArenaReturnPools, snapshotArenaReturnPools } from './arena';
 import { realmRacersHeldElsewhere } from './realm_racers_busy';
+import {
+  beginRealmRacersCountdown,
+  clearRealmRacersReady,
+  markRealmRacersReady,
+  REALM_RACERS_LOADING_MAX_TICKS,
+  realmRacersLoadingDone,
+  realmRacersLoadingInfo,
+} from './realm_racers_loading';
 
 /** The machine every pilot is loaned, as a VEHICLE_PROFILES key. A roster of
  *  machines is a later workstream. */
@@ -475,8 +484,13 @@ export interface RealmRacersMatch {
   /** `pids.length` at seat time, frozen for the same reason. */
   gridSize: number;
   phase: RealmRacersPhase;
+  /** Provisional while `loading`: both are rewritten when the countdown starts. */
   goTick: number;
   deadlineTick: number;
+  /** The loading cap: the countdown starts at this tick whoever is not ready. */
+  loadingUntilTick: number;
+  /** Pilots ready in the loading lobby: house pilots from the seat. */
+  ready: Set<number>;
   finishTick: number | null;
   winnerPid: number | null;
   /**
@@ -594,6 +608,11 @@ function matchSeats(match: RealmRacersMatch | null, pid: number): boolean {
 export function realmRacersStillRunning(match: RealmRacersMatch, pid: number): boolean {
   const progress = match.progress.get(pid);
   return !!progress && progress.finishedTick === null && progress.retiredTick === null;
+}
+
+/** Seated and held on the grid: the loading lobby or the countdown. */
+function preRace(match: RealmRacersMatch): boolean {
+  return match.phase === 'loading' || match.phase === 'countdown';
 }
 
 /** Every live race, public first. The order is the tick order and the search
@@ -985,6 +1004,7 @@ function startMatch(
   const circuit =
     forced ?? (practice ? REALM_RACERS_PRACTICE_CIRCUIT : drawCompetitionCircuit(ctx));
   const id = ctx.realmRacers.nextMatchId++;
+  const loadingUntilTick = ctx.tickCount + REALM_RACERS_LOADING_MAX_TICKS;
   const returns = new Map<number, RealmRacersReturn>();
   const pools = new Map<number, ArenaReturnPools>();
   for (const { pid, e } of grid) {
@@ -1000,10 +1020,12 @@ function startMatch(
     id,
     pids: pids.slice(),
     gridSize: pids.length,
-    phase: 'countdown',
-    goTick: ctx.tickCount + REALM_RACERS_COUNTDOWN_TICKS,
+    phase: 'loading',
+    goTick: loadingUntilTick + REALM_RACERS_COUNTDOWN_TICKS,
     deadlineTick:
-      ctx.tickCount + REALM_RACERS_COUNTDOWN_TICKS + circuit.timeLimitSeconds * TICK_RATE,
+      loadingUntilTick + REALM_RACERS_COUNTDOWN_TICKS + circuit.timeLimitSeconds * TICK_RATE,
+    loadingUntilTick,
+    ready: new Set(pids.filter((pid) => ctx.realmRacers.bots.has(pid))),
     finishTick: null,
     winnerPid: null,
     chaseUntilTick: null,
@@ -1089,7 +1111,6 @@ function startMatch(
       rivalNames: pids
         .filter((other) => other !== pid)
         .map((other) => ctx.players.get(other)?.name ?? ''),
-      countdownTicks: REALM_RACERS_COUNTDOWN_TICKS,
       pid,
     });
   }
@@ -1355,6 +1376,20 @@ export function realmRacersForfeit(
   const match = realmRacersMatchOf(ctx, id);
   if (!match) return;
   retireRacer(ctx, match, id, restoreImmediately);
+}
+
+/** The loading lobby's ready command, from the pilot's own client. */
+export function realmRacersReady(ctx: SimContext, pid?: number): void {
+  const id = ctx.resolve(pid)?.meta.entityId;
+  if (id === undefined) return;
+  const match = realmRacersMatchOf(ctx, id);
+  if (match) markRealmRacersReady(match, id);
+}
+
+/** A pilot whose client dropped has to say it is ready again. */
+export function realmRacersUnready(ctx: SimContext, pid: number): void {
+  const match = realmRacersMatchOf(ctx, pid);
+  if (match) clearRealmRacersReady(match, pid);
 }
 
 /** Where a reset puts a racer, and what it hands back to them. */
@@ -2560,13 +2595,20 @@ function tickMatch(ctx: SimContext, match: RealmRacersMatch): void {
     if (resetLocked) resetVehicleDrive(e.drive);
   }
 
-  if (match.phase === 'countdown') {
+  if (match.phase === 'loading' || match.phase === 'countdown') {
     // The start lock is real: Sim.updatePlayerMovement returns before the
-    // kernel runs. Zero the machine anyway, every countdown tick, so nothing
+    // kernel runs. Zero the machine anyway, every pre-race tick, so nothing
     // (a queued input, a bump on the grid) can bank speed before GO.
     for (const pid of match.pids) {
       const drive = ctx.entities.get(pid)?.drive;
       if (drive) resetVehicleDrive(drive);
+    }
+    if (match.phase === 'loading') {
+      if (realmRacersLoadingDone(ctx, match)) {
+        const timeLimitTicks = realmRacersCircuitOf(match).timeLimitSeconds * TICK_RATE;
+        beginRealmRacersCountdown(ctx, match, REALM_RACERS_COUNTDOWN_TICKS, timeLimitTicks);
+      }
+      return;
     }
     if (ctx.tickCount >= match.goTick) {
       match.phase = 'racing';
@@ -2689,6 +2731,7 @@ interface RallySharedReadout {
   standings: RealmRacersRacerInfo[];
   pickupsTaken: number[];
   slicks: { id: number; x: number; z: number }[];
+  loading: RealmRacersLoadingInfo | null;
 }
 const sharedReadouts = new WeakMap<RealmRacersMatch, RallySharedReadout>();
 
@@ -2717,6 +2760,7 @@ function sharedMatchReadout(ctx: SimContext, match: RealmRacersMatch): RallyShar
       x: roundReadout(slick.x),
       z: roundReadout(slick.z),
     })),
+    loading: realmRacersLoadingInfo(ctx, match),
   };
   sharedReadouts.set(match, fresh);
   return fresh;
@@ -2749,11 +2793,10 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
     !realmRacersStillRunning(match, pid)
       ? 0
       : Math.max(0, Math.ceil((match.chaseUntilTick - ctx.tickCount) / TICK_RATE));
-  const elapsedTicks =
-    match.phase === 'countdown'
-      ? 0
-      : Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick);
-  return {
+  const elapsedTicks = preRace(match)
+    ? 0
+    : Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick);
+  const info: RealmRacersMatchInfo = {
     id: match.id,
     circuitId: match.circuitId,
     participantIds: shared.participantIds,
@@ -2803,6 +2846,8 @@ function matchInfoFor(ctx: SimContext, match: RealmRacersMatch, pid: number): Re
               ? 'draw'
               : 'lost',
   };
+  if (shared.loading && myEndTick === null) info.loading = shared.loading;
+  return info;
 }
 
 /**
@@ -2828,12 +2873,11 @@ export function realmRacersTracksideFor(ctx: SimContext, pid: number): RealmRace
     circuitId: match.circuitId,
     phase: match.phase,
     countdownTicks: match.phase === 'countdown' ? Math.max(0, match.goTick - ctx.tickCount) : 0,
-    elapsed:
-      match.phase === 'countdown'
-        ? 0
-        : Math.floor(
-            Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick) / TICK_RATE,
-          ),
+    elapsed: preRace(match)
+      ? 0
+      : Math.floor(
+          Math.max(0, Math.min(ctx.tickCount, match.deadlineTick) - match.goTick) / TICK_RATE,
+        ),
     pickupsTaken: shared.pickupsTaken,
     slicks: shared.slicks,
   };

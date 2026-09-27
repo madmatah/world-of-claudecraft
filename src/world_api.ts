@@ -436,6 +436,7 @@ export type {
 export type {
   RallyDriverTier,
   RealmRacersInfo,
+  RealmRacersLoadingInfo,
   RealmRacersMatchInfo,
   RealmRacersPhase,
   RealmRacersRacerInfo,
@@ -963,6 +964,8 @@ export const COMMAND_NAMES = [
   'realm_racers_forfeit',
   'realm_racers_practice',
   'realm_racers_reset',
+  // The loading lobby's "my client has prepared the circuit".
+  'realm_racers_ready',
 ] as const;
 
 // The union both the send path (`online.ts`) and the dispatch switch
@@ -1301,6 +1304,7 @@ export const COMMAND_FACETS = {
   realm_racers_forfeit: 'IWorldRealmRacers',
   realm_racers_practice: 'IWorldRealmRacers',
   realm_racers_reset: 'IWorldRealmRacers',
+  realm_racers_ready: 'IWorldRealmRacers',
   // IWorldMounts: pick + mount/dismount (snake_case wire strings, by design).
   // The active mount is a self-snapshot read (terse `mnt`, no send, untagged);
   // summoning one is an item use (use_item), not a mount command.

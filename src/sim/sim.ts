@@ -9949,14 +9949,10 @@ export class Sim {
     fiestaBotsMod.updateFiestaBots(this);
   }
 
-  // -------------------------------------------------------------------------
-  // The Realm Racers: two-player vehicle racing (social/realm_racers.ts +
-  // social/realm_racers_bots.ts). State stays on Sim (`this.realmRacers`);
-  // Sim keeps thin same-named delegates for the IWorld facet, the server, and
-  // tests. The house pilots are driven inside the same tick phase (they need
-  // Sim-only affordances), so the offline Practice button and the server's
-  // queue backfill run identical code.
-  // -------------------------------------------------------------------------
+  // --- The Realm Racers (social/realm_racers.ts + social/realm_racers_bots.ts):
+  // state stays on Sim (`this.realmRacers`), thin delegates serve the IWorld
+  // facet, the server, and tests. House pilots drive in the same tick phase, so
+  // offline Practice and the server's queue backfill run identical code. ---
 
   private updateRealmRacers(): void {
     realmRacersMod.updateRealmRacers(this.ctx);
@@ -10011,6 +10007,10 @@ export class Sim {
 
   resetRealmRacersPosition(): void {
     this.realmRacersResetPosition(this.primaryId);
+  }
+
+  readyRealmRacers(): void {
+    realmRacersMod.realmRacersReady(this.ctx, this.primaryId);
   }
 
   /** Race a house pilot immediately, with no queue and no wait. Runs

@@ -22,7 +22,8 @@ import { otherRealmRacersParticipantIds } from '../server/realm_racers_interest'
 import { appendSnapshotEntity } from '../server/snapshot_entity_stream';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
-import type { Entity } from '../src/sim/types';
+import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
+import { type Entity, TICK_RATE } from '../src/sim/types';
 import { STABLE_TIMER_WIRE_VERSION } from '../src/world_api';
 
 const LEGACY_INTEREST_RADIUS = 120;
@@ -681,10 +682,42 @@ describe('Realm Racers match-scoped interest', () => {
     (server as any).broadcastSnapshots();
     // The race is untouched, and the quitter is off it while the pins for the
     // rest of the field stay exactly where they were.
-    expect(server.sim.realmRacers.match?.phase).toBe('countdown');
+    expect(server.sim.realmRacers.match?.phase).toBe('loading');
     expect(server.sim.realmRacersInfoFor(a.pid).match?.result).toBe('forfeit');
     expect(server.sim.realmRacersInfoFor(b.pid).match?.result).toBeNull();
     expect(framePresentIds(a.lastFrame).has(b.pid)).toBe(true);
+  });
+
+  it('re-sends the rr readout about once a second through a whole loading lobby', () => {
+    const server = new GameServer();
+    const [a] = startRealmRacersGrid(server, 6530);
+    const match = server.sim.realmRacers.match;
+    if (!match) throw new Error('match missing');
+    let resends = 0;
+    let rrBytes = 0;
+    let lobbyBytes = 0;
+    let lobbyTicks = 0;
+    while (match.phase === 'loading') {
+      lobbyTicks++;
+      a.lastFrame = '';
+      (server as any).broadcastSnapshots();
+      const rr = a.lastFrame ? JSON.parse(a.lastFrame).self?.rr : undefined;
+      if (rr !== undefined) {
+        resends++;
+        rrBytes += JSON.stringify(rr).length;
+        lobbyBytes = Math.max(lobbyBytes, JSON.stringify(rr.match?.loading ?? null).length);
+      }
+      server.sim.tick();
+    }
+    // Nobody sent ready, so the lobby ran to its cap.
+    expect(lobbyTicks).toBe(REALM_RACERS_LOADING_MAX_TICKS);
+    // One full send, then one per whole second the countdown to the cap moves:
+    // never once a tick.
+    expect(resends).toBeLessThanOrEqual(REALM_RACERS_LOADING_MAX_TICKS / TICK_RATE + 1);
+    expect(lobbyBytes).toBeLessThanOrEqual(64);
+    // Measured at 15 sends of about 1.24 KB (a four-row readout): about 1.2 KB/s
+    // for the lobby, where a per-tick ticks-left field cost twenty times that.
+    expect(rrBytes / resends).toBeLessThan(1400);
   });
 
   it('pins the field during the racing phase', () => {

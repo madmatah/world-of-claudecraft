@@ -44,7 +44,18 @@ import { BUILTIN_WORLD, setActiveWorldContent } from '../src/sim/data';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { realmRacersPickupBoxes } from '../src/sim/realm_racers_pickups';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
-import { REALM_RACERS_WARD_AURA } from '../src/sim/social/realm_racers';
+import {
+  REALM_RACERS_COUNTDOWN_TICKS,
+  REALM_RACERS_WARD_AURA,
+  realmRacersMatchOf,
+} from '../src/sim/social/realm_racers';
+import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
+import { TICK_RATE } from '../src/sim/types';
+import {
+  createRealmRacersReadySender,
+  stepRealmRacersReady,
+} from '../src/ui/realm_racers_ready_core';
+import type { RealmRacersMatchInfo } from '../src/world_api/realm_racers';
 import { bareClient } from './helpers/bare_client';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
 
@@ -129,12 +140,14 @@ describe('Realm Racers online parity', () => {
     ClientWorld.prototype.forfeitRealmRacers.call(probe as never);
     ClientWorld.prototype.resetRealmRacersPosition.call(probe as never);
     ClientWorld.prototype.startRealmRacersPractice.call(probe as never, 'ace');
+    ClientWorld.prototype.readyRealmRacers.call(probe as never);
     expect(cmd.mock.calls).toEqual([
       [{ cmd: 'realm_racers_join' }],
       [{ cmd: 'realm_racers_leave' }],
       [{ cmd: 'realm_racers_forfeit' }],
       [{ cmd: 'realm_racers_reset' }],
       [{ cmd: 'realm_racers_practice', tier: 'ace' }],
+      [{ cmd: 'realm_racers_ready' }],
     ]);
   });
 
@@ -203,7 +216,7 @@ describe('Realm Racers online parity', () => {
       rivalNames: ['Briar', 'Cass', 'Dell'],
     });
     expect(selfFields(clients[0], 'rr').at(-1)).toMatchObject({
-      match: { phase: 'countdown', totalLaps: 3, gridSize: REALM_RACERS_GRID_SIZE },
+      match: { phase: 'loading', totalLaps: 3, gridSize: REALM_RACERS_GRID_SIZE },
     });
     // The kit flag names the weapon in the racer's SLOT plus its per-race
     // budget, so the mirror rebuilds the same kit the sim granted rather than a
@@ -227,7 +240,104 @@ describe('Realm Racers online parity', () => {
     for (const client of clients.slice(1)) {
       expect(events(client, 'realmRacersResult')).toHaveLength(0);
     }
-    expect(server.sim.realmRacers.match?.phase).toBe('countdown');
+    expect(server.sim.realmRacers.match?.phase).toBe('loading');
+  });
+
+  it('holds the grid in the loading lobby until every pilot sends ready over the wire', () => {
+    const server = new GameServer();
+    const names = ['Aster', 'Briar', 'Cass', 'Dell'];
+    const clients = names.map(() => fakeClient());
+    const sessions = names.map((name, i) => join(server, clients[i], i + 1, name));
+    const [first, second, third, fourth] = sessions;
+    for (const session of sessions) command(server, session, 'realm_racers_join');
+    advance(server);
+    const match = server.sim.realmRacers.match;
+    if (!match) throw new Error('missing match');
+    expect(match.phase).toBe('loading');
+    const lobbyOf = (client: FakeClient) =>
+      (selfFields(client, 'rr').at(-1) as { match: RealmRacersMatchInfo }).match;
+    expect(lobbyOf(clients[3]).loading).toEqual({
+      secondsLeft: REALM_RACERS_LOADING_MAX_TICKS / TICK_RATE,
+      readyIds: [],
+    });
+
+    for (const session of [first, second, third]) command(server, session, 'realm_racers_ready');
+    command(server, first, 'realm_racers_ready');
+    advance(server);
+    expect(match.phase).toBe('loading');
+    expect(lobbyOf(clients[3]).loading?.readyIds).toEqual([first.pid, second.pid, third.pid]);
+
+    // A dropped socket is not ready, and the lobby keeps waiting for it.
+    expect(server.socketClosed(first, first.ws as never)).toBe(true);
+    command(server, fourth, 'realm_racers_ready');
+    advance(server);
+    expect(match.phase).toBe('loading');
+    expect(lobbyOf(clients[3]).loading?.readyIds).toEqual([second.pid, third.pid, fourth.pid]);
+
+    // Reconnected: still seated on the grid, ready only once it says so again.
+    const back = fakeClient();
+    expect(join(server, back, 1, 'Aster')).toBe(first);
+    advance(server);
+    expect(realmRacersMatchOf(server.sim.ctx, first.pid)).toBe(match);
+    expect(match.phase).toBe('loading');
+    expect(lobbyOf(back).loading?.readyIds).toEqual([second.pid, third.pid, fourth.pid]);
+
+    command(server, first, 'realm_racers_ready');
+    advance(server);
+    expect(match.phase).toBe('countdown');
+    expect(match.goTick - server.sim.tickCount).toBe(REALM_RACERS_COUNTDOWN_TICKS);
+    for (const client of [back, ...clients.slice(1)]) {
+      const mirrored = lobbyOf(client);
+      expect(mirrored).toMatchObject({
+        phase: 'countdown',
+        countdownTicks: REALM_RACERS_COUNTDOWN_TICKS,
+      });
+      expect(mirrored.loading).toBeUndefined();
+    }
+    // Out of the lobby, a late ready changes nothing.
+    command(server, second, 'realm_racers_ready');
+    advance(server);
+    expect(match.goTick - server.sim.tickCount).toBe(REALM_RACERS_COUNTDOWN_TICKS - 1);
+  });
+
+  it('re-sends the client ready after a linkdead resume, and the lobby closes early', () => {
+    const server = new GameServer();
+    let client = fakeClient();
+    const session = join(server, client, 1, 'Aster');
+    const mirror = bareClient(session.pid);
+    const sent: string[] = [];
+    (mirror as unknown as { cmd(msg: Record<string, unknown>): void }).cmd = (msg) => {
+      sent.push(String(msg.cmd));
+      command(server, session, String(msg.cmd));
+    };
+    const sender = createRealmRacersReadySender();
+    const frame = () => {
+      const snap = client.sent.filter((f) => f.t === 'snap').at(-1);
+      (mirror as unknown as { applySnapshot(f: unknown): void }).applySnapshot(snap);
+      stepRealmRacersReady(sender, mirror.realmRacersInfo, () => mirror.readyRealmRacers());
+    };
+    command(server, session, 'realm_racers_practice', { tier: 'rookie' });
+    advance(server);
+    const match = server.sim.realmRacers.practices[0];
+    if (!match) throw new Error('missing practice match');
+    const seatTick = server.sim.tickCount;
+    frame();
+    expect(sent).toEqual(['realm_racers_ready']);
+    // The socket drops before the lobby could close on that ready.
+    expect(server.socketClosed(session, session.ws as never)).toBe(true);
+    for (let i = 0; i < 5; i++) advance(server);
+    expect(match.phase).toBe('loading');
+
+    client = fakeClient();
+    expect(join(server, client, 1, 'Aster')).toBe(session);
+    for (let i = 0; i < 2 * TICK_RATE && match.phase === 'loading'; i++) {
+      advance(server);
+      frame();
+    }
+    advance(server);
+    expect(match.phase).toBe('countdown');
+    expect(sent).toEqual(['realm_racers_ready', 'realm_racers_ready']);
+    expect(server.sim.tickCount - seatTick).toBeLessThan(3 * TICK_RATE);
   });
 
   it('dispatches recovery, routes its silent snap event, and mirrors the movement lock', () => {

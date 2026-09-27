@@ -65,7 +65,7 @@ import {
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
 import { TICK_RATE } from '../src/sim/types';
-import { addAt, makeWorld } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers } from './realm_racers_util';
 
 const GARDEN = REALM_RACERS_PRACTICE_CIRCUIT;
 
@@ -678,6 +678,7 @@ describe('Realm Racers circuits: which one a race lands on', () => {
     const sim = makeWorld();
     const human = addAt(sim, 'warrior', 'Aster', -5, -40);
     sim.realmRacersPracticeStart('ace', human);
+    readyAllRacers(sim);
     const match = realmRacersMatchOf(sim.ctx, human);
     if (!match) throw new Error('no practice race');
     const circuit = realmRacersCircuitOf(match);
@@ -798,6 +799,7 @@ describe('Realm Racers competition circuits: raceable to the flag', () => {
       const sim = makeWorld();
       const human = addAt(sim, 'warrior', 'Aster', -5, -40);
       expect(startRealmRacersDevRace(sim, circuit.id, 'ace', human)).toBe(true);
+      readyAllRacers(sim);
       const match = realmRacersMatchOf(sim.ctx, human);
       if (!match) throw new Error('no race');
       expect(match.totalLaps).toBe(circuit.laps);

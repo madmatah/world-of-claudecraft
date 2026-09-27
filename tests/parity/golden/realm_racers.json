@@ -2,15 +2,16 @@
   "scenario": "realm_racers",
   "seed": 7601,
   "sampleEvery": 20,
-  "ticks": 345,
+  "ticks": 346,
   "coverage": [
     "realm racers grid seat (startMatch competition-circuit draw)",
+    "loading lobby: every pilot ready closes it on one tick",
     "countdown lock + vehicle kernel drive on the circuit copy",
     "pickup take (the one weighted effect draw per box that changes hands)",
     "forfeit cascade -> endMatch classification -> tableau return -> teardown"
   ],
-  "draws": 2918,
-  "drawDigest": "37519b78",
+  "draws": 2917,
+  "drawDigest": "c086bd51",
   "frames": [
     {
       "tick": 0,
@@ -31,7 +32,7 @@
       "time": 0.05,
       "nextId": 1014,
       "state": "762e9265",
-      "events": "4b1fd4bd",
+      "events": "4e011057",
       "rng": {
         "draws": 1,
         "digest": "8a61b325"
@@ -729,7 +730,7 @@
       "tick": 200,
       "time": 10,
       "nextId": 1014,
-      "state": "6b2621fa",
+      "state": "762437d2",
       "events": "f0ccd455",
       "rng": {
         "draws": 1660,
@@ -740,7 +741,7 @@
       "tick": 220,
       "time": 11,
       "nextId": 1014,
-      "state": "0d804856",
+      "state": "cb1c521f",
       "events": "741638a5",
       "rng": {
         "draws": 1829,
@@ -748,14 +749,14 @@
       }
     },
     {
-      "tick": 223,
-      "time": 11.15,
+      "tick": 224,
+      "time": 11.2,
       "nextId": 1014,
-      "state": "356cc27b",
-      "events": "bd3864e4",
+      "state": "c7349ea6",
+      "events": "2334ed5c",
       "rng": {
-        "draws": 1850,
-        "digest": "da90d822"
+        "draws": 1852,
+        "digest": "ee36e844"
       },
       "label": "pickup",
       "players": [
@@ -1073,7 +1074,7 @@
               "fixed": true,
               "maxCharges": 3
             },
-            "rally_oil_slick": {
+            "rally_nitro": {
               "charges": 1,
               "fixed": true,
               "maxCharges": 1
@@ -1087,14 +1088,14 @@
               "id": "battle_stance",
               "kind": "battle_stance",
               "name": "Battle Stance",
-              "remaining": 3588.9,
+              "remaining": 3588.85,
               "school": "physical",
               "sourceId": 1010
             }
           ],
           "blockChance": 0.05,
           "blockValue": 6,
-          "combatTimer": 110.1,
+          "combatTimer": 110.15,
           "comboUntil": -1,
           "critChance": 0.06,
           "detonateTimer": "Infinity",
@@ -1109,7 +1110,7 @@
           },
           "facing": 1.56224,
           "fallStartY": 36.677555,
-          "fiveSecondRule": 110.15,
+          "fiveSecondRule": 110.2,
           "healPower": 5,
           "hp": 100,
           "id": 1010,
@@ -1161,7 +1162,7 @@
           },
           "aiState": "idle",
           "attackPower": 10,
-          "combatTimer": 110.1,
+          "combatTimer": 110.15,
           "comboUntil": -1,
           "critChance": 0.056,
           "detonateTimer": "Infinity",
@@ -1175,7 +1176,7 @@
             "speedCap": 1
           },
           "facing": 1.56224,
-          "fiveSecondRule": 110.15,
+          "fiveSecondRule": 110.2,
           "healPower": 13,
           "hp": 54,
           "id": 1011,
@@ -1227,7 +1228,7 @@
           },
           "aiState": "idle",
           "attackPower": 42,
-          "combatTimer": 110.1,
+          "combatTimer": 110.15,
           "comboUntil": -1,
           "critChance": 0.0625,
           "detonateTimer": "Infinity",
@@ -1242,7 +1243,7 @@
           },
           "dualWielding": true,
           "facing": 1.56224,
-          "fiveSecondRule": 110.15,
+          "fiveSecondRule": 110.2,
           "healPower": 6,
           "hp": 62,
           "id": 1012,
@@ -1302,7 +1303,7 @@
           },
           "aiState": "idle",
           "attackPower": 10,
-          "combatTimer": 110.1,
+          "combatTimer": 110.15,
           "comboUntil": -1,
           "critChance": 0.0555,
           "detonateTimer": "Infinity",
@@ -1316,7 +1317,7 @@
             "speedCap": 1
           },
           "facing": 1.56224,
-          "fiveSecondRule": 110.15,
+          "fiveSecondRule": 110.2,
           "healPower": 12,
           "hp": 51,
           "id": 1013,
@@ -1389,8 +1390,8 @@
       "state": "7e3cbec9",
       "events": "741638a5",
       "rng": {
-        "draws": 2324,
-        "digest": "a40739cd"
+        "draws": 2323,
+        "digest": "3dd6e243"
       }
     },
     {
@@ -1400,8 +1401,8 @@
       "state": "bf353b14",
       "events": "741638a5",
       "rng": {
-        "draws": 2504,
-        "digest": "f9c2210a"
+        "draws": 2502,
+        "digest": "ca479b74"
       }
     },
     {
@@ -1411,8 +1412,8 @@
       "state": "e65c5f73",
       "events": "741638a5",
       "rng": {
-        "draws": 2689,
-        "digest": "59c7f5f3"
+        "draws": 2681,
+        "digest": "52eebc0a"
       }
     },
     {
@@ -1422,19 +1423,19 @@
       "state": "1c04896e",
       "events": "741638a5",
       "rng": {
-        "draws": 2881,
-        "digest": "d5ff2af5"
+        "draws": 2863,
+        "digest": "b8567851"
       }
     },
     {
-      "tick": 345,
-      "time": 17.25,
+      "tick": 346,
+      "time": 17.3,
       "nextId": 1014,
-      "state": "f487f6e5",
+      "state": "dc4d42db",
       "events": "7645dd97",
       "rng": {
-        "draws": 2918,
-        "digest": "37519b78"
+        "draws": 2917,
+        "digest": "c086bd51"
       },
       "label": "teardown",
       "players": [
@@ -1778,7 +1779,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 5,
           "id": 1010,
           "kind": "player",
@@ -1828,7 +1829,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.056,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 13,
           "hp": 54,
           "id": 1011,
@@ -1880,7 +1881,7 @@
           "dodgeChance": 0.0625,
           "dualWielding": true,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 6,
           "hp": 62,
           "id": 1012,
@@ -1939,7 +1940,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.0555,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 12,
           "hp": 51,
           "id": 1013,
@@ -1984,14 +1985,14 @@
       ]
     },
     {
-      "tick": 345,
-      "time": 17.25,
+      "tick": 346,
+      "time": 17.3,
       "nextId": 1014,
-      "state": "f487f6e5",
+      "state": "dc4d42db",
       "events": "741638a5",
       "rng": {
-        "draws": 2918,
-        "digest": "37519b78"
+        "draws": 2917,
+        "digest": "c086bd51"
       },
       "label": "final",
       "players": [
@@ -2335,7 +2336,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.06,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 5,
           "id": 1010,
           "kind": "player",
@@ -2385,7 +2386,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.056,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 13,
           "hp": 54,
           "id": 1011,
@@ -2437,7 +2438,7 @@
           "dodgeChance": 0.0625,
           "dualWielding": true,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 6,
           "hp": 62,
           "id": 1012,
@@ -2496,7 +2497,7 @@
           "detonateTimer": "Infinity",
           "dodgeChance": 0.0555,
           "fallStartY": -2,
-          "fiveSecondRule": 116.25,
+          "fiveSecondRule": 116.3,
           "healPower": 12,
           "hp": 51,
           "id": 1013,

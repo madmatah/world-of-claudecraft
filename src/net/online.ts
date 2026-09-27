@@ -254,7 +254,7 @@ import {
 import { decodePlayerIdentityWire } from './player_identity_wire';
 import { applyProfessionsSelfMirror } from './professions_self_mirror';
 import { optimisticQuestState } from './quest_state_optimistic';
-import { applyRealmRacersSelfWire } from './realm_racers_self_wire';
+import { applyRealmRacersSelfWire, idleRealmRacersInfo } from './realm_racers_self_wire';
 import { isTransientReconnectRejection, isTransientTimeoutRejection } from './reconnect_policy';
 import { isInputSendBackpressured } from './send_backpressure';
 import { snapshotAlpha } from './snapshot_alpha';
@@ -1270,14 +1270,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
   // --- IWorldCardMinigame: Card Duel queue/match state, mirrored from the
   // snapshot self (`s.cardDuel`, delta-omitted). ---
   cardMinigameInfo: CardMinigameInfo = { queued: false, available: true, match: null };
-  realmRacersInfo: RealmRacersInfo = {
-    queued: false,
-    queuePosition: 0,
-    queueSize: 0,
-    match: null,
-    practiceAvailable: true,
-    queueViable: true,
-  };
+  realmRacersInfo: RealmRacersInfo = idleRealmRacersInfo();
   realmRacersTrackside: import('../world_api/realm_racers').RealmRacersLaneView | null = null;
   private realmRacersKit: {
     abilityId: string;
@@ -4489,6 +4482,9 @@ export class ClientWorld extends ReconWireState implements IWorld {
   // the tier and the circuit before seating anyone.
   startRealmRacersPractice(tier: RallyDriverTier): void {
     this.cmd({ cmd: 'realm_racers_practice', tier });
+  }
+  readyRealmRacers(): void {
+    this.cmd({ cmd: 'realm_racers_ready' });
   }
   // --- IWorldSocialGraph: persistent social command sends (resolved server-side by
   // character name) + the REST character typeahead. socialInfo arrives via the

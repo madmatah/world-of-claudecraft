@@ -7458,7 +7458,6 @@ export type SimEvent = { pid?: number } & (
       matchId: number;
       /** Everyone else on the grid, in slot order, excluding the recipient. */
       rivalNames: string[];
-      countdownTicks: number;
     }
   | { type: 'realmRacersGo' }
   // Personal, silent recovery discontinuity. It is distinct from `respawn`:

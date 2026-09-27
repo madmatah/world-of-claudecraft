@@ -42,7 +42,7 @@ import {
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
 import type { Entity, SimEvent } from '../src/sim/types';
 import { TICK_RATE } from '../src/sim/types';
-import { addAt, makeWorld, teleport } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers, teleport } from './realm_racers_util';
 
 const LOANER = vehicleProfile('rally_loaner');
 
@@ -183,6 +183,17 @@ describe('The Realm Racers lifecycle', () => {
     sim.realmRacersQueueJoin(pids[REALM_RACERS_GRID_SIZE - 1]);
     sim.tick();
     const liveMatch = match(sim);
+    // Seated in the loading lobby first: no clock runs until every pilot is ready.
+    expect(liveMatch.phase).toBe('loading');
+    expect(sim.realmRacersInfoFor(a).match).toMatchObject({
+      phase: 'loading',
+      countdown: 0,
+      countdownTicks: 0,
+      elapsedTicks: 0,
+    });
+    readyAllRacers(sim);
+    sim.tick();
+    expect(liveMatch.phase).toBe('countdown');
     expect(liveMatch.goTick - sim.tickCount).toBe(180);
     expect(sim.realmRacersInfoFor(a).match).toMatchObject({
       countdown: 0,
@@ -1064,7 +1075,9 @@ describe('The Realm Racers lifecycle', () => {
       updateRealmRacers(sim.ctx);
       return Math.hypot(racerA.pos.x - racerB.pos.x, racerA.pos.z - racerB.pos.z);
     };
-    expect(match(sim).phase).toBe('countdown');
+    expect(match(sim).phase).toBe('loading');
+    expect(overlap()).toBeCloseTo(0.8, 6);
+    match(sim).phase = 'countdown';
     expect(overlap()).toBeCloseTo(0.8, 6);
     match(sim).phase = 'finished';
     match(sim).finishTick = sim.tickCount;
@@ -1199,6 +1212,9 @@ describe('The Realm Racers Book of Deeds credit (docs/design/deeds.md)', () => {
     for (const pid of pids) sim.realmRacersQueueJoin(pid);
     sim.tick();
     expect(sim.realmRacers.match).not.toBeNull();
+    expect(match(sim).phase).toBe('loading');
+    readyAllRacers(sim);
+    sim.tick();
     expect(match(sim).phase).toBe('countdown');
     // The real GO branch, not a hand-flipped phase: this is what actually
     // writes lapStartTick, and no other test in this file ticks through it.

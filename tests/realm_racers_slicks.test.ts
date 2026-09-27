@@ -49,7 +49,7 @@ import {
 } from '../src/sim/social/realm_racers';
 import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { installScriptedRng, rallyPickupRollFor } from './helpers/realm_racers_rng';
-import { addAt, makeWorld, teleport } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers, teleport } from './realm_racers_util';
 
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
 
@@ -76,6 +76,7 @@ function racingGrid(): { sim: Sim; pids: number[] } {
   // holds more than one competition circuit, and the geometry below is this
   // one's road.
   expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
+  readyAllRacers(sim);
   sim.tick();
   for (let i = 0; i < REALM_RACERS_COUNTDOWN_TICKS; i++) sim.tick();
   expect(match(sim).phase).toBe('racing');

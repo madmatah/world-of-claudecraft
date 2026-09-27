@@ -10,6 +10,7 @@
 import { BUILTIN_WORLD } from '../src/sim/data';
 import type { Sim } from '../src/sim/sim';
 import { Sim as SimCtor } from '../src/sim/sim';
+import { realmRacersMatches, realmRacersReady } from '../src/sim/social/realm_racers';
 import type { SimConfig, WorldContent } from '../src/sim/types';
 import { groundHeight } from '../src/sim/world';
 
@@ -54,4 +55,15 @@ export function addAt(
   const pid = sim.addPlayer(cls, name);
   teleport(sim, pid, x, z);
   return pid;
+}
+
+/**
+ * Every human pilot of every live race sends the loading lobby's ready, through
+ * the same entry the server's `realm_racers_ready` dispatch calls. The next tick
+ * closes the lobby and starts the countdown.
+ */
+export function readyAllRacers(sim: Sim): void {
+  for (const match of realmRacersMatches(sim.ctx)) {
+    for (const pid of match.pids) realmRacersReady(sim.ctx, pid);
+  }
 }

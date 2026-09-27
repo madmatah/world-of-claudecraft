@@ -339,6 +339,7 @@ export const IWORLD_MEMBERS = [
   { name: 'forfeitRealmRacers', kind: 'method' },
   { name: 'resetRealmRacersPosition', kind: 'method' },
   { name: 'startRealmRacersPractice', kind: 'method' },
+  { name: 'readyRealmRacers', kind: 'method' },
   // --- market commands ---
   { name: 'marketSearch', kind: 'method' },
   { name: 'marketSellPriceCheck', kind: 'method' },
@@ -945,9 +946,10 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
     // method) at the fourth release/v0.44.0 base merge: 421/124/297.
     // Plus the Realm Racers facet (two data reads, five methods) at the
     // release/v0.44.0 sync into feature/realm-racers, set from a suite run.
-    expect(IWORLD_MEMBERS.length).toBe(428);
+    // Plus the Realm Racers loading lobby's readyRealmRacers (+1 method).
+    expect(IWORLD_MEMBERS.length).toBe(429);
     expect(DATA_MEMBERS.length).toBe(126);
-    expect(METHOD_MEMBERS.length).toBe(302);
+    expect(METHOD_MEMBERS.length).toBe(303);
   });
   it('has no duplicate member names', () => {
     const names = IWORLD_MEMBERS.map((m) => m.name);
@@ -1252,6 +1254,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'raidLockouts',
       'reactiveAbilityWindowRemaining',
       'readyCheckRespond',
+      'readyRealmRacers',
       'realm',
       'realmRacersInfo',
       'realmRacersTrackside',
@@ -1729,6 +1732,7 @@ describe('IWORLD_MEMBERS is the pinned IWorld contract (anti-loosening)', () => 
       'raidLockouts',
       'reactiveAbilityWindowRemaining',
       'readyCheckRespond',
+      'readyRealmRacers',
       'rechargeToolEffect',
       'releaseEmpoweredAbility',
       'releaseSpirit',
@@ -2358,6 +2362,7 @@ const FACET_REALM_RACERS = [
   'forfeitRealmRacers',
   'resetRealmRacersPosition',
   'startRealmRacersPractice',
+  'readyRealmRacers',
 ] as const satisfies readonly (keyof IWorldRealmRacers)[];
 type _ExhaustRealmRacers = AssertNever<
   Exclude<keyof IWorldRealmRacers, (typeof FACET_REALM_RACERS)[number]>
@@ -2649,8 +2654,8 @@ describe('W1: aggregate IWorld member set equals the disjoint union of the facet
     const union = Object.values(FACET_MEMBER_ARRAYS).flatMap((arr) => [...arr]);
     // Mirrors the IWORLD_MEMBERS.length pin above (411); this pin and the one above
     // must always agree.
-    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(428);
-    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(428);
+    expect(union.length, 'union size before dedup (catches a duplicated member)').toBe(429);
+    expect(new Set(union).size, 'union size after dedup (catches a duplicated member)').toBe(429);
     const sortedUnion = [...union].sort();
     const pinned = IWORLD_MEMBERS.map((m) => m.name).sort();
     expect(sortedUnion).toEqual(pinned);

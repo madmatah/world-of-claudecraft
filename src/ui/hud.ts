@@ -13126,8 +13126,8 @@ export class Hud {
           // STATE, by `RealmRacersUi` on the edge where the match first appears:
           // the circuit's name is what the banner says, and this event reaches
           // the client one frame BEFORE the snapshot that carries the circuit
-          // (the server routes events, then broadcasts). The event still owns
-          // the sound here and the start-light deadline in `online.ts`.
+          // (the server routes events, then broadcasts). The event owns only
+          // the sound here; the lights and the lobby read the snapshot too.
           if (ev.pid === sim.playerId) audio.realmRacersFound();
           break;
         case 'realmRacersGo':

@@ -98,6 +98,7 @@ function harness() {
   const forfeitRealmRacers = vi.fn();
   const resetRealmRacersPosition = vi.fn();
   const startRealmRacersPractice = vi.fn();
+  const readyRealmRacers = vi.fn();
   const countdownTick = vi.fn();
   const showBanner = vi.fn();
   const clearPickupSplash = vi.fn();
@@ -110,6 +111,7 @@ function harness() {
     forfeitRealmRacers,
     resetRealmRacersPosition,
     startRealmRacersPractice,
+    readyRealmRacers,
   } as unknown as IWorld;
   const noop = (): void => {};
   const ui = new RealmRacersUi({
@@ -141,6 +143,7 @@ function harness() {
     showBanner,
     clearPickupSplash,
     startRealmRacersPractice,
+    readyRealmRacers,
     forfeitButton,
     touch,
   };
@@ -991,6 +994,33 @@ describe('Realm Racers race-feel HUD', () => {
     h.info.match = match({ phase: 'racing', countdown: 0, countdownTicks: 0 });
     h.ui.update();
     expect(h.countdownTick).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Realm Racers loading lobby ready', () => {
+  it('tells the lobby it is ready once per due key, and again after the server drops it', () => {
+    const h = harness();
+    const lobby = (secondsLeft: number, readyIds: number[]) =>
+      match({
+        phase: 'loading',
+        countdown: 0,
+        countdownTicks: 0,
+        loading: { secondsLeft, readyIds },
+      });
+    h.info.match = lobby(15, [2, 3, 4]);
+    h.ui.update();
+    h.ui.update();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+    h.info.match = lobby(15, [1, 2, 3, 4]);
+    h.ui.update();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(1);
+    // A linkdead resume: the server cleared the flag, so the same second sends again.
+    h.info.match = lobby(15, [2, 3, 4]);
+    h.ui.update();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(2);
+    h.info.match = match({ phase: 'countdown' });
+    h.ui.update();
+    expect(h.readyRealmRacers).toHaveBeenCalledTimes(2);
   });
 });
 

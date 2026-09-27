@@ -59,7 +59,6 @@ import { effectiveFishingBand } from '../src/sim/professions/fishing';
 import { cancelProfessionSessionOnDisplacement } from '../src/sim/professions/session_teardown';
 import { restoreToolEffectSlotAction } from '../src/sim/professions/tool_effect_actions';
 import type { ToolEffectConfirmMode } from '../src/sim/professions/tools';
-import { isRallyDriverTier } from '../src/sim/realm_racers_driver';
 import type { RallyHeldEffect } from '../src/sim/realm_racers_pickup_effects';
 import {
   catalogCharacterCompletion,
@@ -432,6 +431,7 @@ import {
   type PublicTraceCandidate,
 } from './quest_snapshot_wire';
 import { REALM, REALM_PUBLIC_ORIGIN, REALM_RESET_TIME_ZONE } from './realm';
+import { dispatchRealmRacersCommand } from './realm_racers_commands';
 import { realmRacersInterestParticipantIds } from './realm_racers_interest';
 import { createRealmReadoutMemo, realmReadoutJson, realmReadoutObject } from './realm_readout_memo';
 import { RiftAssetCoordinator, riftAssetConfigFromEnv } from './rift_assets';
@@ -7375,22 +7375,12 @@ export class GameServer {
         break;
 
       case 'realm_racers_join':
-        sim.realmRacersQueueJoin(pid);
-        break;
       case 'realm_racers_leave':
-        sim.realmRacersQueueLeave(pid);
-        break;
       case 'realm_racers_forfeit':
-        sim.realmRacersForfeit(pid);
-        break;
       case 'realm_racers_reset':
-        sim.realmRacersResetPosition(pid);
-        break;
       case 'realm_racers_practice':
-        // Race a house pilot now. The Sim re-validates the one circuit being
-        // free and the sender being able to race, and refuses silently
-        // otherwise, exactly as the queue join does.
-        if (isRallyDriverTier(msg.tier)) sim.realmRacersPracticeStart(msg.tier, pid);
+      case 'realm_racers_ready':
+        dispatchRealmRacersCommand(sim, command, msg, pid);
         break;
 
       // Dungeon Finder (docs/prd/dungeon-finder.md). Deliberately NOT in

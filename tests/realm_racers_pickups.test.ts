@@ -45,7 +45,7 @@ import {
 import { startRealmRacersPractice } from '../src/sim/social/realm_racers_bots';
 import { TICK_RATE } from '../src/sim/types';
 import { installScriptedRng, type ScriptedRng } from './helpers/realm_racers_rng';
-import { addAt, makeWorld, teleport } from './realm_racers_util';
+import { addAt, makeWorld, readyAllRacers, teleport } from './realm_racers_util';
 
 /** The circuit a QUEUED race runs on, which is what every live case here seats. */
 const RACE_CIRCUIT = realmRacersCompetitionCircuits()[0];
@@ -75,6 +75,7 @@ function racingGrid(): { sim: Sim; pids: number[] } {
   // holds more than one competition circuit, and every box below is resolved
   // off this one's road.
   expect(realmRacersStartMatch(sim.ctx, pids, undefined, RACE_CIRCUIT.id)).toBe(true);
+  readyAllRacers(sim);
   sim.tick();
   expect(sim.realmRacers.match).not.toBeNull();
   expect(match(sim).circuitId).toBe(RACE_CIRCUIT.id);
@@ -606,12 +607,19 @@ describe('Realm Racers pickup boxes, in a race', () => {
     for (const pid of pids) sim.realmRacersQueueJoin(pid);
     sim.tick();
     const [a] = pids;
-    expect(match(sim).phase).toBe('countdown');
+    expect(match(sim).phase).toBe('loading');
     const before = chargesOf(sim, a);
     standOnBox(sim, a, 0);
     sim.tick();
     // Held on the grid: a machine parked over a box before the lights is not
-    // collecting a lap's ammunition for free.
+    // collecting a lap's ammunition for free, in the lobby or the countdown.
+    expect(takenOf(sim)).toEqual([]);
+    expect(chargesOf(sim, a)).toBe(before);
+    readyAllRacers(sim);
+    sim.tick();
+    expect(match(sim).phase).toBe('countdown');
+    standOnBox(sim, a, 0);
+    sim.tick();
     expect(takenOf(sim)).toEqual([]);
     expect(chargesOf(sim, a)).toBe(before);
 

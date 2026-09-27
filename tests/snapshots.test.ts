@@ -6667,7 +6667,9 @@ describe('full self-state snapshot delta fixture', () => {
     const snap = lastSnap(fc.sent);
     expect(snap.self.rrt).toMatchObject({
       circuitId: REALM_RACERS_PRACTICE_CIRCUIT.id,
-      phase: 'countdown',
+      phase: 'loading',
+      countdownTicks: 0,
+      elapsed: 0,
     });
     const client = bareClient(watcher.pid);
     (client as any).applySnapshot(snap);

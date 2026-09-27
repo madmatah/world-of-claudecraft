@@ -25,8 +25,13 @@ import { realmRacersStripPickups } from '../src/sim/realm_racers_pickups';
 import { forwardArcDelta } from '../src/sim/realm_racers_progress';
 import { realmRacersTrack } from '../src/sim/realm_racers_spline';
 import { Sim } from '../src/sim/sim';
-import { realmRacersMatchOf, realmRacersToCanonical } from '../src/sim/social/realm_racers';
+import {
+  realmRacersCircuitOf,
+  realmRacersMatchOf,
+  realmRacersToCanonical,
+} from '../src/sim/social/realm_racers';
 import { startRealmRacersDevRace } from '../src/sim/social/realm_racers_bots';
+import { beginRealmRacersCountdown } from '../src/sim/social/realm_racers_loading';
 import { TICK_RATE } from '../src/sim/types';
 
 /** A world with one pilot and a full house grid seated on `circuit`, past the
@@ -38,8 +43,9 @@ function seat(circuit: RealmRacersCircuit, seed: number) {
   }
   const match = realmRacersMatchOf(sim.ctx, sim.primaryId);
   if (!match) throw new Error('no match after seating');
-  // Straight to the flag rather than ticking the nine-second countdown out: this
-  // lab seats a fresh world per line it times, and the countdown is pure cost.
+  // Straight to the flag rather than ticking the loading lobby and the nine-second
+  // countdown out: this lab seats a fresh world per line it times, and both are
+  // pure cost. The lobby closes through its own transition with a zero countdown.
   // Driven through the module so the phase transition is the real one (it hands
   // back the controls and starts the lap clocks), not a field poke.
   // The circuit is stripped of its pickup boxes BEFORE the first tick, and that
@@ -64,7 +70,12 @@ function seat(circuit: RealmRacersCircuit, seed: number) {
   // the number of lines that finish inside the drive window from seven to one on
   // the practice circuit while the times themselves barely moved.
   for (const progress of match.progress.values()) progress.heldWeapon = null;
-  match.goTick = sim.ctx.tickCount;
+  beginRealmRacersCountdown(
+    sim.ctx,
+    match,
+    0,
+    realmRacersCircuitOf(match).timeLimitSeconds * TICK_RATE,
+  );
   sim.tick();
   if (match.phase !== 'racing') throw new Error('the flag did not drop');
   return { sim, match };
