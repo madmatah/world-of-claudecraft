@@ -14,7 +14,8 @@
 // and the rally UI hides it on a lost connection or its client failsafe. While
 // shown it holds the window and menu keys (realm_racers_lobby_hold.ts), and it
 // is mounted FIRST in the layer so the chat frame, a later sibling, can be
-// stacked above it (the `realm racers lobby` CSS section).
+// stacked above it (the `realm racers lobby` CSS section). It also marks body
+// (RALLY_LOBBY_SHOWN_CLASS), which lifts the touch chat control over it.
 //
 // The skeleton is rebuilt in ONE innerHTML write when the structural sig
 // changes (a new match, a different grid); every name, status, count and the
@@ -27,6 +28,7 @@ import { esc } from '../../esc';
 import { formatNumber, t } from '../../i18n';
 import type { PainterHostWriters } from '../../painter_host';
 import { realmRacersCircuitName } from '../../realm_racers_circuit_i18n';
+import { RALLY_LOBBY_SHOWN_CLASS } from '../../root_state_classes';
 import { setRealmRacersLobbyHold } from './realm_racers_lobby_hold';
 import type {
   RealmRacersLobbyLive,
@@ -44,6 +46,8 @@ export interface RealmRacersLobbyDeps {
   setCover?: (active: boolean) => void;
   /** Hold or release the window and menu keys; the real hold by default. */
   setHold?: (active: boolean) => void;
+  /** The element carrying the shown state class; body by default. */
+  stateRoot?: () => HTMLElement | null;
 }
 
 interface PilotSlots {
@@ -131,6 +135,8 @@ export class RealmRacersLobby {
     if (active === this.holding) return;
     this.holding = active;
     (this.deps.setHold ?? setRealmRacersLobbyHold)(active);
+    const stateRoot = this.deps.stateRoot ? this.deps.stateRoot() : document.body;
+    if (stateRoot) this.deps.writers.toggleClass(stateRoot, RALLY_LOBBY_SHOWN_CLASS, active);
   }
 
   private ensureRoot(): HTMLElement | null {

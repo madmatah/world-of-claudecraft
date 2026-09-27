@@ -5,6 +5,7 @@
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { RALLY_LOBBY_SHOWN_CLASS } from '../src/ui/root_state_classes';
 
 const root = new URL('../', import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, root), 'utf8');
@@ -36,11 +37,49 @@ describe('Realm Racers lobby curtain stacking', () => {
     );
   });
 
-  it('lifts nothing else: the chat frame is the only sibling the curtain lets over it', () => {
-    const lifts = [
-      ...`${components}\n${mobile}`.matchAll(/#realm-racers-lobby\.shown\s*~\s*([^\s{,]+)/g),
-    ];
-    expect(lifts.map((m) => m[1])).toEqual(['#chatlog-wrap', '#chatlog-wrap']);
+  it('lifts exactly the chat frame and the touch chat control, nothing else', () => {
+    const all = `${components}\n${mobile}`;
+    const siblings = [...all.matchAll(/#realm-racers-lobby\.shown\s*~\s*([^\s{,]+)/g)].map(
+      (m) => m[1],
+    );
+    expect(siblings).toEqual(['#chatlog-wrap', '#chatlog-wrap']);
+    // The touch controls layer sits under #ui; while the curtain is shown it is
+    // raised over #ui and hidden, then only the chat route is shown again.
+    const stateSelector = `.${RALLY_LOBBY_SHOWN_CLASS}`;
+    const layer = 'body.mobile-touch.game-active.rally-lobby-shown #mobile-controls';
+    expect(layer).toContain(stateSelector);
+    expect(zIndexOf(mobile, layer)).toBeGreaterThan(
+      zIndexOf(mobile, 'body.mobile-touch.game-active #ui'),
+    );
+    const layerRule = mobile.slice(mobile.indexOf(`${layer} {`));
+    expect(layerRule.slice(0, layerRule.indexOf('}'))).toMatch(/visibility:\s*hidden/);
+    const shownAgain = [
+      ...all.matchAll(/body\.mobile-touch\.rally-lobby-shown (#[\w-]+)[,\s{]/g),
+    ].map((m) => m[1]);
+    expect(new Set(shownAgain)).toEqual(new Set(['#mobile-menu-anchor', '#mobile-menu-chat']));
+    const shownRule = mobile.slice(
+      mobile.indexOf('body.mobile-touch.rally-lobby-shown #mobile-menu-anchor'),
+    );
+    expect(shownRule.slice(0, shownRule.indexOf('}'))).toMatch(/visibility:\s*visible/);
+    // Every rule keyed on the state class is one of the two above.
+    const keyed = [...all.matchAll(/([^{}]*\.rally-lobby-shown[^{]*)\{/g)].length;
+    expect(keyed).toBe(2);
+  });
+
+  it('keeps the chat route inside the touch controls layer the rule raises', () => {
+    // The layer is a body-level sibling of #ui in both entries (a section in one,
+    // a div in the other); both controls come after it opens and before #ui's
+    // next sibling after it, the window backdrop.
+    for (const entry of ['index.html', 'play.html']) {
+      const html = read(entry);
+      const layerAt = html.search(/<(section|div) id="mobile-controls"/);
+      const layerEnd = html.indexOf('id="mobile-window-backdrop"', layerAt);
+      expect(layerAt, entry).toBeGreaterThan(html.indexOf('<div id="ui"'));
+      for (const id of ['mobile-menu-anchor', 'mobile-menu-chat']) {
+        const at = html.indexOf(`id="${id}"`);
+        expect(at > layerAt && at < layerEnd, `${entry} ${id}`).toBe(true);
+      }
+    }
   });
 
   it('keeps the chat frame inside #ui, beside the curtain the sibling rule starts from', () => {

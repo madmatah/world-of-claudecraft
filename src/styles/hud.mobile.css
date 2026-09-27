@@ -2982,6 +2982,20 @@
   body.mobile-touch #realm-racers-lobby.shown ~ #chatlog-wrap {
     z-index: 151;
   }
+  /* The touch chat control is the Quick Actions anchor and its Chat item, in
+     #mobile-controls, a body-level layer under #ui (60 against 80) and so under
+     the curtain. While the curtain is shown the whole layer is raised over #ui
+     and hidden, and only those two controls are shown again: a hidden control
+     takes no tap, and a swipe onto a hidden item picks nothing
+     (menu_control_controller.ts asks the lobby key hold). */
+  body.mobile-touch.game-active.rally-lobby-shown #mobile-controls {
+    z-index: 96;
+    visibility: hidden;
+  }
+  body.mobile-touch.rally-lobby-shown #mobile-menu-anchor,
+  body.mobile-touch.rally-lobby-shown #mobile-menu-chat {
+    visibility: visible;
+  }
   /* New model: tapping the Chat icon opens a centered READ panel; the composer is a
      desktop-style bar at the TOP of that panel (main.ts moves #chat-input into
      #chatlog-wrap as its first child on mobile), sitting above the tabs + log. Tapping

@@ -17,6 +17,7 @@ import {
   type MobileMenuControl,
 } from '../src/ui/hud/menu/menu_control_controller';
 import { MENU_STRIP_ITEMS } from '../src/ui/hud/menu/menu_strip_core';
+import { setRealmRacersLobbyHold } from '../src/ui/hud/realm_racers';
 import { t } from '../src/ui/i18n';
 import { bindTouchTap } from '../src/ui/touch_tap';
 
@@ -235,5 +236,23 @@ describe('buildMobileMenuControl: a pick runs the seated action exactly once', (
     rig.anchor.dispatchEvent(touchPointer('pointerup', 1, 130));
     expect(rig.runs).toBe(1);
     expect(rig.control.gesture.isOpen()).toBe(false);
+  });
+
+  it('picks nothing but Chat under the race lobby curtain, whose other items are hidden', () => {
+    // A swipe picks by geometry, so a release over an item the curtain hides
+    // must not open it; Chat, the one item left visible, keeps its id.
+    setRealmRacersLobbyHold(true);
+    try {
+      const rig = pickRig(0, 'after');
+      rig.anchor.dispatchEvent(touchPointer('pointerdown', 1, 100));
+      rig.anchor.dispatchEvent(touchPointer('pointermove', 1, 130));
+      rig.anchor.dispatchEvent(touchPointer('pointerup', 1, 130));
+      expect(rig.runs).toBe(0);
+      expect(MENU_STRIP_ITEMS.find((item) => item.elementId === 'mobile-menu-chat')?.id).toBe(
+        'chat',
+      );
+    } finally {
+      setRealmRacersLobbyHold(false);
+    }
   });
 });

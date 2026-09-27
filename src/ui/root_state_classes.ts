@@ -27,3 +27,6 @@ export const DESKTOP_LOGIN_EXIT_SHOWN_CLASS = 'desktop-login-exit-shown';
 /** On body while the composer is focused (the touch reply layout); predates the
  *  set above and lives here beside its focus-mirrored sibling. */
 export const MOBILE_CHAT_REPLY_CLASS = 'mobile-chat-reply';
+/** On body while the Realm Racers lobby curtain is shown: the touch chat
+ *  control is lifted over it (hud.mobile.css). */
+export const RALLY_LOBBY_SHOWN_CLASS = 'rally-lobby-shown';
