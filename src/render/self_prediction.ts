@@ -1,7 +1,13 @@
 import type { InputTickFrame } from '../game/input_tick_sampler';
 import { type MovementWireClient, MovementWireGlue } from '../game/movement_wire_glue';
 import type { DelveMotionState } from '../sim/delves/geometry';
-import { DT, type Entity, type FerryDeckMirror, type MoveInput } from '../sim/types';
+import {
+  DT,
+  type Entity,
+  type FerryDeckMirror,
+  type MoveInput,
+  type VehicleDrive,
+} from '../sim/types';
 import { type ClientDelveMotionState, createClientPlayerMotionDeps } from './client_player_motion';
 import { createDeckAwareStep } from './deck_prediction';
 import {
@@ -25,6 +31,8 @@ export interface SelfPredictionWire extends MovementWireClient {
   reconMoveSpeedMult: number;
   /** The acknowledged pose in a sailing ship's frame, when aboard one. */
   reconDeck?: FerryDeckMirror | null;
+  /** The acknowledged drive state while seated behind a wheel. */
+  reconDrive?: VehicleDrive | null;
   /** The ferry timetable at the newest snapshot (IWorld.ferryView): its
    *  schedule clock times the deck-aware prediction. */
   ferryView?(): { clock: number } | null;
@@ -40,6 +48,11 @@ function hasAuthoritativePose(wire: SelfPredictionWire): boolean {
     wire.reconAuthoritativeZ !== null &&
     wire.reconAuthoritativeFacing !== null
   );
+}
+
+/** A seated driver the wire hands no drive state to replay from. */
+function seatedWithoutDriveRecon(self: Entity, wire: SelfPredictionWire): boolean {
+  return self.drive != null && !wire.reconDrive;
 }
 
 function motionState(self: Entity, wire: SelfPredictionWire): MotionState {
@@ -96,6 +109,7 @@ export class MovementPredictionPipeline {
   private lastEpoch: number | null = null;
   private lastAckClientTick = -1;
   private lastPredictedClientTick = -1;
+  private reseedAfterDriverStandDown = false;
   private pendingResidual: ReconciledSelfPrediction['residual'] = null;
   // The schedule clock of the snapshot that carried the newest acknowledged
   // client tick: the deck-aware step estimates the server tick (and so the
@@ -164,9 +178,11 @@ export class MovementPredictionPipeline {
     if (!this.canPredict()) {
       this.resetPrediction();
       if (!hasAuthoritativePose(wire)) this.lastEpoch = null;
+      else if (seatedWithoutDriveRecon(self, wire)) this.reseedAfterDriverStandDown = true;
       this.lastAckClientTick = wire.reconAckClientTick;
       return null;
     }
+    if (this.reseedAfterDriverStandDown) this.adoptWireStateAfterDriverStandDown();
     if (this.lastEpoch === null) this.lastEpoch = wire.reconOverrideEpoch;
     if (wire.reconOverrideEpoch !== this.lastEpoch) {
       wire.netPipeline().noteReconcileOutcome('suspend');
@@ -233,6 +249,7 @@ export class MovementPredictionPipeline {
 
   private predictFrame(frame: InputTickFrame): void {
     if (!this.canPredict() || !this.wire || !this.self) return;
+    if (this.reseedAfterDriverStandDown) this.adoptWireStateAfterDriverStandDown();
     if (frame.ct <= this.lastPredictedClientTick) this.resetPrediction();
     if (!this.predicted) this.predicted = motionState(this.self, this.wire);
     refreshMirroredMotionState(this.predicted, this.self);
@@ -245,8 +262,22 @@ export class MovementPredictionPipeline {
       this.enabled &&
       this.wire?.movementWireVersion === 2 &&
       !this.wire.reconOverrideActive &&
-      hasAuthoritativePose(this.wire)
+      hasAuthoritativePose(this.wire) &&
+      // Stands every driver down until the drive recon ships on the wire.
+      !(this.self && seatedWithoutDriveRecon(this.self, this.wire))
     );
+  }
+
+  /** Under a kart the epoch moves nearly every tick, so a stale one would
+   *  suspend the first prediction after the unseat. The stand-down held no
+   *  prediction, so the one that resumes is seeded from the current wire
+   *  state: the snapshot that unseats the pilot (its teleport home included)
+   *  is its baseline, not a reason to suspend it. */
+  private adoptWireStateAfterDriverStandDown(): void {
+    this.reseedAfterDriverStandDown = false;
+    if (!this.wire) return;
+    this.lastEpoch = this.wire.reconOverrideEpoch;
+    this.lastAckClientTick = this.wire.reconAckClientTick;
   }
 
   private suspendAtCurrentWireState(): void {
@@ -265,6 +296,7 @@ export class MovementPredictionPipeline {
 
   reset(): void {
     this.resetPrediction();
+    this.reseedAfterDriverStandDown = false;
     this.lastEpoch = null;
     this.lastAckClientTick = -1;
     this.ackClock = null;

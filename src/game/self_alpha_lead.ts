@@ -11,7 +11,7 @@
 // backs off rather than oscillating against the smoother.
 
 export const SELF_LEAD_DEFAULT = 0.65; // pre-first-echo fallback (the old constant)
-const SELF_LEAD_MIN = 0.25;
+export const SELF_LEAD_MIN = 0.25;
 // Above ~0.9 the renderer's min(1.25, alpha + lead) cap eats the rest of the
 // lead for most of the frame window, so more only adds stop overshoot.
 const SELF_LEAD_MAX = 0.9;

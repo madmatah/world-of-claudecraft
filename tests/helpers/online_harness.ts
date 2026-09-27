@@ -36,6 +36,15 @@
 // mode composes the real keyboard turn, mouselook release, movement visual,
 // renderer self-yaw, and camera-facing producers in main.ts order.
 //
+// A seated driver (the mirror carries `drive`) takes main.ts's driving arm in
+// both modes: no heading claims the facing channel (the server refuses one
+// from a driver), the turn keys ride the wire untouched as steering, and the
+// chase camera follows the previous frame's predicted driving heading.
+//
+// The authoritative discontinuity is read off the client exactly where main.ts
+// reads it (`consumeSelfPositionDiscontinuity`, which covers a completed
+// unstuck AND a Realm Racers recovery), after the event drain.
+//
 // A suite using this helper must mock Postgres itself, hoisted above its own
 // import of this module (it pulls in server/game); copy the superset factory at
 // the top of tests/unstuck_online.test.ts.
@@ -43,6 +52,7 @@
 import type { ClientSession, GameServer } from '../../server/game';
 import { consumeMovementFramesV2 } from '../../server/movement_input_timeline_v2';
 import { updateMovementOverrideEpochs } from '../../server/movement_override_epoch';
+import { cameraFollowFacing } from '../../src/game/camera_follow';
 import {
   type KeyboardTurnArgs,
   newKeyboardTurnState,
@@ -65,7 +75,6 @@ import { ClientWorld } from '../../src/net/online';
 import { snapshotAlpha } from '../../src/net/snapshot_alpha';
 import { deckFrameFor, updateSelfRenderOnDeck } from '../../src/render/deck_frame';
 import { advanceSelfFacing, releaseSelfFacing } from '../../src/render/facing_smooth';
-import { hasAuthoritativeSelfPositionDiscontinuity } from '../../src/render/self_motion';
 import { MovementPredictionPipeline } from '../../src/render/self_prediction';
 import {
   createSelfRenderPositionState,
@@ -74,7 +83,13 @@ import {
 import { delveMotionState } from '../../src/sim/delves/geometry';
 import { parseMoveInputFrame } from '../../src/sim/move_input';
 import { worldToDeck } from '../../src/sim/transport_deck';
-import { type Entity, emptyMoveInput, type MoveInput, type PlayerClass } from '../../src/sim/types';
+import {
+  type Entity,
+  emptyMoveInput,
+  type MoveInput,
+  type PlayerClass,
+  type SimEvent,
+} from '../../src/sim/types';
 import { WATER_LEVEL } from '../../src/sim/world';
 import { ONLINE_WORLD_AUTH_TYPE } from '../../src/world_api';
 import type { LatencyLinkConfig } from './latency_link';
@@ -137,6 +152,12 @@ export interface FrameRecord {
   mirrorX: number;
   mirrorY: number;
   mirrorZ: number;
+  /** The mirror's previous authoritative pose (the interpolation's start). */
+  mirrorPrevX: number;
+  mirrorPrevY: number;
+  mirrorPrevZ: number;
+  /** True while the mirrored self is seated behind a wheel. */
+  driving: boolean;
   alpha: number;
   lastSnapAt: number;
   echoMs: number;
@@ -155,8 +176,17 @@ export interface FrameRecord {
   authoritativeFacing: number;
   drawnYaw: number;
   cameraFacing: number;
+  /** The keyboard-turn heading this frame (key-timeline mode), else null. */
+  keyboardFacing: number | null;
+  /** The previous frame's predicted driving heading, as main.ts reads it off
+   *  the renderer for the chase camera; null on foot or while inactive. */
+  predictedDrivingFacing: number | null;
   reconcileMode: ReconcileMode | null;
   residualYd: number;
+  /** The client's cumulative reconcile suspend count after this frame
+   *  (`reconcileMode` never records a suspend: a suspended frame draws the
+   *  fallback). */
+  reconcileSuspends: number;
   /** The drawn pose in the frame of the ship as drawn this frame, while the
    *  player rides one (render/deck_frame.ts), else null. */
   deckDrawn: { x: number; y: number; z: number } | null;
@@ -207,6 +237,20 @@ export interface OnlineHarnessOptions {
   keyTimeline?: boolean;
 }
 
+/** Runs after each server sim tick, before the override epochs are updated
+ *  and the snapshots broadcast, so a mutation it makes reaches the wire as if
+ *  the tick itself had made it. */
+export type ServerTickHook = (events: SimEvent[]) => void;
+
+/** The client's reconcile outcome counters (net_pipeline_stats.ts). */
+export interface ReconcileOutcomeCounts {
+  match: number;
+  replayed: number;
+  ignored: number;
+  stale: number;
+  suspends: number;
+}
+
 export interface OnlineHarness {
   clock: VirtualClock;
   link: LatencyLink;
@@ -217,6 +261,10 @@ export interface OnlineHarness {
   /** The authoritative entity, for adversarial scenarios (auras, teleports). */
   serverEntity: Entity;
   runScript(options: RunScriptOptions): HarnessRun;
+  /** Register a hook run after every server sim tick; returns its remover. */
+  onServerTick(hook: ServerTickHook): () => void;
+  /** The client's reconcile outcomes so far, suspends included. */
+  reconcileOutcomes(): ReconcileOutcomeCounts;
   dispose(): void;
 }
 
@@ -440,6 +488,13 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
   let cameraYaw = startFacing;
   let selfFacingOverride: number | null = null;
   let selfFacingLastTarget: number | null = null;
+  const serverTickHooks: ServerTickHook[] = [];
+
+  function reconcileOutcomes(): ReconcileOutcomeCounts {
+    const counts = client.netPipeline().summary().reconcile;
+    if (!counts) throw new Error('the client net pipeline reports no reconcile outcomes');
+    return counts;
+  }
 
   function stepServer(): void {
     // biome-ignore lint/suspicious/noExplicitAny: the server-loop internals a manual step drives
@@ -447,6 +502,7 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
     internals.clearStaleInputs();
     consumeMovementFramesV2(server.sim, [session]);
     const events = server.sim.tick();
+    for (const hook of [...serverTickHooks]) hook(events);
     updateMovementOverrideEpochs(server.sim, [session]);
     internals.routeEvents(events);
     internals.broadcastSnapshots();
@@ -482,11 +538,13 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
 
     // 2) the scripted intent for this frame, in place of the DOM input stack.
     const mi: MoveInput = { ...heldInput };
-    let netFacing = heldFacing;
+    const driving = pe.drive != null;
+    let netFacing = driving ? null : heldFacing;
     let onlineRenderFacing = netFacing;
     let cameraFacing = netFacing ?? interpServerFacing;
     let turnEngageEdge = false;
     let turnInputActive = false;
+    let keyboardFacing: number | null = null;
     const wireMi: MoveInput = { ...mi };
     if (opts.keyTimeline) {
       const cameraDrivenFacing = heldFacing !== null;
@@ -502,12 +560,16 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         pendingReleaseFacing = edgeReleaseFacing;
         seedKeyboardTurnRelease(kbTurn, edgeReleaseFacing);
       }
-      const foreignFacing = heldFacing ?? pendingReleaseFacing;
+      const foreignFacing = driving ? null : (heldFacing ?? pendingReleaseFacing);
+      kbTurnArgs.rawTurnIntent = driving;
       kbTurnArgs.turnLeft = mi.turnLeft;
       kbTurnArgs.turnRight = mi.turnRight;
       kbTurnArgs.turnAllowed =
-        client.spectating === null && !isMovementFrozen(pe) && !isPlayerImmobilized(pe.auras);
-      kbTurnArgs.sentFacing = heldFacing;
+        client.spectating === null &&
+        !isMovementFrozen(pe) &&
+        !isPlayerImmobilized(pe.auras) &&
+        !driving;
+      kbTurnArgs.sentFacing = driving ? null : heldFacing;
       kbTurnArgs.serverFacing = interpServerFacing;
       kbTurnArgs.releaseCommitAcknowledged = client.inputFacingAcknowledged(
         kbTurn.pendingReleaseCommit,
@@ -517,10 +579,12 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
       kbTurnArgs.movementWireVersion = client.movementWireVersion;
       kbTurnArgs.frameDt = frameDt;
       const kbFacing = stepKeyboardTurnFacing(kbTurn, kbTurnArgs);
+      keyboardFacing = kbFacing;
       netFacing = foreignFacing ?? kbTurn.wireFacing;
       const localFacing = netFacing ?? kbFacing;
-      onlineRenderFacing =
-        diagonalMovementVisualFacing(mi, localFacing ?? interpServerFacing) ?? localFacing;
+      onlineRenderFacing = driving
+        ? null
+        : (diagonalMovementVisualFacing(mi, localFacing ?? interpServerFacing) ?? localFacing);
       cameraFacing = heldFacing ?? kbFacing ?? interpServerFacing;
       turnEngageEdge =
         kbFacing !== null && (mi.turnLeft || mi.turnRight) && !kbTurn.suppressTurnFlags;
@@ -528,6 +592,18 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
         wireMi.turnLeft = false;
         wireMi.turnRight = false;
       }
+    }
+
+    // main.ts reads the renderer's PREVIOUS frame for the driving heading.
+    const predictedDrivingFacing =
+      selfRender.active && selfRender.predictor?.driving ? selfRender.predictor.facing : null;
+    if (driving) {
+      cameraFacing = cameraFollowFacing(
+        true,
+        predictedDrivingFacing,
+        keyboardFacing,
+        interpServerFacing,
+      );
     }
 
     // 3) the prediction gate, then the wire write exactly as main.ts does it.
@@ -562,11 +638,11 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
       commands[i].samplerInterpolationAlpha = samplerInterpolationAlpha;
     }
 
-    // 4) fold the echo samples, then drain the events the discontinuity flag
-    // is read from.
+    // 4) fold the echo samples, drain the events, then read the discontinuity
+    // edge the client holds until its authoritative snapshot has landed.
     inputEcho.fold(client.consumeInputEchoSamples());
-    const drainedEvents = client.drainEvents();
-    const discontinuity = hasAuthoritativeSelfPositionDiscontinuity(drainedEvents, client.playerId);
+    client.drainEvents();
+    const discontinuity = client.consumeSelfPositionDiscontinuity();
 
     // 5) the display frame selected by the negotiated movement wire.
     const cameraLastSnapAge = client.lastSnapAt > 0 ? now - client.lastSnapAt : -1;
@@ -648,6 +724,10 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
       mirrorX: pe.pos.x,
       mirrorY: pe.pos.y,
       mirrorZ: pe.pos.z,
+      mirrorPrevX: pe.prevPos.x,
+      mirrorPrevY: pe.prevPos.y,
+      mirrorPrevZ: pe.prevPos.z,
+      driving,
       alpha,
       lastSnapAt: client.lastSnapAt,
       echoMs: inputEcho.echoMs,
@@ -663,8 +743,11 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
       authoritativeFacing: serverEntity.facing,
       drawnYaw,
       cameraFacing,
+      keyboardFacing,
+      predictedDrivingFacing,
       reconcileMode: reconciled ? 'replayed' : null,
       residualYd,
+      reconcileSuspends: reconcileOutcomes().suspends,
       deckDrawn,
     });
   }
@@ -761,6 +844,14 @@ export function createOnlineHarness(opts: OnlineHarnessOptions): OnlineHarness {
             .movementFrameOutbox?.droppedOldest ?? 0) - outboxBefore,
       };
     },
+    onServerTick(hook: ServerTickHook): () => void {
+      serverTickHooks.push(hook);
+      return () => {
+        const index = serverTickHooks.indexOf(hook);
+        if (index >= 0) serverTickHooks.splice(index, 1);
+      };
+    },
+    reconcileOutcomes,
     dispose: teardown,
   };
 }

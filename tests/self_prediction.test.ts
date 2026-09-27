@@ -6,7 +6,8 @@ import { SELF_PREDICTION_RING_CAPACITY } from '../src/render/self_prediction_cor
 import { DELVE_X_MIN } from '../src/sim/data';
 import { DELVE_DOOR_AISLE_HALF_DEPTH, type DelveDoorClampSolid } from '../src/sim/delves/geometry';
 import { createPlayer } from '../src/sim/entity';
-import { emptyMoveInput, type MoveInput } from '../src/sim/types';
+import { emptyMoveInput, type MoveInput, type VehicleDrive } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { groundHeight } from '../src/sim/world';
 import type { DelveRunInfo } from '../src/world_api/delves';
 
@@ -30,6 +31,7 @@ class FakeSelfPredictionWire implements SelfPredictionWire {
   reconOverrideEpoch = 0;
   reconOverrideActive = false;
   reconMoveSpeedMult = 1;
+  reconDrive?: VehicleDrive | null;
   open = true;
   readonly sends: SendRecord[] = [];
   readonly reconcileOutcomes: Array<'match' | 'replayed' | 'ignore' | 'stale' | 'suspend'> = [];
@@ -261,6 +263,130 @@ describe('MovementPredictionPipeline', () => {
     // otherwise cover far more than doorZ if the clamp never ran).
     expect(predictedZ).toBeLessThan(blockedFace + 0.5);
     expect(predictedZ).toBeGreaterThan(0); // and not vacuously stuck at the start either
+  });
+});
+
+describe('MovementPredictionPipeline for a seated driver', () => {
+  function driverFixture() {
+    const wire = new FakeSelfPredictionWire();
+    const self = createPlayer(1, 'warrior', { x: 0, y: 0, z: 0 }, 'Tester');
+    self.drive = createVehicleDrive('rally_loaner');
+    const pipeline = new MovementPredictionPipeline(SEED);
+    pipeline.connect(wire, 0);
+    pipeline.prepare(wire, self, true);
+    return { pipeline, wire, self };
+  }
+
+  function ringHead(pipeline: MovementPredictionPipeline): unknown {
+    return (pipeline as unknown as { ring: { head: unknown } }).ring.head;
+  }
+
+  it('stands down while the wire carries no drive recon', () => {
+    const { pipeline, wire } = driverFixture();
+    drivePredictionFrame(pipeline, 10, { ...emptyMoveInput(), forward: true });
+    expect(ringHead(pipeline)).toBeNull();
+    expect(pipeline.display()).toBeNull();
+
+    // The epoch thrashes under a kart and the acknowledgements keep coming:
+    // nothing is predicted, so nothing is suspended or reconciled.
+    for (let epoch = 1; epoch <= 4; epoch++) {
+      wire.reconOverrideEpoch = epoch;
+      wire.reconAckClientTick = 10 + epoch;
+      drivePredictionFrame(pipeline, 10 + epoch, { ...emptyMoveInput(), forward: true });
+      expect(ringHead(pipeline)).toBeNull();
+      expect(pipeline.display()).toBeNull();
+    }
+    expect(wire.reconcileOutcomes).toEqual([]);
+  });
+
+  it('resumes from the recon pose after the unseat with zero suspends', () => {
+    const { pipeline, wire, self } = driverFixture();
+    wire.reconOverrideEpoch = 3;
+    drivePredictionFrame(pipeline, 10);
+    expect(pipeline.display()).toBeNull();
+
+    // The snapshot that unseats the pilot also carries the teleport home: a
+    // new pose, a bumped epoch and a new acknowledgement, all at once.
+    self.drive = null;
+    const home = setAuthoritativePose(wire, 40, 44, 0.5);
+    wire.reconOverrideEpoch = 4;
+    wire.reconAckClientTick = 10;
+    drivePredictionFrame(pipeline, 11);
+    expect(pipeline.display()?.position).toEqual(home);
+    expect(wire.reconcileOutcomes).toEqual([]);
+
+    // ...and the resumed prediction reconciles normally from there on.
+    wire.reconAckClientTick = 11;
+    expect(pipeline.display()?.position).toEqual(home);
+    expect(wire.reconcileOutcomes).toEqual(['match']);
+  });
+
+  it('resumes without a suspend when the unseat lands between sampled frames', () => {
+    const { pipeline, wire, self } = driverFixture();
+    wire.reconOverrideEpoch = 3;
+    expect(pipeline.display()).toBeNull();
+
+    self.drive = null;
+    const home = setAuthoritativePose(wire, 40, 44, 0.5);
+    wire.reconOverrideEpoch = 4;
+    wire.reconAckClientTick = 10;
+    expect(pipeline.display()).toBeNull();
+    drivePredictionFrame(pipeline, 11);
+    expect(pipeline.display()?.position).toEqual(home);
+    expect(wire.reconcileOutcomes).toEqual([]);
+  });
+
+  it('adopts the unseat state in the predicted frame, then suspends on a later bump', () => {
+    const { pipeline, wire, self } = driverFixture();
+    wire.reconOverrideEpoch = 3;
+    expect(pipeline.display()).toBeNull();
+
+    self.drive = null;
+    setAuthoritativePose(wire, 40, 44, 0.5);
+    wire.reconOverrideEpoch = 4;
+    wire.reconAckClientTick = 10;
+    drivePredictionFrame(pipeline, 11);
+    // A bump after the resumed prediction started is a real one.
+    wire.reconOverrideEpoch = 5;
+    expect(pipeline.display()).toBeNull();
+    expect(wire.reconcileOutcomes).toEqual(['suspend']);
+  });
+
+  it('forgets a pending driver stand-down on reset', () => {
+    const { pipeline, wire, self } = driverFixture();
+    expect(pipeline.display()).toBeNull();
+    self.drive = null;
+    pipeline.reset();
+    wire.reconAckClientTick = 10;
+    drivePredictionFrame(pipeline, 20);
+    pipeline.display();
+    // What the pipeline recorded before driver stand-downs existed: a reset
+    // pipeline reconciles the first acknowledgement it sees, and one older
+    // than its fresh ring is ignored.
+    expect(wire.reconcileOutcomes).toEqual(['ignore']);
+  });
+
+  it('re-seeds once the drive recon arrives while still seated', () => {
+    const { pipeline, wire, self } = driverFixture();
+    self.drive = null;
+    drivePredictionFrame(pipeline, 5);
+    expect(pipeline.display()).not.toBeNull();
+    self.drive = createVehicleDrive('rally_loaner');
+    wire.reconOverrideEpoch = 3;
+    expect(pipeline.display()).toBeNull();
+
+    wire.reconDrive = createVehicleDrive('rally_loaner');
+    drivePredictionFrame(pipeline, 11);
+    expect(pipeline.display()).not.toBeNull();
+    expect(wire.reconcileOutcomes).toEqual([]);
+  });
+
+  it('predicts a driver once the wire carries a drive recon', () => {
+    const { pipeline, wire } = driverFixture();
+    wire.reconDrive = createVehicleDrive('rally_loaner');
+    drivePredictionFrame(pipeline, 10);
+    expect(ringHead(pipeline)).not.toBeNull();
+    expect(pipeline.display()).not.toBeNull();
   });
 });
 
