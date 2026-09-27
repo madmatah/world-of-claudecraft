@@ -1,4 +1,5 @@
 import type { Entity } from '../src/sim/types';
+import { DRIVE_RECON_WIRE_VERSION } from '../src/world_api';
 import { driveReconWire } from './drive_recon_wire';
 import { ferryDeckReconWire } from './transport_head';
 
@@ -8,6 +9,7 @@ export interface MovementReconciliationSessionWireState {
   movementOverrideEpoch: number;
   movementOverrideActive: boolean;
   movementMoveSpeedMult: number;
+  driveReconWireVersion?: number;
 }
 
 export { updateMovementOverrideEpochs as updateOverrideEpochs } from './movement_override_epoch';
@@ -32,8 +34,11 @@ export function reconciliationSelfWire(
     // aboard a sailing ship: the same pose in the hull's frame, full precision
     // (the deck-aware prediction replays in it: src/render/deck_prediction.ts)
     ...(entity.ferryRide ? { rdk: ferryDeckReconWire(entity) } : {}),
-    // The client rebuilds its own drive mirror from `rdv`, so the rounded `drv`
-    // wireEntity put on this self record is dropped (undefined never serializes).
-    ...(entity.drive ? { drv: undefined, rdv: driveReconWire(entity) } : {}),
+    // A client that advertises the drive recon rebuilds its own drive mirror
+    // from `rdv`, so the rounded `drv` wireEntity put on this self record is
+    // dropped (undefined never serializes). Any other client keeps `drv` alone.
+    ...(entity.drive && session.driveReconWireVersion === DRIVE_RECON_WIRE_VERSION
+      ? { drv: undefined, rdv: driveReconWire(entity) }
+      : {}),
   };
 }

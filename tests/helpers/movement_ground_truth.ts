@@ -25,6 +25,7 @@ import { Sim } from '../../src/sim/sim';
 import { type Entity, emptyMoveInput, type MoveInput, type PlayerClass } from '../../src/sim/types';
 import { terrainHeight } from '../../src/sim/world';
 import { WORLD_SEED } from '../../src/sim/world_seed';
+import { DRIVE_RECON_WIRE_VERSION } from '../../src/world_api';
 
 /** One scripted change of held input, applied BEFORE the tick of that index. */
 export interface MoveScriptEntry {
@@ -111,7 +112,11 @@ export function joinCharacterOn(
     playerClass,
     null,
     false,
-    { movementWireVersion },
+    // The browser client advertises the drive recon beside movement wire v2.
+    {
+      movementWireVersion,
+      driveReconWireVersion: movementWireVersion === 2 ? DRIVE_RECON_WIRE_VERSION : 0,
+    },
   );
   if ('error' in session) throw new Error(session.error);
   session.blockListLoaded = true;

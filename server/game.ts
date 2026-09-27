@@ -3234,6 +3234,7 @@ export class GameServer {
     state: import('../src/sim/sim').CharacterState | null,
     isGm = false,
     meta: RequestMetadata &
+      import('./movement_input_timeline_v2').MovementWireJoinMeta &
       Partial<AccountChatMuteStatus> & {
         accountCosmetics?: AccountCosmetics;
         // The account ledger loaded for this account (server/account_ledger_db.ts);
@@ -3250,7 +3251,6 @@ export class GameServer {
         dungeonEntryFacingWireVersion?: entryFacing.WireVersion;
         timerWireVersion?: 1 | StableTimerWireVersion;
         petSpecialWireVersion?: 0 | PetSpecialWireVersion;
-        movementWireVersion?: 1 | 2;
         generalChatRateLimit?: GeneralChatRateLimit | null;
         // Server-recomputed bank bonus slots (ws_auth.ts, fresh-join arm) stamped into
         // the character state via addPlayer. Absent on a resume and for callers that
@@ -3444,7 +3444,7 @@ export class GameServer {
       lastInputSeq: 0,
       dungeonEntryFacing: entryFacing.forEntity(player, meta.dungeonEntryFacingWireVersion),
       lastInputAt: this.sim.time,
-      ...createMovementInputSessionState(meta.movementWireVersion),
+      ...createMovementInputSessionState(meta.movementWireVersion, meta.driveReconWireVersion),
       lastSent: {},
       needsVarkhulPortalReplay: false,
       timerWireVersion:
@@ -3705,7 +3705,7 @@ export class GameServer {
     }
     session.lastInputSeq = 0;
     session.lastInputAt = this.sim.time;
-    resetMovementInputSessionState(session, meta.movementWireVersion);
+    resetMovementInputSessionState(session, meta.movementWireVersion, meta.driveReconWireVersion);
     // Load-bearing for every revision/cadence gate: sent.X === undefined forces
     // a rebuild on the next snapshot, so stale market/mail/corder/vault/cvault
     // trackers need no reset. Preserving lastSent here would require resetting

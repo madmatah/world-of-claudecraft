@@ -6,6 +6,7 @@ import type { PlayerMeta, Sim } from '../src/sim/sim';
 import type { SimContext } from '../src/sim/sim_context';
 import { type Entity, emptyMoveInput, type MoveInput } from '../src/sim/types';
 import { noteBattlegroundWallPressure } from '../src/sim/unstuck';
+import { DRIVE_RECON_WIRE_VERSION, type DriveReconWireVersion } from '../src/world_api';
 import { type DungeonEntryFacingFence, decideDungeonEntryInput } from './dungeon_entry_facing';
 import {
   createMovementOverrideSessionState,
@@ -28,6 +29,8 @@ export interface MovementInputSessionState extends MovementOverrideSessionState 
   pid: number;
   lastInputAt: number;
   movementWireVersion: 1 | 2;
+  /** Negotiated only on movement wire v2 (src/world_api.ts). */
+  driveReconWireVersion: 0 | DriveReconWireVersion;
   movementTimeline: MovementInputTimeline | null;
   lastConsumedCt: number;
   // The dungeon-entry heading fence. Deliberately NOT minted by
@@ -36,12 +39,23 @@ export interface MovementInputSessionState extends MovementOverrideSessionState 
   dungeonEntryFacing: DungeonEntryFacingFence;
 }
 
+/** The movement capabilities a join carries (server/ws_auth.ts negotiates them). */
+export interface MovementWireJoinMeta {
+  movementWireVersion?: 1 | 2;
+  driveReconWireVersion?: 0 | DriveReconWireVersion;
+}
+
 export function createMovementInputSessionState(
   movementWireVersion: unknown,
+  driveReconWireVersion?: unknown,
 ): Omit<MovementInputSessionState, 'pid' | 'lastInputAt' | 'dungeonEntryFacing'> {
   const version = movementWireVersion === 2 ? 2 : 1;
   return {
     movementWireVersion: version,
+    driveReconWireVersion:
+      version === 2 && driveReconWireVersion === DRIVE_RECON_WIRE_VERSION
+        ? DRIVE_RECON_WIRE_VERSION
+        : 0,
     movementTimeline: version === 2 ? new MovementInputTimeline() : null,
     lastConsumedCt: -1,
     ...createMovementOverrideSessionState(),
@@ -51,8 +65,12 @@ export function createMovementInputSessionState(
 export function resetMovementInputSessionState(
   session: MovementInputSessionState,
   movementWireVersion: unknown,
+  driveReconWireVersion?: unknown,
 ): void {
-  Object.assign(session, createMovementInputSessionState(movementWireVersion));
+  Object.assign(
+    session,
+    createMovementInputSessionState(movementWireVersion, driveReconWireVersion),
+  );
 }
 
 // Whether the client's streamed mouselook facing may be written onto this body.

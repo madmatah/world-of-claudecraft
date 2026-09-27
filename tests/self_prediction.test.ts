@@ -366,6 +366,20 @@ describe('MovementPredictionPipeline for a seated driver', () => {
     expect(wire.reconcileOutcomes).toEqual(['ignore']);
   });
 
+  it('arms the stand-down re-seed while a malformed row holds the last good machine', () => {
+    const { pipeline, wire, self } = driverFixture();
+    pipeline.predictDrivers = true;
+    // What a malformed `rdv` leaves: the mirror still seated on the held
+    // machine, no drive recon, and the override flag standing the client down.
+    wire.reconDrive = null;
+    wire.reconOverrideActive = true;
+    expect(self.drive).not.toBeNull();
+    expect(pipeline.display()).toBeNull();
+    expect(
+      (pipeline as unknown as { reseedAfterDriverStandDown: boolean }).reseedAfterDriverStandDown,
+    ).toBe(true);
+  });
+
   it('keeps a driver standing down on a drive recon while driver prediction is off', () => {
     const { pipeline, wire } = driverFixture();
     expect(pipeline.predictDrivers).toBe(false);

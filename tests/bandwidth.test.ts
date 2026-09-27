@@ -21,6 +21,7 @@ import { isUpdateDue } from '../server/entity_update_cadence';
 import { GameServer, wireEntity } from '../server/game';
 import { otherRealmRacersParticipantIds } from '../server/realm_racers_interest';
 import { appendSnapshotEntity } from '../server/snapshot_entity_stream';
+import { VEHICLE_PROFILES } from '../src/sim/content/vehicles';
 import { createPlayer } from '../src/sim/entity';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
@@ -926,7 +927,10 @@ describe('the drive recon (rdv) byte bound', () => {
     expect(JSON.stringify(LONGEST)).toHaveLength(25);
     const e = createPlayer(1, 'warrior', { x: 0, y: 0, z: 0 }, 'Pilot');
     expect(driveReconWire(e)).toBeUndefined();
-    const drive = createVehicleDrive('rally_loaner');
+    const longestKey = Object.keys(VEHICLE_PROFILES).reduce((a, b) =>
+      b.length > a.length ? b : a,
+    );
+    const drive = createVehicleDrive(longestKey);
     for (const key of Object.keys(drive) as (keyof typeof drive)[]) {
       if (typeof drive[key] === 'number')
         (drive as unknown as Record<string, number>)[key] = LONGEST;
@@ -940,8 +944,8 @@ describe('the drive recon (rdv) byte bound', () => {
     e.vy = LONGEST;
     const rdv = driveReconWire(e);
     expect(Object.keys(rdv ?? {})).toHaveLength(15);
-    // 12 numbers at 25 characters, the scrape at 23, the keys, the profile and
-    // the two flags. At 20 Hz that caps a seated racer at 8.2 KB/s; a measured
+    // 12 numbers at 25 characters, the scrape at 23, the keys, the longest
+    // profile key and the two flags. At 20 Hz that caps a seated racer at 8.2 KB/s; a measured
     // race runs at about 2.4 KB/s (tests/realm_racers_drive_recon_online.test.ts).
     const bytes = Buffer.byteLength(`,"rdv":${JSON.stringify(rdv)}`);
     expect(bytes).toBe(410);

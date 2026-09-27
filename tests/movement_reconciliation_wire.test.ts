@@ -34,6 +34,7 @@ const V2_SESSION = {
   movementOverrideEpoch: 3,
   movementOverrideActive: false,
   movementMoveSpeedMult: 1,
+  driveReconWireVersion: 1,
 };
 
 function pilot(): Entity {
@@ -157,17 +158,59 @@ describe('the drive recon (rdv)', () => {
     expect(mirror.drive).toBeNull();
   });
 
-  it('keeps the last good machine on the mirror across a malformed row', () => {
+  it('keeps the last good machine on the mirror across consecutive malformed rows', () => {
     const e = pilot();
     (e.drive as VehicleDrive).speed = 33.5;
     const state = new ReconWireState();
     const mirror = pilot();
     applyReconSelfWire(state, overTheWire(e), 2, mirror);
+    for (let i = 0; i < 2; i++) {
+      // applyWire nulls the mirror first: the self record carries no `drv`.
+      mirror.drive = null;
+      applyReconSelfWire(state, { ...overTheWire(e), rdv: { k: 'rally_loaner' } }, 2, mirror);
+      expect(mirror.drive).toEqual(e.drive);
+      expect(mirror.drive).not.toBe(state.reconDriveShown);
+      expect(state.reconDrive).toBeNull();
+      expect(state.reconOverrideActive).toBe(true);
+    }
+  });
+
+  it('has no machine to hold on a malformed first row, and still stands down', () => {
+    const state = new ReconWireState();
+    const mirror = pilot();
     mirror.drive = null;
-    applyReconSelfWire(state, { ...overTheWire(e), rdv: { k: 'rally_loaner' } }, 2, mirror);
-    expect(mirror.drive).toEqual(e.drive);
+    applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: { k: 'rally_loaner' } }, 2, mirror);
+    expect(mirror.drive).toBeNull();
     expect(state.reconDrive).toBeNull();
     expect(state.reconOverrideActive).toBe(true);
+  });
+
+  it('forgets the held machine at the unseat and on reset', () => {
+    const e = pilot();
+    const state = new ReconWireState();
+    applyReconSelfWire(state, overTheWire(e), 2);
+    expect(state.reconDriveShown).not.toBeNull();
+    e.drive = null;
+    applyReconSelfWire(state, overTheWire(e), 2);
+    expect(state.reconDriveShown).toBeNull();
+    const mirror = pilot();
+    mirror.drive = null;
+    applyReconSelfWire(state, { ...overTheWire(pilot()), rdv: 3 }, 2, mirror);
+    expect(mirror.drive).toBeNull();
+
+    applyReconSelfWire(state, overTheWire(pilot()), 2);
+    state.resetReconWireState();
+    expect(state.reconDriveShown).toBeNull();
+  });
+
+  it('keeps the rounded drv, and sends no rdv, to a v2 client without the capability', () => {
+    const e = pilot();
+    for (const driveReconWireVersion of [0, undefined, 2]) {
+      const wire = reconciliationSelfWire({ ...V2_SESSION, driveReconWireVersion }, e);
+      expect(Object.hasOwn(wire, 'drv')).toBe(false);
+      expect(wire).not.toHaveProperty('rdv');
+      expect(wire).toHaveProperty('rpx');
+    }
   });
 
   it('replaces a previous drive recon with null on a record without one', () => {

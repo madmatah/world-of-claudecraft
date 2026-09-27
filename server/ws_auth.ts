@@ -18,6 +18,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import { type AccountLedger, freshAccountLedger } from '../src/sim/account_ledger';
 import {
   type BankBonusSource,
+  DRIVE_RECON_WIRE_VERSION,
   DUNGEON_ENTRY_FACING_WIRE_VERSION,
   ONLINE_WORLD_AUTH_TYPE,
   ONLINE_WORLD_INCOMPATIBLE_MESSAGE,
@@ -291,6 +292,8 @@ export function createWsAuth(deps: WsAuthDeps): WsAuthHandlers {
     const petSpecialWireVersion: 0 | typeof PET_SPECIAL_WIRE_VERSION =
       msg.petSpecialWire === PET_SPECIAL_WIRE_VERSION ? PET_SPECIAL_WIRE_VERSION : 0;
     const movementWireVersion = negotiateMovementWireVersion(msg.movementWire);
+    const driveReconWireVersion: 0 | typeof DRIVE_RECON_WIRE_VERSION =
+      msg.driveReconWire === DRIVE_RECON_WIRE_VERSION ? DRIVE_RECON_WIRE_VERSION : 0;
     const dungeonEntryFacingWireVersion: 0 | typeof DUNGEON_ENTRY_FACING_WIRE_VERSION =
       msg.dungeonEntryFacingWire === DUNGEON_ENTRY_FACING_WIRE_VERSION
         ? DUNGEON_ENTRY_FACING_WIRE_VERSION
@@ -378,6 +381,7 @@ export function createWsAuth(deps: WsAuthDeps): WsAuthHandlers {
         timerWireVersion,
         petSpecialWireVersion,
         movementWireVersion,
+        driveReconWireVersion,
         // The character's stored action-bar layout, sent once to the owning client
         // so it restores at login on any device (game.join re-validates it).
         hotbarLayout: character.hotbar_layout ?? null,

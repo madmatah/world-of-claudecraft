@@ -22,6 +22,9 @@ export class ReconWireState extends QuestWorldWireState {
   reconDrive: VehicleDrive | null = null;
   reconVy = 0;
   reconOnGround = true;
+  /** The last well-formed `rdv` drive, for PRESENTATION only: the mirror keeps
+   *  drawing the machine across a malformed row. Never a replay input. */
+  reconDriveShown: VehicleDrive | null = null;
 
   resetReconWireState(): void {
     this.reconAuthoritativeX = null;
@@ -37,6 +40,7 @@ export class ReconWireState extends QuestWorldWireState {
     this.reconDrive = null;
     this.reconVy = 0;
     this.reconOnGround = true;
+    this.reconDriveShown = null;
   }
 }
 
@@ -64,12 +68,14 @@ export function applyReconSelfWire(
   entity?: Entity,
 ): void {
   const drive = movementWireVersion === 2 ? parseDriveRecon(self.rdv) : null;
-  // A v2 self record carries no rounded `drv` beside `rdv`: the mirror is this.
-  // A malformed row keeps the machine the last good one drew, for presentation.
-  if (entity && drive) entity.drive = { ...drive.drive };
-  else if (entity && self.rdv !== undefined && target.reconDrive) {
-    entity.drive = { ...target.reconDrive };
+  if (movementWireVersion === 2) {
+    if (drive) target.reconDriveShown = { ...drive.drive };
+    else if (self.rdv === undefined) target.reconDriveShown = null;
   }
+  // A self record with `rdv` carries no rounded `drv` beside it: the mirror is
+  // this, or the last good row's machine while a malformed one stands down.
+  const shown = drive ? drive.drive : self.rdv !== undefined ? target.reconDriveShown : null;
+  if (entity && shown) entity.drive = { ...shown };
   if (
     movementWireVersion !== 2 ||
     !finiteNumber(self.rpx) ||

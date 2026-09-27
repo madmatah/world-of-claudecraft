@@ -1,7 +1,8 @@
 // `rdv`: a seated pilot's drive state at the acknowledged tick, full precision,
-// for the v2 self block only (src/net/drive_recon_wire.ts decodes it). It is
-// every state the vehicle kernel reads for a driver beyond the recon pose and
-// the auras. Sparse fields fall back to 0 (st, sn, hb) or 1 (g, dg, c, sc);
+// for the v2 self block of a client that advertises it (src/net/drive_recon_wire.ts
+// decodes it). With the recon pose and the auras it is every state that shapes
+// the pose; `fallStartY` and `jumping` are not carried, as they only feed fall
+// damage and the coyote jump. Sparse fields fall back to 0 (st, sn, hb) or 1 (g, dg, c, sc);
 // `vy` and `air` ride only while airborne. `ci` (the scrape reading) follows
 // the `drv` rule, above 0.01 only: the kernel never reads it, the self scrape
 // sparks do.

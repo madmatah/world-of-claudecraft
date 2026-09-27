@@ -628,6 +628,37 @@ describe('createWsAuth: Warlock pet-special capability negotiation', () => {
   });
 });
 
+describe('createWsAuth: drive recon capability negotiation', () => {
+  it('accepts only the exact v1 capability and otherwise keeps the rounded self drive', async () => {
+    const capable = setup();
+    await createWsAuth(capable.deps).authenticateWebSocket(
+      asWs(capable.ws),
+      authRaw({ movementWire: 2, driveReconWire: 1 }),
+      capable.req,
+    );
+    expect(joinedMeta(capable.game)).toMatchObject({ driveReconWireVersion: 1 });
+
+    for (const advertised of [undefined, 2, '1', true]) {
+      const legacy = setup();
+      await createWsAuth(legacy.deps).authenticateWebSocket(
+        asWs(legacy.ws),
+        authRaw(advertised === undefined ? {} : { movementWire: 2, driveReconWire: advertised }),
+        legacy.req,
+      );
+      expect(joinedMeta(legacy.game)).toMatchObject({ driveReconWireVersion: 0 });
+    }
+
+    const resume = setup();
+    resume.game.hasSessionForCharacter.mockReturnValue(true);
+    await createWsAuth(resume.deps).authenticateWebSocket(
+      asWs(resume.ws),
+      authRaw({ movementWire: 2, driveReconWire: 1 }),
+      resume.req,
+    );
+    expect(joinedMeta(resume.game)).toMatchObject({ driveReconWireVersion: 1 });
+  });
+});
+
 describe('createWsAuth: dungeon-entry facing capability negotiation', () => {
   it('accepts only the exact optional capability and otherwise keeps the legacy path', async () => {
     const capable = setup();

@@ -1,4 +1,5 @@
 import {
+  DRIVE_RECON_WIRE_VERSION,
   DUNGEON_ENTRY_FACING_WIRE_VERSION,
   ONLINE_WORLD_AUTH_TYPE,
   PET_SPECIAL_WIRE_VERSION,
@@ -18,6 +19,7 @@ export function buildWebSocketAuthMessage(
   timerWire: typeof STABLE_TIMER_WIRE_VERSION;
   petSpecialWire: typeof PET_SPECIAL_WIRE_VERSION;
   movementWire: 2;
+  driveReconWire: typeof DRIVE_RECON_WIRE_VERSION;
 } {
   return {
     t: ONLINE_WORLD_AUTH_TYPE,
@@ -32,5 +34,6 @@ export function buildWebSocketAuthMessage(
     timerWire: STABLE_TIMER_WIRE_VERSION,
     petSpecialWire: PET_SPECIAL_WIRE_VERSION,
     movementWire: 2,
+    driveReconWire: DRIVE_RECON_WIRE_VERSION,
   };
 }

@@ -113,7 +113,7 @@ import { isAuraDebuff } from '../src/ui/auras_view';
 import { deedBorderSlug } from '../src/ui/deed_border_view';
 import { buildCraftingView } from '../src/ui/hud/professions/crafting_view';
 import { playtimeParts } from '../src/ui/playtime_view';
-import { STABLE_TIMER_WIRE_VERSION } from '../src/world_api';
+import { DRIVE_RECON_WIRE_VERSION, STABLE_TIMER_WIRE_VERSION } from '../src/world_api';
 import {
   bareClient,
   broadcast,
@@ -1900,20 +1900,27 @@ describe('delta snapshots', () => {
     const v1Ws = fakeWs();
     const driver = joinServer(raceServer, v2Ws, 6, 'Driver', 'warrior', {
       movementWireVersion: 2,
+      driveReconWireVersion: DRIVE_RECON_WIRE_VERSION,
     });
     const rival = joinServer(raceServer, rivalWs, 7, 'Rival', 'warrior', {
       movementWireVersion: 2,
+      driveReconWireVersion: DRIVE_RECON_WIRE_VERSION,
     });
     const v1Driver = joinServer(raceServer, v1Ws, 8, 'Legacy');
+    // A v2 build older than the drive recon (a lagging native or desktop shell).
+    const olderWs = fakeWs();
+    const older = joinServer(raceServer, olderWs, 9, 'Older', 'warrior', {
+      movementWireVersion: 2,
+    });
     const at = raceServer.sim.entities.get(driver.pid)!.pos;
-    for (const pid of [rival.pid, v1Driver.pid]) {
+    for (const pid of [rival.pid, v1Driver.pid, older.pid]) {
       const other = raceServer.sim.entities.get(pid)!;
       other.pos = { x: at.x + 3, y: at.y, z: at.z + 2 };
       other.prevPos = { ...other.pos };
     }
     raceServer.sim.grid.refresh(raceServer.sim.entities.values());
     raceServer.sim.playerGrid.refresh((raceServer as any).sim.playerEntities());
-    for (const pid of [driver.pid, rival.pid, v1Driver.pid]) {
+    for (const pid of [driver.pid, rival.pid, v1Driver.pid, older.pid]) {
       const drive = createVehicleDrive('rally_loaner');
       drive.speed = 41.123456789;
       drive.slip = -1.987654321;
@@ -1937,6 +1944,16 @@ describe('delta snapshots', () => {
     const legacy = lastSnap(v1Ws.sent).self;
     expect(legacy).not.toHaveProperty('rdv');
     expect(legacy.drv).toMatchObject({ k: 'rally_loaner', sp: 41.12 });
+    // So does a v2 client that never advertised the drive recon: its full
+    // recon pose rides, its drive stays the rounded `drv` it can decode.
+    const olderSnap = lastSnap(olderWs.sent);
+    expect(olderSnap.self).not.toHaveProperty('rdv');
+    expect(olderSnap.self).toHaveProperty('rpx');
+    expect(olderSnap.self.drv).toMatchObject({ k: 'rally_loaner', sp: 41.12 });
+    const olderClient = bareClient(older.pid, { movementWireVersion: 2 });
+    (olderClient as any).applySnapshot(olderSnap);
+    expect(olderClient.player.drive).toMatchObject({ profileKey: 'rally_loaner', speed: 41.12 });
+    expect(olderClient.reconDrive).toBeNull();
 
     // The v2 mirror rebuilds its drive from the recon at full precision.
     const client = bareClient(driver.pid, { movementWireVersion: 2 });

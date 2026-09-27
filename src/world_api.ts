@@ -297,6 +297,12 @@ export type PetSpecialWireVersion = typeof PET_SPECIAL_WIRE_VERSION;
 export const DUNGEON_ENTRY_FACING_WIRE_VERSION = 1 as const;
 export type DungeonEntryFacingWireVersion = typeof DUNGEON_ENTRY_FACING_WIRE_VERSION;
 
+// Movement wire v2 drive recon capability: a client that advertises it decodes
+// the self `rdv` and rebuilds its own drive from it, so the server may drop the
+// rounded self `drv`. A v2 client without it keeps today's `drv`.
+export const DRIVE_RECON_WIRE_VERSION = 1 as const;
+export type DriveReconWireVersion = typeof DRIVE_RECON_WIRE_VERSION;
+
 // Absolute cooldown schedule in server simulation seconds. A number is the
 // expiry for 1x recovery. The tuple adds a temporary recovery-rate segment;
 // after acceleratedUntil, recovery continues at 1x until expiresAt.

@@ -70,6 +70,7 @@ const GM_TEST_WORLD: WorldContent = {
 };
 
 import {
+  DRIVE_RECON_WIRE_VERSION,
   DUNGEON_ENTRY_FACING_WIRE_VERSION,
   ONLINE_WORLD_AUTH_TYPE,
   ONLINE_WORLD_LAYOUT_VERSION,
@@ -148,6 +149,7 @@ describe('websocket authentication', () => {
 
   it('sends credentials as an auth message instead of query params', () => {
     expect(PET_SPECIAL_WIRE_VERSION).toBe(1);
+    expect(DRIVE_RECON_WIRE_VERSION).toBe(1);
     expect(buildWebSocketAuthMessage('a'.repeat(64), 42)).toEqual({
       t: ONLINE_WORLD_AUTH_TYPE,
       token: 'a'.repeat(64),
@@ -157,6 +159,7 @@ describe('websocket authentication', () => {
       timerWire: STABLE_TIMER_WIRE_VERSION,
       petSpecialWire: PET_SPECIAL_WIRE_VERSION,
       movementWire: 2,
+      driveReconWire: DRIVE_RECON_WIRE_VERSION,
     });
   });
 
@@ -170,6 +173,7 @@ describe('websocket authentication', () => {
       timerWire: STABLE_TIMER_WIRE_VERSION,
       petSpecialWire: PET_SPECIAL_WIRE_VERSION,
       movementWire: 2,
+      driveReconWire: DRIVE_RECON_WIRE_VERSION,
     });
   });
 });
