@@ -1687,6 +1687,7 @@ describe('delta snapshots', () => {
     expect(snap.self).not.toHaveProperty('ovE');
     expect(snap.self).not.toHaveProperty('ovA');
     expect(snap.self).not.toHaveProperty('msm');
+    expect(snap.self).not.toHaveProperty('rdv');
 
     server.handleMessage(session, JSON.stringify({ t: 'input', seq: 6, mi: { f: 0 } }));
     fc.sent.length = 0;
@@ -1877,15 +1878,83 @@ describe('delta snapshots', () => {
     });
     const target = joinServer(spectateServer, targetWs, 5, 'Observed');
     (spectateServer as any).enterSpectate(moderator, target);
+    // The observed body is a seated racer: the spectator receives it as self.
+    spectateServer.sim.entities.get(target.pid)!.drive = createVehicleDrive('rally_loaner');
     moderatorWs.sent.length = 0;
 
     broadcast(spectateServer);
 
     const self = lastSnap(moderatorWs.sent).self;
     expect(self.id).toBe(target.pid);
-    for (const key of ['rpx', 'rpy', 'rpz', 'rpf', 'ackCt', 'ovE', 'ovA', 'msm']) {
+    for (const key of ['rpx', 'rpy', 'rpz', 'rpf', 'ackCt', 'ovE', 'ovA', 'msm', 'rdv']) {
       expect(self).not.toHaveProperty(key);
     }
+    // Without a recon block the spectator's mirror keeps the rounded drive.
+    expect(self.drv).toMatchObject({ k: 'rally_loaner', sp: 0 });
+  });
+
+  it('ships the drive recon in a v2 driver own record only, and keeps drv for everyone else', () => {
+    const raceServer = new GameServer();
+    const v2Ws = fakeWs();
+    const rivalWs = fakeWs();
+    const v1Ws = fakeWs();
+    const driver = joinServer(raceServer, v2Ws, 6, 'Driver', 'warrior', {
+      movementWireVersion: 2,
+    });
+    const rival = joinServer(raceServer, rivalWs, 7, 'Rival', 'warrior', {
+      movementWireVersion: 2,
+    });
+    const v1Driver = joinServer(raceServer, v1Ws, 8, 'Legacy');
+    const at = raceServer.sim.entities.get(driver.pid)!.pos;
+    for (const pid of [rival.pid, v1Driver.pid]) {
+      const other = raceServer.sim.entities.get(pid)!;
+      other.pos = { x: at.x + 3, y: at.y, z: at.z + 2 };
+      other.prevPos = { ...other.pos };
+    }
+    raceServer.sim.grid.refresh(raceServer.sim.entities.values());
+    raceServer.sim.playerGrid.refresh((raceServer as any).sim.playerEntities());
+    for (const pid of [driver.pid, rival.pid, v1Driver.pid]) {
+      const drive = createVehicleDrive('rally_loaner');
+      drive.speed = 41.123456789;
+      drive.slip = -1.987654321;
+      raceServer.sim.entities.get(pid)!.drive = drive;
+    }
+
+    broadcast(raceServer);
+
+    const own = lastSnap(v2Ws.sent);
+    expect(own.self).not.toHaveProperty('drv');
+    expect(own.self.rdv).toEqual({ k: 'rally_loaner', sp: 41.123456789, sl: -1.987654321, yr: 0 });
+    // The rival projection reads the rounded drv off every OTHER racer's record.
+    const rivalRecord = own.ents.find((w: { id: number }) => w.id === rival.pid);
+    expect(rivalRecord?.drv).toMatchObject({ k: 'rally_loaner', sp: 41.12, sl: -1.99 });
+    expect(rivalRecord).not.toHaveProperty('rdv');
+    const seenByRival = lastSnap(rivalWs.sent).ents.find(
+      (w: { id: number }) => w.id === driver.pid,
+    );
+    expect(seenByRival?.drv).toMatchObject({ sp: 41.12 });
+    // A v1 pilot keeps the rounded self drive and never receives the recon.
+    const legacy = lastSnap(v1Ws.sent).self;
+    expect(legacy).not.toHaveProperty('rdv');
+    expect(legacy.drv).toMatchObject({ k: 'rally_loaner', sp: 41.12 });
+
+    // The v2 mirror rebuilds its drive from the recon at full precision.
+    const client = bareClient(driver.pid, { movementWireVersion: 2 });
+    (client as any).applySnapshot(own);
+    expect(client.player.drive).toEqual(raceServer.sim.entities.get(driver.pid)!.drive);
+    expect(client.reconDrive).toEqual(client.player.drive);
+    expect(client.reconDrive).not.toBe(client.player.drive);
+
+    // Off the wheel, a v2 runner gets neither key.
+    raceServer.sim.entities.get(driver.pid)!.drive = null;
+    v2Ws.sent.length = 0;
+    broadcast(raceServer);
+    const runner = lastSnap(v2Ws.sent).self;
+    expect(runner).not.toHaveProperty('rdv');
+    expect(runner).not.toHaveProperty('drv');
+    (client as any).applySnapshot(lastSnap(v2Ws.sent));
+    expect(client.player.drive).toBeNull();
+    expect(client.reconDrive).toBeNull();
   });
 
   it.each([

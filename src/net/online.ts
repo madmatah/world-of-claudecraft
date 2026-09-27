@@ -3013,7 +3013,7 @@ export class ClientWorld extends ReconWireState implements IWorld {
     const s = this.applyNearbyWorldQuestTraceSnapshot(snap);
     const e = s ? applyWire(s, true) : null;
     if (s && e) {
-      applyReconSelfWire(this, s, this.movementWireVersion);
+      applyReconSelfWire(this, s, this.movementWireVersion, e);
       const counterfangRemaining =
         typeof s.opRem === 'number' && Number.isFinite(s.opRem)
           ? Math.min(5, Math.max(0, s.opRem))

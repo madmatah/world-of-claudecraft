@@ -60,6 +60,7 @@ import { Sim } from '../src/sim/sim';
 import { deckToWorld } from '../src/sim/transport_deck';
 import { transportPhaseAt } from '../src/sim/transport_schedule';
 import type { Entity } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { WATER_LEVEL } from '../src/sim/world';
 import { WORLD_SEED } from '../src/sim/world_seed';
 import { bareClient } from './helpers/bare_client';
@@ -173,6 +174,26 @@ describe('the reconciliation self block aboard', () => {
     expect(target.reconAuthoritativeX).toBeCloseTo(e.pos.x, 9);
     applyReconSelfWire(target, reconciliationSelfWire(session, { ...e, ferryRide: null }), 2);
     expect(target.reconDeck).toBeNull();
+  });
+
+  it('keeps the deck pose and the drive recon apart', () => {
+    const sim = new Sim({ seed: WORLD_SEED, playerClass: 'warrior' });
+    const e = sim.player;
+    aboard(e, 2, 3, 0);
+    const passenger = reconciliationSelfWire(session, e);
+    expect(passenger).toHaveProperty('rdk');
+    expect(passenger).not.toHaveProperty('rdv');
+    const target = new ReconWireState();
+    applyReconSelfWire(target, passenger, 2);
+    expect(target.reconDrive).toBeNull();
+    e.ferryRide = null;
+    e.drive = createVehicleDrive('rally_loaner');
+    const driver = reconciliationSelfWire(session, e);
+    expect(driver).not.toHaveProperty('rdk');
+    expect(driver).toHaveProperty('rdv');
+    applyReconSelfWire(target, driver, 2);
+    expect(target.reconDeck).toBeNull();
+    expect(target.reconDrive).toEqual(e.drive);
   });
 
   it('measures the steps of a passenger in the hull frame, for the override epoch', () => {

@@ -366,8 +366,23 @@ describe('MovementPredictionPipeline for a seated driver', () => {
     expect(wire.reconcileOutcomes).toEqual(['ignore']);
   });
 
+  it('keeps a driver standing down on a drive recon while driver prediction is off', () => {
+    const { pipeline, wire } = driverFixture();
+    expect(pipeline.predictDrivers).toBe(false);
+    wire.reconDrive = createVehicleDrive('rally_loaner');
+    for (let epoch = 1; epoch <= 3; epoch++) {
+      wire.reconOverrideEpoch = epoch;
+      wire.reconAckClientTick = 10 + epoch;
+      drivePredictionFrame(pipeline, 10 + epoch, { ...emptyMoveInput(), forward: true });
+      expect(ringHead(pipeline)).toBeNull();
+      expect(pipeline.display()).toBeNull();
+    }
+    expect(wire.reconcileOutcomes).toEqual([]);
+  });
+
   it('re-seeds once the drive recon arrives while still seated', () => {
     const { pipeline, wire, self } = driverFixture();
+    pipeline.predictDrivers = true;
     self.drive = null;
     drivePredictionFrame(pipeline, 5);
     expect(pipeline.display()).not.toBeNull();
@@ -383,6 +398,7 @@ describe('MovementPredictionPipeline for a seated driver', () => {
 
   it('predicts a driver once the wire carries a drive recon', () => {
     const { pipeline, wire } = driverFixture();
+    pipeline.predictDrivers = true;
     wire.reconDrive = createVehicleDrive('rally_loaner');
     drivePredictionFrame(pipeline, 10);
     expect(ringHead(pipeline)).not.toBeNull();

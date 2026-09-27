@@ -16,14 +16,17 @@ vi.mock('../server/db', () => ({
   grantAccountMechChroma: vi.fn(async () => ({ completedQuestIds: [], mechChromaIds: [] })),
 }));
 
+import { driveReconWire } from '../server/drive_recon_wire';
 import { isUpdateDue } from '../server/entity_update_cadence';
 import { GameServer, wireEntity } from '../server/game';
 import { otherRealmRacersParticipantIds } from '../server/realm_racers_interest';
 import { appendSnapshotEntity } from '../server/snapshot_entity_stream';
+import { createPlayer } from '../src/sim/entity';
 import { REALM_RACERS_GRID_SIZE } from '../src/sim/realm_racers_layout';
 import { REALM_RACERS_RETURN_TICKS } from '../src/sim/social/realm_racers';
 import { REALM_RACERS_LOADING_MAX_TICKS } from '../src/sim/social/realm_racers_loading';
 import { type Entity, TICK_RATE } from '../src/sim/types';
+import { createVehicleDrive } from '../src/sim/vehicle_motion';
 import { STABLE_TIMER_WIRE_VERSION } from '../src/world_api';
 
 const LEGACY_INTEREST_RADIUS = 120;
@@ -910,5 +913,38 @@ describe('Realm Racers match-scoped interest', () => {
     // larger world shifts the joined pids, so the one rival that was pid 999
     // now carries a four-digit `id` and aura `src`; the record keys are unchanged.
     expect(Buffer.byteLength(`[${ents.join(',')}]`)).toBe(1178);
+  });
+});
+
+describe('the drive recon (rdv) byte bound', () => {
+  // The longest JSON spelling a double has: a sign, "0.", five zeros and 17
+  // significant digits. Every numeric field at this length, every sparse field
+  // present, is the largest record the encoder can emit for this profile.
+  const LONGEST = -0.0000012345678901234567;
+
+  it('bounds the worst possible self record, and costs nothing on foot', () => {
+    expect(JSON.stringify(LONGEST)).toHaveLength(25);
+    const e = createPlayer(1, 'warrior', { x: 0, y: 0, z: 0 }, 'Pilot');
+    expect(driveReconWire(e)).toBeUndefined();
+    const drive = createVehicleDrive('rally_loaner');
+    for (const key of Object.keys(drive) as (keyof typeof drive)[]) {
+      if (typeof drive[key] === 'number')
+        (drive as unknown as Record<string, number>)[key] = LONGEST;
+    }
+    // The scrape reading rides only above 0.01, so its longest spelling is the
+    // positive exponent form.
+    drive.collisionImpact = 1.2345678901234567e300;
+    drive.controlsLocked = true;
+    e.drive = drive;
+    e.onGround = false;
+    e.vy = LONGEST;
+    const rdv = driveReconWire(e);
+    expect(Object.keys(rdv ?? {})).toHaveLength(15);
+    // 12 numbers at 25 characters, the scrape at 23, the keys, the profile and
+    // the two flags. At 20 Hz that caps a seated racer at 8.2 KB/s; a measured
+    // race runs at about 2.4 KB/s (tests/realm_racers_drive_recon_online.test.ts).
+    const bytes = Buffer.byteLength(`,"rdv":${JSON.stringify(rdv)}`);
+    expect(bytes).toBe(410);
+    expect(bytes * SNAPSHOTS_PER_SECOND).toBeLessThanOrEqual(8200);
   });
 });

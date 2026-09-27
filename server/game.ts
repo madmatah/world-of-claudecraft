@@ -1406,9 +1406,9 @@ function dynamicFields(e: Entity, includeAuras = true): Record<string, unknown> 
   if (e.mountCastRemaining) out.mcr = round2(e.mountCastRemaining);
   if (e.mountCastKey) out.mck = e.mountCastKey;
   // Live vehicle state, for the two seated racers of a running minigame and
-  // nobody else. It is ACTIONABLE, not cosmetic: the online self-extrapolator
-  // runs the same movement kernel, and without this it would predict a running
-  // character while the server simulates a driving machine, so every race would
+  // nobody else. It is ACTIONABLE, not cosmetic: the v1 self-extrapolator and
+  // the rival projection run the same movement kernel off it (a v2 self record
+  // carries the full-precision `rdv` instead), so without it a race would
   // rubber-band. The renderer reads the same fields for engine pitch and drift
   // smoke. Omitted entirely (like mcr/mck) for everyone on foot.
   if (e.drive) {

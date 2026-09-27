@@ -55,6 +55,16 @@ function seatedWithoutDriveRecon(self: Entity, wire: SelfPredictionWire): boolea
   return self.drive != null && !wire.reconDrive;
 }
 
+/** A seated driver the pipeline must not predict: the drive-aware replay is
+ *  not wired yet, so the drive recon alone never starts it. */
+function driverStandsDown(
+  self: Entity,
+  wire: SelfPredictionWire,
+  predictDrivers: boolean,
+): boolean {
+  return self.drive != null && (!predictDrivers || seatedWithoutDriveRecon(self, wire));
+}
+
 function motionState(self: Entity, wire: SelfPredictionWire): MotionState {
   // aboard a sailing ship the prediction starts in its frame (deck_prediction.ts)
   const deck = wire.reconDeck ?? null;
@@ -110,6 +120,8 @@ export class MovementPredictionPipeline {
   private lastAckClientTick = -1;
   private lastPredictedClientTick = -1;
   private reseedAfterDriverStandDown = false;
+  /** Off until the drive-aware replay lands; never set by main.ts. */
+  predictDrivers = false;
   private pendingResidual: ReconciledSelfPrediction['residual'] = null;
   // The schedule clock of the snapshot that carried the newest acknowledged
   // client tick: the deck-aware step estimates the server tick (and so the
@@ -178,7 +190,9 @@ export class MovementPredictionPipeline {
     if (!this.canPredict()) {
       this.resetPrediction();
       if (!hasAuthoritativePose(wire)) this.lastEpoch = null;
-      else if (seatedWithoutDriveRecon(self, wire)) this.reseedAfterDriverStandDown = true;
+      else if (driverStandsDown(self, wire, this.predictDrivers)) {
+        this.reseedAfterDriverStandDown = true;
+      }
       this.lastAckClientTick = wire.reconAckClientTick;
       return null;
     }
@@ -263,8 +277,8 @@ export class MovementPredictionPipeline {
       this.wire?.movementWireVersion === 2 &&
       !this.wire.reconOverrideActive &&
       hasAuthoritativePose(this.wire) &&
-      // Stands every driver down until the drive recon ships on the wire.
-      !(this.self && seatedWithoutDriveRecon(this.self, this.wire))
+      // Stands every driver down until the drive-aware replay is switched on.
+      !(this.self && driverStandsDown(this.self, this.wire, this.predictDrivers))
     );
   }
 
